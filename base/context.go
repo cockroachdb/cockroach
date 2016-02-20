@@ -37,11 +37,8 @@ const (
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
-	// Default HTTP[S]/RPC[S] port.
-	CockroachPort = "26257"
-
-	// Default PG port.
-	PGPort = "15432"
+	// Default port.
+	DefaultPort = "26257"
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second

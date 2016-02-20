@@ -34,7 +34,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connPort, connPGPort, connDBName string
+var connUser, connHost, connPort, connDBName string
 
 var flagUsage = map[string]string{
 	"attrs": wrapText(`
@@ -122,11 +122,8 @@ Adjust the frequency at which the server records its own internal metrics.`),
 The created user's password. If provided, disables prompting. Pass '-' to
 provide the password on standard input.`),
 
-	"pgport": wrapText(`
-The port to bind for Postgres traffic.`),
-
 	"port": wrapText(`
-The port to bind for cockroach traffic.`),
+The port to bind to.`),
 
 	"scan-interval": wrapText(`
 Adjusts the target for the duration of a single scan through a store's
@@ -168,7 +165,7 @@ from a store after this time, the store is considered unavailable.
 Replicas on an unavailable store will be moved to available ones.`),
 
 	"url": wrapText(`
-Connection url. eg: postgresql://myuser@localhost:15432/mydb
+Connection url. eg: postgresql://myuser@localhost:26257/mydb
 If left empty, the connection flags are used (host, port, user,
 database, insecure, certs).`),
 
@@ -219,8 +216,7 @@ func initFlags(ctx *Context) {
 
 		// Server flags.
 		f.StringVar(&connHost, "host", "", usage("host"))
-		f.StringVar(&connPort, "port", base.CockroachPort, usage("port"))
-		f.StringVar(&connPGPort, "pgport", base.PGPort, usage("pgport"))
+		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
@@ -292,7 +288,7 @@ func initFlags(ctx *Context) {
 	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connPort, "port", base.CockroachPort, usage("port"))
+		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
 	}
 
 	// Commands that establish a SQL connection.
@@ -302,7 +298,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&connURL, "url", "", usage("url"))
 
 		f.StringVar(&connUser, "user", security.RootUser, usage("user"))
-		f.StringVar(&connPGPort, "pgport", base.PGPort, usage("pgport"))
+		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
 		f.StringVar(&connDBName, "database", "", "") // TODO(marc): usage("database"))
 	}
 
@@ -318,6 +314,5 @@ func init() {
 
 	cobra.OnInitialize(func() {
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
-		cliContext.PGAddr = net.JoinHostPort(connHost, connPGPort)
 	})
 }

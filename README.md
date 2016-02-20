@@ -55,7 +55,7 @@ Other operating systems will have a similar set of commands. Please check Docker
 Pull the CockroachDB Docker image and drop into a shell within it:
 ```bash
 docker pull cockroachdb/cockroach
-docker run -p 26257:26257 -p 15432:15432 -t -i cockroachdb/cockroach shell
+docker run -p 26257:26257 -t -i cockroachdb/cockroach shell
 # root@82cb657cdc42:/cockroach#
 ```
 
