@@ -32,14 +32,6 @@ message BootstrapInfo {
   roachpb.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 }
 
-// Node contains information about a gossip node.
-message Node {
-  // The most recent timestamp of any info which originated at this node.
-  int64 high_water_stamp = 1;
-  // The minimum number of hops seen for any info which originated at this node.
-  uint32 min_hops = 2;
-}
-
 // Request is the request struct passed with the Gossip RPC.
 message Request {
   // Requesting node's ID.
@@ -47,8 +39,9 @@ message Request {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
   // Address of the requesting client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
-  // Map of information about other nodes, as seen by the requester.
-  map<int32, Node> nodes = 3;
+  // Map of high water timestamps from infos originating at other
+  // nodes, as seen by the requester.
+  map<int32, int64> high_water_stamps = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
   // Delta of Infos originating at sender.
   map<string, Info> delta = 4;
 }
@@ -69,8 +62,9 @@ message Response {
   // Delta of Infos which are fresh according to the map of Node info messages
   // passed with the request.
   map<string, Info> delta = 5;
-  // Map of information about other nodes, as seen by the responder.
-  map<int32, Node> nodes = 6;
+  // Map of high water timestamps from infos originating at other
+  // nodes, as seen by the responder.
+  map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
 }
 
 // Info is the basic unit of information traded over the

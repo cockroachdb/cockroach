@@ -32,11 +32,11 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	peerID      roachpb.NodeID  // Peer node ID; 0 until first gossip response
-	addr        net.Addr        // Peer node network address
-	forwardAddr net.Addr        // Set if disconnected with an alternate addr
-	remoteNodes map[int32]*Node // Remote server's high water timestamps and min hops
-	closer      chan struct{}   // Client shutdown channel
+	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
+	addr                  net.Addr                 // Peer node network address
+	forwardAddr           net.Addr                 // Set if disconnected with an alternate addr
+	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
+	closer                chan struct{}            // Client shutdown channel
 }
 
 // extractKeys returns a string representation of a gossip delta's keys.
@@ -51,9 +51,9 @@ func extractKeys(delta map[string]*Info) string {
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
-		addr:        addr,
-		remoteNodes: map[int32]*Node{},
-		closer:      make(chan struct{}),
+		addr: addr,
+		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
+		closer:                make(chan struct{}),
 	}
 }
 
@@ -99,13 +99,13 @@ func (c *client) close() {
 
 // requestGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
-// timestamps and min hops.
+// timestamps.
 func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	args := &Request{
-		NodeID: g.is.NodeID,
-		Addr:   addr,
-		Nodes:  g.is.getNodes(),
+		NodeID:          g.is.NodeID,
+		Addr:            addr,
+		HighWaterStamps: g.is.getHighWaterStamps(),
 	}
 	g.mu.Unlock()
 
@@ -113,16 +113,15 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 }
 
 // sendGossip sends the latest gossip to the remote server, based on
-// the remote server's notion of other nodes' high water timestamps
-// and min hops.
+// the remote server's notion of other nodes' high water timestamps.
 func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	if delta := g.is.delta(c.remoteNodes); len(delta) > 0 {
+	if delta := g.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
 		args := Request{
-			NodeID: g.is.NodeID,
-			Addr:   addr,
-			Delta:  delta,
-			Nodes:  g.is.getNodes(),
+			NodeID:          g.is.NodeID,
+			Addr:            addr,
+			Delta:           delta,
+			HighWaterStamps: g.is.getHighWaterStamps(),
 		}
 
 		g.mu.Unlock()
@@ -153,7 +152,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
-	c.remoteNodes = reply.Nodes
+	c.remoteHighWaterStamps = reply.HighWaterStamps
 
 	// Handle remote forwarding.
 	if reply.AlternateAddr != nil {
