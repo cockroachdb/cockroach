@@ -61,6 +61,7 @@ github.com/satori/go.uuid e673fdd4dea8a7334adbbe7f57b7e4b00bdc5502
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
 github.com/spf13/cobra 65a708cee0a4424f4e353d031ce440643e312f92
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
+github.com/tamird/cmux ad4b47dd691cbea2ae63f3d570a7f5775bf8fa72
 github.com/tebeka/go2xunit 304a3dad367b395460778a969d87101b778b322f
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 1f22c0103821b9390939b6776727195525381532
