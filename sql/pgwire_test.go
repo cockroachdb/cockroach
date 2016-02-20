@@ -80,7 +80,7 @@ func TestPGWire(t *testing.T) {
 		ctx.Insecure = insecure
 		s := setupTestServerWithContext(t, ctx)
 
-		host, port, err := net.SplitHostPort(s.PGAddr())
+		host, port, err := net.SplitHostPort(s.ServingAddr())
 		if err != nil {
 			t.Fatal(err)
 		}

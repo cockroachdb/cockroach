@@ -44,8 +44,7 @@ import (
 // Context defaults.
 const (
 	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr               = ":" + base.CockroachPort
-	defaultPGAddr             = ":" + base.PGPort
+	defaultAddr               = ":" + base.DefaultPort
 	defaultMaxOffset          = 250 * time.Millisecond
 	defaultCacheSize          = 512 << 20 // 512 MB
 	defaultMemtableBudget     = 512 << 20 // 512 MB
@@ -72,9 +71,6 @@ type Context struct {
 
 	// Addr is the host:port to bind for HTTP/RPC traffic.
 	Addr string
-
-	// PGAddr is the host:port to bind for Postgres traffic.
-	PGAddr string
 
 	// Stores is specified to enable durable key-value storage.
 	// Memory-backed key value stores may be optionally specified
@@ -191,7 +187,6 @@ func NewContext() *Context {
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
-	ctx.PGAddr = defaultPGAddr
 	ctx.MaxOffset = defaultMaxOffset
 	ctx.CacheSize = getDefaultCacheSize()
 	ctx.MemtableBudget = defaultMemtableBudget
@@ -297,7 +292,7 @@ func (ctx *Context) PGURL(user string) string {
 	pgURL := url.URL{
 		Scheme:   "postgresql",
 		User:     url.User(user),
-		Host:     ctx.PGAddr,
+		Host:     ctx.Addr,
 		RawQuery: options.Encode(),
 	}
 	return pgURL.String()
