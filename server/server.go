@@ -236,9 +236,7 @@ func (s *Server) Start() error {
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldDrain()
-		// Some unit tests manually close `ln`, so it may already be closed
-		// when we get here.
-		if err := ln.Close(); err != nil && !util.IsClosedConnection(err) {
+		if err := ln.Close(); err != nil {
 			log.Fatal(err)
 		}
 	})

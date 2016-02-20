@@ -46,30 +46,38 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 		})
 
 		if tlsConfig != nil {
+			// We're in TLS mode. ALPN will be used to automatically handle HTTP1 and
+			// HTTP2 requests.
 			ServeHandler(stopper, handler, tls.NewListener(ln, tlsConfig), tlsConfig)
 		} else {
+			// We're not in TLS mode. We're going to implement h2c ourselves.
+
 			m := cmux.New(ln)
+			// HTTP2 connections are easy to identify because they have a common preface.
 			h2L := m.Match(cmux.HTTP2())
+			// All other connections will get the default treatment.
 			anyL := m.Match(cmux.Any())
 
+			// Construct our h2c handler function.
 			var h2 http2.Server
-
 			serveConnOpts := &http2.ServeConnOpts{
 				Handler: handler,
 			}
-
 			serveH2 := func(conn net.Conn) {
 				h2.ServeConn(conn, serveConnOpts)
 			}
 
+			// Start serving HTTP1 on all non-HTTP2 connections.
 			serveConn := ServeHandler(stopper, handler, anyL, tlsConfig)
 
+			// Start serving h2c on all HTTP2 connections.
 			stopper.RunWorker(func() {
 				if err := serveConn(h2L, serveH2); err != nil && !IsClosedConnection(err) {
 					log.Fatal(err)
 				}
 			})
 
+			// Finally start the multiplexing listener.
 			stopper.RunWorker(func() {
 				if err := m.Serve(); err != nil && !IsClosedConnection(err) {
 					log.Fatal(err)
@@ -80,7 +88,9 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 	return ln, err
 }
 
-// ServeHandler serves the handler on the listener.
+// ServeHandler serves the handler on the listener and returns a function that
+// serves an additional listener using a function that takes a connection. The
+// returned function can be called multiple times.
 func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, tlsConfig *tls.Config) func(net.Listener, func(net.Conn)) error {
 	var mu sync.Mutex
 	activeConns := make(map[net.Conn]struct{})
