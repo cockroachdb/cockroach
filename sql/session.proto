@@ -44,4 +44,5 @@ message Session {
     // A time duration in seconds.
     int64 offset = 6;
   }
+  optional roachpb.IsolationType default_isolation_level = 7 [(gogoproto.nullable) = false];
 }
