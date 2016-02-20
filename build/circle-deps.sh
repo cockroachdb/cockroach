@@ -91,6 +91,7 @@ if [ "${1-}" = "docker" ]; then
     time go test -v -c -tags acceptance ./acceptance
     # Avoid code rot.
     time go build ./gossip/simulation/...
+    time go test ./gossip/simulation/gossip.go
   fi
 
   exit 0
