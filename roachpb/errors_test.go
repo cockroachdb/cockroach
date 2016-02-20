@@ -21,6 +21,35 @@ import (
 	"testing"
 )
 
+type testError struct{}
+
+func (t *testError) Error() string              { return "test" }
+func (t *testError) message(pErr *Error) string { return "test" }
+func (t *testError) CanRetry() bool             { return true }
+func (t *testError) ErrorIndex() (int32, bool)  { return 99, true }
+func (t *testError) SetErrorIndex(_ int32)      { panic("unsupported") }
+
+// TestNewError verifies that a test error that
+// implements retryable or indexed is converted properly into a generic error.
+func TestNewError(t *testing.T) {
+	pErr := NewError(&testError{})
+	if pErr.GoError().Error() != "test" {
+		t.Errorf("unexpected error: %s", pErr)
+	}
+	if !pErr.Retryable {
+		t.Error("expected generic error to be retryable")
+	}
+}
+
+// TestNewErrorNil verifies that a nil error can be set
+// and retrieved from a response header.
+func TestNewErrorNil(t *testing.T) {
+	pErr := NewError(nil)
+	if pErr != nil {
+		t.Errorf("expected nil error; got %s", pErr)
+	}
+}
+
 // TestSetTxn vefifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError())
