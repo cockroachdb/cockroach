@@ -65,8 +65,6 @@ var (
 type Server struct {
 	ctx *Context
 
-	listener net.Listener // Only used in tests.
-
 	mux           *http.ServeMux
 	httpReady     chan struct{}
 	clock         *hlc.Clock
@@ -231,7 +229,6 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	s.listener = ln // Only used in tests.
 
 	if err := officializeAddr(unresolvedAddr, ln.Addr()); err != nil {
 		return err
