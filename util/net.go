@@ -35,52 +35,59 @@ import (
 // the listener when signalled by the stopper.
 func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
-	if err == nil {
+	if err != nil {
+		return ln, err
+	}
+	stopper.RunWorker(func() {
+		<-stopper.ShouldDrain()
+		// Some unit tests manually close `ln`, so it may already be closed
+		// when we get here.
+		FatalIfUnexpected(ln.Close())
+	})
+
+	if tlsConfig != nil {
+		// We're in TLS mode. ALPN will be used to automatically handle HTTP1 and
+		// HTTP2 requests.
+		ServeHandler(stopper, handler, tls.NewListener(ln, tlsConfig), tlsConfig)
+	} else {
+		// We're not in TLS mode. We're going to implement h2c (HTTP2 Clear Text)
+		// ourselves.
+
+		m := cmux.New(ln)
+		// HTTP2 connections are easy to identify because they have a common
+		// preface.
+		h2L := m.Match(cmux.HTTP2())
+		// All other connections will get the default treatment.
+		anyL := m.Match(cmux.Any())
+
+		// Construct our h2c handler function.
+		var h2 http2.Server
+		serveConnOpts := &http2.ServeConnOpts{
+			Handler: handler,
+		}
+		serveH2 := func(conn net.Conn) {
+			h2.ServeConn(conn, serveConnOpts)
+		}
+
+		// Start serving HTTP1 on all non-HTTP2 connections.
+		serveConn := ServeHandler(stopper, handler, anyL, tlsConfig)
+
+		// Start serving h2c on all HTTP2 connections.
 		stopper.RunWorker(func() {
-			<-stopper.ShouldDrain()
-			// Some unit tests manually close `ln`, so it may already be closed
-			// when we get here.
-			if err := ln.Close(); err != nil && !IsClosedConnection(err) {
-				log.Fatal(err)
-			}
+			FatalIfUnexpected(serveConn(h2L, serveH2))
 		})
 
-		if tlsConfig != nil {
-			ServeHandler(stopper, handler, tls.NewListener(ln, tlsConfig), tlsConfig)
-		} else {
-			m := cmux.New(ln)
-			h2L := m.Match(cmux.HTTP2())
-			anyL := m.Match(cmux.Any())
-
-			var h2 http2.Server
-
-			serveConnOpts := &http2.ServeConnOpts{
-				Handler: handler,
-			}
-
-			serveH2 := func(conn net.Conn) {
-				h2.ServeConn(conn, serveConnOpts)
-			}
-
-			serveConn := ServeHandler(stopper, handler, anyL, tlsConfig)
-
-			stopper.RunWorker(func() {
-				if err := serveConn(h2L, serveH2); err != nil && !IsClosedConnection(err) {
-					log.Fatal(err)
-				}
-			})
-
-			stopper.RunWorker(func() {
-				if err := m.Serve(); err != nil && !IsClosedConnection(err) {
-					log.Fatal(err)
-				}
-			})
-		}
+		// Finally start the multiplexing listener.
+		stopper.RunWorker(func() {
+			FatalIfUnexpected(m.Serve())
+		})
 	}
-	return ln, err
+	return ln, nil
 }
 
-// ServeHandler serves the handler on the listener.
+// ServeHandler serves the handler on the listener and returns a function that
+// serves an additional listener using a function that takes a connection. The
+// returned function can be called multiple times.
 func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, tlsConfig *tls.Config) func(net.Listener, func(net.Conn)) error {
 	var mu sync.Mutex
 	activeConns := make(map[net.Conn]struct{})
@@ -107,9 +114,7 @@ func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, 
 	}
 
 	stopper.RunWorker(func() {
-		if err := httpServer.Serve(ln); err != nil && !IsClosedConnection(err) {
-			log.Fatal(err)
-		}
+		FatalIfUnexpected(httpServer.Serve(ln))
 
 		<-stopper.ShouldStop()
 		mu.Lock()
@@ -155,7 +160,16 @@ func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, 
 	}
 }
 
-// IsClosedConnection returns true if err is the net package's errClosed.
+// IsClosedConnection returns true if err is cmux.ErrListenerClosed, or the net
+// package's errClosed.
 func IsClosedConnection(err error) bool {
 	return err == cmux.ErrListenerClosed || strings.Contains(err.Error(), "use of closed network connection")
+}
+
+// FatalIfUnexpected calls Log.Fatal(err) unless err is nil,
+// cmux.ErrListenerClosed, or the net package's errClosed.
+func FatalIfUnexpected(err error) {
+	if err != nil && !IsClosedConnection(err) {
+		log.Fatal(err)
+	}
 }
