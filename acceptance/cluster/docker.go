@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/go-connections/nat"
@@ -81,7 +80,9 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 	defer rc.Close()
 	dec := json.NewDecoder(rc)
 	for {
-		var message jsonmessage.JSONMessage
+		// Using `interface{}` to avoid dependency on github.com/docker/docker. See
+		// https://github.com/docker/engine-api/issues/89.
+		var message interface{}
 		if err := dec.Decode(&message); err != nil {
 			if err == io.EOF {
 				return nil
