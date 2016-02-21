@@ -75,13 +75,7 @@ func (l *loggingT) newBuffers() [NumSeverity]flushSyncWriter {
 
 // contents returns the specified log value as a string.
 func contents(s Severity) string {
-	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewTermEntryReader(buffer)
-	bytes, err := ioutil.ReadAll(hr)
-	if err != nil {
-		panic(err)
-	}
-	return string(bytes)
+	return logging.file[s].(*flushBuffer).Buffer.String()
 }
 
 // jsonContents returns the specified log JSON-encoded.
@@ -149,6 +143,10 @@ func TestStandardLog(t *testing.T) {
 // Verify that a log can be fetched in JSON format.
 func TestJSONLogFormat(t *testing.T) {
 	setFlags()
+	logging.protoFormat = true
+	defer func() {
+		logging.protoFormat = false
+	}()
 	defer logging.swap(logging.newBuffers())
 	stdLog.Print("test")
 	json := jsonContents(InfoLog)
