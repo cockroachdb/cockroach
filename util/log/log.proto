@@ -26,8 +26,6 @@ message LogEntry {
   optional int32 severity = 1 [(gogoproto.nullable) = false];
   // Time, measured in nanoseconds since the epoch.
   optional int64 time = 2 [(gogoproto.nullable) = false];
-  // Thread id of logging routine.
-  optional int32 thread_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ThreadID"];
   // File which generated log statement.
   optional string file = 4 [(gogoproto.nullable) = false];
   // Line in file which generated log statement.

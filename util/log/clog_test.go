@@ -19,16 +19,18 @@ package log
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	stdLog "log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/kr/pretty"
 )
 
 // Test that shortHostname works as advertised.
@@ -76,17 +78,6 @@ func (l *loggingT) newBuffers() [NumSeverity]flushSyncWriter {
 // contents returns the specified log value as a string.
 func contents(s Severity) string {
 	return logging.file[s].(*flushBuffer).Buffer.String()
-}
-
-// jsonContents returns the specified log JSON-encoded.
-func jsonContents(s Severity) []byte {
-	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewJSONEntryReader(buffer)
-	bytes, err := ioutil.ReadAll(hr)
-	if err != nil {
-		panic(err)
-	}
-	return bytes
 }
 
 // contains reports whether the string is contained in the log.
@@ -141,26 +132,68 @@ func TestStandardLog(t *testing.T) {
 }
 
 // Verify that a log can be fetched in JSON format.
-func TestJSONLogFormat(t *testing.T) {
-	setFlags()
-	logging.protoFormat = true
-	defer func() {
-		logging.protoFormat = false
-	}()
-	defer logging.swap(logging.newBuffers())
-	stdLog.Print("test")
-	json := jsonContents(InfoLog)
-	expPat := `{
-  "severity": 0,
-  "time": [\d]+,
-  "thread_id": [\d]+,
-  "file": "clog_test.go",
-  "line": [\d]+,
-  "format": "test",
-  "args": null
-}`
-	if !regexp.MustCompile(expPat).Match(json) {
-		t.Errorf("expected json match; got %s", json)
+func TestEntryDecoder(t *testing.T) {
+	contents := `
+I160224 10:55:08.758542 clog_test.go:136 info
+W160224 10:55:08.758653 clog_test.go:137 warning
+E160224 10:55:08.758658 clog_test.go:138 error
+F160224 10:55:08.758661 clog_test.go:139 fatal
+`
+
+	readAllEntries := func(contents string) []*LogEntry {
+		decoder := NewEntryDecoder(strings.NewReader(contents))
+		var entries []*LogEntry
+		for {
+			entry := &LogEntry{}
+			if err := decoder.Decode(entry); err != nil {
+				if err == io.EOF {
+					break
+				}
+				t.Fatal(err)
+			}
+			entries = append(entries, entry)
+		}
+		return entries
+	}
+
+	entries := readAllEntries(contents)
+	expected := []*LogEntry{
+		&LogEntry{
+			Severity: 0,
+			Time:     1456311308758542000,
+			File:     `clog_test.go`,
+			Line:     136,
+			Format:   `info`,
+		},
+		&LogEntry{
+			Severity: 1,
+			Time:     1456311308758653000,
+			File:     `clog_test.go`,
+			Line:     137,
+			Format:   `warning`,
+		},
+		&LogEntry{
+			Severity: 2,
+			Time:     1456311308758658000,
+			File:     `clog_test.go`,
+			Line:     138,
+			Format:   `error`,
+		},
+		&LogEntry{
+			Severity: 3,
+			Time:     1456311308758661000,
+			File:     `clog_test.go`,
+			Line:     139,
+			Format:   `fatal`,
+		},
+	}
+	if !reflect.DeepEqual(expected, entries) {
+		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
+	}
+
+	entries = readAllEntries("file header\n\n\n" + contents)
+	if !reflect.DeepEqual(expected, entries) {
+		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
 	}
 }
 
@@ -531,7 +564,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := formatHeader(InfoLog, time.Now(), 1, "file.go", 100, nil)
+		buf := formatHeader(InfoLog, time.Now(), "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
 }
