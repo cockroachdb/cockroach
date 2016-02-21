@@ -424,8 +424,12 @@ func (hr *baseEntryReader) Read(p []byte) (int, error) {
 // colorized.
 func NewTermEntryReader(reader io.Reader) io.Reader {
 	tr := &baseEntryReader{ld: NewEntryDecoder(reader)}
-	colors := logging.shouldColorize()
-	tr.format = func(entry *LogEntry) []byte { return formatLogEntry(entry, colors) }
+	colors := logging.getTermColorProfile()
+	tr.format = func(entry *LogEntry) []byte {
+		buf := formatLogEntry(*entry, colors)
+		defer logging.putBuffer(buf)
+		return append([]byte(nil), buf.Bytes()...)
+	}
 	return tr
 }
 
@@ -577,7 +581,7 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry *LogEntry, colors *colorProfile) []byte {
+func formatLogEntry(entry LogEntry, colors *colorProfile) *buffer {
 	buf := formatHeader(Severity(entry.Severity), time.Unix(entry.Time/1E9, entry.Time%1E9), entry.ThreadID, entry.File, entry.Line, colors)
 	var args []interface{}
 	for _, arg := range entry.Args {
@@ -592,8 +596,7 @@ func formatLogEntry(entry *LogEntry, colors *colorProfile) []byte {
 	if len(entry.Stacks) > 0 {
 		buf.Write(entry.Stacks)
 	}
-	defer logging.putBuffer(buf)
-	return buf.Bytes()
+	return buf
 }
 
 func init() {
@@ -618,7 +621,7 @@ func Flush() {
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
 	color           string        // The -color flag.
-	hasColorProfile *bool         // Non-nil if the color profile has been determined
+	hasColorProfile bool          // True if the color profile has been determined
 	colorProfile    *colorProfile // Set via call to getTermColorProfile
 
 	// Level flag. Handled atomically.
@@ -637,6 +640,8 @@ type loggingT struct {
 	// Boolean flags. Also protected by mu (see flags.go).
 	toStderr     bool // The -logtostderr flag.
 	alsoToStderr bool // The -alsologtostderr flag.
+
+	protoFormat bool // Use proto-encoded log files.
 
 	mu sync.Mutex
 	// file holds writer for each of the log types.
@@ -719,7 +724,7 @@ func (l *loggingT) putBuffer(b *buffer) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry *LogEntry) {
+func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry LogEntry) {
 	l.mu.Lock()
 
 	// Set additional details in log entry.
@@ -740,26 +745,27 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry *LogE
 	}
 
 	if l.toStderr {
-		if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
-			panic(err)
-		}
+		l.outputToStderr(entry)
 	} else {
 		if l.alsoToStderr || s >= l.stderrThreshold.get() {
-			if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
-				panic(err)
-			}
+			l.outputToStderr(entry)
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
 				// Make sure the message appears somewhere.
-				if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
-					panic(err)
-				}
+				l.outputToStderr(entry)
 				l.exit(err)
 			}
 		}
 
-		data := encodeLogEntry(entry)
+		var buf *buffer
+		var data []byte
+		if l.protoFormat {
+			data = encodeLogEntry(entry)
+		} else {
+			buf = l.processForFile(entry)
+			data = buf.Bytes()
+		}
 
 		switch s {
 		case FatalLog:
@@ -783,6 +789,10 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry *LogE
 			}
 		}
 
+		if buf != nil {
+			l.putBuffer(buf)
+		}
+
 		if stats := severityStats[s]; stats != nil {
 			atomic.AddInt64(&stats.lines, 1)
 			atomic.AddInt64(&stats.bytes, int64(len(data)))
@@ -801,9 +811,9 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry *LogE
 	}
 }
 
-func encodeLogEntry(entry *LogEntry) []byte {
+func encodeLogEntry(entry LogEntry) []byte {
 	// Marshal log entry.
-	entryData, err := proto.Marshal(entry)
+	entryData, err := proto.Marshal(&entry)
 	if err != nil {
 		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
 	}
@@ -813,37 +823,41 @@ func encodeLogEntry(entry *LogEntry) []byte {
 	return append(data, entryData...)
 }
 
-// processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry *LogEntry) []byte {
-	return formatLogEntry(entry, l.shouldColorize())
+func (l *loggingT) outputToStderr(entry LogEntry) {
+	buf := l.processForStderr(entry)
+	if _, err := os.Stderr.Write(buf.Bytes()); err != nil {
+		panic(err)
+	}
+	l.putBuffer(buf)
 }
 
-// shouldColorize returns whether output should be colorized.
-func (l *loggingT) shouldColorize() *colorProfile {
-	if l.color == "auto" {
-		return l.getTermColorProfile()
-	}
-	return nil
+// processForStderr formats a log entry for output to standard error.
+func (l *loggingT) processForStderr(entry LogEntry) *buffer {
+	return formatLogEntry(entry, l.getTermColorProfile())
+}
+
+// processForFile formats a log entry for output to a file.
+func (l *loggingT) processForFile(entry LogEntry) *buffer {
+	return formatLogEntry(entry, nil)
 }
 
 // checkForColorTerm attempts to verify that stderr is a character
 // device and if so, that the terminal supports color output.
 func (l *loggingT) getTermColorProfile() *colorProfile {
-	if l.hasColorProfile == nil {
-		var color bool
-		fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
-		if (fi.Mode() & os.ModeCharDevice) != 0 {
-			term := os.Getenv("TERM")
-			switch term {
-			case "ansi", "xterm-color":
-				l.colorProfile = colorProfile8
-				color = true
-			case "xterm-256color", "screen-256color":
-				l.colorProfile = colorProfile256
-				color = true
+	if !l.hasColorProfile {
+		l.hasColorProfile = true
+		if l.color == "auto" {
+			fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
+			if (fi.Mode() & os.ModeCharDevice) != 0 {
+				term := os.Getenv("TERM")
+				switch term {
+				case "ansi", "xterm-color":
+					l.colorProfile = colorProfile8
+				case "xterm-256color", "screen-256color":
+					l.colorProfile = colorProfile256
+				}
 			}
 		}
-		l.hasColorProfile = &color
 	}
 	return l.colorProfile
 }
@@ -912,9 +926,10 @@ func (l *loggingT) exit(err error) {
 type syncBuffer struct {
 	logger *loggingT
 	*bufio.Writer
-	file   *os.File
-	sev    Severity
-	nbytes uint64 // The number of bytes written to this file
+	file        *os.File
+	sev         Severity
+	nbytes      uint64 // The number of bytes written to this file
+	protoFormat bool
 }
 
 func (sb *syncBuffer) Sync() error {
@@ -955,22 +970,34 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
 	// Write header.
-	file, line, _ := caller.Lookup(0)
-	for _, format := range []string{
-		fmt.Sprintf("Running on machine: %s", host),
-		fmt.Sprintf("Binary: Built with %s %s for %s/%s",
-			runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
-	} {
-		entry := LogEntry{
-			Time:   time.Now().UnixNano(),
-			File:   file,
-			Line:   int32(line),
-			Format: format,
+	if sb.protoFormat {
+		file, line, _ := caller.Lookup(0)
+		for _, format := range []string{
+			fmt.Sprintf("Running on machine: %s", host),
+			fmt.Sprintf("Binary: Built with %s %s for %s/%s",
+				runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
+		} {
+			entry := LogEntry{
+				Time:   time.Now().UnixNano(),
+				File:   file,
+				Line:   int32(line),
+				Format: format,
+			}
+			var n int
+			n, err = sb.file.Write(encodeLogEntry(entry))
+			if err != nil {
+				panic(err)
+			}
+			sb.nbytes += uint64(n)
 		}
-		n, err := sb.file.Write(encodeLogEntry(&entry))
-		if err != nil {
-			panic(err)
-		}
+	} else {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Log file created at: %s\n", now.Format("2006/01/02 15:04:05"))
+		fmt.Fprintf(&buf, "Running on machine: %s\n", host)
+		fmt.Fprintf(&buf, "Binary: Built with %s %s for %s/%s\n", runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		fmt.Fprintf(&buf, "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line msg\n")
+		var n int
+		n, err = sb.file.Write(buf.Bytes())
 		sb.nbytes += uint64(n)
 	}
 	return err
@@ -1096,7 +1123,7 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	}
 	// printWithFileLine with alsoToStderr=true, so standard log messages
 	// always appear on standard error.
-	entry := &LogEntry{
+	entry := LogEntry{
 		Format: text,
 	}
 	logging.outputLogEntry(Severity(lb), file, line, entry)
