@@ -418,11 +418,14 @@ func (hr *baseEntryReader) Read(p []byte) (int, error) {
 	}
 }
 
-// NewTermEntryReader returns a reader for log files containing
+// newTermEntryReader returns a reader for log files containing
 // encoded entries for use from a terminal. If the --color flag is
 // set, and the terminal supports colors, then log output will be
 // colorized.
-func NewTermEntryReader(reader io.Reader) io.Reader {
+//
+// TODO(pmattis): Temporarily unexported while the long term status of this
+// functionality is determined.
+func newTermEntryReader(reader io.Reader) io.Reader {
 	tr := &baseEntryReader{ld: NewEntryDecoder(reader)}
 	colors := logging.getTermColorProfile()
 	tr.format = func(entry *LogEntry) []byte {
@@ -433,9 +436,12 @@ func NewTermEntryReader(reader io.Reader) io.Reader {
 	return tr
 }
 
-// NewJSONEntryReader returns a reader for log files containing
+// newJSONEntryReader returns a reader for log files containing
 // encoded entries in JSON format.
-func NewJSONEntryReader(reader io.Reader) io.Reader {
+//
+// TODO(pmattis): Temporarily unexported while the long term status of this
+// functionality is determined.
+func newJSONEntryReader(reader io.Reader) io.Reader {
 	jr := &baseEntryReader{ld: NewEntryDecoder(reader)}
 	jr.format = func(entry *LogEntry) []byte {
 		data, err := json.MarshalIndent(entry, "", "  ")

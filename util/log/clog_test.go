@@ -81,7 +81,7 @@ func contents(s Severity) string {
 // jsonContents returns the specified log JSON-encoded.
 func jsonContents(s Severity) []byte {
 	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewJSONEntryReader(buffer)
+	hr := newJSONEntryReader(buffer)
 	bytes, err := ioutil.ReadAll(hr)
 	if err != nil {
 		panic(err)
@@ -320,7 +320,7 @@ func TestListLogFiles(t *testing.T) {
 		t.Fatal("warning wasn't created")
 	}
 	warnName := filepath.Base(warn.file.Name())
-	results, err := ListLogFiles()
+	results, err := listLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestGetLogReader(t *testing.T) {
 			} else {
 				expErr = test.expErrUnrestricted
 			}
-			reader, err := GetLogReader(test.filename, restricted)
+			reader, err := getLogReader(test.filename, restricted)
 			if expErr == "" {
 				if err != nil {
 					t.Errorf("%d (%s, restricted=%t): expected ok, got %s",

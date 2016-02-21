@@ -62,8 +62,6 @@ func init() {
 		exterminateCmd,
 		quitCmd,
 
-		logCmd,
-
 		sqlShellCmd,
 		kvCmd,
 		userCmd,

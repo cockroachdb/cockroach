@@ -18,16 +18,13 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"reflect"
 	"regexp"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -284,173 +281,6 @@ func startServer(t *testing.T) TestServer {
 	}
 
 	return ts
-}
-
-// TestStatusLocalLogs checks to ensure that local/logfiles,
-// local/logfiles/{filename}, local/log and local/log/{level} function
-// correctly.
-func TestStatusLocalLogs(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	dir, err := ioutil.TempDir("", "local_log_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	log.EnableLogFileOutput(dir)
-	defer func() {
-		log.DisableLogFileOutput()
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	ts := startServer(t)
-	defer ts.Stop()
-
-	// Log an error which we expect to show up on every log file.
-	timestamp := time.Now().UnixNano()
-	log.Errorf("TestStatusLocalLogFile test message-Error")
-	timestampE := time.Now().UnixNano()
-	log.Warningf("TestStatusLocalLogFile test message-Warning")
-	timestampEW := time.Now().UnixNano()
-	log.Infof("TestStatusLocalLogFile test message-Info")
-	timestampEWI := time.Now().UnixNano()
-
-	type logsWrapper struct {
-		Data []log.FileInfo `json:"d"`
-	}
-	var logs logsWrapper
-	if err := json.Unmarshal(getRequest(t, ts, "/_status/logfiles/local"), &logs); err != nil {
-		t.Fatal(err)
-	}
-	if a, e := len(logs.Data), 3; a != e {
-		t.Fatalf("expected %d log files; got %d", e, a)
-	}
-	for i, name := range []string{"log.ERROR", "log.INFO", "log.WARNING"} {
-		if !strings.Contains(logs.Data[i].Name, name) {
-			t.Errorf("expected log file name %s to contain %q", logs.Data[i].Name, name)
-		}
-	}
-
-	// Fetch the full list of log entries.
-	type logWrapper struct {
-		Data []log.LogEntry `json:"d"`
-	}
-
-	// Check each individual log can be fetched and is non-empty.
-	var foundInfo, foundWarning, foundError bool
-	for _, file := range logs.Data {
-		var log logWrapper
-		if err := json.Unmarshal(getRequest(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name)), &log); err != nil {
-			t.Fatal(err)
-		}
-		for _, entry := range log.Data {
-			switch entry.Format {
-			case "TestStatusLocalLogFile test message-Error":
-				foundError = true
-			case "TestStatusLocalLogFile test message-Warning":
-				foundWarning = true
-			case "TestStatusLocalLogFile test message-Info":
-				foundInfo = true
-			}
-		}
-	}
-
-	if !(foundInfo && foundWarning && foundError) {
-		t.Errorf("expected to find test messages in %v", logs.Data)
-	}
-
-	testCases := []struct {
-		Level           log.Severity
-		MaxEntities     int
-		StartTimestamp  int64
-		EndTimestamp    int64
-		Pattern         string
-		ExpectedError   bool
-		ExpectedWarning bool
-		ExpectedInfo    bool
-	}{
-		// Test filtering by log severity.
-		{log.InfoLog, 0, 0, 0, "", true, true, true},
-		{log.WarningLog, 0, 0, 0, "", true, true, false},
-		{log.ErrorLog, 0, 0, 0, "", true, false, false},
-		// Test entry limit. Ignore Info/Warning/Error filters.
-		{log.InfoLog, 1, timestamp, timestampEWI, "", false, false, false},
-		{log.InfoLog, 2, timestamp, timestampEWI, "", false, false, false},
-		{log.InfoLog, 3, timestamp, timestampEWI, "", false, false, false},
-		// Test filtering in different timestamp windows.
-		{log.InfoLog, 0, timestamp, timestamp, "", false, false, false},
-		{log.InfoLog, 0, timestamp, timestampE, "", true, false, false},
-		{log.InfoLog, 0, timestampE, timestampEW, "", false, true, false},
-		{log.InfoLog, 0, timestampEW, timestampEWI, "", false, false, true},
-		{log.InfoLog, 0, timestamp, timestampEW, "", true, true, false},
-		{log.InfoLog, 0, timestampE, timestampEWI, "", false, true, true},
-		{log.InfoLog, 0, timestamp, timestampEWI, "", true, true, true},
-		// Test filtering by regexp pattern.
-		{log.InfoLog, 0, 0, 0, "Info", false, false, true},
-		{log.InfoLog, 0, 0, 0, "Warning", false, true, false},
-		{log.InfoLog, 0, 0, 0, "Error", true, false, false},
-		{log.InfoLog, 0, 0, 0, "Info|Error|Warning", true, true, true},
-		{log.InfoLog, 0, 0, 0, "Nothing", false, false, false},
-	}
-
-	for i, testCase := range testCases {
-		var url bytes.Buffer
-		fmt.Fprintf(&url, "/_status/logs/local?level=%s", testCase.Level.Name())
-		if testCase.MaxEntities > 0 {
-			fmt.Fprintf(&url, "&max=%d", testCase.MaxEntities)
-		}
-		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "&starttime=%d", testCase.StartTimestamp)
-		}
-		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "&endtime=%d", testCase.EndTimestamp)
-		}
-		if len(testCase.Pattern) > 0 {
-			fmt.Fprintf(&url, "&pattern=%s", testCase.Pattern)
-		}
-
-		var log logWrapper
-		path := url.String()
-		if err := json.Unmarshal(getRequest(t, ts, path), &log); err != nil {
-			t.Fatal(err)
-		}
-
-		if testCase.MaxEntities > 0 {
-			if a, e := len(log.Data), testCase.MaxEntities; a != e {
-				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, log.Data)
-			}
-		} else {
-			var actualInfo, actualWarning, actualError bool
-			var formats bytes.Buffer
-			for _, entry := range log.Data {
-				fmt.Fprintf(&formats, "%s\n", entry.Format)
-
-				switch entry.Format {
-				case "TestStatusLocalLogFile test message-Error":
-					actualError = true
-				case "TestStatusLocalLogFile test message-Warning":
-					actualWarning = true
-				case "TestStatusLocalLogFile test message-Info":
-					actualInfo = true
-				}
-			}
-
-			if !(testCase.ExpectedInfo == actualInfo &&
-				testCase.ExpectedWarning == actualWarning &&
-				testCase.ExpectedError == actualError) {
-
-				t.Errorf(
-					"%d: expected info, warning, error: (%t, %t, %t) from %s, got:\n%s",
-					i,
-					testCase.ExpectedInfo,
-					testCase.ExpectedWarning,
-					testCase.ExpectedError,
-					path,
-					formats.String(),
-				)
-			}
-		}
-	}
 }
 
 // TestNodeStatusResponse verifies that node status returns the expected

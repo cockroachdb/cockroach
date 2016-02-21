@@ -23,7 +23,6 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
-	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -45,10 +44,6 @@ const (
 
 		/_status/details/:node_id		 - specific node's details
 		/_status/gossip/:node_id         - specific node's gossip
-		/_status/logfiles/:node_id       - list log files
-		/_status/logfiles/:node_id/:file - returns the contents of the specific
-										   log files on specific node
-		/_status/logs/:node_id           - log entries from a specific node
 		/_status/stacks/:node_id		 - exposes stack traces of running
 										   goroutines
 		/_status/nodes				     - all nodes' status
@@ -65,16 +60,6 @@ const (
 
 	// statusDetailsPattern exposes a node's details.
 	statusDetailsPattern = statusPrefix + "details/:node_id"
-
-	// statusLogFilesListPattern exposes a list of log files.
-	statusLogFilesListPattern = statusPrefix + "logfiles/:node_id"
-	// statusLogFilePattern exposes a specific file on a node.
-	statusLogFilePattern = statusPrefix + "logfiles/:node_id/:file"
-
-	// statusLogKeyPrefix exposes the logs for each node.
-	statusLogsPattern = statusPrefix + "logs/:node_id"
-	// Default Maximum number of log entries returned.
-	defaultMaxLogEntries = 1000
 
 	// statusStacksPattern exposes the stack traces of running goroutines.
 	statusStacksPattern = statusPrefix + "stacks/:node_id"
@@ -136,9 +121,6 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry *metric.
 
 	server.router.GET(statusGossipPattern, server.handleGossip)
 	server.router.GET(statusDetailsPattern, server.handleDetails)
-	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
-	server.router.GET(statusLogFilePattern, server.handleLogFile)
-	server.router.GET(statusLogsPattern, server.handleLogs)
 	server.router.GET(statusStacksPattern, server.handleStacks)
 	server.router.GET(statusNodesPrefix, server.handleNodesStatus)
 	server.router.GET(statusNodePattern, server.handleNodeStatus)
@@ -270,205 +252,6 @@ func (s *statusServer) handleDetails(w http.ResponseWriter, r *http.Request, ps 
 
 	if local {
 		s.handleDetailsLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
-	}
-}
-
-// handleLogFilesList handles local requests for a list of available log files.
-func (s *statusServer) handleLogFilesListLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	log.Flush()
-	logFiles, err := log.ListLogFiles()
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	respondAsJSON(w, r, logFiles)
-}
-
-// handleLogFilesList handles GET requests for a list of available log files.
-func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if local {
-		s.handleLogFilesListLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
-	}
-}
-
-// handleLocalLogFile handles local requests for a single log. If no filename is
-// available, it returns 404. The log contents are returned in structured
-// format as JSON.
-func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	log.Flush()
-	file := ps.ByName("file")
-	reader, err := log.GetLogReader(file, true /* restricted */)
-	if reader == nil || err != nil {
-		log.Errorf("log file %s could not be opened: %s", file, err)
-		http.NotFound(w, r)
-		return
-	}
-	defer reader.Close()
-
-	entry := log.LogEntry{}
-	var entries []log.LogEntry
-	decoder := log.NewEntryDecoder(reader)
-	for {
-		if err := decoder.Decode(&entry); err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Error(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		entries = append(entries, entry)
-	}
-
-	respondAsJSON(w, r, entries)
-}
-
-// handleLogFile handles GET requests for a single log file.
-func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if local {
-		s.handleLogFileLocal(w, r, ps)
-	} else {
-		s.proxyRequest(nodeID, w, r)
-	}
-}
-
-// parseInt64WithDefault attempts to parse the passed in string. If an empty
-// string is supplied or parsing results in an error the default value is
-// returned.  If an error does occur during parsing, the error is returned as
-// well.
-func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
-	if len(s) == 0 {
-		return defaultValue, nil
-	}
-	result, err := strconv.ParseInt(s, 10, 0)
-	if err != nil {
-		return defaultValue, err
-	}
-	return result, nil
-}
-
-// handleLogsLocal returns the log entries parsed from the log files stored on
-// the server. Log entries are returned in reverse chronological order. The
-// following options are available:
-// * "starttime" query parameter filters the log entries to only ones that
-//   occurred on or after the "starttime". Defaults to a day ago.
-// * "endtime" query parameter filters the log entries to only ones that
-//   occurred before on on the "endtime". Defaults to the current time.
-// * "pattern" query parameter filters the log entries by the provided regexp
-//   pattern if it exists. Defaults to nil.
-// * "max" query parameter is the hard limit of the number of returned log
-//   entries. Defaults to defaultMaxLogEntries.
-// * "level" query parameter filters the log entries to be those of the
-//   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	log.Flush()
-
-	level := r.URL.Query().Get("level")
-	var sev log.Severity
-	if len(level) == 0 {
-		sev = log.InfoLog
-	} else {
-		var sevFound bool
-		sev, sevFound = log.SeverityByName(level)
-		if !sevFound {
-			http.Error(w,
-				fmt.Sprintf("level could not be determined: %s", level),
-				http.StatusBadRequest)
-			return
-		}
-	}
-
-	startTimestamp, err := parseInt64WithDefault(
-		r.URL.Query().Get("starttime"),
-		time.Now().AddDate(0, 0, -1).UnixNano())
-	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("starttime could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
-	}
-
-	endTimestamp, err := parseInt64WithDefault(
-		r.URL.Query().Get("endtime"),
-		time.Now().UnixNano())
-	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("endtime could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
-	}
-
-	if startTimestamp > endTimestamp {
-		http.Error(w,
-			fmt.Sprintf("startime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp),
-			http.StatusBadRequest)
-		return
-	}
-
-	maxEntries, err := parseInt64WithDefault(
-		r.URL.Query().Get("max"),
-		defaultMaxLogEntries)
-	if err != nil {
-		http.Error(w,
-			fmt.Sprintf("max could not be parsed: %s", err),
-			http.StatusBadRequest)
-		return
-	}
-	if maxEntries < 1 {
-		http.Error(w,
-			fmt.Sprintf("max: %d should be set to a value greater than 0", maxEntries),
-			http.StatusBadRequest)
-		return
-	}
-
-	pattern := r.URL.Query().Get("pattern")
-	var regex *regexp.Regexp
-	if len(pattern) > 0 {
-		if regex, err = regexp.Compile(pattern); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "regex pattern could not be compiled: %s", err)
-			return
-		}
-	}
-
-	entries, err := log.FetchEntriesFromFiles(sev, startTimestamp, endTimestamp, int(maxEntries), regex)
-	if err != nil {
-		log.Error(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	respondAsJSON(w, r, entries)
-}
-
-// handleLogs handles GET requests for log entires.
-func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	nodeID, local, err := s.extractNodeID(ps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if local {
-		s.handleLogsLocal(w, r, ps)
 	} else {
 		s.proxyRequest(nodeID, w, r)
 	}

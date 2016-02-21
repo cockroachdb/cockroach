@@ -216,9 +216,12 @@ type FileInfo struct {
 	Details      FileDetails
 }
 
-// ListLogFiles returns a slice of FileInfo structs for each log file
+// listLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
-func ListLogFiles() ([]FileInfo, error) {
+//
+// TODO(pmattis): Temporarily unexported while the long term status of this
+// functionality is determined.
+func listLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
 	if *logDir == "" {
 		return nil, nil
@@ -241,14 +244,14 @@ func ListLogFiles() ([]FileInfo, error) {
 	return results, nil
 }
 
-// GetLogReader returns a reader for the specified filename. In
+// getLogReader returns a reader for the specified filename. In
 // restricted mode, the filename must be the base name of a file in
 // this process's log directory (this is safe for cases when the
 // filename comes from external sources, such as the admin UI via
 // HTTP). In unrestricted mode any path is allowed, with the added
 // feature that relative paths will be searched in both the current
 // directory and this process's log directory.
-func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
+func getLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 	if !restricted {
 		if resolved, err := filepath.EvalSymlinks(filename); err == nil {
 			if verifyFile(resolved) == nil {
@@ -301,14 +304,17 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 	return files
 }
 
-// FetchEntriesFromFiles fetches all available log entires on disk that match
+// fetchEntriesFromFiles fetches all available log entires on disk that match
 // the log 'severity' (or worse) and are between the 'startTimestamp' and
 // 'endTimestamp'. It will stop reading new files if the number of entries
 // exceeds 'maxEntries'. Log entries are further filtered by the regexp
 // 'pattern' if provided. The logs entries are returned in reverse chronological
 // order.
-func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, error) {
-	logFiles, err := ListLogFiles()
+//
+// TODO(pmattis): Temporarily unexported while the long term status of this
+// functionality is determined.
+func fetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, error) {
+	logFiles, err := listLogFiles()
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +353,7 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 // processed. If the number of entries returned exceeds 'maxEntries' then
 // processing of new entries is stopped immediately.
 func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, bool, error) {
-	reader, err := GetLogReader(file.Name, true /* restricted */)
+	reader, err := getLogReader(file.Name, true /* restricted */)
 	defer reader.Close()
 	if reader == nil || err != nil {
 		return nil, false, err
