@@ -36,6 +36,9 @@ function fetch_docker() {
 # the argument causing the commands in the if-branch to be executed
 # within the docker container.
 if [ "${1-}" = "docker" ]; then
+  go get -u github.com/robfig/glock
+  glock sync -n < GLOCKFILE
+
   # Be careful to keep the dependencies built for each shard in sync
   # with the dependencies used by each shard in circle-test.sh.
 
@@ -64,9 +67,6 @@ if [ "${1-}" = "docker" ]; then
     # Fix permissions on the ui/typings directory and subdirectories
     # (they lack the execute permission for group/other).
     find /uicache/typings -type d | xargs chmod 0755
-
-    cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}')
-    time go install -v ${cmds}
 
     # TODO(pmattis): This works around the problem seen in
     # https://github.com/cockroachdb/cockroach/issues/4013 where
@@ -137,11 +137,6 @@ if is_shard 0; then
   fetch_docker "postgres-test" "20160203-140220"
 fi
 
-# TODO(mjibson): cache the docker-spy image
-
-HOME="" go get -u github.com/robfig/glock
-grep -v '^cmd' GLOCKFILE | glock sync -n
-
 # Recursively invoke this script inside the builder docker container,
 # passing "docker" as the first argument.
 $(dirname $0)/builder.sh $0 docker
@@ -167,7 +162,7 @@ if is_shard 2; then
     time ssh node0 sudo chown -R "${USER}.${USER}" "${dir}"
     time rsync -a --delete "${dir}/" node0:"${dir}"
 
-    cmds=$(grep '^cmd' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
+    cmds=$(grep '^cmd ' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
     time ssh node0 mkdir -p "${gopath0}/bin/linux_amd64"
     time ssh node0 sudo chown "${USER}.${USER}" "${gopath0}/bin/linux_amd64"
     for cmd in ${cmds}; do
