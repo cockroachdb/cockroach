@@ -224,6 +224,26 @@ func (s *Server) Start() error {
 		return err
 	}
 
+	// The following code is a specialization of util/net.go's ListenAndServe
+	// which adds pgwire support. A single port is used to serve all protocols
+	// (pg, http, h2) via the following construction:
+	//
+	// non-TLS case:
+	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	//               |
+	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
+	//               -  -> cmux.Any -> http.(*Server).Serve
+	//
+	// TLS case:
+	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	//               |
+	//               -  -> cmux.Any -> tls.NewListener -> http.(*Server).Serve
+	//
+	// Note that the difference between the TLS and non-TLS cases exists due to
+	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
+	// in util.ListenAndServe for an explanation of how h2c is implemented there
+	// and here.
+
 	ln, err := net.Listen("tcp", s.ctx.Addr)
 	if err != nil {
 		return err
