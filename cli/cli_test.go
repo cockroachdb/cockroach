@@ -709,8 +709,6 @@ Available Commands:
   exterminate destroy all data held by the node
   quit        drain and shutdown node
 
-  log         make log files human-readable
-
   sql         open a sql shell
   kv          get, put, conditional put, increment, delete, scan, and reverse scan key/value pairs
   user        get, set, list and remove users
