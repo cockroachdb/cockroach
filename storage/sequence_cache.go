@@ -143,9 +143,12 @@ func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, *uuid.UUID, roa
 		})
 }
 
-func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax engine.MVCCKey) error {
+// TODO(nvanbenschoten): We pass MVCCStats in, but the actual key handling is
+// too low level to update it.
+func copySeqCache(e engine.Engine, ms *engine.MVCCStats, srcID, dstID roachpb.RangeID, keyMin, keyMax engine.MVCCKey) (int, error) {
 	var scratch [64]byte
-	return e.Iterate(keyMin, keyMax,
+	var count int
+	err := e.Iterate(keyMin, keyMax,
 		func(kv engine.MVCCKeyValue) (bool, error) {
 			// Decode the key into a cmd, skipping on error. Otherwise,
 			// write it to the corresponding key in the new cache.
@@ -167,14 +170,17 @@ func copySeqCache(e engine.Engine, srcID, dstID roachpb.RangeID, keyMin, keyMax 
 			value.InitChecksum(key)
 			meta.RawBytes = value.RawBytes
 			_, _, err = engine.PutProto(e, encKey, meta)
+			count++
 			return false, err
 		})
+	return count, err
 }
 
 // CopyInto copies all the results from this sequence cache into the destRangeID
 // sequence cache. Failures decoding individual cache entries return an error.
-func (sc *SequenceCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) error {
-	return copySeqCache(e, sc.rangeID, destRangeID,
+// On success, returns the number of entries (key-value pairs) copied.
+func (sc *SequenceCache) CopyInto(e engine.Engine, ms *engine.MVCCStats, destRangeID roachpb.RangeID) (int, error) {
+	return copySeqCache(e, ms, sc.rangeID, destRangeID,
 		engine.MakeMVCCMetadataKey(sc.min), engine.MakeMVCCMetadataKey(sc.max))
 }
 
@@ -183,16 +189,24 @@ func (sc *SequenceCache) CopyInto(e engine.Engine, destRangeID roachpb.RangeID) 
 // locked while copying is in progress. Failures decoding individual
 // entries return an error. The copy is done directly using the engine
 // instead of interpreting values through MVCC for efficiency.
-func (sc *SequenceCache) CopyFrom(e engine.Engine, originRangeID roachpb.RangeID) error {
+// On success, returns the number of entries (key-value pairs) copied.
+func (sc *SequenceCache) CopyFrom(e engine.Engine, ms *engine.MVCCStats, originRangeID roachpb.RangeID) (int, error) {
 	originMin := engine.MakeMVCCMetadataKey(
 		keys.SequenceCacheKey(originRangeID, txnIDMin, math.MaxUint32, math.MaxUint32))
 	originMax := engine.MakeMVCCMetadataKey(
 		keys.SequenceCacheKey(originRangeID, txnIDMax, 0, 0))
-	return copySeqCache(e, originRangeID, sc.rangeID, originMin, originMax)
+	return copySeqCache(e, ms, originRangeID, sc.rangeID, originMin, originMax)
+}
+
+// Del removes all sequence cache entries for the given transaction.
+func (sc *SequenceCache) Del(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID) error {
+	startKey := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
+	_, err := engine.MVCCDeleteRange(e, nil /* TODO(nvanbenschoten) */, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */)
+	return err
 }
 
 // Put writes a sequence number for the specified transaction ID.
-func (sc *SequenceCache) Put(e engine.Engine, txnID *uuid.UUID, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, pErr *roachpb.Error) error {
+func (sc *SequenceCache) Put(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, pErr *roachpb.Error) error {
 	if seq <= 0 || txnID == nil {
 		return errEmptyTxnID
 	}
@@ -203,7 +217,7 @@ func (sc *SequenceCache) Put(e engine.Engine, txnID *uuid.UUID, epoch, seq uint3
 	// Write the response value to the engine.
 	key := keys.SequenceCacheKey(sc.rangeID, txnID, epoch, seq)
 	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS}
-	return engine.MVCCPutProto(e, nil /* ms */, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
+	return engine.MVCCPutProto(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
 }
 
 // Responses with write-too-old, write-intent and not leader errors
