@@ -1,7 +1,6 @@
 package sql_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
@@ -12,7 +11,6 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
-	nid := s.Gossip().GetNodeID().String()
 
 	var testcases = []struct {
 		query            string
@@ -55,7 +53,7 @@ func TestQueryCounts(t *testing.T) {
 		}
 
 		checkCounter := func(key string, e int64) {
-			if a := s.MustGetCounter(fmt.Sprintf("cr.node.sql.%s.%s", key, nid)); a != e {
+			if a := s.MustGetSQLCounter(key); a != e {
 				t.Errorf("%s for '%s': actual %d != expected %d", key, tc.query, a, e)
 			}
 		}
@@ -111,9 +109,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	nid := s.Gossip().GetNodeID().String()
 	checkCounter := func(key string, e int64) {
-		if a := s.MustGetCounter(fmt.Sprintf("cr.node.sql.%s.%s", key, nid)); a != e {
+		if a := s.MustGetSQLCounter(key); a != e {
 			t.Errorf("stat %s: actual %d != expected %d", key, a, e)
 		}
 	}
@@ -140,9 +137,8 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	nid := s.Gossip().GetNodeID().String()
 	checkCounter := func(key string, e int64) {
-		if a := s.MustGetCounter(fmt.Sprintf("cr.node.sql.%s.%s", key, nid)); a != e {
+		if a := s.MustGetSQLCounter(key); a != e {
 			t.Errorf("stat %s: actual %d != expected %d", key, a, e)
 		}
 	}

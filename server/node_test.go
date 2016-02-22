@@ -102,7 +102,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
-	node := NewNode(ctx, metric.NewRegistry(), stopper, nil, kv.NewTxnMetrics(metric.NewRegistry()))
+	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper, kv.NewTxnMetrics(metric.NewRegistry()))
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 
@@ -524,7 +524,7 @@ func TestStatusSummaries(t *testing.T) {
 	// were multiple replicas, more care would need to be taken in the initial
 	// syncFeed().
 	forceWriteStatus := func() {
-		if err := ts.node.publishStoreStatuses(); err != nil {
+		if err := ts.node.computePeriodicMetrics(); err != nil {
 			t.Fatalf("error publishing store statuses: %s", err)
 		}
 
