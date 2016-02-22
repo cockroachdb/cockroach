@@ -97,9 +97,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
 		kv.NewTxnMetrics(metric.NewRegistry()))
 	ctx.DB = client.NewDB(sender)
-	// TODO(bdarnell): arrange to have the transport closed.
-	// (or attach LocalRPCTransport.Close to the stopper)
-	ctx.Transport = storage.NewLocalRPCTransport(stopper)
+	ctx.Transport = storage.NewDummyRaftTransport()
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper, kv.NewTxnMetrics(metric.NewRegistry()))

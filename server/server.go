@@ -86,7 +86,7 @@ type Server struct {
 	status              *statusServer
 	tsDB                *ts.DB
 	tsServer            *ts.Server
-	raftTransport       storage.RaftTransport
+	raftTransport       *storage.RaftTransport
 	stopper             *stop.Stopper
 	sqlExecutor         *sql.Executor
 	leaseMgr            *sql.LeaseManager
@@ -160,8 +160,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.db = client.NewDB(sender)
 
 	s.grpc = grpc.NewServer()
-	s.raftTransport = newRPCTransport(s.gossip, s.grpc, s.rpcContext)
-	s.stopper.AddCloser(s.raftTransport)
+	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
 	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
