@@ -719,7 +719,7 @@ func (l *loggingT) putBuffer(b *buffer) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStderr bool, entry *LogEntry) {
+func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry *LogEntry) {
 	l.mu.Lock()
 
 	// Set additional details in log entry.
@@ -744,7 +744,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, alsoToStder
 			panic(err)
 		}
 	} else {
-		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
+		if l.alsoToStderr || s >= l.stderrThreshold.get() {
 			if _, err := os.Stderr.Write(l.processForStderr(entry)); err != nil {
 				panic(err)
 			}
@@ -1052,17 +1052,17 @@ func (l *loggingT) flushAll() {
 	}
 }
 
-// CopyStandardLogTo arranges for messages written to the Go "log" package's
+// copyStandardLogTo arranges for messages written to the Go "log" package's
 // default logs to also appear in the Google logs for the named and lower
 // severities.  Subsequent changes to the standard log's default output location
 // or format may break this behavior.
 //
 // Valid names are "INFO", "WARNING", "ERROR", and "FATAL".  If the name is not
-// recognized, CopyStandardLogTo panics.
-func CopyStandardLogTo(name string) {
+// recognized, copyStandardLogTo panics.
+func copyStandardLogTo(name string) {
 	sev, ok := SeverityByName(name)
 	if !ok {
-		panic(fmt.Sprintf("CopyStandardLogTo(%q): unrecognized Severity name", name))
+		panic(fmt.Sprintf("copyStandardLogTo(%q): unrecognized Severity name", name))
 	}
 	// Set a log format that captures the user's file and line:
 	//   d.go:23: message
@@ -1070,7 +1070,7 @@ func CopyStandardLogTo(name string) {
 	stdLog.SetOutput(logBridge(sev))
 }
 
-// logBridge provides the Write method that enables CopyStandardLogTo to connect
+// logBridge provides the Write method that enables copyStandardLogTo to connect
 // Go's standard logs to the logs provided by this package.
 type logBridge Severity
 
@@ -1099,8 +1099,14 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	entry := &LogEntry{
 		Format: text,
 	}
-	logging.outputLogEntry(Severity(lb), file, line, true, entry)
+	logging.outputLogEntry(Severity(lb), file, line, entry)
 	return len(b), nil
+}
+
+// NewStdLogger creates a *stdLog.Logger that forwards messages to the Google
+// logs for the specified severity.
+func NewStdLogger(severity Severity) *stdLog.Logger {
+	return stdLog.New(logBridge(severity), "", stdLog.Lshortfile)
 }
 
 // setV computes and remembers the V level for a given PC
