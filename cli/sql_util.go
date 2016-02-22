@@ -72,15 +72,7 @@ func runQueryWithFormat(db *sql.DB, format fmtMap, query string, parameters ...i
 // runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes pretty output to 'w'.
 func runPrettyQuery(db *sql.DB, w io.Writer, query string, parameters ...interface{}) error {
-	return runPrettyQueryWithFormat(db, w, nil, query, parameters...)
-}
-
-// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
-// It runs the sql query and writes pretty output to 'w'.
-// If 'format' is not nil, the values with column name
-// found in the map are run through the corresponding callback.
-func runPrettyQueryWithFormat(db *sql.DB, w io.Writer, format fmtMap, query string, parameters ...interface{}) error {
-	cols, allRows, err := runQueryWithFormat(db, format, query, parameters...)
+	cols, allRows, err := runQuery(db, query, parameters...)
 	if err != nil {
 		return err
 	}
