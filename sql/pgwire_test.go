@@ -642,13 +642,12 @@ func TestPGCommandTags(t *testing.T) {
 // checkPGWireMetrics returns the server's pgwire bytesIn/bytesOut and an error if the
 // bytesIn/bytesOut don't satisfy the given minimums and maximums.
 func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
-	nid := s.Gossip().GetNodeID().String()
 	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err
 	}
 
-	bytesIn := s.MustGetCounter("cr.node.pgwire.bytesin." + nid)
-	bytesOut := s.MustGetCounter("cr.node.pgwire.bytesout." + nid)
+	bytesIn := s.MustGetPgwireCounter("bytesin")
+	bytesOut := s.MustGetPgwireCounter("bytesout")
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, util.Errorf("bytesin %d < expected min %d", a, min)
 	}
@@ -700,11 +699,9 @@ func TestPGWireMetrics(t *testing.T) {
 	}
 
 	// Verify connection counter.
-	nid := s.Gossip().GetNodeID().String()
 	expectConns := func(n int) {
 		util.SucceedsWithin(t, 3*time.Second, func() error {
-			connsKey := "cr.node.pgwire.conns." + nid
-			if conns := s.MustGetCounter(connsKey); conns != int64(n) {
+			if conns := s.MustGetPgwireCounter("conns"); conns != int64(n) {
 				return util.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil

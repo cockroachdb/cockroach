@@ -35,6 +35,11 @@ type TimeScale struct {
 	d    time.Duration
 }
 
+// Name returns the name of the TimeScale.
+func (ts TimeScale) Name() string {
+	return ts.name
+}
+
 var (
 	// Scale1M is a 1 minute window for windowed stats (e.g. Rates and Histograms).
 	Scale1M = TimeScale{"1m", 1 * time.Minute}
@@ -255,7 +260,10 @@ func (e *Rate) Add(v float64) {
 	e.mu.Unlock()
 }
 
-// Each calls the given closure with the empty string and the Rate's current value.
+// Each calls the given closure with the empty string and the Rate's current
+// value.  TODO(mrtracy): Fix this to pass the Rate object itself to 'f', to
+// match the 'visitor' behavior as the other metric types (currently, it passes
+// the current value of the Rate as a float64.)
 func (e *Rate) Each(f func(string, interface{})) {
 	e.mu.Lock()
 	maybeTick(e)
