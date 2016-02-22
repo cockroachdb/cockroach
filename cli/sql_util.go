@@ -62,7 +62,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{Rows: rows, conn: c}, nil
+	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
 func (c *sqlConn) Next() (*sqlRows, error) {
@@ -76,7 +76,7 @@ func (c *sqlConn) Next() (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{Rows: rows, conn: c}, nil
+	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
 func (c *sqlConn) Close() {
@@ -89,13 +89,31 @@ func (c *sqlConn) Close() {
 	}
 }
 
-type sqlRows struct {
+type sqlRowsI interface {
 	driver.Rows
+	Result() driver.Result
+	Tag() string
+}
+
+type sqlRows struct {
+	rows sqlRowsI
 	conn *sqlConn
 }
 
+func (r *sqlRows) Columns() []string {
+	return r.rows.Columns()
+}
+
+func (r *sqlRows) Result() driver.Result {
+	return r.rows.Result()
+}
+
+func (r *sqlRows) Tag() string {
+	return r.rows.Tag()
+}
+
 func (r *sqlRows) Close() error {
-	err := r.Rows.Close()
+	err := r.rows.Close()
 	if err == driver.ErrBadConn {
 		r.conn.Close()
 	}
@@ -103,7 +121,7 @@ func (r *sqlRows) Close() error {
 }
 
 func (r *sqlRows) Next(values []driver.Value) error {
-	err := r.Rows.Next(values)
+	err := r.rows.Next(values)
 	if err == driver.ErrBadConn {
 		r.conn.Close()
 	}
@@ -157,7 +175,7 @@ func makeQuery(query string, parameters ...driver.Value) queryFunc {
 
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
-func runQuery(conn *sqlConn, fn queryFunc) ([]string, [][]string, error) {
+func runQuery(conn *sqlConn, fn queryFunc) ([]string, [][]string, string, error) {
 	return runQueryWithFormat(conn, nil, fn)
 }
 
@@ -166,10 +184,10 @@ func runQuery(conn *sqlConn, fn queryFunc) ([]string, [][]string, error) {
 // If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
 func runQueryWithFormat(conn *sqlConn, format fmtMap, fn queryFunc) (
-	[]string, [][]string, error) {
+	[]string, [][]string, string, error) {
 	rows, err := fn(conn)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	defer func() { _ = rows.Close() }()
@@ -180,14 +198,14 @@ func runQueryWithFormat(conn *sqlConn, format fmtMap, fn queryFunc) (
 // It runs the sql query and writes pretty output to 'w'.
 func runPrettyQuery(conn *sqlConn, w io.Writer, fn queryFunc) error {
 	for {
-		cols, allRows, err := runQuery(conn, fn)
+		cols, allRows, result, err := runQuery(conn, fn)
 		if err != nil {
 			if err == pq.ErrNoMoreResults {
 				return nil
 			}
 			return err
 		}
-		printQueryOutput(w, cols, allRows)
+		printQueryOutput(w, cols, allRows, result)
 		fn = nextResult
 	}
 }
@@ -200,15 +218,14 @@ func runPrettyQuery(conn *sqlConn, w io.Writer, fn queryFunc) error {
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
-func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, error) {
+func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, string, error) {
 	cols := rows.Columns()
 
-	if len(cols) == 0 {
-		return nil, nil, nil
+	var allRows [][]string
+	var vals []driver.Value
+	if len(cols) > 0 {
+		vals = make([]driver.Value, len(cols))
 	}
-
-	vals := make([]driver.Value, len(cols))
-	allRows := [][]string{}
 
 	for {
 		err := rows.Next(vals)
@@ -216,7 +233,7 @@ func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, error
 			break
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		rowStrings := make([]string, len(cols))
 		for i, v := range vals {
@@ -229,15 +246,33 @@ func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, error
 		allRows = append(allRows, rowStrings)
 	}
 
-	return cols, allRows, nil
+	result := rows.Result()
+	tag := rows.Tag()
+	switch tag {
+	case "":
+		tag = "OK"
+	case "DELETE", "INSERT", "UPDATE":
+		if n, err := result.RowsAffected(); err == nil {
+			tag = fmt.Sprintf("%s %d", tag, n)
+		}
+	}
+
+	return cols, allRows, tag, nil
+}
+
+func pluralize(n int64) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // printQueryOutput takes a list of column names and a list of row contents
 // writes a pretty table to 'w', or "OK" if empty.
-func printQueryOutput(w io.Writer, cols []string, allRows [][]string) {
+func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string) {
 	if len(cols) == 0 {
-		// This operation did not return rows, just show success.
-		fmt.Fprintln(w, "OK")
+		// This operation did not return rows, just show the tag.
+		fmt.Fprintln(w, tag)
 		return
 	}
 

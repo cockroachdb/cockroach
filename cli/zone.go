@@ -84,7 +84,7 @@ func runGetZone(cmd *cobra.Command, args []string) {
 
 	conn := makeSQLClient()
 	defer conn.Close()
-	_, rows, err := runQueryWithFormat(conn, fmtMap{"config": formatZone},
+	_, rows, _, err := runQueryWithFormat(conn, fmtMap{"config": formatZone},
 		makeQuery(`SELECT * FROM system.zones WHERE id=$1`, id))
 	if err != nil {
 		log.Error(err)
@@ -117,7 +117,7 @@ func runLsZones(cmd *cobra.Command, args []string) {
 	}
 	conn := makeSQLClient()
 	defer conn.Close()
-	_, rows, err := runQueryWithFormat(conn, fmtMap{"config": formatZone},
+	_, rows, _, err := runQueryWithFormat(conn, fmtMap{"config": formatZone},
 		makeQuery(`SELECT * FROM system.zones`))
 	if err != nil {
 		log.Error(err)
