@@ -10,7 +10,8 @@ const (
 	_serverMessageType_name_2 = "serverMsgEmptyQuery"
 	_serverMessageType_name_3 = "serverMsgAuthserverMsgParameterStatusserverMsgRowDescription"
 	_serverMessageType_name_4 = "serverMsgReady"
-	_serverMessageType_name_5 = "serverMsgParameterDescription"
+	_serverMessageType_name_5 = "serverMsgNoData"
+	_serverMessageType_name_6 = "serverMsgParameterDescription"
 )
 
 var (
@@ -19,7 +20,8 @@ var (
 	_serverMessageType_index_2 = [...]uint8{0, 19}
 	_serverMessageType_index_3 = [...]uint8{0, 13, 37, 60}
 	_serverMessageType_index_4 = [...]uint8{0, 14}
-	_serverMessageType_index_5 = [...]uint8{0, 29}
+	_serverMessageType_index_5 = [...]uint8{0, 15}
+	_serverMessageType_index_6 = [...]uint8{0, 29}
 )
 
 func (i serverMessageType) String() string {
@@ -37,8 +39,10 @@ func (i serverMessageType) String() string {
 		return _serverMessageType_name_3[_serverMessageType_index_3[i]:_serverMessageType_index_3[i+1]]
 	case i == 90:
 		return _serverMessageType_name_4
-	case i == 116:
+	case i == 110:
 		return _serverMessageType_name_5
+	case i == 116:
+		return _serverMessageType_name_6
 	default:
 		return fmt.Sprintf("serverMessageType(%d)", i)
 	}

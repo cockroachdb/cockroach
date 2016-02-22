@@ -63,6 +63,7 @@ const (
 	serverMsgParameterDescription serverMessageType = 't'
 	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgParameterStatus      serverMessageType = 'S'
+	serverMsgNoData               serverMessageType = 'n'
 )
 
 //go:generate stringer -type=prepareType
@@ -704,26 +705,30 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 }
 
 func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []formatCode) error {
-	c.writeBuf.initMsg(serverMsgRowDescription)
-	c.writeBuf.putInt16(int16(len(columns)))
-	for i, column := range columns {
-		if log.V(2) {
-			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ)
-		}
-		if err := c.writeBuf.writeString(column.Name); err != nil {
-			return err
-		}
+	if len(columns) == 0 {
+		c.writeBuf.initMsg(serverMsgNoData)
+	} else {
+		c.writeBuf.initMsg(serverMsgRowDescription)
+		c.writeBuf.putInt16(int16(len(columns)))
+		for i, column := range columns {
+			if log.V(2) {
+				log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ)
+			}
+			if err := c.writeBuf.writeString(column.Name); err != nil {
+				return err
+			}
 
-		typ := typeForDatum(column.Typ)
-		c.writeBuf.putInt32(0) // Table OID (optional).
-		c.writeBuf.putInt16(0) // Column attribute ID (optional).
-		c.writeBuf.putInt32(int32(typ.oid))
-		c.writeBuf.putInt16(int16(typ.size))
-		c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
-		if formatCodes == nil {
-			c.writeBuf.putInt16(int16(formatText))
-		} else {
-			c.writeBuf.putInt16(int16(formatCodes[i]))
+			typ := typeForDatum(column.Typ)
+			c.writeBuf.putInt32(0) // Table OID (optional).
+			c.writeBuf.putInt16(0) // Column attribute ID (optional).
+			c.writeBuf.putInt32(int32(typ.oid))
+			c.writeBuf.putInt16(int16(typ.size))
+			c.writeBuf.putInt32(0) // Type modifier (none of our supported types have modifiers).
+			if formatCodes == nil {
+				c.writeBuf.putInt16(int16(formatText))
+			} else {
+				c.writeBuf.putInt16(int16(formatCodes[i]))
+			}
 		}
 	}
 	return c.writeBuf.finishMsg(c.wr)
