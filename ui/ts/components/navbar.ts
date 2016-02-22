@@ -1,4 +1,4 @@
-// source: pages/nodes.ts
+// source: component/navbar.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../util/property.ts" />
@@ -36,24 +36,27 @@ module Components {
       return m(
         "ul.nav",
         _.map(args.ts.targets(), function generateLinks(t: Target): MithrilVirtualElement {
-        let linkAttrs: any = {
-          config: m.route,
-          href: args.ts.baseRoute + t.route,
-        };
-        if (/^https?:\/\//.test(t.route.toLowerCase())) {
-          linkAttrs = {
-            href: t.route,
-            target: "_blank",
+          // settings for a relative URL using the mithril router
+          let linkAttrs: any = {
+            config: m.route,
+            href: args.ts.baseRoute + t.route,
           };
-        }
-        return m(
-          "li",
-          {
-            className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
-          },
-          m("a",
-            linkAttrs,
-            t.view
+          // handle absolute urls by detecting leading http[s]://
+          if (/^https?:\/\//.test(t.route.toLowerCase())) {
+            linkAttrs = {
+              href: t.route,
+              target: "_blank", // open in a new tab/window
+            };
+          }
+          // relative urls
+          return m(
+            "li",
+            {
+              className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
+            },
+            m("a",
+              linkAttrs,
+              t.view
             )
           );
         })

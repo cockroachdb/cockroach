@@ -111,7 +111,6 @@ input
   &:placeholder-shown
     font-style italic
 
-
   &:not([type=checkbox])
     width 100%
     height 40px
@@ -120,7 +119,7 @@ input
     display inline
     margin-right 15px
     padding-bottom 0
-    margin-bottom 0
+    margin-bottom 25px
 
   &:invalid
     border-color $secondary-red-2
@@ -150,6 +149,7 @@ button
   color white
   font-family Lato-Bold
   font-size 16px
+  margin-right 20px
 
 .topbar
   padding 0 3rem 1rem
@@ -272,9 +272,9 @@ a.toggle
   .modal
     position absolute
     width 575px
-    height 740px
+    height 790x
     background-color white
-    top 50px
+    top 20px
     z-index 20
     left 50%
     margin-left -287.5px
@@ -347,4 +347,15 @@ a.toggle
 
 #content
   position relative
+
+.saving
+  display inline
+  font-family Lato-Medium
+  color $secondary-gray-2
+  transition opacity .5s ease-in
+  opacity 0
+  &.no-animate
+    transition opacity 0s
+  &.failed
+    opacity 1
 

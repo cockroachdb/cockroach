@@ -67,7 +67,7 @@ CREATE TABLE system.zones (
 CREATE TABLE system.reporting (
   email       STRING PRIMARY KEY,
   optin       BOOLEAN,
-  dismissed   BOOLEAN,
+  dismissed   INT,
   firstname   STRING,
   lastname    STRING,
   company     STRING,
@@ -98,8 +98,8 @@ var (
 	// zonesTable is the descriptor for the zones table.
 	zonesTable = createSystemTable(keys.ZonesTableID, zonesTableSchema)
 
-	// ReportingTable is the descriptor for the cluster reporting opt-in table.
-	ReportingTable = createSystemTable(keys.ReportingTableID, reportingTableSchema)
+	// reportingTable is the descriptor for the cluster reporting opt-in table.
+	reportingTable = createSystemTable(keys.ReportingTableID, reportingTableSchema)
 
 	// SystemAllowedPrivileges describes the privileges allowed for each
 	// system object. No user may have more than those privileges, and
@@ -167,7 +167,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &descriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &usersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ReportingTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &reportingTable)
 
 	// Add other system tables.
 	target.AddTable(keys.LeaseTableID, leaseTableSchema, privilege.List{privilege.ALL})

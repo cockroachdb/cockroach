@@ -19,40 +19,46 @@ module Models {
     export const LASTUPDATED: string = "lastUpdated";
 
     // Currently the help us flow isn't shown unless the query attribute help-us=true in the URL
-    export function showHelpUs(): _mithril.MithrilPromise<boolean> {
+    export function helpUsFlag(): boolean {
       let helpUs: string = m.route.param("help-us");
-      let deferred: _mithril.MithrilDeferred<boolean> = m.deferred();
-      // TODO: remove this check to show the "Help Us" banner by default
-      if (helpUs && helpUs.toString().toLowerCase() === "true") {
-        // check if the user has already filled out the 'help us' info, or has opted out
-        // TODO: also check if it's a dev cluster in which case we may not want to show the opt in banner
-        Models.SQLQuery.runQuery(`SELECT ${OPTIN}, ${DISMISSED} FROM SYSTEM.REPORTING`, true).then(
-          (r: Object): boolean => {
-            return !!(deferred.resolve(!r[0] || (!_.isBoolean(r[0][OPTIN]) && !r[0][DISMISSED])));
-          });
-      } else {
-        deferred.resolve(false);
-      }
-      return deferred.promise;
+      return (helpUs && helpUs.toString().toLowerCase() === "true");
     }
 
+    /**
+     * OptInAttributes tracks the values we get from the SYSTEM.REPORTING table
+     */
     export class OptInAttributes {
       email: string = "";
-      optin: boolean = false; // Did the user opt in/out of reporting usage
-      dismissed: boolean = false; // Did the user dismiss the banner/modal without opting in/out
+      optin: boolean = null; // Did the user opt in/out of reporting usage
+      dismissed: number = null; // How many times did the user dismiss the banner/modal without opting in/out
       firstname: string = "";
       lastname: string = "";
       company: string = "";
-      updates: boolean = false; // Did the user sign up for product/feature updates
+      updates: boolean = null; // Did the user sign up for product/feature updates
     }
 
     export class UserOptIn {
 
+      /**
+       * savedAttributes are the values we originally received when we fetch SYSTEM.REPORTING.
+       * They are updated when we save.
+       */
+      savedAttributes: OptInAttributes = new OptInAttributes();
+
+      /**
+       * attributes is populated with the values from SYSTEM.REPORTING.
+       * They are updated whenever the user modifies form fields.
+       */
       attributes: OptInAttributes = new OptInAttributes();
 
-      attributeList: string[] = _.keys(this.attributes);
-
+      /**
+       * loaded is true once the original load completes
+       */
       loaded: boolean = false;
+
+      /**
+       * loadPromise stores the original load request promise, so that any function can wait on the original load to complete
+       */
       loadPromise: MithrilPromise<void> = null;
 
       constructor() {
@@ -60,32 +66,56 @@ module Models {
       }
 
       save(): MithrilPromise<void> {
-        return Models.SQLQuery.runQuery(
-          `BEGIN;
-           DELETE FROM SYSTEM.REPORTING;
-           INSERT INTO SYSTEM.REPORTING VALUES (
-            '${this.attributes.email}',
-            ${this.attributes.optin},
-            ${this.attributes.dismissed},
-            '${this.attributes.firstname}',
-            '${this.attributes.lastname}',
-            '${this.attributes.company}',
-            ${this.attributes.updates},
-            NOW()
-           );
-           COMMIT;`);
+        // Make sure we loaded the data first
+        if (this.loaded) {
+          return Models.SQLQuery.runQuery(
+            `BEGIN;
+            DELETE FROM SYSTEM.REPORTING;
+            INSERT INTO SYSTEM.REPORTING VALUES (
+              '${this.attributes.email}',
+              ${this.attributes.optin},
+              ${this.attributes.dismissed},
+              '${this.attributes.firstname}',
+              '${this.attributes.lastname}',
+              '${this.attributes.company}',
+              ${this.attributes.updates},
+              NOW()
+             );
+             COMMIT;`)
+            .then(() => {
+              this.savedAttributes = _.clone(this.attributes);
+            });
+        }
       }
 
       load(): MithrilPromise<void> {
-        return Models.SQLQuery.runQuery("SELECT * FROM SYSTEM.REPORTING", true)
+        return Models.SQLQuery.runQuery(`SELECT * FROM SYSTEM.REPORTING ORDER BY ${LASTUPDATED} DESC LIMIT 1`, true)
           .then((r: Object): void => {
             if (r[0]) {
-              _.each(this.attributeList, (attr: string): void => {
+              _.each(_.keys(this.attributes), (attr: string): void => {
                 this.attributes[attr] = r[0][attr];
               });
             }
             this.loaded = true;
+            this.savedAttributes = _.clone(this.attributes);
           });
+      }
+
+      /**
+       * showHelpUs returns true if the user hasn't dismissed the banner/modal and if they haven't already opted in
+       * @returns {boolean}
+       */
+      showHelpUs(): boolean {
+        console.log("this.attributes", this.attributes);
+        return (this.attributes.dismissed > 0) || _.isBoolean(this.attributes.optin);
+      }
+
+      /**
+       * optedIn returns true if the user has already opted in and provided their email
+       * @returns {boolean}
+       */
+      optedIn(): boolean {
+        return this.savedAttributes.optin && !!this.savedAttributes.email;
       }
 
       // Data binding helper function for form data.
@@ -106,5 +136,7 @@ module Models {
         };
       }
     }
+
+    export let userOptInSingleton: UserOptIn = new UserOptIn();
   }
 }
