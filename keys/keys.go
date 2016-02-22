@@ -120,11 +120,6 @@ func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRaftAppliedIndexSuffix, nil)
 }
 
-// RaftLeaderLeaseKey returns a system-local key for a raft leader lease.
-func RaftLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLeaderLeaseSuffix, nil)
-}
-
 // RaftTombstoneKey returns a system-local key for a raft tombstone.
 func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDKey(rangeID, localRaftTombstoneSuffix, nil)
@@ -157,6 +152,11 @@ func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.K
 	key := MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix, nil)
 	key = encoding.EncodeBytesAscending(key, txnID.Bytes())
 	return key
+}
+
+// RangeLeaderLeaseKey returns a system-local key for a range leader lease.
+func RangeLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDKey(rangeID, localRangeLeaderLeaseSuffix, nil)
 }
 
 // MakeRangeKey creates a range-local key based on the range

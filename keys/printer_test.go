@@ -45,7 +45,6 @@ func TestPrettyPrint(t *testing.T) {
 		{StoreGossipKey(), "/Local/Store/gossipBootstrap"},
 		{SequenceCacheKeyPrefix(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/SequenceCache/%q`, txnID)},
 		{SequenceCacheKey(roachpb.RangeID(1000001), txnID, uint32(111), uint32(222)), fmt.Sprintf(`/Local/RangeID/1000001/SequenceCache/%q/epoch:111/seq:222`, txnID)},
-		{RaftLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLeaderLease"},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTombstone"},
 		{RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftHardState"},
 		{RaftAppliedIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftAppliedIndex"},
@@ -53,6 +52,7 @@ func TestPrettyPrint(t *testing.T) {
 		{RaftTruncatedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftTruncatedState"},
 		{RaftLastIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RaftLastIndex"},
 		{RangeLastVerificationTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLastVerificationTimestamp"},
+		{RangeLeaderLeaseKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeLeaderLease"},
 		{RangeStatsKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/RangeStats"},
 
 		{MakeRangeKeyPrefix(roachpb.RKey("ok")), `/Local/Range/"ok"`},

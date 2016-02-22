@@ -1243,7 +1243,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 	args.Lease.Start = effectiveStart
 
 	// Store the lease to disk & in-memory.
-	if err := engine.MVCCPutProto(batch, ms, keys.RaftLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, keys.RangeLeaderLeaseKey(r.RangeID), roachpb.ZeroTimestamp, nil, &args.Lease); err != nil {
 		return reply, err
 	}
 	r.mu.leaderLease = &args.Lease

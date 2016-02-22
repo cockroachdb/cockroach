@@ -87,7 +87,6 @@ var (
 		ppFunc func(key roachpb.Key) string
 	}{
 		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: sequenceCacheKeyPrint},
-		{name: "RaftLeaderLease", suffix: localRaftLeaderLeaseSuffix},
 		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: localRaftAppliedIndexSuffix},
@@ -95,6 +94,7 @@ var (
 		{name: "RaftTruncatedState", suffix: localRaftTruncatedStateSuffix},
 		{name: "RaftLastIndex", suffix: localRaftLastIndexSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: localRangeLastVerificationTimestampSuffix},
+		{name: "RangeLeaderLease", suffix: localRangeLeaderLeaseSuffix},
 		{name: "RangeStats", suffix: localRangeStatsSuffix},
 	}
 
