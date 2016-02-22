@@ -49,7 +49,6 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 
 	type result struct {
 		err        error
-		count      int
 		maxLatency time.Duration
 	}
 
@@ -68,20 +67,28 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			for time.Now().Before(deadline) {
 				start := time.Now()
 				pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+					minExp := atomic.LoadInt64(&expected)
 					r, pErr := txn.Get(key)
 					if pErr != nil {
 						return pErr
 					}
 					b := txn.NewBatch()
-					b.Put(key, r.ValueInt()+1)
-					return txn.CommitInBatch(b)
+					v := r.ValueInt()
+					b.Put(key, v+1)
+					pErr = txn.CommitInBatch(b)
+					// Atomic updates after the fact mean that we should read
+					// exp or larger (since concurrent writers might have
+					// committed but not yet performed their atomic update).
+					if pErr == nil && v < minExp {
+						return roachpb.NewErrorf("unexpected read: %d, expected >= %d", v, minExp)
+					}
+					return pErr
 				})
 				if pErr != nil {
 					resultCh <- result{err: pErr.GoError()}
 					return
 				}
 				atomic.AddInt64(&expected, 1)
-				r.count++
 				latency := time.Since(start)
 				if r.maxLatency < latency {
 					r.maxLatency = latency
