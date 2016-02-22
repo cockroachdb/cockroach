@@ -14,8 +14,6 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-// +build acceptance
-
 package acceptance
 
 import (

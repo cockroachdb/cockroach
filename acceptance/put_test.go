@@ -14,8 +14,6 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-// +build acceptance
-
 package acceptance
 
 import (
@@ -73,8 +71,8 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			count := atomic.LoadInt64(&count)
-			log.Infof("%d (%d/s)", count, count-baseCount)
+			loadedCount := atomic.LoadInt64(&count)
+			log.Infof("%d (%d/s)", loadedCount, loadedCount-baseCount)
 			c.Assert(t)
 		}
 	}

@@ -14,8 +14,6 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-// +build acceptance
-
 package acceptance
 
 import (
