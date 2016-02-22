@@ -63,6 +63,7 @@ const (
 	serverMsgParameterDescription serverMessageType = 't'
 	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgParameterStatus      serverMessageType = 'S'
+	serverMsgNoData               serverMessageType = 'n'
 )
 
 //go:generate stringer -type=prepareType
@@ -704,6 +705,11 @@ func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendD
 }
 
 func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []formatCode) error {
+	if len(columns) == 0 {
+		c.writeBuf.initMsg(serverMsgNoData)
+		return c.writeBuf.finishMsg(c.wr)
+	}
+
 	c.writeBuf.initMsg(serverMsgRowDescription)
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
