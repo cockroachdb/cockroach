@@ -37,7 +37,8 @@ const (
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
-	// Default port.
+	// From IANA Service Name and Transport Protocol Port Number Registry. See
+	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
 	DefaultPort = "26257"
 
 	// NetworkTimeout is the timeout used for network operations.
