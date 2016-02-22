@@ -751,7 +751,7 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 // checkTxnMetrics verifies that the provided Sender's transaction metrics match the expected
 // values. This is done through a series of retries with increasing backoffs, to work around
 // the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
-func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits, abandoned, aborts, restarts int64) {
+func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits, abandons, aborts, restarts int64) {
 	metrics := sender.metrics
 
 	util.SucceedsWithin(t, 5*time.Second, func() error {
@@ -760,10 +760,10 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits,
 			a, e int64
 		}{
 			{"commits", metrics.Commits.Count(), commits},
-			{"abandoned", metrics.Abandoned.Count(), abandoned},
+			{"abandons", metrics.Abandons.Count(), abandons},
 			{"aborts", metrics.Aborts.Count(), aborts},
 			{"durations", metrics.Durations[metric.Scale1M].Current().TotalCount(),
-				commits + abandoned + aborts},
+				commits + abandons + aborts},
 		}
 
 		for _, tc := range testcases {
@@ -804,8 +804,8 @@ func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) 
 	sender := NewTxnCoordSender(s.distSender, clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
 
 	return manual, sender, func() {
-		s.Stop()
 		teardownHeartbeats(sender)
+		s.Stop()
 	}
 }
 
@@ -853,7 +853,7 @@ func TestTxnAbandonCount(t *testing.T) {
 	// Test abandoned transaction by making the client timeout ridiculously short. We also set
 	// the sender to heartbeat very frequently, because the heartbeat detects and tears down
 	// abandoned transactions.
-	sender.heartbeatInterval = 25 * time.Millisecond
+	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		key := []byte("key-abandon")
@@ -868,18 +868,12 @@ func TestTxnAbandonCount(t *testing.T) {
 
 		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))
 
-		// We have to sleep a bit to allow wall clock time to pass for the sender's heartbeat
-		// loop to execute and mark the transaction abandoned. We need this sleep here specifically,
-		// because the KV client auto-commits when we exit from this transaction (if there are no
-		// errors).
-		time.Sleep(sender.heartbeatInterval * 20)
+		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
 
 		return nil
 	}); pErr == nil {
 		t.Fatalf("unexpected success")
 	}
-	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
 }
 
 func TestTxnAbortCount(t *testing.T) {

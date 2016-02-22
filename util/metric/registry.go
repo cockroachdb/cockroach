@@ -144,7 +144,7 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 }
 
 // Rates returns a slice of EWMAs prefixed with the given name and
-// various "standard" timescales.
+// various "standard" timescales, as well as a cumulative counter.
 func (r *Registry) Rates(prefix string) Rates {
 	scales := DefaultTimeScales
 	es := make(map[TimeScale]*Rate)

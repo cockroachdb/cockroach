@@ -85,7 +85,6 @@ type Histogram struct {
 
 	mu       sync.Mutex
 	windowed *hdrhistogram.WindowedHistogram
-	interval time.Duration
 	nextT    time.Time
 	duration time.Duration
 }
@@ -96,7 +95,6 @@ type Histogram struct {
 func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram {
 	h := &Histogram{}
 	h.maxVal = int64(maxVal)
-	h.interval = duration / histWrapNum
 	h.nextT = now()
 	h.duration = duration
 
@@ -105,7 +103,7 @@ func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram 
 }
 
 func (h *Histogram) tick() {
-	h.nextT = h.nextT.Add(h.interval)
+	h.nextT = h.nextT.Add(h.duration / histWrapNum)
 	h.windowed.Rotate()
 }
 
@@ -129,11 +127,7 @@ func (h *Histogram) Merge() *hdrhistogram.Histogram {
 
 // MarshalJSON outputs to JSON.
 func (h *Histogram) MarshalJSON() ([]byte, error) {
-	h.mu.Lock()
-	maybeTick(h)
-	m := h.windowed.Merge().CumulativeDistribution()
-	h.mu.Unlock()
-	return json.Marshal(m)
+	return json.Marshal(h.Merge().CumulativeDistribution())
 }
 
 // RecordValue adds the given value to the histogram, truncating if necessary.

@@ -162,15 +162,17 @@ func (tm *txnMetadata) intentSpans() []roachpb.Span {
 type TxnMetrics struct {
 	Aborts    metric.Rates
 	Commits   metric.Rates
-	Abandoned metric.Rates
+	Abandons  metric.Rates
 	Durations metric.Histograms
-	Restarts  *metric.Histogram
+
+	// Restarts is the number of times we had to restart the transaction.
+	Restarts *metric.Histogram
 }
 
 const (
 	abortsPrefix    = "aborts"
 	commitsPrefix   = "commits"
-	abandonedPrefix = "abandoned"
+	abandonsPrefix  = "abandons"
 	durationsPrefix = "durations"
 	restartsKey     = "restarts"
 )
@@ -181,7 +183,7 @@ func NewTxnMetrics(txnRegistry *metric.Registry) *TxnMetrics {
 	return &TxnMetrics{
 		Aborts:    txnRegistry.Rates(abortsPrefix),
 		Commits:   txnRegistry.Rates(commitsPrefix),
-		Abandoned: txnRegistry.Rates(abandonedPrefix),
+		Abandons:  txnRegistry.Rates(abandonsPrefix),
 		Durations: txnRegistry.Latency(durationsPrefix),
 		Restarts:  txnRegistry.Histogram(restartsKey, 60*time.Second, 100, 3),
 	}
@@ -262,18 +264,18 @@ func (tc *TxnCoordSender) startStats() {
 			metrics := tc.metrics
 			durations := metrics.Durations[scale].Merge()
 			restarts := metrics.Restarts.Merge()
-			committedRate := metrics.Commits.Rates[scale].Value()
-			abortedRate := metrics.Aborts.Rates[scale].Value()
-			abandonedRate := metrics.Abandoned.Rates[scale].Value()
+			commitRate := metrics.Commits.Rates[scale].Value()
+			abortRate := metrics.Aborts.Rates[scale].Value()
+			abandonRate := metrics.Abandons.Rates[scale].Value()
 
 			// Show transaction stats over the last minute. Maybe this should be shorter in the future.
 			// We'll revisit if we get sufficient feedback.
-			totalRate := committedRate + abortedRate + abandonedRate
+			totalRate := commitRate + abortRate + abandonRate
 			var pCommitted, pAbandoned, pAborted float64
 			if totalRate > 0 {
-				pCommitted = 100 * (committedRate / totalRate)
-				pAborted = 100 * (abortedRate / totalRate)
-				pAbandoned = 100 * (abandonedRate / totalRate)
+				pCommitted = 100 * (commitRate / totalRate)
+				pAborted = 100 * (abortRate / totalRate)
+				pAbandoned = 100 * (abandonRate / totalRate)
 			}
 
 			dMean := durations.Mean()
@@ -768,7 +770,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 					// heartbeat. We refuse new transactions for now because
 					// they're likely not going to have all intents committed.
 					// In principle, we can relax this as needed though.
-					tc.updateStats(tc.unregisterTxnLocked(txnID))
+					tc.unregisterTxnLocked(txnID)
 					return roachpb.NewError(&roachpb.NodeUnavailableError{})
 				}
 			}
@@ -833,7 +835,7 @@ func (tc *TxnCoordSender) updateStats(duration, restarts int64, status roachpb.T
 	case roachpb.ABORTED:
 		tc.metrics.Aborts.Add(1)
 	case roachpb.PENDING:
-		tc.metrics.Abandoned.Add(1)
+		tc.metrics.Abandons.Add(1)
 	case roachpb.COMMITTED:
 		tc.metrics.Commits.Add(1)
 	}

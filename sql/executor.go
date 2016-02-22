@@ -129,11 +129,14 @@ type Executor struct {
 	leaseMgr *LeaseManager
 
 	// Transient stats.
-	registry         *metric.Registry
-	latency          metric.Histograms
-	selectCount      *metric.Counter
-	txnBeginCount    *metric.Counter
-	txnCommitCount   *metric.Counter
+	registry      *metric.Registry
+	latency       metric.Histograms
+	selectCount   *metric.Counter
+	txnBeginCount *metric.Counter
+
+	// txnCommitCount counts the number of times a COMMIT was attempted.
+	txnCommitCount *metric.Counter
+
 	txnAbortCount    *metric.Counter
 	txnRollbackCount *metric.Counter
 	updateCount      *metric.Counter
