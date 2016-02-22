@@ -17,30 +17,10 @@
 package tracing
 
 import (
-	"bytes"
-	"fmt"
-
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/util/log"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/standardtracer"
+	"github.com/opentracing/opentracing-go"
 )
-
-const traceTimeFormat = "15:04:05.000000"
-
-type testRecorder struct{}
-
-func (testRecorder) RecordSpan(sp standardtracer.RawSpan) {
-	if log.V(2) {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "[%s]", sp.Operation)
-		for _, log := range sp.Logs {
-			fmt.Fprint(&buf, "\n * ", log.Timestamp.Format(traceTimeFormat), " ", log.Event)
-		}
-		log.Info(buf.String())
-	}
-}
 
 var netTracer = wrapWithNetTrace(opentracing.NoopTracer{})
 
