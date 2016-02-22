@@ -26,30 +26,34 @@ import (
 )
 
 // Values constructs a valuesNode from a VALUES expression.
-func (p *planner) Values(n parser.Values) (planNode, *roachpb.Error) {
+func (p *planner) Values(n *parser.Values) (planNode, *roachpb.Error) {
 	v := &valuesNode{
-		rows: make([]parser.DTuple, 0, len(n)),
+		rows: make([]parser.DTuple, 0, len(n.Tuples)),
 	}
 
-	for num, tuple := range n {
+	for num, tupleOrig := range n.Tuples {
 		if num == 0 {
-			v.columns = make([]ResultColumn, 0, len(tuple))
-		} else if a, e := len(tuple), len(v.columns); a != e {
+			v.columns = make([]ResultColumn, 0, len(tupleOrig.Exprs))
+		} else if a, e := len(tupleOrig.Exprs), len(v.columns); a != e {
 			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
-		for i := range tuple {
+		// We must not modify the Values node in-place (or the changes will leak if we retry this
+		// transaction).
+		tuple := parser.Tuple{Exprs: parser.Exprs(append([]parser.Expr(nil), tupleOrig.Exprs...))}
+
+		for i := range tuple.Exprs {
 			var pErr *roachpb.Error
-			tuple[i], pErr = p.expandSubqueries(tuple[i], 1)
+			tuple.Exprs[i], pErr = p.expandSubqueries(tuple.Exprs[i], 1)
 			if pErr != nil {
 				return nil, pErr
 			}
 			var err error
-			typ, err := tuple[i].TypeCheck(p.evalCtx.Args)
+			typ, err := tuple.Exprs[i].TypeCheck(p.evalCtx.Args)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
-			tuple[i], err = p.parser.NormalizeExpr(p.evalCtx, tuple[i])
+			tuple.Exprs[i], err = p.parser.NormalizeExpr(p.evalCtx, tuple.Exprs[i])
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}

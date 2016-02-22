@@ -153,7 +153,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.Truncate(n)
 	case *parser.Update:
 		return p.Update(n, autoCommit)
-	case parser.Values:
+	case *parser.Values:
 		return p.Values(n)
 	default:
 		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)

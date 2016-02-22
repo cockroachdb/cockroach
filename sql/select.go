@@ -832,8 +832,8 @@ func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering co
 	}
 }
 
-func (v *indexInfo) findColumnInTuple(tuple parser.Tuple, colID ColumnID) int {
-	for i, val := range tuple {
+func (v *indexInfo) findColumnInTuple(tuple *parser.Tuple, colID ColumnID) int {
+	for i, val := range tuple.Exprs {
 		qval, ok := val.(*qvalue)
 		// TODO(radu): when we will have multiple FROMs, we should check
 		// that the qval refers to us.
@@ -930,7 +930,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 						continue
 					}
 
-				case parser.Tuple:
+				case *parser.Tuple:
 					// If we have a tuple comparison we need to rearrange the comparison
 					// so that the order of the columns in the tuple matches the order in
 					// the index. For example, for an index on (a, b), the tuple
@@ -1513,7 +1513,7 @@ func exactPrefix(constraints []indexConstraint) int {
 			if tuple, ok := c.start.Right.(parser.DTuple); !ok || len(tuple) != 1 {
 				return prefix
 			}
-			if _, ok := c.start.Left.(parser.Tuple); ok {
+			if _, ok := c.start.Left.(*parser.Tuple); ok {
 				prefix += len(c.tupleMap)
 			} else {
 				prefix++
@@ -1580,13 +1580,13 @@ func (v *applyConstraintsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visi
 			if !isDatum(t.Right) || !isDatum(c.Right) {
 				return v, expr
 			}
-			if tuple, ok := c.Left.(parser.Tuple); ok {
+			if tuple, ok := c.Left.(*parser.Tuple); ok {
 				// Do not apply a constraint on a tuple which does not use the entire
 				// tuple.
 				//
 				// TODO(peter): The current code is conservative. We could trim the
 				// tuple instead.
-				if len(tuple) != len(v.constraint.tupleMap) {
+				if len(tuple.Exprs) != len(v.constraint.tupleMap) {
 					return v, expr
 				}
 			}

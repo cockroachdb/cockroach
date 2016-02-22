@@ -291,8 +291,8 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
 	return expr
 }
 
-func (expr Row) normalize(v *normalizeVisitor) Expr {
-	return Tuple(expr)
+func (expr *Row) normalize(v *normalizeVisitor) Expr {
+	return &Tuple{expr.Exprs}
 }
 
 // NormalizeExpr normalizes an expression, simplifying where possible, but

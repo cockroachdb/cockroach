@@ -137,9 +137,9 @@ func (expr *UnaryExpr) Walk(v Visitor) {
 }
 
 // Walk implements the Expr interface.
-func (expr Array) Walk(v Visitor) {
-	for i := range expr {
-		expr[i] = WalkExpr(v, expr[i])
+func (expr *Array) Walk(v Visitor) {
+	for i, e := range expr.Exprs {
+		expr.Exprs[i] = WalkExpr(v, e)
 	}
 }
 
@@ -153,16 +153,16 @@ func (IntVal) Walk(_ Visitor) {}
 func (NumVal) Walk(_ Visitor) {}
 
 // Walk implements the Expr interface.
-func (expr Row) Walk(v Visitor) {
-	for i := range expr {
-		expr[i] = WalkExpr(v, expr[i])
+func (expr *Row) Walk(v Visitor) {
+	for i, e := range expr.Exprs {
+		expr.Exprs[i] = WalkExpr(v, e)
 	}
 }
 
 // Walk implements the Expr interface.
-func (expr Tuple) Walk(v Visitor) {
-	for i := range expr {
-		expr[i] = WalkExpr(v, expr[i])
+func (expr *Tuple) Walk(v Visitor) {
+	for i, e := range expr.Exprs {
+		expr.Exprs[i] = WalkExpr(v, e)
 	}
 }
 
@@ -337,9 +337,9 @@ func WalkStmt(v Visitor, stmt Statement) {
 		if stmt.Where != nil {
 			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
 		}
-	case Values:
-		for i, tuple := range stmt {
-			stmt[i] = WalkExpr(v, tuple).(Tuple)
+	case *Values:
+		for i, tuple := range stmt.Tuples {
+			stmt.Tuples[i] = WalkExpr(v, tuple).(*Tuple)
 		}
 	}
 }

@@ -1256,7 +1256,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 		case parser.EQ:
 			// Translate "(a, b) = (1, 2)" to "(a, b) IN ((1, 2))".
 			switch n.Left.(type) {
-			case parser.Tuple:
+			case *parser.Tuple:
 				return &parser.ComparisonExpr{
 					Operator: parser.In,
 					Left:     n.Left,
@@ -1397,8 +1397,8 @@ func isVar(e parser.Expr) bool {
 	case *qvalue:
 		return true
 
-	case parser.Tuple:
-		for _, v := range t {
+	case *parser.Tuple:
+		for _, v := range t.Exprs {
 			if !isVar(v) {
 				return false
 			}
@@ -1420,12 +1420,12 @@ func varEqual(a, b parser.Expr) bool {
 			return ta.colRef == tb.colRef
 		}
 
-	case parser.Tuple:
+	case *parser.Tuple:
 		switch tb := b.(type) {
-		case parser.Tuple:
-			if len(ta) == len(tb) {
-				for i := range ta {
-					if !varEqual(ta[i], tb[i]) {
+		case *parser.Tuple:
+			if len(ta.Exprs) == len(tb.Exprs) {
+				for i := range ta.Exprs {
+					if !varEqual(ta.Exprs[i], tb.Exprs[i]) {
 						return false
 					}
 				}

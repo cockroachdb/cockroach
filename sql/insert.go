@@ -304,7 +304,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 	cols []ColumnDescriptor, n *parser.Insert) parser.SelectStatement {
 	if n.DefaultValues() {
-		row := make(parser.Tuple, 0, len(cols))
+		row := make(parser.Exprs, 0, len(cols))
 		for i := range cols {
 			if defaultExprs == nil {
 				row = append(row, parser.DNull)
@@ -312,20 +312,20 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 			row = append(row, defaultExprs[i])
 		}
-		return parser.Values{row}
+		return &parser.Values{Tuples: []*parser.Tuple{{Exprs: row}}}
 	}
 
 	switch values := n.Rows.(type) {
-	case parser.Values:
-		for _, tuple := range values {
-			for i, val := range tuple {
+	case *parser.Values:
+		for _, tuple := range values.Tuples {
+			for i, val := range tuple.Exprs {
 				switch val.(type) {
 				case parser.DefaultVal:
 					if defaultExprs == nil {
-						tuple[i] = parser.DNull
+						tuple.Exprs[i] = parser.DNull
 						continue
 					}
-					tuple[i] = defaultExprs[i]
+					tuple.Exprs[i] = defaultExprs[i]
 				}
 			}
 		}

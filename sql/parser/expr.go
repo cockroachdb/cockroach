@@ -528,25 +528,31 @@ func (n QualifiedNames) String() string {
 }
 
 // Tuple represents a parenthesized list of expressions.
-type Tuple Exprs
+type Tuple struct {
+	Exprs Exprs
+}
 
-func (node Tuple) String() string {
-	return fmt.Sprintf("(%s)", Exprs(node))
+func (node *Tuple) String() string {
+	return fmt.Sprintf("(%s)", node.Exprs)
 }
 
 // Row represents a parenthesized list of expressions. Similar to Tuple except
 // in how it is textually represented.
-type Row Exprs
+type Row struct {
+	Exprs Exprs
+}
 
-func (node Row) String() string {
-	return fmt.Sprintf("ROW(%s)", Exprs(node))
+func (node *Row) String() string {
+	return fmt.Sprintf("ROW(%s)", node.Exprs)
 }
 
 // Array represents an array constructor.
-type Array Exprs
+type Array struct {
+	Exprs Exprs
+}
 
-func (node Array) String() string {
-	return fmt.Sprintf("ARRAY[%s]", Exprs(node))
+func (node *Array) String() string {
+	return fmt.Sprintf("ARRAY[%s]", node.Exprs)
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
