@@ -133,15 +133,15 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto() {
     "val_bytes\030\005 \001(\003B\004\310\336\037\000\022\021\n\traw_bytes\030\006 \001(\014"
     "\0225\n\017merge_timestamp\030\007 \001(\0132\034.cockroach.ro"
     "achpb.Timestamp\"\362\002\n\tMVCCStats\022\037\n\021last_up"
-    "date_nanos\030\001 \001(\003B\004\310\336\037\000\022\030\n\nintent_age\030\002 \001"
-    "(\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\003 \001(\003B\022\310\336\037\000\342\336\037\n"
-    "GCBytesAge\022\030\n\nlive_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\n"
-    "live_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_bytes\030\006 \001("
-    "\003B\004\310\336\037\000\022\027\n\tkey_count\030\007 \001(\003B\004\310\336\037\000\022\027\n\tval_"
-    "bytes\030\010 \001(\003B\004\310\336\037\000\022\027\n\tval_count\030\t \001(\003B\004\310\336"
-    "\037\000\022\032\n\014intent_bytes\030\n \001(\003B\004\310\336\037\000\022\032\n\014intent"
-    "_count\030\013 \001(\003B\004\310\336\037\000\022\027\n\tsys_bytes\030\014 \001(\003B\004\310"
-    "\336\037\000\022\027\n\tsys_count\030\r \001(\003B\004\310\336\037\000B\010Z\006engineX\001", 760);
+    "date_nanos\030\001 \001(\020B\004\310\336\037\000\022\030\n\nintent_age\030\002 \001"
+    "(\020B\004\310\336\037\000\022(\n\014gc_bytes_age\030\003 \001(\020B\022\310\336\037\000\342\336\037\n"
+    "GCBytesAge\022\030\n\nlive_bytes\030\004 \001(\020B\004\310\336\037\000\022\030\n\n"
+    "live_count\030\005 \001(\020B\004\310\336\037\000\022\027\n\tkey_bytes\030\006 \001("
+    "\020B\004\310\336\037\000\022\027\n\tkey_count\030\007 \001(\020B\004\310\336\037\000\022\027\n\tval_"
+    "bytes\030\010 \001(\020B\004\310\336\037\000\022\027\n\tval_count\030\t \001(\020B\004\310\336"
+    "\037\000\022\032\n\014intent_bytes\030\n \001(\020B\004\310\336\037\000\022\032\n\014intent"
+    "_count\030\013 \001(\020B\004\310\336\037\000\022\027\n\tsys_bytes\030\014 \001(\020B\004\310"
+    "\336\037\000\022\027\n\tsys_count\030\r \001(\020B\004\310\336\037\000B\010Z\006engineX\001", 760);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/storage/engine/mvcc.proto", &protobuf_RegisterTypes);
   MVCCMetadata::default_instance_ = new MVCCMetadata();
@@ -1048,191 +1048,191 @@ bool MVCCStats::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 last_update_nanos = 1;
+      // optional sfixed64 last_update_nanos = 1;
       case 1: {
-        if (tag == 8) {
+        if (tag == 9) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &last_update_nanos_)));
           set_has_last_update_nanos();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_intent_age;
+        if (input->ExpectTag(17)) goto parse_intent_age;
         break;
       }
 
-      // optional int64 intent_age = 2;
+      // optional sfixed64 intent_age = 2;
       case 2: {
-        if (tag == 16) {
+        if (tag == 17) {
          parse_intent_age:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &intent_age_)));
           set_has_intent_age();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_gc_bytes_age;
+        if (input->ExpectTag(25)) goto parse_gc_bytes_age;
         break;
       }
 
-      // optional int64 gc_bytes_age = 3;
+      // optional sfixed64 gc_bytes_age = 3;
       case 3: {
-        if (tag == 24) {
+        if (tag == 25) {
          parse_gc_bytes_age:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &gc_bytes_age_)));
           set_has_gc_bytes_age();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(32)) goto parse_live_bytes;
+        if (input->ExpectTag(33)) goto parse_live_bytes;
         break;
       }
 
-      // optional int64 live_bytes = 4;
+      // optional sfixed64 live_bytes = 4;
       case 4: {
-        if (tag == 32) {
+        if (tag == 33) {
          parse_live_bytes:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &live_bytes_)));
           set_has_live_bytes();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(40)) goto parse_live_count;
+        if (input->ExpectTag(41)) goto parse_live_count;
         break;
       }
 
-      // optional int64 live_count = 5;
+      // optional sfixed64 live_count = 5;
       case 5: {
-        if (tag == 40) {
+        if (tag == 41) {
          parse_live_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &live_count_)));
           set_has_live_count();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(48)) goto parse_key_bytes;
+        if (input->ExpectTag(49)) goto parse_key_bytes;
         break;
       }
 
-      // optional int64 key_bytes = 6;
+      // optional sfixed64 key_bytes = 6;
       case 6: {
-        if (tag == 48) {
+        if (tag == 49) {
          parse_key_bytes:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &key_bytes_)));
           set_has_key_bytes();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(56)) goto parse_key_count;
+        if (input->ExpectTag(57)) goto parse_key_count;
         break;
       }
 
-      // optional int64 key_count = 7;
+      // optional sfixed64 key_count = 7;
       case 7: {
-        if (tag == 56) {
+        if (tag == 57) {
          parse_key_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &key_count_)));
           set_has_key_count();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(64)) goto parse_val_bytes;
+        if (input->ExpectTag(65)) goto parse_val_bytes;
         break;
       }
 
-      // optional int64 val_bytes = 8;
+      // optional sfixed64 val_bytes = 8;
       case 8: {
-        if (tag == 64) {
+        if (tag == 65) {
          parse_val_bytes:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &val_bytes_)));
           set_has_val_bytes();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(72)) goto parse_val_count;
+        if (input->ExpectTag(73)) goto parse_val_count;
         break;
       }
 
-      // optional int64 val_count = 9;
+      // optional sfixed64 val_count = 9;
       case 9: {
-        if (tag == 72) {
+        if (tag == 73) {
          parse_val_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &val_count_)));
           set_has_val_count();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(80)) goto parse_intent_bytes;
+        if (input->ExpectTag(81)) goto parse_intent_bytes;
         break;
       }
 
-      // optional int64 intent_bytes = 10;
+      // optional sfixed64 intent_bytes = 10;
       case 10: {
-        if (tag == 80) {
+        if (tag == 81) {
          parse_intent_bytes:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &intent_bytes_)));
           set_has_intent_bytes();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(88)) goto parse_intent_count;
+        if (input->ExpectTag(89)) goto parse_intent_count;
         break;
       }
 
-      // optional int64 intent_count = 11;
+      // optional sfixed64 intent_count = 11;
       case 11: {
-        if (tag == 88) {
+        if (tag == 89) {
          parse_intent_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &intent_count_)));
           set_has_intent_count();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(96)) goto parse_sys_bytes;
+        if (input->ExpectTag(97)) goto parse_sys_bytes;
         break;
       }
 
-      // optional int64 sys_bytes = 12;
+      // optional sfixed64 sys_bytes = 12;
       case 12: {
-        if (tag == 96) {
+        if (tag == 97) {
          parse_sys_bytes:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &sys_bytes_)));
           set_has_sys_bytes();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(104)) goto parse_sys_count;
+        if (input->ExpectTag(105)) goto parse_sys_count;
         break;
       }
 
-      // optional int64 sys_count = 13;
+      // optional sfixed64 sys_count = 13;
       case 13: {
-        if (tag == 104) {
+        if (tag == 105) {
          parse_sys_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
                  input, &sys_count_)));
           set_has_sys_count();
         } else {
@@ -1267,69 +1267,69 @@ failure:
 void MVCCStats::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.storage.engine.MVCCStats)
-  // optional int64 last_update_nanos = 1;
+  // optional sfixed64 last_update_nanos = 1;
   if (has_last_update_nanos()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->last_update_nanos(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(1, this->last_update_nanos(), output);
   }
 
-  // optional int64 intent_age = 2;
+  // optional sfixed64 intent_age = 2;
   if (has_intent_age()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->intent_age(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(2, this->intent_age(), output);
   }
 
-  // optional int64 gc_bytes_age = 3;
+  // optional sfixed64 gc_bytes_age = 3;
   if (has_gc_bytes_age()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->gc_bytes_age(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(3, this->gc_bytes_age(), output);
   }
 
-  // optional int64 live_bytes = 4;
+  // optional sfixed64 live_bytes = 4;
   if (has_live_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->live_bytes(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(4, this->live_bytes(), output);
   }
 
-  // optional int64 live_count = 5;
+  // optional sfixed64 live_count = 5;
   if (has_live_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->live_count(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(5, this->live_count(), output);
   }
 
-  // optional int64 key_bytes = 6;
+  // optional sfixed64 key_bytes = 6;
   if (has_key_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->key_bytes(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(6, this->key_bytes(), output);
   }
 
-  // optional int64 key_count = 7;
+  // optional sfixed64 key_count = 7;
   if (has_key_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->key_count(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(7, this->key_count(), output);
   }
 
-  // optional int64 val_bytes = 8;
+  // optional sfixed64 val_bytes = 8;
   if (has_val_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(8, this->val_bytes(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(8, this->val_bytes(), output);
   }
 
-  // optional int64 val_count = 9;
+  // optional sfixed64 val_count = 9;
   if (has_val_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(9, this->val_count(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(9, this->val_count(), output);
   }
 
-  // optional int64 intent_bytes = 10;
+  // optional sfixed64 intent_bytes = 10;
   if (has_intent_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(10, this->intent_bytes(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(10, this->intent_bytes(), output);
   }
 
-  // optional int64 intent_count = 11;
+  // optional sfixed64 intent_count = 11;
   if (has_intent_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(11, this->intent_count(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(11, this->intent_count(), output);
   }
 
-  // optional int64 sys_bytes = 12;
+  // optional sfixed64 sys_bytes = 12;
   if (has_sys_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(12, this->sys_bytes(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(12, this->sys_bytes(), output);
   }
 
-  // optional int64 sys_count = 13;
+  // optional sfixed64 sys_count = 13;
   if (has_sys_count()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(13, this->sys_count(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(13, this->sys_count(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1342,69 +1342,69 @@ void MVCCStats::SerializeWithCachedSizes(
 ::google::protobuf::uint8* MVCCStats::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.storage.engine.MVCCStats)
-  // optional int64 last_update_nanos = 1;
+  // optional sfixed64 last_update_nanos = 1;
   if (has_last_update_nanos()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->last_update_nanos(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(1, this->last_update_nanos(), target);
   }
 
-  // optional int64 intent_age = 2;
+  // optional sfixed64 intent_age = 2;
   if (has_intent_age()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->intent_age(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(2, this->intent_age(), target);
   }
 
-  // optional int64 gc_bytes_age = 3;
+  // optional sfixed64 gc_bytes_age = 3;
   if (has_gc_bytes_age()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->gc_bytes_age(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(3, this->gc_bytes_age(), target);
   }
 
-  // optional int64 live_bytes = 4;
+  // optional sfixed64 live_bytes = 4;
   if (has_live_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->live_bytes(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(4, this->live_bytes(), target);
   }
 
-  // optional int64 live_count = 5;
+  // optional sfixed64 live_count = 5;
   if (has_live_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->live_count(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(5, this->live_count(), target);
   }
 
-  // optional int64 key_bytes = 6;
+  // optional sfixed64 key_bytes = 6;
   if (has_key_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(6, this->key_bytes(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(6, this->key_bytes(), target);
   }
 
-  // optional int64 key_count = 7;
+  // optional sfixed64 key_count = 7;
   if (has_key_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(7, this->key_count(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(7, this->key_count(), target);
   }
 
-  // optional int64 val_bytes = 8;
+  // optional sfixed64 val_bytes = 8;
   if (has_val_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(8, this->val_bytes(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(8, this->val_bytes(), target);
   }
 
-  // optional int64 val_count = 9;
+  // optional sfixed64 val_count = 9;
   if (has_val_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(9, this->val_count(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(9, this->val_count(), target);
   }
 
-  // optional int64 intent_bytes = 10;
+  // optional sfixed64 intent_bytes = 10;
   if (has_intent_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(10, this->intent_bytes(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(10, this->intent_bytes(), target);
   }
 
-  // optional int64 intent_count = 11;
+  // optional sfixed64 intent_count = 11;
   if (has_intent_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(11, this->intent_count(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(11, this->intent_count(), target);
   }
 
-  // optional int64 sys_bytes = 12;
+  // optional sfixed64 sys_bytes = 12;
   if (has_sys_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(12, this->sys_bytes(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(12, this->sys_bytes(), target);
   }
 
-  // optional int64 sys_count = 13;
+  // optional sfixed64 sys_count = 13;
   if (has_sys_count()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(13, this->sys_count(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteSFixed64ToArray(13, this->sys_count(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1419,97 +1419,71 @@ int MVCCStats::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 255u) {
-    // optional int64 last_update_nanos = 1;
+    // optional sfixed64 last_update_nanos = 1;
     if (has_last_update_nanos()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->last_update_nanos());
+      total_size += 1 + 8;
     }
 
-    // optional int64 intent_age = 2;
+    // optional sfixed64 intent_age = 2;
     if (has_intent_age()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->intent_age());
+      total_size += 1 + 8;
     }
 
-    // optional int64 gc_bytes_age = 3;
+    // optional sfixed64 gc_bytes_age = 3;
     if (has_gc_bytes_age()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->gc_bytes_age());
+      total_size += 1 + 8;
     }
 
-    // optional int64 live_bytes = 4;
+    // optional sfixed64 live_bytes = 4;
     if (has_live_bytes()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->live_bytes());
+      total_size += 1 + 8;
     }
 
-    // optional int64 live_count = 5;
+    // optional sfixed64 live_count = 5;
     if (has_live_count()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->live_count());
+      total_size += 1 + 8;
     }
 
-    // optional int64 key_bytes = 6;
+    // optional sfixed64 key_bytes = 6;
     if (has_key_bytes()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->key_bytes());
+      total_size += 1 + 8;
     }
 
-    // optional int64 key_count = 7;
+    // optional sfixed64 key_count = 7;
     if (has_key_count()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->key_count());
+      total_size += 1 + 8;
     }
 
-    // optional int64 val_bytes = 8;
+    // optional sfixed64 val_bytes = 8;
     if (has_val_bytes()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->val_bytes());
+      total_size += 1 + 8;
     }
 
   }
   if (_has_bits_[8 / 32] & 7936u) {
-    // optional int64 val_count = 9;
+    // optional sfixed64 val_count = 9;
     if (has_val_count()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->val_count());
+      total_size += 1 + 8;
     }
 
-    // optional int64 intent_bytes = 10;
+    // optional sfixed64 intent_bytes = 10;
     if (has_intent_bytes()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->intent_bytes());
+      total_size += 1 + 8;
     }
 
-    // optional int64 intent_count = 11;
+    // optional sfixed64 intent_count = 11;
     if (has_intent_count()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->intent_count());
+      total_size += 1 + 8;
     }
 
-    // optional int64 sys_bytes = 12;
+    // optional sfixed64 sys_bytes = 12;
     if (has_sys_bytes()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->sys_bytes());
+      total_size += 1 + 8;
     }
 
-    // optional int64 sys_count = 13;
+    // optional sfixed64 sys_count = 13;
     if (has_sys_count()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->sys_count());
+      total_size += 1 + 8;
     }
 
   }
@@ -1637,7 +1611,7 @@ void MVCCStats::InternalSwap(MVCCStats* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // MVCCStats
 
-// optional int64 last_update_nanos = 1;
+// optional sfixed64 last_update_nanos = 1;
 bool MVCCStats::has_last_update_nanos() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -1661,7 +1635,7 @@ void MVCCStats::clear_last_update_nanos() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.last_update_nanos)
 }
 
-// optional int64 intent_age = 2;
+// optional sfixed64 intent_age = 2;
 bool MVCCStats::has_intent_age() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -1685,7 +1659,7 @@ void MVCCStats::clear_intent_age() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.intent_age)
 }
 
-// optional int64 gc_bytes_age = 3;
+// optional sfixed64 gc_bytes_age = 3;
 bool MVCCStats::has_gc_bytes_age() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
@@ -1709,7 +1683,7 @@ void MVCCStats::clear_gc_bytes_age() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.gc_bytes_age)
 }
 
-// optional int64 live_bytes = 4;
+// optional sfixed64 live_bytes = 4;
 bool MVCCStats::has_live_bytes() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -1733,7 +1707,7 @@ void MVCCStats::clear_live_bytes() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.live_bytes)
 }
 
-// optional int64 live_count = 5;
+// optional sfixed64 live_count = 5;
 bool MVCCStats::has_live_count() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
@@ -1757,7 +1731,7 @@ void MVCCStats::clear_live_count() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.live_count)
 }
 
-// optional int64 key_bytes = 6;
+// optional sfixed64 key_bytes = 6;
 bool MVCCStats::has_key_bytes() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
@@ -1781,7 +1755,7 @@ void MVCCStats::clear_key_bytes() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.key_bytes)
 }
 
-// optional int64 key_count = 7;
+// optional sfixed64 key_count = 7;
 bool MVCCStats::has_key_count() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -1805,7 +1779,7 @@ void MVCCStats::clear_key_count() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.key_count)
 }
 
-// optional int64 val_bytes = 8;
+// optional sfixed64 val_bytes = 8;
 bool MVCCStats::has_val_bytes() const {
   return (_has_bits_[0] & 0x00000080u) != 0;
 }
@@ -1829,7 +1803,7 @@ void MVCCStats::clear_val_bytes() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.val_bytes)
 }
 
-// optional int64 val_count = 9;
+// optional sfixed64 val_count = 9;
 bool MVCCStats::has_val_count() const {
   return (_has_bits_[0] & 0x00000100u) != 0;
 }
@@ -1853,7 +1827,7 @@ void MVCCStats::clear_val_count() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.val_count)
 }
 
-// optional int64 intent_bytes = 10;
+// optional sfixed64 intent_bytes = 10;
 bool MVCCStats::has_intent_bytes() const {
   return (_has_bits_[0] & 0x00000200u) != 0;
 }
@@ -1877,7 +1851,7 @@ void MVCCStats::clear_intent_bytes() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.intent_bytes)
 }
 
-// optional int64 intent_count = 11;
+// optional sfixed64 intent_count = 11;
 bool MVCCStats::has_intent_count() const {
   return (_has_bits_[0] & 0x00000400u) != 0;
 }
@@ -1901,7 +1875,7 @@ void MVCCStats::clear_intent_count() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.intent_count)
 }
 
-// optional int64 sys_bytes = 12;
+// optional sfixed64 sys_bytes = 12;
 bool MVCCStats::has_sys_bytes() const {
   return (_has_bits_[0] & 0x00000800u) != 0;
 }
@@ -1925,7 +1899,7 @@ void MVCCStats::clear_sys_bytes() {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.sys_bytes)
 }
 
-// optional int64 sys_count = 13;
+// optional sfixed64 sys_count = 13;
 bool MVCCStats::has_sys_count() const {
   return (_has_bits_[0] & 0x00001000u) != 0;
 }
