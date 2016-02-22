@@ -2173,7 +2173,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 }
 
 // TestSequenceSnapshotIgnoreRestartPoisoning verifies that we correctly
-// handle SNAPSHOT transactions: They should ignore a sequence cache value
+// handle SNAPSHOT transactions: they should ignore a sequence cache value
 // of SequencePoisonRestart and instead check on the previous, "unpoisoned"
 // cache entry.
 func TestSequenceSnapshotIgnoreRestartPoisoning(t *testing.T) {

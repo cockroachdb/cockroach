@@ -109,30 +109,37 @@ func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, iso roachpb.Isol
 	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
 	startKey := prefix
 	var epoch, seq uint32
-	for {
-		kvs, _, err := engine.MVCCScan(e, startKey, sc.max, 1, /* num */
-			roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
-		if err != nil || len(kvs) == 0 || !bytes.HasPrefix(kvs[0].Key, prefix) {
-			return 0, 0, err
-		}
-		_, epoch, seq, err = decodeSequenceCacheKey(kvs[0].Key, sc.scratchBuf[:0])
-		if err != nil {
-			return 0, 0, err
-		}
-		if seq == SequencePoisonRestart && iso == roachpb.SNAPSHOT {
-			startKey = kvs[0].Key.Next()
-			continue
-		}
-		if dest != nil {
-			dest.Reset()
-			// Caller wants to have the unmarshaled value.
-			if err := kvs[0].Value.GetProto(dest); err != nil {
-				return 0, 0, err
+	_, err := engine.MVCCIterate(e, startKey, sc.max, roachpb.ZeroTimestamp, true, /* consistent */
+		nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (done bool, err error) {
+			defer func() {
+				if !done || err != nil {
+					epoch = 0
+					seq = 0
+				}
+			}()
+			if !bytes.HasPrefix(kv.Key, prefix) {
+				return true, nil
 			}
-		}
-		break
-	}
-	return epoch, seq, nil
+			_, epoch, seq, err = decodeSequenceCacheKey(kv.Key, sc.scratchBuf[:0])
+			if err != nil {
+				return false, err
+			}
+			if seq == SequencePoisonRestart && iso == roachpb.SNAPSHOT {
+				return false, nil
+			}
+			if dest != nil {
+				dest.Reset()
+				// Caller wants to have the unmarshaled value.
+				if err := kv.Value.GetProto(dest); err != nil {
+					return false, err
+				}
+			}
+			return true, nil
+		})
+
+	//kvs, _, err := engine.MVCCScan(e, startKey, sc.max, 1, /* num */
+	//k	roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
+	return epoch, seq, err
 }
 
 // GetAllTransactionID returns all the key-value pairs for the given transaction ID from

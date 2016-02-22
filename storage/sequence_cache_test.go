@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -98,17 +99,18 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	}
 
 	tryHit := func(expEpo, expSeq uint32, iso roachpb.IsolationType) {
+		f, l, _ := caller.Lookup(1)
 		var entry roachpb.SequenceCacheEntry
 		if actEpo, actSeq, readErr := sc.Get(e, testTxnID, iso, &entry); readErr != nil {
-			t.Errorf("unexpected failure getting response: %s", readErr)
+			t.Fatalf("%s:%d: unexpected failure getting response: %s", f, l, readErr)
 		} else if (expSeq > 0 || actSeq > 0) && expSeq != actSeq {
-			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actSeq, expSeq)
+			t.Fatalf("%s:%d: wanted hit: %t, got actual %d vs expected %d", f, l, expSeq > 0, actSeq, expSeq)
 		} else if expSeq > 0 {
 			if !reflect.DeepEqual(testEntry, entry) {
-				t.Fatalf("wanted %v, got %v", testEntry, entry)
+				t.Fatalf("%s:%d: wanted %v, got %v", f, l, testEntry, entry)
 			}
 			if expEpo != actEpo {
-				t.Fatalf("expected epoch %d, got %d", expEpo, actEpo)
+				t.Fatalf("%s:%d: expected epoch %d, got %d", f, l, expEpo, actEpo)
 			}
 		}
 	}
@@ -136,20 +138,26 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 
 	tryHit(2*testTxnEpoch, 2*seq, roachpb.SERIALIZABLE)
 
+	// Clear out sequence cache for testing SNAPSHOT special-casing.
 	if err := sc.ClearData(e); err != nil {
 		t.Fatal(err)
 	}
 
+	// Poison for restart - this shouldn't bother our SNAPSHOT txn.
 	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, SequencePoisonRestart, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Fatal(err)
 	}
-	tryHit(0, 0, roachpb.SNAPSHOT)
+	tryHit(0, 0, roachpb.SNAPSHOT) // ignores poison
 
+	// Put an actual entry below to make sure we get it back (as opposed to
+	// (0,0) again).
 	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, 5, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Fatal(err)
 	}
 	tryHit(testTxnEpoch, 5, roachpb.SNAPSHOT)
+	// Make sure that this really is only happening for SNAPSHOT.
 	tryHit(testTxnEpoch, SequencePoisonRestart, roachpb.SERIALIZABLE)
+	// An ABORT shouldn't be skipped by either SNAPSHOT or SERIALIZABLE.
 	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, SequencePoisonAbort, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Fatal(err)
 	}
