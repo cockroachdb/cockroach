@@ -1317,10 +1317,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	// On successful write commands, flush to event feed, and handle other
 	// write-related triggers including splitting and config gossip updates.
 	if rErr == nil && ba.IsWrite() {
-		// Publish update to event feed.
-		// TODO(spencer): we should be sending feed updates for each part
-		// of the batch. In particular, stats should be reported per-command.
-		r.store.EventFeed().updateRange(r, roachpb.Batch, &ms)
+		r.store.metrics.addMVCCStats(ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 	}
