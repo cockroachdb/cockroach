@@ -672,8 +672,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
-		pErrTxn := pErr.GetTxn().Clone()
-		defer tc.cleanupTxn(sp, pErrTxn)
+		defer tc.cleanupTxn(sp, *pErr.GetTxn())
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:
