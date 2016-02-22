@@ -14,12 +14,6 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-// We mark this file as "build ignore" so that it won't be built as
-// part of the simulation package, but can still be run using "go run
-// gossip.go".
-
-// +build ignore
-
 /*
 Package simulation provides tools meant to visualize or test aspects
 of a Cockroach cluster on a single host.
@@ -35,7 +29,8 @@ simulation.
 
 To run:
 
-    go run gossip.go -size=(small|medium|large|huge|ginormous)
+    go install github.com/cockroachdb/cockroach/cmd/gossipsim
+    gossipsim -size=(small|medium|large|huge|ginormous)
 
 Log output includes instructions for displaying the graph output as a
 series of images to visualize the evolution of the network.
@@ -194,8 +189,8 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		delete(edgeSet, key)
 	}
 
-	f.WriteString("digraph G {\n")
-	f.WriteString("node [shape=record];\n")
+	fmt.Fprintln(f, "digraph G {")
+	fmt.Fprintln(f, "node [shape=record];")
 	for _, simNode := range network.Nodes {
 		node := simNode.Gossip
 		var missing []roachpb.NodeID
@@ -243,8 +238,8 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			fontSize = minDotFontSize + int(math.Floor(float64(len(node.Incoming())*
 				(maxDotFontSize-minDotFontSize))/float64(maxIncoming)))
 		}
-		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|AA=%s, MH=%d, SA=%d}\"]\n",
-			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), age, node.MaxHops(), sentinelAge))
+		fmt.Fprintf(f, "\t%s [%sfontsize=%d,label=\"{%s|AA=%s, MH=%d, SA=%d}\"]\n",
+			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), age, node.MaxHops(), sentinelAge)
 		outgoing := outgoingMap[node.GetNodeID()]
 		for _, e := range outgoing {
 			destSimNode, ok := network.GetNodeFromID(e.dest)
@@ -258,13 +253,13 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			} else if e.deleted {
 				style = " [color=red,style=dotted]"
 			}
-			f.WriteString(fmt.Sprintf("\t%s -> %s%s\n", node.GetNodeID(), dest.GetNodeID(), style))
+			fmt.Fprintf(f, "\t%s -> %s%s\n", node.GetNodeID(), dest.GetNodeID(), style)
 			if !e.deleted {
 				edgeSet[fmt.Sprintf("%d:%d", node.GetNodeID(), e.dest)] = e
 			}
 		}
 	}
-	f.WriteString("}\n")
+	fmt.Fprintln(f, "}")
 	return f.Name(), quiescent
 }
 
