@@ -352,7 +352,7 @@ func (r *Replica) IsFirstRange() bool {
 
 func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	if _, err := engine.MVCCGetProto(eng, keys.RaftLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
+	if _, err := engine.MVCCGetProto(eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil

@@ -79,8 +79,6 @@ var (
 	// LocalSequenceCacheSuffix is the suffix used for the replay protection
 	// mechanism.
 	LocalSequenceCacheSuffix = []byte("res-")
-	// localRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
-	localRaftLeaderLeaseSuffix = []byte("rfll")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
 	localRaftTombstoneSuffix = []byte("rftb")
 	// localRaftHardStateSuffix is the Suffix for the raft HardState.
@@ -93,6 +91,8 @@ var (
 	localRaftTruncatedStateSuffix = []byte("rftt")
 	// localRaftLastIndexSuffix is the suffix for raft's last index.
 	localRaftLastIndexSuffix = []byte("rfti")
+	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
+	localRangeLeaderLeaseSuffix = []byte("rll-")
 	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
 	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
