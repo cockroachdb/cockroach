@@ -14,7 +14,7 @@
 //
 // Author: Timothy Chen
 
-package server
+package storage
 
 import (
 	"math/rand"
@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -38,18 +38,18 @@ import (
 )
 
 type channelServer struct {
-	ch       chan *storage.RaftMessageRequest
+	ch       chan *RaftMessageRequest
 	maxSleep time.Duration
 }
 
 func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	return channelServer{
-		ch:       make(chan *storage.RaftMessageRequest, bufSize),
+		ch:       make(chan *RaftMessageRequest, bufSize),
 		maxSleep: maxSleep,
 	}
 }
 
-func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
+func (s channelServer) RaftMessage(req *RaftMessageRequest) error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -64,7 +64,7 @@ func TestSendAndReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 	g.SetNodeID(roachpb.NodeID(1))
 
@@ -83,7 +83,7 @@ func TestSendAndReceive(t *testing.T) {
 	nextStoreID := roachpb.StoreID(2)
 
 	// Per-node state.
-	transports := map[roachpb.NodeID]storage.RaftTransport{}
+	transports := map[roachpb.NodeID]*RaftTransport{}
 
 	// Per-store state.
 	storeNodes := map[roachpb.StoreID]roachpb.NodeID{}
@@ -119,8 +119,7 @@ func TestSendAndReceive(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		transport := newRPCTransport(g, grpcServer, nodeRPCContext)
-		defer transport.Close()
+		transport := NewRaftTransport(GossipPolymorphismShim(g), grpcServer, nodeRPCContext)
 		transports[nodeID] = transport
 
 		for store := 0; store < storesPerServer; store++ {
@@ -130,9 +129,7 @@ func TestSendAndReceive(t *testing.T) {
 			storeNodes[storeID] = nodeID
 
 			channel := newChannelServer(10, 0)
-			if err := transport.Listen(storeID, channel.RaftMessage); err != nil {
-				t.Fatal(err)
-			}
+			transport.Listen(storeID, channel.RaftMessage)
 			channels[storeID] = channel
 		}
 	}
@@ -140,7 +137,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Heartbeat messages: Each store sends one message to each store.
 	for fromStoreID, fromNodeID := range storeNodes {
 		for toStoreID, toNodeID := range storeNodes {
-			req := &storage.RaftMessageRequest{
+			req := &RaftMessageRequest{
 				GroupID: 0,
 				Message: raftpb.Message{
 					Type: raftpb.MsgHeartbeat,
@@ -193,7 +190,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Send a message from replica 2 (on store 3, node 2) to replica 1 (on store 5, node 3)
 	fromStoreID := roachpb.StoreID(3)
 	toStoreID := roachpb.StoreID(5)
-	req := &storage.RaftMessageRequest{
+	req := &RaftMessageRequest{
 		GroupID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
@@ -237,7 +234,7 @@ func TestInOrderDelivery(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 	g.SetNodeID(roachpb.NodeID(1))
 
@@ -254,12 +251,9 @@ func TestInOrderDelivery(t *testing.T) {
 
 	const numMessages = 100
 	nodeID := roachpb.NodeID(roachpb.NodeID(2))
-	serverTransport := newRPCTransport(g, grpcServer, nodeRPCContext)
-	defer serverTransport.Close()
+	serverTransport := NewRaftTransport(GossipPolymorphismShim(g), grpcServer, nodeRPCContext)
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
-	if err := serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage); err != nil {
-		t.Fatal(err)
-	}
+	serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage)
 	addr := ln.Addr()
 	// Have to set gossip.NodeID before call gossip.AddInofXXX
 	g.SetNodeID(nodeID)
@@ -272,11 +266,10 @@ func TestInOrderDelivery(t *testing.T) {
 	}
 
 	clientNodeID := roachpb.NodeID(2)
-	clientTransport := newRPCTransport(g, nil, nodeRPCContext)
-	defer clientTransport.Close()
+	clientTransport := NewRaftTransport(GossipPolymorphismShim(g), nil, nodeRPCContext)
 
 	for i := 0; i < numMessages; i++ {
-		req := &storage.RaftMessageRequest{
+		req := &RaftMessageRequest{
 			GroupID: 1,
 			Message: raftpb.Message{
 				To:     uint64(nodeID),
