@@ -49,7 +49,7 @@ func TestRunQuery(t *testing.T) {
 	}
 
 	expected := `
-OK
+SET
 `
 	if a, e := b.String(), expected[1:]; a != e {
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
@@ -57,7 +57,7 @@ OK
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`))
+	cols, rows, _, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ OK
 		return fmt.Sprintf("--> %s <--", val)
 	}
 
-	_, rows, err = runQueryWithFormat(conn, fmtMap{"name": newFormat},
+	_, rows, _, err = runQueryWithFormat(conn, fmtMap{"name": newFormat},
 		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"))
 	if err != nil {
 		t.Fatal(err)

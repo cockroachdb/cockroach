@@ -229,7 +229,7 @@ func runStatements(conn *sqlConn, stmts []string) error {
 	for _, stmt := range stmts {
 		q := makeQuery(stmt)
 		for {
-			cols, allRows, err := runQuery(conn, q)
+			cols, allRows, tag, err := runQuery(conn, q)
 			if err != nil {
 				if err == pq.ErrNoMoreResults {
 					break
@@ -240,15 +240,10 @@ func runStatements(conn *sqlConn, stmts []string) error {
 
 			if len(cols) == 0 {
 				// No result selected, inform the user.
-				fmt.Fprintln(os.Stdout, "OK")
+				fmt.Fprintln(os.Stdout, tag)
 			} else {
 				// Some results selected, inform the user about how much data to expect.
-				noun := "rows"
-				if len(allRows) == 1 {
-					noun = "row"
-				}
-
-				fmt.Fprintf(os.Stdout, "%d %s\n", len(allRows), noun)
+				fmt.Fprintf(os.Stdout, "%d row%s\n", len(allRows), pluralize(int64(len(allRows))))
 
 				// Then print the results themselves.
 				fmt.Fprintln(os.Stdout, strings.Join(cols, "\t"))

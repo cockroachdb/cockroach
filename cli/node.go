@@ -66,7 +66,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	printQueryOutput(os.Stdout, lsNodesColumnHeaders, rows)
+	printQueryOutput(os.Stdout, lsNodesColumnHeaders, rows, "")
 	return nil
 }
 
@@ -128,7 +128,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return util.Errorf("expected no arguments or a single node ID")
 	}
 
-	printQueryOutput(os.Stdout, nodesColumnHeaders, nodeStatusesToRows(nodeStatuses))
+	printQueryOutput(os.Stdout, nodesColumnHeaders, nodeStatusesToRows(nodeStatuses), "")
 	return nil
 }
 
