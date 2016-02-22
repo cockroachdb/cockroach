@@ -193,7 +193,7 @@ func (c *Cluster) runEpoch() bool {
 	c.prepareActions()
 
 	// Execute the determined operations.
-	// TODO(bram): Add ability to end when stable.
+	// TODO(bram): #4566 Add ability to end when stable.
 	c.performActions()
 
 	// Recalculate the ranges IDs by store map.
@@ -337,7 +337,7 @@ func (c *Cluster) performActions() bool {
 					c.epoch, storeID, topRangeID, newStoreID)
 			case storage.AllocatorRemoveDead:
 				stable = false
-				// TODO(bram): implement this.
+				// TODO(bram): #4566 implement this.
 				usedRanges[topRangeID] = storeID
 				fmt.Fprintf(c.actionWriter, "%d:\tStore:%d\tRange:%d\tREPAIR\n", c.epoch, storeID, topRangeID)
 			case storage.AllocatorRemove:

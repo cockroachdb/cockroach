@@ -44,7 +44,7 @@ func DefaultConfigs() []TestConfig {
 				},
 			},
 		},
-		/*  TODO(bram): add in these test cases once #4445 is resolved.
+		/*  TODO(bram): #4445 skipping these test cases until is resolved.
 		{
 			Name:     "5x1",
 			Duration: DefaultDuration,
@@ -88,7 +88,8 @@ func (tc TestConfig) PrettyString() string {
 					if tmpStoreCount > 0 {
 						buffer.WriteString(", ")
 					}
-					// TODO(bram): Add store details here when they are available.
+					// TODO(bram): #4561 Add store details (size) here when
+					// they are available.
 					buffer.WriteString(fmt.Sprintf("Store %d", tmpStoreCount))
 					tmpStoreCount++
 					storeCount++

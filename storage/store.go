@@ -485,7 +485,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// If the nodeID is 0, it has not be assigned yet.
-	// TODO(bram): Figure out how to remove this special case.
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
 		return util.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
@@ -1825,9 +1824,9 @@ func (s *Store) GetStatus() (*StoreStatus, *roachpb.Error) {
 
 // computeReplicationStatus counts a number of simple replication statistics for
 // the ranges in this store.
-// TODO(bram): It may be appropriate to compute these statistics while scanning
-// ranges. An ideal solution would be to create incremental events whenever
-// availability changes.
+// TODO(bram): #4564 It may be appropriate to compute these statistics while
+// scanning ranges. An ideal solution would be to create incremental events
+// whenever availability changes.
 func (s *Store) computeReplicationStatus(now int64) (
 	leaderRangeCount, replicatedRangeCount, availableRangeCount int64) {
 	// Load the system config.
@@ -1849,9 +1848,9 @@ func (s *Store) computeReplicationStatus(now int64) (
 		raftStatus := rng.RaftStatus()
 		if raftStatus.SoftState.RaftState == raft.StateLeader {
 			leaderRangeCount++
-			// TODO(bram): Compare attributes of the stores so we can track
-			// ranges that have enough replicas but still need to be migrated
-			// onto nodes with the desired attributes.
+			// TODO(bram): #4564 Compare attributes of the stores so we can
+			// track ranges that have enough replicas but still need to be
+			// migrated onto nodes with the desired attributes.
 			if len(raftStatus.Progress) >= len(zoneConfig.ReplicaAttrs) {
 				replicatedRangeCount++
 			}

@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	// TODO(bram): Do we still need these? The default zone config might be
-	// enough.
+	// TODO(bram): #4566 Do we still need these? The default zone config might
+	// be enough.
 	bytesPerRange    = 64 << 20            // 64 MiB
 	capacityPerStore = bytesPerRange * 100 // 100 ranges
 )
@@ -59,7 +59,7 @@ func (s *Store) getDesc(rangeCount int) roachpb.StoreDescriptor {
 
 // getCapacity returns the store capacity based on the numbers of ranges
 // located in the store.
-// TODO(bram): Change this to take the actual ranges for real counts.
+// TODO(bram): #4566 Change this to take the actual ranges for real counts.
 func (s *Store) getCapacity(rangeCount int) roachpb.StoreCapacity {
 	return roachpb.StoreCapacity{
 		Capacity:   capacityPerStore,

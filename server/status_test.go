@@ -218,7 +218,6 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 	}
 
 	url := testContext.HTTPRequestScheme() + "://" + ts.ServingAddr() + path
-	// TODO(bram) #1940: Remove retry logic.
 	for r := retry.Start(retryOptions); r.Next(); {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
@@ -255,7 +254,6 @@ func getRequest(t *testing.T, ts TestServer, path string) []byte {
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-// TODO(bram): Add more nodes.
 func startServer(t *testing.T) TestServer {
 	var ts TestServer
 	ts.Ctx = NewTestContext()
