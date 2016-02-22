@@ -706,7 +706,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		pErr.SetTxn(newTxn)
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
-		defer tc.cleanupTxn(sp, *pErr.GetTxn())
+		pErrTxn := pErr.GetTxn().Clone()
+		defer tc.cleanupTxn(sp, pErrTxn)
 	case *roachpb.TransactionPushError:
 		newTxn.Update(pErr.GetTxn())
 		// Increase timestamp if applicable, ensuring that we're
