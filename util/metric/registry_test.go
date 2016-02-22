@@ -26,6 +26,7 @@ func TestRegistry(t *testing.T) {
 	sub := NewRegistry()
 
 	_ = r.Gauge("top.gauge")
+	_ = r.Counter("top.counter")
 	_ = r.Rate("top.rate", time.Minute)
 	_ = r.Rates("top.rates")
 	_ = r.Histogram("top.hist", time.Minute, 1000, 3)
@@ -49,6 +50,7 @@ func TestRegistry(t *testing.T) {
 		"top.latency-10m":      {},
 		"top.latency-1h":       {},
 		"top.gauge":            {},
+		"top.counter":          {},
 		"bottom.gauge#1":       {},
 		"bottom.rates-count#1": {},
 		"bottom.rates-1m#1":    {},
@@ -64,5 +66,36 @@ func TestRegistry(t *testing.T) {
 	})
 	if len(expNames) > 0 {
 		t.Fatalf("missed names: %v", expNames)
+	}
+
+	// Test get functions
+	if g := r.GetGauge("top.gauge"); g == nil {
+		t.Errorf("GetGauge returned nil, expected non-nil")
+	}
+	if g := r.GetGauge("bad"); g != nil {
+		t.Errorf("GetGauge returned non-nil, expected nil")
+	}
+	if g := r.GetGauge("top.hist"); g != nil {
+		t.Errorf("GetGauge returned non-nil when requesting non-gauge, expected nil")
+	}
+
+	if c := r.GetCounter("top.counter"); c == nil {
+		t.Errorf("GetCounter returned nil, expected non-nil")
+	}
+	if c := r.GetCounter("bad"); c != nil {
+		t.Errorf("GetCounter returned non-nil, expected nil")
+	}
+	if c := r.GetCounter("top.hist"); c != nil {
+		t.Errorf("GetCounter returned non-nil when requesting non-gauge, expected nil")
+	}
+
+	if r := r.GetRate("top.rate"); r == nil {
+		t.Errorf("GetRate returned nil, expected non-nil")
+	}
+	if r := r.GetRate("bad"); r != nil {
+		t.Errorf("GetRate returned non-nil, expected nil")
+	}
+	if r := r.GetRate("top.hist"); r != nil {
+		t.Errorf("GetRate returned non-nil when requesting non-gauge, expected nil")
 	}
 }

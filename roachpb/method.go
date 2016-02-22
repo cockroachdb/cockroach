@@ -102,7 +102,4 @@ const (
 	TruncateLog
 	// LeaderLease requests a leader lease for a replica.
 	LeaderLease
-	// Batch implements batch processing of commands. This is a
-	// superset of the Batch method.
-	Batch
 )

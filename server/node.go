@@ -65,6 +65,35 @@ var errNeedsBootstrap = errors.New("node has no initialized stores and no instru
 // progress in this state.
 var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own address to join a cluster")
 
+type nodeMetrics struct {
+	registry *metric.Registry
+	latency  metric.Histograms
+	success  metric.Rates
+	err      metric.Rates
+}
+
+func makeNodeMetrics() nodeMetrics {
+	reg := metric.NewRegistry()
+	return nodeMetrics{
+		registry: reg,
+		latency:  reg.Latency("latency"),
+		success:  reg.Rates("success"),
+		err:      reg.Rates("error"),
+	}
+}
+
+// callComplete records very high-level metrics about the number of completed
+// calls and their latency. Currently, this only records statistics at the batch
+// level; stats on specific lower-level kv operations are not recorded.
+func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
+	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_ABORT {
+		nm.err.Add(1)
+	} else {
+		nm.success.Add(1)
+	}
+	nm.latency.RecordValue(d.Nanoseconds())
+}
+
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
@@ -80,8 +109,8 @@ type Node struct {
 	Descriptor roachpb.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext   // Context to use and pass to stores
 	stores     *storage.Stores        // Access to node-local stores
-	feed       status.NodeEventFeed   // Feed publisher for local events
-	status     *status.NodeStatusMonitor
+	metrics    nodeMetrics
+	recorder   *status.MetricsRecorder
 	startedAt  int64
 	txnMetrics *kv.TxnMetrics
 }
@@ -185,14 +214,17 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(ctx storage.StoreContext, registry *metric.Registry, stopper *stop.Stopper, subRegistries []status.NodeSubregistry, txnMetrics *kv.TxnMetrics) *Node {
-	return &Node{
+func NewNode(ctx storage.StoreContext, recorder *status.MetricsRecorder, stopper *stop.Stopper, txnMetrics *kv.TxnMetrics) *Node {
+	n := &Node{
 		ctx:        ctx,
 		stopper:    stopper,
-		status:     status.NewNodeStatusMonitor(registry, subRegistries),
+		recorder:   recorder,
+		metrics:    makeNodeMetrics(),
 		stores:     storage.NewStores(ctx.Clock),
 		txnMetrics: txnMetrics,
 	}
+	n.recorder.AddNodeRegistry("exec.%s", n.metrics.registry)
+	return n
 }
 
 // context returns a context encapsulating the NodeID.
@@ -252,9 +284,6 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
 	n.initDescriptor(addr, attrs)
 
-	// Start status monitor.
-	n.status.StartMonitorFeed(n.ctx.EventFeed)
-
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(engines, n.stopper); err != nil {
 		if err == errNeedsBootstrap {
@@ -283,11 +312,8 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
 
-	// Initialize publisher for Node Events. This requires the NodeID, which is
-	// initialized by initStores(); because of this, some Store initialization
-	// events will precede the StartNodeEvent on the feed.
-	n.feed = status.NewNodeEventFeed(n.Descriptor.NodeID, n.ctx.EventFeed)
-	n.feed.StartNode(n.Descriptor, n.startedAt)
+	// Initialize the recorder with the NodeID, which is initialized by initStores().
+	n.recorder.NodeStarted(n.Descriptor, n.startedAt)
 
 	n.startPublishStatuses(n.stopper)
 	n.startGossip(n.stopper)
@@ -335,7 +361,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 			return util.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof("initialized store %s: %+v", s, capacity)
-		n.stores.AddStore(s)
+		n.addStore(s)
 	}
 
 	// If there are no initialized stores and no gossip resolvers,
@@ -385,6 +411,11 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	return nil
 }
 
+func (n *Node) addStore(store *storage.Store) {
+	n.stores.AddStore(store)
+	n.recorder.AddStore(store)
+}
+
 // validateStores iterates over all stores, verifying they agree on
 // cluster ID and node ID. The node's ident is initialized based on
 // the agreed-upon cluster and node IDs.
@@ -430,7 +461,7 @@ func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stoppe
 		if err := s.Start(stopper); err != nil {
 			log.Fatal(err)
 		}
-		n.stores.AddStore(s)
+		n.addStore(s)
 		sIdent.StoreID++
 		log.Infof("bootstrapped store %s", s)
 		// Done regularly in Node.startGossip, but this cuts down the time
@@ -503,7 +534,9 @@ func (n *Node) gossipStores() {
 }
 
 // startPublishStatuses starts a loop which periodically instructs each store to
-// publish its current status to the event feed.
+// publish certain periodically calculated metrics.
+// TODO(mrtracy): This method should probably be renamed to more accurately
+// reflect what it is doing; its purpose has been modified slightly.
 func (n *Node) startPublishStatuses(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		// Publish status at the same frequency as metrics are collected.
@@ -553,7 +586,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 		}
-		n.feed.CallComplete(*ba, time.Now().Sub(tStart), pErr)
+		n.metrics.callComplete(time.Now().Sub(tStart), pErr)
 		br.Error = pErr
 	}
 
