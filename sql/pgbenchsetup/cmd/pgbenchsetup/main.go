@@ -1,0 +1,85 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: David Taylor (david@cockroachlabs.com)
+
+package main
+
+import (
+	"database/sql"
+	"flag"
+	"fmt"
+	"net/url"
+	"os"
+
+	_ "github.com/lib/pq"
+
+	"github.com/cockroachdb/cockroach/sql/pgbenchsetup"
+	"github.com/cockroachdb/cockroach/util/log"
+)
+
+var usage = func() {
+	fmt.Fprintln(os.Stderr, "Creates the schema and initial data used by the `pgbench` tool")
+	fmt.Fprintf(os.Stderr, "\nUsage: %s <db URL>\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
+func main() {
+	accounts := flag.Int("accounts", 100000, "number of accounts to create")
+
+	createDb := flag.Bool("createdb", false, "attempt to create named db, dropping first if exists")
+
+	flag.Parse()
+	flag.Usage = usage
+	if flag.NArg() != 1 {
+		flag.Usage()
+		os.Exit(2)
+	}
+
+	name := ""
+	parsed, err := url.Parse(flag.Arg(0))
+	if err != nil {
+		log.Fatal(err)
+	} else if len(parsed.Path) > 2 { // first char is '/'
+		name = parsed.Path[1:]
+	}
+
+	db, err := sql.Open("postgres", flag.Arg(0))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if *createDb {
+		if name == "" {
+			log.Fatal("URL must include db name")
+		}
+
+		if _, err := db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", name)); err != nil {
+			log.Fatalf("Could not drop db %s: %s", name, err.Error())
+		}
+		if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE %s", name)); err != nil {
+			log.Fatalf("Could not create db %s: %s", name, err.Error())
+		} else {
+			log.Infof("Created database %s", name)
+		}
+	}
+
+	prefix := ""
+	if name != "" {
+		prefix = name + "."
+	}
+
+	if err := pgbenchsetup.SetupBenchDB(db, prefix, *accounts); err != nil {
+		log.Fatal(err)
+	}
+}
