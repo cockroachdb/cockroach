@@ -38,8 +38,8 @@ const (
 	OpSplitRange Operation = "splitrange"
 	OpAddNode    Operation = "addnode"
 	OpExit       Operation = "exit"
-	// TODO(bram): add optional value to addnode to indicate size
-	// TODO(bram): consider many other operations here.
+	// TODO(bram): #4566 add optional value to addnode to indicate size
+	// TODO(bram): #4566 consider many other operations here.
 	//	OpMergeRangeRandom
 	//	OpMergeRangeFirst
 	//  OpKillNodeRandom

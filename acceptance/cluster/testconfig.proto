@@ -23,7 +23,7 @@ import weak "gogoproto/gogo.proto";
 // StoreConfig holds the configuration of a collection of similar stores.
 message StoreConfig {
   optional int32 count = 1 [(gogoproto.nullable) = false];
-// TODO(bram): something for different store sizes here
+// TODO(bram): #4561 something for different store sizes here
 }
 
 // NodeConfig holds the configuration of a collection of similar nodes.
@@ -41,5 +41,5 @@ message TestConfig {
   // Stall is the duration after which if no forward progress is made in a test,
   // consider the test stalled.
   optional int64 stall = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-// TODO(bram): once defined, add in a collection of chaos agents here.
+// TODO(bram): #4559 once defined, add in a collection of chaos agents here.
 }

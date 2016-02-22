@@ -1051,7 +1051,7 @@ func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 }
 
 func (r *Replica) handleRaftReady() error {
-	// TODO(bram): There is a lot of locking and unlocking of the replica,
+	// TODO(bram): #4562 There is a lot of locking and unlocking of the replica,
 	// consider refactoring this.
 	r.mu.Lock()
 	if !r.mu.raftGroup.HasReady() {
