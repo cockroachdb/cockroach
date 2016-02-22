@@ -17,7 +17,6 @@
 package cli
 
 import (
-	"database/sql"
 	"fmt"
 	"io"
 	"net/url"
@@ -118,7 +117,7 @@ func handleInputLine(stmt *[]string, line string) int {
 
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
-func preparePrompts(db *sql.DB, dbURL string) (fullPrompt string, continuePrompt string) {
+func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 	// Default prompt is part of the connection URL. eg: "marc@localhost>"
 	// continued statement prompt is: "        -> "
 	fullPrompt = dbURL
@@ -142,8 +141,8 @@ func preparePrompts(db *sql.DB, dbURL string) (fullPrompt string, continuePrompt
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
-	fullPrompt, continuePrompt := preparePrompts(db, dbURL)
+func runInteractive(conn *sqlConn) (exitErr error) {
+	fullPrompt, continuePrompt := preparePrompts(conn.url)
 
 	if isatty.IsTerminal(os.Stdout.Fd()) {
 		// We only enable history management when the terminal is actually
@@ -211,7 +210,7 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 			readline.SetHistoryPath("")
 		}
 
-		if exitErr = runPrettyQuery(db, os.Stdout, fullStmt); exitErr != nil {
+		if exitErr = runPrettyQuery(conn, os.Stdout, fullStmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
 
@@ -224,10 +223,10 @@ func runInteractive(db *sql.DB, dbURL string) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(db *sql.DB, stmts []string) error {
+func runStatements(conn *sqlConn, stmts []string) error {
 	for _, stmt := range stmts {
 		fullStmt := stmt + "\n"
-		cols, allRows, err := runQuery(db, fullStmt)
+		cols, allRows, err := runQuery(conn, fullStmt)
 		if err != nil {
 			fmt.Fprintln(osStderr, err)
 			return err
@@ -261,12 +260,12 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return errMissingParams
 	}
 
-	db, dbURL := makeSQLClient()
-	defer func() { _ = db.Close() }()
+	conn := makeSQLClient()
+	defer conn.Close()
 
 	if cliContext.OneShotSQL {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(db, args)
+		return runStatements(conn, args)
 	}
-	return runInteractive(db, dbURL)
+	return runInteractive(conn)
 }

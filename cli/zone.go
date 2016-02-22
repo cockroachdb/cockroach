@@ -18,6 +18,7 @@
 package cli
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"os"
 	"strconv"
@@ -46,7 +47,7 @@ func zoneProtoToYAMLString(val []byte) (string, error) {
 
 // formatZone is a callback used to format the raw zone config
 // protobuf in a sql.Rows column for pretty printing.
-func formatZone(val interface{}) string {
+func formatZone(val driver.Value) string {
 	if raw, ok := val.([]byte); ok {
 		if ret, err := zoneProtoToYAMLString(raw); err == nil {
 			return ret
@@ -81,9 +82,9 @@ func runGetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db, _ := makeSQLClient()
-	defer func() { _ = db.Close() }()
-	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone},
+	conn := makeSQLClient()
+	defer conn.Close()
+	_, rows, err := runQueryWithFormat(conn, fmtMap{"config": formatZone},
 		`SELECT * FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
@@ -114,9 +115,9 @@ func runLsZones(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
-	db, _ := makeSQLClient()
-	defer func() { _ = db.Close() }()
-	_, rows, err := runQueryWithFormat(db, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
+	conn := makeSQLClient()
+	defer conn.Close()
+	_, rows, err := runQueryWithFormat(conn, fmtMap{"config": formatZone}, `SELECT * FROM system.zones`)
 	if err != nil {
 		log.Error(err)
 		return
@@ -155,9 +156,9 @@ func runRmZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db, _ := makeSQLClient()
-	defer func() { _ = db.Close() }()
-	err = runPrettyQuery(db, os.Stdout,
+	conn := makeSQLClient()
+	defer conn.Close()
+	err = runPrettyQuery(conn, os.Stdout,
 		`DELETE FROM system.zones WHERE id=$1`, id)
 	if err != nil {
 		log.Error(err)
@@ -227,10 +228,10 @@ func runSetZone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	db, _ := makeSQLClient()
-	defer func() { _ = db.Close() }()
+	conn := makeSQLClient()
+	defer conn.Close()
 	// TODO(marc): switch to UPSERT.
-	err = runPrettyQuery(db, os.Stdout,
+	err = runPrettyQuery(conn, os.Stdout,
 		`INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
 	if err != nil {
 		log.Error(err)
