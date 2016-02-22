@@ -78,13 +78,20 @@ header
           path
             fill $main-nav-hover
 
+        #Fill-6, #Fill-7
+          fill $navbar-bg
+
+        &.active
+          #Fill-6, #Fill-7
+            fill $main-nav-active-bg
+
       &.cockroach
         padding-top 10px
         height $top-bar-height
         border-bottom 1px solid $navbar-border
 
-        &.active
-          background-color $navbar-bg
+      &.active
+        background-color $navbar-bg
 
       a
         width 100%

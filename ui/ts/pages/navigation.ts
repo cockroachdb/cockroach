@@ -59,9 +59,9 @@ module AdminViews {
             icon: SvgIcons.databaseIcon,
           },
           {
-            title: "Support",
-            route: "/settings/support",
-            icon: SvgIcons.wrenchIcon,
+            title: "Help Us",
+            route: "/helpus/reporting",
+            icon: SvgIcons.cockroachIconSmall,
           },
         ].map(function(v: {title: string; route: string; icon: string; liClass?: string; }): NavigationBar.Target {
           return {
