@@ -10,6 +10,7 @@ checkout:
     # run or the subsequent `mv` will fail. We put our checkout in the correct
     # location for the OSX build step.
     - rm -rf "${GOPATH%%:*}/src/github.com/cockroachdb/cockroach"
+    - mkdir -p "${GOPATH%%:*}/src/github.com/cockroachdb/"
     - mv ~/cockroach "${GOPATH%%:*}/src/github.com/cockroachdb/"
     - ln -s ${GOPATH%%:*}/src/github.com/cockroachdb/cockroach ~/cockroach
 
