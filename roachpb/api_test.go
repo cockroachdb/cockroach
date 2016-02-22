@@ -21,37 +21,6 @@ import (
 	"testing"
 )
 
-type testError struct{}
-
-func (t *testError) Error() string              { return "test" }
-func (t *testError) message(pErr *Error) string { return "test" }
-func (t *testError) CanRetry() bool             { return true }
-func (t *testError) ErrorIndex() (int32, bool)  { return 99, true }
-func (t *testError) SetErrorIndex(_ int32)      { panic("unsupported") }
-
-// TestSetGoError verifies that a test error that
-// implements retryable or indexed is converted properly into a generic error.
-func TestSetGoErrorGeneric(t *testing.T) {
-	br := &BatchResponse{}
-	br.SetGoError(&testError{})
-	if br.Error.GoError().Error() != "test" {
-		t.Errorf("unexpected error: %s", br.Error)
-	}
-	if !br.Error.Retryable {
-		t.Error("expected generic error to be retryable")
-	}
-}
-
-// TestResponseHeaderNilError verifies that a nil error can be set
-// and retrieved from a response header.
-func TestSetGoErrorNil(t *testing.T) {
-	br := &BatchResponse{}
-	br.SetGoError(nil)
-	if br.Error != nil {
-		t.Errorf("expected nil error; got %s", br.Error)
-	}
-}
-
 // TestCombinable tests the correct behaviour of some types that implement
 // the Combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
@@ -124,15 +93,5 @@ func TestCombinable(t *testing.T) {
 
 	if !reflect.DeepEqual(dr1, wantedDR) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
-	}
-}
-
-func TestSetGoErrorCopy(t *testing.T) {
-	br := &BatchResponse{}
-	oErr := &Error{Message: "test123"}
-	br.Error = oErr
-	br.SetGoError(&testError{})
-	if oErr.Message != "test123" {
-		t.Fatalf("SetGoError did not create a new error")
 	}
 }

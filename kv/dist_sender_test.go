@@ -423,7 +423,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		if first {
 			reply := &roachpb.BatchResponse{}
-			reply.SetGoError(
+			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaderError{Leader: &leader, Replica: &roachpb.ReplicaDescriptor{}})
 			first = false
 			return reply, nil
@@ -535,7 +535,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				err = errors.New("boom")
 			}
 			reply := &roachpb.BatchResponse{}
-			reply.SetGoError(err)
+			reply.Error = roachpb.NewError(err)
 			return reply, nil
 		}
 

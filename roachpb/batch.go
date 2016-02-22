@@ -295,14 +295,3 @@ func (ba *BatchRequest) SetNewRequest() {
 	}
 	ba.Txn.Sequence++
 }
-
-// SetGoError converts the specified type into either one of the proto-
-// defined error types or into an Error for all other Go errors.
-func (br *BatchResponse) SetGoError(err error) {
-	if err == nil {
-		br.Error = nil
-		return
-	}
-	br.Error = &Error{}
-	br.Error.setGoError(err)
-}
