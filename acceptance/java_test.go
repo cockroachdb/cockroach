@@ -44,7 +44,39 @@ public class main {
 		DB_URL += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
 		Connection conn = DriverManager.getConnection(DB_URL);
 
-		PreparedStatement stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::string, ?::string, ?::string, ?::string, ?::string");
+		PreparedStatement stmt = conn.prepareStatement("CREATE DATABASE test");
+		int res = stmt.executeUpdate();
+		if (res != 0) {
+		    throw new Exception("unexpected: CREATE DATABASE reports " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("CREATE TABLE test.f (x INT)");
+		res = stmt.executeUpdate();
+		if (res != 0) {
+		    throw new Exception("unexpected: CREATE TABLE reports " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("INSERT INTO test.f VALUES (42)");
+		res = stmt.executeUpdate();
+		if (res != 1) {
+		    throw new Exception("unexpected: INSERT reports " + res + " rows changed, expecting 1");
+		}
+
+		stmt = conn.prepareStatement("SELECT * FROM test.f");
+		ResultSet rs = stmt.executeQuery();
+		rs.next();
+		int a = rs.getInt(1);
+		if (a != 42) {
+		    throw new Exception("unexpected: SELECT can't find inserted value: read " + a + ", expecting 42");
+		}
+
+		stmt = conn.prepareStatement("DROP TABLE test.f");
+		res = stmt.executeUpdate();
+		if (res != 0) {
+		    throw new Exception("unexpected: DROP TABLE reports " + res + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::string, ?::string, ?::string, ?::string, ?::string");
 		stmt.setInt(1, 3);
 		stmt.set%v;
 
@@ -54,9 +86,9 @@ public class main {
 		stmt.setDouble(6, -6.21d);
 		stmt.setShort(7, (short)7);
 
-		ResultSet rs = stmt.executeQuery();
+		rs = stmt.executeQuery();
 		rs.next();
-		int a = rs.getInt(1);
+		a = rs.getInt(1);
 		boolean b = rs.getBoolean(2);
 		int c = rs.getInt(3);
 		String d = rs.getString(4);
