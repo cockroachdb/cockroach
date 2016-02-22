@@ -269,91 +269,91 @@ class MVCCStats : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int64 last_update_nanos = 1;
+  // optional sfixed64 last_update_nanos = 1;
   bool has_last_update_nanos() const;
   void clear_last_update_nanos();
   static const int kLastUpdateNanosFieldNumber = 1;
   ::google::protobuf::int64 last_update_nanos() const;
   void set_last_update_nanos(::google::protobuf::int64 value);
 
-  // optional int64 intent_age = 2;
+  // optional sfixed64 intent_age = 2;
   bool has_intent_age() const;
   void clear_intent_age();
   static const int kIntentAgeFieldNumber = 2;
   ::google::protobuf::int64 intent_age() const;
   void set_intent_age(::google::protobuf::int64 value);
 
-  // optional int64 gc_bytes_age = 3;
+  // optional sfixed64 gc_bytes_age = 3;
   bool has_gc_bytes_age() const;
   void clear_gc_bytes_age();
   static const int kGcBytesAgeFieldNumber = 3;
   ::google::protobuf::int64 gc_bytes_age() const;
   void set_gc_bytes_age(::google::protobuf::int64 value);
 
-  // optional int64 live_bytes = 4;
+  // optional sfixed64 live_bytes = 4;
   bool has_live_bytes() const;
   void clear_live_bytes();
   static const int kLiveBytesFieldNumber = 4;
   ::google::protobuf::int64 live_bytes() const;
   void set_live_bytes(::google::protobuf::int64 value);
 
-  // optional int64 live_count = 5;
+  // optional sfixed64 live_count = 5;
   bool has_live_count() const;
   void clear_live_count();
   static const int kLiveCountFieldNumber = 5;
   ::google::protobuf::int64 live_count() const;
   void set_live_count(::google::protobuf::int64 value);
 
-  // optional int64 key_bytes = 6;
+  // optional sfixed64 key_bytes = 6;
   bool has_key_bytes() const;
   void clear_key_bytes();
   static const int kKeyBytesFieldNumber = 6;
   ::google::protobuf::int64 key_bytes() const;
   void set_key_bytes(::google::protobuf::int64 value);
 
-  // optional int64 key_count = 7;
+  // optional sfixed64 key_count = 7;
   bool has_key_count() const;
   void clear_key_count();
   static const int kKeyCountFieldNumber = 7;
   ::google::protobuf::int64 key_count() const;
   void set_key_count(::google::protobuf::int64 value);
 
-  // optional int64 val_bytes = 8;
+  // optional sfixed64 val_bytes = 8;
   bool has_val_bytes() const;
   void clear_val_bytes();
   static const int kValBytesFieldNumber = 8;
   ::google::protobuf::int64 val_bytes() const;
   void set_val_bytes(::google::protobuf::int64 value);
 
-  // optional int64 val_count = 9;
+  // optional sfixed64 val_count = 9;
   bool has_val_count() const;
   void clear_val_count();
   static const int kValCountFieldNumber = 9;
   ::google::protobuf::int64 val_count() const;
   void set_val_count(::google::protobuf::int64 value);
 
-  // optional int64 intent_bytes = 10;
+  // optional sfixed64 intent_bytes = 10;
   bool has_intent_bytes() const;
   void clear_intent_bytes();
   static const int kIntentBytesFieldNumber = 10;
   ::google::protobuf::int64 intent_bytes() const;
   void set_intent_bytes(::google::protobuf::int64 value);
 
-  // optional int64 intent_count = 11;
+  // optional sfixed64 intent_count = 11;
   bool has_intent_count() const;
   void clear_intent_count();
   static const int kIntentCountFieldNumber = 11;
   ::google::protobuf::int64 intent_count() const;
   void set_intent_count(::google::protobuf::int64 value);
 
-  // optional int64 sys_bytes = 12;
+  // optional sfixed64 sys_bytes = 12;
   bool has_sys_bytes() const;
   void clear_sys_bytes();
   static const int kSysBytesFieldNumber = 12;
   ::google::protobuf::int64 sys_bytes() const;
   void set_sys_bytes(::google::protobuf::int64 value);
 
-  // optional int64 sys_count = 13;
+  // optional sfixed64 sys_count = 13;
   bool has_sys_count() const;
   void clear_sys_count();
   static const int kSysCountFieldNumber = 13;
@@ -678,7 +678,7 @@ inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::roachpb::Ti
 
 // MVCCStats
 
-// optional int64 last_update_nanos = 1;
+// optional sfixed64 last_update_nanos = 1;
 inline bool MVCCStats::has_last_update_nanos() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -702,7 +702,7 @@ inline void MVCCStats::set_last_update_nanos(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.last_update_nanos)
 }
 
-// optional int64 intent_age = 2;
+// optional sfixed64 intent_age = 2;
 inline bool MVCCStats::has_intent_age() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -726,7 +726,7 @@ inline void MVCCStats::set_intent_age(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.intent_age)
 }
 
-// optional int64 gc_bytes_age = 3;
+// optional sfixed64 gc_bytes_age = 3;
 inline bool MVCCStats::has_gc_bytes_age() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
@@ -750,7 +750,7 @@ inline void MVCCStats::set_gc_bytes_age(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.gc_bytes_age)
 }
 
-// optional int64 live_bytes = 4;
+// optional sfixed64 live_bytes = 4;
 inline bool MVCCStats::has_live_bytes() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -774,7 +774,7 @@ inline void MVCCStats::set_live_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.live_bytes)
 }
 
-// optional int64 live_count = 5;
+// optional sfixed64 live_count = 5;
 inline bool MVCCStats::has_live_count() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
@@ -798,7 +798,7 @@ inline void MVCCStats::set_live_count(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.live_count)
 }
 
-// optional int64 key_bytes = 6;
+// optional sfixed64 key_bytes = 6;
 inline bool MVCCStats::has_key_bytes() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
@@ -822,7 +822,7 @@ inline void MVCCStats::set_key_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.key_bytes)
 }
 
-// optional int64 key_count = 7;
+// optional sfixed64 key_count = 7;
 inline bool MVCCStats::has_key_count() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -846,7 +846,7 @@ inline void MVCCStats::set_key_count(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.key_count)
 }
 
-// optional int64 val_bytes = 8;
+// optional sfixed64 val_bytes = 8;
 inline bool MVCCStats::has_val_bytes() const {
   return (_has_bits_[0] & 0x00000080u) != 0;
 }
@@ -870,7 +870,7 @@ inline void MVCCStats::set_val_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.val_bytes)
 }
 
-// optional int64 val_count = 9;
+// optional sfixed64 val_count = 9;
 inline bool MVCCStats::has_val_count() const {
   return (_has_bits_[0] & 0x00000100u) != 0;
 }
@@ -894,7 +894,7 @@ inline void MVCCStats::set_val_count(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.val_count)
 }
 
-// optional int64 intent_bytes = 10;
+// optional sfixed64 intent_bytes = 10;
 inline bool MVCCStats::has_intent_bytes() const {
   return (_has_bits_[0] & 0x00000200u) != 0;
 }
@@ -918,7 +918,7 @@ inline void MVCCStats::set_intent_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.intent_bytes)
 }
 
-// optional int64 intent_count = 11;
+// optional sfixed64 intent_count = 11;
 inline bool MVCCStats::has_intent_count() const {
   return (_has_bits_[0] & 0x00000400u) != 0;
 }
@@ -942,7 +942,7 @@ inline void MVCCStats::set_intent_count(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.intent_count)
 }
 
-// optional int64 sys_bytes = 12;
+// optional sfixed64 sys_bytes = 12;
 inline bool MVCCStats::has_sys_bytes() const {
   return (_has_bits_[0] & 0x00000800u) != 0;
 }
@@ -966,7 +966,7 @@ inline void MVCCStats::set_sys_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.MVCCStats.sys_bytes)
 }
 
-// optional int64 sys_count = 13;
+// optional sfixed64 sys_count = 13;
 inline bool MVCCStats::has_sys_count() const {
   return (_has_bits_[0] & 0x00001000u) != 0;
 }

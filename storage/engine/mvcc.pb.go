@@ -75,52 +75,59 @@ func (*MVCCMetadata) ProtoMessage()    {}
 // new data's base quantity times the (truncated) number of seconds behind.
 // Important to keep in mind with those computations is that (x/1e9 - y/1e9)
 // does not equal (x-y)/1e9 in most cases.
+//
+// Note that this struct must be kept at a fixed size by using fixed-size
+// encodings for all fields and by making all fields non-nullable. This is
+// so that it can predict its own impact on the size of the system-local
+// kv-pairs.
 type MVCCStats struct {
 	// last_update_nanos is a timestamp at which the ages were last
 	// updated. See the comment on MVCCStats.
-	LastUpdateNanos int64 `protobuf:"varint,1,opt,name=last_update_nanos" json:"last_update_nanos"`
+	LastUpdateNanos int64 `protobuf:"fixed64,1,opt,name=last_update_nanos" json:"last_update_nanos"`
 	// intent_age is the cumulative age of the tracked intents.
 	// See the comment on MVCCStats.
-	IntentAge int64 `protobuf:"varint,2,opt,name=intent_age" json:"intent_age"`
+	IntentAge int64 `protobuf:"fixed64,2,opt,name=intent_age" json:"intent_age"`
 	// gc_bytes_age is the cumulative age of the non-live data (i.e.
 	// data included in key_bytes and val_bytes, but not live_bytes).
 	// See the comment on MVCCStats.
-	GCBytesAge int64 `protobuf:"varint,3,opt,name=gc_bytes_age" json:"gc_bytes_age"`
+	GCBytesAge int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age" json:"gc_bytes_age"`
 	// live_bytes is the number of bytes stored in keys and values which can in
 	// principle be read by means of a Scan or Get, including intents but not
 	// deletion tombstones (or their intents). Note that the size of the meta kv
 	// pair (which could be explicit or implicit) is included in this.
 	// Only the meta kv pair counts for the actual length of the encoded key
 	// (regular pairs only count the timestamp suffix).
-	LiveBytes int64 `protobuf:"varint,4,opt,name=live_bytes" json:"live_bytes"`
+	LiveBytes int64 `protobuf:"fixed64,4,opt,name=live_bytes" json:"live_bytes"`
 	// live_count is the number of meta keys tracked under live_bytes.
-	LiveCount int64 `protobuf:"varint,5,opt,name=live_count" json:"live_count"`
+	LiveCount int64 `protobuf:"fixed64,5,opt,name=live_count" json:"live_count"`
 	// key_bytes is the number of bytes stored in all non-system
 	// keys, including live, meta, old, and deleted keys.
 	// Only meta keys really account for the "full" key; value
 	// keys only for the timestamp suffix.
-	KeyBytes int64 `protobuf:"varint,6,opt,name=key_bytes" json:"key_bytes"`
+	KeyBytes int64 `protobuf:"fixed64,6,opt,name=key_bytes" json:"key_bytes"`
 	// key_count is the number of meta keys tracked under key_bytes.
-	KeyCount int64 `protobuf:"varint,7,opt,name=key_count" json:"key_count"`
+	KeyCount int64 `protobuf:"fixed64,7,opt,name=key_count" json:"key_count"`
 	// value_bytes is the number of bytes in all non-system version
 	// values, including meta values.
-	ValBytes int64 `protobuf:"varint,8,opt,name=val_bytes" json:"val_bytes"`
+	ValBytes int64 `protobuf:"fixed64,8,opt,name=val_bytes" json:"val_bytes"`
 	// val_count is the number of meta values tracked under val_bytes.
-	ValCount int64 `protobuf:"varint,9,opt,name=val_count" json:"val_count"`
+	ValCount int64 `protobuf:"fixed64,9,opt,name=val_count" json:"val_count"`
 	// intent_bytes is the number of bytes in intent key-value
 	// pairs (without their meta keys).
-	IntentBytes int64 `protobuf:"varint,10,opt,name=intent_bytes" json:"intent_bytes"`
+	IntentBytes int64 `protobuf:"fixed64,10,opt,name=intent_bytes" json:"intent_bytes"`
 	// intent_count is the number of keys tracked under intent_bytes.
 	// It is equal to the number of meta keys in the system with
 	// a non-empty Transaction proto.
-	IntentCount int64 `protobuf:"varint,11,opt,name=intent_count" json:"intent_count"`
-	// sys_bytes is the number of bytes stored in system-local  kv-pairs.
+	IntentCount int64 `protobuf:"fixed64,11,opt,name=intent_count" json:"intent_count"`
+	// sys_bytes is the number of bytes stored in system-local kv-pairs.
 	// This tracks the same quantity as (key_bytes + val_bytes), but
-	// for system-local keys (which aren't counted in either key_bytes
-	// or val_bytes).
-	SysBytes int64 `protobuf:"varint,12,opt,name=sys_bytes" json:"sys_bytes"`
+	// for system-local metadata keys (which aren't counted in either
+	// key_bytes or val_bytes). Each of the keys falling into this group
+	// is documented in keys/constants.go under the localPrefix constant
+	// and is prefixed by either LocalRangeIDPrefix or LocalRangePrefix.
+	SysBytes int64 `protobuf:"fixed64,12,opt,name=sys_bytes" json:"sys_bytes"`
 	// sys_count is the number of meta keys tracked under sys_bytes.
-	SysCount int64 `protobuf:"varint,13,opt,name=sys_count" json:"sys_count"`
+	SysCount int64 `protobuf:"fixed64,13,opt,name=sys_count" json:"sys_count"`
 }
 
 func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
@@ -212,45 +219,45 @@ func (m *MVCCStats) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	data[i] = 0x9
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LastUpdateNanos))
-	data[i] = 0x10
+	i = encodeFixed64Mvcc(data, i, uint64(m.LastUpdateNanos))
+	data[i] = 0x11
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentAge))
-	data[i] = 0x18
+	i = encodeFixed64Mvcc(data, i, uint64(m.IntentAge))
+	data[i] = 0x19
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.GCBytesAge))
-	data[i] = 0x20
+	i = encodeFixed64Mvcc(data, i, uint64(m.GCBytesAge))
+	data[i] = 0x21
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LiveBytes))
-	data[i] = 0x28
+	i = encodeFixed64Mvcc(data, i, uint64(m.LiveBytes))
+	data[i] = 0x29
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.LiveCount))
-	data[i] = 0x30
+	i = encodeFixed64Mvcc(data, i, uint64(m.LiveCount))
+	data[i] = 0x31
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyBytes))
-	data[i] = 0x38
+	i = encodeFixed64Mvcc(data, i, uint64(m.KeyBytes))
+	data[i] = 0x39
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.KeyCount))
-	data[i] = 0x40
+	i = encodeFixed64Mvcc(data, i, uint64(m.KeyCount))
+	data[i] = 0x41
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValBytes))
-	data[i] = 0x48
+	i = encodeFixed64Mvcc(data, i, uint64(m.ValBytes))
+	data[i] = 0x49
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.ValCount))
-	data[i] = 0x50
+	i = encodeFixed64Mvcc(data, i, uint64(m.ValCount))
+	data[i] = 0x51
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentBytes))
-	data[i] = 0x58
+	i = encodeFixed64Mvcc(data, i, uint64(m.IntentBytes))
+	data[i] = 0x59
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.IntentCount))
-	data[i] = 0x60
+	i = encodeFixed64Mvcc(data, i, uint64(m.IntentCount))
+	data[i] = 0x61
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.SysBytes))
-	data[i] = 0x68
+	i = encodeFixed64Mvcc(data, i, uint64(m.SysBytes))
+	data[i] = 0x69
 	i++
-	i = encodeVarintMvcc(data, i, uint64(m.SysCount))
+	i = encodeFixed64Mvcc(data, i, uint64(m.SysCount))
 	return i, nil
 }
 
@@ -307,19 +314,19 @@ func (m *MVCCMetadata) Size() (n int) {
 func (m *MVCCStats) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovMvcc(uint64(m.LastUpdateNanos))
-	n += 1 + sovMvcc(uint64(m.IntentAge))
-	n += 1 + sovMvcc(uint64(m.GCBytesAge))
-	n += 1 + sovMvcc(uint64(m.LiveBytes))
-	n += 1 + sovMvcc(uint64(m.LiveCount))
-	n += 1 + sovMvcc(uint64(m.KeyBytes))
-	n += 1 + sovMvcc(uint64(m.KeyCount))
-	n += 1 + sovMvcc(uint64(m.ValBytes))
-	n += 1 + sovMvcc(uint64(m.ValCount))
-	n += 1 + sovMvcc(uint64(m.IntentBytes))
-	n += 1 + sovMvcc(uint64(m.IntentCount))
-	n += 1 + sovMvcc(uint64(m.SysBytes))
-	n += 1 + sovMvcc(uint64(m.SysCount))
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
+	n += 9
 	return n
 }
 
@@ -601,252 +608,226 @@ func (m *MVCCStats) Unmarshal(data []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
 			}
 			m.LastUpdateNanos = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.LastUpdateNanos |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.LastUpdateNanos = int64(data[iNdEx-8])
+			m.LastUpdateNanos |= int64(data[iNdEx-7]) << 8
+			m.LastUpdateNanos |= int64(data[iNdEx-6]) << 16
+			m.LastUpdateNanos |= int64(data[iNdEx-5]) << 24
+			m.LastUpdateNanos |= int64(data[iNdEx-4]) << 32
+			m.LastUpdateNanos |= int64(data[iNdEx-3]) << 40
+			m.LastUpdateNanos |= int64(data[iNdEx-2]) << 48
+			m.LastUpdateNanos |= int64(data[iNdEx-1]) << 56
 		case 2:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
 			}
 			m.IntentAge = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.IntentAge |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.IntentAge = int64(data[iNdEx-8])
+			m.IntentAge |= int64(data[iNdEx-7]) << 8
+			m.IntentAge |= int64(data[iNdEx-6]) << 16
+			m.IntentAge |= int64(data[iNdEx-5]) << 24
+			m.IntentAge |= int64(data[iNdEx-4]) << 32
+			m.IntentAge |= int64(data[iNdEx-3]) << 40
+			m.IntentAge |= int64(data[iNdEx-2]) << 48
+			m.IntentAge |= int64(data[iNdEx-1]) << 56
 		case 3:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
 			}
 			m.GCBytesAge = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.GCBytesAge |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.GCBytesAge = int64(data[iNdEx-8])
+			m.GCBytesAge |= int64(data[iNdEx-7]) << 8
+			m.GCBytesAge |= int64(data[iNdEx-6]) << 16
+			m.GCBytesAge |= int64(data[iNdEx-5]) << 24
+			m.GCBytesAge |= int64(data[iNdEx-4]) << 32
+			m.GCBytesAge |= int64(data[iNdEx-3]) << 40
+			m.GCBytesAge |= int64(data[iNdEx-2]) << 48
+			m.GCBytesAge |= int64(data[iNdEx-1]) << 56
 		case 4:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LiveBytes", wireType)
 			}
 			m.LiveBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.LiveBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.LiveBytes = int64(data[iNdEx-8])
+			m.LiveBytes |= int64(data[iNdEx-7]) << 8
+			m.LiveBytes |= int64(data[iNdEx-6]) << 16
+			m.LiveBytes |= int64(data[iNdEx-5]) << 24
+			m.LiveBytes |= int64(data[iNdEx-4]) << 32
+			m.LiveBytes |= int64(data[iNdEx-3]) << 40
+			m.LiveBytes |= int64(data[iNdEx-2]) << 48
+			m.LiveBytes |= int64(data[iNdEx-1]) << 56
 		case 5:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LiveCount", wireType)
 			}
 			m.LiveCount = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.LiveCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.LiveCount = int64(data[iNdEx-8])
+			m.LiveCount |= int64(data[iNdEx-7]) << 8
+			m.LiveCount |= int64(data[iNdEx-6]) << 16
+			m.LiveCount |= int64(data[iNdEx-5]) << 24
+			m.LiveCount |= int64(data[iNdEx-4]) << 32
+			m.LiveCount |= int64(data[iNdEx-3]) << 40
+			m.LiveCount |= int64(data[iNdEx-2]) << 48
+			m.LiveCount |= int64(data[iNdEx-1]) << 56
 		case 6:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
 			}
 			m.KeyBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.KeyBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.KeyBytes = int64(data[iNdEx-8])
+			m.KeyBytes |= int64(data[iNdEx-7]) << 8
+			m.KeyBytes |= int64(data[iNdEx-6]) << 16
+			m.KeyBytes |= int64(data[iNdEx-5]) << 24
+			m.KeyBytes |= int64(data[iNdEx-4]) << 32
+			m.KeyBytes |= int64(data[iNdEx-3]) << 40
+			m.KeyBytes |= int64(data[iNdEx-2]) << 48
+			m.KeyBytes |= int64(data[iNdEx-1]) << 56
 		case 7:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field KeyCount", wireType)
 			}
 			m.KeyCount = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.KeyCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.KeyCount = int64(data[iNdEx-8])
+			m.KeyCount |= int64(data[iNdEx-7]) << 8
+			m.KeyCount |= int64(data[iNdEx-6]) << 16
+			m.KeyCount |= int64(data[iNdEx-5]) << 24
+			m.KeyCount |= int64(data[iNdEx-4]) << 32
+			m.KeyCount |= int64(data[iNdEx-3]) << 40
+			m.KeyCount |= int64(data[iNdEx-2]) << 48
+			m.KeyCount |= int64(data[iNdEx-1]) << 56
 		case 8:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
 			}
 			m.ValBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ValBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.ValBytes = int64(data[iNdEx-8])
+			m.ValBytes |= int64(data[iNdEx-7]) << 8
+			m.ValBytes |= int64(data[iNdEx-6]) << 16
+			m.ValBytes |= int64(data[iNdEx-5]) << 24
+			m.ValBytes |= int64(data[iNdEx-4]) << 32
+			m.ValBytes |= int64(data[iNdEx-3]) << 40
+			m.ValBytes |= int64(data[iNdEx-2]) << 48
+			m.ValBytes |= int64(data[iNdEx-1]) << 56
 		case 9:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ValCount", wireType)
 			}
 			m.ValCount = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.ValCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.ValCount = int64(data[iNdEx-8])
+			m.ValCount |= int64(data[iNdEx-7]) << 8
+			m.ValCount |= int64(data[iNdEx-6]) << 16
+			m.ValCount |= int64(data[iNdEx-5]) << 24
+			m.ValCount |= int64(data[iNdEx-4]) << 32
+			m.ValCount |= int64(data[iNdEx-3]) << 40
+			m.ValCount |= int64(data[iNdEx-2]) << 48
+			m.ValCount |= int64(data[iNdEx-1]) << 56
 		case 10:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
 			}
 			m.IntentBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.IntentBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.IntentBytes = int64(data[iNdEx-8])
+			m.IntentBytes |= int64(data[iNdEx-7]) << 8
+			m.IntentBytes |= int64(data[iNdEx-6]) << 16
+			m.IntentBytes |= int64(data[iNdEx-5]) << 24
+			m.IntentBytes |= int64(data[iNdEx-4]) << 32
+			m.IntentBytes |= int64(data[iNdEx-3]) << 40
+			m.IntentBytes |= int64(data[iNdEx-2]) << 48
+			m.IntentBytes |= int64(data[iNdEx-1]) << 56
 		case 11:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IntentCount", wireType)
 			}
 			m.IntentCount = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.IntentCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.IntentCount = int64(data[iNdEx-8])
+			m.IntentCount |= int64(data[iNdEx-7]) << 8
+			m.IntentCount |= int64(data[iNdEx-6]) << 16
+			m.IntentCount |= int64(data[iNdEx-5]) << 24
+			m.IntentCount |= int64(data[iNdEx-4]) << 32
+			m.IntentCount |= int64(data[iNdEx-3]) << 40
+			m.IntentCount |= int64(data[iNdEx-2]) << 48
+			m.IntentCount |= int64(data[iNdEx-1]) << 56
 		case 12:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SysBytes", wireType)
 			}
 			m.SysBytes = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.SysBytes |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.SysBytes = int64(data[iNdEx-8])
+			m.SysBytes |= int64(data[iNdEx-7]) << 8
+			m.SysBytes |= int64(data[iNdEx-6]) << 16
+			m.SysBytes |= int64(data[iNdEx-5]) << 24
+			m.SysBytes |= int64(data[iNdEx-4]) << 32
+			m.SysBytes |= int64(data[iNdEx-3]) << 40
+			m.SysBytes |= int64(data[iNdEx-2]) << 48
+			m.SysBytes |= int64(data[iNdEx-1]) << 56
 		case 13:
-			if wireType != 0 {
+			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SysCount", wireType)
 			}
 			m.SysCount = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.SysCount |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
 			}
+			iNdEx += 8
+			m.SysCount = int64(data[iNdEx-8])
+			m.SysCount |= int64(data[iNdEx-7]) << 8
+			m.SysCount |= int64(data[iNdEx-6]) << 16
+			m.SysCount |= int64(data[iNdEx-5]) << 24
+			m.SysCount |= int64(data[iNdEx-4]) << 32
+			m.SysCount |= int64(data[iNdEx-3]) << 40
+			m.SysCount |= int64(data[iNdEx-2]) << 48
+			m.SysCount |= int64(data[iNdEx-1]) << 56
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMvcc(data[iNdEx:])
