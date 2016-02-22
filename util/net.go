@@ -31,8 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// ListenAndServe creates a listener and serves handler on it, closing
-// the listener when signalled by the stopper.
+// ListenAndServe creates a listener and serves handler on it, closing the
+// listener when signalled by the stopper. The handling server implements HTTP1
+// and HTTP2, with or without TLS. Note that the "real" server also implements
+// the postgres wire protocol, and so does not use this function, but the
+// pattern used is similar; that implementation is in server/server.go.
 func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
