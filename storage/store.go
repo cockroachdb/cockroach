@@ -1627,15 +1627,12 @@ func (s *Store) processRaft() {
 			var replicas []*Replica
 			s.processRaftMu.Lock()
 			s.mu.Lock()
-			for rangeID := range s.mu.pendingRaftGroups {
-				r, ok := s.mu.replicas[rangeID]
-				if !ok {
-					continue
-				}
-				replicas = append(replicas, r)
-
-			}
 			if len(s.mu.pendingRaftGroups) > 0 {
+				for rangeID := range s.mu.pendingRaftGroups {
+					if r, ok := s.mu.replicas[rangeID]; ok {
+						replicas = append(replicas, r)
+					}
+				}
 				s.mu.pendingRaftGroups = map[roachpb.RangeID]struct{}{}
 			}
 			s.mu.Unlock()
