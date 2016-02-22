@@ -70,70 +70,46 @@ func NodeStatusKey(nodeID int32) roachpb.Key {
 	return key
 }
 
-// MakeRangeIDPrefix creates a range-local key prefix from
-// rangeID.
-func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
+func makePrefixWithRangeID(prefix []byte, rangeID roachpb.RangeID, infix roachpb.RKey) roachpb.Key {
 	// Size the key buffer so that it is large enough for most callers.
 	key := make(roachpb.Key, 0, 32)
-	key = append(key, LocalRangeIDPrefix...)
+	key = append(key, prefix...)
 	key = encoding.EncodeUvarintAscending(key, uint64(rangeID))
+	key = append(key, infix...)
 	return key
 }
 
-// MakeRangeIDKey creates a range-local key based on the range's
+// MakeRangeIDPrefix creates a range-local key prefix from
+// rangeID for both replicated and unreplicated data.
+func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
+	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, nil)
+}
+
+// MakeRangeIDReplicatedPrefix creates a range-local key prefix from
+// rangeID for all Raft replicated data.
+func MakeRangeIDReplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
+	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, localRangeIDReplicatedInfix)
+}
+
+// MakeRangeIDReplicatedKey creates a range-local key based on the range's
 // Range ID, metadata key suffix, and optional detail.
-func MakeRangeIDKey(rangeID roachpb.RangeID, suffix, detail roachpb.RKey) roachpb.Key {
+func MakeRangeIDReplicatedKey(rangeID roachpb.RangeID, suffix, detail roachpb.RKey) roachpb.Key {
 	if len(suffix) != localSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
 	}
 
-	key := MakeRangeIDPrefix(rangeID)
+	key := MakeRangeIDReplicatedPrefix(rangeID)
 	key = append(key, suffix...)
 	key = append(key, detail...)
 	return key
 }
 
-// RaftLogKey returns a system-local key for a Raft log entry.
-func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
-	key := MakeRangeIDKey(rangeID, localRaftLogSuffix, nil)
-	key = encoding.EncodeUint64Ascending(key, logIndex)
+// SequenceCacheKeyPrefix returns the prefix common to all sequence cache keys
+// for the given transaction ID.
+func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
+	key := MakeRangeIDReplicatedKey(rangeID, LocalSequenceCacheSuffix, nil)
+	key = encoding.EncodeBytesAscending(key, txnID.Bytes())
 	return key
-}
-
-// RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
-func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLogSuffix, nil)
-}
-
-// RaftHardStateKey returns a system-local key for a Raft HardState.
-func RaftHardStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftHardStateSuffix, nil)
-}
-
-// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
-func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftTruncatedStateSuffix, nil)
-}
-
-// RaftAppliedIndexKey returns a system-local key for a raft applied index.
-func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftAppliedIndexSuffix, nil)
-}
-
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftTombstoneSuffix, nil)
-}
-
-// RaftLastIndexKey returns a system-local key for a raft last index.
-func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRaftLastIndexSuffix, nil)
-}
-
-// RangeStatsKey returns the key for accessing the MVCCStats struct
-// for the specified Range ID.
-func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRangeStatsSuffix, nil)
 }
 
 // SequenceCacheKey returns a range-local key by Range ID for a
@@ -146,17 +122,79 @@ func SequenceCacheKey(rangeID roachpb.RangeID, txnID *uuid.UUID, epoch uint32, s
 	return key
 }
 
-// SequenceCacheKeyPrefix returns the prefix common to all sequence cache keys
-// for the given transaction ID.
-func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
-	key := MakeRangeIDKey(rangeID, LocalSequenceCacheSuffix, nil)
-	key = encoding.EncodeBytesAscending(key, txnID.Bytes())
-	return key
+// RaftTombstoneKey returns a system-local key for a raft tombstone.
+func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRaftTombstoneSuffix, nil)
+}
+
+// RaftAppliedIndexKey returns a system-local key for a raft applied index.
+func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRaftAppliedIndexSuffix, nil)
+}
+
+// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
+func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRaftTruncatedStateSuffix, nil)
 }
 
 // RangeLeaderLeaseKey returns a system-local key for a range leader lease.
 func RangeLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRangeLeaderLeaseSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, localRangeLeaderLeaseSuffix, nil)
+}
+
+// RangeLastVerificationTimestampKey returns a range-local key for
+// the range's last verification timestamp.
+func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRangeLastVerificationTimestampSuffix, nil)
+}
+
+// RangeStatsKey returns the key for accessing the MVCCStats struct
+// for the specified Range ID.
+func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, localRangeStatsSuffix, nil)
+}
+
+// MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
+// rangeID for all unreplicated data.
+func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
+	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, localRangeIDUnreplicatedInfix)
+}
+
+// MakeRangeIDUnreplicatedKey creates a range-local unreplicated key based
+// on the range's Range ID, metadata key suffix, and optional detail.
+func MakeRangeIDUnreplicatedKey(rangeID roachpb.RangeID, suffix roachpb.RKey, detail roachpb.RKey) roachpb.Key {
+	if len(suffix) != localSuffixLength {
+		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
+	}
+
+	key := MakeRangeIDUnreplicatedPrefix(rangeID)
+	key = append(key, suffix...)
+	key = append(key, detail...)
+	return key
+}
+
+// RaftHardStateKey returns a system-local key for a Raft HardState.
+func RaftHardStateKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, localRaftHardStateSuffix, nil)
+}
+
+// RaftLastIndexKey returns a system-local key for the last index of the
+// Raft log.
+func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, localRaftLastIndexSuffix, nil)
+}
+
+// RaftLogPrefix returns the system-local prefix shared by all entries
+// in a Raft log.
+func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, localRaftLogSuffix, nil)
+}
+
+// RaftLogKey returns a system-local key for a Raft log entry.
+func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
+	key := RaftLogPrefix(rangeID)
+	key = encoding.EncodeUint64Ascending(key, logIndex)
+	return key
 }
 
 // MakeRangeKey creates a range-local key based on the range
@@ -202,12 +240,6 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 	suffix = b[:localSuffixLength]
 	detail = b[localSuffixLength:]
 	return
-}
-
-// RangeLastVerificationTimestampKey returns a range-local key for
-// the range's last verification timestamp.
-func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDKey(rangeID, localRangeLastVerificationTimestampSuffix, nil)
 }
 
 // RangeTreeNodeKey returns a range-local key for the range's

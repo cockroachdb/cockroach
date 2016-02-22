@@ -1396,7 +1396,7 @@ func (r *Replica) computeStats(d *roachpb.RangeDescriptor, e engine.Engine, nowN
 	defer iter.Close()
 
 	ms := &engine.MVCCStats{}
-	for _, r := range makeReplicaKeyRanges(d) {
+	for _, r := range makeReplicatedKeyRanges(d) {
 		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
 		if err != nil {
 			return engine.MVCCStats{}, err
