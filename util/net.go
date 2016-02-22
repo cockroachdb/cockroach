@@ -27,7 +27,7 @@ import (
 
 	"golang.org/x/net/http2"
 
-	clog "github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -157,7 +157,7 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 			}
 			mu.Unlock()
 		},
-		ErrorLog: clog.NewStdLogger(clog.ErrorLog),
+		ErrorLog: log.NewStdLogger(log.ErrorLog),
 	}
 
 	var http2Server http2.Server
@@ -173,7 +173,7 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
 					http2Server.ServeConn(conn.(*replayableConn).replay(), &connOpts)
 				} else {
-					clog.Fatal(err)
+					log.Fatal(err)
 				}
 			} else {
 				handler.ServeHTTP(w, r)
@@ -190,13 +190,13 @@ func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, 
 		// Some unit tests manually close `ln`, so it may already be closed
 		// when we get here.
 		if err := ln.Close(); err != nil && !IsClosedConnection(err) {
-			clog.Fatal(err)
+			log.Fatal(err)
 		}
 	})
 
 	stopper.RunWorker(func() {
 		if err := httpServer.Serve(ln); err != nil && !IsClosedConnection(err) {
-			clog.Fatal(err)
+			log.Fatal(err)
 		}
 
 		<-stopper.ShouldStop()
