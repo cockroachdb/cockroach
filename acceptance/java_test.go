@@ -24,28 +24,76 @@ import (
 )
 
 func TestDockerJava(t *testing.T) {
-	testDockerSuccess(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "Int(2, 3)", 1)})
-	testDockerFail(t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", `String(2, "a")`, 1)})
+	setupSysConn := strings.Replace(setupConn, "%D", "", 1)
+	setupTestConn := strings.Replace(setupConn, "%D", "test", 1)
+
+	testCreateDB := strings.Replace(java, "%C", setupSysConn, 1)
+	testCreateDB = strings.Replace(testCreateDB, "%T", createdbTest, 1)
+	testDockerSuccess(t, "java-create-db", []string{"/bin/sh", "-c", testCreateDB})
+
+	testSetupSchema := strings.Replace(java, "%C", setupTestConn, 1)
+	testSetupSchema = strings.Replace(testSetupSchema, "%T", schemaTests, 1)
+	testDockerSuccess(t, "java-setup-schema", []string{"/bin/sh", "-c", testSetupSchema})
+
+	testQueries := strings.Replace(java, "%C", setupTestConn, 1)
+	testQueries = strings.Replace(testQueries, "%T", valueTests, 1)
+	testDockerSuccess(t, "java-valid-query", []string{"/bin/sh", "-c", strings.Replace(testQueries, "%v", "Int(2, 3)", 1)})
+	testDockerFail(t, "java-invalid-query", []string{"/bin/sh", "-c", strings.Replace(testQueries, "%v", `String(2, "a")`, 1)})
 }
 
-const java = `
-set -e
-cat > main.java << 'EOF'
-import java.sql.*;
-
-public class main {
-	public static void main(String[] args) throws Exception {
+const setupConn = `
 		Class.forName("org.postgresql.Driver");
 
-		String DB_URL = "jdbc:postgresql://";
-		DB_URL += System.getenv("PGHOST") + ":" + System.getenv("PGPORT");
-		DB_URL += "/?ssl=true";
-		DB_URL += "&sslcert=" + System.getenv("PGSSLCERT");
-		DB_URL += "&sslkey=key.pk8";
-		DB_URL += "&sslrootcert=/certs/ca.crt";
-		DB_URL += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
-		Connection conn = DriverManager.getConnection(DB_URL);
+		String urlBase = "jdbc:postgresql://";
+		urlBase += System.getenv("PGHOST") + ":" + System.getenv("PGPORT");
+		urlBase += "/";
 
+		String sslSettings = "?ssl=true";
+		sslSettings += "&sslcert=" + System.getenv("PGSSLCERT");
+		sslSettings += "&sslkey=key.pk8";
+		sslSettings += "&sslrootcert=/certs/ca.crt";
+		sslSettings += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
+
+		Connection conn = DriverManager.getConnection(urlBase + "%D" + sslSettings);
+`
+
+const createdbTest = `
+		PreparedStatement stmt = conn.prepareStatement("CREATE DATABASE test");
+		int res = stmt.executeUpdate();
+		if (res != 0) {
+				throw new Exception("unexpected: CREATE DATABASE reports " + String(res) + " rows changed, expecting 0");
+		}
+`
+
+const schemaTests = `
+		PreparedStatement stmt = conn.prepareStatement("CREATE TABLE f (x INT)");
+		int res = stmt.executeUpdate();
+		if (res != 0) {
+				throw new Exception("unexpected: CREATE TABLE reports " + String(res) + " rows changed, expecting 0");
+		}
+
+		stmt = conn.prepareStatement("INSERT INTO f VALUES (42)");
+		res = stmt.executeUpdate();
+		if (res != 1) {
+				throw new Exception("unexpected: INSERT reports " + String(res) + " rows changed, expecting 1");
+		}
+
+		stmt = conn.prepareStatement("SELECT * FROM f");
+		ResultSet rs = stmt.executeQuery();
+		rs.next();
+		int a = rs.getInt(1);
+		if (a != 42) {
+				throw new Exception("unexpected: unable to read inserted value back");
+		}
+
+		stmt = conn.prepareStatement("DROP TABLE f");
+		res = stmt.executeUpdate();
+		if (res != 0) {
+				throw new Exception("unexpected: DROP TABLE reports " + String(res) + " rows changed, expecting 0");
+		}
+`
+
+const valueTests = `
 		PreparedStatement stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::string, ?::string, ?::string, ?::string, ?::string");
 		stmt.setInt(1, 3);
 		stmt.set%v;
@@ -69,6 +117,20 @@ public class main {
 		if (a != 1 || b != false || c != 3 || !d.equals("true") || !e.equals("-4") || !f.startsWith("5.3") || !g.startsWith("-6.2") || !h.equals("7")) {
 			throw new Exception("unexpected");
 		}
+`
+
+const java = `
+set -e
+cat > main.java << 'EOF'
+import java.sql.*;
+
+public class main {
+	public static void main(String[] args) throws Exception {
+
+		%C
+
+		%T
+
 	}
 }
 EOF
