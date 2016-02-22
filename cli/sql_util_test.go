@@ -25,27 +25,26 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func makeTestDBClient(t *testing.T, s *server.TestServer) *sql.DB {
-	db, err := sql.Open("cockroach", fmt.Sprintf("https://%s@%s?certs=%s",
-		security.RootUser,
-		s.ServingAddr(),
-		security.EmbeddedCertsDir))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db
-}
 
 func TestRunQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := server.StartTestServer(nil)
-	db := makeTestDBClient(t, s)
 
+	url, cleanup := sqlutils.PGUrl(t, s, security.RootUser, "TestRunQuery")
+	db, err := sql.Open("postgres", url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
 	defer db.Close()
 	defer s.Stop()
+
+	// Ensure we use only one connection so that retrieval of multiple results
+	// can work without assumptions about connection reuse.
+	db.SetMaxOpenConns(1)
 
 	// Use a buffer as the io.Writer.
 	var b bytes.Buffer
@@ -121,21 +120,45 @@ OK
 
 	// Test custom formatting.
 	newFormat := func(val interface{}) string {
-		return fmt.Sprintf("--> %#v <--", val)
+		return fmt.Sprintf("--> %s <--", val)
 	}
 
-	if err := runPrettyQueryWithFormat(db, &b, fmtMap{"name": newFormat},
-		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"); err != nil {
+	_, rows, err = runQueryWithFormat(db, fmtMap{"name": newFormat},
+		`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = `[1 --> descriptor <-- 3]`
+	if a, e := fmt.Sprint(rows[0]), expected; a != e {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+
+	// Test multiple results.
+	if err := runPrettyQuery(db, &b, `SELECT 1; SELECT 2, 3; SELECT 'hello'`); err != nil {
 		t.Fatal(err)
 	}
 
 	expected = `
-+----------+----------------------+----+
-| parentID |         name         | id |
-+----------+----------------------+----+
-|        1 | --> "descriptor" <-- |  3 |
-+----------+----------------------+----+
++---+
+| 1 |
++---+
+| 1 |
++---+
 `
+	// TODO(pmattis): When #4016 is fixed, we should see:
+	// +---+---+
+	// | 2 | 3 |
+	// +---+---+
+	// | 2 | 3 |
+	// +---+---+
+	// +---------+
+	// | 'hello' |
+	// +---------+
+	// | "hello" |
+	// +---------+
+
 	if a, e := b.String(), expected[1:]; a != e {
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
