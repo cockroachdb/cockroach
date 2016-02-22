@@ -556,7 +556,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	}
 	_, _ = nonempty.RowsAffected() // should not panic if lib/pq returned a non-nil result.
 
-	empty, err := db.Exec(" ")
+	empty, err := db.Exec(" ; ; ;")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,6 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	}()
 	_, _ = empty.RowsAffected() // should panic if lib/pq returned a nil result as expected.
 	t.Fatal("should not get here -- empty result from empty query should panic first")
-	// TODO(dt): clean this up with testify/assert and add tests for less trivial empty queries.
 }
 
 // Unfortunately lib/pq doesn't expose returned command tags directly, but we can test

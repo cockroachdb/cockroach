@@ -85,6 +85,9 @@ type Response struct {
 	// The list of results. There is one result object per SQL statement in the
 	// request.
 	Results []Result
+
+	// Indicates that after parsing, the request contained 0 non-empty statements.
+	Empty bool
 }
 
 // Result corresponds to the execution of a single SQL statement.
@@ -337,6 +340,11 @@ func (e *Executor) execStmts(sql string, planMaker *planner) Response {
 		resp.Results = append(resp.Results, makeResultFromError(planMaker, roachpb.NewError(err)))
 		return resp
 	}
+	if len(stmts) < 1 {
+		resp.Empty = true
+		return resp
+	}
+
 	for _, stmt := range stmts {
 		result, err := e.execStmt(stmt, planMaker)
 		if err != nil {
