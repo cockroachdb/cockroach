@@ -82,8 +82,11 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 		// Start gossiping.
 		if err := c.gossip(g, NewGossipClient(conn), stopper); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
-				if c.peerID != 0 {
-					log.Infof("closing client to node %d (%s): %s", c.peerID, c.addr, err)
+				g.mu.Lock()
+				peerID := c.peerID
+				g.mu.Unlock()
+				if peerID != 0 {
+					log.Infof("closing client to node %d (%s): %s", peerID, c.addr, err)
 				} else {
 					log.Infof("closing client to %s: %s", c.addr, err)
 				}
