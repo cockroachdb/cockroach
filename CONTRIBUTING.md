@@ -27,19 +27,27 @@
 
 Note that if you edit a `.proto` or `.ts` file, you will need to
 manually regenerate the associated `.pb.{go,cc,h}` or `.js` files
-using `go generate ./...`.  `go generate` requires a collection of
-node modules which are installed via npm. If you don't have npm, it
-typically comes with node. To get it via homebrew: `brew install node`
-If you're not using homebrew, make sure you install both
-[node.js](https://nodejs.org/) and [npm](https://www.npmjs.com/).  If
-you plan on working on the UI, check out [the ui readme](ui).
+using `go generate ./...`.
+
+We advise to run `go generate` using our embedded Docker
+setup. `build/builder.sh` is a wrapper script designed to make this
+convenient. You can run `build/builder.sh go generate ./...` from the
+repository root to get the intended result.
+
+If you want to run it outside of Docker, `go generate` requires a
+collection of Node.js modules which are installed via npm.
+
+If you plan on working on the UI, check out [the ui readme](ui).
 
 To add or update a go dependency:
 - `(cd $GOPATH/src && go get -u ./...)` to update the dependencies or
   `go get {package}` to add a dependency
 - `glock save github.com/cockroachdb/cockroach` to update the
   GLOCKFILE
-- `go generate ./...` to update generated files
+- `go generate ./...` to update generated files -- prefer `go generate
+  ./the-updated-package` instead of `...` when possible to avoid
+  re-generating files in directories where you haven't made any
+  changes.
 - create a PR with all the changes
 
 ### Style guide
