@@ -23,7 +23,6 @@ import (
 	"net"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/lib/pq/oid"
 
@@ -553,13 +552,6 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 
 	c.session.Database = c.opts.database
 
-	// TODO(dt): this is a clumsy check better left to the actual parser. #3852
-	if len(strings.TrimSpace(stmts)) == 0 {
-		// Skip executor and just send EmptyQueryResponse.
-		c.writeBuf.initMsg(serverMsgEmptyQuery)
-		return c.writeBuf.finishMsg(c.wr)
-	}
-
 	resp, _, err := c.executor.ExecuteStatements(c.opts.user, c.session, stmts, params)
 	if err != nil {
 		return c.sendError(err.Error())
@@ -570,6 +562,11 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 
 	c.opts.database = c.session.Database
 	tracing.AnnotateTrace()
+	if resp.Empty {
+		// Skip executor and just send EmptyQueryResponse.
+		c.writeBuf.initMsg(serverMsgEmptyQuery)
+		return c.writeBuf.finishMsg(c.wr)
+	}
 	return c.sendResponse(resp, formatCodes, sendDescription, limit)
 }
 
