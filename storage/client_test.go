@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -126,7 +127,8 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
-	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper, kv.DummyTxnMetrics())
+	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper,
+		kv.NewTxnMetrics(metric.NewRegistry()))
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
@@ -244,7 +246,8 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 			RPCSend:           m.rpcSend,
 			RPCRetryOptions:   &retryOpts,
 		}, m.gossip)
-		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(), m.clientStopper, kv.DummyTxnMetrics())
+		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(),
+			m.clientStopper, kv.NewTxnMetrics(metric.NewRegistry()))
 		m.db = client.NewDB(sender)
 	}
 

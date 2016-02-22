@@ -94,14 +94,15 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		RPCRetryOptions: &retryOpts,
 	}, g)
 	tracer := tracing.NewTracer()
-	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper, kv.DummyTxnMetrics())
+	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
+		kv.NewTxnMetrics(metric.NewRegistry()))
 	ctx.DB = client.NewDB(sender)
 	// TODO(bdarnell): arrange to have the transport closed.
 	// (or attach LocalRPCTransport.Close to the stopper)
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
-	node := NewNode(ctx, metric.NewRegistry(), stopper, nil, kv.DummyTxnMetrics())
+	node := NewNode(ctx, metric.NewRegistry(), stopper, nil, kv.NewTxnMetrics(metric.NewRegistry()))
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 
@@ -137,7 +138,7 @@ func TestBootstrapCluster(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.DummyTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
 		t.Fatal(err)
 	}
 
@@ -179,7 +180,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.DummyTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
 		t.Fatal(err)
 	}
 
@@ -221,7 +222,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.DummyTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
 		t.Fatal(err)
 	}
 
@@ -288,7 +289,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.DummyTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
 		t.Fatal(err)
 	}
 

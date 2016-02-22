@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -103,9 +104,11 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The earlier transaction must lose.
-	if err := txn.Commit(); err == nil {
-		t.Fatal("transaction should have aborted but did not")
+	// The earlier transaction loses.
+	// TODO(cdo): This is not exactly right and could take a while. Fix this when there's
+	// a better test to model this after.
+	if err := txn.Commit(); !testutils.IsError(err, "txn aborted") {
+		t.Fatalf("unexpected error: %s", err)
 	}
 
 	nid := s.Gossip().GetNodeID().String()

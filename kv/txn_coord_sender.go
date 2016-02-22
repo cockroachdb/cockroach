@@ -189,12 +189,6 @@ func NewTxnMetrics(txnRegistry *metric.Registry) *TxnMetrics {
 	}
 }
 
-// DummyTxnMetrics returns a new txnMetrics instance suitable for all tests that must
-// construct a new TxnCoordSender but don't need to test transaction metrics.
-func DummyTxnMetrics() *TxnMetrics {
-	return NewTxnMetrics(metric.NewRegistry())
-}
-
 // A TxnCoordSender is an implementation of client.Sender which
 // wraps a lower-level Sender (either a storage.Stores or a DistSender)
 // to which it sends commands. It acts as a man-in-the-middle,

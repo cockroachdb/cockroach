@@ -566,7 +566,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				reply = ba.CreateReply()
 			}
 			return reply, test.pErr
-		}), clock, false, tracing.NewTracer(), stopper, DummyTxnMetrics())
+		}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
 		db := client.NewDB(ts)
 		txn := client.NewTxn(*db)
 		txn.InternalSetPriority(1)
@@ -669,7 +669,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		br.Txn = &txnClone
 		br.Txn.Writing = true
 		return br, nil
-	}), clock, false, tracing.NewTracer(), stopper, DummyTxnMetrics())
+	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -704,7 +704,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
 		pErr.SetTxn(&txn)
 		return nil, pErr
-	}), clock, false, tracing.NewTracer(), stopper, DummyTxnMetrics())
+	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
 	defer stopper.Stop()
 
 	var ba roachpb.BatchRequest
@@ -777,10 +777,9 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits,
 		dist := metrics.Restarts.Merge().Distribution()
 		var actualRestarts int64
 		for _, b := range dist {
-			if b.From == 1 && b.To == 1 {
-				actualRestarts += b.Count
-				break
-			} else if b.From != 0 || b.To != 0 {
+			if b.From == b.To {
+				actualRestarts += b.From * b.Count
+			} else {
 				t.Fatalf("unexpected value in histogram: %d-%d", b.From, b.To)
 			}
 		}
@@ -871,8 +870,8 @@ func TestTxnAbandonCount(t *testing.T) {
 		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
 
 		return nil
-	}); pErr == nil {
-		t.Fatalf("unexpected success")
+	}); !testutils.IsPError(pErr, "already committed or aborted") {
+		t.Fatalf("unexpected error: %s", pErr)
 	}
 }
 
@@ -884,6 +883,7 @@ func TestTxnAbortCount(t *testing.T) {
 	value := []byte("value")
 	db := client.NewDB(sender)
 
+	intentionalErrText := "intentional error to cause abort"
 	// Test aborted transaction.
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		key := []byte("key-abort")
@@ -896,9 +896,9 @@ func TestTxnAbortCount(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
-		return roachpb.NewErrorf("intentional error to cause abort")
-	}); pErr == nil {
-		t.Fatal("unexpected success when trying to cause aborted transaction")
+		return roachpb.NewErrorf(intentionalErrText)
+	}); !testutils.IsPError(pErr, intentionalErrText) {
+		t.Fatalf("unexpected error: %s", pErr)
 	}
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "abort txn", 0, 0, 1, 0)
@@ -942,8 +942,8 @@ func TestTxnDurations(t *testing.T) {
 	const puts = 10
 
 	const incr int64 = 1000
-	key := roachpb.Key("key-txn-durations")
 	for i := 0; i < puts; i++ {
+		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
 		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return roachpb.NewError(err)
