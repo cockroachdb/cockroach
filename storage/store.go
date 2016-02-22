@@ -305,7 +305,7 @@ type StoreContext struct {
 	DB        *client.DB
 	Gossip    *gossip.Gossip
 	StorePool *StorePool
-	Transport RaftTransport
+	Transport *RaftTransport
 
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.
@@ -669,9 +669,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	if err := s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage); err != nil {
-		return err
-	}
+	s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage)
 	s.processRaft()
 
 	// Gossip is only ever nil while bootstrapping a cluster and

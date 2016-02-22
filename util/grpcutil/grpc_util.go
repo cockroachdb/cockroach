@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/transport"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // GRPCHandlerFunc returns an http.Handler that delegates to grpcServer on incoming gRPC
@@ -59,19 +58,4 @@ func IsClosedConnection(err error) bool {
 		return true
 	}
 	return util.IsClosedConnection(err)
-}
-
-// NewContextWithStopper returns a context whose Done() channel is closed when
-// base's Done() channel is closed or when stopper's ShouldStop() channel is
-// closed, whichever is first.
-func NewContextWithStopper(base context.Context, stopper *stop.Stopper) context.Context {
-	ctx, cancel := context.WithCancel(base)
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-stopper.ShouldStop():
-			cancel()
-		}
-	}()
-	return ctx
 }

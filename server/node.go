@@ -162,7 +162,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 	stores := storage.NewStores(ctx.Clock)
 	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper, txnMetrics)
 	ctx.DB = client.NewDB(sender)
-	ctx.Transport = storage.NewLocalRPCTransport(stopper)
+	ctx.Transport = storage.NewDummyRaftTransport()
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
