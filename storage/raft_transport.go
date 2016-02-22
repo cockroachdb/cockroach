@@ -14,44 +14,36 @@
 // for names of contributors.
 //
 // Author: Ben Darnell
+// Author: Timothy Chen
 
 package storage
 
 import (
 	"net"
 	"sync"
-	"time"
 
 	"golang.org/x/net/context"
-
 	"google.golang.org/grpc"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// RaftMessageHandler is the callback type used by RaftTransport.
-type RaftMessageHandler func(*RaftMessageRequest) error
+type raftMessageHandler func(*RaftMessageRequest) error
 
-// The RaftTransport interface is supplied by the application to manage communication with
-// other nodes. It is responsible for mapping from IDs to some communication channel.
-// TODO(bdarnell): this interface needs to be updated and may just go away.
-type RaftTransport interface {
-	// Listen informs the RaftTransport of a local store's ID and callback interface.
-	// The RaftTransport should associate the given id with the server object so other RaftTransport's
-	// Connect methods can find it.
-	Listen(id roachpb.StoreID, server RaftMessageHandler) error
+// NodeAddressResolver is the function used by RaftTransport to map node IDs to
+// network addresses.
+type NodeAddressResolver func(roachpb.NodeID) (net.Addr, error)
 
-	// Stop undoes a previous Listen.
-	Stop(id roachpb.StoreID)
-
-	// Send a message to the node specified in the request's To field.
-	Send(req *RaftMessageRequest) error
-
-	// Close all associated connections.
-	Close()
+// GossipPolymorphismShim is a thin wrapper around gossip's GetNodeIDAddress
+// that allows its return value to be used as the net.Addr interface.
+func GossipPolymorphismShim(gossip *gossip.Gossip) NodeAddressResolver {
+	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+		return gossip.GetNodeIDAddress(nodeID)
+	}
 }
 
 type streamWithCancel struct {
@@ -59,117 +51,99 @@ type streamWithCancel struct {
 	cancel func()
 }
 
-type localRPCTransport struct {
-	mu      sync.Mutex
-	servers map[roachpb.StoreID]net.Addr
-	streams map[roachpb.StoreID]streamWithCancel
-	closed  chan struct{}
-	stopper *stop.Stopper
-}
+// RaftTransport handles the rpc messages for raft.
+type RaftTransport struct {
+	resolver   NodeAddressResolver
+	rpcContext *rpc.Context
 
-// NewLocalRPCTransport creates a RaftTransport for local testing use. Stores
-// sharing the same local Transport can find and communicate with each other by ID (which
-// can be an arbitrary string). Each instance binds to a different unused port on
-// localhost.
-// Because this is just for local testing, it doesn't use TLS.
-// TODO(bdarnell): can we get rid of LocalRPCTransport?
-func NewLocalRPCTransport(stopper *stop.Stopper) RaftTransport {
-	return &localRPCTransport{
-		servers: make(map[roachpb.StoreID]net.Addr),
-		streams: make(map[roachpb.StoreID]streamWithCancel),
-		closed:  make(chan struct{}),
-		stopper: stopper,
+	mu struct {
+		sync.RWMutex
+		handlers map[roachpb.StoreID]raftMessageHandler
+		streams  map[roachpb.NodeID]streamWithCancel
 	}
 }
 
-type handlerWithStopper struct {
-	handler RaftMessageHandler
-	stopper *stop.Stopper
+// NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
+func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpcContext *rpc.Context) *RaftTransport {
+	t := &RaftTransport{
+		resolver:   resolver,
+		rpcContext: rpcContext,
+	}
+	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
+	t.mu.streams = make(map[roachpb.NodeID]streamWithCancel)
+
+	if grpcServer != nil {
+		RegisterMultiRaftServer(grpcServer, t)
+	}
+
+	return t
 }
 
-// RaftMessage implements the generated gRPC server interface.
-func (hws handlerWithStopper) RaftMessage(stream MultiRaft_RaftMessageServer) error {
-	errCh := make(chan error, 1)
+// RaftMessage proxies the incoming request to the listening server interface.
+func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
 
-	hws.stopper.RunTask(func() {
-		hws.stopper.RunWorker(func() {
-			errCh <- func() error {
-				for {
-					req, err := stream.Recv()
-					if err != nil {
-						return err
-					}
-					if err := hws.handler(req); err != nil {
-						return err
-					}
-				}
-			}()
-		})
-	})
+		t.mu.Lock()
+		handler, ok := t.mu.handlers[req.ToReplica.StoreID]
+		t.mu.Unlock()
 
-	select {
-	case err := <-errCh:
-		return err
-	case <-hws.stopper.ShouldDrain():
-		return stream.SendAndClose(new(RaftMessageResponse))
+		if !ok {
+			return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
+		}
+
+		if err := handler(req); err != nil {
+			return err
+		}
 	}
 }
 
-func (lt *localRPCTransport) Listen(id roachpb.StoreID, handler RaftMessageHandler) error {
-	grpcServer := grpc.NewServer()
-	RegisterMultiRaftServer(grpcServer, handlerWithStopper{handler: handler, stopper: lt.stopper})
-
-	addr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServe(lt.stopper, grpcServer, addr, nil)
-	if err != nil {
-		return err
-	}
-
-	lt.mu.Lock()
-	if _, ok := lt.servers[id]; ok {
-		log.Fatalf("node %d already listening", id)
-	}
-	lt.servers[id] = ln.Addr()
-	lt.mu.Unlock()
-
-	return nil
+// Listen registers a raftMessageHandler to receive proxied messages.
+func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler raftMessageHandler) {
+	t.mu.Lock()
+	t.mu.handlers[storeID] = handler
+	t.mu.Unlock()
 }
 
-func (lt *localRPCTransport) Stop(id roachpb.StoreID) {
-	lt.mu.Lock()
-	defer lt.mu.Unlock()
-	delete(lt.servers, id)
-	if swc, ok := lt.streams[id]; ok {
-		swc.cancel()
-		delete(lt.streams, id)
-	}
+// Stop unregisters a raftMessageHandler.
+func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
+	t.mu.Lock()
+	delete(t.mu.handlers, storeID)
+	t.mu.Unlock()
 }
 
-func (lt *localRPCTransport) getStream(id roachpb.StoreID) (MultiRaft_RaftMessageClient, error) {
-	lt.mu.Lock()
-	defer lt.mu.Unlock()
-
-	if swc, ok := lt.streams[id]; ok {
+func (t *RaftTransport) getStream(nodeID roachpb.NodeID) (MultiRaft_RaftMessageClient, error) {
+	t.mu.RLock()
+	swc, ok := t.mu.streams[nodeID]
+	t.mu.RUnlock()
+	if ok {
 		return swc.stream, nil
 	}
 
-	addr, ok := lt.servers[id]
-	if !ok {
-		return nil, util.Errorf("unknown peer %v", id)
-	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	// If this wasn't test code we wouldn't want to call Dial while holding the lock.
-	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(10*time.Millisecond))
+	addr, err := t.resolver(nodeID)
 	if err != nil {
 		return nil, err
 	}
+
+	conn, err := t.rpcContext.GRPCDial(addr.String())
+	if err != nil {
+		return nil, err
+	}
+
 	client := NewMultiRaftClient(conn)
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := client.RaftMessage(ctx)
 	if err != nil {
 		return nil, err
 	}
-	lt.streams[id] = streamWithCancel{
+
+	t.mu.streams[nodeID] = streamWithCancel{
 		stream: stream,
 		cancel: func() {
 			cancel()
@@ -186,35 +160,22 @@ func (lt *localRPCTransport) getStream(id roachpb.StoreID) (MultiRaft_RaftMessag
 			log.Errorf("stream closed with: %s", err)
 		}
 
-		lt.mu.Lock()
-		defer lt.mu.Unlock()
-		if swc, ok := lt.streams[id]; ok {
+		t.mu.Lock()
+		if swc, ok := t.mu.streams[nodeID]; ok {
 			swc.cancel()
-			delete(lt.streams, id)
+			delete(t.mu.streams, nodeID)
 		}
+		t.mu.Unlock()
 	}()
 
 	return stream, nil
 }
 
-func (lt *localRPCTransport) Send(req *RaftMessageRequest) error {
-	select {
-	case <-lt.closed:
-		return util.Errorf("transport is closed")
-	default:
-		stream, err := lt.getStream(req.ToReplica.StoreID)
-		if err != nil {
-			return err
-		}
-		return stream.Send(req)
+// Send a message to the recipient specified in the request.
+func (t *RaftTransport) Send(req *RaftMessageRequest) error {
+	stream, err := t.getStream(req.ToReplica.NodeID)
+	if err != nil {
+		return err
 	}
-}
-
-func (lt *localRPCTransport) Close() {
-	lt.mu.Lock()
-	defer lt.mu.Unlock()
-	close(lt.closed)
-	for _, swc := range lt.streams {
-		swc.cancel()
-	}
+	return stream.Send(req)
 }

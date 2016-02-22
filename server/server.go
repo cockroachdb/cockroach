@@ -85,7 +85,7 @@ type Server struct {
 	status        *statusServer
 	tsDB          *ts.DB
 	tsServer      *ts.Server
-	raftTransport storage.RaftTransport
+	raftTransport *storage.RaftTransport
 
 	// registry is the root metrics Registry in a Cockroach node. Adding metrics directly to this
 	// registry should be rare. Instead, add more specialized registries to this one. Refer to the
@@ -166,8 +166,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.db = client.NewDB(sender)
 
 	s.grpc = grpc.NewServer()
-	s.raftTransport = newRPCTransport(s.gossip, s.grpc, s.rpcContext)
-	s.stopper.AddCloser(s.raftTransport)
+	s.raftTransport = storage.NewRaftTransport(storage.GossipPolymorphismShim(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
 	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {

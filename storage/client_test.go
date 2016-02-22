@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net"
 	"reflect"
 	"sort"
 	"strconv"
@@ -40,6 +41,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -132,7 +134,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
-	sCtx.Transport = storage.NewLocalRPCTransport(stopper)
+	sCtx.Transport = storage.NewRaftTransport(nil, nil, nil) // Doesn't actually need to function.
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*sCtx, eng, nodeDesc)
 	if bootstrap {
@@ -157,12 +159,16 @@ type multiTestContext struct {
 	storeContext *storage.StoreContext
 	manualClock  *hlc.ManualClock
 	clock        *hlc.Clock
+	grpcServer   *grpc.Server
+	rpcContext   *rpc.Context
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
-	transport    storage.RaftTransport
+	transport    *storage.RaftTransport
 	distSender   *kv.DistSender
 	db           *client.DB
 	feed         *util.Feed
+
+	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
@@ -187,6 +193,16 @@ type multiTestContext struct {
 	stores   []*storage.Store
 	stoppers []*stop.Stopper
 	idents   []roachpb.StoreIdent
+}
+
+func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
+	m.mu.RLock()
+	addr, ok := m.nodeIDtoAddr[nodeID]
+	m.mu.RUnlock()
+	if ok {
+		return addr, nil
+	}
+	return nil, util.Errorf("unknown peer %d", nodeID)
 }
 
 // startMultiTestContext is a convenience function to create, start, and return
@@ -220,15 +236,23 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.transportStopper = stop.NewStopper()
 	}
 	if m.gossip == nil {
-		rpcContext := rpc.NewContext(&base.Context{}, m.clock, nil)
-		m.gossip = gossip.New(rpcContext, gossip.TestBootstrap, m.transportStopper)
+		if m.rpcContext == nil {
+			m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
+		}
+		m.gossip = gossip.New(m.rpcContext, gossip.TestBootstrap, m.transportStopper)
 		m.gossip.SetNodeID(math.MaxInt32)
 	}
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
 	}
+	if m.grpcServer == nil {
+		m.grpcServer = grpc.NewServer()
+	}
 	if m.transport == nil {
-		m.transport = storage.NewLocalRPCTransport(m.transportStopper)
+		if m.rpcContext == nil {
+			m.rpcContext = rpc.NewContext(&base.Context{}, m.clock, nil)
+		}
+		m.transport = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServer, m.rpcContext)
 	}
 	if m.storePool == nil {
 		if m.timeUntilStoreDead == 0 {
@@ -254,7 +278,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	for i := 0; i < numStores; i++ {
 		m.addStore()
 	}
-	m.transportStopper.AddCloser(m.transport)
 
 	// Wait for gossip to startup.
 	util.SucceedsWithin(t, 100*time.Millisecond, func() error {
@@ -500,6 +523,25 @@ func (m *multiTestContext) addStore() {
 			}
 		}
 	}
+
+	tlsConfig, err := m.rpcContext.GetServerTLSConfig()
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	if m.nodeIDtoAddr == nil {
+		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
+	}
+	ln, err := util.ListenAndServe(m.transportStopper, m.grpcServer, util.CreateTestAddr("tcp"), tlsConfig)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	m.mu.Lock()
+	if _, ok := m.nodeIDtoAddr[nodeID]; ok {
+		m.t.Fatalf("node %d already listening", nodeID)
+	}
+	m.nodeIDtoAddr[nodeID] = ln.Addr()
+	m.mu.Unlock()
 
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
