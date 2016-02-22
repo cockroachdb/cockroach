@@ -1379,15 +1379,9 @@ func (t NumVal) Eval(_ EvalContext) (Datum, error) {
 	return DFloat(v), nil
 }
 
-// Eval implements the Expr interface.
-func (t Row) Eval(ctx EvalContext) (Datum, error) {
-	return Tuple(t).Eval(ctx)
-}
-
-// Eval implements the Expr interface.
-func (t Tuple) Eval(ctx EvalContext) (Datum, error) {
-	tuple := make(DTuple, 0, len(t))
-	for _, v := range t {
+func evalExprs(ctx EvalContext, exprs []Expr) (Datum, error) {
+	tuple := make(DTuple, 0, len(exprs))
+	for _, v := range exprs {
 		d, err := v.Eval(ctx)
 		if err != nil {
 			return DNull, err
@@ -1395,6 +1389,16 @@ func (t Tuple) Eval(ctx EvalContext) (Datum, error) {
 		tuple = append(tuple, d)
 	}
 	return tuple, nil
+}
+
+// Eval implements the Expr interface.
+func (t *Row) Eval(ctx EvalContext) (Datum, error) {
+	return evalExprs(ctx, t.Exprs)
+}
+
+// Eval implements the Expr interface.
+func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
+	return evalExprs(ctx, t.Exprs)
 }
 
 // Eval implements the Expr interface.

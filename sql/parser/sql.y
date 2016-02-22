@@ -1764,7 +1764,7 @@ single_set_clause:
 multiple_set_clause:
   '(' qualified_name_list ')' '=' ctext_row
   {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: Tuple($5.exprs())}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Tuple{$5.exprs()}}
   }
 | '(' qualified_name_list ')' '=' select_with_parens
   {
@@ -2163,11 +2163,13 @@ having_clause:
 values_clause:
   VALUES ctext_row
   {
-    $$.val = Values{Tuple($2.exprs())}
+    $$.val = &Values{[]*Tuple{{$2.exprs()}}}
   }
 | values_clause ',' ctext_row
   {
-    $$.val = append($1.selectStmt().(Values), Tuple($3.exprs()))
+    valNode := $1.selectStmt().(*Values)
+    valNode.Tuples = append(valNode.Tuples, &Tuple{$3.exprs()})
+    $$.val = valNode
   }
 
 // clauses common to all optimizable statements:
@@ -3223,31 +3225,31 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$.val = Row($3.exprs())
+    $$.val = &Row{$3.exprs()}
   }
 | ROW '(' ')'
   {
-    $$.val = Row(nil)
+    $$.val = &Row{nil}
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$.val = Tuple(append($2.exprs(), $4.expr()))
+    $$.val = &Tuple{append($2.exprs(), $4.expr())}
   }
 
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$.val = Row($3.exprs())
+    $$.val = &Row{$3.exprs()}
   }
 | ROW '(' ')'
   {
-    $$.val = Row(nil)
+    $$.val = &Row{nil}
   }
 
 implicit_row:
   '(' expr_list ',' a_expr ')'
   {
-    $$.val = Tuple(append($2.exprs(), $4.expr()))
+    $$.val = &Tuple{append($2.exprs(), $4.expr())}
   }
 
 // sub_type:
@@ -3308,15 +3310,15 @@ type_list:
 array_expr:
   '[' expr_list ']'
   {
-    $$.val = Array($2.exprs())
+    $$.val = &Array{$2.exprs()}
   }
 | '[' array_expr_list ']'
   {
-    $$.val = Array($2.exprs())
+    $$.val = &Array{$2.exprs()}
   }
 | '[' ']'
   {
-    $$.val = Array(nil)
+    $$.val = &Array{nil}
   }
 
 array_expr_list:
@@ -3448,7 +3450,7 @@ in_expr:
   }
 | '(' expr_list ')'
   {
-    $$.val = Tuple($2.exprs())
+    $$.val = &Tuple{$2.exprs()}
   }
 
 // Define SQL-style CASE clause.

@@ -162,7 +162,7 @@ func (expr *UnaryExpr) DeepCopy() Expr {
 
 // DeepCopy is part of the Expr interface.
 func (expr Array) DeepCopy() Expr {
-	return Array(deepCopyExprs(expr))
+	return &Array{deepCopyExprs(expr.Exprs)}
 }
 
 // DeepCopy is part of the Expr interface.
@@ -178,13 +178,13 @@ func (t *IntVal) DeepCopy() Expr {
 func (t NumVal) DeepCopy() Expr { return t }
 
 // DeepCopy is part of the Expr interface.
-func (expr Row) DeepCopy() Expr {
-	return Row(deepCopyExprs(expr))
+func (expr *Row) DeepCopy() Expr {
+	return &Row{deepCopyExprs(expr.Exprs)}
 }
 
 // DeepCopy is part of the Expr interface.
-func (expr Tuple) DeepCopy() Expr {
-	return Tuple(deepCopyExprs(expr))
+func (expr *Tuple) DeepCopy() Expr {
+	return &Tuple{deepCopyExprs(expr.Exprs)}
 }
 
 // DeepCopy is part of the Expr interface.

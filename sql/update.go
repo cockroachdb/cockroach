@@ -57,8 +57,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			// has been evaluated. We'll see a Tuple in other cases.
 			n := 0
 			switch t := expr.Expr.(type) {
-			case parser.Tuple:
-				n = len(t)
+			case *parser.Tuple:
+				n = len(t.Exprs)
 			case parser.DTuple:
 				n = len(t)
 			default:
@@ -106,8 +106,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	for _, expr := range n.Exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
-			case parser.Tuple:
-				for _, e := range t {
+			case *parser.Tuple:
+				for _, e := range t.Exprs {
 					e = fillDefault(e, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					i++

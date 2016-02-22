@@ -450,7 +450,7 @@ func (expr *UnaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr Array) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *Array) TypeCheck(args MapArgs) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
@@ -469,15 +469,9 @@ func (expr NumVal) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyFloat, nil
 }
 
-// TypeCheck implements the Expr interface.
-func (expr Row) TypeCheck(args MapArgs) (Datum, error) {
-	return Tuple(expr).TypeCheck(args)
-}
-
-// TypeCheck implements the Expr interface.
-func (expr Tuple) TypeCheck(args MapArgs) (Datum, error) {
-	tuple := make(DTuple, 0, len(expr))
-	for _, v := range expr {
+func typeCheckExprs(args MapArgs, exprs []Expr) (Datum, error) {
+	tuple := make(DTuple, 0, len(exprs))
+	for _, v := range exprs {
 		d, err := v.TypeCheck(args)
 		if err != nil {
 			return nil, err
@@ -485,6 +479,16 @@ func (expr Tuple) TypeCheck(args MapArgs) (Datum, error) {
 		tuple = append(tuple, d)
 	}
 	return tuple, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *Row) TypeCheck(args MapArgs) (Datum, error) {
+	return typeCheckExprs(args, expr.Exprs)
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *Tuple) TypeCheck(args MapArgs) (Datum, error) {
+	return typeCheckExprs(args, expr.Exprs)
 }
 
 // TypeCheck implements the Expr interface.

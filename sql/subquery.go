@@ -157,8 +157,8 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, multipleRows bool) 
 			//   SELECT (SELECT 1, 2) = (SELECT 1, 2)
 			columns = 1
 			switch t := e.Left.(type) {
-			case parser.Tuple:
-				columns = len(t)
+			case *parser.Tuple:
+				columns = len(t.Exprs)
 			case parser.DTuple:
 				columns = len(t)
 			}
