@@ -1050,22 +1050,16 @@ func (r *Replica) clearSequenceCache(batch engine.Engine, ms *engine.MVCCStats, 
 	var poison uint32
 	switch status {
 	case roachpb.PENDING:
-		poison = roachpb.SequencePoisonRestart
-		// TODO(tschottdorf): Previous code here poisoned unless the
-		// transaction was either SERIALIZABLE and with its original timestamp
-		// or SNAPSHOT. This hasn't been possible since we factored out the
-		// transaction metadata from the transaction proto, since now we only
-		// have the **metadata** available at the callsite. With a bit more
-		// elbow grease, it should be possible to thread the necessary
-		// information through ResolveIntent{,Range} to here, at least in cases
-		// where the performance matters (short-circuiting a Transaction helps
-		// avoid redundant work). Early-return for now; we don't want to mess
-		// with SNAPSHOT transactions.
-		return nil
+		// Note that a SNAPSHOT transaction will simply ignore being poisoned.
+		// We don't know what type of transaction we're dealing with here, or
+		// we would preferably only poison SERIALIZABLE transactions.
+		// Instead, we poison unconditionally and SNAPSHOT txns ignore such
+		// an entry.
+		poison = SequencePoisonRestart
 	default:
 		// When committing or aborting, we don't want the transaction (or accidental
 		// replays) to come back.
-		poison = roachpb.SequencePoisonAbort
+		poison = SequencePoisonAbort
 	}
 
 	// The snake bites.

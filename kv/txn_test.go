@@ -667,9 +667,6 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	// Wait for txnA to finish.
 	for range ch {
 	}
-	// TODO(tschottdorf): temporarily expect only two restarts since sequence
-	// cache poisoning works differently for now. See TestSequenceCachePoisonOnResolve.
-	//
 	// We expect two restarts (so a count of three):
 	// 1) Txn restarts after having been pushed (this happens via sequence poisoning
 	//    on the last Put before Commit, but otherwise EndTransaction would do it)
@@ -678,7 +675,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	//    we got restarted via sequence poisoning instead of EndTransaction: The
 	//    previous iteration never executed the Put on keyB, so it hasn't taken
 	//    that timestamp into account yet.
-	const expCount = 2
+	const expCount = 3
 	if count != expCount {
 		t.Fatalf("expected %d restarts, but got %d", expCount, count)
 	}

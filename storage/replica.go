@@ -1440,25 +1440,31 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 	defer r.mu.Unlock()
 
 	var entry roachpb.SequenceCacheEntry
-	if epoch, sequence, readErr := r.sequence.Get(b, txn.ID, &entry); readErr != nil {
+	epoch, sequence, readErr := r.sequence.Get(b, txn.ID, txn.Isolation, &entry)
+	if readErr != nil {
 		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr))
-	} else if txn.Epoch > epoch {
+	}
+	var err error
+	switch {
+	case txn.Epoch > epoch:
 		// No cache hit from current or future epoch, continue.
-	} else if sequence == roachpb.SequencePoisonAbort {
+	case sequence == SequencePoisonAbort:
 		// We were poisoned, which means that our Transaction has been
 		// aborted and learns about that right now.
-		newTxn := txn.Clone()
-		newTxn.Timestamp.Forward(entry.Timestamp)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &newTxn)
-	} else if sequence >= txn.Sequence || epoch > txn.Epoch {
+		err = roachpb.NewTransactionAbortedError()
+	case sequence == SequencePoisonRestart:
+		err = roachpb.NewTransactionRetryError()
+	case sequence >= txn.Sequence || epoch > txn.Epoch:
+		err = roachpb.NewTransactionRetryError()
+	}
+	if err != nil {
 		// We hit the cache, so let the transaction restart.
-		// This is also the path taken by roachpb.SequencePoisonRestart.
 		if log.V(1) {
 			log.Infof("found sequence cache entry for %s@%d", txn.Short(), txn.Sequence)
 		}
 		newTxn := txn.Clone()
 		newTxn.Timestamp.Forward(entry.Timestamp)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &newTxn)
+		return roachpb.NewErrorWithTxn(err, &newTxn)
 	}
 	return nil
 }
