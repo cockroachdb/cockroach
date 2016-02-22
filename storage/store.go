@@ -910,9 +910,14 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	if err := engine.MVCCSetRangeStats(batch, 1, ms); err != nil {
+	// Set range stats.
+	if err := ms.AccountForSelf(desc.RangeID); err != nil {
 		return err
 	}
+	if err := engine.MVCCSetRangeStats(batch, desc.RangeID, ms); err != nil {
+		return err
+	}
+
 	if err := batch.Commit(); err != nil {
 		return err
 	}
