@@ -17,10 +17,14 @@
 package status
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -31,10 +35,10 @@ import (
 const (
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
-	storeTimeSeriesPrefix = "cr.store."
+	storeTimeSeriesPrefix = "cr.store.%s"
 	// nodeTimeSeriesPrefix is the common prefix for time series keys which
 	// record node-specific data.
-	nodeTimeSeriesPrefix = "cr.node."
+	nodeTimeSeriesPrefix = "cr.node.%s"
 	// runtimeStatTimeSeriesFmt is the current format for time series keys which
 	// record runtime system stats on a node.
 	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s"
@@ -56,125 +60,237 @@ var recordHistogramQuantiles = []quantile{
 	{"-p50", 50},
 }
 
-// NodeStatusRecorder is used to periodically persist the status of a node as a
-// set of time series data.
-type NodeStatusRecorder struct {
-	*NodeStatusMonitor
-	clock            *hlc.Clock
-	source           string // Source string used when storing time series data for this node.
-	lastDataCount    int
-	lastSummaryCount int
+// storeMetrics is the minimum interface of the storage.Store object needed by
+// MetricsRecorder to provide status summaries. This is used instead of Store
+// directly in order to simplify testing.
+type storeMetrics interface {
+	StoreID() roachpb.StoreID
+	Descriptor() (*roachpb.StoreDescriptor, error)
+	MVCCStats() engine.MVCCStats
+	Registry() *metric.Registry
 }
 
-// NewNodeStatusRecorder instantiates a recorder for the supplied monitor.
-func NewNodeStatusRecorder(monitor *NodeStatusMonitor, clock *hlc.Clock) *NodeStatusRecorder {
-	return &NodeStatusRecorder{
-		NodeStatusMonitor: monitor,
-		clock:             clock,
+// MetricsRecorder is used to periodically record the information in a number of
+// metric registries.
+//
+// Two types of registries are maintained: "node-level"
+// registries, provided by node-level systems, and "store-level" registries
+// which are provided by each store hosted by the node. There are slight
+// differences in the way these are recorded, and they are thus kept separate.
+type MetricsRecorder struct {
+	// nodeRegistry contains, as subregistries, the multiple component-specific
+	// registries which are recorded as "node level" metrics.
+	nodeRegistry *metric.Registry
+
+	// Fields below are locked by this mutex.
+	sync.Mutex
+	// storeRegistries contains a registry for each store on the node. These
+	// are not stored as subregistries, but rather are treated as wholly
+	// independent.
+	storeRegistries map[roachpb.StoreID]*metric.Registry
+	nodeID          roachpb.NodeID
+	clock           *hlc.Clock
+
+	// Counts to help optimize slice allocation.
+	lastDataCount    int
+	lastSummaryCount int
+
+	// TODO(mrtracy): These are stored to support the current structure of
+	// status summaries. These should be removed as part of #4465.
+	startedAt int64
+	desc      roachpb.NodeDescriptor
+	stores    map[roachpb.StoreID]storeMetrics
+}
+
+// NewMetricsRecorder initializes a new MetricsRecorder object that uses the
+// given clock.
+func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
+	return &MetricsRecorder{
+		nodeRegistry:    metric.NewRegistry(),
+		storeRegistries: make(map[roachpb.StoreID]*metric.Registry),
+		stores:          make(map[roachpb.StoreID]storeMetrics),
+		clock:           clock,
 	}
 }
 
-// GetTimeSeriesData returns a slice of interesting TimeSeriesData from the
-// encapsulated NodeStatusMonitor.
-func (nsr *NodeStatusRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
-	nsr.RLock()
-	defer nsr.RUnlock()
+// AddNodeRegistry adds a node-level registry to this recorder. Each node-level
+// registry has a 'prefix format' which is used to add a prefix to the name of
+// all metrics in that registry while recording (see the metric.Registry object
+// for more information on prefix format strings).
+func (mr *MetricsRecorder) AddNodeRegistry(prefixFmt string, registry *metric.Registry) {
+	mr.nodeRegistry.MustAdd(prefixFmt, registry)
+}
 
-	if nsr.desc.NodeID == 0 {
+// AddStore adds the Registry from the provided store as a store-level registry
+// in this recoder. A reference to the store is kept, for the purpose of
+// gathering some additional information which is present in store status
+// summaries.
+// Stores should only be added to the registry after they have been started.
+// TODO(mrtracy): Store references should not be necessary after #4465.
+func (mr *MetricsRecorder) AddStore(store storeMetrics) {
+	mr.Lock()
+	defer mr.Unlock()
+	storeID := store.StoreID()
+	mr.storeRegistries[storeID] = store.Registry()
+	mr.stores[storeID] = store
+}
+
+// NodeStarted should be called on the recorder once the associated node has
+// received its Node ID; this indicates that it is appropriate to begin
+// recording statistics for this node.
+func (mr *MetricsRecorder) NodeStarted(desc roachpb.NodeDescriptor, startedAt int64) {
+	mr.Lock()
+	defer mr.Unlock()
+	mr.desc = desc
+	mr.nodeID = desc.NodeID
+	mr.startedAt = startedAt
+}
+
+// MarshalJSON returns an appropriate JSON representation of the current values
+// of the metrics being tracked by this recorder.
+func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
+	if mr.nodeID == 0 {
+		// We haven't yet processed initialization information; return an empty
+		// byte string.
+		if log.V(1) {
+			log.Warning("MetricsRecorder.MarshalJSON() called before NodeID allocation.")
+		}
+		return []byte("{}"), nil
+	}
+	topLevel := map[string]interface{}{
+		fmt.Sprintf("node.%d", mr.nodeID): mr.nodeRegistry,
+	}
+	// Add collection of stores to top level.
+	storeLevel := map[roachpb.StoreID]interface{}{}
+	for id, reg := range mr.storeRegistries {
+		storeLevel[id] = reg
+	}
+	topLevel["stores"] = storeLevel
+	return json.Marshal(topLevel)
+}
+
+// GetTimeSeriesData serializes registered metrics for consumption by
+// CockroachDB's time series system.
+func (mr *MetricsRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
+	mr.Lock()
+	defer mr.Unlock()
+
+	if mr.desc.NodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("NodeStatusRecorder.GetTimeSeriesData called before StartNode event received.")
+			log.Warning("MetricsRecorder.GetTimeSeriesData called before NodeID allocation.")
 		}
 		return nil
 	}
-	if nsr.source == "" {
-		nsr.source = strconv.FormatInt(int64(nsr.desc.NodeID), 10)
-	}
 
-	data := make([]ts.TimeSeriesData, 0, nsr.lastDataCount)
+	data := make([]ts.TimeSeriesData, 0, mr.lastDataCount)
 
-	// Record node stats.
-	now := nsr.clock.PhysicalNow()
+	// Record time series from node-level registries.
+	now := mr.clock.PhysicalNow()
 	recorder := registryRecorder{
-		registry:       nsr.nodeRegistry,
+		registry:       mr.nodeRegistry,
 		prefix:         nodeTimeSeriesPrefix,
-		source:         nsr.source,
+		source:         strconv.FormatInt(int64(mr.nodeID), 10),
 		timestampNanos: now,
 	}
 	recorder.record(&data)
 
-	// Record per store stats.
-	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
-		now := nsr.clock.PhysicalNow()
+	// Record time series from store-level registries.
+	for storeID, r := range mr.storeRegistries {
 		storeRecorder := registryRecorder{
-			registry:       ssm.storeRegistry,
+			registry:       r,
 			prefix:         storeTimeSeriesPrefix,
-			source:         strconv.FormatInt(int64(ssm.ID), 10),
+			source:         strconv.FormatInt(int64(storeID), 10),
 			timestampNanos: now,
 		}
 		storeRecorder.record(&data)
-	})
-	nsr.lastDataCount = len(data)
+	}
+	mr.lastDataCount = len(data)
 	return data
 }
 
 // GetStatusSummaries returns a status summary messages for the node, along with
 // a status summary for every individual store within the node.
-func (nsr *NodeStatusRecorder) GetStatusSummaries() (*NodeStatus, []storage.StoreStatus) {
-	nsr.RLock()
-	defer nsr.RUnlock()
+// TODO(mrtracy): The status summaries deserve a near-term, significant
+// overhaul. Their primary usage is as an indicator of the most recent metrics
+// of a node or store - they are essentially a "vertical" query of several
+// time series for a single node or store, returning only the most recent value
+// of each series. The structure should be modified to reflect that: there is no
+// reason for them to have a strict schema of fields. (Github Issue #4465)
+func (mr *MetricsRecorder) GetStatusSummaries() (*NodeStatus, []storage.StoreStatus) {
+	mr.Lock()
+	defer mr.Unlock()
 
-	if nsr.desc.NodeID == 0 {
+	if mr.nodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("NodeStatusRecorder.GetStatusSummaries called before StartNode event received.")
+			log.Warning("MetricsRecorder.GetStatusSummaries called before NodeID allocation.")
 		}
 		return nil, nil
 	}
 
-	now := nsr.clock.PhysicalNow()
+	now := mr.clock.PhysicalNow()
 
 	// Generate an node status with no store data.
 	nodeStat := &NodeStatus{
-		Desc:      nsr.desc,
+		Desc:      mr.desc,
 		UpdatedAt: now,
-		StartedAt: nsr.startedAt,
-		StoreIDs:  make([]roachpb.StoreID, 0, nsr.lastSummaryCount),
+		StartedAt: mr.startedAt,
+		StoreIDs:  make([]roachpb.StoreID, 0, mr.lastSummaryCount),
 	}
 
-	storeStats := make([]storage.StoreStatus, 0, nsr.lastSummaryCount)
+	storeStats := make([]storage.StoreStatus, 0, mr.lastSummaryCount)
 	// Generate status summaries for stores, while accumulating data into the
 	// NodeStatus.
-	nsr.visitStoreMonitors(func(ssm *StoreStatusMonitor) {
-		// Accumulate per-store values into node status.
-		// TODO(mrtracy): A number of the fields on the protocol buffer are
-		// Int32s when they would be more easily represented as Int64.
-		nodeStat.StoreIDs = append(nodeStat.StoreIDs, ssm.ID)
-		nodeStat.Stats.Add(ssm.stats)
-		nodeStat.RangeCount += int32(ssm.rangeCount.Count())
-		nodeStat.LeaderRangeCount += int32(ssm.leaderRangeCount.Value())
-		nodeStat.ReplicatedRangeCount += int32(ssm.replicatedRangeCount.Value())
-		nodeStat.AvailableRangeCount += int32(ssm.availableRangeCount.Value())
+	for storeID, r := range mr.storeRegistries {
+		nodeStat.StoreIDs = append(nodeStat.StoreIDs, storeID)
 
-		// Its difficult to guarantee that we have the store descriptor yet; we
-		// may not have processed a StoreStatusEvent yet for this store. Just
-		// skip the store summary in this case.
-		if ssm.desc == nil {
-			return
+		// Gather MVCCStats from the store directly.
+		stats := mr.stores[storeID].MVCCStats()
+
+		// Gather updates from a few specific gauges.
+		// TODO(mrtracy): This is the worst hack present in supporting the
+		// current status summary format. It will be removed as part of #4465.
+		rangeCounter := r.GetCounter("ranges")
+		if rangeCounter == nil {
+			log.Errorf("Could not record status summaries: Store %d did not have 'ranges' counter in registry.", storeID)
+			return nil, nil
 		}
+		gaugeNames := []string{"ranges.leader", "ranges.replicated", "ranges.available"}
+		gauges := make(map[string]*metric.Gauge)
+		for _, name := range gaugeNames {
+			gauge := r.GetGauge(name)
+			if gauge == nil {
+				log.Errorf("Could not record status summaries: Store %d did not have '%s' gauge in registry.", storeID, name)
+				return nil, nil
+			}
+			gauges[name] = gauge
+		}
+
+		// Gather descriptor from store.
+		descriptor, err := mr.stores[storeID].Descriptor()
+		if err != nil {
+			log.Errorf("Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+		}
+
 		status := storage.StoreStatus{
-			Desc:                 *ssm.desc,
-			NodeID:               nsr.desc.NodeID,
+			Desc:                 *descriptor,
+			NodeID:               mr.nodeID,
 			UpdatedAt:            now,
-			StartedAt:            ssm.startedAt,
-			Stats:                ssm.stats,
-			RangeCount:           int32(ssm.rangeCount.Count()),
-			LeaderRangeCount:     int32(ssm.leaderRangeCount.Value()),
-			ReplicatedRangeCount: int32(ssm.replicatedRangeCount.Value()),
-			AvailableRangeCount:  int32(ssm.availableRangeCount.Value()),
+			StartedAt:            mr.startedAt,
+			Stats:                stats,
+			RangeCount:           int32(rangeCounter.Count()),
+			LeaderRangeCount:     int32(gauges[gaugeNames[0]].Value()),
+			ReplicatedRangeCount: int32(gauges[gaugeNames[1]].Value()),
+			AvailableRangeCount:  int32(gauges[gaugeNames[2]].Value()),
 		}
+		nodeStat.Stats.Add(stats)
+		nodeStat.RangeCount += status.RangeCount
+		nodeStat.LeaderRangeCount += status.LeaderRangeCount
+		nodeStat.ReplicatedRangeCount += status.ReplicatedRangeCount
+		nodeStat.AvailableRangeCount += status.AvailableRangeCount
 		storeStats = append(storeStats, status)
-	})
+	}
 	return nodeStat, storeStats
 }
 
@@ -190,7 +306,7 @@ type registryRecorder struct {
 func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
 	rr.registry.Each(func(name string, m interface{}) {
 		data := ts.TimeSeriesData{
-			Name:   rr.prefix + name,
+			Name:   fmt.Sprintf(rr.prefix, name),
 			Source: rr.source,
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{

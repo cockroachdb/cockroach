@@ -641,13 +641,12 @@ func TestPGCommandTags(t *testing.T) {
 // checkPGWireMetrics returns the server's pgwire bytesIn/bytesOut and an error if the
 // bytesIn/bytesOut don't satisfy the given minimums and maximums.
 func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
-	nid := s.Gossip().GetNodeID().String()
 	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err
 	}
 
-	bytesIn := s.MustGetCounter("cr.node.pgwire.bytesin." + nid)
-	bytesOut := s.MustGetCounter("cr.node.pgwire.bytesout." + nid)
+	bytesIn := s.MustGetPgwireCounter("bytesin")
+	bytesOut := s.MustGetPgwireCounter("bytesout")
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, util.Errorf("bytesin %d < expected min %d", a, min)
 	}

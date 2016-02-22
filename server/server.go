@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -67,31 +66,25 @@ type Server struct {
 
 	listener net.Listener // Only used in tests.
 
-	mux           *http.ServeMux
-	httpReady     chan struct{}
-	clock         *hlc.Clock
-	rpcContext    *crpc.Context
-	rpc           *crpc.Server
-	grpc          *grpc.Server
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	db            *client.DB
-	kvDB          *kv.DBServer
-	sqlServer     sql.Server
-	pgServer      *pgwire.Server
-	node          *Node
-	recorder      *status.NodeStatusRecorder
-	admin         *adminServer
-	status        *statusServer
-	tsDB          *ts.DB
-	tsServer      *ts.Server
-	raftTransport storage.RaftTransport
-
-	// registry is the root metrics Registry in a Cockroach node. Adding metrics directly to this
-	// registry should be rare. Instead, add more specialized registries to this one. Refer to the
-	// package docs for util/metric for more information on metrics.
-	registry *metric.Registry
-
+	mux                 *http.ServeMux
+	httpReady           chan struct{}
+	clock               *hlc.Clock
+	rpcContext          *crpc.Context
+	rpc                 *crpc.Server
+	grpc                *grpc.Server
+	gossip              *gossip.Gossip
+	storePool           *storage.StorePool
+	db                  *client.DB
+	kvDB                *kv.DBServer
+	sqlServer           sql.Server
+	pgServer            *pgwire.Server
+	node                *Node
+	recorder            *status.MetricsRecorder
+	admin               *adminServer
+	status              *statusServer
+	tsDB                *ts.DB
+	tsServer            *ts.Server
+	raftTransport       storage.RaftTransport
 	stopper             *stop.Stopper
 	sqlExecutor         *sql.Executor
 	leaseMgr            *sql.LeaseManager
@@ -124,7 +117,6 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		mux:       http.NewServeMux(),
 		httpReady: make(chan struct{}),
 		clock:     hlc.NewClock(hlc.UnixNano),
-		registry:  metric.NewRegistry(),
 		stopper:   stopper,
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
@@ -206,11 +198,12 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			Mode:           s.ctx.BalanceMode,
 		},
 	}
-	subRegistries := []status.NodeSubregistry{
-		{"pgwire", s.pgServer.Registry()},
-		{"sql", s.sqlExecutor.Registry()},
-	}
-	s.node = NewNode(nCtx, s.registry, s.stopper, subRegistries)
+
+	s.recorder = status.NewMetricsRecorder(s.clock)
+	s.recorder.AddNodeRegistry("pgwire.%s", s.pgServer.Registry())
+	s.recorder.AddNodeRegistry("sql.%s", s.sqlExecutor.Registry())
+
+	s.node = NewNode(nCtx, s.recorder, s.stopper)
 	s.admin = newAdminServer(s.db, s.stopper)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
@@ -251,7 +244,6 @@ func (s *Server) Start() error {
 	s.tsDB.PollSource(runtime, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
 
 	// Begin recording time series data collected by the status monitor.
-	s.recorder = status.NewNodeStatusRecorder(s.node.status, s.clock)
 	s.tsDB.PollSource(s.recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
 
 	// Begin recording status summaries.
@@ -263,7 +255,7 @@ func (s *Server) Start() error {
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
-	s.status = newStatusServer(s.db, s.gossip, s.registry, s.ctx)
+	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx)
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
 	s.initHTTP()

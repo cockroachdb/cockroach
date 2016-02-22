@@ -17,6 +17,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -106,14 +106,14 @@ var localRE = regexp.MustCompile(`(?i)local`)
 type statusServer struct {
 	db           *client.DB
 	gossip       *gossip.Gossip
-	metaRegistry *metric.Registry
+	metricSource json.Marshaler
 	router       *httprouter.Router
 	ctx          *Context
 	proxyClient  *http.Client
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry *metric.Registry, ctx *Context) *statusServer {
+func newStatusServer(db *client.DB, gossip *gossip.Gossip, metricSource json.Marshaler, ctx *Context) *statusServer {
 	// Create an http client with a timeout
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
@@ -128,7 +128,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, metaRegistry *metric.
 	server := &statusServer{
 		db:           db,
 		gossip:       gossip,
-		metaRegistry: metaRegistry,
+		metricSource: metricSource,
 		router:       httprouter.New(),
 		ctx:          ctx,
 		proxyClient:  httpClient,
@@ -610,7 +610,7 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 		s.proxyRequest(nodeID, w, r)
 		return
 	}
-	respondAsJSON(w, r, s.metaRegistry)
+	respondAsJSON(w, r, s.metricSource)
 }
 
 func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {

@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -101,7 +100,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
-	node := NewNode(ctx, metric.NewRegistry(), stopper, nil)
+	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper)
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -259,7 +260,7 @@ type Store struct {
 	replicaGCQueue  *replicaGCQueue // Replica GC queue
 	raftLogQueue    *raftLogQueue   // Raft Log Truncation queue
 	scanner         *replicaScanner // Replica scanner
-	feed            StoreEventFeed  // Event Feed
+	metrics         *storeMetrics
 	wakeRaftLoop    chan struct{}
 	started         int32
 	stopper         *stop.Stopper
@@ -354,6 +355,112 @@ type StoreContext struct {
 	LogRangeEvents bool
 }
 
+type storeMetrics struct {
+	registry *metric.Registry
+
+	// Range data metrics.
+	rangeCount           *metric.Counter
+	leaderRangeCount     *metric.Gauge
+	replicatedRangeCount *metric.Gauge
+	availableRangeCount  *metric.Gauge
+
+	// Storage metrics.
+	liveBytes       *metric.Gauge
+	keyBytes        *metric.Gauge
+	valBytes        *metric.Gauge
+	intentBytes     *metric.Gauge
+	liveCount       *metric.Gauge
+	keyCount        *metric.Gauge
+	valCount        *metric.Gauge
+	intentCount     *metric.Gauge
+	intentAge       *metric.Gauge
+	gcBytesAge      *metric.Gauge
+	lastUpdateNanos *metric.Gauge
+	capacity        *metric.Gauge
+	available       *metric.Gauge
+
+	// Stats for efficient merges.
+	// TODO(mrtracy): This should be removed as part of #4465. This is only
+	// maintained to keep the current structure of StatusSummaries; it would be
+	// better to convert the Gauges below into counters which are adjusted
+	// accordingly.
+	mu    sync.Mutex
+	stats engine.MVCCStats
+}
+
+func newStoreMetrics() *storeMetrics {
+	storeRegistry := metric.NewRegistry()
+	return &storeMetrics{
+		registry:             storeRegistry,
+		rangeCount:           storeRegistry.Counter("ranges"),
+		leaderRangeCount:     storeRegistry.Gauge("ranges.leader"),
+		replicatedRangeCount: storeRegistry.Gauge("ranges.replicated"),
+		availableRangeCount:  storeRegistry.Gauge("ranges.available"),
+		liveBytes:            storeRegistry.Gauge("livebytes"),
+		keyBytes:             storeRegistry.Gauge("keybytes"),
+		valBytes:             storeRegistry.Gauge("valbytes"),
+		intentBytes:          storeRegistry.Gauge("intentbytes"),
+		liveCount:            storeRegistry.Gauge("livecount"),
+		keyCount:             storeRegistry.Gauge("keycount"),
+		valCount:             storeRegistry.Gauge("valcount"),
+		intentCount:          storeRegistry.Gauge("intentcount"),
+		intentAge:            storeRegistry.Gauge("intentage"),
+		gcBytesAge:           storeRegistry.Gauge("gcbytesage"),
+		lastUpdateNanos:      storeRegistry.Gauge("lastupdatenanos"),
+		capacity:             storeRegistry.Gauge("capacity"),
+		available:            storeRegistry.Gauge("capacity.available"),
+	}
+}
+
+// updateGaugesLocked breaks out individual metrics from the MVCCStats object.
+// This process should be locked with each stat application to ensure that all
+// gauges increase/decrease in step with the application of updates. However,
+// this locking is not exposed to the registry level, and therefore a single
+// snapshot of these gauges in the registry might mix the values of two
+// subsequent updates.
+func (sm *storeMetrics) updateMVCCGaugesLocked() {
+	sm.liveBytes.Update(sm.stats.LiveBytes)
+	sm.keyBytes.Update(sm.stats.KeyBytes)
+	sm.valBytes.Update(sm.stats.ValBytes)
+	sm.intentBytes.Update(sm.stats.IntentBytes)
+	sm.liveCount.Update(sm.stats.LiveCount)
+	sm.keyCount.Update(sm.stats.KeyCount)
+	sm.valCount.Update(sm.stats.ValCount)
+	sm.intentCount.Update(sm.stats.IntentCount)
+	sm.intentAge.Update(sm.stats.IntentAge)
+	sm.gcBytesAge.Update(sm.stats.GCBytesAge)
+	sm.lastUpdateNanos.Update(sm.stats.LastUpdateNanos)
+}
+
+func (sm *storeMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.capacity.Update(capacity.Capacity)
+	sm.available.Update(capacity.Available)
+}
+
+func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, available int64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.leaderRangeCount.Update(leaders)
+	sm.replicatedRangeCount.Update(replicated)
+	sm.availableRangeCount.Update(available)
+}
+
+func (sm *storeMetrics) addMVCCStats(stats engine.MVCCStats) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.stats.Add(stats)
+	sm.updateMVCCGaugesLocked()
+}
+
+func (sm *storeMetrics) subtractMVCCStats(stats engine.MVCCStats) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.stats.Subtract(stats)
+	sm.updateMVCCGaugesLocked()
+}
+
 // Valid returns true if the StoreContext is populated correctly.
 // We don't check for Gossip and DB since some of our tests pass
 // that as nil.
@@ -398,6 +505,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		nodeDesc:        nodeDesc,
 		wakeRaftLoop:    make(chan struct{}, 1),
 		raftRequestChan: make(chan *RaftMessageRequest, raftReqBufferSize),
+		metrics:         newStoreMetrics(),
 	}
 
 	s.mu.Lock()
@@ -503,10 +611,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
 
-	// Start store event feed.
-	s.feed = NewStoreEventFeed(s.Ident.StoreID, s.ctx.EventFeed)
-	s.feed.startStore(s.startedAt)
-
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -516,7 +620,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
-	s.feed.beginScanRanges()
 	_, err = engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			// Only consider range metadata entries; ignore others.
@@ -546,7 +649,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			if err = s.addReplicaInternalLocked(rng); err != nil {
 				return false, err
 			}
-			s.feed.registerRange(rng, true /* scan */)
+			s.metrics.rangeCount.Inc(1)
 			// TODO(bdarnell): lazily create raft groups to make the following comment true again.
 			// Note that we do not create raft groups at this time; they will be created
 			// on-demand the first time they are needed. This helps reduce the amount of
@@ -559,7 +662,6 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			return false, nil
 		})
 	s.mu.Unlock()
-	s.feed.endScanRanges()
 	if err != nil {
 		return err
 	}
@@ -944,9 +1046,6 @@ func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
-// EventFeed accessor.
-func (s *Store) EventFeed() StoreEventFeed { return s.feed }
-
 // Tracer accessor.
 func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
 
@@ -1022,7 +1121,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return err
 	}
 
-	s.feed.splitRange(origRng, newRng)
+	s.metrics.rangeCount.Inc(1)
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
@@ -1061,7 +1160,7 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 		return err
 	}
 
-	s.feed.mergeRange(subsumingRng, subsumedRng)
+	s.metrics.rangeCount.Dec(1)
 	return nil
 }
 
@@ -1073,7 +1172,7 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 	if err := s.addReplicaInternalLocked(rng); err != nil {
 		return err
 	}
-	s.feed.registerRange(rng, false /* scan */)
+	s.metrics.rangeCount.Inc(1)
 	return nil
 }
 
@@ -1199,7 +1298,10 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 		return nil
 	}
 	delete(s.mu.uninitReplicas, rangeID)
-	s.feed.registerRange(rng, false /* scan */)
+
+	// Add the range and its current stats into metrics.
+	s.metrics.rangeCount.Inc(1)
+	s.metrics.addMVCCStats(rng.stats.GetMVCC())
 
 	if s.mu.replicasByKey.Has(rng) {
 		return rangeAlreadyExists{rng}
@@ -1224,6 +1326,20 @@ func (s *Store) Attrs() roachpb.Attributes {
 // Capacity returns the capacity of the underlying storage engine.
 func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	return s.engine.Capacity()
+}
+
+// Registry returns the metric registry used by this store.
+func (s *Store) Registry() *metric.Registry {
+	return s.metrics.registry
+}
+
+// MVCCStats returns the current MVCCStats accumulated for this store.
+// TODO(mrtracy): This should be removed as part of #4465, this is only needed
+// to support the current StatusSummary structures which will be changing.
+func (s *Store) MVCCStats() engine.MVCCStats {
+	s.metrics.mu.Lock()
+	defer s.metrics.mu.Unlock()
+	return s.metrics.stats
 }
 
 // Descriptor returns a StoreDescriptor including current store
@@ -1884,13 +2000,13 @@ func (s *Store) PublishStatus() error {
 	if err != nil {
 		return err
 	}
-	s.feed.storeStatus(desc)
+	s.metrics.updateCapacityGauges(desc.Capacity)
 
 	// broadcast replication status.
 	now := s.ctx.Clock.Now().WallTime
 	leaderRangeCount, replicatedRangeCount, availableRangeCount :=
 		s.computeReplicationStatus(now)
-	s.feed.replicationStatus(leaderRangeCount, replicatedRangeCount, availableRangeCount)
+	s.metrics.updateReplicationGauges(leaderRangeCount, replicatedRangeCount, availableRangeCount)
 	return nil
 }
 

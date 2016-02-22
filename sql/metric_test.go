@@ -10,7 +10,6 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
-	nid := s.Gossip().GetNodeID().String()
 
 	var testcases = []struct {
 		query       string
@@ -49,25 +48,25 @@ func TestQueryCounts(t *testing.T) {
 		if err := s.WriteSummaries(); err != nil {
 			t.Fatal(err)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.transaction.begincount."+nid), tc.txnCount; a != e {
+		if a, e := s.MustGetSQLCounter("transaction.begincount"), tc.txnCount; a != e {
 			t.Errorf("transaction count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.select.count."+nid), tc.selectCount; a != e {
+		if a, e := s.MustGetSQLCounter("select.count"), tc.selectCount; a != e {
 			t.Errorf("select count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.update.count."+nid), tc.updateCount; a != e {
+		if a, e := s.MustGetSQLCounter("update.count"), tc.updateCount; a != e {
 			t.Errorf("update count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.insert.count."+nid), tc.insertCount; a != e {
+		if a, e := s.MustGetSQLCounter("insert.count"), tc.insertCount; a != e {
 			t.Errorf("insert count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.delete.count."+nid), tc.deleteCount; a != e {
+		if a, e := s.MustGetSQLCounter("delete.count"), tc.deleteCount; a != e {
 			t.Errorf("delete count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.ddl.count."+nid), tc.ddlCount; a != e {
+		if a, e := s.MustGetSQLCounter("ddl.count"), tc.ddlCount; a != e {
 			t.Errorf("DDL count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
-		if a, e := s.MustGetCounter("cr.node.sql.misc.count."+nid), tc.miscCount; a != e {
+		if a, e := s.MustGetSQLCounter("misc.count"), tc.miscCount; a != e {
 			t.Errorf("misc count for '%s': actual %d != expected %d", tc.query, a, e)
 		}
 

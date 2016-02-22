@@ -304,13 +304,31 @@ func (ts *TestServer) WriteSummaries() error {
 	return ts.Server.writeSummaries()
 }
 
-// MustGetCounter returns the value of a counter from the metrics registry. Runs in
-// O(# of metrics) time, which is fine for test code.
-func (ts *TestServer) MustGetCounter(name string) int64 {
+// MustGetSQLCounter returns the value of a counter metric from the server's SQL
+// Executor. Runs in O(# of metrics) time, which is fine for test code.
+func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	var c int64
 	var found bool
 
-	ts.registry.Each(func(n string, v interface{}) {
+	ts.sqlExecutor.Registry().Each(func(n string, v interface{}) {
+		if name == n {
+			c = v.(*metric.Counter).Count()
+			found = true
+		}
+	})
+	if !found {
+		panic(fmt.Sprintf("couldn't find metric %s", name))
+	}
+	return c
+}
+
+// MustGetPgwireCounter returns the value of a counter metric from the server's
+// PGWire server. Runs in O(# of metrics) time, which is fine for test code.
+func (ts *TestServer) MustGetPgwireCounter(name string) int64 {
+	var c int64
+	var found bool
+
+	ts.pgServer.Registry().Each(func(n string, v interface{}) {
 		if name == n {
 			c = v.(*metric.Counter).Count()
 			found = true

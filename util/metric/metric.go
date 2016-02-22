@@ -35,6 +35,11 @@ type TimeScale struct {
 	d    time.Duration
 }
 
+// Name returns the name of the TimeScale.
+func (ts TimeScale) Name() string {
+	return ts.name
+}
+
 var scale1M = TimeScale{"1m", 1 * time.Minute}
 var scale10M = TimeScale{"10m", 10 * time.Minute}
 var scale1H = TimeScale{"1h", time.Hour}
@@ -239,6 +244,7 @@ func (e *Rate) Add(v float64) {
 }
 
 // Each calls the given closure with the empty string and the Rate's current value.
+// TODO(mrtracy): Fix this to call 'f' on itself instead of a float64.
 func (e *Rate) Each(f func(string, interface{})) {
 	e.mu.Lock()
 	maybeTick(e)
