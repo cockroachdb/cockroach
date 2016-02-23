@@ -1,5 +1,6 @@
-.PHONY: all
-all: sql.go keywords.go reserved_keywords.go
+TARGETS = sql.go keywords.go reserved_keywords.go
+.PHONY: all $(TARGETS)
+all: $(TARGETS)
 
 sql.go: sql.y
 	@./sql_union.sh
