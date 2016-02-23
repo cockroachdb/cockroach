@@ -215,7 +215,7 @@ SELECT z FROM test.unknown@foo WHERE y = 5
 query error index "unknown" not found
 SELECT z FROM test.xyzw@unknown WHERE y = 5
 
-query error qualified name "foo.w" not found
+query error qualified name "w" not found
 SELECT w FROM test.xyzw@foo WHERE y = 5
 
 statement ok

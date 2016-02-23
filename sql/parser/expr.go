@@ -283,6 +283,9 @@ type QualifiedName struct {
 	Base       Name
 	Indirect   Indirection
 	normalized nameType
+
+	// We preserve the "original" string representation (before normalization).
+	origString string
 }
 
 // Variable implements the VariableExpr interface.
@@ -335,6 +338,7 @@ func (n *QualifiedName) NormalizeTableName(database string) error {
 // table@index -> database.table@index
 // *           -> database.*
 func (n *QualifiedName) QualifyWithDatabase(database string) error {
+	n.setString()
 	if len(n.Indirect) == 0 {
 		if database == "" {
 			return fmt.Errorf("no database specified: %s", n)
@@ -406,6 +410,7 @@ func (n *QualifiedName) NormalizeColumnName() error {
 	if n.normalized == tableName {
 		return fmt.Errorf("already normalized as a table name: %s", n)
 	}
+	n.setString()
 	if len(n.Indirect) == 0 {
 		// column -> table.column
 		if n.Base == "" {
@@ -502,12 +507,27 @@ func (n *QualifiedName) IsStar() bool {
 	return true
 }
 
-func (n *QualifiedName) String() string {
-	// Special handling for unqualified star indirection.
-	if n.Base == "" && len(n.Indirect) == 1 && n.Indirect[0] == unqualifiedStar {
-		return n.Indirect[0].String()
+// ClearString causes String to return the current (possibly normalized) name instead of the
+// original name (used for testing).
+func (n *QualifiedName) ClearString() {
+	n.origString = ""
+}
+
+func (n *QualifiedName) setString() {
+	// We preserve the representation pre-normalization.
+	if n.origString != "" {
+		return
 	}
-	return fmt.Sprintf("%s%s", n.Base, n.Indirect)
+	if n.Base == "" && len(n.Indirect) == 1 && n.Indirect[0] == unqualifiedStar {
+		n.origString = n.Indirect[0].String()
+	} else {
+		n.origString = fmt.Sprintf("%s%s", n.Base, n.Indirect)
+	}
+}
+
+func (n *QualifiedName) String() string {
+	n.setString()
+	return n.origString
 }
 
 // QualifiedNames represents a command separated list (see the String method)

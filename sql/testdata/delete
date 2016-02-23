@@ -48,5 +48,5 @@ query TTTT
 EXPLAIN (DEBUG) SELECT * FROM kv@bar
 ----
 
-statement error qualified name "kv.nonexistent" not found
+statement error qualified name "nonexistent" not found
 DELETE FROM kv WHERE nonexistent = 1

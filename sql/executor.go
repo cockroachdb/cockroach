@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+const checkStmtStringChange = true
+
 var testingWaitForMetadata bool
 
 // TestingWaitForMetadata causes metadata-mutating operations to wait
@@ -367,7 +369,18 @@ func (e *Executor) execStmts(sql string, planMaker *planner) Response {
 	}
 
 	for _, stmt := range stmts {
+		var stmtStrBefore string
+		if checkStmtStringChange {
+			stmtStrBefore = stmt.String()
+		}
 		result, err := e.execStmt(stmt, planMaker)
+		if checkStmtStringChange {
+			after := stmt.String()
+			if after != stmtStrBefore {
+				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
+					stmtStrBefore, after))
+			}
+		}
 		if err != nil {
 			result = makeResultFromError(planMaker, err)
 		}
