@@ -37,8 +37,21 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
+	name := "benchmarkCockroach"
+	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, name)
 	defer cleanupFn()
+
+	{ // Connect briefly to create the DB before (re)connecting
+		db, err := sql.Open("postgres", pgUrl.String())
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, name)); err != nil {
+			b.Fatal(err)
+		}
+	}
 
 	db, err := sql.Open("postgres", pgUrl.String())
 	if err != nil {
