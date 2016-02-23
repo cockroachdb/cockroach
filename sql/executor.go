@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// TODO(radu): perhaps we should turn this on only for tests.
 const checkStmtStringChange = true
 
 var testingWaitForMetadata bool
