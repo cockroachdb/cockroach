@@ -12,26 +12,22 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Matt Jibson (mjibson@cockroachlabs.com)
+// Author: Tamir Duberstein (tamird@gmail.com)
+
+// +build !acceptance
+
+// Acceptance tests are comparatively slow to run, so we use the above build
+// tag to separate invocations of `go test` which are intended to run the
+// acceptance tests from those which are not. The corollary file to this one
+// is main_test.go
 
 package acceptance
 
 import (
-	"strings"
+	"os"
 	"testing"
 )
 
-func TestDockerPython(t *testing.T) {
-	testDockerSuccess(t, "python", []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
-	testDockerFail(t, "python", []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})
+func TestMain(m *testing.M) {
+	os.Exit(0)
 }
-
-const python = `
-import psycopg2
-import os
-conn = psycopg2.connect('')
-cur = conn.cursor()
-cur.execute("SELECT 1, 2+%v")
-v = cur.fetchall()
-assert v == [(1, 5)]
-`

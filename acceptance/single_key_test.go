@@ -14,8 +14,6 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-// +build acceptance
-
 package acceptance
 
 import (
@@ -41,9 +39,9 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	db, initDBStopper := makeClient(t, c.ConnString(0))
+	initDB, initDBStopper := makeClient(t, c.ConnString(0))
 	defer initDBStopper.Stop()
-	if err := db.Put(key, 0); err != nil {
+	if err := initDB.Put(key, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -117,7 +115,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	}
 
 	// Verify the resulting value stored at the key is what we expect.
-	r, err := db.Get(key)
+	r, err := initDB.Get(key)
 	if err != nil {
 		t.Fatal(err)
 	}

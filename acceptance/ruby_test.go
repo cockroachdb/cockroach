@@ -14,8 +14,6 @@
 //
 // Author: Matt Jibson (mjibson@cockroachlabs.com)
 
-// +build acceptance
-
 package acceptance
 
 import (

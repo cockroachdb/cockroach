@@ -14,8 +14,6 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-// +build acceptance
-
 package acceptance
 
 import (

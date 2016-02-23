@@ -16,148 +16,20 @@
 
 // +build acceptance
 
+// Acceptance tests are comparatively slow to run, so we use the above build
+// tag to separate invocations of `go test` which are intended to run the
+// acceptance tests from those which are not. The corollary file to this one
+// is stub_main_test.go
+
 package acceptance
 
 import (
-	"crypto/tls"
-	"database/sql"
-	"encoding/json"
-	"flag"
-	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
 	"testing"
-	"time"
 
-	"github.com/docker/engine-api/types"
-	"github.com/docker/engine-api/types/container"
-	"github.com/docker/engine-api/types/strslice"
-	_ "github.com/lib/pq"
-
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
-var flagNodes = flag.Int("nodes", 3, "number of nodes")
-var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
-var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
-var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
-var flagStall = flag.Duration("stall", cluster.DefaultStall, "duration after which if no forward progress is made, consider "+
-	"the test stalled")
-var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
-var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
-var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
-	"cluster configurations for each test. This overrides the nodes, stores, stall and duration flags and will run "+
-	"the test against a collection of pre-specified cluster configurations.")
-
-var stopper = make(chan struct{})
-
-func farmer(t *testing.T) *terrafarm.Farmer {
-	if !*flagRemote {
-		t.Skip("running in docker mode")
-	}
-	if *flagKeyName == "" {
-		t.Fatal("-key-name is required") // saves a lot of trouble
-	}
-	logDir := *flagLogDir
-	if logDir == "" {
-		var err error
-		logDir, err = ioutil.TempDir("", "clustertest_")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if !filepath.IsAbs(logDir) {
-		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
-	}
-	stores := "ssd=data0"
-	for j := 1; j < *flagStores; j++ {
-		stores += ",ssd=data" + strconv.Itoa(j)
-	}
-	f := &terrafarm.Farmer{
-		Output:  os.Stderr,
-		Cwd:     *flagCwd,
-		LogDir:  logDir,
-		KeyName: *flagKeyName,
-		Stores:  stores,
-	}
-	log.Infof("logging to %s", logDir)
-	return f
-}
-
-// readConfigFromFlags will convert the flags to a TestConfig for the purposes
-// of starting up a cluster.
-func readConfigFromFlags() cluster.TestConfig {
-	return cluster.TestConfig{
-		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
-		Duration: *flagDuration,
-		Stall:    *flagStall,
-		Nodes: []cluster.NodeConfig{
-			{
-				Count:  int32(*flagNodes),
-				Stores: []cluster.StoreConfig{{Count: int32(*flagStores)}},
-			},
-		},
-	}
-}
-
-// getConfigs returns a list of test configs based on the passed in flags.
-func getConfigs() []cluster.TestConfig {
-	if *flagTestConfigs {
-		return cluster.DefaultConfigs()
-	}
-	return []cluster.TestConfig{readConfigFromFlags()}
-}
-
-// runTestOnConfigs retrieves the full list of test configurations and runs the
-// passed in test against each on serially.
-func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
-	cfgs := getConfigs()
-	for _, cfg := range cfgs {
-		cluster := StartCluster(t, cfg)
-		testFunc(t, cluster, cfg)
-		cluster.AssertAndStop(t)
-	}
-}
-
-// StartCluster starts a cluster from the relevant flags. All test clusters
-// should be created through this command since it sets up the logging in a
-// unified way.
-func StartCluster(t *testing.T, cfg cluster.TestConfig) cluster.Cluster {
-	if !*flagRemote {
-		logDir := *flagLogDir
-		if logDir != "" {
-			if _, _, fun := caller.Lookup(1); fun != "" {
-				logDir = filepath.Join(logDir, fun)
-			}
-		}
-		l := cluster.CreateLocal(cfg, logDir, stopper)
-		l.Start()
-		checkRangeReplication(t, l, 20*time.Second)
-		return l
-	}
-	f := farmer(t)
-	if err := f.Resize(*flagNodes, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.WaitReady(5 * time.Minute); err != nil {
-		_ = f.Destroy()
-		t.Fatalf("cluster not ready in time: %v", err)
-	}
-	checkRangeReplication(t, f, 20*time.Second)
-	return f
-}
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
@@ -174,104 +46,4 @@ func TestMain(m *testing.M) {
 		}
 	}()
 	os.Exit(m.Run())
-}
-
-// SkipUnlessLocal calls t.Skip if not running against a local cluster.
-func SkipUnlessLocal(t *testing.T) {
-	if *flagRemote {
-		t.Skip("skipping since not run against local cluster")
-	}
-}
-
-func makeClient(t *testing.T, str string) (*client.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	db, err := client.Open(stopper, str)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db, stopper
-}
-
-func makePGClient(t *testing.T, dest string) *sql.DB {
-	db, err := sql.Open("postgres", dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db
-}
-
-// HTTPClient is an http.Client configured for querying a cluster. We need to
-// run with "InsecureSkipVerify" (at least on Docker) due to the fact that we
-// cannot use a fixed hostname to reach the cluster. This in turn means that we
-// do not have a verified server name in the certs.
-var HTTPClient = http.Client{
-	Timeout: base.NetworkTimeout,
-	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}}
-
-// getJSON retrieves the URL specified by the parameters and
-// and unmarshals the result into the supplied interface.
-func getJSON(url, rel string, v interface{}) error {
-	resp, err := HTTPClient.Get(url + rel)
-	if err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		if log.V(1) {
-			log.Info(err)
-		}
-		return err
-	}
-	return json.Unmarshal(b, v)
-}
-
-// testDockerFail ensures the specified docker cmd fails.
-func testDockerFail(t *testing.T, name string, cmd []string) {
-	if err := testDocker(t, name, cmd); err == nil {
-		t.Error("expected failure")
-	}
-}
-
-// testDockerSuccess ensures the specified docker cmd succeeds.
-func testDockerSuccess(t *testing.T, name string, cmd []string) {
-	if err := testDocker(t, name, cmd); err != nil {
-		t.Errorf("expected success: %s", err)
-	}
-}
-
-func testDocker(t *testing.T, name string, cmd []string) error {
-	const image = "cockroachdb/postgres-test"
-	const tag = "20160203-140220"
-	SkipUnlessLocal(t)
-	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
-
-	defer l.AssertAndStop(t)
-	addr := l.Nodes[0].PGAddr()
-	containerConfig := container.Config{
-		Image: fmt.Sprintf(image + ":" + tag),
-		Env: []string{
-			fmt.Sprintf("PGHOST=%s", addr.IP),
-			fmt.Sprintf("PGPORT=%d", addr.Port),
-			"PGSSLCERT=/certs/node.client.crt",
-			"PGSSLKEY=/certs/node.client.key",
-		},
-		Cmd: strslice.New(cmd...),
-	}
-	hostConfig := container.HostConfig{
-		Binds:       []string{l.CertsDir + ":/certs"},
-		NetworkMode: "host",
-	}
-	ipo := types.ImagePullOptions{
-		ImageID: image,
-		Tag:     tag,
-	}
-	return l.OneShot(ipo, containerConfig, hostConfig, "docker-"+name)
 }

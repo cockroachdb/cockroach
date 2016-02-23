@@ -14,8 +14,6 @@
 //
 // Author: Tobias Schottdorf (tobias@cockroachlabs.com)
 
-// +build acceptance
-
 package acceptance
 
 import (
