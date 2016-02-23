@@ -230,11 +230,7 @@ func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 	if pErr != nil {
 		return 0, pErr
 	}
-	count := 0
-	for plan.Next() {
-		count++
-	}
-	return count, plan.PErr()
+	return countRowsAffected(plan), plan.PErr()
 }
 
 // getAliasedTableLease looks up the table descriptor for an alias table
