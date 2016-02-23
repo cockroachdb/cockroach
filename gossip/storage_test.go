@@ -17,7 +17,6 @@
 package gossip_test
 
 import (
-	"errors"
 	"reflect"
 	"sort"
 	"strings"
@@ -111,7 +110,7 @@ func TestGossipStorage(t *testing.T) {
 	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
 		for _, p := range stores {
 			if p.Len() != 2 {
-				return errors.New("incorrect number of addresses")
+				return util.Errorf("incorrect number of addresses: expected 2; got %d", p.Len())
 			}
 		}
 		return nil
