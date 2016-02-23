@@ -33,14 +33,15 @@ import (
 	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
 
+	"github.com/julienschmidt/httprouter"
+
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-
-	"github.com/julienschmidt/httprouter"
 )
 
 func init() {
@@ -143,7 +144,13 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request, _ http
 // just a stub.
 // TODO(cdo): Implement this when we've implemented authentication.
 func (s *adminServer) getUser(_ *http.Request) string {
-	return "root"
+	return security.RootUser
+}
+
+func (s *adminServer) internalServerErrorf(w http.ResponseWriter, format string, args ...interface{}) {
+	err := util.ErrorfSkipFrames(1, format, args...)
+	log.Error(err)
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 // handleDatabases is an endpoint that responds with a JSON object listing all databases.
@@ -152,17 +159,23 @@ func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ 
 	user := s.getUser(r)
 	resp, _, err := s.sqlExecutor.ExecuteStatements(user, session, "SHOW DATABASES", nil)
 	if err != nil {
-		log.Errorf("handleDatabases: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	for _, res := range resp.Results {
-		if res.PErr != nil {
-			log.Error(res.PErr)
-			http.Error(w, res.PErr.String(), http.StatusInternalServerError)
-			return
-		}
+	if resp.Results[0].PErr != nil {
+		s.internalServerErrorf(w, "%s", resp.Results[0].PErr)
+		return
+	}
+
+	if a, e := len(resp.Results), 1; a != e {
+		s.internalServerErrorf(w, "# of results %d != expected %d", a, e)
+		return
+	}
+
+	if a, e := len(resp.Results[0].Columns), 1; a != e {
+		s.internalServerErrorf(w, "# of columns %d != expected %d", a, e)
+		return
 	}
 
 	// It would be natural to just return a slice as the JSON response object. However, when
@@ -170,7 +183,7 @@ func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ 
 	// vulnerability: http://haacked.com/archive/2009/06/25/json-hijacking.aspx/
 	//
 	// So, it seems cleaner to wrap the results in a more obvious way.
-	databases := sqlResultToSlice(resp.Results[0])
+	databases := firstColumnToSlice(resp.Results[0])
 	result := map[string]interface{}{
 		"Databases": databases,
 	}
@@ -186,9 +199,9 @@ func (s *adminServer) extractDatabase(ps httprouter.Params) (string, error) {
 	return databaseParam, nil
 }
 
-// sqlResultToSlice returns a slice containing the value of the first column of each row in the
+// firstColumnToSlice returns a slice containing the value of the first column of each row in the
 // provided SQL result. This useful for results containing a single column.
-func sqlResultToSlice(result sql.Result) []interface{} {
+func firstColumnToSlice(result sql.Result) []interface{} {
 	var rows []interface{}
 	for _, r := range result.Rows {
 		rows = append(rows, r.Values[0])
@@ -201,8 +214,6 @@ func sqlResultToSlice(result sql.Result) []interface{} {
 func sqlResultToMaps(result sql.Result) []map[string]interface{} {
 	var rows []map[string]interface{}
 	for _, r := range result.Rows {
-		if len(result.Columns) == 1 {
-		}
 		row := make(map[string]interface{})
 		for i, col := range result.Columns {
 			row[col.Name] = r.Values[i]
@@ -218,9 +229,12 @@ func sqlResultToMaps(result sql.Result) []map[string]interface{} {
 func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var session sql.Session
 	dbname, err := s.extractDatabase(ps)
-	escdbname := parser.Name(dbname).String()
-	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escdbname, escdbname)
-	resp, _, err := s.sqlExecutor.ExecuteStatements("root", session, query, nil)
+
+	// TODO(cdo): Use real placeholders for the database name when we've extended our SQL grammar
+	// to allow that.
+	escDBName := parser.Name(dbname).String()
+	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
+	resp, _, err := s.sqlExecutor.ExecuteStatements(security.RootUser, session, query, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -233,8 +247,7 @@ func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Reque
 				return
 			}
 
-			log.Error(res.PErr)
-			http.Error(w, res.PErr.String(), http.StatusInternalServerError)
+			s.internalServerErrorf(w, "%s", res.PErr.String())
 			return
 		}
 	}
@@ -247,7 +260,7 @@ func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Reque
 		privileges := string(grant[privilegesKey].(parser.DString))
 		grant[privilegesKey] = strings.Split(privileges, ",")
 	}
-	tables := sqlResultToSlice(resp.Results[1])
+	tables := firstColumnToSlice(resp.Results[1])
 	result := map[string]interface{}{
 		"Grants": grants,
 		"Tables": tables,
