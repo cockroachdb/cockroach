@@ -81,7 +81,7 @@ func (rh *returningHelper) append(rowVals parser.DTuple) error {
 	return nil
 }
 
-// finalize returns the results in a valuseNode
+// finalize returns the results as a valuesNode.
 func (rh *returningHelper) finalize() *valuesNode {
 	return rh.values
 }
