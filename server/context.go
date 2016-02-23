@@ -17,12 +17,10 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -37,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -56,13 +53,6 @@ const (
 	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
-// StoreSpec holds the parameters for a store.
-type StoreSpec struct {
-	Name  string
-	Attrs string
-	Path  string
-}
-
 // Context holds parameters needed to setup a server.
 // Calling "cli".initFlags(ctx *Context) will initialize Context using
 // command flags. Keep in sync with "cli/flags.go".
@@ -74,17 +64,7 @@ type Context struct {
 	Addr string
 
 	// Stores is specified to enable durable key-value storage.
-	// Memory-backed key value stores may be optionally specified
-	// via mem=<integer byte size>.
-	//
-	// Stores specify a comma-separated list of stores specified by a
-	// colon-separated list of device attributes followed by '=' and
-	// either a filepath for a persistent store or an integer size in bytes for an
-	// in-memory store. Device attributes typically include whether the store is
-	// flash (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device
-	// attributes might also include speeds and other specs (7200rpm, 200kiops, etc.).
-	// For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
-	Stores string
+	Stores StoreSpecList
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -144,9 +124,38 @@ type Context struct {
 	TimeUntilStoreDead time.Duration
 }
 
-func getDefaultCacheSize() uint64 {
+// getTotalMemory returns either the total system memory or if possible the
+// cgroups available memory.
+func getTotalMemory() (uint64, error) {
 	mem := sigar.Mem{}
 	if err := mem.Get(); err != nil {
+		return 0, err
+	}
+	totalMem := mem.Total
+	var cgAvlMem uint64
+	if runtime.GOOS == "linux" {
+		var err error
+		var buf []byte
+		if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+			if log.V(1) {
+				log.Infof("can't read available memory from cgroups (%s)", err)
+			}
+			return totalMem, nil
+		}
+		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
+			if log.V(1) {
+				log.Infof("can't parse available memory from cgroups (%s)", err)
+			}
+			return totalMem, nil
+		}
+		return cgAvlMem, nil
+	}
+	return totalMem, nil
+}
+
+func getDefaultCacheSize() uint64 {
+	sysMem, err := getTotalMemory()
+	if err != nil {
 		if log.V(1) {
 			log.Infof("can't retrieve system memory information (%s)\n"+
 				"\tsetting default rocksdb cache size to %s",
@@ -154,33 +163,7 @@ func getDefaultCacheSize() uint64 {
 		}
 		return defaultCacheSize
 	}
-
-	halfSysMem := mem.Total / 2
-	if runtime.GOOS == "linux" {
-		buf, err := ioutil.ReadFile(defaultCGroupMemPath)
-		if err != nil {
-			if log.V(1) {
-				log.Infof("can't read available memory from cgroups (%s)\n"+
-					"\tsetting default rocksdb cache size to %s (half of system memory)",
-					err, humanize.IBytes(halfSysMem))
-			}
-			return halfSysMem
-		}
-
-		cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
-		if err != nil {
-			if log.V(1) {
-				log.Infof("can't parse available memory from cgroups (%s)\n"+
-					"\tsetting default rocksdb cache size to %s (half of system memory)",
-					err, humanize.IBytes(halfSysMem))
-			}
-			return halfSysMem
-		}
-		if cgAvlMem < mem.Total {
-			return cgAvlMem / 2
-		}
-	}
-	return halfSysMem
+	return sysMem / 2
 }
 
 // NewContext returns a Context with default values.
@@ -204,52 +187,50 @@ func (ctx *Context) InitDefaults() {
 	ctx.BalanceMode = defaultBalanceMode
 }
 
-var storesRE = regexp.MustCompile(`(?:([^,=]+)=)?([^=,]+)(,|$)`)
-
-// InitStores interprets the stores parameter to initialize a slice of
-// engine.Engine objects.
+// InitStores initializes ctx.Engines based on ctx.Stores.
 func (ctx *Context) InitStores(stopper *stop.Stopper) error {
-	specs, err := ctx.GetStoreSpecs()
-	if err != nil {
-		return err
-	}
-	for _, spec := range specs {
-		// There are two matches for each store specification: the colon-separated
-		// list of attributes and the path.
-		engine, err := ctx.initEngine(spec.Attrs, spec.Path, stopper)
-		if err != nil {
-			return util.Errorf("unable to init engine for store %q: %s", spec.Name, err)
+	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
+	// are split evenly if there are multiple stores, but we aren't doing that
+	// currently.
+	for _, spec := range ctx.Stores {
+		var sizeInBytes = spec.SizeInBytes
+		if spec.InMemory {
+			if spec.SizePercent > 0 {
+				sysMem, err := getTotalMemory()
+				if err != nil {
+					return fmt.Errorf("could not retrieve system memory")
+				}
+				sizeInBytes = uint64(float64(sysMem) * spec.SizePercent)
+			}
+			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
+				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+					spec.SizePercent, humanize.IBytes(sizeInBytes), humanize.IBytes(minimumStoreSize))
+			}
+			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, spec.SizeInBytes, stopper))
+		} else {
+			if spec.SizePercent > 0 {
+				fileSystemUsage := sigar.FileSystemUsage{}
+				if err := fileSystemUsage.Get(spec.Path); err != nil {
+					return err
+				}
+				sizeInBytes = uint64(float64(fileSystemUsage.Total) * spec.SizePercent)
+			}
+			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
+				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+					spec.SizePercent, spec.Path, humanize.IBytes(sizeInBytes),
+					humanize.IBytes(minimumStoreSize))
+			}
+			// TODO(bram): #4621 actually hook this up to the store.
+			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path, ctx.CacheSize,
+				ctx.MemtableBudget, stopper))
 		}
-		ctx.Engines = append(ctx.Engines, engine)
 	}
-	log.Infof("%d storage engine(s) specified", len(ctx.Engines))
+	if len(ctx.Engines) == 1 {
+		log.Infof("1 storage engine initialized")
+	} else {
+		log.Infof("%d storage engines initialized", len(ctx.Engines))
+	}
 	return nil
-}
-
-// GetStoreSpecs parses the Stores string and returns the a slice of
-// StoreSpecs.
-func (ctx *Context) GetStoreSpecs() ([]StoreSpec, error) {
-	ctx.Stores = strings.TrimSpace(ctx.Stores)
-	if len(ctx.Stores) == 0 {
-		return nil, fmt.Errorf("no storage specified; see --stores")
-	}
-	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
-	// Error if regexp doesn't match.
-	if storeSpecs == nil {
-		return nil, fmt.Errorf("invalid storage specification %q; see --stores", ctx.Stores)
-	}
-	specs := make([]StoreSpec, len(storeSpecs))
-	for i, spec := range storeSpecs {
-		if len(spec) != 4 {
-			return nil, fmt.Errorf("unable to parse attributes and path from store %q", spec[0])
-		}
-		specs[i] = StoreSpec{
-			Name:  spec[0],
-			Attrs: spec[1],
-			Path:  spec[2],
-		}
-	}
-	return specs, nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap
@@ -303,26 +284,6 @@ func (ctx *Context) PGURL(user string) string {
 		RawQuery: options.Encode(),
 	}
 	return pgURL.String()
-}
-
-var errUnsizedInMemStore = errors.New("unable to initialize an in-memory store with capacity 0")
-
-// initEngine parses the store attributes as a colon-separated list
-// and instantiates an engine based on the dir parameter. If dir parses
-// to an integer, it's taken to mean an in-memory engine; otherwise,
-// dir is treated as a path and a RocksDB engine is created.
-func (ctx *Context) initEngine(attrsStr, path string, stopper *stop.Stopper) (engine.Engine, error) {
-	attrs := parseAttributes(attrsStr)
-	if size, err := strconv.ParseUint(path, 10, 64); err == nil {
-		if size == 0 {
-			return nil, errUnsizedInMemStore
-		}
-		return engine.NewInMem(attrs, size, stopper), nil
-	}
-	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
-	// are split evenly if there are multiple stores, but we aren't doing that
-	// currently.
-	return engine.NewRocksDB(attrs, path, ctx.CacheSize, ctx.MemtableBudget, stopper), nil
 }
 
 // parseGossipBootstrapResolvers parses a comma-separated list of

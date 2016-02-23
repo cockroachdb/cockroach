@@ -6,10 +6,9 @@ variable "cockroach_port" {
   default = "26257"
 }
 
-# Comma-separated list of directories with attributes (cp. the --stores flag
-# of the cockroach binary).
+# List of stores each with its own --store flag. (--store flags from the cockroach binary).
 variable "stores" {
-  default = "ssd=data"
+  default = "--store=data"
 }
 
 # Port used by supervisord.

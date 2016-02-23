@@ -39,110 +39,16 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
 var testContext = NewTestContext()
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
-
-// TestInitEngine tests whether the data directory string is parsed correctly.
-func TestInitEngine(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tmp := util.CreateNTempDirs(t, "_server_test", 6)
-	defer util.CleanupDirs(tmp)
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	testCases := []struct {
-		key       string             // data directory
-		expAttrs  roachpb.Attributes // attributes for engine
-		wantError bool               // do we expect an error from this key?
-		isMem     bool               // is the engine in-memory?
-	}{
-		{"mem=1000", roachpb.Attributes{Attrs: []string{"mem"}}, false, true},
-		{"ssd=1000", roachpb.Attributes{Attrs: []string{"ssd"}}, false, true},
-		{fmt.Sprintf("ssd=%s", tmp[0]), roachpb.Attributes{Attrs: []string{"ssd"}}, false, false},
-		{fmt.Sprintf("hdd=%s", tmp[1]), roachpb.Attributes{Attrs: []string{"hdd"}}, false, false},
-		{fmt.Sprintf("mem=%s", tmp[2]), roachpb.Attributes{Attrs: []string{"mem"}}, false, false},
-		{fmt.Sprintf("abc=%s", tmp[3]), roachpb.Attributes{Attrs: []string{"abc"}}, false, false},
-		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), roachpb.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false, false},
-		{tmp[5], roachpb.Attributes{}, false, false},
-		{"", roachpb.Attributes{}, true, false},
-		{"  ", roachpb.Attributes{}, true, false},
-		{"mem=", roachpb.Attributes{}, true, false},
-		{"ssd=", roachpb.Attributes{}, true, false},
-		{"hdd=", roachpb.Attributes{}, true, false},
-	}
-	for _, spec := range testCases {
-		ctx := NewContext()
-		ctx.Stores = spec.key
-		if err := ctx.InitStores(stopper); err == nil {
-			engines := ctx.Engines
-			if spec.wantError {
-				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
-			}
-			if len(engines) != 1 {
-				t.Fatalf("unexpected number of engines: %d: %+v", len(engines), spec)
-			}
-			e := engines[0]
-			if e.Attrs().SortedString() != spec.expAttrs.SortedString() {
-				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, e.Attrs(), spec)
-			}
-			_, ok := e.(engine.InMem)
-			if spec.isMem != ok {
-				t.Errorf("expected in memory? %t, got %t: %+v", spec.isMem, ok, spec)
-			}
-		} else if !spec.wantError {
-			t.Errorf("expected no error, got %v: %+v", err, spec)
-		}
-	}
-}
-
-// TestInitEngines tests whether multiple engines specified as a
-// single comma-separated list are parsed correctly.
-func TestInitEngines(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	tmp := util.CreateNTempDirs(t, "_server_test", 2)
-	defer util.CleanupDirs(tmp)
-
-	ctx := NewContext()
-	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
-	expEngines := []struct {
-		attrs roachpb.Attributes
-		isMem bool
-	}{
-		{roachpb.Attributes{Attrs: []string{"mem"}}, true},
-		{roachpb.Attributes{Attrs: []string{"mem", "ddr3"}}, true},
-		{roachpb.Attributes{Attrs: []string{"ssd"}}, false},
-		{roachpb.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
-	}
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	if err := ctx.InitStores(stopper); err != nil {
-		t.Fatal(err)
-	}
-
-	engines := ctx.Engines
-	if len(engines) != len(expEngines) {
-		t.Errorf("number of engines parsed %d != expected %d", len(engines), len(expEngines))
-	}
-	for i, e := range engines {
-		if e.Attrs().SortedString() != expEngines[i].attrs.SortedString() {
-			t.Errorf("wrong engine attributes, expected %v but got %v: %+v", expEngines[i].attrs, e.Attrs(), expEngines[i])
-		}
-		_, ok := e.(engine.InMem)
-		if expEngines[i].isMem != ok {
-			t.Errorf("expected in memory? %t, got %t: %+v", expEngines[i].isMem, ok, expEngines[i])
-		}
-	}
-}
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
