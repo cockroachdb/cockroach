@@ -134,7 +134,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 	for rows.Next() {
 		rowVals := rows.Values()
-		result.rows = append(result.rows, parser.DTuple(nil))
+		result.rowCount++
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Generate default values for those columns using the

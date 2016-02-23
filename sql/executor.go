@@ -410,6 +410,19 @@ func (e *Executor) execStmts(sql string, planMaker *planner) Response {
 	return resp
 }
 
+// If the plan is a returningNode we can just use the `rowCount`,
+// otherwise we fall back to counting via plan.Next().
+func countRowsAffected(p planNode) int {
+	if a, ok := p.(*returningNode); ok {
+		return a.rowCount
+	}
+	count := 0
+	for p.Next() {
+		count++
+	}
+	return count
+}
+
 func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, *roachpb.Error) {
 	var result Result
 
@@ -464,9 +477,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 
 		switch result.Type {
 		case parser.RowsAffected:
-			for plan.Next() {
-				result.RowsAffected++
-			}
+			result.RowsAffected += countRowsAffected(plan)
 
 		case parser.Rows:
 			result.Columns = plan.Columns()

@@ -18,8 +18,13 @@ package sql
 
 import "github.com/cockroachdb/cockroach/sql/parser"
 
-func (p *planner) initReturning(r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) (*valuesNode, qvalMap, error) {
-	result := &valuesNode{}
+type returningNode struct {
+	valuesNode
+	rowCount int
+}
+
+func (p *planner) initReturning(r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) (*returningNode, qvalMap, error) {
+	result := &returningNode{valuesNode{}, 0}
 	if r == nil {
 		return result, nil, nil
 	}
@@ -52,7 +57,7 @@ func (p *planner) initReturning(r parser.ReturningExprs, alias string, tablecols
 	return result, qvals, nil
 }
 
-func (p *planner) populateReturning(r parser.ReturningExprs, result *valuesNode, qvals qvalMap, rowVals parser.DTuple) error {
+func (p *planner) populateReturning(r parser.ReturningExprs, result *returningNode, qvals qvalMap, rowVals parser.DTuple) error {
 	if r == nil {
 		return nil
 	}
@@ -65,6 +70,6 @@ func (p *planner) populateReturning(r parser.ReturningExprs, result *valuesNode,
 		}
 		resrow[i] = d
 	}
-	result.rows[len(result.rows)-1] = resrow
+	result.rows = append(result.rows, resrow)
 	return nil
 }
