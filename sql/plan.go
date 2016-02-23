@@ -198,7 +198,8 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, *roachpb.Err
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	if err := parser.FillArgs(stmt, golangParameters(args)); err != nil {
+	stmt, err = parser.FillArgs(stmt, golangParameters(args))
+	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	return p.makePlan(stmt, false)

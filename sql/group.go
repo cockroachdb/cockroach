@@ -56,13 +56,15 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 		return nil, nil
 	}
 
+	groupBy := append([]parser.Expr(nil), n.GroupBy...)
+
 	// Start by normalizing the GROUP BY expressions (to match what has been done to
 	// the SELECT expressions in addRender) so that we can compare to them later.
 	// This is done before determining if aggregation is being performed, because
 	// that determination is made during validation, which will require matching
 	// expressions.
-	for i := range n.GroupBy {
-		resolved, err := s.resolveQNames(n.GroupBy[i])
+	for i := range groupBy {
+		resolved, err := s.resolveQNames(groupBy[i])
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -85,11 +87,10 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 		if col, err := s.colIndex(norm); err != nil {
 			return nil, roachpb.NewError(err)
 		} else if col >= 0 {
-			n.GroupBy[i] = s.render[col]
+			groupBy[i] = s.render[col]
 		} else {
-			n.GroupBy[i] = norm
+			groupBy[i] = norm
 		}
-
 	}
 
 	// Normalize and check the HAVING expression too if it exists.
@@ -122,11 +123,11 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 
 	visitor := extractAggregatesVisitor{
 		n:           group,
-		groupStrs:   make(map[string]struct{}, len(n.GroupBy)),
+		groupStrs:   make(map[string]struct{}, len(groupBy)),
 		groupedCopy: new(extractAggregatesVisitor),
 	}
 
-	for _, e := range n.GroupBy {
+	for _, e := range groupBy {
 		visitor.groupStrs[e.String()] = struct{}{}
 	}
 
@@ -158,7 +159,7 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 	}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
-	group.addNullBucketIfEmpty = len(n.GroupBy) == 0
+	group.addNullBucketIfEmpty = len(groupBy) == 0
 
 	group.buckets = make(map[string]struct{})
 
@@ -178,7 +179,7 @@ func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb
 	}
 
 	// Add the group-by expressions so they are available for bucketing.
-	for _, g := range n.GroupBy {
+	for _, g := range groupBy {
 		if err := s.addRender(parser.SelectExpr{Expr: g}); err != nil {
 			return nil, err
 		}
@@ -411,15 +412,16 @@ type extractAggregatesVisitor struct {
 
 var _ parser.Visitor = &extractAggregatesVisitor{}
 
-func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.err != nil {
-		return nil, expr
+func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+	if v.err != nil {
+		return false, expr
 	}
 
-	// This expression is in the GROUP BY - switch to the copy that will accept
+	// This expression is in the GROUP BY - switch to the visitor that will accept
 	// qvalues for this and any subtrees.
-	if _, ok := v.groupStrs[expr.String()]; ok && v.groupedCopy != nil {
-		v = v.groupedCopy
+	if _, ok := v.groupStrs[expr.String()]; ok && v.groupedCopy != nil && v != v.groupedCopy {
+		expr, _ = parser.WalkExpr(v.groupedCopy, expr)
+		return false, expr
 	}
 
 	switch t := expr.(type) {
@@ -436,10 +438,10 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 			}
 
 			defer v.subAggregateVisitor.reset()
-			_ = parser.WalkExpr(&v.subAggregateVisitor, t.Exprs[0])
+			parser.WalkExprConst(&v.subAggregateVisitor, t.Exprs[0])
 			if v.subAggregateVisitor.aggregated {
 				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
-				return v, expr
+				return false, expr
 			}
 
 			f := &aggregateFunc{
@@ -453,13 +455,13 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 				f.seen = make(map[string]struct{})
 			}
 			v.n.funcs = append(v.n.funcs, f)
-			return nil, f
+			return false, f
 		}
 	case *qvalue:
 		if v.groupedCopy != nil {
 			v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 				t.colRef.get().Name)
-			return v, expr
+			return true, expr
 		}
 		f := &aggregateFunc{
 			expr:    t,
@@ -469,10 +471,12 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 			buckets: make(map[string]aggregateImpl),
 		}
 		v.n.funcs = append(v.n.funcs, f)
-		return nil, f
+		return false, f
 	}
-	return v, expr
+	return true, expr
 }
+
+func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 // Extract aggregateFuncs from exprs that use aggregation and check if they are valid.
 // An expression is valid if:
@@ -494,7 +498,7 @@ func (v *extractAggregatesVisitor) Visit(expr parser.Expr, pre bool) (parser.Vis
 // Invalid:    `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
 // - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
 func (v extractAggregatesVisitor) extract(expr parser.Expr) (parser.Expr, error) {
-	expr = parser.WalkExpr(&v, expr)
+	expr, _ = parser.WalkExpr(&v, expr)
 	return expr, v.err
 }
 
@@ -504,20 +508,18 @@ type isAggregateVisitor struct {
 	aggregated bool
 }
 
-func (v *isAggregateVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre {
-		return nil, expr
-	}
-
+func (v *isAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
 	if t, ok := expr.(*parser.FuncExpr); ok {
 		if _, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
 			v.aggregated = true
-			return nil, expr
+			return false, expr
 		}
 	}
 
-	return v, expr
+	return true, expr
 }
+
+func (*isAggregateVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 func (v *isAggregateVisitor) reset() {
 	v.aggregated = false
@@ -526,7 +528,7 @@ func (v *isAggregateVisitor) reset() {
 func (p *planner) aggregateInWhere(where *parser.Where) bool {
 	if where != nil {
 		defer p.isAggregateVisitor.reset()
-		_ = parser.WalkExpr(&p.isAggregateVisitor, where.Expr)
+		parser.WalkExprConst(&p.isAggregateVisitor, where.Expr)
 		if p.isAggregateVisitor.aggregated {
 			return true
 		}
@@ -541,7 +543,7 @@ func (p *planner) isAggregate(n *parser.Select) bool {
 
 	defer p.isAggregateVisitor.reset()
 	for _, target := range n.Exprs {
-		_ = parser.WalkExpr(&p.isAggregateVisitor, target.Expr)
+		parser.WalkExprConst(&p.isAggregateVisitor, target.Expr)
 		if p.isAggregateVisitor.aggregated {
 			return true
 		}
@@ -591,8 +593,7 @@ func (a *aggregateFunc) String() string {
 	return a.expr.String()
 }
 
-func (a *aggregateFunc) Walk(v parser.Visitor) {
-}
+func (a *aggregateFunc) Walk(v parser.Visitor) parser.Expr { return a }
 
 func (a *aggregateFunc) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 	return a.expr.TypeCheck(args)
@@ -618,10 +619,6 @@ func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 
 	// This is almost certainly the identity. Oh well.
 	return datum.Eval(ctx)
-}
-
-func (a *aggregateFunc) DeepCopy() parser.Expr {
-	panic(fmt.Sprintf("deep copy not implemented for %T", a))
 }
 
 type aggregateImpl interface {

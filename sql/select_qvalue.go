@@ -64,10 +64,7 @@ func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error
 	// TODO(radu): when we support multiple FROMs, we will find the node with the correct alias; if
 	// no alias is given, we will search for the column in all FROMs and make sure there is only
 	// one.  For now we just check that the name matches (if given).
-	if qname.Base == "" {
-		qname.Base = parser.Name(qt.table.alias)
-	}
-	if equalName(qt.table.alias, string(qname.Base)) {
+	if qname.Base == "" || equalName(qt.table.alias, string(qname.Base)) {
 		colName := qname.Column()
 		for idx, col := range qt.table.columns {
 			if equalName(col.Name, colName) {
@@ -101,8 +98,10 @@ func (q *qvalue) String() string {
 	return q.colRef.get().Name
 }
 
-func (q *qvalue) Walk(v parser.Visitor) {
-	q.datum = parser.WalkExpr(v, q.datum).(parser.Datum)
+func (q *qvalue) Walk(v parser.Visitor) parser.Expr {
+	e, _ := parser.WalkExpr(v, q.datum)
+	q.datum = e.(parser.Datum)
+	return q
 }
 
 func (q *qvalue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
@@ -111,10 +110,6 @@ func (q *qvalue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 
 func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return q.datum.Eval(ctx)
-}
-
-func (q *qvalue) DeepCopy() parser.Expr {
-	return q
 }
 
 // getQVal creates a qvalue for a column reference. Created qvalues are
@@ -145,11 +140,9 @@ type qnameVisitor struct {
 
 var _ parser.Visitor = &qnameVisitor{}
 
-// Visit is invoked for each Expr node. It can return a new expression for the
-// node, or it can stop processing by returning a nil Visitor.
-func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || v.err != nil {
-		return nil, expr
+func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
+	if v.err != nil {
+		return false, expr
 	}
 
 	switch t := expr.(type) {
@@ -159,16 +152,16 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		if v.qt.qvals[t.colRef] != t {
 			panic(fmt.Sprintf("qvalue already resolved with different resolver (name: %s)", t))
 		}
-		return v, expr
+		return true, expr
 
 	case *parser.QualifiedName:
 		var colRef columnRef
 
 		colRef, v.err = v.qt.findColumn(t)
 		if v.err != nil {
-			return nil, expr
+			return false, expr
 		}
-		return v, v.qt.qvals.getQVal(colRef)
+		return true, v.qt.qvals.getQVal(colRef)
 
 	case *parser.FuncExpr:
 		// Special case handling for COUNT(*). This is a special construct to
@@ -188,7 +181,7 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 		}
 		v.err = qname.NormalizeColumnName()
 		if v.err != nil {
-			return nil, expr
+			return false, expr
 		}
 		if !qname.IsStar() {
 			// This will cause us to recurse into the arguments of the function which
@@ -196,16 +189,19 @@ func (v *qnameVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser
 			break
 		}
 		// Replace the function argument with a special non-NULL VariableExpr.
+		t = t.CopyNode()
 		t.Exprs[0] = starDatumInstance
-		return v, expr
+		return true, t
 
 	case *parser.Subquery:
 		// Do not recurse into subqueries.
-		return nil, expr
+		return false, expr
 	}
 
-	return v, expr
+	return true, expr
 }
+
+func (*qnameVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
 	return resolveQNames(&s.table, s.qvals, expr)
@@ -221,13 +217,7 @@ func resolveQNames(table *tableInfo, qvals qvalMap, expr parser.Expr) (parser.Ex
 			qvals: qvals,
 		},
 	}
-	// We make a copy of the expression first. This is necessary if the expression is reused, e.g.
-	// for retrying transactions.
-	// TODO(radu): ideally the visitor would make copies only of those nodes that needed it,
-	// allowing the old and new expression to share nodes for constant expressions.
-	expr = expr.DeepCopy()
-
-	expr = parser.WalkExpr(&v, expr)
+	expr, _ = parser.WalkExpr(&v, expr)
 	return expr, v.err
 }
 
@@ -259,7 +249,7 @@ func (*starDatum) String() string {
 	return "*"
 }
 
-func (*starDatum) Walk(v parser.Visitor) {}
+func (e *starDatum) Walk(v parser.Visitor) parser.Expr { return e }
 
 func (*starDatum) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 	return parser.DummyInt.TypeCheck(args)
@@ -267,8 +257,4 @@ func (*starDatum) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
 
 func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return parser.DummyInt.Eval(ctx)
-}
-
-func (*starDatum) DeepCopy() parser.Expr {
-	return starDatumInstance
 }
