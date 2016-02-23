@@ -734,6 +734,17 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Update(pErr.GetTxn())
 		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
 		pErr.SetTxn(newTxn)
+	default:
+		if pErr.GetTxn() != nil {
+			if pErr.CanRetry() {
+				panic("Retryable internal error must not happen at this level")
+			} else {
+				// Do not clean up the transaction here since the client might still
+				// want to continue the transaction. For example, a client might
+				// continue its transaction after receiving ConditionFailedError, which
+				// can come from a unique index violation.
+			}
+		}
 	}
 
 	if newTxn.ID == nil {
