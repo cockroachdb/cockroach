@@ -109,8 +109,8 @@ func TestSendAndReceive(t *testing.T) {
 		}
 
 		addr := ln.Addr()
-		// Have to call g.SetNodeID before call g.AddInfo
-		g.SetNodeID(roachpb.NodeID(nodeID))
+		// Have to call g.SetNodeID before call g.AddInfo.
+		g.ResetNodeID(roachpb.NodeID(nodeID))
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 			&roachpb.NodeDescriptor{
 				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
@@ -239,7 +239,6 @@ func TestInOrderDelivery(t *testing.T) {
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, hlc.NewClock(hlc.UnixNano), stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
-	g.SetNodeID(roachpb.NodeID(1))
 
 	rpcServer := rpc.NewServer(nodeRPCContext)
 	grpcServer := grpc.NewServer()
@@ -261,7 +260,7 @@ func TestInOrderDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := ln.Addr()
-	// Have to set gossip.NodeID before call gossip.AddInofXXX
+	// Have to set gossip.NodeID before call gossip.AddInofXXX.
 	g.SetNodeID(nodeID)
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 		&roachpb.NodeDescriptor{
