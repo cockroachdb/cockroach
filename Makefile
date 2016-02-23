@@ -225,6 +225,15 @@ clean:
 protobuf:
 	$(MAKE) -C .. -f cockroach/build/protobuf.mk
 
+# The .go-version target is phony so that it is rebuilt every time.
+.PHONY: .go-version
+.go-version:
+	@actual=$$($(GO) version); \
+	echo "$${actual}" | grep -q $(GOVERS) || \
+	  (echo "$(GOVERS) required (see CONTRIBUTING.md): $${actual}" && false)
+
+include .go-version
+
 ifneq ($(SKIP_BOOTSTRAP),1)
 
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
