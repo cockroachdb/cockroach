@@ -223,3 +223,14 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
+
+func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	path := "databases/system;DROP DATABASE system;"
+	if err := apiGet(s, path, nil); !testutils.IsError(err, "Not Found") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
