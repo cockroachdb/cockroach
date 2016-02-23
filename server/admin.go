@@ -55,18 +55,19 @@ func init() {
 }
 
 const (
-	// adminEndpoint is the prefix for RESTful endpoints used to
-	// provide an administrative interface to the cockroach cluster.
-	adminEndpoint = "/_admin/"
 	// debugEndpoint is the prefix of golang's standard debug functionality
 	// for access to exported vars and pprof tools.
 	debugEndpoint = "/debug/"
-	// healthPath is the health endpoint.
-	healthPath = adminEndpoint + "health"
-	// quitPath is the quit endpoint.
-	quitPath = adminEndpoint + "quit"
+
+	// adminEndpoint is the prefix for RESTful endpoints used to
+	// provide an administrative interface to the cockroach cluster.
+	adminEndpoint = "/_admin/"
 	// apiEndpoint is the prefix for the RESTful API used by the admin UI.
-	apiEndpoint = adminEndpoint + "api/v1/"
+	apiEndpoint = adminEndpoint + "v1/"
+	// healthPath is the health endpoint.
+	healthPath = apiEndpoint + "health"
+	// quitPath is the quit endpoint.
+	quitPath = apiEndpoint + "quit"
 	// databasesPath is the endpoint for listing databases.
 	databasesPath = apiEndpoint + "databases"
 	// databasesPath is the endpoint for listing databases.
@@ -138,10 +139,18 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request, _ http
 	handler.ServeHTTP(w, r)
 }
 
+// getUser will return the username of the authenticated CockroachDB user. For now, this is
+// just a stub.
+// TODO(cdo): Implement this when we've implemented authentication.
+func (s *adminServer) getUser(_ *http.Request) string {
+	return "root"
+}
+
 // handleDatabases is an endpoint that responds with a JSON object listing all databases.
 func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	var session sql.Session
-	resp, _, err := s.sqlExecutor.ExecuteStatements("root", session, "SHOW DATABASES", nil)
+	user := s.getUser(r)
+	resp, _, err := s.sqlExecutor.ExecuteStatements(user, session, "SHOW DATABASES", nil)
 	if err != nil {
 		log.Errorf("handleDatabases: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -204,7 +213,7 @@ func sqlResultToMaps(result sql.Result) []map[string]interface{} {
 	return rows
 }
 
-// handleDatabase is an endpoint that returns grants and a list of tables for the specified
+// handleDatabaseDetails is an endpoint that returns grants and a list of tables for the specified
 // database.
 func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var session sql.Session

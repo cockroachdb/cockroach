@@ -51,7 +51,7 @@ func NewAdminClient(ctx *base.Context, address, configType string) AdminClient {
 
 // adminURI builds a base URI for the embedded 'configType'
 func (a *AdminClient) adminURI() string {
-	return fmt.Sprintf("%s://%s/_admin/%s", a.context.HTTPRequestScheme(),
+	return fmt.Sprintf("%s://%s/_admin/v1/%s", a.context.HTTPRequestScheme(),
 		a.address, a.configType)
 }
 
