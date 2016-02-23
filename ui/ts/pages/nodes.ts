@@ -21,18 +21,23 @@ module AdminViews {
 
   import MithrilElement = _mithril.MithrilVirtualElement;
   import NavigationBar = Components.NavigationBar;
+  import Metrics = Models.Metrics;
+  import Table = Components.Table;
+  import NodeStatus = Models.Proto.NodeStatus;
+  import Moment = moment.Moment;
+  import MithrilVirtualElement = _mithril.MithrilVirtualElement;
+  import MithrilComponent = _mithril.MithrilComponent;
+  import bytesAndCountReducer = Models.Status.bytesAndCountReducer;
+  import sumReducer = Models.Status.sumReducer;
+  import BytesAndCount = Models.Status.BytesAndCount;
+  import Status = Models.Status.Status;
+  import StoreStatus = Models.Proto.StoreStatus;
 
   /**
    * Nodes is the view for exploring the status of all nodes.
    */
   export module Nodes {
-    import Metrics = Models.Metrics;
-    import Table = Components.Table;
-    import NodeStatus = Models.Proto.NodeStatus;
-    import Moment = moment.Moment;
-    import MithrilVirtualElement = _mithril.MithrilVirtualElement;
-
-    let nodeStatuses: Models.Status.Nodes = new Models.Status.Nodes();
+    let allStatuses: Models.Status.Aggregates = new Models.Status.Aggregates();
 
     function _nodeMetric(metric: string): string {
       return "cr.node." + metric;
@@ -50,25 +55,33 @@ module AdminViews {
      * NodesPage show a list of all the available nodes.
      */
     export module NodesPage {
-      import MithrilComponent = _mithril.MithrilComponent;
-      import bytesAndCountReducer = Models.Status.bytesAndCountReducer;
-      import sumReducer = Models.Status.sumReducer;
-      import BytesAndCount = Models.Status.BytesAndCount;
 
-      function ByteCountColumn(key: string, section: string, title?: string): Table.TableColumn<NodeStatus> {
+      function ByteColumn(key: string, section: string, title?: string): Table.TableColumn<Status> {
         let byteKey: string = key + "_bytes";
         let countKey: string = key + "_count";
         return {
           title: title || Utils.Format.Titlecase(_.last(byteKey.split("."))),
-          view: (status: NodeStatus): MithrilVirtualElement => Table.FormatBytesAndCount(parseFloat(_.get<string>(status, byteKey)), parseFloat(_.get<string>(status, countKey))),
+          view: (status: Status): MithrilVirtualElement => Table.FormatBytes(parseFloat(_.get<string>(status, byteKey))),
           sortable: true,
-          sortValue: (status: NodeStatus): number => parseFloat(_.get<string>(status, byteKey)),
-          rollup: function(rows: NodeStatus[]): MithrilVirtualElement {
+          sortValue: (status: Status): number => parseFloat(_.get<string>(status, byteKey)),
+          rollup: function(rows: Status[]): MithrilVirtualElement {
             let total: BytesAndCount = bytesAndCountReducer(byteKey, countKey, rows);
-            return Table.FormatBytesAndCount(total.bytes, total.count);
+            return Table.FormatBytes(total.bytes);
           },
           section: section,
         };
+      }
+
+      function toNodeStatus(s: Status): NodeStatus {
+        if ((<NodeStatus>s).desc.node_id) {
+          return <NodeStatus>s;
+        } else {
+          return null;
+        }
+      }
+
+      function nodeId(s: Status): number {
+        return toNodeStatus(s) ? toNodeStatus(s).desc.node_id : null;
       }
 
       class Controller {
@@ -85,10 +98,10 @@ module AdminViews {
           },
         ];
 
-        private static comparisonColumns: Table.TableColumn<NodeStatus>[] = [
+        private static comparisonColumns: Table.TableColumn<Status>[] = [
           {
             title: "",
-            view: (status: NodeStatus): MithrilVirtualElement => {
+            view: (status: Status): MithrilVirtualElement => {
               let lastUpdate: Moment = moment(Utils.Convert.NanoToMilli(status.stats.last_update_nanos));
               let s: string = Models.Status.staleStatus(lastUpdate);
               return m("div.status.icon-circle-filled." + s);
@@ -97,17 +110,17 @@ module AdminViews {
           },
           {
             title: "Node ID",
-            view: (status: NodeStatus): MithrilElement =>
-              m("a", {href: "/nodes/" + status.desc.node_id, config: m.route}, status.desc.node_id.toString()),
+            view: (status: Status): MithrilElement =>
+              m("a", {href: "/nodes/" + nodeId(status), config: m.route}, nodeId(status) ? nodeId(status).toString() : null),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.desc.node_id,
-            rollup: function(rows: NodeStatus[]): MithrilVirtualElement {
+            sortValue: (status: Status): number => nodeId(status),
+            rollup: function(rows: Status[]): MithrilVirtualElement {
               interface StatusTotals {
                 missing?: number;
                 stale?: number;
                 healthy?: number;
               }
-              let statuses: StatusTotals = _.countBy(rows, (row: NodeStatus) => Models.Status.staleStatus(moment(Utils.Convert.NanoToMilli(row.stats.last_update_nanos))));
+              let statuses: StatusTotals = _.countBy(_.filter(rows, nodeId), (row: Status) => Models.Status.staleStatus(moment(Utils.Convert.NanoToMilli(row.stats.last_update_nanos))));
 
               return m("node-counts", [
                 m("span.healthy", statuses.healthy || 0),
@@ -119,63 +132,70 @@ module AdminViews {
             },
           },
           {
+            title: "Stores",
+            view: (status: Status): MithrilElement => (<NodeStatus>status).store_ids.length,
+            sortable: true,
+            sortValue: (status: Status): number => (<NodeStatus>status).store_ids.length,
+            rollup: function(rows: Status[]): string {
+              return sumReducer("store_ids.length", <NodeStatus[]>rows).toString();
+            },
+          },
+          {
             title: "Address",
-            view: (status: NodeStatus): string => status.desc.address.address,
+            view: (status: Status): string => toNodeStatus(status) ? toNodeStatus(status).desc.address.address : null,
             sortable: true,
           },
           {
             title: "Started At",
-            view: (status: NodeStatus): string => {
+            view: (status: Status): string => {
               let date = new Date(Utils.Convert.NanoToMilli(status.started_at));
               return Utils.Format.Date(date);
             },
             sortable: true,
           },
-          ByteCountColumn("stats.live", "storage"),
-          ByteCountColumn("stats.key", "storage"),
-          ByteCountColumn("stats.val", "storage", "Value Bytes"),
-          ByteCountColumn("stats.intent", "storage"),
-          ByteCountColumn("stats.sys", "storage", "System Bytes"),
+          ByteColumn("stats.live", "storage"),
+          ByteColumn("stats.key", "storage"),
+          ByteColumn("stats.val", "storage", "Value Bytes"),
+          ByteColumn("stats.intent", "storage"),
+          ByteColumn("stats.sys", "storage", "System Bytes"),
           {
             title: "Leader Ranges",
-            view: (status: NodeStatus): string => status.leader_range_count.toString(),
+            view: (status: Status): string => status.leader_range_count.toString(),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.leader_range_count,
-            rollup: function(rows: NodeStatus[]): string {
+            sortValue: (status: Status): number => status.leader_range_count,
+            rollup: function(rows: Status[]): string {
               return sumReducer("leader_range_count", rows).toString();
             },
             section: "ranges",
           },
           {
             title: "Replicated Ranges",
-            view: (status: NodeStatus): string => status.replicated_range_count.toString(),
+            view: (status: Status): string => status.replicated_range_count.toString(),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.replicated_range_count,
-            rollup: function(rows: NodeStatus[]): string {
+            sortValue: (status: Status): number => status.replicated_range_count,
+            rollup: function(rows: Status[]): string {
               return sumReducer("replicated_range_count", rows).toString();
             },
             section: "ranges",
           },
           {
             title: "Available Ranges",
-            view: (status: NodeStatus): string => status.available_range_count.toString(),
+            view: (status: Status): string => status.available_range_count.toString(),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.available_range_count,
-            rollup: function(rows: NodeStatus[]): string {
+            sortValue: (status: Status): number => status.available_range_count,
+            rollup: function(rows: Status[]): string {
               return sumReducer("available_range_count", rows).toString();
             },
             section: "ranges",
           },
           {
             title: "Logs",
-            view: (status: NodeStatus): MithrilElement =>
-              m("a", { href: "/logs/" + status.desc.node_id, config: m.route }, "Log"),
+            view: (status: Status): MithrilElement =>
+              m("a", { href: "/logs/" + nodeId(status) ? nodeId(status) : "", config: m.route }, nodeId(status) ? "Logs" : ""),
           },
         ];
 
-        public columns: Utils.Property<Table.TableColumn<NodeStatus>[]> = Utils.Prop(Controller.comparisonColumns);
-        public sources: string[] = [];
-
+        public columns: Utils.Property<Table.TableColumn<Status>[]> = Utils.Prop(Controller.comparisonColumns);
         exec: Metrics.Executor;
         axes: Metrics.Axis[] = [];
         private _interval: number;
@@ -190,28 +210,28 @@ module AdminViews {
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("ranges.available"))
-                .sources(this.sources)
+                .sources([])
                 .title("Available Ranges")
               ).format(d3.format("d")));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
-                .sources(this.sources)
+                .sources([])
                 .title("Error Calls")
               ).format(d3.format("d")));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("livebytes"))
-                .sources(this.sources) // TODO: store sources vs node sources
+                .sources([])
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
-                .sources(this.sources) // TODO: store sources vs node sources
+                .sources([])
                 .title("CPU User %")
               ).format(d3.format(".2%")));
 
@@ -225,7 +245,7 @@ module AdminViews {
         }
 
         public RenderPrimaryStats(): MithrilElement {
-          let allStats: Models.Proto.Status = nodeStatuses.totalStatus();
+          let allStats: Models.Proto.Status = allStatuses.totalStatus();
           if (allStats) {
             return m(".primary-stats", [
                 {
@@ -292,7 +312,7 @@ module AdminViews {
 
         private _refresh(): void {
           this.exec.refresh();
-          nodeStatuses.refresh();
+          allStatuses.refresh();
         }
 
         private _addChart(axis: Metrics.Axis): void {
@@ -306,19 +326,13 @@ module AdminViews {
       }
 
       export function view(ctrl: Controller): MithrilElement {
-        // set
-        ctrl.sources = _.map(
-          nodeStatuses.allStatuses(),
-          function(v: NodeStatus): string {
-            return v.desc.node_id.toString();
-          }
-        );
-        let comparisonData: Table.TableData<NodeStatus> = {
+
+        let comparisonData: Table.TableData<Status> = {
           columns: ctrl.columns,
-          rows: nodeStatuses.allStatuses,
+          rows: allStatuses.allNodeStatuses,
         };
 
-        let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at ));
+        let mostRecentlyUpdated: number = _.max(_.map(allStatuses.allStatuses(), (s: Status) => s.updated_at ));
         return m(".page", [
           m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
@@ -474,38 +488,89 @@ module AdminViews {
         }
 
         public RenderPrimaryStats(): MithrilElement {
-          let nodeStats: Models.Proto.NodeStatus = nodeStatuses.GetStatus(this._nodeId);
+          let nodeStats: Models.Proto.NodeStatus = allStatuses.GetNodeStatus(this._nodeId);
           if (nodeStats) {
-            return m(".primary-stats", [
-              m(".stat", [
-                m("span.title", "Started At"),
-                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at)))),
-              ]),
-              m(".stat", [
-                m("span.title", "Last Updated At"),
-                m("span.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at)))),
-              ]),
-              m(".stat", [
-                m("span.title", "Total Ranges"),
-                m("span.value", nodeStats.range_count),
-              ]),
-              m(".stat", [
-                m("span.title", "Total Live Bytes"),
-                m("span.value", Utils.Format.Bytes(nodeStats.stats.live_bytes)),
-              ]),
-              m(".stat", [
-                m("span.title", "Leader Ranges"),
-                m("span.value", nodeStats.leader_range_count),
-              ]),
-              m(".stat", [
-                m("span.title", "Available"),
-                m("span.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count)),
-              ]),
-              m(".stat", [
-                m("span.title", "Fully Replicated"),
-                m("span.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count)),
-              ]),
-            ]);
+            return m(".section.node-info", [
+              m(".header", m("h1", `Node ${this._nodeId}`)),
+              m("table.stats-table", m("tbody", [
+                m("tr.stat", [
+                  m("td.title", "Started At"),
+                  m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at)))),
+                ]),
+                m("tr.stat", [
+                  m("td.title", "Last Updated At"),
+                  m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at)))),
+                ]),
+                m("tr.stat", [
+                  m("td.title", "Total Ranges"),
+                  m("td.value", nodeStats.range_count),
+                ]),
+                m("tr.stat", [
+                  m("td.title", "Total Live Bytes"),
+                  m("td.value", Utils.Format.Bytes(nodeStats.stats.live_bytes)),
+                ]),
+                m("tr.stat", [
+                  m("td.title", "Leader Ranges"),
+                  m("td.value", nodeStats.leader_range_count),
+                ]),
+                m("tr.stat", [
+                  m("td.title", "Available"),
+                  m("td.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count)),
+                ]),
+                m("tr.stat", [
+                  m("td.title", "Fully Replicated"),
+                  m("td.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count)),
+                ]),
+              ])),
+            ]
+              .concat(_.map(nodeStats.store_ids, (id: number): MithrilVirtualElement => {
+              let storeStatus: StoreStatus = allStatuses.GetStoreStatus(id.toString());
+              if (storeStatus) {
+                return m(".section.store-info", [
+                  m(".header", m("h1", `Store ${id}`)),
+                  m("table.stats-table", m("tbody", [
+                    m("tr.stat", [
+                      m("td.title", "Started At"),
+                      m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStatus.started_at)))),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Last Updated At"),
+                      m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStatus.updated_at)))),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Total Ranges"),
+                      m("td.value", storeStatus.range_count),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Total Live Bytes"),
+                      m("td.value", Utils.Format.Bytes(storeStatus.stats.live_bytes)),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Leader Ranges"),
+                      m("td.value", storeStatus.leader_range_count),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Available"),
+                      m("td.value", Utils.Format.Percentage(storeStatus.available_range_count, storeStatus.leader_range_count)),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Fully Replicated"),
+                      m("td.value", Utils.Format.Percentage(storeStatus.replicated_range_count, storeStatus.leader_range_count)),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Available Capacity"),
+                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.Available)),
+                    ]),
+                    m("tr.stat", [
+                      m("td.title", "Total Capacity"),
+                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.Capacity)),
+                    ]),
+                  ])),
+                ]);
+              }
+              return m(".primary-stats");
+            }))
+            );
           }
           return m(".primary-stats");
         }
@@ -515,14 +580,12 @@ module AdminViews {
             m("h2", "Network Stats"),
             this.networkAxes.map((axis: Metrics.Axis) => {
               return m("", { style: "float:left" }, [
-                m("h4", axis.title()),
                 Components.Metrics.LineGraph.create(this.exec, axis),
                 ]);
             }),
             m("h2", "SQL Queries"),
             this.sqlAxes.map((axis: Metrics.Axis) => {
               return m("", { style: "float:left" }, [
-                m("h4", axis.title()),
                 Components.Metrics.LineGraph.create(this.exec, axis),
                 ]);
             }),
@@ -542,7 +605,7 @@ module AdminViews {
         }
 
         private _refresh(): void {
-          nodeStatuses.refresh();
+          allStatuses.refresh();
           this.exec.refresh();
         }
 
@@ -574,7 +637,7 @@ module AdminViews {
           primaryContent = ctrl.RenderPrimaryStats();
         }
 
-        let nodeStatus: NodeStatus = nodeStatuses.GetStatus(ctrl.GetNodeId());
+        let nodeStatus: NodeStatus = allStatuses.GetNodeStatus(ctrl.GetNodeId());
         let updated: number = (nodeStatus ? nodeStatus.updated_at : 0);
 
         return m(".page", [

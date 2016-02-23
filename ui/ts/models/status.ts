@@ -14,6 +14,8 @@ module Models {
     import Moment = moment.Moment;
     import StoreStatus = Models.Proto.StoreStatus;
     import NodeStatus = Models.Proto.NodeStatus;
+    import StoreDescriptor = Models.Proto.StoreDescriptor;
+    import NodeDescriptor = Models.Proto.NodeDescriptor;
 
     export interface StoreStatusResponseSet {
       d: Proto.StoreStatus[];
@@ -57,10 +59,10 @@ module Models {
       count: number;
     }
 
-    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (NodeStatus|StoreStatus)[]): BytesAndCount {
+    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (Status)[]): BytesAndCount {
       return _.reduce(
         rows,
-        function(memo: BytesAndCount, row: (NodeStatus|StoreStatus)): BytesAndCount {
+        function (memo: BytesAndCount, row: (Status)): BytesAndCount {
           memo.bytes += <number>_.get(row, byteAttr);
           memo.count += <number>_.get(row, countAttr);
           return memo;
@@ -68,11 +70,12 @@ module Models {
         {bytes: 0, count: 0});
     }
 
-    export function sumReducer(attr: string, rows: (NodeStatus|StoreStatus)[]): number {
+    export function sumReducer(attr: string, rows: (Status)[]): number {
       return _.reduce(
         rows,
-        function(memo: number, row: (NodeStatus|StoreStatus)): number {
-          return memo + <number>_.get(row, attr);
+        function (memo: number, row: (Status)): number {
+          memo += <number>_.get(row, attr);
+          return memo;
         },
         0);
     }
@@ -89,7 +92,7 @@ module Models {
       });
 
       private _dataMap: Utils.ReadOnlyProperty<StoreStatusMap> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
-        return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.node.node_id);
+        return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.store_id);
       });
 
       private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
@@ -168,6 +171,53 @@ module Models {
 
       public refresh(): void {
         this._data.refresh();
+      }
+    }
+
+    export interface Status extends Proto.Status {
+      desc?: (StoreDescriptor|NodeDescriptor);
+    }
+
+    export class Aggregates {
+      public nodeStatusObj: Nodes;
+      public storeStatusObj: Stores;
+
+      public allNodeStatuses: Utils.ReadOnlyProperty<Proto.NodeStatus[]>;
+      public allStoreStatuses: Utils.ReadOnlyProperty<Proto.StoreStatus[]>;
+      public allStatuses: Utils.ReadOnlyProperty<Status[]>;
+      public totalStatus: Utils.ReadOnlyProperty<Proto.Status>;
+
+      constructor() {
+        this.nodeStatusObj = new Nodes();
+        this.storeStatusObj = new Stores();
+
+        this.allNodeStatuses = this.nodeStatusObj.allStatuses;
+        this.allStoreStatuses = this.storeStatusObj.allStatuses;
+        this.totalStatus = this.nodeStatusObj.totalStatus;
+
+        this.allStatuses = Utils.Computed(this.allNodeStatuses, this.allStoreStatuses, (nodeStatuses: NodeStatus[], storeStatuses: StoreStatus[]): (Status)[] => {
+          let output: (Status)[] = [];
+
+          _.each(nodeStatuses, (nodeStatus: NodeStatus): void => {
+            output.push(nodeStatus);
+            output = output.concat(_.filter(storeStatuses, {desc: {node: {node_id: nodeStatus.desc.node_id}}}));
+          });
+
+          return output;
+        });
+      }
+
+      public GetNodeStatus(nodeId: string): Proto.NodeStatus {
+        return this.nodeStatusObj.GetStatus(nodeId);
+      }
+
+      public GetStoreStatus(storeId: string): Proto.StoreStatus {
+        return this.storeStatusObj.GetStatus(storeId);
+      }
+
+      public refresh(): void {
+        this.nodeStatusObj.refresh();
+        this.storeStatusObj.refresh();
       }
     }
   }
