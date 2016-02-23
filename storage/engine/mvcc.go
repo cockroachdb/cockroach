@@ -1634,26 +1634,35 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_G
 		if !ok {
 			return util.Errorf("could not seek to key %q", gcKey.Key)
 		}
-		implicitMeta := iter.Key().IsValue()
+		inlinedValue := meta.IsInline()
+		implicitMeta := iter.Key().IsValue() && !inlinedValue
 		// First, check whether all values of the key are being deleted.
 		if !gcKey.Timestamp.Less(meta.Timestamp) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
 			// they are internal and GCing them directly saves the extra
 			// deletion step.
-			if !meta.Deleted && !gcKey.Timestamp.Equal(roachpb.ZeroTimestamp) {
+			if !meta.Deleted && !inlinedValue {
 				return util.Errorf("request to GC non-deleted, latest value of %q", gcKey.Key)
 			}
 			if meta.Txn != nil {
 				return util.Errorf("request to GC intent at %q", gcKey.Key)
 			}
 			if ms != nil {
-				ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime, timestamp.WallTime))
+				if inlinedValue {
+					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
+					ms.AgeTo(timestamp.WallTime)
+				} else {
+					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime, timestamp.WallTime))
+				}
 			}
-			if !implicitMeta {
+			if !implicitMeta || inlinedValue {
 				if err := engine.Clear(iter.Key()); err != nil {
 					return err
 				}
+			}
+			if inlinedValue {
+				continue
 			}
 		}
 
