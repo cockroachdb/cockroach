@@ -76,6 +76,21 @@ public class main {
 		    throw new Exception("unexpected: DROP TABLE reports " + res + " rows changed, expecting 0");
 		}
 
+		String DB_URL2 = "jdbc:postgresql://";
+		DB_URL2 += System.getenv("PGHOST") + ":" + System.getenv("PGPORT");
+		DB_URL2 += "/test?ssl=true";
+		DB_URL2 += "&sslcert=" + System.getenv("PGSSLCERT");
+		DB_URL2 += "&sslkey=key.pk8";
+		DB_URL2 += "&sslrootcert=/certs/ca.crt";
+		DB_URL2 += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
+		Connection conn2 = DriverManager.getConnection(DB_URL2);
+
+		conn2.prepareStatement("CREATE TABLE f (x INT)");
+		stmt.executeUpdate();
+		
+		conn2.prepareStatement("INSERT INTO f VALUES (42)");
+		stmt.executeUpdate();
+
 		stmt = conn.prepareStatement("SELECT 1, 2 > ?, ?::int, ?::string, ?::string, ?::string, ?::string, ?::string");
 		stmt.setInt(1, 3);
 		stmt.set%v;

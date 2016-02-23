@@ -235,18 +235,12 @@ func (e *Executor) newTxn(s Session) *client.Txn {
 	return txn
 }
 
-// Prepare returns the result types of the given statement. Args may be a
-// partially populated val args map. Prepare will populate the missing val
-// args. The column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(user string, query string, session Session, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
-	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
+// getPlanner allocates a new planner and initializes it.
+func (e *Executor) getPlanner(user string, session Session) *planner {
 	planMaker := plannerPool.Get().(*planner)
 	defer plannerPool.Put(planMaker)
-
 	cfg, cache := e.getSystemConfig()
+
 	*planMaker = planner{
 		user: user,
 		evalCtx: parser.EvalContext{
@@ -255,12 +249,26 @@ func (e *Executor) Prepare(user string, query string, session Session, args pars
 			// Copy existing GetLocation closure. See plannerPool.New() for the
 			// initial setting.
 			GetLocation: planMaker.evalCtx.GetLocation,
-			Args:        args,
 		},
 		leaseMgr:      e.leaseMgr,
 		systemConfig:  cfg,
 		databaseCache: cache,
+		session:       session,
 	}
+	return planMaker
+}
+
+// Prepare returns the result types of the given statement. Args may be a
+// partially populated val args map. Prepare will populate the missing val
+// args. The column result types are returned (or nil if there are no results).
+func (e *Executor) Prepare(user string, query string, session Session, args parser.MapArgs) ([]ResultColumn, *roachpb.Error) {
+	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	planMaker := e.getPlanner(user, session)
+	planMaker.evalCtx.Args = args
 
 	timestamp := time.Now()
 	txn := e.newTxn(session)
@@ -285,24 +293,7 @@ func (e *Executor) Prepare(user string, query string, session Session, args pars
 // ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) ExecuteStatements(user string, session Session, stmts string, params []parser.Datum) (Response, int, error) {
-	planMaker := plannerPool.Get().(*planner)
-	defer plannerPool.Put(planMaker)
-
-	cfg, cache := e.getSystemConfig()
-	*planMaker = planner{
-		user: user,
-		evalCtx: parser.EvalContext{
-			NodeID:  e.nodeID,
-			ReCache: e.reCache,
-			// Copy existing GetLocation closure. See plannerPool.New() for the
-			// initial setting.
-			GetLocation: planMaker.evalCtx.GetLocation,
-		},
-		leaseMgr:      e.leaseMgr,
-		systemConfig:  cfg,
-		databaseCache: cache,
-		session:       session,
-	}
+	planMaker := e.getPlanner(user, session)
 
 	// Resume a pending transaction if present.
 	if planMaker.session.Txn != nil {
