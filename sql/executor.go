@@ -260,6 +260,7 @@ func (e *Executor) Prepare(user string, query string, session Session, args pars
 		leaseMgr:      e.leaseMgr,
 		systemConfig:  cfg,
 		databaseCache: cache,
+		session:       session,
 	}
 
 	timestamp := time.Now()
