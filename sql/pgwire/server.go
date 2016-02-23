@@ -92,6 +92,7 @@ func Match(rd io.Reader) bool {
 // and delegating to the appropriate connection type.
 func (s *Server) ServeConn(conn net.Conn) error {
 	s.metrics.conns.Inc(1)
+	defer s.metrics.conns.Dec(1)
 
 	var buf readBuffer
 	n, err := buf.readUntypedMsg(conn)
