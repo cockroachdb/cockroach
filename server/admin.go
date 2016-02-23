@@ -218,8 +218,8 @@ func sqlResultToMaps(result sql.Result) []map[string]interface{} {
 func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var session sql.Session
 	dbname, err := s.extractDatabase(ps)
-
-	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", dbname, dbname)
+	escdbname := parser.Name(dbname).String()
+	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escdbname, escdbname)
 	resp, _, err := s.sqlExecutor.ExecuteStatements("root", session, query, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
