@@ -336,9 +336,9 @@ statement ok
 INSERT INTO return VALUES (default) RETURNING rowid != unique_rowid()
 
 # Cannot return non-default columns when columns specified.
-statement error pq: qualified name "return.b" not found
+statement error pq: qualified name "b" not found
 INSERT INTO return (a) VALUES (default) RETURNING b
 
 # TODO(mjibson): support *
-statement error pq: qualified name """.*" not found
+statement error pq: qualified name "\*" not found
 INSERT INTO return VALUES (default) RETURNING *

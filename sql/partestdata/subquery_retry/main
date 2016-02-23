@@ -1,6 +1,6 @@
 run setup
 
-# TODO(radu): this fails because of issue #4472
+# TODO(radu): this fails occasionally, issue #4607
 # run txn txn txn
 run txn
 
