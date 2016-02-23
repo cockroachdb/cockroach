@@ -32,6 +32,7 @@ import (
 
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/4579")
 
 	testCases := []struct {
 		keys   []string
