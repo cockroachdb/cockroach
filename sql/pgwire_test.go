@@ -528,6 +528,61 @@ func TestPGPreparedExec(t *testing.T) {
 	}
 }
 
+// Names should be qualified automatically during Prepare when a database name
+// was given in the connection string.
+func TestPGPrepareNameQual(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareNameQual")
+	defer cleanupFn()
+
+	db, err := sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE DATABASE IF NOT EXISTS testing`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	pgUrl.Path = "/testing"
+	db, err = sql.Open("postgres", pgUrl.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS f (v INT)`,
+		`INSERT INTO f VALUES (42)`,
+		`SELECT * FROM f`,
+		`DELETE FROM f WHERE v = 42`,
+		`DROP TABLE IF EXISTS f`,
+	}
+
+	for _, stmtString := range statements {
+		_, err = db.Exec(stmtString)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		stmt, err := db.Prepare(stmtString)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = stmt.Exec()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)
