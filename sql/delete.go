@@ -79,7 +79,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	b := p.txn.NewBatch()
 	for rows.Next() {
 		rowVals := rows.Values()
-		result.rows = append(result.rows, parser.DTuple(nil))
+		result.rowCount++
 
 		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
