@@ -40,3 +40,4 @@ _testmain.go
 *.swp
 
 .bootstrap
+.go-version-check

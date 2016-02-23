@@ -225,6 +225,20 @@ clean:
 protobuf:
 	$(MAKE) -C .. -f cockroach/build/protobuf.mk
 
+# The .go-version-check target is phony so that it is rebuilt every
+# time, but we create a .go-version-check file so that the include
+# directive below only complains about .go-version-check not existing
+# the first time we are run.
+.PHONY: .go-version-check
+.go-version-check:
+	@required=go1.6; \
+	govers=$$($(GO) version); \
+	echo "$${govers}" | grep -q $${required} || \
+	  (echo "$${required} required: $${govers}" && false)
+	@touch $@
+
+include .go-version-check
+
 ifneq ($(SKIP_BOOTSTRAP),1)
 
 GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
