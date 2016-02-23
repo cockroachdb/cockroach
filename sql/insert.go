@@ -109,11 +109,11 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	n.Rows = p.fillDefaults(defaultExprs, cols, n)
+	insertRows := p.fillDefaults(defaultExprs, cols, n)
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	rows, pErr := p.makePlan(n.Rows, false)
+	rows, pErr := p.makePlan(insertRows, false)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -128,13 +128,12 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	marshalled := make([]interface{}, len(cols))
 
 	b := p.txn.NewBatch()
-	result, qvals, err := p.initReturning(n.Returning, tableDesc.Name, cols)
+	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, cols)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	for rows.Next() {
 		rowVals := rows.Values()
-		result.rowCount++
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Generate default values for those columns using the
@@ -238,7 +237,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := p.populateReturning(n.Returning, result, qvals, rowVals); err != nil {
+		if err := rh.append(rowVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -266,7 +265,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, convertBatchError(&tableDesc, *b, pErr)
 	}
-	return result, nil
+	return rh.getResults(), nil
 }
 
 func (p *planner) processColumns(tableDesc *TableDescriptor,
@@ -315,22 +314,34 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 		return &parser.Values{Tuples: []*parser.Tuple{{Exprs: row}}}
 	}
 
-	switch values := n.Rows.(type) {
-	case *parser.Values:
-		for _, tuple := range values.Tuples {
-			for i, val := range tuple.Exprs {
-				switch val.(type) {
-				case parser.DefaultVal:
-					if defaultExprs == nil {
-						tuple.Exprs[i] = parser.DNull
-						continue
+	values, ok := n.Rows.(*parser.Values)
+	if !ok {
+		return n.Rows
+	}
+
+	ret := values
+	for tIdx, tuple := range values.Tuples {
+		tupleCopied := false
+		for eIdx, val := range tuple.Exprs {
+			switch val.(type) {
+			case parser.DefaultVal:
+				if !tupleCopied {
+					if ret == values {
+						ret = &parser.Values{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
 					}
-					tuple.Exprs[i] = defaultExprs[i]
+					ret.Tuples[tIdx] =
+						&parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
+					tupleCopied = true
+				}
+				if defaultExprs == nil {
+					ret.Tuples[tIdx].Exprs[eIdx] = parser.DNull
+				} else {
+					ret.Tuples[tIdx].Exprs[eIdx] = defaultExprs[eIdx]
 				}
 			}
 		}
 	}
-	return n.Rows
+	return ret
 }
 
 func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {

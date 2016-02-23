@@ -227,13 +227,14 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, *roachpb.Error) {
 	//     WHERE parentID = (SELECT id FROM system.namespace
 	//                       WHERE parentID = 0 AND name = <database>)
 
-	if n.Name == nil {
+	name := n.Name
+	if name == nil {
 		if p.session.Database == "" {
 			return nil, roachpb.NewError(errNoDatabase)
 		}
-		n.Name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
+		name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
 	}
-	dbDesc, pErr := p.getDatabaseDesc(string(n.Name.Base))
+	dbDesc, pErr := p.getDatabaseDesc(string(name.Base))
 	if pErr != nil {
 		return nil, pErr
 	}
