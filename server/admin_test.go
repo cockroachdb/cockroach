@@ -229,8 +229,9 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	path := "databases/system;DROP DATABASE system;"
-	if err := apiGet(s, path, nil); !testutils.IsError(err, "Not Found") {
+	fakedb := "system;DROP DATABASE system;"
+	path := "databases/" + fakedb
+	if err := apiGet(s, path, nil); !testutils.IsError(err, fakedb+".*does not exist") {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }

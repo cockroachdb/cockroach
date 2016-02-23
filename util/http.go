@@ -251,12 +251,12 @@ func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return Errorf("http error: %s", resp.Status)
-	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return Errorf("status: %s, error: %s", resp.Status, b)
 	}
 	return json.Unmarshal(b, v)
 }
