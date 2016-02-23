@@ -48,6 +48,7 @@ CSS_DEBUG_TARGET        := build/app_debug.css
 REMOTE_DEPS             := npm.installed bower.installed typings.installed
 INDEX                   := index.html
 GOBINDATA_FONTS         := ./fonts/*
+GOBINDATA_ASSETS        := ./assets/*
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
 GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
 GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
@@ -58,6 +59,7 @@ GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(BOWER_COMPONENTS)/moment/min/moment.min.js \
                            $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.min.js \
                            $(GOBINDATA_FONTS) \
+                           $(GOBINDATA_ASSETS) \
                            favicon.ico \
                            apple-touch-icon.png
 GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
@@ -68,6 +70,7 @@ GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
                            $(BOWER_COMPONENTS)/moment/moment.js \
                            $(BOWER_COMPONENTS)/moment-timezone/builds/moment-timezone-with-data.js \
                            $(GOBINDATA_FONTS) \
+                           $(GOBINDATA_ASSETS) \
                            favicon.ico \
                            apple-touch-icon.png
 GOBINDATA_TARGET        := ./embedded.go

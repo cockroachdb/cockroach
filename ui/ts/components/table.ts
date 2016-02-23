@@ -85,7 +85,7 @@ module Components {
     interface SectionWidth {
       name: string;
       width: number;
-    };
+    }
 
     class Controller<T> {
       data: TableData<T>;
