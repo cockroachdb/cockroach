@@ -80,7 +80,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := pgbench.SetupBenchDB(db, *accounts); err != nil {
+	if err := pgbench.SetupBenchDB(db, *accounts, false); err != nil {
 		panic(err)
 	}
 }

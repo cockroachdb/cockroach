@@ -64,20 +64,22 @@ CREATE TABLE pgbench_history (
 // not support. The queries this script runs are based on a dump of a db created
 // by `pgbench -i`, but sticking to the compatible subset that both cockroach and
 // postgres support.
-func SetupBenchDB(db *sql.DB, accounts int) error {
+func SetupBenchDB(db *sql.DB, accounts int, quiet bool) error {
 	if _, err := db.Exec(schema); err != nil {
 		return err
 	}
-	return populateDB(db, accounts)
+	return populateDB(db, accounts, quiet)
 }
 
-func populateDB(db *sql.DB, accounts int) error {
+const tellers = 10
+
+func populateDB(db *sql.DB, accounts int, quiet bool) error {
 	branches := `INSERT INTO pgbench_branches (bid, bbalance, filler) VALUES (1, 7354, NULL)`
 	if r, err := db.Exec(branches); err != nil {
 		return err
 	} else if x, err := r.RowsAffected(); err != nil {
 		return err
-	} else {
+	} else if !quiet {
 		fmt.Printf("Inserted %d branch records\n", x)
 	}
 
@@ -97,7 +99,7 @@ func populateDB(db *sql.DB, accounts int) error {
 		return err
 	} else if x, err := r.RowsAffected(); err != nil {
 		return err
-	} else {
+	} else if !quiet {
 		fmt.Printf("Inserted %d teller records\n", x)
 	}
 
@@ -124,7 +126,7 @@ func populateDB(db *sql.DB, accounts int) error {
 			return err
 		} else if x, err := r.RowsAffected(); err != nil {
 			return err
-		} else {
+		} else if !quiet {
 			fmt.Printf("Inserted %d account records\n", x)
 		}
 		done += batch
@@ -147,7 +149,7 @@ INSERT INTO pgbench_history VALUES
 		return err
 	} else if x, err := r.RowsAffected(); err != nil {
 		return err
-	} else {
+	} else if !quiet {
 		fmt.Printf("Inserted %d history records\n", x)
 	}
 
