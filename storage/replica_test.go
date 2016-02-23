@@ -273,6 +273,9 @@ func TestRangeContains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
+		t.Errorf("expected range to contain range stats key %q", statsKey)
+	}
 	if !r.ContainsKey(roachpb.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
@@ -1039,6 +1042,23 @@ func truncateLogArgs(index uint64, rangeID roachpb.RangeID) roachpb.TruncateLogR
 	return roachpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,
+	}
+}
+
+func gcKey(key roachpb.Key, timestamp roachpb.Timestamp) roachpb.GCRequest_GCKey {
+	return roachpb.GCRequest_GCKey{
+		Key:       key,
+		Timestamp: timestamp,
+	}
+}
+
+func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roachpb.GCRequest {
+	return roachpb.GCRequest{
+		Span: roachpb.Span{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+		Keys: keys,
 	}
 }
 
@@ -3887,5 +3907,63 @@ func TestTerm(t *testing.T) {
 	}
 	if _, err := tc.rng.Term(indexes[9] + 1000); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
+	}
+}
+
+func TestGCIncorrectRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Split range into two ranges.
+	splitKey := roachpb.RKey("c")
+	rng1 := tc.rng
+	rng2 := splitTestRange(tc.store, splitKey, splitKey, t)
+
+	// Write a key to range 2 at two different timestamps so we can
+	// GC the earlier timestamp without needing to delete it.
+	key := splitKey.PrefixEnd().AsRawKey()
+	val := []byte("value")
+	putReq := putArgs(key, val)
+	ts1 := makeTS(1, 0)
+	ts2 := makeTS(2, 0)
+	ts1Header := roachpb.Header{Timestamp: ts1}
+	ts2Header := roachpb.Header{Timestamp: ts2}
+	if _, pErr := client.SendWrappedWith(rng2, rng2.context(), ts1Header, &putReq); pErr != nil {
+		t.Errorf("unexpected pError on put key request: %s", pErr)
+	}
+	if _, pErr := client.SendWrappedWith(rng2, rng2.context(), ts2Header, &putReq); pErr != nil {
+		t.Errorf("unexpected pError on put key request: %s", pErr)
+	}
+
+	// Send GC request to range 1 for the key on range 2, which
+	// should succeed even though it doesn't contain the key, because
+	// the request for the incorrect key will be silently dropped.
+	gKey := gcKey(key, ts1)
+	gcReq := gcArgs(rng1.Desc().StartKey, rng1.Desc().EndKey, gKey)
+	if _, pErr := client.SendWrapped(rng1, rng1.context(), &gcReq); pErr != nil {
+		t.Errorf("unexpected pError on garbage collection request to incorrect range: %s", pErr)
+	}
+
+	// Make sure the key still exists on range 2.
+	getReq := getArgs(key)
+	if res, pErr := client.SendWrappedWith(rng2, rng2.context(), ts1Header, &getReq); pErr != nil {
+		t.Errorf("unexpected pError on get request to correct range: %s", pErr)
+	} else if resVal := res.(*roachpb.GetResponse).Value; resVal == nil {
+		t.Errorf("expected value %s to exists after GC to incorrect range but before GC to correct range, found %v", val, resVal)
+	}
+
+	// Send GC request to range 2 for the same key.
+	gcReq = gcArgs(rng2.Desc().StartKey, rng2.Desc().EndKey, gKey)
+	if _, pErr := client.SendWrapped(rng2, rng2.context(), &gcReq); pErr != nil {
+		t.Errorf("unexpected pError on garbage collection request to correct range: %s", pErr)
+	}
+
+	// Make sure the key no longer exists on range 2.
+	if res, pErr := client.SendWrappedWith(rng2, rng2.context(), ts1Header, &getReq); pErr != nil {
+		t.Errorf("unexpected pError on get request to correct range: %s", pErr)
+	} else if resVal := res.(*roachpb.GetResponse).Value; resVal != nil {
+		t.Errorf("expected value at key %s to no longer exist after GC to correct range, found value %v", key, resVal)
 	}
 }
