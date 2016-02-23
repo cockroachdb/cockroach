@@ -83,6 +83,7 @@ type Node struct {
 	feed       status.NodeEventFeed   // Feed publisher for local events
 	status     *status.NodeStatusMonitor
 	startedAt  int64
+	txnMetrics *kv.TxnMetrics
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -119,7 +120,7 @@ func GetBootstrapSchema() sql.MetadataSchema {
 // engines and cluster ID. The first bootstrapped store contains a
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
-func bootstrapCluster(engines []engine.Engine) (uuid.UUID, error) {
+func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -130,7 +131,7 @@ func bootstrapCluster(engines []engine.Engine) (uuid.UUID, error) {
 	ctx.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(ctx.Clock)
-	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper)
+	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper, txnMetrics)
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewLocalRPCTransport(stopper)
 	for i, eng := range engines {
@@ -184,12 +185,13 @@ func bootstrapCluster(engines []engine.Engine) (uuid.UUID, error) {
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(ctx storage.StoreContext, registry *metric.Registry, stopper *stop.Stopper, subRegistries []status.NodeSubregistry) *Node {
+func NewNode(ctx storage.StoreContext, registry *metric.Registry, stopper *stop.Stopper, subRegistries []status.NodeSubregistry, txnMetrics *kv.TxnMetrics) *Node {
 	return &Node{
-		ctx:     ctx,
-		stopper: stopper,
-		status:  status.NewNodeStatusMonitor(registry, subRegistries),
-		stores:  storage.NewStores(ctx.Clock),
+		ctx:        ctx,
+		stopper:    stopper,
+		status:     status.NewNodeStatusMonitor(registry, subRegistries),
+		stores:     storage.NewStores(ctx.Clock),
+		txnMetrics: txnMetrics,
 	}
 }
 
@@ -258,7 +260,7 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 		if err == errNeedsBootstrap {
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
-			clusterID, err := bootstrapCluster(engines)
+			clusterID, err := bootstrapCluster(engines, n.txnMetrics)
 			if err != nil {
 				return err
 			}

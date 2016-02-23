@@ -28,7 +28,7 @@ const sep = "-"
 
 // DefaultTimeScales are the durations used for helpers which create windowed
 // metrics in bulk (such as Latency or Rates).
-var DefaultTimeScales = []TimeScale{scale1M, scale10M, scale1H}
+var DefaultTimeScales = []TimeScale{Scale1M, Scale10M, Scale1H}
 
 // A Registry bundles up various iterables (i.e. typically metrics or other
 // registries) to provide a single point of access to them.
@@ -67,7 +67,7 @@ func (r *Registry) Add(format string, item Iterable) error {
 // MustAdd calls Add and panics on error.
 func (r *Registry) MustAdd(format string, item Iterable) {
 	if err := r.Add(format, item); err != nil {
-		panic(err)
+		panic(fmt.Sprintf("error adding %s: %s", format, err))
 	}
 }
 
@@ -114,10 +114,9 @@ func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64,
 // which) information flows between metrics and time series.
 func (r *Registry) Latency(prefix string) Histograms {
 	windows := DefaultTimeScales
-	hs := make([]*Histogram, 0, 3)
+	hs := make(Histograms)
 	for _, w := range windows {
-		h := r.Histogram(prefix+sep+w.name, w.d, int64(time.Minute), 2)
-		hs = append(hs, h)
+		hs[w] = r.Histogram(prefix+sep+w.name, w.d, int64(time.Minute), 2)
 	}
 	return hs
 }
@@ -144,13 +143,13 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 	return e
 }
 
-// Rates returns a slice of EWMAs prefixed with the given name and
-// various "standard" timescales.
+// Rates registers and returns a new Rates instance, which contains a set of EWMA-based rates
+// with generally useful time scales and a cumulative counter.
 func (r *Registry) Rates(prefix string) Rates {
 	scales := DefaultTimeScales
-	es := make([]*Rate, 0, len(scales))
+	es := make(map[TimeScale]*Rate)
 	for _, scale := range scales {
-		es = append(es, r.Rate(prefix+sep+scale.name, scale.d))
+		es[scale] = r.Rate(prefix+sep+scale.name, scale.d)
 	}
 	c := r.Counter(prefix + sep + "count")
 	return Rates{Counter: c, Rates: es}

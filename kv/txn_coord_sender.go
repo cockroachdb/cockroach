@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/montanaflynn/stats"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -158,14 +158,35 @@ func (tm *txnMetadata) intentSpans() []roachpb.Span {
 	return intents
 }
 
-// txnCoordStats tallies up statistics about the transactions which have
-// completed on this sender.
-type txnCoordStats struct {
-	committed, abandoned, aborted int
+// TxnMetrics holds all metrics relating to KV transactions.
+type TxnMetrics struct {
+	Aborts    metric.Rates
+	Commits   metric.Rates
+	Abandons  metric.Rates
+	Durations metric.Histograms
 
-	// Store float64 since that's what we want in the end.
-	durations []float64 // nanoseconds
-	restarts  []float64 // restarts (as measured by epoch)
+	// Restarts is the number of times we had to restart the transaction.
+	Restarts *metric.Histogram
+}
+
+const (
+	abortsPrefix    = "aborts"
+	commitsPrefix   = "commits"
+	abandonsPrefix  = "abandons"
+	durationsPrefix = "durations"
+	restartsKey     = "restarts"
+)
+
+// NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have
+// been registered with the provided Registry.
+func NewTxnMetrics(txnRegistry *metric.Registry) *TxnMetrics {
+	return &TxnMetrics{
+		Aborts:    txnRegistry.Rates(abortsPrefix),
+		Commits:   txnRegistry.Rates(commitsPrefix),
+		Abandons:  txnRegistry.Rates(abandonsPrefix),
+		Durations: txnRegistry.Latency(durationsPrefix),
+		Restarts:  txnRegistry.Histogram(restartsKey, 60*time.Second, 100, 3),
+	}
 }
 
 // A TxnCoordSender is an implementation of client.Sender which
@@ -184,17 +205,17 @@ type TxnCoordSender struct {
 	clientTimeout     time.Duration
 	sync.Mutex                                   // protects txns and txnStats
 	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
-	txnStats          txnCoordStats              // statistics of recent txns
 	linearizable      bool                       // enables linearizable behaviour
 	tracer            opentracing.Tracer
 	stopper           *stop.Stopper
+	metrics           *TxnMetrics
 }
 
 var _ client.Sender = &TxnCoordSender{}
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
-func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer opentracing.Tracer, stopper *stop.Stopper) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer opentracing.Tracer, stopper *stop.Stopper, txnMetrics *TxnMetrics) *TxnCoordSender {
 	if tracer == nil {
 		panic("nil tracer supplied")
 	}
@@ -207,6 +228,7 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		linearizable:      linearizable,
 		tracer:            tracer,
 		stopper:           stopper,
+		metrics:           txnMetrics,
 	}
 
 	tc.stopper.RunWorker(tc.startStats)
@@ -217,12 +239,11 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 // success rates, durations, ...). Note that this only captures write txns,
 // since read-only txns are stateless as far as TxnCoordSender is concerned.
 // stats).
-// TODO(mrtracy): Add this to TimeSeries.
 func (tc *TxnCoordSender) startStats() {
 	res := time.Millisecond // for duration logging resolution
-	lastNow := tc.clock.PhysicalNow()
 	var statusLogTimer util.Timer
 	defer statusLogTimer.Stop()
+	scale := metric.Scale1M
 	for {
 		statusLogTimer.Reset(statusLogInterval)
 		select {
@@ -232,68 +253,42 @@ func (tc *TxnCoordSender) startStats() {
 				continue
 			}
 
-			tc.Lock()
-			curStats := tc.txnStats
-			tc.txnStats = txnCoordStats{}
-			tc.Unlock()
+			// Take a snapshot of metrics. There's some chance of skew, since the snapshots are
+			// not done atomically, but that should be fine for these debug stats.
+			metrics := tc.metrics
+			durations := metrics.Durations[scale].Merge()
+			restarts := metrics.Restarts.Merge()
+			commitRate := metrics.Commits.Rates[scale].Value()
+			abortRate := metrics.Aborts.Rates[scale].Value()
+			abandonRate := metrics.Abandons.Rates[scale].Value()
 
-			now := tc.clock.PhysicalNow()
-
-			// Tests have weird clocks.
-			if now-lastNow <= 0 {
-				continue
+			// Show transaction stats over the last minute. Maybe this should be shorter in the future.
+			// We'll revisit if we get sufficient feedback.
+			totalRate := commitRate + abortRate + abandonRate
+			var pCommitted, pAbandoned, pAborted float64
+			if totalRate > 0 {
+				pCommitted = 100 * (commitRate / totalRate)
+				pAborted = 100 * (abortRate / totalRate)
+				pAbandoned = 100 * (abandonRate / totalRate)
 			}
 
-			num := len(curStats.durations)
-			// Only compute when non-empty input.
-			var dMax, dMean, dDev, rMax, rMean, rDev float64
-			var err error
-			if num > 0 {
-				// There should never be an error in the below
-				// computations.
-				dMax, err = stats.Max(curStats.durations)
-				if err != nil {
-					panic(err)
-				}
-				dMean, err = stats.Mean(curStats.durations)
-				if err != nil {
-					panic(err)
-				}
-				dDev, err = stats.StdDevP(curStats.durations)
-				if err != nil {
-					panic(err)
-				}
-				rMax, err = stats.Max(curStats.restarts)
-				if err != nil {
-					panic(err)
-				}
-				rMean, err = stats.Mean(curStats.restarts)
-				if err != nil {
-					panic(err)
-				}
-				rDev, err = stats.StdDevP(curStats.restarts)
-				if err != nil {
-					panic(err)
-				}
-			}
+			dMean := durations.Mean()
+			dDev := durations.StdDev()
+			dMax := durations.Max()
+			rMean := restarts.Mean()
+			rDev := restarts.StdDev()
+			rMax := restarts.Max()
+			num := durations.TotalCount()
 
-			rate := float64(int64(num)*int64(time.Second)) / float64(now-lastNow)
-			var pCommitted, pAbandoned, pAborted float32
-
-			if fNum := float32(num); fNum > 0 {
-				pCommitted = 100 * float32(curStats.committed) / fNum
-				pAbandoned = 100 * float32(curStats.abandoned) / fNum
-				pAborted = 100 * float32(curStats.aborted) / fNum
-			}
 			log.Infof(
-				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%.1f avg/σ/max restarts (%d samples)",
-				rate, pCommitted, pAborted, pAbandoned,
+				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples)",
+				totalRate, pCommitted, pAborted, pAbandoned,
 				util.TruncateDuration(time.Duration(dMean), res),
 				util.TruncateDuration(time.Duration(dDev), res),
 				util.TruncateDuration(time.Duration(dMax), res),
 				rMean, rDev, rMax, num,
 			)
-			lastNow = now
+
 		case <-tc.stopper.ShouldStop():
 			return
 		}
@@ -519,28 +514,26 @@ func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transac
 	txnMeta.txn = txn
 	// Trigger heartbeat shutdown.
 	close(txnMeta.txnEnd)
+	txnMeta.txnEnd = nil
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
-// and collects its stats. It assumes the lock is held.
-func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) {
+// and collects its stats. It assumes the lock is held. Returns
+// the status and starts for the removed transaction.
+func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (duration, restarts int64, status roachpb.TransactionStatus) {
 	txnMeta := tc.txns[txnID] // guaranteed to exist
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
-	tc.txnStats.durations = append(tc.txnStats.durations, float64(tc.clock.PhysicalNow()-txnMeta.firstUpdateNanos))
-	tc.txnStats.restarts = append(tc.txnStats.restarts, float64(txnMeta.txn.Epoch))
-	switch txnMeta.txn.Status {
-	case roachpb.ABORTED:
-		tc.txnStats.aborted++
-	case roachpb.PENDING:
-		tc.txnStats.abandoned++
-	case roachpb.COMMITTED:
-		tc.txnStats.committed++
-	}
+	duration = tc.clock.PhysicalNow() - txnMeta.firstUpdateNanos
+	restarts = int64(txnMeta.txn.Epoch)
+	status = txnMeta.txn.Status
+
 	txnMeta.keys.Clear()
 
 	delete(tc.txns, txnID)
+
+	return
 }
 
 // heartbeatLoop periodically sends a HeartbeatTxn RPC to an extant
@@ -557,8 +550,9 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	}
 	defer func() {
 		tc.Lock()
-		tc.unregisterTxnLocked(txnID)
+		duration, restarts, status := tc.unregisterTxnLocked(txnID)
 		tc.Unlock()
+		tc.updateStats(duration, int64(restarts), status)
 	}()
 
 	var closer <-chan struct{}
@@ -825,4 +819,18 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil
+}
+
+// updateStats updates transaction metrics after a transaction finishes.
+func (tc *TxnCoordSender) updateStats(duration, restarts int64, status roachpb.TransactionStatus) {
+	tc.metrics.Durations.RecordValue(duration)
+	tc.metrics.Restarts.RecordValue(restarts)
+	switch status {
+	case roachpb.ABORTED:
+		tc.metrics.Aborts.Add(1)
+	case roachpb.PENDING:
+		tc.metrics.Abandons.Add(1)
+	case roachpb.COMMITTED:
+		tc.metrics.Commits.Add(1)
+	}
 }
