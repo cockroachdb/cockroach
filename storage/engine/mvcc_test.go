@@ -2645,6 +2645,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
 	val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
 	val3 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts3)
+	valInline := roachpb.MakeValueFromBytesAndTimestamp(bytes, roachpb.ZeroTimestamp)
 
 	testData := []struct {
 		key       roachpb.Key
@@ -2655,6 +2656,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		{roachpb.Key("a-del"), []roachpb.Value{val1, val2}, true},
 		{roachpb.Key("b"), []roachpb.Value{val1, val2, val3}, false},
 		{roachpb.Key("b-del"), []roachpb.Value{val1, val2, val3}, true},
+		{roachpb.Key("inline"), []roachpb.Value{valInline}, false},
 	}
 
 	for i := 0; i < 3; i++ {
@@ -2677,12 +2679,12 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 		}
 	}
-	kvsn, err := Scan(engine, mvccKey(keyMin), mvccKey(keyMax), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, kv := range kvsn {
-		if log.V(1) {
+	if log.V(1) {
+		kvsn, err := Scan(engine, mvccKey(keyMin), mvccKey(keyMax), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, kv := range kvsn {
 			log.Infof("%d: %s", i, kv.Key)
 		}
 	}
@@ -2692,9 +2694,21 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		{Key: roachpb.Key("a-del"), Timestamp: ts2},
 		{Key: roachpb.Key("b"), Timestamp: ts1},
 		{Key: roachpb.Key("b-del"), Timestamp: ts2},
+		{Key: roachpb.Key("inline"), Timestamp: roachpb.ZeroTimestamp},
 	}
 	if err := MVCCGarbageCollect(engine, ms, keys, ts3); err != nil {
 		t.Fatal(err)
+	}
+
+	badKeys := []roachpb.GCRequest_GCKey{
+		{Key: roachpb.Key("a-bad"), Timestamp: ts2},
+		{Key: roachpb.Key("inline-bad"), Timestamp: roachpb.ZeroTimestamp},
+	}
+	for _, badKey := range badKeys {
+		expErr := fmt.Sprintf("could not seek to key %s", badKey.Key.String())
+		if err := MVCCGarbageCollect(engine, ms, []roachpb.GCRequest_GCKey{badKey}, ts3); !testutils.IsError(err, expErr) {
+			t.Fatalf("expected error %q when attempting to garbage collect nonexistent key, found %v", expErr, err)
+		}
 	}
 
 	expEncKeys := []MVCCKey{
@@ -2761,21 +2775,40 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	ts2 := makeTS(2E9, 0)
 	val1 := mkVal(s, ts1)
 	val2 := mkVal(s, ts2)
-	key := roachpb.Key("a")
-	vals := []roachpb.Value{val1, val2}
-	for _, val := range vals {
-		valCpy := *util.CloneProto(&val).(*roachpb.Value)
-		valCpy.Timestamp = roachpb.ZeroTimestamp
-		if err := MVCCPut(engine, nil, key, val.Timestamp, valCpy, nil); err != nil {
-			t.Fatal(err)
+	valInline := mkVal(s, roachpb.ZeroTimestamp)
+
+	testData := []struct {
+		key      roachpb.Key
+		vals     []roachpb.Value
+		expError string
+	}{
+		{roachpb.Key("a"), []roachpb.Value{val1, val2}, `request to GC non-deleted, latest value ok "a"`},
+		{roachpb.Key("inline"), []roachpb.Value{valInline}, ""},
+	}
+
+	for _, test := range testData {
+		for _, val := range test.vals {
+			valCpy := *util.CloneProto(&val).(*roachpb.Value)
+			valCpy.Timestamp = roachpb.ZeroTimestamp
+			if err := MVCCPut(engine, nil, test.key, val.Timestamp, valCpy, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		keys := []roachpb.GCRequest_GCKey{
+			{Key: test.key, Timestamp: ts2},
+		}
+		err := MVCCGarbageCollect(engine, nil, keys, ts2)
+		if test.expError == "" {
+			if err != nil {
+				t.Fatalf("expected no error garbage collecting a non-deleted inline live value, found %v", err)
+			}
+		} else {
+			if testutils.IsError(err, test.expError) {
+				t.Fatalf("expected error %q when garbage collecting a non-deleted live value, found %v", test.expError, err)
+			}
 		}
 	}
-	keys := []roachpb.GCRequest_GCKey{
-		{Key: roachpb.Key("a"), Timestamp: ts2},
-	}
-	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
-		t.Fatal("expected error garbage collecting a non-deleted live value")
-	}
+
 }
 
 // TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
@@ -2800,7 +2833,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := []roachpb.GCRequest_GCKey{
-		{Key: roachpb.Key("a"), Timestamp: ts2},
+		{Key: key, Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
 		t.Fatal("expected error garbage collecting an intent")
