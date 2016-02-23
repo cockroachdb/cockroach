@@ -587,6 +587,9 @@ func (r *Replica) ContainsKey(key roachpb.Key) bool {
 }
 
 func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
+	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
+	}
 	return desc.ContainsKey(keys.Addr(key))
 }
 
@@ -1762,9 +1765,11 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			if args.Method() == roachpb.EndTransaction {
 				var ba roachpb.BatchRequest
 				txn := item.intents[0].Txn
-				gcKey := r.Desc().StartKey.AsRawKey()
 				gcArgs := roachpb.GCRequest{
-					Span: roachpb.Span{Key: gcKey, EndKey: gcKey.Next()},
+					Span: roachpb.Span{
+						Key:    r.Desc().StartKey.AsRawKey(),
+						EndKey: r.Desc().EndKey.AsRawKey(),
+					},
 				}
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{Key: keys.TransactionKey(txn.Key, txn.ID)})
 
