@@ -58,9 +58,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil {
 		if err := TestingCommandFilter(r.store.StoreID(), args, h); err != nil {
-			pErr := roachpb.NewError(err)
-			pErr.SetTxn(h.Txn)
-			return nil, nil, pErr
+			return nil, nil, roachpb.NewErrorWithTxn(err, h.Txn)
 		}
 	}
 
@@ -181,13 +179,11 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	// Create a roachpb.Error by initializing txn from the request/response header.
 	var pErr *roachpb.Error
 	if err != nil {
-		pErr = roachpb.NewError(err)
-		if reply.Header() != nil {
-			pErr.SetTxn(reply.Header().Txn)
+		txn := reply.Header().Txn
+		if txn == nil {
+			txn = h.Txn
 		}
-		if pErr.GetTxn() == nil {
-			pErr.SetTxn(h.Txn)
-		}
+		pErr = roachpb.NewErrorWithTxn(err, txn)
 	}
 	return reply, intents, pErr
 }
