@@ -63,6 +63,11 @@ module Components {
       return m("div", [b.value.toFixed(1), " ", m("span.units", b.units), " (", count , ")"]);
     }
 
+    export function FormatBytes(bytes: number): MithrilElement {
+      let b: UnitValue = Utils.Format.BytesToUnitValue(bytes);
+      return m("div", [b.value.toFixed(1), " ", m("span.units", b.units)]);
+    }
+
     /**
      * TableData is the argument for creating a table component.
      */

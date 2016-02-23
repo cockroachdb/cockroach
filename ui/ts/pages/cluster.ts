@@ -78,7 +78,7 @@ module AdminViews {
             this._quantiles,
             (q: string): Selector => {
               return Metrics.Select.Avg(_nodeMetric("exec.latency-1m" + q))
-                .sources(this.sources)
+                .sources([])
                 .title("Latency" + q);
             });
           this._addChart(Metrics.NewAxis.apply(this, latencySelectors)
@@ -90,83 +90,83 @@ module AdminViews {
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
-                .sources(this.sources)
+                .sources([])
                 .title("Error Calls"),
               Metrics.Select.AvgRate(_nodeMetric("exec.success-count"))
-                .sources(this.sources)
+                .sources([])
                 .title("Success Calls")
               ).format(d3.format("d")).title("Successes vs Errors").range([0]));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("livebytes"))
-                .sources(this.sources) // TODO: store sources vs node sources
+                .sources([])
                 .title("Live Bytes"),
               Metrics.Select.Avg(_storeMetric("capacity.available"))
-                .sources(this.sources)
+                .sources([])
                 .title("Available Capacity")
               ).format(Utils.Format.Bytes).title("Capacity").range([0]));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
-                .sources(this.sources) // TODO: store sources vs node sources
+                .sources([])
                 .title("CPU User %"),
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
-                .sources(this.sources) // TODO: store sources vs node sources
+                .sources([])
                 .title("CPU Sys %")
               ).format(d3.format(".2%")).title("CPU").range([0, 1]).stacked(true)
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("pgwire.bytesin"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesin"))
+                .sources([])
                 .title("Bytes In"),
-              Metrics.Select.Avg(_nodeMetric("pgwire.bytesout"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesout"))
+                .sources([])
                 .title("Bytes Out")
-            ).format(Utils.Format.Bytes).title("PGwire")
+            ).format(Utils.Format.Bytes).title("data")
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.txn.begin.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
-                .title("Transactions"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
-                .title("Transactions"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
-                .title("Transactions"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
-                .title("Transactions")
-            ).format(d3.format("d")).title("Transactions")
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.begin.count"))
+                .sources([])
+                .title("BEGIN"),
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.commit.count"))
+                .sources([])
+                .title("COMMIT"),
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.rollback.count"))
+                .sources([])
+                .title("ROLLBACK"),
+              Metrics.Select.AvgRate(_nodeMetric("sql.txn.abort.count"))
+                .sources([])
+                .title("ABORT")
+            ).format(d3.format("d")).title("Transaction Info")
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("sql.update.count"))
+                .sources([])
                 .title("Updates"),
-              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("sql.insert.count"))
+                .sources([])
                 .title("Inserts"),
-              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("sql.delete.count"))
+                .sources([])
                 .title("Deletes"),
-              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("sql.ddl.count"))
+                .sources([])
                 .title("DDL")
             ).format(d3.format("d")).title("SQL Writes")
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.select.count"))
-                .sources(this.sources) // TODO: store sources vs node sources
+              Metrics.Select.AvgRate(_nodeMetric("sql.select.count"))
+                .sources([])
                 .title("Selects")
             ).format(d3.format("d")).title("SQL Reads")
           );

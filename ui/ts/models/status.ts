@@ -12,8 +12,6 @@ module Models {
   export module Status {
     import promise = _mithril.MithrilPromise;
     import Moment = moment.Moment;
-    import StoreStatus = Models.Proto.StoreStatus;
-    import NodeStatus = Models.Proto.NodeStatus;
 
     export interface StoreStatusResponseSet {
       d: Proto.StoreStatus[];
@@ -57,10 +55,10 @@ module Models {
       count: number;
     }
 
-    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (NodeStatus|StoreStatus)[]): BytesAndCount {
+    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (Proto.Status)[]): BytesAndCount {
       return _.reduce(
         rows,
-        function(memo: BytesAndCount, row: (NodeStatus|StoreStatus)): BytesAndCount {
+        function (memo: BytesAndCount, row: (Proto.Status)): BytesAndCount {
           memo.bytes += <number>_.get(row, byteAttr);
           memo.count += <number>_.get(row, countAttr);
           return memo;
@@ -68,10 +66,10 @@ module Models {
         {bytes: 0, count: 0});
     }
 
-    export function sumReducer(attr: string, rows: (NodeStatus|StoreStatus)[]): number {
+    export function sumReducer(attr: string, rows: (Proto.Status)[]): number {
       return _.reduce(
         rows,
-        function(memo: number, row: (NodeStatus|StoreStatus)): number {
+        function (memo: number, row: (Proto.Status)): number {
           return memo + <number>_.get(row, attr);
         },
         0);
@@ -89,7 +87,7 @@ module Models {
       });
 
       private _dataMap: Utils.ReadOnlyProperty<StoreStatusMap> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
-        return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.node.node_id);
+        return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.store_id);
       });
 
       private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {

@@ -120,7 +120,7 @@ module Models {
       store_id: number;
       node: NodeDescriptor;
       attrs: any;
-      Capacity: StoreCapacity;
+      capacity: StoreCapacity;
     }
 
     /*****************************

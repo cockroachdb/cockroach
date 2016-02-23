@@ -44,7 +44,7 @@ module AdminViews {
 
       export function view(ctrl: any): MithrilVirtualElement {
         return m(".page.events", [
-          m.component(Components.Topbar, {title: "Events", updated: Utils.Convert.MilliToNano(Models.Events.eventSingleton.updated.valueOf()) }),
+          m.component(Components.Topbar, {title: "Nodes", updated: Utils.Convert.MilliToNano(Models.Events.eventSingleton.updated.valueOf()) }),
           m.component(NavigationBar, {ts: TargetSet()}),
           m(".section", m(Components.Events, 1000)), // TODO: pagination
         ]);
