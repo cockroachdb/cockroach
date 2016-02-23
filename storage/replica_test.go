@@ -273,6 +273,9 @@ func TestRangeContains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
+		t.Errorf("expected range to contain range stats key %q", statsKey)
+	}
 	if !r.ContainsKey(roachpb.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
@@ -1039,6 +1042,23 @@ func truncateLogArgs(index uint64, rangeID roachpb.RangeID) roachpb.TruncateLogR
 	return roachpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,
+	}
+}
+
+func gcKey(key roachpb.Key, timestamp roachpb.Timestamp) roachpb.GCRequest_GCKey {
+	return roachpb.GCRequest_GCKey{
+		Key:       key,
+		Timestamp: timestamp,
+	}
+}
+
+func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roachpb.GCRequest {
+	return roachpb.GCRequest{
+		Span: roachpb.Span{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+		Keys: keys,
 	}
 }
 
@@ -3887,5 +3907,32 @@ func TestTerm(t *testing.T) {
 	}
 	if _, err := tc.rng.Term(indexes[9] + 1000); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
+	}
+}
+
+func TestGCIncorrectRangeError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	splitKey := roachpb.RKey("c")
+	rng1 := tc.rng
+	rng2 := splitTestRange(tc.store, splitKey, splitKey, t)
+
+	key := gcKey(splitKey.PrefixEnd().AsRawKey(), tc.clock.Now())
+
+	// Send GC request to incorrect range.
+	args := gcArgs(rng1.Desc().StartKey, rng1.Desc().EndKey, key)
+	_, pErr := client.SendWrapped(tc.Sender(), rng1.context(), &args)
+	if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
+		t.Errorf("expected RangeKeyMismatchError on garbage collection request sent to wrong range")
+	}
+
+	// Send GC request to correct range.
+	args = gcArgs(rng2.Desc().StartKey, rng2.Desc().EndKey, key)
+	_, pErr = client.SendWrapped(tc.Sender(), rng2.context(), &args)
+	if pErr == nil {
+		t.Errorf("unexpected pError on garbage collection request: %s", pErr)
 	}
 }

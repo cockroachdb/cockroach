@@ -587,6 +587,9 @@ func (r *Replica) ContainsKey(key roachpb.Key) bool {
 }
 
 func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
+	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
+	}
 	return desc.ContainsKey(keys.Addr(key))
 }
 

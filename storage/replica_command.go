@@ -840,6 +840,15 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 // specified in the args is persisted after GC.
 func (r *Replica) GC(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.GCRequest) (roachpb.GCResponse, error) {
 	var reply roachpb.GCResponse
+
+	// All keys must be inside the current replica range. Discrepancies
+	// here can arise from race conditions during range splitting.
+	for _, k := range args.Keys {
+		if !r.ContainsKey(k.Key) {
+			return reply, roachpb.NewRangeKeyMismatchError(k.Key, k.Key, r.Desc())
+		}
+	}
+
 	// Garbage collect the specified keys by expiration timestamps.
 	err := engine.MVCCGarbageCollect(batch, ms, args.Keys, h.Timestamp)
 	return reply, err
