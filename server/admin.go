@@ -163,13 +163,13 @@ func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 
-	if resp.Results[0].PErr != nil {
-		s.internalServerErrorf(w, "%s", resp.Results[0].PErr)
+	if a, e := len(resp.Results), 1; a != e {
+		s.internalServerErrorf(w, "# of results %d != expected %d", a, e)
 		return
 	}
 
-	if a, e := len(resp.Results), 1; a != e {
-		s.internalServerErrorf(w, "# of results %d != expected %d", a, e)
+	if resp.Results[0].PErr != nil {
+		s.internalServerErrorf(w, "%s", resp.Results[0].PErr)
 		return
 	}
 
