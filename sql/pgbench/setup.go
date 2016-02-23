@@ -71,6 +71,8 @@ func SetupBenchDB(db *sql.DB, accounts int) error {
 	return populateDB(db, accounts)
 }
 
+const tellers = 10
+
 func populateDB(db *sql.DB, accounts int) error {
 	branches := `INSERT INTO pgbench_branches (bid, bbalance, filler) VALUES (1, 7354, NULL)`
 	if r, err := db.Exec(branches); err != nil {
