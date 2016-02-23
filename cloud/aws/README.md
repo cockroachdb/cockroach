@@ -74,7 +74,7 @@ The DNS names of AWS instances is shown as a comma-separated list in the terrafo
 $ ssh -i ~/.ssh/cockroach.pem ubuntu@ec2-54-85-12-159.compute-1.amazonaws.com
 
 ubuntu@ip-172-31-15-87:~$ ps -Af|grep cockroach
-ubuntu    1448     1  4 20:03 ?        00:00:39 ./cockroach start --log-dir=logs --logtostderr=false --stores=ssd=data --insecure --join=ec2-54-152-252-37.compute-1.amazonaws.com
+ubuntu    1448     1  4 20:03 ?        00:00:39 ./cockroach start --log-dir=logs --logtostderr=false --store=attr=ssd,path=data --insecure --join=ec2-54-152-252-37.compute-1.amazonaws.com
 
 ubuntu@ip-172-31-15-87:~$ ls logs
 cockroach.ERROR

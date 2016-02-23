@@ -377,6 +377,7 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 	} else if *cockroachEntry != "" {
 		entrypoint = append(entrypoint, *cockroachEntry)
 	}
+	log.Infof("Cockroach Cluster CLI: %s", cmd)
 	var err error
 	node.Container, err = createContainer(
 		l,
@@ -414,26 +415,16 @@ func (l *LocalCluster) createNodeCerts() {
 }
 
 func (l *LocalCluster) startNode(node *testNode) {
-	var stores string
-	first := true
-	for _, store := range node.stores {
-		if first {
-			first = false
-		} else {
-			stores += ","
-		}
-		stores += "ssd=" + store.dataStr
-	}
-
 	cmd := []string{
 		"start",
-		"--stores=" + stores,
 		"--certs=/certs",
 		"--host=" + node.nodeStr,
 		"--port=" + base.DefaultPort,
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
-	log.Warning(stores)
+	for _, store := range node.stores {
+		cmd = append(cmd, fmt.Sprintf("--store=attr=ssd,path=%s", store.dataStr))
+	}
 	// Append --join flag for all nodes except first.
 	if node.index > 0 {
 		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.DefaultPort))

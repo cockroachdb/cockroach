@@ -84,34 +84,35 @@ var startCmd = &cobra.Command{
 	Short: "start a node",
 	Long: `
 Start a CockroachDB node, which will export data from one or more
-storage devices, specified via the --stores flag.
+storage devices, specified via --store flags.
 
 If no cluster exists yet and this is the first node, no additional
 flags are required. If the cluster already exists, and this node is
 uninitialized, specify the --join flag to point to any healthy node
 (or list of nodes) already part of the cluster.
 `,
-	Example:      `  cockroach start --certs=<dir> --stores=ssd=/mnt/ssd1,... [--join=host:port,[host:port]]`,
+	Example:      `  cockroach start --certs=<dir> --store=attr=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
 	SilenceUsage: true,
 	RunE:         runStart,
 }
 
-// runStart starts the cockroach node using --stores as the list of
+// runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
-	storeSpecs, err := cliContext.GetStoreSpecs()
-	if err != nil {
-		return err
+	// Add in the default store now if none were specified.
+	if len(cliContext.Stores) == 0 {
+		cliContext.Stores = []server.StoreSpec{{Path: "cockroach-data"}}
 	}
+
 	// Default the log directory to the the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
 	f := flag.Lookup("log-dir")
 	if !log.DirSet() {
-		for _, spec := range storeSpecs {
-			if spec.Attrs == "mem" {
+		for _, spec := range cliContext.Stores {
+			if spec.InMemory {
 				continue
 			}
 			if err := f.Value.Set(filepath.Join(spec.Path, "logs")); err != nil {
@@ -156,8 +157,8 @@ func runStart(_ *cobra.Command, _ []string) error {
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
 	fmt.Fprintf(tw, "sql:\t%s\n", cliContext.PGURL(connUser))
 	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-	for i, spec := range storeSpecs {
-		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec.Name)
+	for i, spec := range cliContext.Stores {
+		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -213,7 +214,7 @@ var exterminateCmd = &cobra.Command{
 	Short: "destroy all data held by the node",
 	Long: `
 First shuts down the system and then destroys all data held by the
-node, cycling through each store specified by the --stores flag.
+node, cycling through each store specified by --store flags.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runExterminate),
