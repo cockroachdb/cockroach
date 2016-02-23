@@ -47,13 +47,14 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, pErr
 	}
-	result, qvals, err := p.initReturning(n.Returning, tableDesc.Name, tableDesc.Columns)
+	var rh returningHelper
+	err := rh.init(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
 	if p.prepareOnly {
-		return result, nil
+		return rh.finalize(), nil
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -79,7 +80,6 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	b := p.txn.NewBatch()
 	for rows.Next() {
 		rowVals := rows.Values()
-		result.rows = append(result.rows, parser.DTuple(nil))
 
 		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
@@ -108,7 +108,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		}
 		b.DelRange(rowStartKey, rowEndKey)
 
-		if err := p.populateReturning(n.Returning, result, qvals, rowVals); err != nil {
+		if err := rh.append(rowVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -134,5 +134,5 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	return result, nil
+	return rh.finalize(), nil
 }

@@ -42,27 +42,32 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 
+	exprs := make([]parser.UpdateExpr, len(n.Exprs))
+	for i, expr := range n.Exprs {
+		exprs[i] = *expr
+	}
+
 	// Determine which columns we're inserting into.
 	var names parser.QualifiedNames
-	for _, expr := range n.Exprs {
-		var epErr *roachpb.Error
-		expr.Expr, epErr = p.expandSubqueries(expr.Expr, len(expr.Names))
+	for i, expr := range exprs {
+		newExpr, epErr := p.expandSubqueries(expr.Expr, len(expr.Names))
 		if epErr != nil {
 			return nil, epErr
 		}
+		exprs[i].Expr = newExpr
 
 		if expr.Tuple {
 			// TODO(pmattis): The distinction between Tuple and DTuple here is
 			// irritating. We'll see a DTuple if the expression was a subquery that
 			// has been evaluated. We'll see a Tuple in other cases.
 			n := 0
-			switch t := expr.Expr.(type) {
+			switch t := newExpr.(type) {
 			case *parser.Tuple:
 				n = len(t.Exprs)
 			case parser.DTuple:
 				n = len(t)
 			default:
-				return nil, roachpb.NewErrorf("unsupported tuple assignment: %T", expr.Expr)
+				return nil, roachpb.NewErrorf("unsupported tuple assignment: %T", newExpr)
 			}
 			if len(expr.Names) != n {
 				return nil, roachpb.NewUErrorf("number of columns (%d) does not match number of values (%d)",
@@ -101,9 +106,9 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// "*, 1, 2", not "*, (1, 2)".
 	targets := tableDesc.allColumnsSelector()
 	i := 0
-	// Remember the index where the targets for n.Exprs start.
+	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
-	for _, expr := range n.Exprs {
+	for _, expr := range exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
 			case *parser.Tuple:
@@ -137,7 +142,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	result, qvals, err := p.initReturning(n.Returning, tableDesc.Name, cols)
+	var rh returningHelper
+	err = rh.init(p, n.Returning, tableDesc.Name, cols)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -161,7 +167,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 				return nil, roachpb.NewError(err)
 			}
 		}
-		return result, nil
+		return rh.finalize(), nil
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -219,7 +225,6 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		tracing.AnnotateTrace()
 
 		rowVals := rows.Values()
-		result.rows = append(result.rows, parser.DTuple(nil))
 
 		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
@@ -306,7 +311,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := p.populateReturning(n.Returning, result, qvals, newVals); err != nil {
+		if err := rh.append(newVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -329,7 +334,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	}
 
 	tracing.AnnotateTrace()
-	return result, nil
+	return rh.finalize(), nil
 }
 
 func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) parser.Expr {

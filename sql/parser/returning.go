@@ -25,7 +25,7 @@ func (r ReturningExprs) String() string {
 	if len(r) == 0 {
 		return ""
 	}
-	return fmt.Sprintf(" RETURNING %s", SelectExprs(r))
+	return fmt.Sprintf(" RETURNING%s", SelectExprs(r))
 }
 
 // StatementType implements the Statement interface.

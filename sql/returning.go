@@ -18,53 +18,70 @@ package sql
 
 import "github.com/cockroachdb/cockroach/sql/parser"
 
-func (p *planner) initReturning(r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) (*valuesNode, qvalMap, error) {
-	result := &valuesNode{}
-	if r == nil {
-		return result, nil, nil
+// returningHelper implements the logic used for statements with RETURNING clauses.
+type returningHelper struct {
+	p      *planner
+	values *valuesNode
+	qvals  qvalMap
+	exprs  parser.Exprs
+}
+
+func (rh *returningHelper) init(p *planner, r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) error {
+	rh.p = p
+	rh.values = &valuesNode{}
+	if len(r) == 0 {
+		return nil
 	}
 
-	result.columns = make([]ResultColumn, len(r))
+	rh.values.columns = make([]ResultColumn, len(r))
 	table := tableInfo{
 		columns: makeResultColumns(tablecols, 0),
 		alias:   alias,
 	}
-	qvals := make(qvalMap)
+	rh.qvals = make(qvalMap)
+	rh.exprs = make([]parser.Expr, len(r))
 	for i, c := range r {
-		expr, err := resolveQNames(&table, qvals, c.Expr)
+		expr, err := resolveQNames(&table, rh.qvals, c.Expr)
 		if err != nil {
-			return result, nil, err
+			return err
 		}
-		r[i].Expr = expr
-		typ, err := expr.TypeCheck(p.evalCtx.Args)
+		rh.exprs[i] = expr
+		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
 		if err != nil {
-			return result, nil, err
+			return err
 		}
 		name := string(c.As)
 		if name == "" {
 			name = expr.String()
 		}
-		result.columns[i] = ResultColumn{
+		rh.values.columns[i] = ResultColumn{
 			Name: name,
 			Typ:  typ,
 		}
 	}
-	return result, qvals, nil
+	return nil
 }
 
-func (p *planner) populateReturning(r parser.ReturningExprs, result *valuesNode, qvals qvalMap, rowVals parser.DTuple) error {
-	if r == nil {
+// appends a result row using the given values.
+func (rh *returningHelper) append(rowVals parser.DTuple) error {
+	if rh.exprs == nil {
+		rh.values.rows = append(rh.values.rows, parser.DTuple(nil))
 		return nil
 	}
-	qvals.populateQVals(rowVals)
-	resrow := make(parser.DTuple, len(r))
-	for i, c := range r {
-		d, err := c.Expr.Eval(p.evalCtx)
+	rh.qvals.populateQVals(rowVals)
+	resrow := make(parser.DTuple, len(rh.exprs))
+	for i, e := range rh.exprs {
+		d, err := e.Eval(rh.p.evalCtx)
 		if err != nil {
 			return err
 		}
 		resrow[i] = d
 	}
-	result.rows[len(result.rows)-1] = resrow
+	rh.values.rows = append(rh.values.rows, resrow)
 	return nil
+}
+
+// finalize returns the results in a valuseNode
+func (rh *returningHelper) finalize() *valuesNode {
+	return rh.values
 }
