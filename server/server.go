@@ -214,7 +214,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		{txnRegistryName, txnRegistry},
 	}
 	s.node = NewNode(nCtx, s.registry, s.stopper, subRegistries, txnMetrics)
-	s.admin = newAdminServer(s.db, s.stopper)
+	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 

@@ -255,5 +255,8 @@ func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface
 	if err != nil {
 		return err
 	}
+	if resp.StatusCode != http.StatusOK {
+		return Errorf("status: %s, error: %s", resp.Status, b)
+	}
 	return json.Unmarshal(b, v)
 }

@@ -20,9 +20,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"reflect"
+	"sort"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -115,5 +120,118 @@ func TestAdminNetTrace(t *testing.T) {
 		if !bytes.Contains(body, []byte(c.search)) {
 			t.Errorf("expected %s to be contained in %s", c.search, body)
 		}
+	}
+}
+
+// apiGet issues a GET to the provided server using the given API path and marshals the result
+// into the v parameter.
+func apiGet(s *TestServer, path string, v interface{}) error {
+	apiPath := apiEndpoint + path
+	client, err := s.Ctx.GetHTTPClient()
+	if err != nil {
+		return err
+	}
+	return util.GetJSON(client, s.Ctx.HTTPRequestScheme(), s.ServingAddr(), apiPath, v)
+}
+
+func TestAdminAPIDatabases(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	// Test databases endpoint.
+	const testdb = "test"
+	var session sql.Session
+	query := "CREATE DATABASE " + testdb
+	if _, _, err := s.sqlExecutor.ExecuteStatements("root", session, query, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	type databasesResult struct {
+		Databases []string
+	}
+	var res databasesResult
+	if err := apiGet(s, "databases", &res); err != nil {
+		t.Fatal(err)
+	}
+
+	// We should have the system database and the newly created test database.
+	if a, e := len(res.Databases), 2; a != e {
+		t.Fatalf("length of result %d != expected %d", a, e)
+	}
+
+	sort.Strings(res.Databases)
+	if a, e := res.Databases[0], "system"; a != e {
+		t.Fatalf("database name %s != expected %s", a, e)
+	}
+	if a, e := res.Databases[1], testdb; a != e {
+		t.Fatalf("database name %s != expected %s", a, e)
+	}
+
+	// Test database details endpoint.
+	privileges := []string{"SELECT", "UPDATE"}
+	testuser := "testuser"
+	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
+	if _, _, err := s.sqlExecutor.ExecuteStatements("root", session, grantQuery, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	type databaseDetailsResult struct {
+		Grants []struct {
+			Database   string
+			Privileges []string
+			User       string
+		}
+		Tables []string
+	}
+	var details databaseDetailsResult
+	if err := apiGet(s, "databases/"+testdb, &details); err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(details.Grants), 2; a != e {
+		t.Fatalf("# of grants %d != expected %d", a, e)
+	}
+
+	for _, grant := range details.Grants {
+		switch grant.User {
+		case "root":
+			if !reflect.DeepEqual(grant.Privileges, []string{"ALL"}) {
+				t.Fatalf("privileges %v != expected %v", details.Grants[0].Privileges, privileges)
+			}
+		case testuser:
+			sort.Strings(grant.Privileges)
+			if !reflect.DeepEqual(grant.Privileges, privileges) {
+				t.Fatalf("privileges %v != expected %v", grant.Privileges, privileges)
+			}
+		default:
+			t.Fatalf("unknown grant to user %s", grant.User)
+		}
+
+		if a, e := grant.Database, testdb; a != e {
+			t.Fatalf("database %s != expected %s", grant.Database, testdb)
+		}
+	}
+}
+
+func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	if err := apiGet(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, "Not Found") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	fakedb := "system;DROP DATABASE system;"
+	path := "databases/" + fakedb
+	if err := apiGet(s, path, nil); !testutils.IsError(err, fakedb+".*does not exist") {
+		t.Fatalf("unexpected error: %s", err)
 	}
 }
