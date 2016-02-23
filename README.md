@@ -136,13 +136,13 @@ done
 Now, on node 1, initialize the cluster (this example uses `/data`; yours may vary):
 
 ```bash
-./cockroach start --stores=/data1
+./cockroach start --store=path=/data1
 ```
 
 Then, add nodes 2, 3, etc. to the cluster by specifying the `--join` flag to connect to any already-joined node.
 
 ```bash
-./cockroach start --stores=/data2 --join=${NODE1}:26257
+./cockroach start --store=path=/data2 --join=${NODE1}:26257
 ```
 
 Verify that the cluster is connected on the web UI by directing your browser at
