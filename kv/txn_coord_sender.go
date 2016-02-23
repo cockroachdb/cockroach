@@ -256,8 +256,8 @@ func (tc *TxnCoordSender) startStats() {
 			// Take a snapshot of metrics. There's some chance of skew, since the snapshots are
 			// not done atomically, but that should be fine for these debug stats.
 			metrics := tc.metrics
-			durations := metrics.Durations[scale].Merge()
-			restarts := metrics.Restarts.Merge()
+			durations := metrics.Durations[scale].Current()
+			restarts := metrics.Restarts.Current()
 			commitRate := metrics.Commits.Rates[scale].Value()
 			abortRate := metrics.Aborts.Rates[scale].Value()
 			abandonRate := metrics.Abandons.Rates[scale].Value()

@@ -116,18 +116,9 @@ func (h *Histogram) Duration() time.Duration {
 	return h.duration
 }
 
-// Merge returns a histogram containing a merged copy of the underlying histograms.
-func (h *Histogram) Merge() *hdrhistogram.Histogram {
-	h.mu.Lock()
-	maybeTick(h)
-	merged := h.windowed.Merge()
-	h.mu.Unlock()
-	return merged
-}
-
 // MarshalJSON outputs to JSON.
 func (h *Histogram) MarshalJSON() ([]byte, error) {
-	return json.Marshal(h.Merge().CumulativeDistribution())
+	return json.Marshal(h.Current().CumulativeDistribution())
 }
 
 // RecordValue adds the given value to the histogram, truncating if necessary.
@@ -145,6 +136,12 @@ func (h *Histogram) Current() *hdrhistogram.Histogram {
 	h.mu.Lock()
 	maybeTick(h)
 	export := h.windowed.Merge().Export()
+	// Make a deep copy of export.Counts, because (*hdrhistogram.Histogram).Export() does
+	// a shallow copy of the histogram counts, which leads to data races when multiple goroutines
+	// call this method.
+	// TODO(cdo): Remove this when I've gotten a chance to submit a PR for the proper fix
+	// to hdrhistogram.
+	export.Counts = append([]int64(nil), export.Counts...)
 	h.mu.Unlock()
 	return hdrhistogram.Import(export)
 }

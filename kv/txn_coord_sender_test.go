@@ -774,7 +774,7 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits,
 
 		// Handle restarts separately, because that's a histogram. Though the histogram is approximate,
 		// we're recording so few distinct values that we should be okay.
-		dist := metrics.Restarts.Merge().Distribution()
+		dist := metrics.Restarts.Current().Distribution()
 		var actualRestarts int64
 		for _, b := range dist {
 			if b.From == b.To {
