@@ -65,6 +65,7 @@ func PGUrl(t testing.TB, ts *server.TestServer, user, prefix string) (url.URL, f
 			Scheme:   "postgres",
 			User:     url.User(user),
 			Host:     net.JoinHostPort(host, port),
+			Path:     prefix,
 			RawQuery: options.Encode(),
 		}, func() {
 			if err := os.RemoveAll(tempDir); err != nil {
