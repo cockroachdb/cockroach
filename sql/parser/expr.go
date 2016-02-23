@@ -25,10 +25,10 @@ import (
 // Expr represents an expression.
 type Expr interface {
 	fmt.Stringer
-	// Walk replaces each child of the receiver with the return of
-	// `WalkExpr(v, child)`. For childless (leaf) Exprs, its
-	// implementation is empty.
-	Walk(Visitor)
+	// Walk recursively walks all children using WalkExpr. If any children are changed, it returns a
+	// copy of this node updated to point to the new children. Otherwise the receiver is returned.
+	// For childless (leaf) Exprs, its implementation is empty.
+	Walk(Visitor) Expr
 	// TypeCheck returns the zero value of the expression's type, or an
 	// error if the expression doesn't type-check. args maps bind var argument
 	// names to types.
@@ -42,8 +42,6 @@ type Expr interface {
 	// WalkExpr. For example, ValArg should be replace by the argument passed from
 	// the client.
 	Eval(EvalContext) (Datum, error)
-	// DeepCopy returns a new copy of the entire expression.
-	DeepCopy() Expr
 }
 
 // VariableExpr is an Expr that may change per row. It is used to
