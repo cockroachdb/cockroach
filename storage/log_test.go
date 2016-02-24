@@ -39,10 +39,10 @@ func TestLogSplits(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogSplits")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogSplits")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,10 +156,10 @@ func TestLogRebalances(t *testing.T) {
 	logEvent(roachpb.REMOVE_REPLICA)
 
 	// Open a SQL connection to verify that the events have been logged.
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogRebalances")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogRebalances")
 	defer cleanupFn()
 
-	sqlDB, err := sql.Open("postgres", pgUrl.String())
+	sqlDB, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
