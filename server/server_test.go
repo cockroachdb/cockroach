@@ -184,7 +184,6 @@ func TestPlainHTTPServer(t *testing.T) {
 	// Create a custom context. The default one has a default --certs value.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
-	ctx.PGAddr = "127.0.0.1:0"
 	ctx.Insecure = true
 	// TestServer.Start does not override the context if set.
 	s := &TestServer{Ctx: ctx}
@@ -586,15 +585,12 @@ func TestSystemConfigGossip(t *testing.T) {
 }
 
 func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAddrString string) {
-	unresolvedAddr := util.NewUnresolvedAddr(network, oldAddrString)
 	resolvedAddr := util.NewUnresolvedAddr(network, newAddrString)
 
-	if err := officializeAddr(unresolvedAddr, resolvedAddr); err != nil {
+	if unresolvedAddr, err := officialAddr(oldAddrString, resolvedAddr); err != nil {
 		t.Fatal(err)
-	}
-
-	if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
-		t.Errorf("officializeAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
+	} else if retAddrString := unresolvedAddr.String(); retAddrString != expAddrString {
+		t.Errorf("officialAddr(%s, %s) was %s; expected %s", oldAddrString, newAddrString, retAddrString, expAddrString)
 	}
 }
 

@@ -31,8 +31,8 @@ type Cluster interface {
 	ConnString(int) string
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(int) string
-	// PGAddr returns the Postgres address for the given node.
-	PGAddr(i int) *net.TCPAddr
+	// Addr returns the TCP address for the given node.
+	Addr(i int) *net.TCPAddr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.

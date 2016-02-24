@@ -233,7 +233,7 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
 
 	defer l.AssertAndStop(t)
-	addr := l.Nodes[0].PGAddr()
+	addr := l.Nodes[0].Addr()
 	containerConfig := container.Config{
 		Image: fmt.Sprintf(image + ":" + tag),
 		Env: []string{

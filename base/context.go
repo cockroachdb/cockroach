@@ -37,11 +37,9 @@ const (
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
-	// Default HTTP[S]/RPC[S] port.
-	CockroachPort = "26257"
-
-	// Default PG port.
-	PGPort = "15432"
+	// From IANA Service Name and Transport Protocol Port Number Registry. See
+	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
+	DefaultPort = "26257"
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second

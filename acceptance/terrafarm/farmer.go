@@ -166,7 +166,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 func (f *Farmer) ConnString(i int) string {
 	// TODO(tschottdorf,mberhault): TLS all the things!
 	return "rpc://" + "root" + "@" +
-		net.JoinHostPort(f.Nodes()[i], base.CockroachPort) +
+		net.JoinHostPort(f.Nodes()[i], base.DefaultPort) +
 		"?certs=" + "certswhocares"
 }
 
@@ -175,8 +175,8 @@ func (f *Farmer) PGUrl(i int) string {
 	panic("unimplemented")
 }
 
-// PGAddr returns the Postgres address for the given node.
-func (f *Farmer) PGAddr(i int) *net.TCPAddr {
+// Addr returns the TCP address for the given node.
+func (f *Farmer) Addr(i int) *net.TCPAddr {
 	panic("unimplemented")
 }
 
@@ -258,7 +258,7 @@ func (f *Farmer) Restart(i int) error {
 
 // URL returns the HTTP(s) endpoint.
 func (f *Farmer) URL(i int) string {
-	return "http://" + net.JoinHostPort(f.Nodes()[i], base.CockroachPort)
+	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultPort)
 }
 
 func (f *Farmer) logf(format string, args ...interface{}) {

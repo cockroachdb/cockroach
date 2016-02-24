@@ -21,7 +21,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
-	"net"
 
 	"github.com/lib/pq"
 
@@ -105,9 +104,7 @@ func makeSQLConn(url string) *sqlConn {
 func makeSQLClient() *sqlConn {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		tmpCtx := cliContext
-		tmpCtx.PGAddr = net.JoinHostPort(connHost, connPGPort)
-		sqlURL = tmpCtx.PGURL(connUser)
+		sqlURL = cliContext.PGURL(connUser)
 	}
 	return makeSQLConn(sqlURL)
 }
