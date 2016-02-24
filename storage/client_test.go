@@ -134,7 +134,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(sCtx.Gossip, clock, storage.TestTimeUntilStoreDeadOff, stopper)
-	sCtx.Transport = storage.NewRaftTransport(nil, nil, nil) // Doesn't actually need to function.
+	sCtx.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*sCtx, eng, nodeDesc)
 	if bootstrap {
@@ -235,10 +235,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()
 	}
+	if m.rpcContext == nil {
+		m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
+	}
 	if m.gossip == nil {
-		if m.rpcContext == nil {
-			m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
-		}
 		m.gossip = gossip.New(m.rpcContext, gossip.TestBootstrap, m.transportStopper)
 		m.gossip.SetNodeID(math.MaxInt32)
 	}
@@ -249,9 +249,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.grpcServer = grpc.NewServer()
 	}
 	if m.transport == nil {
-		if m.rpcContext == nil {
-			m.rpcContext = rpc.NewContext(&base.Context{}, m.clock, nil)
-		}
 		m.transport = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServer, m.rpcContext)
 	}
 	if m.storePool == nil {
@@ -537,12 +534,14 @@ func (m *multiTestContext) addStore() {
 		m.t.Fatal(err)
 	}
 	m.mu.Lock()
-	if _, ok := m.nodeIDtoAddr[nodeID]; ok {
+	_, ok := m.nodeIDtoAddr[nodeID]
+	if !ok {
+		m.nodeIDtoAddr[nodeID] = ln.Addr()
+	}
+	m.mu.Unlock()
+	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
-	m.nodeIDtoAddr[nodeID] = ln.Addr()
-	m.mu.Unlock()
-
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
 	// FirstRange() can find the sender)

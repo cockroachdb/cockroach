@@ -97,7 +97,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
 		kv.NewTxnMetrics(metric.NewRegistry()))
 	ctx.DB = client.NewDB(sender)
-	ctx.Transport = storage.NewRaftTransport(nil, nil, nil) // // Doesn't actually need to function.
+	ctx.Transport = storage.NewDummyRaftTransport()
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
 	node := NewNode(ctx, metric.NewRegistry(), stopper, nil, kv.NewTxnMetrics(metric.NewRegistry()))

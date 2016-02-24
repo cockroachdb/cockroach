@@ -14,7 +14,7 @@
 //
 // Author: Timothy Chen
 
-package storage
+package storage_test
 
 import (
 	"math/rand"
@@ -22,13 +22,13 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/coreos/etcd/raft/raftpb"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
@@ -38,18 +38,18 @@ import (
 )
 
 type channelServer struct {
-	ch       chan *RaftMessageRequest
+	ch       chan *storage.RaftMessageRequest
 	maxSleep time.Duration
 }
 
 func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	return channelServer{
-		ch:       make(chan *RaftMessageRequest, bufSize),
+		ch:       make(chan *storage.RaftMessageRequest, bufSize),
 		maxSleep: maxSleep,
 	}
 }
 
-func (s channelServer) RaftMessage(req *RaftMessageRequest) error {
+func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -83,7 +83,7 @@ func TestSendAndReceive(t *testing.T) {
 	nextStoreID := roachpb.StoreID(2)
 
 	// Per-node state.
-	transports := map[roachpb.NodeID]*RaftTransport{}
+	transports := map[roachpb.NodeID]*storage.RaftTransport{}
 
 	// Per-store state.
 	storeNodes := map[roachpb.StoreID]roachpb.NodeID{}
@@ -119,7 +119,7 @@ func TestSendAndReceive(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		transport := NewRaftTransport(GossipPolymorphismShim(g), grpcServer, nodeRPCContext)
+		transport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
 		transports[nodeID] = transport
 
 		for store := 0; store < storesPerServer; store++ {
@@ -137,7 +137,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Heartbeat messages: Each store sends one message to each store.
 	for fromStoreID, fromNodeID := range storeNodes {
 		for toStoreID, toNodeID := range storeNodes {
-			req := &RaftMessageRequest{
+			req := &storage.RaftMessageRequest{
 				GroupID: 0,
 				Message: raftpb.Message{
 					Type: raftpb.MsgHeartbeat,
@@ -190,7 +190,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Send a message from replica 2 (on store 3, node 2) to replica 1 (on store 5, node 3)
 	fromStoreID := roachpb.StoreID(3)
 	toStoreID := roachpb.StoreID(5)
-	req := &RaftMessageRequest{
+	req := &storage.RaftMessageRequest{
 		GroupID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
@@ -251,7 +251,7 @@ func TestInOrderDelivery(t *testing.T) {
 
 	const numMessages = 100
 	nodeID := roachpb.NodeID(roachpb.NodeID(2))
-	serverTransport := NewRaftTransport(GossipPolymorphismShim(g), grpcServer, nodeRPCContext)
+	serverTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
 	serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage)
 	addr := ln.Addr()
@@ -266,10 +266,10 @@ func TestInOrderDelivery(t *testing.T) {
 	}
 
 	clientNodeID := roachpb.NodeID(2)
-	clientTransport := NewRaftTransport(GossipPolymorphismShim(g), nil, nodeRPCContext)
+	clientTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), nil, nodeRPCContext)
 
 	for i := 0; i < numMessages; i++ {
-		req := &RaftMessageRequest{
+		req := &storage.RaftMessageRequest{
 			GroupID: 1,
 			Message: raftpb.Message{
 				To:     uint64(nodeID),

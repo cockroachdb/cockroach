@@ -135,7 +135,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.StorePool = NewStorePool(ctx.Gossip, ctx.Clock, TestTimeUntilStoreDeadOff, stopper)
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper)
-	ctx.Transport = NewRaftTransport(nil, nil, nil) // Doesn't actually need to function.
+	ctx.Transport = NewDummyRaftTransport()
 	sender := &testSender{}
 	ctx.DB = client.NewDB(sender)
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -178,7 +178,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	ctx.Transport = NewRaftTransport(nil, nil, nil) // Doesn't actually need to function.
+	ctx.Transport = NewDummyRaftTransport()
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't start as haven't bootstrapped.
@@ -247,7 +247,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
-	ctx.Transport = NewRaftTransport(nil, nil, nil) // Doesn't actually need to function.
+	ctx.Transport = NewDummyRaftTransport()
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.

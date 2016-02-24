@@ -37,17 +37,21 @@ type raftMessageHandler func(*RaftMessageRequest) error
 // network addresses.
 type NodeAddressResolver func(roachpb.NodeID) (net.Addr, error)
 
-// GossipPolymorphismShim is a thin wrapper around gossip's GetNodeIDAddress
+// GossipAddressResolver is a thin wrapper around gossip's GetNodeIDAddress
 // that allows its return value to be used as the net.Addr interface.
-func GossipPolymorphismShim(gossip *gossip.Gossip) NodeAddressResolver {
+func GossipAddressResolver(gossip *gossip.Gossip) NodeAddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
 		return gossip.GetNodeIDAddress(nodeID)
 	}
 }
 
-type streamWithCancel struct {
+type cachedStream struct {
 	stream MultiRaft_RaftMessageClient
 	cancel func()
+
+	once sync.Once
+	init func()
+	err  error
 }
 
 // RaftTransport handles the rpc messages for raft.
@@ -56,10 +60,18 @@ type RaftTransport struct {
 	rpcContext *rpc.Context
 
 	mu struct {
-		sync.RWMutex
+		sync.Mutex
 		handlers map[roachpb.StoreID]raftMessageHandler
-		streams  map[roachpb.NodeID]streamWithCancel
+		// streams' value type must be a pointer to allow for lazy (mutating)
+		// initialization.
+		streams map[roachpb.NodeID]*cachedStream
 	}
+}
+
+// NewDummyRaftTransport returns a dummy raft transport for use in tests which
+// need a non-nil raft transport that need not function.
+func NewDummyRaftTransport() *RaftTransport {
+	return NewRaftTransport(nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
@@ -69,7 +81,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		rpcContext: rpcContext,
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
-	t.mu.streams = make(map[roachpb.NodeID]streamWithCancel)
+	t.mu.streams = make(map[roachpb.NodeID]*cachedStream)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -129,60 +141,69 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 	t.mu.Unlock()
 }
 
-func (t *RaftTransport) getStream(nodeID roachpb.NodeID) (MultiRaft_RaftMessageClient, error) {
-	t.mu.RLock()
-	swc, ok := t.mu.streams[nodeID]
-	t.mu.RUnlock()
-	if ok {
-		return swc.stream, nil
-	}
-
+func (t *RaftTransport) invalidateStream(nodeID roachpb.NodeID) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	addr, err := t.resolver(nodeID)
-	if err != nil {
-		return nil, err
+	if cs, ok := t.mu.streams[nodeID]; ok {
+		cs.cancel()
+		delete(t.mu.streams, nodeID)
 	}
+	t.mu.Unlock()
+}
 
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		return nil, err
-	}
+func (t *RaftTransport) newStream(nodeID roachpb.NodeID) *cachedStream {
+	var cs cachedStream
+	cs.init = func() {
+		var addr net.Addr
+		if addr, cs.err = t.resolver(nodeID); cs.err != nil {
+			return
+		}
 
-	client := NewMultiRaftClient(conn)
-	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := client.RaftMessage(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	t.mu.streams[nodeID] = streamWithCancel{
-		stream: stream,
-		cancel: func() {
+		var conn *grpc.ClientConn
+		if conn, cs.err = t.rpcContext.GRPCDial(addr.String()); cs.err != nil {
+			return
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cs.cancel = func() {
 			cancel()
 			if err := conn.Close(); err != nil {
-				log.Warning(err)
+				log.Warningf("raft transport failed to close grpc connection: %s", err)
 			}
-		},
+		}
+
+		client := NewMultiRaftClient(conn)
+		if cs.stream, cs.err = client.RaftMessage(ctx); cs.err != nil {
+			return
+		}
+
+		go func() {
+			var response RaftMessageResponse
+
+			if err := cs.stream.RecvMsg(&response); err != nil {
+				log.Errorf("raft transport received grpc error: %s; invalidating connection to: %s", err, addr)
+			}
+
+			t.invalidateStream(nodeID)
+		}()
 	}
 
-	go func() {
-		var response RaftMessageResponse
+	return &cs
+}
 
-		if err := stream.RecvMsg(&response); err != nil {
-			log.Errorf("stream closed with: %s", err)
-		}
+func (t *RaftTransport) getStream(nodeID roachpb.NodeID) (MultiRaft_RaftMessageClient, error) {
+	t.mu.Lock()
+	cs, ok := t.mu.streams[nodeID]
+	if !ok {
+		cs = t.newStream(nodeID)
+		t.mu.streams[nodeID] = cs
+	}
+	t.mu.Unlock()
 
-		t.mu.Lock()
-		if swc, ok := t.mu.streams[nodeID]; ok {
-			swc.cancel()
-			delete(t.mu.streams, nodeID)
-		}
-		t.mu.Unlock()
-	}()
+	cs.once.Do(cs.init)
+	if cs.err != nil {
+		t.invalidateStream(nodeID)
+	}
 
-	return stream, nil
+	return cs.stream, cs.err
 }
 
 // Send a message to the recipient specified in the request.
