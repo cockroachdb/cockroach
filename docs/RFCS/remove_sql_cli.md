@@ -35,8 +35,7 @@ the official client `psql` from `postgresql-client`.
 
 Pros:
 
-- solves the existing issues in CockroachDB's own client (#4016,
-  #4052, #4018, #4017);
+- solves the existing issues in CockroachDB's own client (#4016, #4052, #4018, #4017);
 
 - automatically brings in numerous psql features:
     
