@@ -29,8 +29,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/kr/pretty"
+
+	"github.com/cockroachdb/cockroach/util/caller"
 )
 
 // Test that shortHostname works as advertised.
@@ -133,19 +134,30 @@ func TestStandardLog(t *testing.T) {
 
 // Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
-	contents := `
-I160224 10:55:08.758542 clog_test.go:136 info
-W160224 10:55:08.758653 clog_test.go:137 warning
-E160224 10:55:08.758658 clog_test.go:138 error
-F160224 10:55:08.758661 clog_test.go:139 fatal
-`
+	formatEntry := func(s Severity, now time.Time, file string, line int, msg string) string {
+		buf := formatHeader(s, now, file, line, nil)
+		buf.WriteString(msg)
+		buf.WriteString("\n")
+		defer logging.putBuffer(buf)
+		return buf.String()
+	}
 
-	readAllEntries := func(contents string) []*LogEntry {
+	t1 := time.Now().Round(time.Microsecond)
+	t2 := t1.Add(time.Microsecond)
+	t3 := t2.Add(time.Microsecond)
+	t4 := t3.Add(time.Microsecond)
+
+	contents := formatEntry(InfoLog, t1, "clog_test.go", 136, "info")
+	contents += formatEntry(WarningLog, t2, "clog_test.go", 137, "warning")
+	contents += formatEntry(ErrorLog, t3, "clog_test.go", 138, "error")
+	contents += formatEntry(FatalLog, t4, "clog_test.go", 139, "fatal")
+
+	readAllEntries := func(contents string) []Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents))
-		var entries []*LogEntry
+		var entries []Entry
+		var entry Entry
 		for {
-			entry := &LogEntry{}
-			if err := decoder.Decode(entry); err != nil {
+			if err := decoder.Decode(&entry); err != nil {
 				if err == io.EOF {
 					break
 				}
@@ -157,34 +169,34 @@ F160224 10:55:08.758661 clog_test.go:139 fatal
 	}
 
 	entries := readAllEntries(contents)
-	expected := []*LogEntry{
-		&LogEntry{
+	expected := []Entry{
+		{
 			Severity: 0,
-			Time:     1456311308758542000,
+			Time:     t1.UnixNano(),
 			File:     `clog_test.go`,
 			Line:     136,
-			Format:   `info`,
+			Message:  `info`,
 		},
-		&LogEntry{
+		{
 			Severity: 1,
-			Time:     1456311308758653000,
+			Time:     t2.UnixNano(),
 			File:     `clog_test.go`,
 			Line:     137,
-			Format:   `warning`,
+			Message:  `warning`,
 		},
-		&LogEntry{
+		{
 			Severity: 2,
-			Time:     1456311308758658000,
+			Time:     t3.UnixNano(),
 			File:     `clog_test.go`,
 			Line:     138,
-			Format:   `error`,
+			Message:  `error`,
 		},
-		&LogEntry{
+		{
 			Severity: 3,
-			Time:     1456311308758661000,
+			Time:     t4.UnixNano(),
 			File:     `clog_test.go`,
 			Line:     139,
-			Format:   `fatal`,
+			Message:  `fatal`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
@@ -245,7 +257,7 @@ func TestV(t *testing.T) {
 	_ = logging.verbosity.Set("2")
 	defer func() { _ = logging.verbosity.Set("0") }()
 	if v(2) {
-		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
+		addStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
@@ -271,7 +283,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if v(2) {
-		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
+		addStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
@@ -293,7 +305,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if v(2) {
-		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
+		addStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if contents(InfoLog) != "" {
 		t.Error("V logged incorrectly")

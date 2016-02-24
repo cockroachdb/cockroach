@@ -307,7 +307,8 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 // exceeds 'maxEntries'. Log entries are further filtered by the regexp
 // 'pattern' if provided. The logs entries are returned in reverse chronological
 // order.
-func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, error) {
+func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int,
+	pattern *regexp.Regexp) ([]Entry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
 		return nil, err
@@ -315,7 +316,7 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 
 	selectedFiles := selectFiles(logFiles, severity, endTimestamp)
 
-	entries := []LogEntry{}
+	entries := []Entry{}
 	for _, file := range selectedFiles {
 		newEntries, entryBeforeStart, err := readAllEntriesFromFile(
 			file,
@@ -346,17 +347,18 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 // 'startTimestamp' to inform the caller that no more log files need to be
 // processed. If the number of entries returned exceeds 'maxEntries' then
 // processing of new entries is stopped immediately.
-func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp) ([]LogEntry, bool, error) {
+func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int,
+	pattern *regexp.Regexp) ([]Entry, bool, error) {
 	reader, err := GetLogReader(file.Name, true /* restricted */)
 	defer reader.Close()
 	if reader == nil || err != nil {
 		return nil, false, err
 	}
-	entries := []LogEntry{}
+	entries := []Entry{}
 	decoder := NewEntryDecoder(reader)
 	entryBeforeStart := false
 	for {
-		entry := LogEntry{}
+		entry := Entry{}
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
@@ -367,17 +369,11 @@ func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, m
 		if pattern == nil {
 			match = true
 		} else {
-			args := []interface{}{}
-			for _, arg := range entry.Args {
-				args = append(args, arg.Str)
-			}
-			logText := fmt.Sprintf(entry.Format, args...)
-
-			match = pattern.MatchString(logText) ||
+			match = pattern.MatchString(entry.Message) ||
 				pattern.MatchString(entry.File)
 		}
 		if match && entry.Time >= startTimestamp && entry.Time <= endTimestamp {
-			entries = append([]LogEntry{entry}, entries...)
+			entries = append([]Entry{entry}, entries...)
 			if len(entries) >= maxEntries {
 				break
 			}

@@ -331,7 +331,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Fetch the full list of log entries.
 	type logWrapper struct {
-		Data []log.LogEntry `json:"d"`
+		Data []log.Entry `json:"d"`
 	}
 
 	// Check each individual log can be fetched and is non-empty.
@@ -342,7 +342,7 @@ func TestStatusLocalLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, entry := range log.Data {
-			switch entry.Format {
+			switch entry.Message {
 			case "TestStatusLocalLogFile test message-Error":
 				foundError = true
 			case "TestStatusLocalLogFile test message-Warning":
@@ -421,9 +421,9 @@ func TestStatusLocalLogs(t *testing.T) {
 			var actualInfo, actualWarning, actualError bool
 			var formats bytes.Buffer
 			for _, entry := range log.Data {
-				fmt.Fprintf(&formats, "%s\n", entry.Format)
+				fmt.Fprintf(&formats, "%s\n", entry.Message)
 
-				switch entry.Format {
+				switch entry.Message {
 				case "TestStatusLocalLogFile test message-Error":
 					actualError = true
 				case "TestStatusLocalLogFile test message-Warning":
