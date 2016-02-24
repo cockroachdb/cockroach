@@ -36,8 +36,8 @@ function fetch_docker() {
 # the argument causing the commands in the if-branch to be executed
 # within the docker container.
 if [ "${1-}" = "docker" ]; then
-  go get -u github.com/robfig/glock
-  glock sync -n < GLOCKFILE
+  go install ./vendor/...
+  go install ./cmd/...
 
   # Be careful to keep the dependencies built for each shard in sync
   # with the dependencies used by each shard in circle-test.sh.
@@ -162,11 +162,11 @@ if is_shard 2; then
     time ssh node0 sudo chown -R "${USER}.${USER}" "${dir}"
     time rsync -a --delete "${dir}/" node0:"${dir}"
 
-    cmds=$(grep '^cmd ' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
     time ssh node0 mkdir -p "${gopath0}/bin/linux_amd64"
     time ssh node0 sudo chown "${USER}.${USER}" "${gopath0}/bin/linux_amd64"
-    for cmd in ${cmds}; do
-      path="${gopath0}/bin/linux_amd64/${cmd}"
+    basepath="${gopath0}/bin/linux_amd64"
+    for cmd in $(ls $basepath); do
+      path="${basepath}/${cmd}"
       time rsync "${path}" node0:"${path}"
     done
   fi
