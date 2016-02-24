@@ -290,7 +290,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(true, 0).Error(`pq: param $1: strconv.ParseInt: parsing "true": invalid syntax`),
 		},
 		"SHOW database": {
-			base.Results(""),
+			base.Results("TestPGPreparedQuery"),
 		},
 		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1": {
 			base.Params([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
