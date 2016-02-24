@@ -554,9 +554,16 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 			continue
 		}
 		h := req.Header()
+		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
+			return roachpb.RSpan{}, util.Errorf("end key specified for non-range operation: %s", req)
+		}
+
 		key, err := Addr(h.Key)
 		if err != nil {
 			return roachpb.RSpan{}, err
+		}
+		if bytes.Compare(key, roachpb.RKeyMax) > 0 {
+			return roachpb.RSpan{}, util.Errorf("%s must be less than KeyMax", key)
 		}
 		if key.Less(from) {
 			// Key is smaller than `from`.
@@ -569,6 +576,9 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 		endKey, err := AddrUpperBound(h.EndKey)
 		if err != nil {
 			return roachpb.RSpan{}, err
+		}
+		if bytes.Compare(roachpb.RKeyMax, endKey) < 0 {
+			return roachpb.RSpan{}, util.Errorf("%s must be less than or equal to KeyMax", endKey)
 		}
 		if to.Less(endKey) {
 			// EndKey is larger than `to`.
