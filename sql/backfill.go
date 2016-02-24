@@ -146,7 +146,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", indexStartKey, indexEndKey)
 		}
-		b.DelRange(indexStartKey, indexEndKey)
+		b.DelRange(indexStartKey, indexEndKey, false)
 	}
 
 	if len(newIndexDescs) > 0 {

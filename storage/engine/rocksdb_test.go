@@ -592,7 +592,7 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 		}
 
 		b.StartTimer()
-		_, err := MVCCDeleteRange(dupRocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil)
+		_, err := MVCCDeleteRange(dupRocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}

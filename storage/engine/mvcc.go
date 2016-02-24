@@ -1088,16 +1088,20 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction) (int64, error) {
+func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction, returnKeys bool) ([]roachpb.Key, error) {
+	var keys []roachpb.Key
 	num := int64(0)
 	buf := putBufferPool.Get().(*putBuffer)
 	iter := engine.NewIterator(endKey)
-
 	f := func(kv roachpb.KeyValue) (bool, error) {
 		if err := mvccPutInternal(engine, iter, ms, kv.Key, timestamp, nil, txn, buf); err != nil {
 			return true, err
 		}
+		if returnKeys {
+			keys = append(keys, kv.Key)
+		}
 		num++
+		// We check num rather than len(keys) since returnKeys could be false.
 		if max != 0 && max >= num {
 			return true, nil
 		}
@@ -1111,7 +1115,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max 
 
 	iter.Close()
 	putBufferPool.Put(buf)
-	return num, err
+	return keys, err
 }
 
 func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (MVCCKey, error) {
