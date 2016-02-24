@@ -37,7 +37,7 @@ var usage = func() {
 func main() {
 	accounts := flag.Int("accounts", 100000, "number of accounts to create")
 
-	createDb := flag.Bool("createdb", false, "attempt to create named db, dropping first if exists")
+	createDb := flag.Bool("createdb", false, "attempt to create named db, dropping first if exists (must be able to connect to default db to do so).")
 
 	flag.Parse()
 	flag.Usage = usage
@@ -46,41 +46,31 @@ func main() {
 		os.Exit(2)
 	}
 
+	var db *sql.DB
+	var err error
+
 	if *createDb {
 		name := ""
-		parsed, err := url.Parse(flag.Arg(0))
-		if err != nil {
-			panic(err)
+		parsed, parseErr := url.Parse(flag.Arg(0))
+		if parseErr != nil {
+			panic(parseErr)
 		} else if len(parsed.Path) < 2 { // first char is '/'
 			panic("URL must include db name")
 		} else {
 			name = parsed.Path[1:]
 		}
 
-		// Create throw-away connection to create the DB.
-		db, err := sql.Open("postgres", flag.Arg(0))
-		if err != nil {
-			panic(err)
-		}
-		defer db.Close()
-
-		if _, err := db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", name)); err != nil {
-			panic(fmt.Sprintf("Could not drop db %s: %s\n", name, err.Error()))
-		}
-		if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE %s", name)); err != nil {
-			panic(fmt.Sprintf("Could not create db %s: %s\n", name, err.Error()))
-		} else {
-			fmt.Printf("Created database %s\n", name)
-		}
+		db, err = pgbench.CreateAndConnect(*parsed, name)
+	} else {
+		db, err = sql.Open("postgres", flag.Arg(0))
 	}
-
-	db, err := sql.Open("postgres", flag.Arg(0))
 	if err != nil {
 		panic(err)
 	}
+
 	defer db.Close()
 
-	if err := pgbench.SetupBenchDB(db, *accounts); err != nil {
+	if err := pgbench.SetupBenchDB(db, *accounts, false); err != nil {
 		panic(err)
 	}
 }

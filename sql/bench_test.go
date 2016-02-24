@@ -38,6 +38,7 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	defer s.Stop()
 
 	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
+	pgUrl.Path = "bench"
 	defer cleanupFn()
 
 	db, err := sql.Open("postgres", pgUrl.String())
