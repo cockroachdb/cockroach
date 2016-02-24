@@ -63,6 +63,22 @@ func StartTestServer(t util.Tester) *TestServer {
 	return s
 }
 
+// StartTestServer starts an insecure in-memory test server.
+func StartInsecureTestServer(t util.Tester) *TestServer {
+	s := &TestServer{Ctx: NewTestContext()}
+	s.Ctx.Insecure = true
+	s.Ctx.Certs = ""
+
+	if err := s.Start(); err != nil {
+		if t != nil {
+			t.Fatalf("Could not start server: %v", err)
+		} else {
+			log.Fatalf("Could not start server: %v", err)
+		}
+	}
+	return s
+}
+
 // NewTestContext returns a context for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
