@@ -518,7 +518,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	// Local addressing has already been resolved.
 	// TODO(tschottdorf): consider rudimentary validation of the batch here
 	// (for example, non-range requests with EndKey, or empty key ranges).
-	rs := keys.Range(ba)
+	rs, rErr := keys.Range(ba)
+	if rErr != nil {
+		return nil, roachpb.NewError(rErr), false
+	}
 	var br *roachpb.BatchResponse
 	// Send the request to one range per iteration.
 	for {
