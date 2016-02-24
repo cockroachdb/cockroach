@@ -139,7 +139,11 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
 		var repl *roachpb.ReplicaDescriptor
 		var rangeID roachpb.RangeID
-		rs := keys.Range(ba)
+		var rs *roachpb.RSpan
+		rs, err = keys.Range(ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		rangeID, repl, err = ls.lookupReplica(rs.Key, rs.EndKey)
 		if err == nil {
 			ba.RangeID = rangeID
