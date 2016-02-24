@@ -84,11 +84,11 @@ func TestSSLEnforcement(t *testing.T) {
 	kvGet.Key = roachpb.Key("/")
 
 	testCases := []struct {
-		method, key string
-		body        proto.Message
-		ctx         *base.Context
-		success     bool // request sent successfully (may be non-200)
-		code        int  // http response code
+		method, path string
+		body         proto.Message
+		ctx          *base.Context
+		success      bool // request sent successfully (may be non-200)
+		code         int  // http response code
 	}{
 		// /ui/: basic file server: no auth.
 		{"GET", "/index.html", nil, rootCertsContext, true, http.StatusOK},
@@ -143,9 +143,8 @@ func TestSSLEnforcement(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}
-		resp, err := doHTTPReq(t, client, tc.method,
-			fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.ServingAddr(), tc.key),
-			tc.body)
+		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.ServingAddr(), tc.path)
+		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
 		if (err == nil) != tc.success {
 			t.Fatalf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
 		}
