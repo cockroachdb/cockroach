@@ -243,19 +243,12 @@ GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
 	@mkdir -p $(dir $@)
 	@ln -s ../../$(basename $<) $(dir $@)
 
-GLOCK := ../../../../bin/glock
-#        ^  ^  ^  ^~ GOPATH
-#        |  |  |~ GOPATH/src
-#        |  |~ GOPATH/src/github.com
-#        |~ GOPATH/src/github.com/cockroachdb
-
-$(GLOCK):
-	$(GO) get github.com/robfig/glock
-
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
-	@unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
+.bootstrap: $(GITHOOKS)
+	go install -v ./vendor/...
+	go install cmd/gossipsim
+	go install cmd/protoc-gen-gogoroach
 	touch $@
 
 include .bootstrap
