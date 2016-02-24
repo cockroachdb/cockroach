@@ -16,10 +16,13 @@
 
 package log
 
-import "reflect"
+import (
+	"bytes"
+	"fmt"
+)
 
 type field interface {
-	populate(entry *LogEntry, v interface{})
+	format(buf *bytes.Buffer, v interface{})
 }
 
 type nodeIDField struct{}
@@ -28,9 +31,8 @@ func (nodeIDField) String() string {
 	return "NodeID"
 }
 
-func (nodeIDField) populate(entry *LogEntry, v interface{}) {
-	entry.NodeID = new(int32)
-	*entry.NodeID = int32(reflect.ValueOf(v).Int())
+func (nodeIDField) format(buf *bytes.Buffer, v interface{}) {
+	fmt.Fprintf(buf, "node=%d", v)
 }
 
 type storeIDField struct{}
@@ -39,9 +41,8 @@ func (storeIDField) String() string {
 	return "StoreID"
 }
 
-func (storeIDField) populate(entry *LogEntry, v interface{}) {
-	entry.StoreID = new(int32)
-	*entry.StoreID = int32(reflect.ValueOf(v).Int())
+func (storeIDField) format(buf *bytes.Buffer, v interface{}) {
+	fmt.Fprintf(buf, "store=%d", v)
 }
 
 type rangeIDField struct{}
@@ -50,9 +51,8 @@ func (rangeIDField) String() string {
 	return "RangeID"
 }
 
-func (rangeIDField) populate(entry *LogEntry, v interface{}) {
-	entry.RangeID = new(int64)
-	*entry.RangeID = int64(reflect.ValueOf(v).Int())
+func (rangeIDField) format(buf *bytes.Buffer, v interface{}) {
+	fmt.Fprintf(buf, "range=%d", v)
 }
 
 var (

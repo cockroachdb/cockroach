@@ -18,6 +18,17 @@ package log
 
 import "golang.org/x/net/context"
 
+// Entry represents a cockroach structured log entry.
+type Entry struct {
+	Severity int    `json:"severity"` // Log message severity.
+	Time     int64  `json:"time"`     // Time, measured in nanoseconds since the epoch.
+	File     string `json:"file"`     // File which generated log statement.
+	Line     int    `json:"line"`     // Line in file which generated log statement.
+	// TODO(pmattis): The json output should be called `message` as well. Need to
+	// fix the UI.
+	Message string `json:"format"` // Log message.
+}
+
 func init() {
 	copyStandardLogTo("INFO")
 }
@@ -59,7 +70,7 @@ func DisableLogFileOutput() {
 // dictionary for separate binary-log output.
 func logDepth(ctx context.Context, depth int, sev Severity, format string, args []interface{}) {
 	// TODO(tschottdorf): logging hooks should have their entry point here.
-	AddStructured(ctx, sev, depth+1, format, args)
+	addStructured(ctx, sev, depth+1, format, args)
 }
 
 // Infoc logs to the WARNING and INFO logs. It extracts values from the context
