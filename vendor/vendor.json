@@ -13,6 +13,11 @@
 			"revisionTime": "2015-05-12T14:48:22-04:00"
 		},
 		{
+			"path": "github.com/agtorre/gocolorize",
+			"revision": "f42b554bf7f006936130c9bb4f971afd2d87f671",
+			"revisionTime": "2014-09-21T15:56:20-07:00"
+		},
+		{
 			"path": "github.com/biogo/store/interval",
 			"revision": "3b4c041f52c224ee4a44f5c8b150d003a40643a0",
 			"revisionTime": "2015-09-19T13:18:34+09:30"
@@ -33,9 +38,30 @@
 			"revisionTime": "2016-02-23T13:52:35+08:00"
 		},
 		{
+			"path": "github.com/client9/misspell",
+			"revision": "c9127cb48d96739b0712cff253d86f05d1f431b1",
+			"revisionTime": "2016-02-21T12:19:24-08:00"
+		},
+		{
+			"path": "github.com/client9/misspell/cmd/misspell",
+			"revision": "c9127cb48d96739b0712cff253d86f05d1f431b1",
+			"revisionTime": "2016-02-21T12:19:24-08:00"
+		},
+		{
 			"path": "github.com/cloudfoundry/gosigar",
 			"revision": "3ed7c74352dae6dc00bdc8c74045375352e3ec05",
 			"revisionTime": "2015-04-02T10:07:47-07:00"
+		},
+		{
+			"origin": "github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc",
+			"path": "github.com/cockroachdb/c-protobuf/cmd/protoc",
+			"revision": "4feb192131ea08dfbd7253a00868ad69cbb61b81",
+			"revisionTime": "2016-01-07T10:29:53-05:00"
+		},
+		{
+			"path": "github.com/cockroachdb/stress",
+			"revision": "aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25",
+			"revisionTime": "2016-02-05T10:49:49-05:00"
 		},
 		{
 			"path": "github.com/codahale/hdrhistogram",
@@ -273,6 +299,16 @@
 			"revisionTime": "2016-02-01T16:25:51+02:00"
 		},
 		{
+			"path": "github.com/golang/lint",
+			"revision": "32a87160691b3c96046c0c678fe57c5bef761456",
+			"revisionTime": "2015-10-19T09:42:00+11:00"
+		},
+		{
+			"path": "github.com/golang/lint/golint",
+			"revision": "32a87160691b3c96046c0c678fe57c5bef761456",
+			"revisionTime": "2015-10-19T09:42:00+11:00"
+		},
+		{
 			"path": "github.com/golang/protobuf/proto",
 			"revision": "3c84672111d91bb5ac31719e112f9f7126a0e26e",
 			"revisionTime": "2016-02-22T08:49:41+11:00"
@@ -283,14 +319,54 @@
 			"revisionTime": "2015-04-13T10:36:44-06:00"
 		},
 		{
+			"path": "github.com/gordonklaus/ineffassign",
+			"revision": "507e48671a072e56dbc5dbbee2872ce0d662697e",
+			"revisionTime": "2015-11-29T15:06:40+01:00"
+		},
+		{
 			"path": "github.com/inconshreveable/mousetrap",
 			"revision": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75",
 			"revisionTime": "2014-10-17T13:07:13-07:00"
 		},
 		{
+			"path": "github.com/jteeuwen/go-bindata",
+			"revision": "a0ff2567cfb70903282db057e799fd826784d41d",
+			"revisionTime": "2015-10-23T11:11:02+02:00"
+		},
+		{
+			"path": "github.com/jteeuwen/go-bindata/go-bindata",
+			"revision": "a0ff2567cfb70903282db057e799fd826784d41d",
+			"revisionTime": "2015-10-23T11:11:02+02:00"
+		},
+		{
 			"path": "github.com/julienschmidt/httprouter",
 			"revision": "77366a47451a56bb3ba682481eed85b64fea14e8",
 			"revisionTime": "2016-02-19T16:40:26+01:00"
+		},
+		{
+			"path": "github.com/kisielk/errcheck",
+			"revision": "f76568f8d87e48ccbbd17a827c2eaf31805bf58c",
+			"revisionTime": "2016-02-18T11:58:08-08:00"
+		},
+		{
+			"path": "github.com/kisielk/errcheck/internal/errcheck",
+			"revision": "f76568f8d87e48ccbbd17a827c2eaf31805bf58c",
+			"revisionTime": "2016-02-18T11:58:08-08:00"
+		},
+		{
+			"path": "github.com/kisielk/gotool",
+			"revision": "58a7a198f2ec6ea7af221fd216e7f559d663ce02",
+			"revisionTime": "2015-09-04T21:49:35-07:00"
+		},
+		{
+			"path": "github.com/kkaneda/returncheck",
+			"revision": "bf081fa7155e3a27df1f056a49d50685edfa5b1b",
+			"revisionTime": "2016-01-21T19:28:49-08:00"
+		},
+		{
+			"path": "github.com/kkaneda/returncheck/internal",
+			"revision": "bf081fa7155e3a27df1f056a49d50685edfa5b1b",
+			"revisionTime": "2016-01-21T19:28:49-08:00"
 		},
 		{
 			"path": "github.com/kr/pretty",
@@ -323,6 +399,41 @@
 			"revisionTime": "2016-02-16T20:09:16+09:00"
 		},
 		{
+			"path": "github.com/mibk/dupl",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/job",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/output",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/remote",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/suffixtree",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/syntax",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/syntax/golang",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
 			"path": "github.com/olekukonko/tablewriter",
 			"revision": "cca8bbc0798408af109aaaa239cbd2634846b340",
 			"revisionTime": "2016-01-15T12:10:02+01:00"
@@ -333,6 +444,11 @@
 			"revisionTime": "2016-02-23T13:30:19+05:30"
 		},
 		{
+			"path": "github.com/opennota/check/cmd/varcheck",
+			"revision": "2647c7f78677e5af42e988a36343bc83194b7109",
+			"revisionTime": "2016-01-08T11:05:44+07:00"
+		},
+		{
 			"path": "github.com/opentracing/opentracing-go",
 			"revision": "0d6663129887f81abfd874da4faa8438a46b42dc",
 			"revisionTime": "2016-02-22T20:41:21-08:00"
@@ -341,6 +457,11 @@
 			"path": "github.com/rcrowley/go-metrics",
 			"revision": "51425a2415d21afadfd55cd93432c0bc69e9598d",
 			"revisionTime": "2016-01-13T15:50:30-08:00"
+		},
+		{
+			"path": "github.com/robfig/glock",
+			"revision": "cb3c3ec56de988289cab7bbd284eddc04dfee6c9",
+			"revisionTime": "2015-06-10T16:55:51-04:00"
 		},
 		{
 			"path": "github.com/russross/blackfriday",
@@ -376,6 +497,11 @@
 			"path": "github.com/spf13/pflag",
 			"revision": "7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7",
 			"revisionTime": "2015-10-24T12:54:09+02:00"
+		},
+		{
+			"path": "github.com/tebeka/go2xunit",
+			"revision": "304a3dad367b395460778a969d87101b778b322f",
+			"revisionTime": "2016-02-17T19:48:42+02:00"
 		},
 		{
 			"path": "github.com/termie/go-shutil",
@@ -441,6 +567,51 @@
 			"path": "golang.org/x/text/unicode/norm",
 			"revision": "07b9a78963006a15c538ec5175243979025fa7a8",
 			"revisionTime": "2016-02-11T19:16:47+11:00"
+		},
+		{
+			"path": "golang.org/x/tools/cmd/goimports",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/cmd/stringer",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/ast/astutil",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/buildutil",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/exact",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/gcimporter",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/loader",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/types",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/imports",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
 		},
 		{
 			"path": "google.golang.org/grpc",
