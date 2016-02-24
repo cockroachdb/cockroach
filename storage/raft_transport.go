@@ -206,11 +206,19 @@ func (t *RaftTransport) getStream(nodeID roachpb.NodeID) (MultiRaft_RaftMessageC
 	return cs.stream, cs.err
 }
 
-// Send a message to the recipient specified in the request.
-func (t *RaftTransport) Send(req *RaftMessageRequest) error {
+func (t *RaftTransport) send(req *RaftMessageRequest) error {
 	stream, err := t.getStream(req.ToReplica.NodeID)
 	if err != nil {
 		return err
 	}
 	return stream.Send(req)
+}
+
+// Send a message to the recipient specified in the request.
+func (t *RaftTransport) Send(req *RaftMessageRequest) error {
+	var err error
+	if !t.rpcContext.Stopper.RunTask(func() { err = t.send(req) }) {
+		err = util.Errorf("node stopped")
+	}
+	return err
 }

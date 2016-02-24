@@ -89,7 +89,7 @@ func (s *DBServer) executeCmd(argsI proto.Message) (proto.Message, error) {
 	}
 
 	if !s.stopper.RunTask(f) {
-		err = util.Errorf("stopped")
+		err = util.Errorf("node stopped")
 	}
 	return br, err
 }
