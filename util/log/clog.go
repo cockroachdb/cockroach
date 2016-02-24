@@ -22,7 +22,6 @@ package log
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -36,9 +35,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/gogo/protobuf/proto"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -377,7 +373,7 @@ func NewEntryDecoder(in io.Reader) *EntryDecoder {
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
-func (d *EntryDecoder) Decode(entry *LogEntry) error {
+func (d *EntryDecoder) Decode(entry *Entry) error {
 	for {
 		if !d.scanner.Scan() {
 			if err := d.scanner.Err(); err != nil {
@@ -390,19 +386,18 @@ func (d *EntryDecoder) Decode(entry *LogEntry) error {
 		if m == nil {
 			continue
 		}
-		entry.Severity = int32(strings.IndexByte(severityChar, m[1][0]))
-		t, err := time.ParseInLocation("060102 15:04:05.999999", string(m[2]), time.UTC)
+		entry.Severity = strings.IndexByte(severityChar, m[1][0])
+		t, err := time.ParseInLocation("060102 15:04:05.999999", string(m[2]), time.Local)
 		if err != nil {
 			return err
 		}
 		entry.Time = t.UnixNano()
 		entry.File = string(m[3])
-		i, err := strconv.Atoi(string(m[4]))
+		entry.Line, err = strconv.Atoi(string(m[4]))
 		if err != nil {
 			return err
 		}
-		entry.Line = int32(i)
-		entry.Format = string(m[5])
+		entry.Message = string(m[5])
 		return nil
 	}
 }
@@ -448,7 +443,7 @@ type flushSyncWriter interface {
 // 	file             The file name
 // 	line             The line number
 // 	msg              The user-supplied message
-func formatHeader(s Severity, now time.Time, file string, line int32, colors *colorProfile) *buffer {
+func formatHeader(s Severity, now time.Time, file string, line int, colors *colorProfile) *buffer {
 	buf := logging.getBuffer()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
@@ -557,21 +552,15 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry LogEntry, colors *colorProfile) *buffer {
+func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 	buf := formatHeader(Severity(entry.Severity), time.Unix(entry.Time/1E9, entry.Time%1E9),
 		entry.File, entry.Line, colors)
-	var args []interface{}
-	for _, arg := range entry.Args {
-		args = append(args, arg.Str)
+	_, _ = buf.WriteString(entry.Message)
+	if buf.Bytes()[buf.Len()-1] != '\n' {
+		_ = buf.WriteByte('\n')
 	}
-	if len(entry.Format) == 0 {
-		fmt.Fprint(buf, args...)
-	} else {
-		fmt.Fprintf(buf, entry.Format, args...)
-	}
-	_ = buf.WriteByte('\n')
-	if len(entry.Stacks) > 0 {
-		buf.Write(entry.Stacks)
+	if len(stacks) > 0 {
+		buf.Write(stacks)
 	}
 	return buf
 }
@@ -617,8 +606,6 @@ type loggingT struct {
 	// Boolean flags. Also protected by mu (see flags.go).
 	toStderr     bool // The -logtostderr flag.
 	alsoToStderr bool // The -alsologtostderr flag.
-
-	protoFormat bool // Use proto-encoded log files.
 
 	mu sync.Mutex
 	// file holds writer for each of the log types.
@@ -701,47 +688,45 @@ func (l *loggingT) putBuffer(b *buffer) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry LogEntry) {
+func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
 	l.mu.Lock()
 
 	// Set additional details in log entry.
 	now := time.Now()
-	entry.Severity = int32(s)
-	entry.Time = now.UnixNano()
-	entry.File = file
-	entry.Line = int32(line)
+	entry := Entry{
+		Severity: int(s),
+		Time:     now.UnixNano(),
+		File:     file,
+		Line:     line,
+		Message:  msg,
+	}
 	// On fatal log, set all stacks.
+	var stacks []byte
 	if s == FatalLog {
-		entry.Stacks = stacks(true)
+		stacks = getStacks(true)
 		logExitFunc = func(error) {} // If we get a write error, we'll still exit.
 	} else if l.traceLocation.isSet() {
 		if l.traceLocation.match(file, line) {
-			entry.Stacks = stacks(false)
+			stacks = getStacks(false)
 		}
 	}
 
 	if l.toStderr {
-		l.outputToStderr(entry)
+		l.outputToStderr(entry, stacks)
 	} else {
 		if l.alsoToStderr || s >= l.stderrThreshold.get() {
-			l.outputToStderr(entry)
+			l.outputToStderr(entry, stacks)
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
 				// Make sure the message appears somewhere.
-				l.outputToStderr(entry)
+				l.outputToStderr(entry, stacks)
 				l.exit(err)
 			}
 		}
 
-		var buf *buffer
-		var data []byte
-		if l.protoFormat {
-			data = encodeLogEntry(entry)
-		} else {
-			buf = l.processForFile(entry)
-			data = buf.Bytes()
-		}
+		buf := l.processForFile(entry, stacks)
+		data := buf.Bytes()
 
 		switch s {
 		case FatalLog:
@@ -765,9 +750,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry LogEn
 			}
 		}
 
-		if buf != nil {
-			l.putBuffer(buf)
-		}
+		l.putBuffer(buf)
 
 		if stats := severityStats[s]; stats != nil {
 			atomic.AddInt64(&stats.lines, 1)
@@ -787,20 +770,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, entry LogEn
 	}
 }
 
-func encodeLogEntry(entry LogEntry) []byte {
-	// Marshal log entry.
-	entryData, err := proto.Marshal(&entry)
-	if err != nil {
-		panic(fmt.Sprintf("unable to marshal log entry: %s", err))
-	}
-	// Encode the length of the data first, followed by the encoded data.
-	data := make([]byte, 4, 4+len(entryData))
-	binary.BigEndian.PutUint32(data, uint32(len(entryData)))
-	return append(data, entryData...)
-}
-
-func (l *loggingT) outputToStderr(entry LogEntry) {
-	buf := l.processForStderr(entry)
+func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
+	buf := l.processForStderr(entry, stacks)
 	if _, err := os.Stderr.Write(buf.Bytes()); err != nil {
 		panic(err)
 	}
@@ -808,13 +779,13 @@ func (l *loggingT) outputToStderr(entry LogEntry) {
 }
 
 // processForStderr formats a log entry for output to standard error.
-func (l *loggingT) processForStderr(entry LogEntry) *buffer {
-	return formatLogEntry(entry, l.getTermColorProfile())
+func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
+	return formatLogEntry(entry, stacks, l.getTermColorProfile())
 }
 
 // processForFile formats a log entry for output to a file.
-func (l *loggingT) processForFile(entry LogEntry) *buffer {
-	return formatLogEntry(entry, nil)
+func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
+	return formatLogEntry(entry, stacks, nil)
 }
 
 // checkForColorTerm attempts to verify that stderr is a character
@@ -855,8 +826,8 @@ func timeoutFlush(timeout time.Duration) {
 	}
 }
 
-// stacks is a wrapper for runtime.Stack that attempts to recover the data for all goroutines.
-func stacks(all bool) []byte {
+// getStacks is a wrapper for runtime.Stack that attempts to recover the data for all goroutines.
+func getStacks(all bool) []byte {
 	// We don't know how big the traces are, so grow a few times if they don't fit. Start large, though.
 	n := 10000
 	if all {
@@ -902,10 +873,9 @@ func (l *loggingT) exit(err error) {
 type syncBuffer struct {
 	logger *loggingT
 	*bufio.Writer
-	file        *os.File
-	sev         Severity
-	nbytes      uint64 // The number of bytes written to this file
-	protoFormat bool
+	file   *os.File
+	sev    Severity
+	nbytes uint64 // The number of bytes written to this file
 }
 
 func (sb *syncBuffer) Sync() error {
@@ -946,36 +916,14 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
 	// Write header.
-	if sb.protoFormat {
-		file, line, _ := caller.Lookup(0)
-		for _, format := range []string{
-			fmt.Sprintf("Running on machine: %s", host),
-			fmt.Sprintf("Binary: Built with %s %s for %s/%s",
-				runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH),
-		} {
-			entry := LogEntry{
-				Time:   time.Now().UnixNano(),
-				File:   file,
-				Line:   int32(line),
-				Format: format,
-			}
-			var n int
-			n, err = sb.file.Write(encodeLogEntry(entry))
-			if err != nil {
-				panic(err)
-			}
-			sb.nbytes += uint64(n)
-		}
-	} else {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Log file created at: %s\n", now.Format("2006/01/02 15:04:05"))
-		fmt.Fprintf(&buf, "Running on machine: %s\n", host)
-		fmt.Fprintf(&buf, "Binary: Built with %s %s for %s/%s\n", runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH)
-		fmt.Fprintf(&buf, "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu file:line msg\n")
-		var n int
-		n, err = sb.file.Write(buf.Bytes())
-		sb.nbytes += uint64(n)
-	}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Log file created at: %s\n", now.Format("2006/01/02 15:04:05"))
+	fmt.Fprintf(&buf, "Running on machine: %s\n", host)
+	fmt.Fprintf(&buf, "Binary: Built with %s %s for %s/%s\n", runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(&buf, "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu file:line msg\n")
+	var n int
+	n, err = sb.file.Write(buf.Bytes())
+	sb.nbytes += uint64(n)
 	return err
 }
 
@@ -1099,10 +1047,7 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	}
 	// printWithFileLine with alsoToStderr=true, so standard log messages
 	// always appear on standard error.
-	entry := LogEntry{
-		Format: text,
-	}
-	logging.outputLogEntry(Severity(lb), file, line, entry)
+	logging.outputLogEntry(Severity(lb), file, line, text)
 	return len(b), nil
 }
 
