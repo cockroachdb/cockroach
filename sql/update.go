@@ -219,7 +219,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		tracing.AnnotateTrace()
 
 		rowVals := rows.Values()
-		result.rows = append(result.rows, parser.DTuple(nil))
+		result.rowCount++
 
 		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
