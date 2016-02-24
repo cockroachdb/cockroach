@@ -380,17 +380,16 @@ func (expr DTuple) Walk(_ Visitor) Expr { return expr }
 func (expr DValArg) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
-func WalkExpr(v Visitor, expr Expr) (new Expr, changed bool) {
-	recurse, new := v.VisitPre(expr)
+func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
+	recurse, newExpr := v.VisitPre(expr)
 
 	if recurse {
-		new = new.Walk(v)
-		new = v.VisitPost(new)
+		newExpr = newExpr.Walk(v)
+		newExpr = v.VisitPost(newExpr)
 	}
 
 	// We cannot use == because some Expr implementations are not comparable (e.g. DTuple)
-	changed = (reflect.ValueOf(expr) != reflect.ValueOf(new))
-	return
+	return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
 }
 
 // WalkExprConst is a variant of WalkExpr for visitors that do not modify the expression.
@@ -703,14 +702,13 @@ var _ WalkableStmt = &Values{}
 // WalkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned
 // by WalkExpr.
-func WalkStmt(v Visitor, stmt Statement) (new Statement, changed bool) {
+func WalkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
 	walkable, ok := stmt.(WalkableStmt)
 	if !ok {
 		return stmt, false
 	}
-	new = walkable.WalkStmt(v)
-	changed = (stmt != new)
-	return
+	newStmt = walkable.WalkStmt(v)
+	return newStmt, (stmt != newStmt)
 }
 
 // Args defines the interface for retrieving arguments. Return false for the
