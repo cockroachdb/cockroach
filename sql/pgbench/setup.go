@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os/exec"
 )
 
 const schema = `
@@ -86,6 +87,20 @@ func CreateAndConnect(pgURL url.URL, name string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func SetupExec(pgUrl url.URL, name string, accounts, transactions int) (*exec.Cmd, error) {
+	db, err := CreateAndConnect(pgUrl, name)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	if err := SetupBenchDB(db, accounts, true /*quiet*/); err != nil {
+		return nil, err
+	}
+
+	return ExecPgbench(pgUrl, name, transactions)
 }
 
 // SetupBenchDB sets up a db with the schema and initial data used by `pgbench`.

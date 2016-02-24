@@ -18,10 +18,16 @@ package sql_test
 
 import (
 	"database/sql"
+	"fmt"
 	"math/rand"
+	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/pgbench"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // Tests a batch of queries very similar to those that that PGBench runs
@@ -58,6 +64,44 @@ func runPgbenchQueryParallel(b *testing.B, db *sql.DB) {
 		}
 	})
 	b.StopTimer()
+}
+
+func execPgbench(b *testing.B, pgUrl url.URL) {
+	c, err := pgbench.SetupExec(pgUrl, "bench", 20000, b.N)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	out, err := c.CombinedOutput()
+	if testing.Verbose() || err != nil {
+		fmt.Println(string(out))
+	}
+	if err != nil {
+		b.Log(c)
+		b.Fatal(err)
+	}
+	b.StopTimer()
+}
+
+func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
+	defer tracing.Disable()()
+	s := server.StartInsecureTestServer(b)
+	defer s.Stop()
+
+	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
+	pgUrl.RawQuery = "sslmode=disable"
+	defer cleanupFn()
+
+	execPgbench(b, pgUrl)
+}
+
+func BenchmarkPgbenchExec_Postgres(b *testing.B) {
+	pgUrl, err := url.Parse("postgres://localhost:5432?sslmode=disable")
+	if err != nil {
+		b.Fatal(err)
+	}
+	execPgbench(b, *pgUrl)
 }
 
 func BenchmarkPgbenchQuery_Cockroach(b *testing.B) {

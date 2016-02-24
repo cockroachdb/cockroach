@@ -20,6 +20,9 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"net"
+	"net/url"
+	"os/exec"
 )
 
 // This is the TPC-B(ish) query that pgbench runs.
@@ -43,4 +46,30 @@ func RunOne(db *sql.DB, r *rand.Rand, accounts int) error {
 	q := fmt.Sprintf(tpcbQuery, delta, account, teller, branch)
 	_, err := db.Exec(q)
 	return err
+}
+
+// ExecPgbench returns a ready-to-run pgbench Cmd, that will run
+// against the db specific by `pgUrl`.
+func ExecPgbench(pgUrl url.URL, dbname string, count int) (*exec.Cmd, error) {
+	host, port, err := net.SplitHostPort(pgUrl.Host)
+	if err != nil {
+		return nil, err
+	}
+
+	args := []string{
+		"-n", // disable (pg-specific) vacuum
+		"-r", // print stats
+		fmt.Sprintf("--transactions=%d", count),
+		"-h", host,
+		"-p", port,
+	}
+
+	if pgUrl.User != nil {
+		if user := pgUrl.User.Username(); user != "" {
+			args = append(args, "-U", user)
+		}
+	}
+	args = append(args, dbname)
+
+	return exec.Command("pgbench", args...), nil
 }
