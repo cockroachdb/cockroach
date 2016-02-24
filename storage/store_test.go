@@ -98,7 +98,10 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.
-	rs := keys.Range(ba)
+	rs, rErr := keys.Range(ba)
+	if rErr != nil {
+		return nil, roachpb.NewErrorf("Lookup range failed")
+	}
 	rng := db.store.LookupReplica(rs.Key, rs.EndKey)
 	if rng == nil {
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))

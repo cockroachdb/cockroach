@@ -471,19 +471,26 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 // Range returns a key range encompassing all the keys in the Batch.
 // TODO(tschottdorf): there is no protection for doubly-local keys here;
 // maybe Range should return an error.
-func Range(ba roachpb.BatchRequest) roachpb.RSpan {
+func Range(ba roachpb.BatchRequest) (*roachpb.RSpan, error) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
+	var rsErr *roachpb.RSpan
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if req.Method() == roachpb.Noop {
 			continue
 		}
 		h := req.Header()
+		if roachpb.IsRange(req) == false && len(h.EndKey) != 0 {
+			return rsErr, util.Errorf("%s: specified for this operation", req)
+		}
 		key := Addr(h.Key)
 		if key.Less(from) {
 			// Key is smaller than `from`.
 			from = key
+			if bytes.Compare(key, from) > 0 {
+				return rsErr, util.Errorf("%s: must be less than KeyMax", key)
+			}
 		}
 		if !key.Less(to) {
 			// Key.Next() is larger than `to`.
@@ -492,7 +499,10 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 		if endKey := Addr(h.EndKey); to.Less(endKey) {
 			// EndKey is larger than `to`.
 			to = endKey
+			if bytes.Compare(to, endKey) < 0 {
+				return rsErr, util.Errorf("%s: must be less than or equal to KeyMax", endKey)
+			}
 		}
 	}
-	return roachpb.RSpan{Key: from, EndKey: to}
+	return &roachpb.RSpan{Key: from, EndKey: to}, nil
 }
