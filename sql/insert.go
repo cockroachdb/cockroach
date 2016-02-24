@@ -128,8 +128,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	marshalled := make([]interface{}, len(cols))
 
 	b := p.txn.NewBatch()
-	var rh returningHelper
-	err = rh.init(p, n.Returning, tableDesc.Name, cols)
+	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, cols)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -266,7 +265,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, convertBatchError(&tableDesc, *b, pErr)
 	}
-	return rh.finalize(), nil
+	return rh.getValues(), nil
 }
 
 func (p *planner) processColumns(tableDesc *TableDescriptor,

@@ -142,8 +142,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	var rh returningHelper
-	err = rh.init(p, n.Returning, tableDesc.Name, cols)
+	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, cols)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -167,7 +166,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 				return nil, roachpb.NewError(err)
 			}
 		}
-		return rh.finalize(), nil
+		return rh.getValues(), nil
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -334,7 +333,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	}
 
 	tracing.AnnotateTrace()
-	return rh.finalize(), nil
+	return rh.getValues(), nil
 }
 
 func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) parser.Expr {

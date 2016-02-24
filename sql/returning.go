@@ -26,11 +26,12 @@ type returningHelper struct {
 	exprs  parser.Exprs
 }
 
-func (rh *returningHelper) init(p *planner, r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) error {
+func newReturningHelper(p *planner, r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) (*returningHelper, error) {
+	rh := &returningHelper{p: p, values: &valuesNode{}}
 	rh.p = p
 	rh.values = &valuesNode{}
 	if len(r) == 0 {
-		return nil
+		return rh, nil
 	}
 
 	rh.values.columns = make([]ResultColumn, len(r))
@@ -43,12 +44,12 @@ func (rh *returningHelper) init(p *planner, r parser.ReturningExprs, alias strin
 	for i, c := range r {
 		expr, err := resolveQNames(&table, rh.qvals, c.Expr)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		rh.exprs[i] = expr
 		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		name := string(c.As)
 		if name == "" {
@@ -59,7 +60,7 @@ func (rh *returningHelper) init(p *planner, r parser.ReturningExprs, alias strin
 			Typ:  typ,
 		}
 	}
-	return nil
+	return rh, nil
 }
 
 // appends a result row using the given values.
@@ -81,7 +82,7 @@ func (rh *returningHelper) append(rowVals parser.DTuple) error {
 	return nil
 }
 
-// finalize returns the results as a valuesNode.
-func (rh *returningHelper) finalize() *valuesNode {
+// getResults returns the results as a valuesNode.
+func (rh *returningHelper) getValues() *valuesNode {
 	return rh.values
 }
