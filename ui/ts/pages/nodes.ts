@@ -20,6 +20,7 @@ module AdminViews {
   "use strict";
 
   import MithrilElement = _mithril.MithrilVirtualElement;
+  import NavigationBar = Components.NavigationBar;
 
   /**
    * Nodes is the view for exploring the status of all nodes.
@@ -72,6 +73,21 @@ module AdminViews {
 
       class Controller {
         private static _queryEveryMS: number = 10000;
+
+        private static defaultTargets: NavigationBar.Target[] = [
+          {
+            view: "Overview",
+            route: "",
+          },
+          {
+            view: "Events",
+            route: "events",
+          },
+        ];
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+          return ((m.route.param("detail") || "") === t.route);
+        };
 
         private static comparisonColumns: Table.TableColumn<NodeStatus>[] = [
           {
@@ -265,6 +281,14 @@ module AdminViews {
           }));
         }
 
+        public TargetSet(): NavigationBar.TargetSet {
+          return {
+            baseRoute: "/nodes/",
+            targets: Utils.Prop(Controller.defaultTargets),
+            isActive: Controller.isActive,
+          };
+        }
+
         private _refresh(): void {
           this.exec.refresh();
           nodeStatuses.refresh();
@@ -296,6 +320,7 @@ module AdminViews {
         let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at ));
         return m(".page", [
           m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           m(".section", [
             m(".subtitle", m("h1", "Node Overview")),
             ctrl.RenderGraphs(),
@@ -309,8 +334,6 @@ module AdminViews {
      * NodePage show the details of a single node.
      */
     export module NodePage {
-      import NavigationBar = Components.NavigationBar;
-
       class Controller {
         private static defaultTargets: NavigationBar.Target[] = [
           {
