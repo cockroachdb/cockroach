@@ -158,7 +158,7 @@ module Models {
           return eventTemplates[e.eventType](e) || {icon: Icon.WARNING, timestamp: moment.utc(e.timestamp), content: m("span", "Unknown event type: " + e.eventType)};
         });
 
-        return _.sortByOrder(normalizedEvents.concat(normalizedRangeEvents), ["timestamp"], ["desc"]);
+        return _.orderBy(normalizedEvents.concat(normalizedRangeEvents), ["timestamp"], ["desc"]);
       }
     }
 
