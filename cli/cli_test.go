@@ -19,6 +19,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -56,6 +57,10 @@ func newCLITest() cliTest {
 	// pointer (because they are tied into the flags), but instead
 	// overwrite the existing struct's values.
 	cliContext.InitDefaults()
+
+	if err := flag.Lookup("log-dir").Value.Set(os.TempDir()); err != nil {
+		panic(err)
+	}
 
 	osStderr = os.Stdout
 
@@ -718,7 +723,7 @@ Flags:
       --alsologtostderr value[=true]   log to standard error as well as files
       --color value                    colorize standard error output according to severity (default "auto")
       --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir value                  if non-empty, write log files in this directory (default "` + os.TempDir() + `")
+      --log-dir value                  if non-empty, write log files in this directory
       --log-threshold value            logs at or above this threshold go to stderr (default ERROR)
       --logtostderr value[=true]       log to standard error instead of files
       --verbosity value                log level for V logs
