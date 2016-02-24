@@ -128,11 +128,45 @@ func (r *Registry) Counter(name string) *Counter {
 	return c
 }
 
+// GetCounter returns the Counter in this registry with the given name. If a
+// Counter with this name is not present (including if a non-Counter Iterable is
+// registered with the name), nil is returned.
+func (r *Registry) GetCounter(name string) *Counter {
+	r.Lock()
+	defer r.Unlock()
+	iterable, ok := r.tracked[name]
+	if !ok {
+		return nil
+	}
+	counter, ok := iterable.(*Counter)
+	if !ok {
+		return nil
+	}
+	return counter
+}
+
 // Gauge registers a new Gauge with the given name.
 func (r *Registry) Gauge(name string) *Gauge {
 	g := NewGauge()
 	r.MustAdd(name, g)
 	return g
+}
+
+// GetGauge returns the Gauge in this registry with the given name. If a Gauge
+// with this name is not present (including if a non-Gauge Iterable is
+// registered with the name), nil is returned.
+func (r *Registry) GetGauge(name string) *Gauge {
+	r.Lock()
+	defer r.Unlock()
+	iterable, ok := r.tracked[name]
+	if !ok {
+		return nil
+	}
+	gauge, ok := iterable.(*Gauge)
+	if !ok {
+		return nil
+	}
+	return gauge
 }
 
 // Rate creates an EWMA rate over the given timescale. The comments on NewRate
@@ -141,6 +175,23 @@ func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
 	e := NewRate(timescale)
 	r.MustAdd(name, e)
 	return e
+}
+
+// GetRate returns the Rate in this registry with the given name. If a Rate with
+// this name is not present (including if a non-Rate Iterable is registered with
+// the name), nil is returned.
+func (r *Registry) GetRate(name string) *Rate {
+	r.Lock()
+	defer r.Unlock()
+	iterable, ok := r.tracked[name]
+	if !ok {
+		return nil
+	}
+	rate, ok := iterable.(*Rate)
+	if !ok {
+		return nil
+	}
+	return rate
 }
 
 // Rates registers and returns a new Rates instance, which contains a set of EWMA-based rates
