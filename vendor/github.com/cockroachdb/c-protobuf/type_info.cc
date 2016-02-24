@@ -1,0 +1,1 @@
+internal/src/google/protobuf/util/internal/type_info.cc

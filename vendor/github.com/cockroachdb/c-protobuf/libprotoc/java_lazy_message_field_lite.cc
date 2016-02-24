@@ -1,0 +1,1 @@
+../internal/src/google/protobuf/compiler/java/java_lazy_message_field_lite.cc

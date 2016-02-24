@@ -1,0 +1,1 @@
+internal/src/google/protobuf/stubs/structurally_valid.cc

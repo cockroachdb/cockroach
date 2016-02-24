@@ -1,0 +1,1 @@
+../internal/src/google/protobuf/compiler/java/java_shared_code_generator.cc
