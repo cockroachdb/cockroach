@@ -13,11 +13,6 @@
 			"revisionTime": "2015-05-12T14:48:22-04:00"
 		},
 		{
-			"path": "github.com/agtorre/gocolorize",
-			"revision": "f42b554bf7f006936130c9bb4f971afd2d87f671",
-			"revisionTime": "2014-09-21T15:56:20-07:00"
-		},
-		{
 			"path": "github.com/biogo/store/interval",
 			"revision": "3b4c041f52c224ee4a44f5c8b150d003a40643a0",
 			"revisionTime": "2015-09-19T13:18:34+09:30"
@@ -457,11 +452,6 @@
 			"path": "github.com/rcrowley/go-metrics",
 			"revision": "51425a2415d21afadfd55cd93432c0bc69e9598d",
 			"revisionTime": "2016-01-13T15:50:30-08:00"
-		},
-		{
-			"path": "github.com/robfig/glock",
-			"revision": "cb3c3ec56de988289cab7bbd284eddc04dfee6c9",
-			"revisionTime": "2015-06-10T16:55:51-04:00"
 		},
 		{
 			"path": "github.com/russross/blackfriday",
