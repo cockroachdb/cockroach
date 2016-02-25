@@ -44,27 +44,34 @@ func rangeError(r Range) error {
 	}
 }
 
-// An Overlapper can determine whether it overlaps a range.
-type Overlapper interface {
-	// Overlap returns a boolean indicating whether the receiver overlaps the parameter.
-	Overlap(Range) bool
-}
-
 // A Range is a type that describes the basic characteristics of an interval.
 type Range struct {
 	Start, End Comparable
 }
 
+// OverlapInclusive returns whether the two provided ranges overlap. It
+// defines overlapping as a pair of ranges that share a segment, with both
+// start and end keys treated as inclusive values.
+func (r Range) OverlapInclusive(other Range) bool {
+	return r.End.Compare(other.Start) >= 0 && r.Start.Compare(other.End) <= 0
+}
+
+// OverlapExclusive returns whether the two provided ranges overlap. It defines
+// overlapping as a pair of ranges that share a segment of the keyspace, with the
+// start keys treated as inclusive and the end keys treated as inclusive.
+func (r Range) OverlapExclusive(other Range) bool {
+	return r.End.Compare(other.Start) > 0 && r.Start.Compare(other.End) < 0
+}
+
 // An Interface is a type that can be inserted into a Tree.
 type Interface interface {
-	Overlapper
 	Range() Range
 	// Returns a unique ID for the element.
 	// TODO(nvanbenschoten) Should this be changed to an int64?
 	ID() uintptr
 }
 
-// A Comparable is a type that describes the ends of an Overlapper.
+// A Comparable is a type that describes the ends of a Range.
 type Comparable []byte
 
 // Compare returns a value indicating the sort order relationship between the
@@ -89,8 +96,9 @@ type Node struct {
 
 // A Tree manages the root node of an interval tree. Public methods are exposed through this type.
 type Tree struct {
-	Root  *Node // Root node of the tree.
-	Count int   // Number of elements stored.
+	Root            *Node // root node of the tree.
+	Count           int   // number of elements stored.
+	InclusiveRanges bool  // whether Range ends are inclusive or not.
 }
 
 // Helper methods
@@ -225,11 +233,11 @@ func (t *Tree) Len() int {
 	return t.Count
 }
 
-// Get returns a slice of Interfaces that overlap q in the Tree according
-// to q.Overlap().
-func (t *Tree) Get(q Overlapper) (o []Interface) {
-	if t.Root != nil && q.Overlap(t.Root.Range) {
-		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, q)
+// Get returns a slice of Interfaces that overlap r in the Tree.
+func (t *Tree) Get(r Range) (o []Interface) {
+	overlaps := t.overlapperFunc()
+	if t.Root != nil && overlaps(r, t.Root.Range) {
+		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, r, overlaps)
 	}
 	return
 }
@@ -395,7 +403,7 @@ func (t *Tree) Delete(e Interface, fast bool) (err error) {
 	if err := rangeError(r); err != nil {
 		return err
 	}
-	if t.Root == nil || !e.Overlap(t.Root.Range) {
+	if t.Root == nil || !t.overlapperFunc()(r, t.Root.Range) {
 		return
 	}
 	var d int
@@ -618,28 +626,29 @@ func (n *Node) doReverse(fn Operation) (done bool) {
 // the condition is independent of sort order. A boolean is returned indicating whether the Do
 // traversal was interrupted by an Operation returning true. If fn alters stored intervals' sort
 // relationships, future tree operation behaviors are undefined.
-func (t *Tree) DoMatching(fn Operation, q Overlapper) bool {
-	if t.Root != nil && q.Overlap(t.Root.Range) {
-		return t.Root.doMatch(fn, q)
+func (t *Tree) DoMatching(fn Operation, r Range) bool {
+	overlaps := t.overlapperFunc()
+	if t.Root != nil && overlaps(r, t.Root.Range) {
+		return t.Root.doMatch(fn, r, overlaps)
 	}
 	return false
 }
 
-func (n *Node) doMatch(fn Operation, q Overlapper) (done bool) {
-	if n.Left != nil && q.Overlap(n.Left.Range) {
-		done = n.Left.doMatch(fn, q)
+func (n *Node) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
+	if n.Left != nil && overlaps(r, n.Left.Range) {
+		done = n.Left.doMatch(fn, r, overlaps)
 		if done {
 			return
 		}
 	}
-	if q.Overlap(n.Elem.Range()) {
+	if overlaps(r, n.Elem.Range()) {
 		done = fn(n.Elem)
 		if done {
 			return
 		}
 	}
-	if n.Right != nil && q.Overlap(n.Right.Range) {
-		done = n.Right.doMatch(fn, q)
+	if n.Right != nil && overlaps(r, n.Right.Range) {
+		done = n.Right.doMatch(fn, r, overlaps)
 	}
 	return
 }
@@ -650,28 +659,37 @@ func (n *Node) doMatch(fn Operation, q Overlapper) (done bool) {
 // the condition is independent of sort order. A boolean is returned indicating whether the Do
 // traversal was interrupted by an Operation returning true. If fn alters stored intervals' sort
 // relationships, future tree operation behaviors are undefined.
-func (t *Tree) DoMatchingReverse(fn Operation, q Overlapper) bool {
-	if t.Root != nil && q.Overlap(t.Root.Range) {
-		return t.Root.doMatch(fn, q)
+func (t *Tree) DoMatchingReverse(fn Operation, r Range) bool {
+	overlaps := t.overlapperFunc()
+	if t.Root != nil && overlaps(r, t.Root.Range) {
+		return t.Root.doMatch(fn, r, overlaps)
 	}
 	return false
 }
 
-func (n *Node) doMatchReverse(fn Operation, q Overlapper) (done bool) {
-	if n.Right != nil && q.Overlap(n.Right.Range) {
-		done = n.Right.doMatchReverse(fn, q)
+func (n *Node) doMatchReverse(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
+	if n.Right != nil && overlaps(r, n.Right.Range) {
+		done = n.Right.doMatchReverse(fn, r, overlaps)
 		if done {
 			return
 		}
 	}
-	if q.Overlap(n.Elem.Range()) {
+	if overlaps(r, n.Elem.Range()) {
 		done = fn(n.Elem)
 		if done {
 			return
 		}
 	}
-	if n.Left != nil && q.Overlap(n.Left.Range) {
-		done = n.Left.doMatchReverse(fn, q)
+	if n.Left != nil && overlaps(r, n.Left.Range) {
+		done = n.Left.doMatchReverse(fn, r, overlaps)
 	}
 	return
+}
+
+// overlapperFunc determines how the Tree should define ranges overlapping.
+func (t *Tree) overlapperFunc() func(Range, Range) bool {
+	if t.InclusiveRanges {
+		return Range.OverlapInclusive
+	}
+	return Range.OverlapExclusive
 }
