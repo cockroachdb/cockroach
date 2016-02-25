@@ -129,10 +129,17 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		// the new commands overlapped range. Following this strategy, the other dependencies
 		// will be implicitly enforced, which reduces memory utilization and synchronization
 		// costs.
+		// The exception are existing reads: since reads don't wait for each other, an incoming
+		// write must wait for reads even when they are covered by a "later" read (since that
+		// "later" read won't wait for the earlier read to complete).
+		//
+		// TODO(nvanbeschoten): some (likely minimal) gains are possible: The writer does not
+		// have to blindly wait for all reads; only those which aren't already covered directly
+		// by writes are relevant.
 		sort.Sort(overlapSorter(overlaps))
 		for i := len(overlaps) - 1; i >= 0; i-- {
 			c := overlaps[i]
-			if cq.rg.Add(c.Key.Range) {
+			if cq.rg.Add(c.Key.Range) || !readOnly {
 				c := c.Value.(*cmd)
 				c.pending = append(c.pending, wg)
 				wg.Add(1)
