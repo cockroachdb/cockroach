@@ -1,0 +1,657 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"path": "github.com/Sirupsen/logrus",
+			"revision": "74bde9ea4c5b2c78995da8ed56d37e75644dc941",
+			"revisionTime": "2016-02-23T08:49:20-05:00"
+		},
+		{
+			"path": "github.com/VividCortex/ewma",
+			"revision": "c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed",
+			"revisionTime": "2015-05-12T14:48:22-04:00"
+		},
+		{
+			"path": "github.com/biogo/store/interval",
+			"revision": "3b4c041f52c224ee4a44f5c8b150d003a40643a0",
+			"revisionTime": "2015-09-19T13:18:34+09:30"
+		},
+		{
+			"path": "github.com/biogo/store/llrb",
+			"revision": "3b4c041f52c224ee4a44f5c8b150d003a40643a0",
+			"revisionTime": "2015-09-19T13:18:34+09:30"
+		},
+		{
+			"path": "github.com/chzyer/readline",
+			"revision": "a0bb3f70e4e781b8249963efda8dee347565f2a6",
+			"revisionTime": "2016-02-23T13:52:35+08:00"
+		},
+		{
+			"path": "github.com/chzyer/readline/runes",
+			"revision": "a0bb3f70e4e781b8249963efda8dee347565f2a6",
+			"revisionTime": "2016-02-23T13:52:35+08:00"
+		},
+		{
+			"path": "github.com/client9/misspell",
+			"revision": "c9127cb48d96739b0712cff253d86f05d1f431b1",
+			"revisionTime": "2016-02-21T12:19:24-08:00"
+		},
+		{
+			"path": "github.com/client9/misspell/cmd/misspell",
+			"revision": "c9127cb48d96739b0712cff253d86f05d1f431b1",
+			"revisionTime": "2016-02-21T12:19:24-08:00"
+		},
+		{
+			"path": "github.com/cloudfoundry/gosigar",
+			"revision": "3ed7c74352dae6dc00bdc8c74045375352e3ec05",
+			"revisionTime": "2015-04-02T10:07:47-07:00"
+		},
+		{
+			"origin": "github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/c-protobuf/cmd/protoc",
+			"path": "github.com/cockroachdb/c-protobuf/cmd/protoc",
+			"revision": "4feb192131ea08dfbd7253a00868ad69cbb61b81",
+			"revisionTime": "2016-01-07T10:29:53-05:00"
+		},
+		{
+			"path": "github.com/cockroachdb/stress",
+			"revision": "aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25",
+			"revisionTime": "2016-02-05T10:49:49-05:00"
+		},
+		{
+			"path": "github.com/codahale/hdrhistogram",
+			"revision": "e88be87d51429689cef99043a54150d733265cd7",
+			"revisionTime": "2016-02-14T09:16:03-08:00"
+		},
+		{
+			"path": "github.com/coreos/etcd/Godeps/_workspace/src/github.com/gogo/protobuf/proto",
+			"revision": "410d32a9b14f6052a834a966a02950cde518d7ce",
+			"revisionTime": "2016-02-22T23:41:26-08:00"
+		},
+		{
+			"path": "github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context",
+			"revision": "410d32a9b14f6052a834a966a02950cde518d7ce",
+			"revisionTime": "2016-02-22T23:41:26-08:00"
+		},
+		{
+			"path": "github.com/coreos/etcd/raft",
+			"revision": "410d32a9b14f6052a834a966a02950cde518d7ce",
+			"revisionTime": "2016-02-22T23:41:26-08:00"
+		},
+		{
+			"path": "github.com/coreos/etcd/raft/raftpb",
+			"revision": "410d32a9b14f6052a834a966a02950cde518d7ce",
+			"revisionTime": "2016-02-22T23:41:26-08:00"
+		},
+		{
+			"path": "github.com/cpuguy83/go-md2man/md2man",
+			"revision": "2724a9c9051aa62e9cca11304e7dd518e9e41599",
+			"revisionTime": "2016-01-04T20:15:47-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/client",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/client/transport",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/client/transport/cancellable",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/blkiodev",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/container",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/events",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/filters",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/network",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/registry",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/strslice",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/engine-api/types/time",
+			"revision": "adfa32fb6ccad724d73a16d53ce3defa46df27e5",
+			"revisionTime": "2016-02-22T14:48:32-05:00"
+		},
+		{
+			"path": "github.com/docker/go-connections/nat",
+			"revision": "34b5052da6b11e27f5f2e357b38b571ddddd3928",
+			"revisionTime": "2016-02-12T15:19:11-08:00"
+		},
+		{
+			"path": "github.com/docker/go-connections/sockets",
+			"revision": "34b5052da6b11e27f5f2e357b38b571ddddd3928",
+			"revisionTime": "2016-02-12T15:19:11-08:00"
+		},
+		{
+			"path": "github.com/docker/go-connections/tlsconfig",
+			"revision": "34b5052da6b11e27f5f2e357b38b571ddddd3928",
+			"revisionTime": "2016-02-12T15:19:11-08:00"
+		},
+		{
+			"path": "github.com/docker/go-units",
+			"revision": "5d2041e26a699eaca682e2ea41c8f891e1060444",
+			"revisionTime": "2016-01-25T09:48:45-08:00"
+		},
+		{
+			"path": "github.com/elazarl/go-bindata-assetfs",
+			"revision": "57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2",
+			"revisionTime": "2015-12-24T06:54:52+02:00"
+		},
+		{
+			"path": "github.com/go-sql-driver/mysql",
+			"revision": "1309049fd598c1faa0290fd70ab1afde2b6df0f9",
+			"revisionTime": "2016-02-17T22:43:58+01:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/gogoproto",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/defaultcheck",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/description",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/embedcheck",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/enumstringer",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/equal",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/face",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/gostring",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/grpc",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/marshalto",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/oneofcheck",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/populate",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/size",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/stringer",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/testgen",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/union",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/plugin/unmarshal",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/proto",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/protoc-gen-gogo/descriptor",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/protoc-gen-gogo/generator",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/protoc-gen-gogo/plugin",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/vanity",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/gogo/protobuf/vanity/command",
+			"revision": "82d16f734d6d871204a3feb1a73cb220cc92574c",
+			"revisionTime": "2016-02-01T16:25:51+02:00"
+		},
+		{
+			"path": "github.com/golang/lint",
+			"revision": "32a87160691b3c96046c0c678fe57c5bef761456",
+			"revisionTime": "2015-10-19T09:42:00+11:00"
+		},
+		{
+			"path": "github.com/golang/lint/golint",
+			"revision": "32a87160691b3c96046c0c678fe57c5bef761456",
+			"revisionTime": "2015-10-19T09:42:00+11:00"
+		},
+		{
+			"path": "github.com/golang/protobuf/proto",
+			"revision": "3c84672111d91bb5ac31719e112f9f7126a0e26e",
+			"revisionTime": "2016-02-22T08:49:41+11:00"
+		},
+		{
+			"path": "github.com/google/btree",
+			"revision": "cc6329d4279e3f025a53a83c397d2339b5705c45",
+			"revisionTime": "2015-04-13T10:36:44-06:00"
+		},
+		{
+			"path": "github.com/gordonklaus/ineffassign",
+			"revision": "507e48671a072e56dbc5dbbee2872ce0d662697e",
+			"revisionTime": "2015-11-29T15:06:40+01:00"
+		},
+		{
+			"path": "github.com/inconshreveable/mousetrap",
+			"revision": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75",
+			"revisionTime": "2014-10-17T13:07:13-07:00"
+		},
+		{
+			"path": "github.com/jteeuwen/go-bindata",
+			"revision": "a0ff2567cfb70903282db057e799fd826784d41d",
+			"revisionTime": "2015-10-23T11:11:02+02:00"
+		},
+		{
+			"path": "github.com/jteeuwen/go-bindata/go-bindata",
+			"revision": "a0ff2567cfb70903282db057e799fd826784d41d",
+			"revisionTime": "2015-10-23T11:11:02+02:00"
+		},
+		{
+			"path": "github.com/julienschmidt/httprouter",
+			"revision": "77366a47451a56bb3ba682481eed85b64fea14e8",
+			"revisionTime": "2016-02-19T16:40:26+01:00"
+		},
+		{
+			"path": "github.com/kisielk/errcheck",
+			"revision": "f76568f8d87e48ccbbd17a827c2eaf31805bf58c",
+			"revisionTime": "2016-02-18T11:58:08-08:00"
+		},
+		{
+			"path": "github.com/kisielk/errcheck/internal/errcheck",
+			"revision": "f76568f8d87e48ccbbd17a827c2eaf31805bf58c",
+			"revisionTime": "2016-02-18T11:58:08-08:00"
+		},
+		{
+			"path": "github.com/kisielk/gotool",
+			"revision": "58a7a198f2ec6ea7af221fd216e7f559d663ce02",
+			"revisionTime": "2015-09-04T21:49:35-07:00"
+		},
+		{
+			"path": "github.com/kkaneda/returncheck",
+			"revision": "bf081fa7155e3a27df1f056a49d50685edfa5b1b",
+			"revisionTime": "2016-01-21T19:28:49-08:00"
+		},
+		{
+			"path": "github.com/kkaneda/returncheck/internal",
+			"revision": "bf081fa7155e3a27df1f056a49d50685edfa5b1b",
+			"revisionTime": "2016-01-21T19:28:49-08:00"
+		},
+		{
+			"path": "github.com/kr/pretty",
+			"revision": "e6ac2fc51e89a3249e82157fa0bb7a18ef9dd5bb",
+			"revisionTime": "2015-05-20T12:35:14-04:00"
+		},
+		{
+			"path": "github.com/kr/text",
+			"revision": "bb797dc4fb8320488f47bf11de07a733d7233e1f",
+			"revisionTime": "2015-09-05T15:45:08-07:00"
+		},
+		{
+			"path": "github.com/lib/pq",
+			"revision": "69552e54d2a9d4c6a2438926a774930f7bc398ec",
+			"revisionTime": "2016-02-09T23:37:49+09:00"
+		},
+		{
+			"path": "github.com/lib/pq/oid",
+			"revision": "69552e54d2a9d4c6a2438926a774930f7bc398ec",
+			"revisionTime": "2016-02-09T23:37:49+09:00"
+		},
+		{
+			"path": "github.com/mattn/go-isatty",
+			"revision": "56b76bdf51f7708750eac80fa38b952bb9f32639",
+			"revisionTime": "2015-12-11T09:06:21+09:00"
+		},
+		{
+			"path": "github.com/mattn/go-runewidth",
+			"revision": "d037b52ae5c0338c2bb18da01fb7ddf0e8be9aa1",
+			"revisionTime": "2016-02-16T20:09:16+09:00"
+		},
+		{
+			"path": "github.com/mibk/dupl",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/job",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/output",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/remote",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/suffixtree",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/syntax",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/mibk/dupl/syntax/golang",
+			"revision": "c450df04426c2f8c35d91fb588feb88fbe328915",
+			"revisionTime": "2016-01-25T19:52:55+01:00"
+		},
+		{
+			"path": "github.com/olekukonko/tablewriter",
+			"revision": "cca8bbc0798408af109aaaa239cbd2634846b340",
+			"revisionTime": "2016-01-15T12:10:02+01:00"
+		},
+		{
+			"path": "github.com/opencontainers/runc/libcontainer/user",
+			"revision": "2c3115481ee1782ad687a9e0b4834f89533c2acf",
+			"revisionTime": "2016-02-23T13:30:19+05:30"
+		},
+		{
+			"path": "github.com/opennota/check/cmd/varcheck",
+			"revision": "2647c7f78677e5af42e988a36343bc83194b7109",
+			"revisionTime": "2016-01-08T11:05:44+07:00"
+		},
+		{
+			"path": "github.com/opentracing/opentracing-go",
+			"revision": "0d6663129887f81abfd874da4faa8438a46b42dc",
+			"revisionTime": "2016-02-22T20:41:21-08:00"
+		},
+		{
+			"path": "github.com/rcrowley/go-metrics",
+			"revision": "51425a2415d21afadfd55cd93432c0bc69e9598d",
+			"revisionTime": "2016-01-13T15:50:30-08:00"
+		},
+		{
+			"path": "github.com/russross/blackfriday",
+			"revision": "006144af03eeeff1037240a71865a9fd61f1c25f",
+			"revisionTime": "2016-01-24T13:12:56+02:00"
+		},
+		{
+			"path": "github.com/satori/go.uuid",
+			"revision": "e673fdd4dea8a7334adbbe7f57b7e4b00bdc5502",
+			"revisionTime": "2016-02-18T23:57:46Z"
+		},
+		{
+			"path": "github.com/shurcooL/sanitized_anchor_name",
+			"revision": "10ef21a441db47d8b13ebcc5fd2310f636973c77",
+			"revisionTime": "2015-10-27T17:19:15-07:00"
+		},
+		{
+			"path": "github.com/soheilhy/cmux",
+			"revision": "1a2fcbde3ab1e722390239b941ad35ec716b0d1c",
+			"revisionTime": "2016-02-23T23:05:27-05:00"
+		},
+		{
+			"path": "github.com/spf13/cobra",
+			"revision": "65a708cee0a4424f4e353d031ce440643e312f92",
+			"revisionTime": "2016-02-08T02:29:17+08:00"
+		},
+		{
+			"path": "github.com/spf13/cobra/doc",
+			"revision": "65a708cee0a4424f4e353d031ce440643e312f92",
+			"revisionTime": "2016-02-08T02:29:17+08:00"
+		},
+		{
+			"path": "github.com/spf13/pflag",
+			"revision": "7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7",
+			"revisionTime": "2015-10-24T12:54:09+02:00"
+		},
+		{
+			"path": "github.com/tebeka/go2xunit",
+			"revision": "304a3dad367b395460778a969d87101b778b322f",
+			"revisionTime": "2016-02-17T19:48:42+02:00"
+		},
+		{
+			"path": "github.com/termie/go-shutil",
+			"revision": "bcacb06fecaeec8dc42af03c87c6949f4a05c74c",
+			"revisionTime": "2014-07-29T14:59:57-07:00"
+		},
+		{
+			"path": "golang.org/x/crypto/bcrypt",
+			"revision": "1f22c0103821b9390939b6776727195525381532",
+			"revisionTime": "2016-01-26T09:50:25-08:00"
+		},
+		{
+			"path": "golang.org/x/crypto/blowfish",
+			"revision": "1f22c0103821b9390939b6776727195525381532",
+			"revisionTime": "2016-01-26T09:50:25-08:00"
+		},
+		{
+			"path": "golang.org/x/crypto/ssh/terminal",
+			"revision": "1f22c0103821b9390939b6776727195525381532",
+			"revisionTime": "2016-01-26T09:50:25-08:00"
+		},
+		{
+			"path": "golang.org/x/net/context",
+			"revision": "4599ae7937fce9b670ce32b8ad32bbb7ae726b3e",
+			"revisionTime": "2016-02-20T14:44:54-08:00"
+		},
+		{
+			"path": "golang.org/x/net/http2",
+			"revision": "4599ae7937fce9b670ce32b8ad32bbb7ae726b3e",
+			"revisionTime": "2016-02-20T14:44:54-08:00"
+		},
+		{
+			"path": "golang.org/x/net/http2/hpack",
+			"revision": "4599ae7937fce9b670ce32b8ad32bbb7ae726b3e",
+			"revisionTime": "2016-02-20T14:44:54-08:00"
+		},
+		{
+			"path": "golang.org/x/net/internal/timeseries",
+			"revision": "4599ae7937fce9b670ce32b8ad32bbb7ae726b3e",
+			"revisionTime": "2016-02-20T14:44:54-08:00"
+		},
+		{
+			"path": "golang.org/x/net/proxy",
+			"revision": "4599ae7937fce9b670ce32b8ad32bbb7ae726b3e",
+			"revisionTime": "2016-02-20T14:44:54-08:00"
+		},
+		{
+			"path": "golang.org/x/net/trace",
+			"revision": "4599ae7937fce9b670ce32b8ad32bbb7ae726b3e",
+			"revisionTime": "2016-02-20T14:44:54-08:00"
+		},
+		{
+			"path": "golang.org/x/sys/unix",
+			"revision": "5eaf0df67e70d6997a9fe0ed24383fa1b01638d3",
+			"revisionTime": "2016-02-22T17:57:57+01:00"
+		},
+		{
+			"path": "golang.org/x/text/transform",
+			"revision": "07b9a78963006a15c538ec5175243979025fa7a8",
+			"revisionTime": "2016-02-11T19:16:47+11:00"
+		},
+		{
+			"path": "golang.org/x/text/unicode/norm",
+			"revision": "07b9a78963006a15c538ec5175243979025fa7a8",
+			"revisionTime": "2016-02-11T19:16:47+11:00"
+		},
+		{
+			"path": "golang.org/x/tools/cmd/goimports",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/cmd/stringer",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/ast/astutil",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/buildutil",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/exact",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/gcimporter",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/loader",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/go/types",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "golang.org/x/tools/imports",
+			"revision": "f7268ab39bf8b78faa0c2f9eb524b9ea85982c41",
+			"revisionTime": "2016-02-20T17:33:56-05:00"
+		},
+		{
+			"path": "google.golang.org/grpc",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/codes",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/credentials",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/grpclog",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/metadata",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/naming",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/peer",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "google.golang.org/grpc/transport",
+			"revision": "19b24c30421ae3b637495b7b6bfa656cb72fad9d",
+			"revisionTime": "2016-02-22T17:50:41-08:00"
+		},
+		{
+			"path": "gopkg.in/inf.v0",
+			"revision": "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4",
+			"revisionTime": "2015-09-11T12:57:57Z"
+		},
+		{
+			"path": "gopkg.in/yaml.v1",
+			"revision": "9f9df34309c04878acc86042b16630b0f696e1de",
+			"revisionTime": "2014-09-24T13:16:07-03:00"
+		}
+	]
+}

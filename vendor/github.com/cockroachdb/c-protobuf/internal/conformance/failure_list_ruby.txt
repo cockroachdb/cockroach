@@ -1,0 +1,2 @@
+JsonInput.HelloWorld.JsonOutput
+JsonInput.HelloWorld.ProtobufOutput

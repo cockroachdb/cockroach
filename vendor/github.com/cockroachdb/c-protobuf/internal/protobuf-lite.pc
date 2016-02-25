@@ -1,0 +1,11 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: Protocol Buffers
+Description: Google's Data Interchange Format
+Version: 3.0.0-beta-2
+Libs: -L${libdir} -lprotobuf-lite -D_THREAD_SAFE  
+Cflags: -I${includedir} -D_THREAD_SAFE 
+Conflicts: protobuf

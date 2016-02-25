@@ -42,8 +42,8 @@ If you plan on working on the UI, check out [the ui readme](ui).
 To add or update a go dependency:
 - `(cd $GOPATH/src && go get -u ./...)` to update the dependencies or
   `go get {package}` to add a dependency
-- `glock save github.com/cockroachdb/cockroach` to update the
-  GLOCKFILE
+- `go get github.com/kardianos/govendor` to install govendor
+- `govendor add {package}` to update the vendor manifest
 - `go generate ./...` to update generated files -- prefer `go generate
   ./the-updated-package` instead of `...` when possible to avoid
   re-generating files in directories where you haven't made any

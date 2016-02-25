@@ -1,0 +1,13 @@
+diff --git a/internal/.gitignore b/internal/.gitignore
+index 8ea85af..8e032c6 100644
+--- a/internal/.gitignore
++++ b/internal/.gitignore
+@@ -27,7 +27,7 @@ src/Makefile
+ /config.h
+ config.log
+ config.status
+-pbconfig.h
++vsprojects/google/protobuf/stubs/pbconfig.h
+ 
+ libtool
+ protobuf-lite.pc

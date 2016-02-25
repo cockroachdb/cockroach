@@ -1,0 +1,1 @@
+internal/src/google/protobuf/message_lite.cc
