@@ -548,7 +548,12 @@ func (t *logicTest) execQuery(query logicQuery) {
 
 	var results []string
 	if query.colNames {
-		results = append(results, cols...)
+		for _, col := range cols {
+			// We split string results on whitespace and append a separate result
+			// for each string. A bit unusual, but otherwise we can't match strings
+			// containing whitespace.
+			results = append(results, strings.Fields(col)...)
+		}
 	}
 	for rows.Next() {
 		if err := rows.Scan(vals...); err != nil {
