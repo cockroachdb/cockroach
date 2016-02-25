@@ -35,38 +35,44 @@ type returningHelper struct {
 	qvals qvalMap
 }
 
-func newReturningHelper(p *planner, r parser.ReturningExprs,
+func makeReturningHelper(p *planner, r parser.ReturningExprs,
 	alias string, tablecols []ColumnDescriptor) (returningHelper, error) {
 	rh := returningHelper{p: p, results: &returningNode{}}
 	if len(r) == 0 {
 		return rh, nil
 	}
 
-	rh.results.columns = make([]ResultColumn, len(r))
+	rh.results.columns = make([]ResultColumn, 0, len(r))
 	table := tableInfo{
 		columns: makeResultColumns(tablecols, 0),
 		alias:   alias,
 	}
 	rh.qvals = make(qvalMap)
-	rh.exprs = make([]parser.Expr, len(r))
-	for i, c := range r {
-		expr, err := resolveQNames(&table, rh.qvals, c.Expr)
-		if err != nil {
-			return rh, err
+	rh.exprs = make([]parser.Expr, 0, len(r))
+	for _, target := range r {
+		if isStar, cols, exprs, err := checkRenderStar(target, &table, rh.qvals); err != nil {
+			return returningHelper{}, err
+		} else if isStar {
+			rh.exprs = append(rh.exprs, exprs...)
+			rh.results.columns = append(rh.results.columns, cols...)
+			continue
 		}
-		rh.exprs[i] = expr
+
+		// When generating an output column name it should exactly match the original
+		// expression, so determine the output column name before we perform any
+		// manipulations to the expression.
+		outputName := getRenderColName(target)
+
+		expr, err := resolveQNames(&table, rh.qvals, target.Expr)
+		if err != nil {
+			return returningHelper{}, err
+		}
 		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
 		if err != nil {
-			return rh, err
+			return returningHelper{}, err
 		}
-		name := string(c.As)
-		if name == "" {
-			name = expr.String()
-		}
-		rh.results.columns[i] = ResultColumn{
-			Name: name,
-			Typ:  typ,
-		}
+		rh.exprs = append(rh.exprs, expr)
+		rh.results.columns = append(rh.results.columns, ResultColumn{Name: outputName, Typ: typ})
 	}
 	return rh, nil
 }

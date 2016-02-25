@@ -128,7 +128,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	marshalled := make([]interface{}, len(cols))
 
 	b := p.txn.NewBatch()
-	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, cols)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, cols)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
