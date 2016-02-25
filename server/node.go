@@ -20,10 +20,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -535,11 +537,35 @@ func (n *Node) publishStoreStatuses() error {
 func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	ba := argsI.(*roachpb.BatchRequest)
 	var br *roachpb.BatchResponse
+	opName := "node " + strconv.Itoa(int(n.Descriptor.NodeID)) // could save allocs here
+
+	fail := func(err error) {
+		br = &roachpb.BatchResponse{}
+		br.Error = roachpb.NewError(err)
+	}
 
 	f := func() {
-		// TODO(tschottdorf) get a hold of the client's ID, add it to the
-		// context before dispatching, and create an ID for tracing the request.
-		sp := n.ctx.Tracer.StartSpan("node")
+		sp, err := tracing.JoinOrNew(n.ctx.Tracer, ba.Trace, opName)
+		if err != nil {
+			fail(err)
+			return
+		}
+		// If this is a snowball span, it gets special treatment: It skips the
+		// regular tracing machinery, and we instead send the collected spans
+		// back with the response. This is more expensive, but then again,
+		// those are individual requests traced by users, so they can be.
+		if sp.BaggageItem(tracing.Snowball) != "" {
+			if sp, err = tracing.JoinOrNewSnowball(opName, ba.Trace, func(rawSpan basictracer.RawSpan) {
+				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
+				if err != nil {
+					log.Warning(err)
+				}
+				br.CollectedSpans = append(br.CollectedSpans, encSp)
+			}); err != nil {
+				fail(err)
+				return
+			}
+		}
 		defer sp.Finish()
 		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), sp)
 

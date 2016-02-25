@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
+const opStores = "stores"
+
 // A Stores provides methods to access a collection of stores. There's
 // a visitor pattern and also an implementation of the client.Sender
 // interface which directs a call to the appropriate store based on
@@ -130,7 +132,6 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 // executed locally, and the replica is determined via lookup through each
 // store's LookupRange method. The latter path is taken only by unit tests.
 func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	sp := tracing.SpanFromContext(ctx)
 	var store *Store
 	var err error
 
@@ -157,6 +158,8 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
+
+	sp := tracing.SpanFromContext(opStores, store.Tracer(), ctx)
 	// For calls that read data within a txn, we can avoid uncertainty
 	// related retries in certain situations. If the node is in
 	// "CertainNodes", we need not worry about uncertain reads any

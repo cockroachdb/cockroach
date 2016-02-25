@@ -73,6 +73,8 @@ const (
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
+
+	opReplica = "replica"
 )
 
 // TestingCommandFilter may be set in tests to intercept the handling
@@ -639,10 +641,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		return nil, roachpb.NewError(err)
 	}
 
-	sp := tracing.SpanFromContext(ctx)
-	if sp == nil {
-		ctx, sp = opentracing.ContextWithSpan(ctx, r.store.Tracer().StartSpan("replica"))
-	}
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	// Differentiate between admin, read-only and write.
 	var pErr *roachpb.Error
 	if ba.IsAdmin() {
@@ -784,7 +783,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		return nil, pErr
 	}
 
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	sp.SetOperationName(reflect.TypeOf(args).String())
 
 	// Admin commands always require the leader lease.
@@ -821,7 +820,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
@@ -882,7 +881,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// early returns do not skip this.
 	defer signal()
 
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 
 	// Add the write to the command queue to gate subsequent overlapping
 	// commands until this command completes. Note that this must be
@@ -1253,7 +1252,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 		ctx = r.context()
 	}
 
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	sp.LogEvent("applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
@@ -1576,7 +1575,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 	var pErr *roachpb.Error
 	if !r.store.Stopper().RunTask(func() {
 		// Check for or obtain the lease, if none active.
-		pErr = r.redirectOnOrAcquireLeaderLease(tracing.SpanFromContext(ctx))
+		pErr = r.redirectOnOrAcquireLeaderLease(tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx))
 		hasLease = pErr == nil
 		if pErr != nil {
 			switch e := pErr.GetDetail().(type) {
@@ -1816,7 +1815,7 @@ func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 // waiting client retries immediately after calling this function, it will not
 // hit the same intents again.
 func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	ctx, _ = opentracing.ContextWithSpan(ctx, nil) // we're doing async stuff below; those need new traces
 	sp.LogEvent(fmt.Sprintf("resolving intents [wait=%t]", wait))
 
