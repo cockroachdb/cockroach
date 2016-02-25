@@ -233,7 +233,7 @@ module Components {
           let renderedCols = cols.map((col: TableColumn<T>) =>
             m("td",
               {
-                className: this.IsSortColumn(col) ? "sorted" : ""
+                className: this.IsSortColumn(col) ? "sorted" : "",
               },
               col.view(row)));
           return m("tr", renderedCols);

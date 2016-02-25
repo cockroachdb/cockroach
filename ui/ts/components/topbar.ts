@@ -19,7 +19,7 @@ module Components {
         (args.title && m("h2", args.title) || (args.titleImage)),
         m(".info-container", [
           // TODO: health
-          m(".last-updated", [ m("strong", "Updated: "), updatedStr ])
+          m(".last-updated", [ m("strong", "Updated: "), updatedStr ]),
         ]),
       ]);
     }

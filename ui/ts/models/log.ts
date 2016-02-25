@@ -33,6 +33,16 @@ module Models {
       pattern: Property<string> = m.prop(<string>null);
       node: Property<string> = m.prop(<string>null);
 
+      private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache(
+          (): Promise<Proto.LogEntry[]> => {
+              return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors, config: function(xhr: XMLHttpRequest): void { xhr.timeout = 2000; } })
+                  .then((results: LogResponseSet) => {
+                      return results.d;
+                  });
+          },
+          true
+      );
+
       refresh: () => void = () => {
         this._data.refresh();
       };
@@ -47,16 +57,6 @@ module Models {
         }
         return "Local";
       };
-
-      private _data: Utils.QueryCache<Proto.LogEntry[]> = new Utils.QueryCache(
-        (): Promise<Proto.LogEntry[]> => {
-          return m.request({ url: this._url(), method: "GET", extract: nonJsonErrors, config: function(xhr: XMLHttpRequest): void { xhr.timeout = 2000; } })
-            .then((results: LogResponseSet) => {
-              return results.d;
-            });
-        },
-        true
-      );
 
       /**
        * getURL creates the URL based on the node id. It is designed to be

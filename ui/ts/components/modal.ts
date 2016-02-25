@@ -60,8 +60,7 @@ module Components {
       ctrl.onclose = modalConfig.onclose;
 
       return m(".modal-container" + modalConfig.containerClass, [
-        m(".screen", {
-          onclick: modalConfig.onclose}),
+        m(".screen", {onclick: modalConfig.onclose}),
         m(".modal" + modalConfig.modalClass, [
           m(".close", {onclick: modalConfig.onclose}, m.trust("&#x2715; ")),
           m("h1.modal-title", modalConfig.title),

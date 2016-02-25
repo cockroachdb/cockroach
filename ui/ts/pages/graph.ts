@@ -33,17 +33,6 @@ module AdminViews {
 
         timespan: Metrics.Time.TimeSpan = Metrics.Time.Recent(10 * 60 * 1000);
 
-        toggleGraph: () => void = () => {
-          this.showRates = !this.showRates;
-          if (this.showRates) {
-            this.axis.selectors([this.successRate, this.errorRate])
-              .label("Count / 10sec");
-          } else {
-            this.axis.selectors([this.successCount, this.errorCount])
-              .label("Count");
-          }
-        };
-
         // Define selectors.
         private successCount: Metrics.Select.Selector = Metrics.Select.Avg("cr.node.exec.success.count.1")
           .title("Successful calls");
@@ -61,6 +50,17 @@ module AdminViews {
           this.successRate,
           this.errorRate)
           .timespan(this.timespan);
+
+        toggleGraph: () => void = () => {
+            this.showRates = !this.showRates;
+            if (this.showRates) {
+                this.axis.selectors([this.successRate, this.errorRate])
+                    .label("Count / 10sec");
+            } else {
+                this.axis.selectors([this.successCount, this.errorCount])
+                    .label("Count");
+            }
+        };
 
         onunload(): void {
           clearInterval(this.interval);
