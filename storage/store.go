@@ -66,6 +66,8 @@ const (
 	maxReplicaDescCacheSize = 1000
 
 	raftReqBufferSize = 100
+
+	opStore = "store"
 )
 
 var (
@@ -1371,7 +1373,7 @@ func (s *Store) ReplicaCount() int {
 // command using the fetched range.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	ctx = s.Context(ctx)
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
 
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
@@ -1554,7 +1556,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
 	sp.LogEvent("intent resolution")
 
 	// Split intents into those we need to push and those which are good to

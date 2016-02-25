@@ -123,6 +123,7 @@ package roachpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import cockroach_util_tracing "github.com/cockroachdb/cockroach/util/tracing"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
@@ -958,6 +959,9 @@ type Header struct {
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
 	ReadConsistency ReadConsistencyType `protobuf:"varint,6,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
+	// trace is the active span of an OpenTracing distributed trace. It is
+	// empty if tracing the request is not desired.
+	Trace cockroach_util_tracing.WireSpan `protobuf:"bytes,7,opt,name=trace" json:"trace"`
 }
 
 func (m *Header) Reset()         { *m = Header{} }
@@ -1007,6 +1011,9 @@ type BatchResponse_Header struct {
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
+	// collected_spans is a binary representation of the trace spans
+	// generated during the execution of this request.
+	CollectedSpans [][]byte `protobuf:"bytes,4,rep,name=collected_spans" json:"collected_spans,omitempty"`
 }
 
 func (m *BatchResponse_Header) Reset()         { *m = BatchResponse_Header{} }
@@ -3129,6 +3136,14 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x30
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
+	data[i] = 0x3a
+	i++
+	i = encodeVarintApi(data, i, uint64(m.Trace.Size()))
+	n110, err := m.Trace.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n110
 	return i, nil
 }
 
@@ -3150,11 +3165,11 @@ func (m *BatchRequest) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Header.Size()))
-	n110, err := m.Header.MarshalTo(data[i:])
+	n111, err := m.Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n110
+	i += n111
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -3188,11 +3203,11 @@ func (m *BatchResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.BatchResponse_Header.Size()))
-	n111, err := m.BatchResponse_Header.MarshalTo(data[i:])
+	n112, err := m.BatchResponse_Header.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n111
+	i += n112
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -3227,29 +3242,37 @@ func (m *BatchResponse_Header) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Error.Size()))
-		n112, err := m.Error.MarshalTo(data[i:])
+		n113, err := m.Error.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n112
+		i += n113
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n113, err := m.Timestamp.MarshalTo(data[i:])
+	n114, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n113
+	i += n114
 	if m.Txn != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n114, err := m.Txn.MarshalTo(data[i:])
+		n115, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n114
+		i += n115
+	}
+	if len(m.CollectedSpans) > 0 {
+		for _, b := range m.CollectedSpans {
+			data[i] = 0x22
+			i++
+			i = encodeVarintApi(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
+		}
 	}
 	return i, nil
 }
@@ -3961,6 +3984,8 @@ func (m *Header) Size() (n int) {
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.ReadConsistency))
+	l = m.Trace.Size()
+	n += 1 + l + sovApi(uint64(l))
 	return n
 }
 
@@ -4004,6 +4029,12 @@ func (m *BatchResponse_Header) Size() (n int) {
 	if m.Txn != nil {
 		l = m.Txn.Size()
 		n += 1 + l + sovApi(uint64(l))
+	}
+	if len(m.CollectedSpans) > 0 {
+		for _, b := range m.CollectedSpans {
+			l = len(b)
+			n += 1 + l + sovApi(uint64(l))
+		}
 	}
 	return n
 }
@@ -10791,6 +10822,36 @@ func (m *Header) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Trace", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Trace.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])
@@ -11158,6 +11219,35 @@ func (m *BatchResponse_Header) Unmarshal(data []byte) error {
 			if err := m.Txn.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CollectedSpans", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CollectedSpans = append(m.CollectedSpans, make([]byte, postIndex-iNdEx))
+			copy(m.CollectedSpans[len(m.CollectedSpans)-1], data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

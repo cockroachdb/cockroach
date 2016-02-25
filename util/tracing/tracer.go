@@ -17,32 +17,75 @@
 package tracing
 
 import (
+	"bytes"
+	"encoding/gob"
+
 	"golang.org/x/net/context"
 
-	"github.com/opentracing/opentracing-go"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
-var netTracer = wrapWithNetTrace(opentracing.NoopTracer{})
+// Snowball is set as Baggage on traces which are used for snowball tracing.
+const Snowball = "sb"
 
-// NewTracer creates a Tracer which records directly to the net/trace
+// A CallbackRecorder immediately invokes itself on received trace spans.
+type CallbackRecorder func(sp basictracer.RawSpan)
+
+// RecordSpan implements basictracer.SpanRecorder.
+func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
+	cr(sp)
+}
+
+// JoinOrNew creates a new Span joined to the (serialized) span context in
+// WireSpan or creates one from the given tracer.
+func JoinOrNew(tr opentracing.Tracer, ws WireSpan, opName string) (opentracing.Span, error) {
+	if len(ws.Context) > 0 { // reducing allocs
+		carrier := opentracing.SplitBinaryCarrier{TracerState: ws.Context, Baggage: ws.Baggage}
+		sp, err := tr.Extractor(opentracing.SplitBinary).JoinTrace(opName, &carrier)
+		switch err {
+		case nil:
+			sp.LogEvent(opName)
+			return sp, nil
+		case opentracing.ErrTraceNotFound:
+		default:
+			return nil, err
+		}
+	}
+	return tr.StartSpan(opName), nil
+}
+
+// JoinOrNewSnowball returns a Span which records directly via the specified
+// callback. If the given WireSpan is the zero value, a new trace is created;
+// otherwise, the created Span is a child.
+func JoinOrNewSnowball(opName string, ws WireSpan, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
+	tr := basictracer.New(CallbackRecorder(callback))
+	sp, err := JoinOrNew(tr, ws, opName)
+	if err == nil {
+		sp.SetBaggageItem(Snowball, "1")
+	}
+	return sp, err
+}
+
+// newTracer implements NewTracer and allows that function to be mocked out via Disable().
+var newTracer = func() opentracing.Tracer {
+	return wrapWithNetTrace(basictracer.New(CallbackRecorder(func(_ basictracer.RawSpan) {})))
+}
+
+// NewTracer creates a Tracer which records to the net/trace
 // endpoint.
 func NewTracer() opentracing.Tracer {
-	return netTracer
+	return newTracer()
 }
 
-// SpanFromContext wraps opentracing.SpanFromContext so that the returned
-// Span is never nil.
-func SpanFromContext(ctx context.Context) opentracing.Span {
+// SpanFromContext returns the Span optained from the context or, if none is
+// found, a new one started through the tracer.
+func SpanFromContext(opName string, tracer opentracing.Tracer, ctx context.Context) opentracing.Span {
 	sp := opentracing.SpanFromContext(ctx)
 	if sp == nil {
-		return NoopSpan()
+		return tracer.StartSpan(opName)
 	}
 	return sp
-}
-
-// NoopSpan returns a Span which discards all operations.
-func NoopSpan() opentracing.Span {
-	return (opentracing.NoopTracer{}).StartSpan("DefaultSpan")
 }
 
 // Disable is for benchmarking use and causes all future tracers to deal in
@@ -50,9 +93,23 @@ func NoopSpan() opentracing.Span {
 // synchronization, so no moving parts are allowed while Disable and the
 // closure are called.
 func Disable() func() {
-	orig := netTracer
-	netTracer = opentracing.NoopTracer{}
+	orig := newTracer
+	newTracer = func() opentracing.Tracer { return opentracing.NoopTracer{} }
 	return func() {
-		netTracer = orig
+		newTracer = orig
 	}
+}
+
+// EncodeRawSpan encodes a raw span into bytes, using the given dest slice
+// as a buffer.
+func EncodeRawSpan(rawSpan *basictracer.RawSpan, dest []byte) ([]byte, error) {
+	// This is not a greatly efficient (but convenient) use of gob.
+	buf := bytes.NewBuffer(dest[:0])
+	err := gob.NewEncoder(buf).Encode(rawSpan)
+	return buf.Bytes(), err
+}
+
+// DecodeRawSpan unmarshals into the given RawSpan.
+func DecodeRawSpan(enc []byte, dest *basictracer.RawSpan) error {
+	return gob.NewDecoder(bytes.NewBuffer(enc)).Decode(dest)
 }

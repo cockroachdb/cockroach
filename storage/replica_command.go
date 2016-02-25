@@ -1286,7 +1286,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 // TODO(tschottdorf): should assert that split key is not a local key.
 func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor) (roachpb.AdminSplitResponse, *roachpb.Error) {
 	var reply roachpb.AdminSplitResponse
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
@@ -1546,7 +1546,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
-	sp := tracing.SpanFromContext(ctx)
+	sp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
