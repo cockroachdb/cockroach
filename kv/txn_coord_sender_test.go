@@ -453,7 +453,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 }
 
 // TestTxnCoordSenderGC verifies that the coordinator cleans up extant
-// transactions after the lastUpdateNanos exceeds the timeout.
+// transactions and intents after the lastUpdateNanos exceeds the timeout.
 func TestTxnCoordSenderGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	s := createTestDB(t)
@@ -463,7 +463,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	s.Sender.heartbeatInterval = 1 * time.Millisecond
 
 	txn := client.NewTxn(*s.DB)
-	if pErr := txn.Put(roachpb.Key("a"), []byte("value")); pErr != nil {
+	key := roachpb.Key("a")
+	if pErr := txn.Put(key, []byte("value")); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -484,6 +485,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	}, 50*time.Millisecond); err != nil {
 		t.Error("expected garbage collection")
 	}
+
+	verifyCleanup(key, s.Sender, s.Eng, t)
 }
 
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
