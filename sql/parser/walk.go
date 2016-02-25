@@ -16,206 +16,701 @@
 
 package parser
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
-// The Visitor Visit method is invoked for each Expr node encountered by
-// WalkExpr. The returned Expr replaces the pointer to the visited expression
-// in the parent node and can be used for rewriting expressions. The pre
-// argument indicates whether the visit is a pre-order or post-order visit. On
-// a pre-order visit, if the result Visitor is nil children nodes are skipped
-// from the traversal.
+// Visitor defines methods that are called for nodes during an expression or statement walk.
 type Visitor interface {
-	Visit(expr Expr, pre bool) (Visitor, Expr)
+	// VisitPre is called for each node before recursing into that subtree. Upon return, if recurse
+	// is false, the visit will not recurse into the subtree (and VisitPost will not be called for
+	// this node).
+	//
+	// The returned Expr replaces the visited expression and can be used for rewriting expressions.
+	// The function should NOT modify nodes in-place; it should make copies of nodes. The Walk
+	// infrastructure will automatically make copies of parents as needed.
+	VisitPre(expr Expr) (recurse bool, newExpr Expr)
+
+	// VisitPost is called for each node after recursing into the subtree. The returned Expr
+	// replaces the visited expression and can be used for rewriting expressions.
+	//
+	// The returned Expr replaces the visited expression and can be used for rewriting expressions.
+	// The function should NOT modify nodes in-place; it should make and return copies of nodes. The
+	// Walk infrastructure will automatically make copies of parents as needed.
+	VisitPost(expr Expr) (newNode Expr)
 }
 
-// Walk implements the Expr interface.
-func (expr *AndExpr) Walk(v Visitor) {
-	expr.Left = WalkExpr(v, expr.Left)
-	expr.Right = WalkExpr(v, expr.Right)
-}
-
-// Walk implements the Expr interface.
-func (expr *BinaryExpr) Walk(v Visitor) {
-	expr.Left = WalkExpr(v, expr.Left)
-	expr.Right = WalkExpr(v, expr.Right)
-}
-
-// Walk implements the Expr interface.
-func (expr *CaseExpr) Walk(v Visitor) {
-	if expr.Expr != nil {
-		expr.Expr = WalkExpr(v, expr.Expr)
+func copyQualifiedNames(q QualifiedNames) QualifiedNames {
+	if q == nil {
+		return nil
 	}
-	for _, w := range expr.Whens {
-		w.Cond = WalkExpr(v, w.Cond)
-		w.Val = WalkExpr(v, w.Val)
+	copy := QualifiedNames(make([]*QualifiedName, len(q)))
+	for i, n := range q {
+		qCopy := *n
+		copy[i] = &qCopy
+	}
+	return copy
+}
+
+// Walk implements the Expr interface.
+func (expr *AndExpr) Walk(v Visitor) Expr {
+	left, changedL := WalkExpr(v, expr.Left)
+	right, changedR := WalkExpr(v, expr.Right)
+	if changedL || changedR {
+		return &AndExpr{left, right}
+	}
+	return expr
+}
+
+// Walk implements the Expr interface.
+func (expr *BinaryExpr) Walk(v Visitor) Expr {
+	left, changedL := WalkExpr(v, expr.Left)
+	right, changedR := WalkExpr(v, expr.Right)
+	if changedL || changedR {
+		exprCopy := *expr
+		exprCopy.Left = left
+		exprCopy.Right = right
+		return &exprCopy
+	}
+	return expr
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (expr *CaseExpr) CopyNode() *CaseExpr {
+	exprCopy := *expr
+	// Copy the Whens slice.
+	exprCopy.Whens = make([]*When, len(expr.Whens))
+	for i, w := range expr.Whens {
+		wCopy := *w
+		exprCopy.Whens[i] = &wCopy
+	}
+	return &exprCopy
+}
+
+// Walk implements the Expr interface.
+func (expr *CaseExpr) Walk(v Visitor) Expr {
+	ret := expr
+
+	if expr.Expr != nil {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			ret = expr.CopyNode()
+			ret.Expr = e
+		}
+	}
+	for i, w := range expr.Whens {
+		cond, changedC := WalkExpr(v, w.Cond)
+		val, changedV := WalkExpr(v, w.Val)
+		if changedC || changedV {
+			if ret == expr {
+				ret = expr.CopyNode()
+			}
+			ret.Whens[i].Cond = cond
+			ret.Whens[i].Val = val
+		}
 	}
 	if expr.Else != nil {
-		expr.Else = WalkExpr(v, expr.Else)
+		e, changed := WalkExpr(v, expr.Else)
+		if changed {
+			if ret == expr {
+				ret = expr.CopyNode()
+			}
+			ret.Else = e
+		}
 	}
+	return ret
 }
 
 // Walk implements the Expr interface.
-func (expr *CastExpr) Walk(v Visitor) {
-	expr.Expr = WalkExpr(v, expr.Expr)
+func (expr *CastExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (expr *CoalesceExpr) CopyNode() *CoalesceExpr {
+	exprCopy := *expr
+	exprCopy.Exprs = Exprs(append([]Expr(nil), exprCopy.Exprs...))
+	return &exprCopy
 }
 
 // Walk implements the Expr interface.
-func (expr *CoalesceExpr) Walk(v Visitor) {
+func (expr *CoalesceExpr) Walk(v Visitor) Expr {
+	ret := expr
 	for i := range expr.Exprs {
-		expr.Exprs[i] = WalkExpr(v, expr.Exprs[i])
+		e, changed := WalkExpr(v, expr.Exprs[i])
+		if changed {
+			if ret == expr {
+				ret = expr.CopyNode()
+			}
+			ret.Exprs[i] = e
+		}
 	}
+	return ret
 }
 
 // Walk implements the Expr interface.
-func (expr *ComparisonExpr) Walk(v Visitor) {
-	expr.Left = WalkExpr(v, expr.Left)
-	expr.Right = WalkExpr(v, expr.Right)
+func (expr *ComparisonExpr) Walk(v Visitor) Expr {
+	left, changedL := WalkExpr(v, expr.Left)
+	right, changedR := WalkExpr(v, expr.Right)
+	if changedL || changedR {
+		exprCopy := *expr
+		exprCopy.Left = left
+		exprCopy.Right = right
+		return &exprCopy
+	}
+	return expr
 }
 
 // Walk implements the Expr interface.
-func (expr *ExistsExpr) Walk(v Visitor) {
-	expr.Subquery = WalkExpr(v, expr.Subquery)
+func (expr *ExistsExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Subquery)
+	if changed {
+		return &ExistsExpr{e}
+	}
+	return expr
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (expr *FuncExpr) CopyNode() *FuncExpr {
+	exprCopy := *expr
+	exprCopy.Exprs = Exprs(append([]Expr(nil), exprCopy.Exprs...))
+	return &exprCopy
 }
 
 // Walk implements the Expr interface.
-func (expr *FuncExpr) Walk(v Visitor) {
+func (expr *FuncExpr) Walk(v Visitor) Expr {
+	ret := expr
 	for i := range expr.Exprs {
-		expr.Exprs[i] = WalkExpr(v, expr.Exprs[i])
+		e, changed := WalkExpr(v, expr.Exprs[i])
+		if changed {
+			if ret == expr {
+				ret = expr.CopyNode()
+			}
+			ret.Exprs[i] = e
+		}
 	}
+	return ret
 }
 
 // Walk implements the Expr interface.
-func (expr *IfExpr) Walk(v Visitor) {
-	expr.Cond = WalkExpr(v, expr.Cond)
-	expr.True = WalkExpr(v, expr.True)
-	expr.Else = WalkExpr(v, expr.Else)
-}
-
-// Walk implements the Expr interface.
-func (*IsOfTypeExpr) Walk(_ Visitor) {}
-
-// Walk implements the Expr interface.
-func (expr *NotExpr) Walk(v Visitor) {
-	expr.Expr = WalkExpr(v, expr.Expr)
-}
-
-// Walk implements the Expr interface.
-func (expr *NullIfExpr) Walk(v Visitor) {
-	expr.Expr1 = WalkExpr(v, expr.Expr1)
-	expr.Expr2 = WalkExpr(v, expr.Expr2)
-}
-
-// Walk implements the Expr interface.
-func (expr *OrExpr) Walk(v Visitor) {
-	expr.Left = WalkExpr(v, expr.Left)
-	expr.Right = WalkExpr(v, expr.Right)
-}
-
-// Walk implements the Expr interface.
-func (expr *ParenExpr) Walk(v Visitor) {
-	expr.Expr = WalkExpr(v, expr.Expr)
-}
-
-// Walk implements the Expr interface.
-func (*QualifiedName) Walk(_ Visitor) {}
-
-// Walk implements the Expr interface.
-func (expr *RangeCond) Walk(v Visitor) {
-	expr.Left = WalkExpr(v, expr.Left)
-	expr.From = WalkExpr(v, expr.From)
-	expr.To = WalkExpr(v, expr.To)
-}
-
-// Walk implements the Expr interface.
-func (expr *Subquery) Walk(v Visitor) {
-	WalkStmt(v, expr.Select)
-}
-
-// Walk implements the Expr interface.
-func (expr *UnaryExpr) Walk(v Visitor) {
-	expr.Expr = WalkExpr(v, expr.Expr)
-}
-
-// Walk implements the Expr interface.
-func (expr *Array) Walk(v Visitor) {
-	for i, e := range expr.Exprs {
-		expr.Exprs[i] = WalkExpr(v, e)
+func (expr *IfExpr) Walk(v Visitor) Expr {
+	c, changedC := WalkExpr(v, expr.Cond)
+	t, changedT := WalkExpr(v, expr.True)
+	e, changedE := WalkExpr(v, expr.Else)
+	if changedC || changedT || changedE {
+		return &IfExpr{c, t, e}
 	}
+	return expr
 }
 
 // Walk implements the Expr interface.
-func (DefaultVal) Walk(_ Visitor) {}
+func (expr *IsOfTypeExpr) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (IntVal) Walk(_ Visitor) {}
-
-// Walk implements the Expr interface.
-func (NumVal) Walk(_ Visitor) {}
-
-// Walk implements the Expr interface.
-func (expr *Row) Walk(v Visitor) {
-	for i, e := range expr.Exprs {
-		expr.Exprs[i] = WalkExpr(v, e)
+func (expr *NotExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		return &NotExpr{e}
 	}
+	return expr
 }
 
 // Walk implements the Expr interface.
-func (expr *Tuple) Walk(v Visitor) {
-	for i, e := range expr.Exprs {
-		expr.Exprs[i] = WalkExpr(v, e)
+func (expr *NullIfExpr) Walk(v Visitor) Expr {
+	e1, changed1 := WalkExpr(v, expr.Expr1)
+	e2, changed2 := WalkExpr(v, expr.Expr2)
+	if changed1 || changed2 {
+		return &NullIfExpr{e1, e2}
 	}
+	return expr
 }
 
 // Walk implements the Expr interface.
-func (ValArg) Walk(_ Visitor) {}
+func (expr *OrExpr) Walk(v Visitor) Expr {
+	left, changedL := WalkExpr(v, expr.Left)
+	right, changedR := WalkExpr(v, expr.Right)
+	if changedL || changedR {
+		return &OrExpr{left, right}
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (DBool) Walk(_ Visitor) {}
+func (expr *ParenExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		return &ParenExpr{e}
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (DBytes) Walk(_ Visitor) {}
+func (expr *RangeCond) Walk(v Visitor) Expr {
+	l, changedL := WalkExpr(v, expr.Left)
+	f, changedF := WalkExpr(v, expr.From)
+	t, changedT := WalkExpr(v, expr.To)
+	if changedL || changedF || changedT {
+		exprCopy := *expr
+		exprCopy.Left = l
+		exprCopy.From = f
+		exprCopy.To = t
+		return &exprCopy
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (DDate) Walk(_ Visitor) {}
+func (expr *Subquery) Walk(v Visitor) Expr {
+	sel, changed := WalkStmt(v, expr.Select)
+	if changed {
+		return &Subquery{sel.(SelectStatement)}
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (DFloat) Walk(_ Visitor) {}
+func (expr *UnaryExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
+func walkExprSlice(v Visitor, slice []Expr) ([]Expr, bool) {
+	copied := false
+	for i := range slice {
+		e, changed := WalkExpr(v, slice[i])
+		if changed {
+			if !copied {
+				slice = append([]Expr(nil), slice...)
+				copied = true
+			}
+			slice[i] = e
+		}
+	}
+	return slice, copied
+}
 
 // Walk implements the Expr interface.
-func (*DDecimal) Walk(_ Visitor) {}
+func (expr *Array) Walk(v Visitor) Expr {
+	exprs, changed := walkExprSlice(v, expr.Exprs)
+	if changed {
+		return &Array{exprs}
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (DInt) Walk(_ Visitor) {}
+func (expr *Row) Walk(v Visitor) Expr {
+	exprs, changed := walkExprSlice(v, expr.Exprs)
+	if changed {
+		return &Row{exprs}
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (DInterval) Walk(_ Visitor) {}
+func (expr *Tuple) Walk(v Visitor) Expr {
+	exprs, changed := walkExprSlice(v, expr.Exprs)
+	if changed {
+		return &Tuple{exprs}
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
-func (dNull) Walk(_ Visitor) {}
+func (expr *QualifiedName) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (DString) Walk(_ Visitor) {}
+func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (DTimestamp) Walk(_ Visitor) {}
+func (expr *IntVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (DTuple) Walk(_ Visitor) {}
+func (expr NumVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (DValArg) Walk(_ Visitor) {}
+func (expr ValArg) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DBool) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DBytes) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DDate) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DFloat) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *DDecimal) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DInt) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DInterval) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr dNull) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DString) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DTimestamp) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DTuple) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr DValArg) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
-func WalkExpr(v Visitor, expr Expr) Expr {
-	v, expr = v.Visit(expr, true)
-	if v == nil {
-		return expr
+func WalkExpr(v Visitor, expr Expr) (new Expr, changed bool) {
+	recurse, new := v.VisitPre(expr)
+
+	if recurse {
+		new = new.Walk(v)
+		new = v.VisitPost(new)
 	}
 
-	expr.Walk(v)
+	// We cannot use == because some Expr implementations are not comparable (e.g. DTuple)
+	changed = (reflect.ValueOf(expr) != reflect.ValueOf(new))
+	return
+}
 
-	_, expr = v.Visit(expr, false)
-	return expr
+// WalkExprConst is a variant of WalkExpr for visitors that do not modify the expression.
+func WalkExprConst(v Visitor, expr Expr) {
+	WalkExpr(v, expr)
+	// TODO(radu): we should verify that WalkExpr returns changed == false. Unfortunately that
+	// is not the case today because walking through non-pointer implementations of Expr (like
+	// DBool, DTuple) causes new nodes to be created. We should make all Expr implementations be
+	// pointers (which will also remove the need for using reflect.ValueOf above).
+}
+
+// WalkableStmt is implemented by statements that can appear inside an expression (selects) or
+// we want to start a walk from (using WalkStmt).
+type WalkableStmt interface {
+	Statement
+	WalkStmt(Visitor) Statement
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *Delete) CopyNode() *Delete {
+	stmtCopy := *stmt
+	if stmt.Where != nil {
+		wCopy := *stmt.Where
+		stmtCopy.Where = &wCopy
+	}
+	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Delete) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Where != nil {
+		e, changed := WalkExpr(v, stmt.Where.Expr)
+		if changed {
+			ret = stmt.CopyNode()
+			ret.Where.Expr = e
+		}
+	}
+	for i, expr := range stmt.Returning {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Returning[i].Expr = e
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *Explain) CopyNode() *Explain {
+	stmtCopy := *stmt
+	stmtCopy.Options = append([]string(nil), stmt.Options...)
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Explain) WalkStmt(v Visitor) Statement {
+	s, changed := WalkStmt(v, stmt.Statement)
+	if changed {
+		stmt = stmt.CopyNode()
+		stmt.Statement = s
+	}
+	return stmt
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *Insert) CopyNode() *Insert {
+	stmtCopy := *stmt
+	tableCopy := *stmt.Table
+	stmtCopy.Table = &tableCopy
+	stmtCopy.Columns = copyQualifiedNames(stmt.Columns)
+	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Insert) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Rows != nil {
+		rows, changed := WalkStmt(v, stmt.Rows)
+		if changed {
+			ret = stmt.CopyNode()
+			ret.Rows = rows.(SelectStatement)
+		}
+	}
+	for i, expr := range stmt.Returning {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Returning[i].Expr = e
+		}
+	}
+	return ret
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
+	sel, changed := WalkStmt(v, stmt.Select)
+	if changed {
+		return &ParenSelect{sel.(SelectStatement)}
+	}
+	return stmt
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *Select) CopyNode() *Select {
+	stmtCopy := *stmt
+	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
+	stmtCopy.From = TableExprs(append([]TableExpr(nil), stmt.From...))
+	if stmt.Where != nil {
+		wCopy := *stmt.Where
+		stmtCopy.Where = &wCopy
+	}
+	stmtCopy.GroupBy = GroupBy(append([]Expr(nil), stmt.GroupBy...))
+	if stmt.Having != nil {
+		hCopy := *stmt.Having
+		stmtCopy.Having = &hCopy
+	}
+	stmtCopy.OrderBy = make([]*Order, len(stmt.OrderBy))
+	for i, o := range stmt.OrderBy {
+		oCopy := *o
+		stmtCopy.OrderBy[i] = &oCopy
+	}
+	if stmt.Limit != nil {
+		lCopy := *stmt.Limit
+		stmtCopy.Limit = &lCopy
+	}
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Select) WalkStmt(v Visitor) Statement {
+	ret := stmt
+
+	for i, expr := range stmt.Exprs {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Exprs[i].Expr = e
+		}
+	}
+
+	if stmt.Where != nil {
+		e, changed := WalkExpr(v, stmt.Where.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Where.Expr = e
+		}
+	}
+
+	for i, expr := range stmt.GroupBy {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.GroupBy[i] = e
+		}
+	}
+
+	if stmt.Having != nil {
+		e, changed := WalkExpr(v, stmt.Having.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Having.Expr = e
+		}
+	}
+
+	for i, expr := range stmt.OrderBy {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.OrderBy[i].Expr = e
+		}
+	}
+	if stmt.Limit != nil {
+		if stmt.Limit.Offset != nil {
+			e, changed := WalkExpr(v, stmt.Limit.Offset)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Limit.Offset = e
+			}
+		}
+		if stmt.Limit.Count != nil {
+			e, changed := WalkExpr(v, stmt.Limit.Count)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Limit.Count = e
+			}
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *Set) CopyNode() *Set {
+	stmtCopy := *stmt
+	stmtCopy.Values = Exprs(append([]Expr(nil), stmt.Values...))
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Set) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	for i, expr := range stmt.Values {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Values[i] = e
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *Update) CopyNode() *Update {
+	stmtCopy := *stmt
+	stmtCopy.Exprs = UpdateExprs(make([]*UpdateExpr, len(stmt.Exprs)))
+	for i, e := range stmt.Exprs {
+		eCopy := *e
+		eCopy.Names = copyQualifiedNames(e.Names)
+		stmtCopy.Exprs[i] = &eCopy
+	}
+	if stmt.Where != nil {
+		wCopy := *stmt.Where
+		stmtCopy.Where = &wCopy
+	}
+	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Update) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	for i, expr := range stmt.Exprs {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Exprs[i].Expr = e
+		}
+	}
+
+	if stmt.Where != nil {
+		e, changed := WalkExpr(v, stmt.Where.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Where.Expr = e
+		}
+	}
+
+	for i, expr := range stmt.Returning {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Returning[i].Expr = e
+		}
+	}
+	return ret
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Values) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	for i, tuple := range stmt.Tuples {
+		t, changed := WalkExpr(v, tuple)
+		if changed {
+			if ret == stmt {
+				ret = &Values{append([]*Tuple(nil), stmt.Tuples...)}
+			}
+			ret.Tuples[i] = t.(*Tuple)
+		}
+	}
+	return ret
+}
+
+var _ WalkableStmt = &Delete{}
+var _ WalkableStmt = &Explain{}
+var _ WalkableStmt = &Insert{}
+var _ WalkableStmt = &ParenSelect{}
+var _ WalkableStmt = &Select{}
+var _ WalkableStmt = &Set{}
+var _ WalkableStmt = &Update{}
+var _ WalkableStmt = &Values{}
+
+// WalkStmt walks the entire parsed stmt calling WalkExpr on each
+// expression, and replacing each expression with the one returned
+// by WalkExpr.
+func WalkStmt(v Visitor, stmt Statement) (new Statement, changed bool) {
+	walkable, ok := stmt.(WalkableStmt)
+	if !ok {
+		return stmt, false
+	}
+	new = walkable.WalkStmt(v)
+	changed = (stmt != new)
+	return
 }
 
 // Args defines the interface for retrieving arguments. Return false for the
@@ -263,85 +758,30 @@ type argVisitor struct {
 
 var _ Visitor = &argVisitor{}
 
-func (v *argVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
-	if !pre || v.err != nil {
-		return nil, expr
+func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if v.err != nil {
+		return false, expr
 	}
 	placeholder, ok := expr.(ValArg)
 	if !ok {
-		return v, expr
+		return true, expr
 	}
 	d, found := v.args.Arg(placeholder.name)
 	if !found {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
-		return nil, expr
+		return false, expr
 	}
-	return v, d
+	return true, d
 }
+
+func (v *argVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // FillArgs replaces any placeholder nodes in the expression with arguments
 // supplied with the query.
-func FillArgs(stmt Statement, args Args) error {
+func FillArgs(stmt Statement, args Args) (Statement, error) {
 	v := argVisitor{args: args}
-	WalkStmt(&v, stmt)
-	return v.err
-}
-
-// WalkStmt walks the entire parsed stmt calling WalkExpr on each
-// expression, and replacing each expression with the one returned
-// by WalkExpr.
-func WalkStmt(v Visitor, stmt Statement) {
-	switch stmt := stmt.(type) {
-	case *Delete:
-		if stmt.Where != nil {
-			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
-		}
-	case *Explain:
-		WalkStmt(v, stmt.Statement)
-	case *Insert:
-		WalkStmt(v, stmt.Rows)
-	case *ParenSelect:
-		WalkStmt(v, stmt.Select)
-	case *Select:
-		for i := range stmt.Exprs {
-			stmt.Exprs[i].Expr = WalkExpr(v, stmt.Exprs[i].Expr)
-		}
-		if stmt.Where != nil {
-			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
-		}
-		for i, expr := range stmt.GroupBy {
-			stmt.GroupBy[i] = WalkExpr(v, expr)
-		}
-		if stmt.Having != nil {
-			stmt.Having.Expr = WalkExpr(v, stmt.Having.Expr)
-		}
-		for i, expr := range stmt.OrderBy {
-			stmt.OrderBy[i].Expr = WalkExpr(v, expr.Expr)
-		}
-		if stmt.Limit != nil {
-			if stmt.Limit.Offset != nil {
-				stmt.Limit.Offset = WalkExpr(v, stmt.Limit.Offset)
-			}
-			if stmt.Limit.Count != nil {
-				stmt.Limit.Count = WalkExpr(v, stmt.Limit.Count)
-			}
-		}
-	case *Set:
-		for i, expr := range stmt.Values {
-			stmt.Values[i] = WalkExpr(v, expr)
-		}
-	case *Update:
-		for i, expr := range stmt.Exprs {
-			stmt.Exprs[i].Expr = WalkExpr(v, expr.Expr)
-		}
-		if stmt.Where != nil {
-			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
-		}
-	case *Values:
-		for i, tuple := range stmt.Tuples {
-			stmt.Tuples[i] = WalkExpr(v, tuple).(*Tuple)
-		}
-	}
+	stmt, _ = WalkStmt(&v, stmt)
+	return stmt, v.err
 }
 
 type containsSubqueryVisitor struct {
@@ -350,20 +790,22 @@ type containsSubqueryVisitor struct {
 
 var _ Visitor = &containsSubqueryVisitor{}
 
-func (v *containsSubqueryVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
-	if pre && !v.containsSubquery {
+func (v *containsSubqueryVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if !v.containsSubquery {
 		switch expr.(type) {
 		case *Subquery:
 			v.containsSubquery = true
-			return nil, expr
+			return false, expr
 		}
 	}
-	return v, expr
+	return true, expr
 }
+
+func (v *containsSubqueryVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // containsSubquery returns true if the expression contains a subquery.
 func containsSubquery(expr Expr) bool {
 	v := containsSubqueryVisitor{containsSubquery: false}
-	_ = WalkExpr(&v, expr)
+	WalkExprConst(&v, expr)
 	return v.containsSubquery
 }
