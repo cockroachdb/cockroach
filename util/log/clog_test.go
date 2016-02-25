@@ -402,7 +402,7 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	otherFile, err := os.Create(filepath.Join(*logDir, "other.txt"))
+	otherFile, err := os.Create(filepath.Join(logDir, "other.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,11 +414,11 @@ func TestGetLogReader(t *testing.T) {
 		expErrUnrestricted string
 	}{
 		// File is not specified (trying to open a directory instead).
-		{*logDir, "pathnames must be basenames", "not a regular file"},
+		{logDir, "pathnames must be basenames", "not a regular file"},
 		// Absolute filename is specified.
 		{warn.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(*logDir, "logtest.WARNING"), "pathnames must be basenames", ""},
+		{filepath.Join(logDir, "logtest.WARNING"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
 		{"logtest.WARNING", "malformed log filename", ""},
 		// Non-log file.

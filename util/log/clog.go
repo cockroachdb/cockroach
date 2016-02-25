@@ -572,10 +572,6 @@ func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 func init() {
 	// Default stderrThreshold to errors and above.
 	logging.stderrThreshold = ErrorLog
-	{
-		tmpStr := ""
-		logDir = &tmpStr
-	}
 
 	logging.setVState(0, nil, false)
 	osExitFunc = os.Exit

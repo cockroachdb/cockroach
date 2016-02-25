@@ -56,8 +56,8 @@ var _ flag.Value = &atomicBool{}
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
 // locked while the boolean variables are accessed during flag updates.
-func InitFlags(mu sync.Locker, toStderr *bool, alsoToStderr *bool, logDir, color *string,
-	verbosity, vmodule, traceLocation flag.Value) {
+func InitFlags(mu sync.Locker, toStderr *bool, alsoToStderr *bool, logDir flag.Value,
+	color *string, verbosity, vmodule, traceLocation flag.Value) {
 	*toStderr = true // wonky way of specifying a default
 	flag.Var(&atomicBool{Locker: mu, b: toStderr}, "logtostderr", "log to standard error instead of files")
 	flag.Var(&atomicBool{Locker: mu, b: alsoToStderr}, "alsologtostderr", "log to standard error as well as files")
@@ -65,5 +65,5 @@ func InitFlags(mu sync.Locker, toStderr *bool, alsoToStderr *bool, logDir, color
 	flag.Var(verbosity, "verbosity", "log level for V logs")
 	flag.Var(vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(traceLocation, "log-backtrace-at", "when logging hits line file:N, emit a stack trace")
-	flag.StringVar(logDir, "log-dir", "", "if non-empty, write log files in this directory") // in util/log/file.go
+	flag.Var(logDir, "log-dir", "if non-empty, write log files in this directory")
 }

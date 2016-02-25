@@ -108,13 +108,8 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// Default the log directory to the the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
-	//
-	// TODO(pmattis): This isn't quite correct. The user might specify
-	// --log-dir=$TMPDIR and this will override their request. This can be fixed
-	// by changing the log-dir flag to keep track of whether it has been set or
-	// not. Doesn't seem urgent to do (yet).
 	f := flag.Lookup("log-dir")
-	if f.Value.String() == os.TempDir() {
+	if !log.DirSet() {
 		for _, spec := range storeSpecs {
 			if spec.Attrs == "mem" {
 				continue

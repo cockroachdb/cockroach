@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 
 	"github.com/dustin/go-humanize"
@@ -219,9 +218,6 @@ func usage(name string) string {
 // settable here.
 func initFlags(ctx *Context) {
 	// Change the logging defaults for the main cockroach binary.
-	if err := flag.Lookup("log-dir").Value.Set(os.TempDir()); err != nil {
-		panic(err)
-	}
 	if err := flag.Lookup("logtostderr").Value.Set("false"); err != nil {
 		panic(err)
 	}
