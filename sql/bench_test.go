@@ -526,6 +526,10 @@ func runBenchmarkScan100(b *testing.B, db *sql.DB) {
 	runBenchmarkScan(b, db, 100)
 }
 
+func runBenchmarkScan1000(b *testing.B, db *sql.DB) {
+	runBenchmarkScan(b, db, 1000)
+}
+
 func BenchmarkScan1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkScan1)
 }
@@ -551,9 +555,9 @@ func BenchmarkScan100_Postgres(b *testing.B) {
 }
 
 func BenchmarkScan1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkScan100)
+	benchmarkCockroach(b, runBenchmarkScan1000)
 }
 
 func BenchmarkScan1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkScan100)
+	benchmarkPostgres(b, runBenchmarkScan1000)
 }
