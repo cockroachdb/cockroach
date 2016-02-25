@@ -168,16 +168,15 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 		return ctx.httpClient, nil
 	}
 
-	if ctx.Insecure {
-		log.Println("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
-	}
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
 		return nil, err
 	}
 	ctx.httpClient = &http.Client{
-		Transport: &http.Transport{TLSClientConfig: tlsConfig},
-		Timeout:   NetworkTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+		Timeout: NetworkTimeout,
 	}
 
 	return ctx.httpClient, nil
