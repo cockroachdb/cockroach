@@ -455,6 +455,9 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		return err
 	}
 	numParams := len(stmt.inTypes)
+	if int(numParamFormatCodes) > numParams {
+		return c.sendError(fmt.Sprintf("too many format codes specified: %d for %d paramaters", numParamFormatCodes, numParams))
+	}
 	paramFormatCodes := make([]formatCode, numParams)
 	for i := range paramFormatCodes[:numParamFormatCodes] {
 		c, err := buf.getInt16()
