@@ -241,6 +241,10 @@ func runBenchmarkInsert100(b *testing.B, db *sql.DB) {
 	runBenchmarkInsert(b, db, 100)
 }
 
+func runBenchmarkInsert1000(b *testing.B, db *sql.DB) {
+	runBenchmarkInsert(b, db, 1000)
+}
+
 func BenchmarkInsert1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkInsert1)
 }
@@ -263,6 +267,14 @@ func BenchmarkInsert100_Cockroach(b *testing.B) {
 
 func BenchmarkInsert100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkInsert100)
+}
+
+func BenchmarkInsert1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkInsert1000)
+}
+
+func BenchmarkInsert1000_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkInsert1000)
 }
 
 // runBenchmarkUpdate benchmarks updating count random rows in a table.
@@ -325,6 +337,10 @@ func runBenchmarkUpdate100(b *testing.B, db *sql.DB) {
 	runBenchmarkUpdate(b, db, 100)
 }
 
+func runBenchmarkUpdate1000(b *testing.B, db *sql.DB) {
+	runBenchmarkUpdate(b, db, 1000)
+}
+
 func BenchmarkUpdate1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpdate1)
 }
@@ -347,6 +363,14 @@ func BenchmarkUpdate100_Cockroach(b *testing.B) {
 
 func BenchmarkUpdate100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkUpdate100)
+}
+
+func BenchmarkUpdate1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkUpdate1000)
+}
+
+func BenchmarkUpdate1000_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkUpdate1000)
 }
 
 // runBenchmarkDelete benchmarks deleting count rows from a table.
@@ -408,6 +432,10 @@ func runBenchmarkDelete100(b *testing.B, db *sql.DB) {
 	runBenchmarkDelete(b, db, 100)
 }
 
+func runBenchmarkDelete1000(b *testing.B, db *sql.DB) {
+	runBenchmarkDelete(b, db, 1000)
+}
+
 func BenchmarkDelete1_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkDelete1)
 }
@@ -430,6 +458,14 @@ func BenchmarkDelete100_Cockroach(b *testing.B) {
 
 func BenchmarkDelete100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkDelete100)
+}
+
+func BenchmarkDelete1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkDelete1000)
+}
+
+func BenchmarkDelete1000_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkDelete1000)
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.
@@ -511,5 +547,13 @@ func BenchmarkScan100_Cockroach(b *testing.B) {
 }
 
 func BenchmarkScan100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, runBenchmarkScan100)
+}
+
+func BenchmarkScan1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, runBenchmarkScan100)
+}
+
+func BenchmarkScan1000_Postgres(b *testing.B) {
 	benchmarkPostgres(b, runBenchmarkScan100)
 }
