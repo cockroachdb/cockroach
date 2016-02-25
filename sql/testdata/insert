@@ -339,6 +339,40 @@ INSERT INTO return VALUES (default) RETURNING rowid != unique_rowid()
 statement error pq: qualified name "b" not found
 INSERT INTO return (a) VALUES (default) RETURNING b
 
-# TODO(mjibson): support *
-statement error pq: qualified name "\*" not found
+query II colnames
 INSERT INTO return VALUES (default) RETURNING *
+----
+a b
+3 NULL
+
+query II colnames
+INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.a, b
+----
+a b
+1 2
+3 4
+
+query II colnames
+INSERT INTO return VALUES (1, 2), (3, 4) RETURNING *
+----
+a b
+1 2
+3 4
+
+# Verify we return all columns even if we don't provide a value for all of them.
+query II colnames
+INSERT INTO return VALUES (1) RETURNING *
+----
+a b
+1 NULL
+
+
+statement error pq: "return.*" cannot be aliased
+INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.* as x
+
+query III colnames
+INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.*, a + b
+----
+a b a + b
+1 2 3
+3 4 7

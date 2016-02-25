@@ -171,10 +171,38 @@ SELECT * FROM abc
 ----
 1 6 7
 
-query III
-UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING b, c, 4
+query III colnames
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING abc.b, c, 4
 ----
+b c 4
 8 9 4
+
+query III colnames
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING b as col1, c as col2, 4 as col3
+----
+col1 col2 col3
+8    9    4
+
+# Issue #4368: we should be able to return other columns.
+query error pq: qualified name "a" not found
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING a
+
+# Issue #4368: this should return all columns in the table.
+query II colnames
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING *
+----
+b c
+8 9
+
+# Issue #4368: this should return all columns in the table.
+query II colnames
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING abc.*
+----
+b c
+8 9
+
+statement error pq: "abc.*" cannot be aliased
+UPDATE abc SET (b, c) = (VALUES (8, 9)) RETURNING abc.* as x
 
 query III
 SELECT * FROM abc

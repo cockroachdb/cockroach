@@ -49,7 +49,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, pErr
 	}
-	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
