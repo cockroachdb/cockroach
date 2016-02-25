@@ -465,6 +465,12 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
+			"INSERT INTO d.T VALUES ($1) RETURNING 1",
+			[]preparedExecTest{
+				base.Params(1).RowsAffected(1),
+			},
+		},
+		{
 			"DROP TABLE d.t",
 			[]preparedExecTest{
 				base,
