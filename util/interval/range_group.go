@@ -186,7 +186,7 @@ func (rt *rangeTree) Add(r Range) bool {
 	key := rt.makeKey(r)
 	overlaps := rt.t.Get(key.r)
 	if len(overlaps) == 0 {
-		if err := rt.t.Insert(&key, false /* !fast */); err != nil {
+		if err := rt.insertKey(key); err != nil {
 			panic(err)
 		}
 		return true
@@ -210,6 +210,13 @@ func (rt *rangeTree) Add(r Range) bool {
 	}
 	rt.t.AdjustRanges()
 	return true
+}
+
+// insertKey inserts the rangeKey into the rangeTree's interval tree.
+// This is split into a helper method so that key will only escape to
+// the heap when the insertion case is needed and Insert is called.
+func (rt *rangeTree) insertKey(key rangeKey) error {
+	return rt.t.Insert(&key, false /* !fast */)
 }
 
 // Len implements RangeGroup. It returns the number of rangeKeys in
