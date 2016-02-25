@@ -142,6 +142,7 @@ func TestWalkStmt(t *testing.T) {
 		}
 		qOrig := q
 		qOrigStr := q.String()
+		// FillArgs is where the walk happens, using argVisitor.
 		q, err = FillArgs(q, d.args)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)

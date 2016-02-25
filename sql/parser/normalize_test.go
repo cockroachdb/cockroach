@@ -27,7 +27,7 @@ func TestNormalizeExpr(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		//{`(a)`, `a`},
+		{`(a)`, `a`},
 		{`((((a))))`, `a`},
 		{`ROW(a)`, `(a)`},
 		{`a BETWEEN b AND c`, `a >= b AND a <= c`},

@@ -66,11 +66,9 @@ type varConvertVisitor struct {
 
 var _ parser.Visitor = &varConvertVisitor{}
 
-// Visit is invoked for each Expr node. It can return a new expression for the
-// node, or it can stop processing by returning a nil Visitor.
-func (v *varConvertVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre || (v.justCheck && v.checkFailed) {
-		return nil, expr
+func (v *varConvertVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+	if v.justCheck && v.checkFailed {
+		return false, expr
 	}
 
 	if varExpr, ok := expr.(parser.VariableExpr); ok {
@@ -81,20 +79,22 @@ func (v *varConvertVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, p
 				panic(fmt.Sprintf("exprConvertVars called with unchecked variable %s", varExpr))
 			}
 			v.checkFailed = true
-			return nil, expr
+			return false, expr
 		}
 		if !v.justCheck {
-			return v, converted
+			return true, converted
 		}
 	}
 
-	return v, expr
+	return true, expr
 }
+
+func (v *varConvertVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 // Checks if the given expression only has vars that are known to the conversion function.
 func exprCheckVars(expr parser.Expr, conv varConvertFunc) bool {
 	v := varConvertVisitor{justCheck: true, conv: conv}
-	parser.WalkExpr(&v, expr)
+	parser.WalkExprConst(&v, expr)
 	return !v.checkFailed
 }
 
@@ -102,7 +102,8 @@ func exprCheckVars(expr parser.Expr, conv varConvertFunc) bool {
 // variables known to the conversion function (exprCheckVars should be used first).
 func exprConvertVars(expr parser.Expr, conv varConvertFunc) parser.Expr {
 	v := varConvertVisitor{justCheck: false, conv: conv}
-	return parser.WalkExpr(&v, expr)
+	ret, _ := parser.WalkExpr(&v, expr)
+	return ret
 }
 
 func makeAnd(left parser.Expr, right parser.Expr) parser.Expr {
@@ -153,8 +154,6 @@ func makeNot(expr parser.Expr) parser.Expr {
 //  - If weaker is false:
 //       E(x) = (RES(x) OR REM(x))
 //    This implies RES(x) => E(x), i.e. RES is "stronger"
-//
-// Note: the original expression is modified in-place and should not be used again.
 func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restricted, remainder parser.Expr) {
 	// If the expression only contains "restricted" vars, the split is trivial.
 	if exprCheckVars(expr, conv) {
@@ -180,10 +179,9 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 		//   E = (leftRes OR leftRem) AND (rightRes OR rightRem)
 		// We can't do more than:
 		//   E = (leftRes AND rightRes) OR E
-		exprCopy := expr.DeepCopy()
 		leftRes, _ := splitBoolExpr(t.Left, conv, weaker)
 		rightRes, _ := splitBoolExpr(t.Right, conv, weaker)
-		return makeAnd(leftRes, rightRes), exprCopy
+		return makeAnd(leftRes, rightRes), expr
 
 	case *parser.OrExpr:
 		if !weaker {
@@ -200,10 +198,9 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 		//   E = (leftRes AND leftRem) OR (rightRes AND rightRem)
 		// We can't do more than:
 		//   E = (leftRes OR rightRes) OR E
-		exprCopy := expr.DeepCopy()
 		leftRes, _ := splitBoolExpr(t.Left, conv, weaker)
 		rightRes, _ := splitBoolExpr(t.Right, conv, weaker)
-		return makeOr(leftRes, rightRes), exprCopy
+		return makeOr(leftRes, rightRes), expr
 
 	case *parser.ParenExpr:
 		return splitBoolExpr(t.Expr, conv, weaker)

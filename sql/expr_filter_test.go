@@ -29,11 +29,7 @@ type countVarsVisitor struct {
 	numQNames, numQValues int
 }
 
-func (v *countVarsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if !pre {
-		return nil, expr
-	}
-
+func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
 	switch expr.(type) {
 	case *qvalue:
 		v.numQValues++
@@ -41,14 +37,16 @@ func (v *countVarsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, pa
 		v.numQNames++
 	}
 
-	return v, expr
+	return true, expr
 }
+
+func (*countVarsVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 // countVars counts how many *QualifiedName and *qvalue nodes are in an expression.
 func countVars(expr parser.Expr) (numQNames, numQValues int) {
 	v := countVarsVisitor{}
 	if expr != nil {
-		parser.WalkExpr(&v, expr)
+		parser.WalkExprConst(&v, expr)
 	}
 	return v.numQNames, v.numQValues
 }

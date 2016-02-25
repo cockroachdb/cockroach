@@ -456,7 +456,8 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
-	if err := parser.FillArgs(stmt, &planMaker.params); err != nil {
+	stmt, err := parser.FillArgs(stmt, &planMaker.params)
+	if err != nil {
 		return result, roachpb.NewError(err)
 	}
 

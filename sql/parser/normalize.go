@@ -67,7 +67,6 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
 }
 
 func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
-	exprCopied := false
 
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
@@ -92,6 +91,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 		// We loop attempting to simplify the comparison expression. As a
 		// pre-condition, we know there is at least one variable in the expression
 		// tree or we would not have entered this code path.
+		exprCopied := false
 		for {
 			if v.isConst(expr.Left) {
 				switch expr.Right.(type) {
@@ -217,11 +217,8 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 		tuple, ok := expr.Right.(DTuple)
 		if ok {
 			tuple.Normalize()
-			if !exprCopied {
-				exprCopy := *expr
-				expr = &exprCopy
-				exprCopied = true
-			}
+			exprCopy := *expr
+			expr = &exprCopy
 			expr.Right = tuple
 		}
 	}

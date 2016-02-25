@@ -1536,7 +1536,7 @@ func applyConstraints(expr parser.Expr, constraints indexConstraints) parser.Exp
 	v := &applyConstraintsVisitor{}
 	for _, c := range constraints {
 		v.constraint = c
-		expr = parser.WalkExpr(v, expr)
+		expr, _ = parser.WalkExpr(v, expr)
 		// We can only continue to apply the constraints if the constraints we have
 		// applied so far are equality constraints. There are two cases to
 		// consider: the first is that both the start and end constraints are
@@ -1563,114 +1563,114 @@ type applyConstraintsVisitor struct {
 	constraint indexConstraint
 }
 
-func (v *applyConstraintsVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
-	if pre {
-		switch t := expr.(type) {
-		case *parser.AndExpr, *parser.NotExpr:
-			return v, expr
+func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+	switch t := expr.(type) {
+	case *parser.AndExpr, *parser.NotExpr:
+		return true, expr
 
-		case *parser.ComparisonExpr:
-			c := v.constraint.start
-			if c == nil {
-				return v, expr
+	case *parser.ComparisonExpr:
+		c := v.constraint.start
+		if c == nil {
+			return true, expr
+		}
+		if !varEqual(t.Left, c.Left) {
+			return true, expr
+		}
+		if !isDatum(t.Right) || !isDatum(c.Right) {
+			return true, expr
+		}
+		if tuple, ok := c.Left.(*parser.Tuple); ok {
+			// Do not apply a constraint on a tuple which does not use the entire
+			// tuple.
+			//
+			// TODO(peter): The current code is conservative. We could trim the
+			// tuple instead.
+			if len(tuple.Exprs) != len(v.constraint.tupleMap) {
+				return true, expr
 			}
-			if !varEqual(t.Left, c.Left) {
-				return v, expr
-			}
-			if !isDatum(t.Right) || !isDatum(c.Right) {
-				return v, expr
-			}
-			if tuple, ok := c.Left.(*parser.Tuple); ok {
-				// Do not apply a constraint on a tuple which does not use the entire
-				// tuple.
-				//
-				// TODO(peter): The current code is conservative. We could trim the
-				// tuple instead.
-				if len(tuple.Exprs) != len(v.constraint.tupleMap) {
-					return v, expr
-				}
-			}
-
-			datum := t.Right.(parser.Datum)
-			cdatum := c.Right.(parser.Datum)
-
-			switch t.Operator {
-			case parser.EQ:
-				if v.constraint.start != v.constraint.end {
-					return v, expr
-				}
-
-				switch c.Operator {
-				case parser.EQ:
-					// Expr: "a = <val>", constraint: "a = <val>".
-					if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
-						return v, expr
-					}
-					cmp := datum.Compare(cdatum)
-					if cmp == 0 {
-						return nil, parser.DBool(true)
-					}
-				case parser.In:
-					// Expr: "a = <val>", constraint: "a IN (<vals>)".
-					ctuple := cdatum.(parser.DTuple)
-					if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
-						return v, expr
-					}
-					i := sort.Search(len(ctuple), func(i int) bool {
-						return ctuple[i].(parser.Datum).Compare(datum) >= 0
-					})
-					if i < len(ctuple) && ctuple[i].Compare(datum) == 0 {
-						return nil, parser.DBool(true)
-					}
-				}
-
-			case parser.In:
-				if v.constraint.start != v.constraint.end {
-					return v, expr
-				}
-
-				switch c.Operator {
-				case parser.In:
-					// Expr: "a IN (<vals>)", constraint: "a IN (<vals>)".
-					if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
-						return v, expr
-					}
-					diff := diffSorted(datum.(parser.DTuple), cdatum.(parser.DTuple))
-					if len(diff) == 0 {
-						return nil, parser.DBool(true)
-					}
-					t.Right = diff
-				}
-
-			case parser.IsNot:
-				switch c.Operator {
-				case parser.IsNot:
-					if datum == parser.DNull && cdatum == parser.DNull {
-						// Expr: "a IS NOT NULL", constraint: "a IS NOT NULL"
-						return nil, parser.DBool(true)
-					}
-				}
-			}
-
-		default:
-			return nil, expr
 		}
 
-		return v, expr
+		datum := t.Right.(parser.Datum)
+		cdatum := c.Right.(parser.Datum)
+
+		switch t.Operator {
+		case parser.EQ:
+			if v.constraint.start != v.constraint.end {
+				return true, expr
+			}
+
+			switch c.Operator {
+			case parser.EQ:
+				// Expr: "a = <val>", constraint: "a = <val>".
+				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
+					return true, expr
+				}
+				cmp := datum.Compare(cdatum)
+				if cmp == 0 {
+					return false, parser.DBool(true)
+				}
+			case parser.In:
+				// Expr: "a = <val>", constraint: "a IN (<vals>)".
+				ctuple := cdatum.(parser.DTuple)
+				if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
+					return true, expr
+				}
+				i := sort.Search(len(ctuple), func(i int) bool {
+					return ctuple[i].(parser.Datum).Compare(datum) >= 0
+				})
+				if i < len(ctuple) && ctuple[i].Compare(datum) == 0 {
+					return false, parser.DBool(true)
+				}
+			}
+
+		case parser.In:
+			if v.constraint.start != v.constraint.end {
+				return true, expr
+			}
+
+			switch c.Operator {
+			case parser.In:
+				// Expr: "a IN (<vals>)", constraint: "a IN (<vals>)".
+				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
+					return true, expr
+				}
+				diff := diffSorted(datum.(parser.DTuple), cdatum.(parser.DTuple))
+				if len(diff) == 0 {
+					return false, parser.DBool(true)
+				}
+				t.Right = diff
+			}
+
+		case parser.IsNot:
+			switch c.Operator {
+			case parser.IsNot:
+				if datum == parser.DNull && cdatum == parser.DNull {
+					// Expr: "a IS NOT NULL", constraint: "a IS NOT NULL"
+					return false, parser.DBool(true)
+				}
+			}
+		}
+
+	default:
+		return false, expr
 	}
 
+	return true, expr
+}
+
+func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	switch t := expr.(type) {
 	case *parser.AndExpr:
 		if t.Left == parser.DBool(true) && t.Right == parser.DBool(true) {
-			return nil, parser.DBool(true)
+			return parser.DBool(true)
 		} else if t.Left == parser.DBool(true) {
-			return nil, t.Right
+			return t.Right
 		} else if t.Right == parser.DBool(true) {
-			return nil, t.Left
+			return t.Left
 		}
 	}
 
-	return v, expr
+	return expr
 }
 
 func diffSorted(a, b parser.DTuple) parser.DTuple {
