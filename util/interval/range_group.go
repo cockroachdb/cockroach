@@ -75,7 +75,7 @@ func (rg *rangeList) Add(r Range) bool {
 	for e := rg.ll.Front(); e != nil; e = e.Next() {
 		er := e.Value.(Range)
 		switch {
-		case overlap(er, r):
+		case er.OverlapInclusive(r):
 			// If a current range fully contains the new range, no
 			// need to add it.
 			if contains(er, r) {
@@ -86,7 +86,7 @@ func (rg *rangeList) Add(r Range) bool {
 			newR := merge(er, r)
 			for p := e.Next(); p != nil; {
 				pr := p.Value.(Range)
-				if overlap(newR, pr) {
+				if newR.OverlapInclusive(pr) {
 					newR = merge(newR, pr)
 
 					nextP := p.Next()
@@ -130,7 +130,9 @@ type rangeTree struct {
 
 // NewRangeTree constructs an interval tree backed RangeGroup.
 func NewRangeTree() RangeGroup {
-	return &rangeTree{}
+	return &rangeTree{
+		t: Tree{Overlapper: Range.OverlapInclusive},
+	}
 }
 
 // rangeKey implements Interface and can be inserted into a Tree. It
@@ -149,11 +151,6 @@ func (rt *rangeTree) makeKey(r Range) rangeKey {
 		r:  r,
 		id: rt.idCount,
 	}
-}
-
-// Overlap implements Interface.
-func (rk rangeKey) Overlap(r Range) bool {
-	return overlap(rk.r, r)
 }
 
 func (rk rangeKey) Contains(lk rangeKey) bool {
@@ -187,9 +184,9 @@ func (rt *rangeTree) Add(r Range) bool {
 		panic(err)
 	}
 	key := rt.makeKey(r)
-	overlaps := rt.t.Get(key)
+	overlaps := rt.t.Get(key.r)
 	if len(overlaps) == 0 {
-		if err := rt.t.Insert(&key, false /* !fast */); err != nil {
+		if err := rt.insertKey(key); err != nil {
 			panic(err)
 		}
 		return true
@@ -215,6 +212,13 @@ func (rt *rangeTree) Add(r Range) bool {
 	return true
 }
 
+// insertKey inserts the rangeKey into the rangeTree's interval tree.
+// This is split into a helper method so that key will only escape to
+// the heap when the insertion case is needed and Insert is called.
+func (rt *rangeTree) insertKey(key rangeKey) error {
+	return rt.t.Insert(&key, false /* !fast */)
+}
+
 // Len implements RangeGroup. It returns the number of rangeKeys in
 // the rangeTree.
 func (rt *rangeTree) Len() int {
@@ -223,14 +227,7 @@ func (rt *rangeTree) Len() int {
 
 // Clear implements RangeGroup. It clears all rangeKeys from the rangeTree.
 func (rt *rangeTree) Clear() {
-	rt.t = Tree{}
-}
-
-// overlap returns whether the two provided ranges overlap. It defines
-// overlapping as a pair of ranges that either share a segment of the
-// keyspace, or share an inclusive/exclusive boundary.
-func overlap(l, r Range) bool {
-	return l.End.Compare(r.Start) >= 0 && l.Start.Compare(r.End) <= 0
+	rt.t = Tree{Overlapper: Range.OverlapInclusive}
 }
 
 // contains returns if the range in the out range fully contains the
