@@ -294,6 +294,8 @@ module AdminViews {
       import NavigationBar = Components.NavigationBar;
 
       class Controller {
+        private static _queryEveryMS: number = 10000;
+
         private static defaultTargets: NavigationBar.Target[] = [
           {
             view: "Overview",
@@ -305,16 +307,16 @@ module AdminViews {
           },
         ];
 
-        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
-          return ((m.route.param("detail") || "") === t.route);
-        };
-
-        private static _queryEveryMS: number = 10000;
         exec: Metrics.Executor;
         axes: Metrics.Axis[] = [];
+
         private _query: Metrics.Query;
         private _interval: number;
         private _storeId: string;
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+          return ((m.route.param("detail") || "") === t.route);
+        };
 
         public onunload(): void {
           clearInterval(this._interval);

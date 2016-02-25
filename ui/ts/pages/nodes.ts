@@ -85,10 +85,6 @@ module AdminViews {
           },
         ];
 
-        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
-          return ((m.route.param("detail") || "") === t.route);
-        };
-
         private static comparisonColumns: Table.TableColumn<NodeStatus>[] = [
           {
             title: "",
@@ -179,10 +175,15 @@ module AdminViews {
 
         public columns: Utils.Property<Table.TableColumn<NodeStatus>[]> = Utils.Prop(Controller.comparisonColumns);
         public sources: string[] = [];
+
         exec: Metrics.Executor;
         axes: Metrics.Axis[] = [];
         private _interval: number;
         private _query: Metrics.Query;
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+            return ((m.route.param("detail") || "") === t.route);
+        };
 
         public constructor(nodeId?: string) {
           this._query = Metrics.NewQuery();
@@ -346,17 +347,18 @@ module AdminViews {
           },
         ];
 
-        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
-          return ((m.route.param("detail") || "") === t.route);
-        };
-
         private static _queryEveryMS: number = 10000;
+
         exec: Metrics.Executor;
         private networkAxes: Metrics.Axis[] = [];
         private sqlAxes: Metrics.Axis[] = [];
         private _query: Metrics.Query;
         private _interval: number;
         private _nodeId: string;
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+          return ((m.route.param("detail") || "") === t.route);
+        };
 
         public onunload(): void {
           clearInterval(this._interval);

@@ -98,7 +98,7 @@ module AdminViews {
           m.component(
             NavigationBar,
             {
-              ts: ctrl.TargetSet()
+              ts: ctrl.TargetSet(),
             }
           )
         );

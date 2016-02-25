@@ -305,6 +305,24 @@ module Models {
        */
       selectors: Utils.ChainProperty<Select.Selector[], Query> = Utils.ChainProp(this, []);
 
+      private static dispatch_query(q: Proto.QueryRequestSet): promise<QueryResultSet> {
+          return Utils.Http.Post("/ts/query", q)
+              .then((d: Proto.QueryResultSet) => {
+                  // Populate missing collection fields with empty arrays.
+                  if (!d.results) {
+                      d.results = [];
+                  }
+                  let result: QueryInfoSet<Proto.QueryResult> = new QueryInfoSet<Proto.QueryResult>();
+                  d.results.forEach((r: Proto.QueryResult) => {
+                      if (!r.datapoints) {
+                          r.datapoints = [];
+                      }
+                      result.add(r);
+                  });
+                  return result;
+              });
+      }
+
       /**
        * execute dispatches a query to the server and returns a promise
        * for the results.
@@ -328,24 +346,6 @@ module Models {
         });
         return Query.dispatch_query(req);
       };
-
-      private static dispatch_query(q: Proto.QueryRequestSet): promise<QueryResultSet> {
-        return Utils.Http.Post("/ts/query", q)
-          .then((d: Proto.QueryResultSet) => {
-            // Populate missing collection fields with empty arrays.
-            if (!d.results) {
-              d.results = [];
-            }
-            let result: QueryInfoSet<Proto.QueryResult> = new QueryInfoSet<Proto.QueryResult>();
-            d.results.forEach((r: Proto.QueryResult) => {
-              if (!r.datapoints) {
-                r.datapoints = [];
-              }
-              result.add(r);
-            });
-            return result;
-          });
-      }
     }
 
     /**
@@ -362,11 +362,11 @@ module Models {
      * execution.
      */
     export class Executor extends Utils.QueryCache<QueryResultSet> {
+      private _metricquery: Query;
+
       query: () => Query = () => {
         return this._metricquery;
       };
-
-      private _metricquery: Query;
 
       constructor(q: Query) {
         super(q.execute);

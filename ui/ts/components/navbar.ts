@@ -52,7 +52,7 @@ module Components {
           return m(
             "li",
             {
-              className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal")
+              className: (args.ts.isActive(t) ? "active" : "") + (t.liClass ? " " + t.liClass : " normal"),
             },
             m("a",
               linkAttrs,
