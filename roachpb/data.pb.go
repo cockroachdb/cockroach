@@ -381,16 +381,17 @@ func (*NodeList) ProtoMessage()    {}
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
 	// id is a unique UUID value which identifies the transaction.
-	ID *github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"id,omitempty"`
+	ID        *github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"id,omitempty"`
+	Isolation IsolationType                                    `protobuf:"varint,2,opt,name=isolation,enum=cockroach.roachpb.IsolationType" json:"isolation"`
 	// key is the key which anchors the transaction. This is typically
 	// the first key read or written during the transaction and determines which
 	// range in the cluster will hold the transaction record.
-	Key Key `protobuf:"bytes,2,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Key Key `protobuf:"bytes,3,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// Incremented on txn retry.
-	Epoch uint32 `protobuf:"varint,3,opt,name=epoch" json:"epoch"`
+	Epoch uint32 `protobuf:"varint,4,opt,name=epoch" json:"epoch"`
 	// The proposed timestamp for the transaction. This starts as
 	// the current wall time on the txn coordinator.
-	Timestamp Timestamp `protobuf:"bytes,4,opt,name=timestamp" json:"timestamp"`
+	Timestamp Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *TxnMeta) Reset()         { *m = TxnMeta{} }
@@ -412,23 +413,22 @@ type Transaction struct {
 	// The transaction metadata. These are persisted with every intent.
 	TxnMeta `protobuf:"bytes,1,opt,name=meta,embedded=meta" json:"meta"`
 	// A free-text identifier for debug purposes.
-	Name      string            `protobuf:"bytes,2,opt,name=name" json:"name"`
-	Priority  int32             `protobuf:"varint,3,opt,name=priority" json:"priority"`
-	Isolation IsolationType     `protobuf:"varint,4,opt,name=isolation,enum=cockroach.roachpb.IsolationType" json:"isolation"`
-	Status    TransactionStatus `protobuf:"varint,5,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
+	Name     string            `protobuf:"bytes,2,opt,name=name" json:"name"`
+	Priority int32             `protobuf:"varint,3,opt,name=priority" json:"priority"`
+	Status   TransactionStatus `protobuf:"varint,4,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// The last heartbeat timestamp.
-	LastHeartbeat *Timestamp `protobuf:"bytes,6,opt,name=last_heartbeat" json:"last_heartbeat,omitempty"`
+	LastHeartbeat *Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat" json:"last_heartbeat,omitempty"`
 	// The original timestamp at which the transaction started. For serializable
 	// transactions, if the timestamp drifts from the original timestamp, the
 	// transaction will retry.
-	OrigTimestamp Timestamp `protobuf:"bytes,7,opt,name=orig_timestamp" json:"orig_timestamp"`
+	OrigTimestamp Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
 	// timestamps between timestamp and max_timestamp trigger a txn
 	// retry error, unless the node being read is listed in certain_nodes
 	// (in which case no more read uncertainty can occur).
 	// The case max_timestamp < timestamp is possible for transactions which have
 	// been pushed; in this case, max_timestamp should be ignored.
-	MaxTimestamp Timestamp `protobuf:"bytes,8,opt,name=max_timestamp" json:"max_timestamp"`
+	MaxTimestamp Timestamp `protobuf:"bytes,7,opt,name=max_timestamp" json:"max_timestamp"`
 	// A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
 	// occurred during a prior read. The purpose of keeping this information is
 	// that as a reaction to this error, the transaction's timestamp is forwarded
@@ -447,15 +447,15 @@ type Transaction struct {
 	// Bits of this mechanism are found in the local sender, the range and the
 	// txn_coord_sender, with brief comments referring here.
 	// See https://github.com/cockroachdb/cockroach/pull/221.
-	CertainNodes NodeList `protobuf:"bytes,9,opt,name=certain_nodes" json:"certain_nodes"`
+	CertainNodes NodeList `protobuf:"bytes,8,opt,name=certain_nodes" json:"certain_nodes"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
-	Writing bool `protobuf:"varint,10,opt,name=Writing" json:"Writing"`
+	Writing bool `protobuf:"varint,9,opt,name=Writing" json:"Writing"`
 	// A one-indexed sequence number which is increased on each batch sent as
 	// part of the transaction. Used to prevent replay and out-of-order
 	// application protection (by means of a transaction retry).
-	Sequence uint32 `protobuf:"varint,11,opt,name=Sequence" json:"Sequence"`
-	Intents  []Span `protobuf:"bytes,12,rep,name=Intents" json:"Intents"`
+	Sequence uint32 `protobuf:"varint,10,opt,name=Sequence" json:"Sequence"`
+	Intents  []Span `protobuf:"bytes,11,rep,name=Intents" json:"Intents"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
@@ -929,16 +929,19 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 		}
 		i += n14
 	}
+	data[i] = 0x10
+	i++
+	i = encodeVarintData(data, i, uint64(m.Isolation))
 	if m.Key != nil {
-		data[i] = 0x12
+		data[i] = 0x1a
 		i++
 		i = encodeVarintData(data, i, uint64(len(m.Key)))
 		i += copy(data[i:], m.Key)
 	}
-	data[i] = 0x18
+	data[i] = 0x20
 	i++
 	i = encodeVarintData(data, i, uint64(m.Epoch))
-	data[i] = 0x22
+	data[i] = 0x2a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
 	n15, err := m.Timestamp.MarshalTo(data[i:])
@@ -981,12 +984,9 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintData(data, i, uint64(m.Priority))
 	data[i] = 0x20
 	i++
-	i = encodeVarintData(data, i, uint64(m.Isolation))
-	data[i] = 0x28
-	i++
 	i = encodeVarintData(data, i, uint64(m.Status))
 	if m.LastHeartbeat != nil {
-		data[i] = 0x32
+		data[i] = 0x2a
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
 		n17, err := m.LastHeartbeat.MarshalTo(data[i:])
@@ -995,7 +995,7 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		}
 		i += n17
 	}
-	data[i] = 0x3a
+	data[i] = 0x32
 	i++
 	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
 	n18, err := m.OrigTimestamp.MarshalTo(data[i:])
@@ -1003,7 +1003,7 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n18
-	data[i] = 0x42
+	data[i] = 0x3a
 	i++
 	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
 	n19, err := m.MaxTimestamp.MarshalTo(data[i:])
@@ -1011,7 +1011,7 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n19
-	data[i] = 0x4a
+	data[i] = 0x42
 	i++
 	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
 	n20, err := m.CertainNodes.MarshalTo(data[i:])
@@ -1019,7 +1019,7 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n20
-	data[i] = 0x50
+	data[i] = 0x48
 	i++
 	if m.Writing {
 		data[i] = 1
@@ -1027,12 +1027,12 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x58
+	data[i] = 0x50
 	i++
 	i = encodeVarintData(data, i, uint64(m.Sequence))
 	if len(m.Intents) > 0 {
 		for _, msg := range m.Intents {
-			data[i] = 0x62
+			data[i] = 0x5a
 			i++
 			i = encodeVarintData(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -1324,6 +1324,7 @@ func (m *TxnMeta) Size() (n int) {
 		l = m.ID.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
+	n += 1 + sovData(uint64(m.Isolation))
 	if m.Key != nil {
 		l = len(m.Key)
 		n += 1 + l + sovData(uint64(l))
@@ -1342,7 +1343,6 @@ func (m *Transaction) Size() (n int) {
 	l = len(m.Name)
 	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.Priority))
-	n += 1 + sovData(uint64(m.Isolation))
 	n += 1 + sovData(uint64(m.Status))
 	if m.LastHeartbeat != nil {
 		l = m.LastHeartbeat.Size()
@@ -2756,6 +2756,25 @@ func (m *TxnMeta) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Isolation", wireType)
+			}
+			m.Isolation = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Isolation |= (IsolationType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
 			}
@@ -2786,7 +2805,7 @@ func (m *TxnMeta) Unmarshal(data []byte) error {
 				m.Key = []byte{}
 			}
 			iNdEx = postIndex
-		case 3:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Epoch", wireType)
 			}
@@ -2805,7 +2824,7 @@ func (m *TxnMeta) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
 			}
@@ -2965,25 +2984,6 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Isolation", wireType)
-			}
-			m.Isolation = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowData
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Isolation |= (IsolationType(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
 			}
 			m.Status = 0
@@ -3001,7 +3001,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 6:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LastHeartbeat", wireType)
 			}
@@ -3034,7 +3034,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 7:
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field OrigTimestamp", wireType)
 			}
@@ -3064,7 +3064,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 8:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MaxTimestamp", wireType)
 			}
@@ -3094,7 +3094,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 9:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field CertainNodes", wireType)
 			}
@@ -3124,7 +3124,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 10:
+		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Writing", wireType)
 			}
@@ -3144,7 +3144,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				}
 			}
 			m.Writing = bool(v != 0)
-		case 11:
+		case 10:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Sequence", wireType)
 			}
@@ -3163,7 +3163,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 					break
 				}
 			}
-		case 12:
+		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Intents", wireType)
 			}

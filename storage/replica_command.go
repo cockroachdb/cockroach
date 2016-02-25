@@ -1042,37 +1042,35 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 // out.
 // TODO(tschottdorf): early restarts are currently disabled, see TODO within.
 func (r *Replica) clearSequenceCache(batch engine.Engine, ms *engine.MVCCStats, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus) (err error) {
+	var poison uint32
+	if shouldPoison {
+		switch status {
+		case roachpb.PENDING:
+			// Note that a SNAPSHOT transaction will simply ignore being poisoned.
+			// We don't know what type of transaction we're dealing with here, or
+			// we would preferably only poison SERIALIZABLE transactions.
+			// Instead, we poison unconditionally and SNAPSHOT txns ignore such
+			// an entry.
+			if txn.Isolation != roachpb.SNAPSHOT {
+				poison = SequencePoisonRestart
+			}
+		default:
+			// When committing or aborting, we don't want the transaction (or accidental
+			// replays) to come back.
+			poison = SequencePoisonAbort
+		}
+	}
+
 	// Clear out before (maybe) poisoning unless it's PENDING. No need for old
 	// stuff to accumulate.
-	if status != roachpb.PENDING {
+	if status != roachpb.PENDING || poison > 0 {
 		if err := r.sequence.Del(batch, ms, txn.ID); err != nil {
 			return err
 		}
 	}
 
-	if !shouldPoison {
+	if poison == 0 {
 		return nil
-	}
-
-	var poison uint32
-	switch status {
-	case roachpb.PENDING:
-		poison = roachpb.SequencePoisonRestart
-		// TODO(tschottdorf): Previous code here poisoned unless the
-		// transaction was either SERIALIZABLE and with its original timestamp
-		// or SNAPSHOT. This hasn't been possible since we factored out the
-		// transaction metadata from the transaction proto, since now we only
-		// have the **metadata** available at the callsite. With a bit more
-		// elbow grease, it should be possible to thread the necessary
-		// information through ResolveIntent{,Range} to here, at least in cases
-		// where the performance matters (short-circuiting a Transaction helps
-		// avoid redundant work). Early-return for now; we don't want to mess
-		// with SNAPSHOT transactions.
-		return nil
-	default:
-		// When committing or aborting, we don't want the transaction (or accidental
-		// replays) to come back.
-		poison = roachpb.SequencePoisonAbort
 	}
 
 	// The snake bites.

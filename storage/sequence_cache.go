@@ -31,6 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
+const (
+	// SequencePoisonAbort is a special value for the sequence cache which
+	// commands a TransactionAbortedError.
+	SequencePoisonAbort = math.MaxUint32
+	// SequencePoisonRestart is a special value for the sequence cache which
+	// commands a TransactionRestartError.
+	SequencePoisonRestart = math.MaxUint32 - 1
+)
+
 var errEmptyTxnID = errors.New("empty Transaction ID used in sequence cache")
 
 // The SequenceCache provides idempotence for request retries. Each
