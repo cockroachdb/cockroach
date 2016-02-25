@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
 )
@@ -58,7 +57,7 @@ type SendOptions struct {
 	// Timeout is the maximum duration of an RPC before failure.
 	// 0 for no timeout.
 	Timeout time.Duration
-	// If not nil, information about the request is added to this trace.
+	// Information about the request is added to this trace. Must not be nil.
 	Trace opentracing.Span
 }
 
@@ -104,10 +103,7 @@ func shuffleClients(clients []batchClient) {
 // requests.
 func send(opts SendOptions, replicas ReplicaSlice,
 	args roachpb.BatchRequest, context *rpc.Context) (proto.Message, error) {
-	sp := opts.Trace
-	if sp == nil {
-		sp = tracing.NoopSpan()
-	}
+	sp := opts.Trace // must not be nil
 
 	if len(replicas) < 1 {
 		return nil, roachpb.NewSendError(

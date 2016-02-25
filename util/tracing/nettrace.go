@@ -76,11 +76,13 @@ type netTraceWrapInjector struct {
 }
 
 func (ntwi *netTraceWrapInjector) InjectSpan(span opentracing.Span, carrier interface{}) error {
-	sp, ok := span.(*netTraceWrapSpan)
+	realSpan, ok := span.(*netTraceWrapSpan)
 	if !ok {
-		return opentracing.ErrTraceCorrupted
+		// If the incoming span wasn't wrapped, hope for the best and let the
+		// injector do its thing.
+		return ntwi.wrap.InjectSpan(span, carrier)
 	}
-	return ntwi.wrap.InjectSpan(sp, carrier)
+	return ntwi.wrap.InjectSpan(realSpan.Span, carrier)
 }
 
 func (nt *netTraceWrapTracer) Injector(format interface{}) opentracing.Injector {

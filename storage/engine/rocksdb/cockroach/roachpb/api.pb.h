@@ -31,6 +31,7 @@
 #include "cockroach/roachpb/metadata.pb.h"
 #include "cockroach/roachpb/data.pb.h"
 #include "cockroach/roachpb/errors.pb.h"
+#include "cockroach/util/tracing/span.pb.h"
 #include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
@@ -5624,6 +5625,15 @@ class Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::ReadConsistencyType read_consistency() const;
   void set_read_consistency(::cockroach::roachpb::ReadConsistencyType value);
 
+  // optional .cockroach.util.tracing.WireSpan trace = 7;
+  bool has_trace() const;
+  void clear_trace();
+  static const int kTraceFieldNumber = 7;
+  const ::cockroach::util::tracing::WireSpan& trace() const;
+  ::cockroach::util::tracing::WireSpan* mutable_trace();
+  ::cockroach::util::tracing::WireSpan* release_trace();
+  void set_allocated_trace(::cockroach::util::tracing::WireSpan* trace);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
   inline void set_has_timestamp();
@@ -5638,6 +5648,8 @@ class Header : public ::google::protobuf::Message {
   inline void clear_has_txn();
   inline void set_has_read_consistency();
   inline void clear_has_read_consistency();
+  inline void set_has_trace();
+  inline void clear_has_trace();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -5647,6 +5659,7 @@ class Header : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id_;
   double user_priority_;
   ::cockroach::roachpb::Transaction* txn_;
+  ::cockroach::util::tracing::WireSpan* trace_;
   int read_consistency_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -5852,6 +5865,22 @@ class BatchResponse_Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::Transaction* release_txn();
   void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
 
+  // repeated bytes collected_spans = 4;
+  int collected_spans_size() const;
+  void clear_collected_spans();
+  static const int kCollectedSpansFieldNumber = 4;
+  const ::std::string& collected_spans(int index) const;
+  ::std::string* mutable_collected_spans(int index);
+  void set_collected_spans(int index, const ::std::string& value);
+  void set_collected_spans(int index, const char* value);
+  void set_collected_spans(int index, const void* value, size_t size);
+  ::std::string* add_collected_spans();
+  void add_collected_spans(const ::std::string& value);
+  void add_collected_spans(const char* value);
+  void add_collected_spans(const void* value, size_t size);
+  const ::google::protobuf::RepeatedPtrField< ::std::string>& collected_spans() const;
+  ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_collected_spans();
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.BatchResponse.Header)
  private:
   inline void set_has_error();
@@ -5867,6 +5896,7 @@ class BatchResponse_Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::Error* error_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::cockroach::roachpb::Transaction* txn_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> collected_spans_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -11739,6 +11769,49 @@ inline void Header::set_read_consistency(::cockroach::roachpb::ReadConsistencyTy
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.read_consistency)
 }
 
+// optional .cockroach.util.tracing.WireSpan trace = 7;
+inline bool Header::has_trace() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void Header::set_has_trace() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void Header::clear_has_trace() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void Header::clear_trace() {
+  if (trace_ != NULL) trace_->::cockroach::util::tracing::WireSpan::Clear();
+  clear_has_trace();
+}
+inline const ::cockroach::util::tracing::WireSpan& Header::trace() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.trace)
+  return trace_ != NULL ? *trace_ : *default_instance_->trace_;
+}
+inline ::cockroach::util::tracing::WireSpan* Header::mutable_trace() {
+  set_has_trace();
+  if (trace_ == NULL) {
+    trace_ = new ::cockroach::util::tracing::WireSpan;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.trace)
+  return trace_;
+}
+inline ::cockroach::util::tracing::WireSpan* Header::release_trace() {
+  clear_has_trace();
+  ::cockroach::util::tracing::WireSpan* temp = trace_;
+  trace_ = NULL;
+  return temp;
+}
+inline void Header::set_allocated_trace(::cockroach::util::tracing::WireSpan* trace) {
+  delete trace_;
+  trace_ = trace;
+  if (trace) {
+    set_has_trace();
+  } else {
+    clear_has_trace();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Header.trace)
+}
+
 // -------------------------------------------------------------------
 
 // BatchRequest
@@ -11947,6 +12020,60 @@ inline void BatchResponse_Header::set_allocated_txn(::cockroach::roachpb::Transa
     clear_has_txn();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.BatchResponse.Header.txn)
+}
+
+// repeated bytes collected_spans = 4;
+inline int BatchResponse_Header::collected_spans_size() const {
+  return collected_spans_.size();
+}
+inline void BatchResponse_Header::clear_collected_spans() {
+  collected_spans_.Clear();
+}
+inline const ::std::string& BatchResponse_Header::collected_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.collected_spans)
+  return collected_spans_.Get(index);
+}
+inline ::std::string* BatchResponse_Header::mutable_collected_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.collected_spans)
+  return collected_spans_.Mutable(index);
+}
+inline void BatchResponse_Header::set_collected_spans(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.BatchResponse.Header.collected_spans)
+  collected_spans_.Mutable(index)->assign(value);
+}
+inline void BatchResponse_Header::set_collected_spans(int index, const char* value) {
+  collected_spans_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.BatchResponse.Header.collected_spans)
+}
+inline void BatchResponse_Header::set_collected_spans(int index, const void* value, size_t size) {
+  collected_spans_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.BatchResponse.Header.collected_spans)
+}
+inline ::std::string* BatchResponse_Header::add_collected_spans() {
+  return collected_spans_.Add();
+}
+inline void BatchResponse_Header::add_collected_spans(const ::std::string& value) {
+  collected_spans_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.BatchResponse.Header.collected_spans)
+}
+inline void BatchResponse_Header::add_collected_spans(const char* value) {
+  collected_spans_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.roachpb.BatchResponse.Header.collected_spans)
+}
+inline void BatchResponse_Header::add_collected_spans(const void* value, size_t size) {
+  collected_spans_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.roachpb.BatchResponse.Header.collected_spans)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+BatchResponse_Header::collected_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.Header.collected_spans)
+  return collected_spans_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+BatchResponse_Header::mutable_collected_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.BatchResponse.Header.collected_spans)
+  return &collected_spans_;
 }
 
 // -------------------------------------------------------------------

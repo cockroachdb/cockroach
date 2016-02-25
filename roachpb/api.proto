@@ -21,6 +21,7 @@ option go_package = "roachpb";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
+import "cockroach/util/tracing/span.proto";
 import weak "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
@@ -609,6 +610,9 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
+  // trace is the active span of an OpenTracing distributed trace. It is
+  // empty if tracing the request is not desired.
+  optional util.tracing.WireSpan trace = 7 [(gogoproto.nullable) = false];
 }
 
 
@@ -649,6 +653,9 @@ message BatchResponse {
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
     optional Transaction txn = 3;
+    // collected_spans is a binary representation of the trace spans
+    // generated during the execution of this request.
+    repeated bytes collected_spans = 4;
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];

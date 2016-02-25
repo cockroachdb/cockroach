@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const (
@@ -412,7 +411,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(tracing.NoopSpan()); err != nil {
+		if err := repl.redirectOnOrAcquireLeaderLease(repl.store.Tracer().StartSpan("queue")); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return nil
 		}
