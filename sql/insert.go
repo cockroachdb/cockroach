@@ -247,7 +247,8 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	if p.prepareOnly {
-		return nil, nil
+		// Return the result column types.
+		return result, nil
 	}
 
 	if isSystemConfigID(tableDesc.GetID()) {
