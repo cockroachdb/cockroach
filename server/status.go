@@ -317,8 +317,8 @@ func (s *statusServer) handleLogFileLocal(w http.ResponseWriter, r *http.Request
 	}
 	defer reader.Close()
 
-	entry := log.LogEntry{}
-	var entries []log.LogEntry
+	entry := log.Entry{}
+	var entries []log.Entry
 	decoder := log.NewEntryDecoder(reader)
 	for {
 		if err := decoder.Decode(&entry); err != nil {

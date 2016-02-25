@@ -19,14 +19,17 @@ package log
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	stdLog "log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/util/caller"
 )
@@ -75,24 +78,7 @@ func (l *loggingT) newBuffers() [NumSeverity]flushSyncWriter {
 
 // contents returns the specified log value as a string.
 func contents(s Severity) string {
-	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewTermEntryReader(buffer)
-	bytes, err := ioutil.ReadAll(hr)
-	if err != nil {
-		panic(err)
-	}
-	return string(bytes)
-}
-
-// jsonContents returns the specified log JSON-encoded.
-func jsonContents(s Severity) []byte {
-	buffer := bytes.NewBuffer(logging.file[s].(*flushBuffer).Buffer.Bytes())
-	hr := NewJSONEntryReader(buffer)
-	bytes, err := ioutil.ReadAll(hr)
-	if err != nil {
-		panic(err)
-	}
-	return bytes
+	return logging.file[s].(*flushBuffer).Buffer.String()
 }
 
 // contains reports whether the string is contained in the log.
@@ -147,22 +133,79 @@ func TestStandardLog(t *testing.T) {
 }
 
 // Verify that a log can be fetched in JSON format.
-func TestJSONLogFormat(t *testing.T) {
-	setFlags()
-	defer logging.swap(logging.newBuffers())
-	stdLog.Print("test")
-	json := jsonContents(InfoLog)
-	expPat := `{
-  "severity": 0,
-  "time": [\d]+,
-  "thread_id": [\d]+,
-  "file": "clog_test.go",
-  "line": [\d]+,
-  "format": "test",
-  "args": null
-}`
-	if !regexp.MustCompile(expPat).Match(json) {
-		t.Errorf("expected json match; got %s", json)
+func TestEntryDecoder(t *testing.T) {
+	formatEntry := func(s Severity, now time.Time, file string, line int, msg string) string {
+		buf := formatHeader(s, now, file, line, nil)
+		buf.WriteString(msg)
+		buf.WriteString("\n")
+		defer logging.putBuffer(buf)
+		return buf.String()
+	}
+
+	t1 := time.Now().Round(time.Microsecond)
+	t2 := t1.Add(time.Microsecond)
+	t3 := t2.Add(time.Microsecond)
+	t4 := t3.Add(time.Microsecond)
+
+	contents := formatEntry(InfoLog, t1, "clog_test.go", 136, "info")
+	contents += formatEntry(WarningLog, t2, "clog_test.go", 137, "warning")
+	contents += formatEntry(ErrorLog, t3, "clog_test.go", 138, "error")
+	contents += formatEntry(FatalLog, t4, "clog_test.go", 139, "fatal")
+
+	readAllEntries := func(contents string) []Entry {
+		decoder := NewEntryDecoder(strings.NewReader(contents))
+		var entries []Entry
+		var entry Entry
+		for {
+			if err := decoder.Decode(&entry); err != nil {
+				if err == io.EOF {
+					break
+				}
+				t.Fatal(err)
+			}
+			entries = append(entries, entry)
+		}
+		return entries
+	}
+
+	entries := readAllEntries(contents)
+	expected := []Entry{
+		{
+			Severity: 0,
+			Time:     t1.UnixNano(),
+			File:     `clog_test.go`,
+			Line:     136,
+			Message:  `info`,
+		},
+		{
+			Severity: 1,
+			Time:     t2.UnixNano(),
+			File:     `clog_test.go`,
+			Line:     137,
+			Message:  `warning`,
+		},
+		{
+			Severity: 2,
+			Time:     t3.UnixNano(),
+			File:     `clog_test.go`,
+			Line:     138,
+			Message:  `error`,
+		},
+		{
+			Severity: 3,
+			Time:     t4.UnixNano(),
+			File:     `clog_test.go`,
+			Line:     139,
+			Message:  `fatal`,
+		},
+	}
+	if !reflect.DeepEqual(expected, entries) {
+		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
+	}
+
+	entries = readAllEntries("file header\n\n\n" + contents)
+	if !reflect.DeepEqual(expected, entries) {
+		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
 	}
 }
 
@@ -214,7 +257,7 @@ func TestV(t *testing.T) {
 	_ = logging.verbosity.Set("2")
 	defer func() { _ = logging.verbosity.Set("0") }()
 	if v(2) {
-		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
+		addStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
@@ -240,7 +283,7 @@ func TestVmoduleOn(t *testing.T) {
 		t.Error("V enabled for 3")
 	}
 	if v(2) {
-		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
+		addStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if !contains(InfoLog, "I", t) {
 		t.Errorf("Info has wrong character: %q", contents(InfoLog))
@@ -262,7 +305,7 @@ func TestVmoduleOff(t *testing.T) {
 		}
 	}
 	if v(2) {
-		AddStructured(nil, InfoLog, 1, "", []interface{}{"test"})
+		addStructured(nil, InfoLog, 1, "", []interface{}{"test"})
 	}
 	if contents(InfoLog) != "" {
 		t.Error("V logged incorrectly")
@@ -533,7 +576,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := formatHeader(InfoLog, time.Now(), 1, "file.go", 100, nil)
+		buf := formatHeader(InfoLog, time.Now(), "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
 }
