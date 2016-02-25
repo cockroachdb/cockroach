@@ -123,6 +123,9 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	case *valuesNode:
 		// valuesNode supports DebugValues without any explicit enablement.
 		return t, nil
+	case *returningNode:
+		// returningNode supports DebugValues on the underlying valuesNode.
+		return &t.valuesNode, nil
 
 	default:
 		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
