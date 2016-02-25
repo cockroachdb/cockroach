@@ -32,7 +32,6 @@ import (
 
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/4579")
 
 	testCases := []struct {
 		keys   []string
@@ -71,7 +70,7 @@ func TestIntentResolution(t *testing.T) {
 	splitKey := []byte("s")
 	defer func() { storage.TestingCommandFilter = nil }()
 	for i, tc := range testCases {
-		var result []string
+		result := map[string]struct{}{}
 		var mu sync.Mutex
 		closer := make(chan struct{}, 2)
 		storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
@@ -79,16 +78,14 @@ func TestIntentResolution(t *testing.T) {
 			defer mu.Unlock()
 			header := args.Header()
 			// Ignore anything outside of the intent key range of "a" - "z"
-			// TODO: Implement "ContainsKey()" for Span, currently only
-			// implemented for RSpan
 			if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
 				return nil
 			}
 			switch args.(type) {
 			case *roachpb.ResolveIntentRequest:
-				result = append(result, string(header.Key))
+				result[string(header.Key)] = struct{}{}
 			case *roachpb.ResolveIntentRangeRequest:
-				result = append(result, fmt.Sprintf("%s-%s", header.Key, header.EndKey))
+				result[fmt.Sprintf("%s-%s", header.Key, header.EndKey)] = struct{}{}
 			}
 			if len(result) == len(tc.exp) {
 				closer <- struct{}{}
@@ -129,14 +126,16 @@ func TestIntentResolution(t *testing.T) {
 			<-closer // wait for async intents
 		}()
 		// Verification. Note that this runs after the system has stopped, so that
-		// everything asynchronous has already happened (while tearing down, intent
-		// resolution still takes place, synchronously).
+		// everything asynchronous has already happened.
 		expResult := tc.exp
 		sort.Strings(expResult)
+		var actResult []string
+		for k := range results {
+			actResult = append(actResult, k)
+		}
 		sort.Strings(result)
 		if !reflect.DeepEqual(result, expResult) {
 			t.Fatalf("%d: unexpected non-local intents, expected %s: %s", i, expResult, result)
 		}
-
 	}
 }
