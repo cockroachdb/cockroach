@@ -86,6 +86,7 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
+		rOrig := expr.String()
 		r, err := defaultContext.NormalizeExpr(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
@@ -100,6 +101,10 @@ func TestNormalizeExpr(t *testing.T) {
 		}
 		if s := r2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		// The original expression should be unchanged.
+		if rStr := expr.String(); rOrig != rStr {
+			t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
 		}
 	}
 }

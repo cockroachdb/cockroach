@@ -81,7 +81,8 @@ func TestFillArgs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if err := FillArgs(q, d.args); err != nil {
+		q, err = FillArgs(q, d.args)
+		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		if s := q.(*Select).Exprs[0].Expr.String(); d.expected != s {
@@ -104,7 +105,7 @@ func TestFillArgsError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if err := FillArgs(q, d.args); err == nil {
+		if _, err := FillArgs(q, d.args); err == nil {
 			t.Fatalf("%s: expected failure, but found success", d.expr)
 		} else if d.expected != err.Error() {
 			t.Fatalf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -139,16 +140,24 @@ func TestWalkStmt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
-		if err := FillArgs(q, d.args); err != nil {
+		qOrig := q
+		qOrigStr := q.String()
+		// FillArgs is where the walk happens, using argVisitor.
+		q, err = FillArgs(q, d.args)
+		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
 		e, err := ParseOneTraditional(d.expected)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expected, err)
 		}
-		// Verify that all expressions match up
+		// Verify that all expressions match up.
 		if q.String() != e.String() {
 			log.Fatalf("%s not eq expected: %s", q.String(), e.String())
+		}
+		// The original expression should be unchanged.
+		if qOrig.String() != qOrigStr {
+			t.Fatalf("Original expression `%s` changed to `%s`", qOrigStr, qOrigStr)
 		}
 	}
 }

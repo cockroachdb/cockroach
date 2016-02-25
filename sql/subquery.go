@@ -23,7 +23,7 @@ import (
 
 func (p *planner) expandSubqueries(expr parser.Expr, columns int) (parser.Expr, *roachpb.Error) {
 	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns}
-	expr = parser.WalkExpr(&p.subqueryVisitor, expr)
+	expr, _ = parser.WalkExpr(&p.subqueryVisitor, expr)
 	return expr, p.subqueryVisitor.pErr
 }
 
@@ -36,13 +36,9 @@ type subqueryVisitor struct {
 
 var _ parser.Visitor = &subqueryVisitor{}
 
-func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, parser.Expr) {
+func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
 	if v.pErr != nil {
-		return nil, expr
-	}
-	if !pre {
-		v.path = v.path[:len(v.path)-1]
-		return nil, expr
+		return false, expr
 	}
 	v.path = append(v.path, expr)
 
@@ -51,11 +47,11 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	if !ok {
 		exists, ok = expr.(*parser.ExistsExpr)
 		if !ok {
-			return v, expr
+			return true, expr
 		}
 		subquery, ok = exists.Subquery.(*parser.Subquery)
 		if !ok {
-			return v, expr
+			return true, expr
 		}
 	}
 
@@ -64,24 +60,24 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 	planMaker := *v.planner
 	var plan planNode
 	if plan, v.pErr = planMaker.makePlan(subquery.Select, false); v.pErr != nil {
-		return nil, expr
+		return false, expr
 	}
 
 	if v.prepareOnly {
-		return nil, expr
+		return false, expr
 	}
 
 	if exists != nil {
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
 		if plan.Next() {
-			return v, parser.DBool(true)
+			return true, parser.DBool(true)
 		}
 		v.pErr = plan.PErr()
 		if v.pErr != nil {
-			return nil, expr
+			return false, expr
 		}
-		return v, parser.DBool(false)
+		return true, parser.DBool(false)
 	}
 
 	columns, multipleRows := v.getSubqueryContext()
@@ -92,7 +88,7 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 		default:
 			v.pErr = roachpb.NewUErrorf("subquery must return %d columns, found %d", columns, n)
 		}
-		return nil, expr
+		return true, expr
 	}
 
 	var result parser.Expr
@@ -131,16 +127,23 @@ func (v *subqueryVisitor) Visit(expr parser.Expr, pre bool) (parser.Visitor, par
 			}
 			if plan.Next() {
 				v.pErr = roachpb.NewUErrorf("more than one row returned by a subquery used as an expression")
-				return nil, expr
+				return false, expr
 			}
 		}
 	}
 
 	v.pErr = plan.PErr()
 	if v.pErr != nil {
-		return nil, expr
+		return false, expr
 	}
-	return v, result
+	return true, result
+}
+
+func (v *subqueryVisitor) VisitPost(expr parser.Expr) parser.Expr {
+	if v.pErr == nil {
+		v.path = v.path[:len(v.path)-1]
+	}
+	return expr
 }
 
 // getSubqueryContext returns the number of columns and rows the subquery is

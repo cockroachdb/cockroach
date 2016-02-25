@@ -82,19 +82,11 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 	return p.scanner.stmts, nil
 }
 
-// FillArgs replaces any placeholder nodes in the expression with arguments
-// supplied with the query.
-func (p *Parser) FillArgs(stmt Statement, args Args) error {
-	p.argVisitor = argVisitor{args: args}
-	WalkStmt(&p.argVisitor, stmt)
-	return p.argVisitor.err
-}
-
 // NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
 // a normalizeVisitor.
 func (p *Parser) NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
 	p.normalizeVisitor = normalizeVisitor{ctx: ctx}
-	expr = WalkExpr(&p.normalizeVisitor, expr)
+	expr, _ = WalkExpr(&p.normalizeVisitor, expr)
 	return expr, p.normalizeVisitor.err
 }
 

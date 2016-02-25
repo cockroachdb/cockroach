@@ -39,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// TODO(radu): perhaps we should turn this on only for tests.
+const checkStmtStringChange = true
+
 var testingWaitForMetadata bool
 
 // TestingWaitForMetadata causes metadata-mutating operations to wait
@@ -368,7 +371,18 @@ func (e *Executor) execStmts(sql string, planMaker *planner) Response {
 	}
 
 	for _, stmt := range stmts {
+		var stmtStrBefore string
+		if checkStmtStringChange {
+			stmtStrBefore = stmt.String()
+		}
 		result, err := e.execStmt(stmt, planMaker)
+		if checkStmtStringChange {
+			after := stmt.String()
+			if after != stmtStrBefore {
+				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
+					stmtStrBefore, after))
+			}
+		}
 		if err != nil {
 			result = makeResultFromError(planMaker, err)
 		}
@@ -456,7 +470,8 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
-	if err := parser.FillArgs(stmt, &planMaker.params); err != nil {
+	stmt, err := parser.FillArgs(stmt, &planMaker.params)
+	if err != nil {
 		return result, roachpb.NewError(err)
 	}
 

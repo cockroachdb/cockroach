@@ -27,41 +27,47 @@ type normalizableExpr interface {
 }
 
 func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
+	left := expr.Left
+	right := expr.Right
+
 	// Use short-circuit evaluation to simplify AND expressions.
-	if v.isConst(expr.Left) {
-		expr.Left, v.err = expr.Left.Eval(v.ctx)
+	if v.isConst(left) {
+		left, v.err = left.Eval(v.ctx)
 		if v.err != nil {
 			return expr
 		}
-		if expr.Left != DNull {
-			if d, err := GetBool(expr.Left.(Datum)); err != nil {
-				return DNull
-			} else if !d {
-				return expr.Left
+		if left != DNull {
+			if d, err := GetBool(left.(Datum)); err == nil {
+				if !d {
+					return left
+				}
+				return right
 			}
-			return expr.Right
+			return DNull
 		}
-		return expr
+		return &AndExpr{left, right}
 	}
-	if v.isConst(expr.Right) {
-		expr.Right, v.err = expr.Right.Eval(v.ctx)
+	if v.isConst(right) {
+		right, v.err = right.Eval(v.ctx)
 		if v.err != nil {
 			return expr
 		}
-		if expr.Right != DNull {
-			if d, err := GetBool(expr.Right.(Datum)); err != nil {
-				return DNull
-			} else if d {
-				return expr.Left
+		if right != DNull {
+			if d, err := GetBool(expr.Right.(Datum)); err == nil {
+				if !d {
+					return right
+				}
+				return left
 			}
-			return expr.Right
+			return DNull
 		}
-		return expr
+		return &AndExpr{expr.Left, right}
 	}
 	return expr
 }
 
 func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
+
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
 		// We want var nodes (VariableExpr, QualifiedName, etc) to be immediate
@@ -85,6 +91,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 		// We loop attempting to simplify the comparison expression. As a
 		// pre-condition, we know there is at least one variable in the expression
 		// tree or we would not have entered this code path.
+		exprCopied := false
 		for {
 			if v.isConst(expr.Left) {
 				switch expr.Right.(type) {
@@ -97,6 +104,11 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 				// variable. Flip the comparison op so that the right side is const and
 				// the left side is a binary expression or variable.
 				// Create a new ComparisonExpr so the function cache isn't reused.
+				if !exprCopied {
+					exprCopy := *expr
+					expr = &exprCopy
+					exprCopied = true
+				}
 				*expr = ComparisonExpr{
 					Operator: invertComparisonOp(expr.Operator),
 					Left:     expr.Right,
@@ -115,14 +127,24 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 			// comparison combining portions that are const.
 
 			switch {
-			case v.isConst(left.Right):
+			case v.isConst(left.Right) &&
+				(left.Operator == Plus || left.Operator == Minus || left.Operator == Div):
+
 				//        cmp          cmp
 				//       /   \        /   \
 				//    [+-/]   2  ->  a   [-+*]
 				//   /     \            /     \
 				//  a       1          2       1
 
-				rotating := true
+				if !exprCopied {
+					exprCopy := *expr
+					expr = &exprCopy
+					exprCopied = true
+				}
+
+				leftCopy := *left
+				left = &leftCopy
+
 				switch left.Operator {
 				case Plus:
 					left.Operator = Minus
@@ -130,57 +152,59 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 					left.Operator = Plus
 				case Div:
 					left.Operator = Mult
-				default:
-					rotating = false
 				}
 
-				if rotating {
-					// Clear the function caches since we're rotating.
-					expr.fn.fn = nil
-					left.fn.fn = nil
+				// Clear the function caches since we're rotating.
+				left.fn.fn = nil
+				expr.fn.fn = nil
 
-					expr.Left = left.Left
-					left.Left = expr.Right
-					expr.Right, v.err = left.Eval(v.ctx)
-					if v.err != nil {
-						return nil
-					}
-					if !isVar(expr.Left) {
-						// Continue as long as the left side of the comparison is not a
-						// variable.
-						continue
-					}
+				expr.Left = left.Left
+				left.Left = expr.Right
+				expr.Right, v.err = left.Eval(v.ctx)
+				if v.err != nil {
+					return nil
+				}
+				if !isVar(expr.Left) {
+					// Continue as long as the left side of the comparison is not a
+					// variable.
+					continue
 				}
 
-			case v.isConst(left.Left):
+			case v.isConst(left.Left) && (left.Operator == Plus || left.Operator == Minus):
 				//       cmp              cmp
 				//      /   \            /   \
 				//    [+-]   2  ->     [+-]   a
 				//   /    \           /    \
 				//  1      a         1      2
 
-				switch left.Operator {
-				case Plus, Minus:
-					// Clear the function caches; we're about to change stuff.
-					expr.fn.fn = nil
-					left.fn.fn = nil
-					left.Right, expr.Right = expr.Right, left.Right
-					if left.Operator == Plus {
-						left.Operator = Minus
-						left.Left, left.Right = left.Right, left.Left
-					} else {
-						expr.Operator = invertComparisonOp(expr.Operator)
-					}
-					expr.Left, v.err = left.Eval(v.ctx)
-					if v.err != nil {
-						return nil
-					}
-					expr.Left, expr.Right = expr.Right, expr.Left
-					if !isVar(expr.Left) {
-						// Continue as long as the left side of the comparison is not a
-						// variable.
-						continue
-					}
+				if !exprCopied {
+					exprCopy := *expr
+					expr = &exprCopy
+					exprCopied = true
+				}
+
+				leftCopy := *left
+				left = &leftCopy
+
+				// Clear the function caches; we're about to change stuff.
+				expr.fn.fn = nil
+				left.fn.fn = nil
+				left.Right, expr.Right = expr.Right, left.Right
+				if left.Operator == Plus {
+					left.Operator = Minus
+					left.Left, left.Right = left.Right, left.Left
+				} else {
+					expr.Operator = invertComparisonOp(expr.Operator)
+				}
+				expr.Left, v.err = left.Eval(v.ctx)
+				if v.err != nil {
+					return nil
+				}
+				expr.Left, expr.Right = expr.Right, expr.Left
+				if !isVar(expr.Left) {
+					// Continue as long as the left side of the comparison is not a
+					// variable.
+					continue
 				}
 			}
 
@@ -193,6 +217,8 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 		tuple, ok := expr.Right.(DTuple)
 		if ok {
 			tuple.Normalize()
+			exprCopy := *expr
+			expr = &exprCopy
 			expr.Right = tuple
 		}
 	}
@@ -201,34 +227,47 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 }
 
 func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
+	left := expr.Left
+	right := expr.Right
+	changed := false
+
 	// Use short-circuit evaluation to simplify OR expressions.
-	if v.isConst(expr.Left) {
-		expr.Left, v.err = expr.Left.Eval(v.ctx)
+	if v.isConst(left) {
+		left, v.err = left.Eval(v.ctx)
 		if v.err != nil {
 			return expr
 		}
-		if expr.Left != DNull {
-			if d, err := GetBool(expr.Left.(Datum)); err != nil {
-				return DNull
-			} else if d {
-				return expr.Left
+		if left != DNull {
+			if d, err := GetBool(left.(Datum)); err == nil {
+				if d {
+					return left
+				}
+				return right
 			}
-			return expr.Right
+			return DNull
 		}
+		changed = true
 	}
-	if v.isConst(expr.Right) {
-		expr.Right, v.err = expr.Right.Eval(v.ctx)
+
+	if v.isConst(right) {
+		right, v.err = right.Eval(v.ctx)
 		if v.err != nil {
 			return expr
 		}
-		if expr.Right != DNull {
-			if d, err := GetBool(expr.Right.(Datum)); err != nil {
-				return DNull
-			} else if d {
-				return expr.Right
+		if right != DNull {
+			if d, err := GetBool(right.(Datum)); err == nil {
+				if d {
+					return right
+				}
+				return left
 			}
-			return expr.Left
+			return DNull
 		}
+
+		changed = true
+	}
+	if changed {
+		return &OrExpr{left, right}
 	}
 	return expr
 }
@@ -307,7 +346,7 @@ func (expr *Row) normalize(v *normalizeVisitor) Expr {
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
 func (ctx EvalContext) NormalizeExpr(expr Expr) (Expr, error) {
 	v := normalizeVisitor{ctx: ctx}
-	expr = WalkExpr(&v, expr)
+	expr, _ = WalkExpr(&v, expr)
 	return expr, v.err
 }
 
@@ -320,43 +359,53 @@ type normalizeVisitor struct {
 
 var _ Visitor = &normalizeVisitor{}
 
-func (v *normalizeVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
+func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.err != nil {
-		return nil, expr
+		return false, expr
 	}
 
 	// Normalize expressions that know how to normalize themselves.
 	if normalizeable, ok := expr.(normalizableExpr); ok {
 		expr = normalizeable.normalize(v)
 		if v.err != nil {
-			return nil, expr
+			return false, expr
 		}
 	}
 
-	if pre {
-		switch expr.(type) {
-		case *CaseExpr, *IfExpr, *NullIfExpr, *CoalesceExpr:
-			// Conditional expressions need to be evaluated during the downward
-			// traversal in order to avoid evaluating sub-expressions which should
-			// not be evaluated due to the case/conditional.
-			if v.isConst(expr) {
-				expr, v.err = expr.Eval(v.ctx)
-				if v.err != nil {
-					return nil, expr
-				}
-			}
-		}
-	} else {
-		// Evaluate all constant expressions.
+	switch expr.(type) {
+	case *CaseExpr, *IfExpr, *NullIfExpr, *CoalesceExpr:
+		// Conditional expressions need to be evaluated during the downward
+		// traversal in order to avoid evaluating sub-expressions which should
+		// not be evaluated due to the case/conditional.
 		if v.isConst(expr) {
 			expr, v.err = expr.Eval(v.ctx)
 			if v.err != nil {
-				return nil, expr
+				return false, expr
 			}
 		}
 	}
 
-	return v, expr
+	return true, expr
+}
+
+func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
+	if v.err != nil {
+		return expr
+	}
+
+	// Normalize expressions that know how to normalize themselves.
+	if normalizeable, ok := expr.(normalizableExpr); ok {
+		expr = normalizeable.normalize(v)
+		if v.err != nil {
+			return expr
+		}
+	}
+
+	// Evaluate all constant expressions.
+	if v.isConst(expr) {
+		expr, v.err = expr.Eval(v.ctx)
+	}
+	return expr
 }
 
 func (v *normalizeVisitor) isConst(expr Expr) bool {
@@ -386,31 +435,33 @@ type isConstVisitor struct {
 
 var _ Visitor = &isConstVisitor{}
 
-func (v *isConstVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
-	if pre && v.isConst {
+func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if v.isConst {
 		if isVar(expr) {
 			v.isConst = false
-			return nil, expr
+			return false, expr
 		}
 
 		switch t := expr.(type) {
 		case *Subquery:
 			v.isConst = false
-			return nil, expr
+			return false, expr
 		case *FuncExpr:
 			// typeCheckFuncExpr populates t.fn.impure.
 			if _, err := t.TypeCheck(nil); err != nil || t.fn.impure {
 				v.isConst = false
-				return nil, expr
+				return false, expr
 			}
 		}
 	}
-	return v, expr
+	return true, expr
 }
+
+func (*isConstVisitor) VisitPost(expr Expr) Expr { return expr }
 
 func (v *isConstVisitor) run(expr Expr) bool {
 	v.isConst = true
-	_ = WalkExpr(v, expr)
+	WalkExprConst(v, expr)
 	return v.isConst
 }
 
@@ -425,19 +476,21 @@ type containsVarsVisitor struct {
 
 var _ Visitor = &containsVarsVisitor{}
 
-func (v *containsVarsVisitor) Visit(expr Expr, pre bool) (Visitor, Expr) {
-	if pre && !v.containsVars {
-		if isVar(expr) {
-			v.containsVars = true
-			return nil, expr
-		}
+func (v *containsVarsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if !v.containsVars && isVar(expr) {
+		v.containsVars = true
 	}
-	return v, expr
+	if v.containsVars {
+		return false, expr
+	}
+	return true, expr
 }
+
+func (*containsVarsVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // ContainsVars returns true if the expression contains any variables.
 func ContainsVars(expr Expr) bool {
 	v := containsVarsVisitor{containsVars: false}
-	_ = WalkExpr(&v, expr)
+	WalkExprConst(&v, expr)
 	return v.containsVars
 }

@@ -49,13 +49,13 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, pErr
 	}
-	result, qvals, err := p.initReturning(n.Returning, tableDesc.Name, tableDesc.Columns)
+	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
 	if p.prepareOnly {
-		return result, nil
+		return rh.getResults(), nil
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -86,14 +86,13 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	if canDeleteWithoutScan(n, rows, len(indexes)) {
-		return p.fastDelete(rows, result, autoCommit)
+		return p.fastDelete(rows, rh.getResults(), autoCommit)
 	}
 
 	b := p.txn.NewBatch()
 
 	for rows.Next() {
 		rowVals := rows.Values()
-		result.rowCount++
 
 		primaryIndexKey, _, err := encodeIndexKey(
 			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
@@ -122,7 +121,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		}
 		b.DelRange(rowStartKey, rowEndKey, false)
 
-		if err := p.populateReturning(n.Returning, result, qvals, rowVals); err != nil {
+		if err := rh.append(rowVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -143,7 +142,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	return result, nil
+	return rh.getResults(), nil
 }
 
 // Determine if the deletion of `rows` can be done without actually scanning them,

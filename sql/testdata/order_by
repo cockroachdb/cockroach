@@ -142,7 +142,7 @@ SELECT * FROM t ORDER BY 0
 query error non-integer constant column index: true
 SELECT * FROM t ORDER BY true
 
-query error qualified name "t.foo" not found
+query error qualified name "foo" not found
 SELECT * FROM t ORDER BY foo
 
 query error qualified name "a.b" not found

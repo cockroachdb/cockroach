@@ -18,58 +18,80 @@ package sql
 
 import "github.com/cockroachdb/cockroach/sql/parser"
 
+// returningNode accumulates the results for a RETURNING clause. If the rows are empty, we just
+// keep track of the count.
 type returningNode struct {
 	valuesNode
 	rowCount int
 }
 
-func (p *planner) initReturning(r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor) (*returningNode, qvalMap, error) {
-	result := &returningNode{valuesNode{}, 0}
-	if r == nil {
-		return result, nil, nil
+// returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
+// result rows, one for each call to append().
+type returningHelper struct {
+	p       *planner
+	results *returningNode
+	// Processed copies of expressions from ReturningExprs.
+	exprs parser.Exprs
+	qvals qvalMap
+}
+
+func newReturningHelper(p *planner, r parser.ReturningExprs,
+	alias string, tablecols []ColumnDescriptor) (returningHelper, error) {
+	rh := returningHelper{p: p, results: &returningNode{}}
+	if len(r) == 0 {
+		return rh, nil
 	}
 
-	result.columns = make([]ResultColumn, len(r))
+	rh.results.columns = make([]ResultColumn, len(r))
 	table := tableInfo{
 		columns: makeResultColumns(tablecols, 0),
 		alias:   alias,
 	}
-	qvals := make(qvalMap)
+	rh.qvals = make(qvalMap)
+	rh.exprs = make([]parser.Expr, len(r))
 	for i, c := range r {
-		expr, err := resolveQNames(&table, qvals, c.Expr)
+		expr, err := resolveQNames(&table, rh.qvals, c.Expr)
 		if err != nil {
-			return result, nil, err
+			return rh, err
 		}
-		r[i].Expr = expr
-		typ, err := expr.TypeCheck(p.evalCtx.Args)
+		rh.exprs[i] = expr
+		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
 		if err != nil {
-			return result, nil, err
+			return rh, err
 		}
 		name := string(c.As)
 		if name == "" {
 			name = expr.String()
 		}
-		result.columns[i] = ResultColumn{
+		rh.results.columns[i] = ResultColumn{
 			Name: name,
 			Typ:  typ,
 		}
 	}
-	return result, qvals, nil
+	return rh, nil
 }
 
-func (p *planner) populateReturning(r parser.ReturningExprs, result *returningNode, qvals qvalMap, rowVals parser.DTuple) error {
-	if r == nil {
+// append adds a result row. The row is computed according to the ReturningExprs, with input values
+// from rowVals.
+func (rh *returningHelper) append(rowVals parser.DTuple) error {
+	if rh.exprs == nil {
+		rh.results.rowCount++
 		return nil
 	}
-	qvals.populateQVals(rowVals)
-	resrow := make(parser.DTuple, len(r))
-	for i, c := range r {
-		d, err := c.Expr.Eval(p.evalCtx)
+	rh.qvals.populateQVals(rowVals)
+	resrow := make(parser.DTuple, len(rh.exprs))
+	for i, e := range rh.exprs {
+		d, err := e.Eval(rh.p.evalCtx)
 		if err != nil {
 			return err
 		}
 		resrow[i] = d
 	}
-	result.rows = append(result.rows, resrow)
+	rh.results.rows = append(rh.results.rows, resrow)
 	return nil
+}
+
+// getResults returns the results as a returningNode.
+func (rh *returningHelper) getResults() *returningNode {
+	return rh.results
 }
