@@ -501,7 +501,7 @@ range_max_bytes: 67108864
 	// range_min_bytes: 8388608
 	// range_max_bytes: 67108864
 	//
-	// OK
+	// INSERT 1
 	// zone ls
 	// Object 100:
 	// replicas:
@@ -524,7 +524,7 @@ range_max_bytes: 67108864
 	//   ttlseconds: 0
 	//
 	// zone rm 100
-	// OK
+	// DELETE 1
 	// zone ls
 }
 
@@ -538,10 +538,11 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "show databases"})
 	c.RunWithArgs([]string{"sql", "-e", "explain select 3"})
+	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2"})
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
-	// OK
+	// INSERT 1
 	// sql -e select 3 select * from t.f
 	// 1 row
 	// 3
@@ -550,11 +551,11 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql -e begin select 3 commit
-	// OK
+	// BEGIN
 	// 1 row
 	// 3
 	// 3
-	// OK
+	// COMMIT
 	// sql -e select * from t.f
 	// 1 row
 	// x	y
@@ -568,6 +569,13 @@ func Example_sql() {
 	// 1 row
 	// Level	Type	Description
 	// 0	empty	-
+	// sql -e select 1; select 2
+	// 1 row
+	// 1
+	// 1
+	// 1 row
+	// 2
+	// 2
 }
 
 func Example_sql_escape() {
@@ -586,21 +594,21 @@ func Example_sql_escape() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
-	// OK
+	// CREATE TABLE
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
-	// OK
+	// INSERT 1
 	// sql -e insert into t.t values (e'foo\x0a', 'non-printable ASCII')
-	// OK
+	// INSERT 1
 	// sql -e insert into t.t values ('κόσμε', 'printable UTF8')
-	// OK
+	// INSERT 1
 	// sql -e insert into t.t values (e'\xc3\xb1', 'printable UTF8 using escapes')
-	// OK
+	// INSERT 1
 	// sql -e insert into t.t values (e'\x01', 'non-printable UTF8 string')
-	// OK
+	// INSERT 1
 	// sql -e insert into t.t values (e'\xdc\x88\x38\x35', 'UTF8 string with RTL char')
-	// OK
+	// INSERT 1
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
-	// OK
+	// INSERT 1
 	// sql -e select * from t.t
 	// 7 rows
 	// s	d
@@ -632,7 +640,7 @@ func Example_user() {
 	// +----------+
 	// +----------+
 	// user set foo --password=bar
-	// OK
+	// INSERT 1
 	// user ls
 	// +----------+
 	// | username |
@@ -640,7 +648,7 @@ func Example_user() {
 	// | foo      |
 	// +----------+
 	// user rm foo
-	// OK
+	// DELETE 1
 	// user ls
 	// +----------+
 	// | username |

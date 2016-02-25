@@ -22,16 +22,16 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lib/pq"
-
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/pq"
 )
 
 type sqlConnI interface {
 	driver.Conn
 	driver.Queryer
+	Next() (driver.Rows, error)
 }
 
 type sqlConn struct {
@@ -61,7 +61,21 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sqlRows{Rows: rows, conn: c}, nil
+	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
+}
+
+func (c *sqlConn) Next() (*sqlRows, error) {
+	if c.conn == nil {
+		return nil, driver.ErrBadConn
+	}
+	rows, err := c.conn.Next()
+	if err == driver.ErrBadConn {
+		c.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
 }
 
 func (c *sqlConn) Close() {
@@ -74,13 +88,31 @@ func (c *sqlConn) Close() {
 	}
 }
 
-type sqlRows struct {
+type sqlRowsI interface {
 	driver.Rows
+	Result() driver.Result
+	Tag() string
+}
+
+type sqlRows struct {
+	rows sqlRowsI
 	conn *sqlConn
 }
 
+func (r *sqlRows) Columns() []string {
+	return r.rows.Columns()
+}
+
+func (r *sqlRows) Result() driver.Result {
+	return r.rows.Result()
+}
+
+func (r *sqlRows) Tag() string {
+	return r.rows.Tag()
+}
+
 func (r *sqlRows) Close() error {
-	err := r.Rows.Close()
+	err := r.rows.Close()
 	if err == driver.ErrBadConn {
 		r.conn.Close()
 	}
@@ -88,7 +120,7 @@ func (r *sqlRows) Close() error {
 }
 
 func (r *sqlRows) Next(values []driver.Value) error {
-	err := r.Rows.Next(values)
+	err := r.rows.Next(values)
 	if err == driver.ErrBadConn {
 		r.conn.Close()
 	}
@@ -113,51 +145,66 @@ func makeSQLClient() *sqlConn {
 // and outputs the string to be displayed.
 type fmtMap map[string]func(driver.Value) string
 
-// runQuery takes a 'query' with optional 'parameters'.
-// It runs the sql query and returns a list of columns names and a list of rows.
-func runQuery(db *sqlConn, query string, parameters ...driver.Value) (
-	[]string, [][]string, error) {
-	return runQueryWithFormat(db, nil, query, parameters...)
+type queryFunc func(conn *sqlConn) (*sqlRows, error)
+
+func nextResult(conn *sqlConn) (*sqlRows, error) {
+	return conn.Next()
+}
+
+func makeQuery(query string, parameters ...driver.Value) queryFunc {
+	return func(conn *sqlConn) (*sqlRows, error) {
+		// driver.Value is an alias for interface{}, but must adhere to a restricted
+		// set of types when being passed to driver.Queryer.Query (see
+		// driver.IsValue). We use driver.DefaultParameterConverter to perform the
+		// necessary conversion. This is usually taken care of by the sql package,
+		// but we have to do so manually because we're talking directly to the
+		// driver.
+		for i := range parameters {
+			var err error
+			parameters[i], err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+		return conn.Query(query, parameters)
+	}
 }
 
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
+func runQuery(conn *sqlConn, fn queryFunc) ([]string, [][]string, string, error) {
+	return runQueryWithFormat(conn, nil, fn)
+}
+
+// runQueryWithFormat takes a 'query' with optional 'parameters'.
+// It runs the sql query and returns a list of columns names and a list of rows.
 // If 'format' is not nil, the values with column name
 // found in the map are run through the corresponding callback.
-func runQueryWithFormat(db *sqlConn, format fmtMap, query string, parameters ...driver.Value) (
-	[]string, [][]string, error) {
-	// driver.Value is an alias for interface{}, but must adhere to a restricted
-	// set of types when being passed to driver.Queryer.Query (see
-	// driver.IsValue). We use driver.DefaultParameterConverter to perform the
-	// necessary conversion. This is usually taken care of by the sql package,
-	// but we have to do so manually because we're talking directly to the
-	// driver.
-	for i := range parameters {
-		var err error
-		parameters[i], err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	rows, err := db.Query(query, parameters)
+func runQueryWithFormat(conn *sqlConn, format fmtMap, fn queryFunc) (
+	[]string, [][]string, string, error) {
+	rows, err := fn(conn)
 	if err != nil {
-		return nil, nil, fmt.Errorf("query error: %s", err)
+		return nil, nil, "", err
 	}
 
 	defer func() { _ = rows.Close() }()
 	return sqlRowsToStrings(rows, format)
 }
 
-// runPrettyQueryWithFormat takes a 'query' with optional 'parameters'.
+// runPrettyQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes pretty output to 'w'.
-func runPrettyQuery(db *sqlConn, w io.Writer, query string, parameters ...driver.Value) error {
-	cols, allRows, err := runQuery(db, query, parameters...)
-	if err != nil {
-		return err
+func runPrettyQuery(conn *sqlConn, w io.Writer, fn queryFunc) error {
+	for {
+		cols, allRows, result, err := runQuery(conn, fn)
+		if err != nil {
+			if err == pq.ErrNoMoreResults {
+				return nil
+			}
+			return err
+		}
+		printQueryOutput(w, cols, allRows, result)
+		fn = nextResult
 	}
-	printQueryOutput(w, cols, allRows)
-	return nil
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
@@ -168,15 +215,14 @@ func runPrettyQuery(db *sqlConn, w io.Writer, query string, parameters ...driver
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
-func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, error) {
+func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, string, error) {
 	cols := rows.Columns()
 
-	if len(cols) == 0 {
-		return nil, nil, nil
+	var allRows [][]string
+	var vals []driver.Value
+	if len(cols) > 0 {
+		vals = make([]driver.Value, len(cols))
 	}
-
-	vals := make([]driver.Value, len(cols))
-	allRows := [][]string{}
 
 	for {
 		err := rows.Next(vals)
@@ -184,7 +230,7 @@ func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, error
 			break
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		rowStrings := make([]string, len(cols))
 		for i, v := range vals {
@@ -197,15 +243,33 @@ func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, error
 		allRows = append(allRows, rowStrings)
 	}
 
-	return cols, allRows, nil
+	result := rows.Result()
+	tag := rows.Tag()
+	switch tag {
+	case "":
+		tag = "OK"
+	case "DELETE", "INSERT", "UPDATE":
+		if n, err := result.RowsAffected(); err == nil {
+			tag = fmt.Sprintf("%s %d", tag, n)
+		}
+	}
+
+	return cols, allRows, tag, nil
+}
+
+func pluralize(n int64) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // printQueryOutput takes a list of column names and a list of row contents
 // writes a pretty table to 'w', or "OK" if empty.
-func printQueryOutput(w io.Writer, cols []string, allRows [][]string) {
+func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string) {
 	if len(cols) == 0 {
-		// This operation did not return rows, just show success.
-		fmt.Fprintln(w, "OK")
+		// This operation did not return rows, just show the tag.
+		fmt.Fprintln(w, tag)
 		return
 	}
 

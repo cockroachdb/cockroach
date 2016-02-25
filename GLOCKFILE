@@ -25,6 +25,7 @@ github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb c0124c907c74b579d9d3d48eb96471bef270bc25
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
+github.com/cockroachdb/pq dd29f9a2c333350480bf658e7f99c4ffdc145830
 github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
 github.com/codahale/hdrhistogram e88be87d51429689cef99043a54150d733265cd7
 github.com/coreos/etcd 410d32a9b14f6052a834a966a02950cde518d7ce
