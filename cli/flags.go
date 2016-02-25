@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/kr/text"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -57,7 +58,7 @@ decisions. Valid options are "usage" (default) or "rangecount".`),
 
 	"cache-size": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
-storage devices.`),
+storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
 
 	"certs": wrapText(`
 Directory containing RSA key and x509 certs. This flag is required if
@@ -112,7 +113,7 @@ Define the maximum number of results that will be retrieved.`),
 
 	"memtable-budget": wrapText(`
 Total size in bytes for memtables, shared evenly if there are multiple
-storage devices.`),
+storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
 
 	"metrics-frequency": wrapText(`
 Adjust the frequency at which the server records its own internal metrics.`),
@@ -175,6 +176,28 @@ Database user name.`),
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
 
+type bytesValue uint64
+
+func (b *bytesValue) Set(s string) error {
+	v, err := humanize.ParseBytes(s)
+	if err != nil {
+		return err
+	}
+	*b = bytesValue(v)
+	return nil
+}
+
+func (b *bytesValue) Type() string {
+	return "bytes"
+}
+
+func (b *bytesValue) String() string {
+	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
+	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
+	// vs 1024.
+	return humanize.IBytes(uint64(*b))
+}
+
 func wrapText(s string) string {
 	return text.Wrap(s, wrapWidth)
 }
@@ -233,8 +256,8 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, usage("linearizable"))
 
 		// Engine flags.
-		f.Uint64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, usage("cache-size"))
-		f.Uint64Var(&ctx.MemtableBudget, "memtable-budget", ctx.MemtableBudget, usage("memtable-budget"))
+		f.Var((*bytesValue)(&ctx.CacheSize), "cache-size", usage("cache-size"))
+		f.Var((*bytesValue)(&ctx.MemtableBudget), "memtable-budget", usage("memtable-budget"))
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, usage("scan-interval"))
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))
