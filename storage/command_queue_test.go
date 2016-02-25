@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -84,6 +85,56 @@ func TestCommandQueue(t *testing.T) {
 	if !testCmdDone(cmdDone, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
+}
+
+// TestCommandQueueWriteWaitForNonAdjacentRead tests that the command queue
+// lets a writer wait for a read which is separated from it through another
+// read. Since reads don't wait for reads, there was a bug in which the writer
+// would wind up waiting only for one of the two readers under it.
+func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	cq := NewCommandQueue()
+	key := roachpb.Key("a")
+	// Add a read-only command.
+	wk1 := add(cq, key, nil, true)
+	// Add another one on top.
+	wk2 := add(cq, key, nil, true)
+
+	// A write should have to wait for **both** reads, not only the second
+	// one.
+	wg := sync.WaitGroup{}
+	getWait(cq, key, nil, false /* !readOnly */, &wg)
+
+	assert := func(blocked bool) {
+		cmdDone := waitForCmd(&wg)
+		d := time.Millisecond
+		if !blocked {
+			d *= 5
+		}
+		f, l, _ := caller.Lookup(1)
+		if testCmdDone(cmdDone, d) {
+			if blocked {
+				t.Fatalf("%s:%d: command should not finish with command outstanding", f, l)
+			}
+		} else if !blocked {
+			t.Fatalf("%s:%d: command should not have been blocked", f, l)
+		}
+	}
+
+	// Certainly blocks now.
+	assert(true)
+
+	// The second read returns, but the first one remains.
+	cq.Remove([]interface{}{wk2})
+
+	// Should still block. This being broken is why this test exists.
+	assert(true)
+
+	// First read returns.
+	cq.Remove([]interface{}{wk1})
+
+	// Now it goes through.
+	assert(false)
 }
 
 func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
