@@ -48,7 +48,7 @@ from the common prefix of the attributes list, so topographic
 attributes should be specified first and in the same order for all
 nodes. For example:`) + `
 
-  --attrs=us-west-1b,gpu
+  --attrs=us-west-1b:gpu
 `,
 
 	"balance-mode": wrapText(`
@@ -71,6 +71,7 @@ error occurs in any statement, the command exits with a
 non-zero status code and further statements are not
 executed. The results of each SQL statement are printed on
 the standard output.`),
+
 	"join": wrapText(`
 A comma-separated list of addresses to use when a new node is joining
 an existing cluster. For the first node in a cluster, --join should
