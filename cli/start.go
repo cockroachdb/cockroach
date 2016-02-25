@@ -113,20 +113,22 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// --log-dir=$TMPDIR and this will override their request. This can be fixed
 	// by changing the log-dir flag to keep track of whether it has been set or
 	// not. Doesn't seem urgent to do (yet).
-	if f := flag.Lookup("log-dir"); f.Value.String() == os.TempDir() {
+	f := flag.Lookup("log-dir")
+	if f.Value.String() == os.TempDir() {
 		for _, spec := range storeSpecs {
 			if spec.Attrs == "mem" {
 				continue
 			}
-			dir := filepath.Join(spec.Path, "logs")
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return err
-			}
-			if err := f.Value.Set(dir); err != nil {
+			if err := f.Value.Set(filepath.Join(spec.Path, "logs")); err != nil {
 				return err
 			}
 			break
 		}
+	}
+
+	// Make sure the path exists
+	if err := os.MkdirAll(f.Value.String(), 0755); err != nil {
+		return err
 	}
 
 	info := util.GetBuildInfo()
