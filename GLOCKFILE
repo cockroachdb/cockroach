@@ -33,6 +33,7 @@ github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/docker/engine-api adfa32fb6ccad724d73a16d53ce3defa46df27e5
 github.com/docker/go-connections 34b5052da6b11e27f5f2e357b38b571ddddd3928
 github.com/docker/go-units 5d2041e26a699eaca682e2ea41c8f891e1060444
+github.com/dustin/go-humanize 8929fe90cee4b2cb9deb468b51fb34eba64d1bf0
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/go-sql-driver/mysql 1309049fd598c1faa0290fd70ab1afde2b6df0f9
 github.com/gogo/protobuf 82d16f734d6d871204a3feb1a73cb220cc92574c
