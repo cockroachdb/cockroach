@@ -835,8 +835,9 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	}
 
 	// Verify that updated_at and started_at are reasonably recent.
-	checkTimeElapsed(t, fields[2], 5*time.Second, start)
-	checkTimeElapsed(t, fields[3], 5*time.Second, start)
+	// CircleCI can be very slow. This was flaky at 5s.
+	checkTimeElapsed(t, fields[2], 15*time.Second, start)
+	checkTimeElapsed(t, fields[3], 15*time.Second, start)
 
 	// Verify all byte/range metrics.
 	testcases := []struct {
