@@ -147,7 +147,9 @@ func getDefaultCacheSize() uint64 {
 	mem := sigar.Mem{}
 	if err := mem.Get(); err != nil {
 		if log.V(1) {
-			log.Infof("can't retrieve system memory information (%s), setting default rocksdb cache size to %dMB", err, defaultCacheSize>>20)
+			log.Infof("can't retrieve system memory information (%s)\n"+
+				"\tsetting default rocksdb cache size to %dMB",
+				err, defaultCacheSize>>20)
 		}
 		return defaultCacheSize
 	}
@@ -157,7 +159,9 @@ func getDefaultCacheSize() uint64 {
 		buf, err := ioutil.ReadFile(defaultCGroupMemPath)
 		if err != nil {
 			if log.V(1) {
-				log.Infof("can't read available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+				log.Infof("can't read available memory from cgroups (%s)\n"+
+					"\tsetting default rocksdb cache size to %dMB (half of system memory)",
+					err, halfSysMem>>20)
 			}
 			return halfSysMem
 		}
@@ -165,7 +169,9 @@ func getDefaultCacheSize() uint64 {
 		cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
 		if err != nil {
 			if log.V(1) {
-				log.Infof("can't parse available memory from cgroups (%s), setting default rocksdb cache size to %dMB (half of system memory)", err, halfSysMem>>20)
+				log.Infof("can't parse available memory from cgroups (%s)\n"+
+					"\tsetting default rocksdb cache size to %dMB (half of system memory)",
+					err, halfSysMem>>20)
 			}
 			return halfSysMem
 		}
