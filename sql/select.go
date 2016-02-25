@@ -370,50 +370,75 @@ func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
 	}
 }
 
+// checkRenderStar checks if the SelectExpr is a QualifiedName with a StarIndirection suffix. If so,
+// we match the prefix of the qualified name to one of the tables in the query and then expand the
+// "*" into a list of columns. The qvalMap is updated to include all the relevant columns. A
+// ResultColumns and Expr pair is returned for each column.
+func checkRenderStar(target parser.SelectExpr, table *tableInfo, qvals qvalMap) (isStar bool,
+	columns []ResultColumn, exprs []parser.Expr, err error) {
+	qname, ok := target.Expr.(*parser.QualifiedName)
+	if !ok {
+		return false, nil, nil, nil
+	}
+	if err := qname.NormalizeColumnName(); err != nil {
+		return false, nil, nil, err
+	}
+	if !qname.IsStar() {
+		return false, nil, nil, nil
+	}
+
+	if table.alias == "" {
+		return false, nil, nil, fmt.Errorf("\"%s\" with no tables specified is not valid", qname)
+	}
+	if target.As != "" {
+		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
+	}
+
+	// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
+	if tableName := qname.Table(); tableName != "" && !equalName(table.alias, tableName) {
+		return false, nil, nil, fmt.Errorf("table \"%s\" not found", tableName)
+	}
+
+	for idx, col := range table.columns {
+		if col.hidden {
+			continue
+		}
+		qval := qvals.getQVal(columnRef{table, idx})
+		columns = append(columns, ResultColumn{Name: col.Name, Typ: qval.datum})
+		exprs = append(exprs, qval)
+	}
+	return true, columns, exprs, nil
+}
+
+// getRenderColName returns the output column name for a render expression.
+// The expression cannot be a star.
+func getRenderColName(target parser.SelectExpr) string {
+	if target.As != "" {
+		return string(target.As)
+	}
+	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
+		return qname.Column()
+	}
+	return target.Expr.String()
+}
+
 func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	// outputName will be empty if the target is not aliased.
 	outputName := string(target.As)
 
-	switch t := target.Expr.(type) {
-	case *parser.QualifiedName:
-		// If a QualifiedName has a StarIndirection suffix we need to match the
-		// prefix of the qualified name to one of the tables in the query and
-		// then expand the "*" into a list of columns.
-		if s.pErr = roachpb.NewError(t.NormalizeColumnName()); s.pErr != nil {
-			return s.pErr
-		}
-		if t.IsStar() {
-			if s.table.alias == "" {
-				return roachpb.NewUErrorf("\"%s\" with no tables specified is not valid", t)
-			}
-			if target.As != "" {
-				return roachpb.NewUErrorf("\"%s\" cannot be aliased", t)
-			}
-			// TODO(radu): support multiple FROMs, consolidate with logic in findColumn
-			tableName := t.Table()
-			if tableName != "" && !equalName(s.table.alias, tableName) {
-				return roachpb.NewUErrorf("table \"%s\" not found", tableName)
-			}
-
-			for idx, col := range s.table.columns {
-				if col.hidden {
-					continue
-				}
-				qval := s.qvals.getQVal(columnRef{&s.table, idx})
-				s.columns = append(s.columns, ResultColumn{Name: col.Name, Typ: qval.datum})
-				s.render = append(s.render, qval)
-			}
-
-			return nil
-		}
-	default:
-		if outputName == "" {
-			// When generating an output column name it should exactly match the original
-			// expression, so determine the output column name before we perform any
-			// manipulations to the expression (such as star expansion).
-			outputName = target.Expr.String()
-		}
+	if isStar, cols, exprs, err := checkRenderStar(target, &s.table, s.qvals); err != nil {
+		s.pErr = roachpb.NewError(err)
+		return s.pErr
+	} else if isStar {
+		s.columns = append(s.columns, cols...)
+		s.render = append(s.render, exprs...)
+		return nil
 	}
+
+	// When generating an output column name it should exactly match the original
+	// expression, so determine the output column name before we perform any
+	// manipulations to the expression.
+	outputName = getRenderColName(target)
 
 	// Resolve qualified names. This has the side-effect of normalizing any
 	// qualified name found.

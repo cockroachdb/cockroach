@@ -142,7 +142,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	rh, err := newReturningHelper(p, n.Returning, tableDesc.Name, cols)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, cols)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
