@@ -37,11 +37,11 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *sql.DB)) {
 	s := server.StartTestServer(b)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
-	pgUrl.Path = "bench"
+	pgURL, cleanupFn := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
+	pgURL.Path = "bench"
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		b.Fatal(err)
 	}

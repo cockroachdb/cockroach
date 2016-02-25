@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func trivialQuery(pgUrl url.URL) error {
-	db, err := sql.Open("postgres", pgUrl.String())
+func trivialQuery(pgURL url.URL) error {
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		return err
 	}
@@ -168,10 +168,10 @@ func TestPGPrepareFail(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareFail")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareFail")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,10 +322,10 @@ func TestPGPreparedQuery(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedQuery")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedQuery")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,10 +482,10 @@ func TestPGPreparedExec(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedExec")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedExec")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,10 +535,10 @@ func TestPGPrepareNameQual(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareNameQual")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareNameQual")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,8 +548,8 @@ func TestPGPrepareNameQual(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pgUrl.Path = "/testing"
-	db2, err := sql.Open("postgres", pgUrl.String())
+	pgURL.Path = "/testing"
+	db2, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -585,10 +585,10 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestCmdCompleteVsEmptyStatements")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestCmdCompleteVsEmptyStatements")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,10 +626,10 @@ func TestPGCommandTags(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGCommandTags")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGCommandTags")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -721,7 +721,7 @@ func TestPGWireMetrics(t *testing.T) {
 	defer s.Stop()
 
 	// Setup pgwire client.
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGWireMetrics")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGWireMetrics")
 	defer cleanupFn()
 
 	const minbytes = 20
@@ -732,14 +732,14 @@ func TestPGWireMetrics(t *testing.T) {
 	}
 
 	// A single query should give us some I/O.
-	if err := trivialQuery(pgUrl); err != nil {
+	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
 	}
 	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := trivialQuery(pgUrl); err != nil {
+	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
 	}
 
@@ -762,7 +762,7 @@ func TestPGWireMetrics(t *testing.T) {
 	var conns [10]*sql.DB
 	for i := range conns {
 		var err error
-		if conns[i], err = sql.Open("postgres", pgUrl.String()); err != nil {
+		if conns[i], err = sql.Open("postgres", pgURL.String()); err != nil {
 			t.Fatal(err)
 		}
 		defer conns[i].Close()
@@ -787,10 +787,10 @@ func TestPrepareSyntax(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPrepareSyntax")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPrepareSyntax")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgUrl.String())
+	db, err := sql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
