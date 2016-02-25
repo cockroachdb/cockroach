@@ -225,10 +225,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 // Allow local calls to be dispatched directly to the local server without
 // sending an RPC.
-//
-// TODO(pmattis): We should either always enable local calls or remove this
-// support. Revisit once the current performance work has completed.
-var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") == "1"
+var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") != "0"
 
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
