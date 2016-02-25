@@ -298,7 +298,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Results("username", "STRING", false, sql.NullBool{}),
 		},
 		"SHOW DATABASES": {
-			base.Results("system"),
+			base.Results("d"),
 		},
 		"SHOW GRANTS ON system.users": {
 			base.Results("users", "root", "DELETE,GRANT,INSERT,SELECT,UPDATE"),
@@ -316,6 +316,20 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(1).Results(2),
 		},
 		// TODO(mjibson): test date/time types
+
+		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
+			base.Params(1).Results(1),
+		},
+		/* TODO(mjibson): fix #4658
+		"INSERT INTO d.T VALUES ($1) RETURNING $1": {
+			base.Params(1).Results(1),
+			base.Params(3).Results(3),
+		},
+		"INSERT INTO d.T VALUES ($1) RETURNING $1, 1 + $1": {
+			base.Params(1).Results(1, 2),
+			base.Params(3).Results(3, 4),
+		},
+		*/
 	}
 
 	s := server.StartTestServer(t)
@@ -364,6 +378,10 @@ func TestPGPreparedQuery(t *testing.T) {
 				}
 			}
 		}
+	}
+
+	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (a INT)`); err != nil {
+		t.Fatal(err)
 	}
 
 	for query, tests := range queryTests {
