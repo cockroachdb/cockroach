@@ -45,7 +45,9 @@ var aggregates = map[string]func() aggregateImpl{
 // render targets in the selectNode as necessary.
 func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb.Error) {
 	// Make sure there are no aggregation functions in the select's WHERE clause.
-	if p.aggregateInWhere(n.Where) {
+	// We don't want to check n.Where because it could contain subqueries (which we
+	// already expanded).
+	if p.aggregateInExpr(s.filter) {
 		return nil, roachpb.NewUErrorf("aggregate functions are not allowed in WHERE")
 	}
 
@@ -525,10 +527,10 @@ func (v *isAggregateVisitor) reset() {
 	v.aggregated = false
 }
 
-func (p *planner) aggregateInWhere(where *parser.Where) bool {
-	if where != nil {
+func (p *planner) aggregateInExpr(expr parser.Expr) bool {
+	if expr != nil {
 		defer p.isAggregateVisitor.reset()
-		parser.WalkExprConst(&p.isAggregateVisitor, where.Expr)
+		parser.WalkExprConst(&p.isAggregateVisitor, expr)
 		if p.isAggregateVisitor.aggregated {
 			return true
 		}

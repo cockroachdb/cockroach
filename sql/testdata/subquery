@@ -127,6 +127,16 @@ SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
 ----
 true
 
+query III
+SELECT * FROM xyz WHERE x = (SELECT MIN(x) FROM xyz)
+----
+1 2 3
+
+query III
+SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz)
+----
+7 11 12
+
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
 
