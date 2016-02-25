@@ -55,6 +55,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	}
 
 	if p.prepareOnly {
+		// Return the result column types.
 		return rh.getResults(), nil
 	}
 

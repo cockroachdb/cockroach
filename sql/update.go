@@ -166,6 +166,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 				return nil, roachpb.NewError(err)
 			}
 		}
+		// Return the result column types.
 		return rh.getResults(), nil
 	}
 
