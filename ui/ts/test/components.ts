@@ -61,27 +61,27 @@ module TestTable {
 
     test("Sorts data correctly", () => {
       let table = Table.controller(data);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [2, 1, 3]);
       // Sort by ID.
       table.SetSortColumn(columns[0]);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [1, 2, 3]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [1, 2, 3]);
       // Reverse.
       table.SetSortColumn(columns[0]);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [3, 2, 1]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [3, 2, 1]);
 
       // Sort by value.
       table.SetSortColumn(columns[2]);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [3, 1, 2]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [3, 1, 2]);
       // Reverse.
       table.SetSortColumn(columns[2]);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [2, 1, 3]);
 
       // Non-sortable column restores original order.
       table.SetSortColumn(columns[1]);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [2, 1, 3]);
       // Reverse does nothing.
       table.SetSortColumn(columns[1]);
-      chai.assert.deepEqual(_.pluck(table.sortedRows(), "id"), [2, 1, 3]);
+      chai.assert.deepEqual(_.map(table.sortedRows(), "id"), [2, 1, 3]);
     });
   });
 }

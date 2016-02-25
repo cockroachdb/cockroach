@@ -89,7 +89,7 @@ module Models {
       });
 
       private _dataMap: Utils.ReadOnlyProperty<StoreStatusMap> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
-        return _.indexBy(list, (status: Proto.StoreStatus) => status.desc.node.node_id);
+        return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.node.node_id);
       });
 
       private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
@@ -136,7 +136,7 @@ module Models {
       });
 
       private _dataMap: Utils.ReadOnlyProperty<NodeStatusMap> = Utils.Computed(this._data.result, (list: Proto.NodeStatus[]) => {
-        return _.indexBy(list, (status: Proto.NodeStatus) => status.desc.node_id);
+        return _.keyBy(list, (status: Proto.NodeStatus) => status.desc.node_id);
       });
 
       private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.result, (list: Proto.NodeStatus[]) => {

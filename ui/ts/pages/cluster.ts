@@ -80,8 +80,7 @@ module AdminViews {
               return Metrics.Select.Avg(_nodeMetric("exec.latency-1m" + q))
                 .sources(this.sources)
                 .title("Latency" + q);
-            },
-            this);
+            });
           this._addChart(Metrics.NewAxis.apply(this, latencySelectors)
           .format(Utils.Convert.NanoToMilli)
           .title("Latency (ms)")

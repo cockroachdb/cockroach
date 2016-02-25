@@ -76,7 +76,15 @@
       "version": "1.0.1"
     },
     "ascli": {
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "dependencies": {
+        "colour": {
+          "version": "0.7.1"
+        },
+        "optjs": {
+          "version": "3.2.2"
+        }
+      }
     },
     "asn1": {
       "version": "0.2.3"
@@ -183,9 +191,6 @@
     },
     "code-point-at": {
       "version": "1.0.0"
-    },
-    "colour": {
-      "version": "0.7.1"
     },
     "columnify": {
       "version": "1.5.4"
@@ -865,6 +870,9 @@
         "inherits": {
           "version": "1.0.2"
         },
+        "lodash": {
+          "version": "1.0.2"
+        },
         "minimatch": {
           "version": "0.2.14"
         }
@@ -1224,7 +1232,7 @@
       "version": "1.0.1"
     },
     "lodash": {
-      "version": "1.0.2"
+      "version": "4.5.1"
     },
     "lodash._baseassign": {
       "version": "3.2.0"
@@ -2392,9 +2400,6 @@
           "version": "0.0.10"
         }
       }
-    },
-    "optjs": {
-      "version": "3.2.2"
     },
     "orchestrator": {
       "version": "0.3.7"
