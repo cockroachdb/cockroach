@@ -59,3 +59,23 @@ func TestNoLinkForbidden(t *testing.T) {
 		}
 	}
 }
+
+func TestByteFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	f := startCmd.Flags()
+	args := []string{"--cache-size", "100MB", "--memtable-budget", "42GiB"}
+	if err := f.Parse(args); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := cliContext
+	const expectedCacheSize = 100 * 1000 * 1000
+	if expectedCacheSize != ctx.CacheSize {
+		t.Errorf("expected %d, but got %d", expectedCacheSize, ctx.CacheSize)
+	}
+	const expectedMemtableBudget = 42 * 1024 * 1024 * 1024
+	if expectedMemtableBudget != ctx.MemtableBudget {
+		t.Errorf("expected %d, but got %d", expectedMemtableBudget, ctx.MemtableBudget)
+	}
+}
