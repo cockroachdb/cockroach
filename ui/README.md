@@ -59,7 +59,12 @@ want to run them from the local install using one of:
 
 If you're adding an npm dependency, you'll need to run:
 ```
-	node_modules/.bin/npm install --save <myAwesomeDep> && node_modules/.bin/shonkwrap
+	npm install --save <myAwesomeDep>
+```
+
+Then both if you modify and if you add a dependency, you'll need to run:
+```
+	rm -rf node_modules && npm update && node_modules/.bin/shonkwrap
 ```
 
 The `--save` modifier and `shonkwrap` invocation above are necessary to properly
