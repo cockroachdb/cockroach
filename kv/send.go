@@ -21,7 +21,6 @@ import (
 	"io"
 	"math/rand"
 	netrpc "net/rpc"
-	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -223,13 +222,6 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	}
 }
 
-// Allow local calls to be dispatched directly to the local server without
-// sending an RPC.
-//
-// TODO(pmattis): We should either always enable local calls or remove this
-// support. Revisit once the current performance work has completed.
-var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") == "1"
-
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
 
@@ -253,7 +245,7 @@ func sendOne(client *batchClient, timeout time.Duration,
 	}
 	trace.LogEvent(fmt.Sprintf("sending to %s", addr))
 
-	if enableLocalCalls && context.LocalServer != nil && addr.String() == context.LocalAddr {
+	if context.LocalServer != nil && addr.String() == context.LocalAddr {
 		if context.LocalServer.LocalCall(method, args, done) {
 			return
 		}
