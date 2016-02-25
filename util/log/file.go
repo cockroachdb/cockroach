@@ -22,6 +22,7 @@ package log
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -38,9 +39,41 @@ import (
 // MaxSize is the maximum size of a log file in bytes.
 var MaxSize uint64 = 1024 * 1024 * 10
 
-// If non-empty, overrides the choice of directory in which to write logs.
-// See createLogDirs for the full list of possible destinations.
-var logDir *string
+// If non-empty, overrides the choice of directory in which to write logs. See
+// createLogDirs for the full list of possible destinations. Note that the
+// default is to log to stderr independent of this setting. See --logtostderr.
+var logDir = os.TempDir()
+var logDirSet bool
+
+// DirSet returns true of the log directory has been changed from its default.
+func DirSet() bool {
+	return logDirSet
+}
+
+type stringValue struct {
+	val *string
+	set *bool
+}
+
+var _ flag.Value = &stringValue{}
+
+func newStringValue(val *string, set *bool) *stringValue {
+	return &stringValue{val: val, set: set}
+}
+
+func (s *stringValue) Set(val string) error {
+	*s.val = val
+	*s.set = true
+	return nil
+}
+
+func (s *stringValue) Type() string {
+	return "string"
+}
+
+func (s *stringValue) String() string {
+	return *s.val
+}
 
 // logFileRE matches log files to avoid exposing non-log files accidentally
 // and it splits the details of the filename into groups for easy parsing.
@@ -161,18 +194,18 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
 func create(severity Severity, t time.Time) (f *os.File, filename string, err error) {
-	if len(*logDir) == 0 {
+	if len(logDir) == 0 {
 		return nil, "", errDirectoryNotSet
 	}
 	name, link := logName(severity, t)
 	var lastErr error
-	fname := filepath.Join(*logDir, name)
+	fname := filepath.Join(logDir, name)
 
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err == nil {
-		symlink := filepath.Join(*logDir, link)
+		symlink := filepath.Join(logDir, link)
 		_ = os.Remove(symlink)        // ignore err
 		_ = os.Symlink(name, symlink) // ignore err
 		return f, fname, nil
@@ -220,10 +253,10 @@ type FileInfo struct {
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	if *logDir == "" {
+	if logDir == "" {
 		return nil, nil
 	}
-	infos, err := ioutil.ReadDir(*logDir)
+	infos, err := ioutil.ReadDir(logDir)
 	if err != nil {
 		return results, err
 	}
@@ -261,7 +294,7 @@ func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
 	}
 	if !filepath.IsAbs(filename) {
-		filename = filepath.Join(*logDir, filename)
+		filename = filepath.Join(logDir, filename)
 	}
 	if !restricted {
 		var err error

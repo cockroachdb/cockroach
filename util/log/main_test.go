@@ -32,6 +32,6 @@ func TestMain(m *testing.M) {
 			Errorf("failed to clean up temp directory: %s", err)
 		}
 	}()
-	*logDir = tmpDir
+	logDir = tmpDir
 	os.Exit(m.Run())
 }
