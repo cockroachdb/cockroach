@@ -43,7 +43,7 @@ func NewContext(context *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 }
 
 // GRPCDial calls grpc.Dial with the options appropriate for the context.
-func (c *Context) GRPCDial(target string) (*grpc.ClientConn, error) {
+func (c *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	var dialOpt grpc.DialOption
 	if c.Insecure {
 		dialOpt = grpc.WithInsecure()
@@ -55,7 +55,7 @@ func (c *Context) GRPCDial(target string) (*grpc.ClientConn, error) {
 		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	return grpc.Dial(target, dialOpt, grpc.WithBlock(), grpc.WithTimeout(base.NetworkTimeout))
+	return grpc.Dial(target, append(opts, dialOpt, grpc.WithTimeout(base.NetworkTimeout))...)
 }
 
 // Copy creates a copy of the rpc Context config values, but with a
