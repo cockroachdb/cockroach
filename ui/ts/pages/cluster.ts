@@ -151,13 +151,13 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.update.count"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("Updates"),
-              Metrics.Select.Avg(_nodeMetric("sq.insert.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("Inserts"),
-              Metrics.Select.Avg(_nodeMetric("sq.delete.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("Deletes"),
-              Metrics.Select.Avg(_nodeMetric("sq.ddl.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
                 .sources(this.sources) // TODO: store sources vs node sources
                 .title("DDL")
             ).format(d3.format("d")).title("SQL Writes")

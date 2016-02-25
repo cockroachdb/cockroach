@@ -51,7 +51,7 @@ module Models {
             } else if (rowValue.type === "BoolVal") {
               result[rowValue.key] = rowValue.value.toString().toLowerCase() === "true";
             } else if (rowValue.type === "TimeVal") {
-              result[rowValue.key] = Utils.Convert.TimestampToMoment(rowValue.value).toString();
+              result[rowValue.key] = Utils.Convert.TimestampToMoment(rowValue.value);
             } else if (rowValue.type === "DateVal") {
               result[rowValue.key] = moment.utc(0).add(rowValue.value, "days").format("YYYY-MM-DD");
             } else {
