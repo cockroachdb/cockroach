@@ -1298,9 +1298,16 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
-	if err := setAppliedIndex(batch, r.RangeID, index); err != nil {
+	if err := setAppliedIndex(batch, &ms, r.RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
+
+	// Flush the MVCC stats to the batch.
+	if err := r.stats.MergeMVCCStats(batch, ms); err != nil {
+		// TODO(tschottdorf): ReplicaCorruptionError.
+		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
+	}
+
 	if err := batch.Commit(); err != nil {
 		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
@@ -1390,15 +1397,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence, even if leadership changes.
 	if ba.IsWrite() {
-		if err == nil {
-			// If command was successful, flush the MVCC stats to the batch.
-			// TODO(nvanbenschoten): this needs to happen regardless of the
-			// error at the end of this function.
-			if err := r.stats.MergeMVCCStats(btch, *ms); err != nil {
-				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
-			}
-		} else {
+		if err != nil {
 			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
 			// roachpb.Response{With->Or}Error.
 			br = &roachpb.BatchResponse{}
@@ -1408,6 +1407,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			btch = r.store.Engine().NewBatch()
 			*ms = engine.MVCCStats{}
 		}
+
 		// Only transactional requests have replay protection. If the transaction
 		// just ended (via a successful EndTransaction call), it has purged its
 		// sequence cache state and would prefer if we didn't write an entry

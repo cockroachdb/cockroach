@@ -59,10 +59,11 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor, metaFunc func(roachpb.Rang
 	if d.StartKey.Equal(roachpb.RKeyMin) {
 		dataStartKey = keys.LocalMax
 	}
+	sysRangeIDKey := metaFunc(d.RangeID)
 	return []keyRange{
 		{
-			start: engine.MakeMVCCMetadataKey(metaFunc(d.RangeID)),
-			end:   engine.MakeMVCCMetadataKey(metaFunc(d.RangeID + 1)),
+			start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
+			end:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
 		},
 		{
 			start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),

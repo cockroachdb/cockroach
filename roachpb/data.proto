@@ -125,12 +125,17 @@ message SplitTrigger {
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
 // command. It provides the updated range descriptor that now encompasses
-// what was originally both ranges. This information allows the final bookkeeping
-// for the merge to be completed and put into operation.
+// what was originally both ranges and the soon to be invalid range
+// descriptor that used to cover the subsumed half of the merge. This
+// information allows the final bookkeeping for the merge to be completed
+// and put into operation.
 message MergeTrigger {
+  // The updated range descriptor that now encompasses what was originally
+  // both ranges.
   optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
-  optional int64 subsumed_range_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "SubsumedRangeID", (gogoproto.casttype) = "RangeID"];
+  // The soon to be invalid range descriptor that used to cover the subsumed
+  // half of the merge.
+  optional RangeDescriptor subsumed_desc = 2 [(gogoproto.nullable) = false];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

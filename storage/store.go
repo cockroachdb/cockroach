@@ -2021,7 +2021,7 @@ func (s *Store) ComputeMVCCStatsTest() (engine.MVCCStats, error) {
 	now := s.Clock().PhysicalNow()
 	visitor.Visit(func(r *Replica) bool {
 		var stats engine.MVCCStats
-		stats, err = r.computeStats(r.Desc(), s.Engine(), now)
+		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
 			return false
 		}
