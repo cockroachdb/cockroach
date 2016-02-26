@@ -115,7 +115,7 @@ type v3Conn struct {
 }
 
 type opts struct {
-	user, database string
+	user string
 }
 
 func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v3Conn {
@@ -146,7 +146,7 @@ func (c *v3Conn) parseOptions(data []byte) error {
 		}
 		switch key {
 		case "database":
-			c.opts.database = value
+			c.session.Database = value
 		case "user":
 			c.opts.user = value
 		default:
@@ -552,9 +552,6 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
 	tracing.AnnotateTrace()
-
-	c.session.Database = c.opts.database
-
 	resp, _, err := c.executor.ExecuteStatements(c.opts.user, c.session, stmts, params)
 	if err != nil {
 		return c.sendError(err.Error())
@@ -563,7 +560,6 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 	c.session.Reset()
 	c.session = resp.Session
 
-	c.opts.database = c.session.Database
 	tracing.AnnotateTrace()
 	if resp.Empty {
 		// Skip executor and just send EmptyQueryResponse.
