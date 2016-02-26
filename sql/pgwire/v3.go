@@ -191,6 +191,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		return err
 	}
 
+	c.session.Database = c.opts.database
 	for {
 		if !c.doingExtendedQueryMessage {
 			c.writeBuf.initMsg(serverMsgReady)
@@ -552,9 +553,6 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
 	tracing.AnnotateTrace()
-
-	c.session.Database = c.opts.database
-
 	resp, _, err := c.executor.ExecuteStatements(c.opts.user, c.session, stmts, params)
 	if err != nil {
 		return c.sendError(err.Error())
