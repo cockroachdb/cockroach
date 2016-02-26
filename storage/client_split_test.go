@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const splitTimeout = 10 * time.Second
@@ -424,19 +425,8 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Write random data.
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < 100; i++ {
-		key := append([]byte(nil), keyPrefix...)
-		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		key = keys.MakeNonColumnKey(key)
-		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-			RangeID: rng.RangeID,
-		}, &pArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
+	writeRandomDataToRange(t, store, rng.RangeID, keyPrefix)
+
 	// Get the range stats now that we have data.
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID, &ms); err != nil {
@@ -996,5 +986,61 @@ func TestLeaderAfterSplit(t *testing.T) {
 	incArgs = incrementArgs(rightKey, 2)
 	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+func BenchmarkStoreRangeSplit(b *testing.B) {
+	defer tracing.Disable()()
+	defer config.TestingDisableTableSplits()()
+	store, stopper := createTestStore(b)
+	defer stopper.Stop()
+
+	// Perform initial split of ranges.
+	sArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	if _, err := client.SendWrapped(rg1(store), nil, &sArgs); err != nil {
+		b.Fatal(err)
+	}
+
+	// Write some values left and right of the split key.
+	aDesc := store.LookupReplica([]byte("a"), nil).Desc()
+	bDesc := store.LookupReplica([]byte("c"), nil).Desc()
+	writeRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
+	writeRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
+
+	// Merge the b range back into the a range.
+	mArgs := adminMergeArgs(roachpb.KeyMin)
+	if _, err := client.SendWrapped(rg1(store), nil, &mArgs); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Split the range.
+		b.StartTimer()
+		if _, err := client.SendWrapped(rg1(store), nil, &sArgs); err != nil {
+			b.Fatal(err)
+		}
+
+		// Merge the ranges.
+		b.StopTimer()
+		if _, err := client.SendWrapped(rg1(store), nil, &mArgs); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func writeRandomDataToRange(t testing.TB, store *storage.Store, rangeID roachpb.RangeID, keyPrefix []byte) {
+	src := rand.New(rand.NewSource(0))
+	for i := 0; i < 100; i++ {
+		key := append([]byte(nil), keyPrefix...)
+		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
+		key = keys.MakeNonColumnKey(key)
+		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
+		pArgs := putArgs(key, val)
+		if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+			RangeID: rangeID,
+		}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 }

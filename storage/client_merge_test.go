@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func adminMergeArgs(key roachpb.Key) roachpb.AdminMergeRequest {
@@ -355,5 +356,42 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	argsMerge := adminMergeArgs(roachpb.Key(rangeADesc.StartKey))
 	if _, pErr := rangeA.AdminMerge(context.Background(), argsMerge, rangeADesc); !testutils.IsPError(pErr, "ranges not collocated") {
 		t.Fatalf("did not got expected error; got %s", pErr)
+	}
+}
+
+func BenchmarkStoreRangeMerge(b *testing.B) {
+	defer tracing.Disable()()
+	defer config.TestingDisableTableSplits()()
+	store, stopper := createTestStore(b)
+	defer stopper.Stop()
+
+	// Perform initial split of ranges.
+	sArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	if _, err := client.SendWrapped(rg1(store), nil, &sArgs); err != nil {
+		b.Fatal(err)
+	}
+
+	// Write some values left and right of the proposed split key.
+	aDesc := store.LookupReplica([]byte("a"), nil).Desc()
+	bDesc := store.LookupReplica([]byte("c"), nil).Desc()
+	writeRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
+	writeRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
+
+	// Create args to merge the b range back into the a range.
+	mArgs := adminMergeArgs(roachpb.KeyMin)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Merge the ranges.
+		b.StartTimer()
+		if _, err := client.SendWrapped(rg1(store), nil, &mArgs); err != nil {
+			b.Fatal(err)
+		}
+
+		// Split the range.
+		b.StopTimer()
+		if _, err := client.SendWrapped(rg1(store), nil, &sArgs); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
