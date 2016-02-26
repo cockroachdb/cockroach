@@ -57,10 +57,19 @@ want to run them from the local install using one of:
 - `node_modules/.bin/bower install --save <myAwesomeDep>`
 - `node_modules/.bin/typings install --save <myAwesomeDep>`
 
-If you're adding an npm dependency, you'll need to run:
+To modify an existing npm dependency, you'll need to edit `package.json` in the
+standard fashion, while to add a new npm dependency, you'll want to run:
+
 ```
-	node_modules/.bin/npm install --save <myAwesomeDep> && node_modules/.bin/shonkwrap
+	npm install --save <myAwesomeDep>
 ```
+
+Either way, complete any npm changes by running:
+```
+	rm -r node_modules && npm update && node_modules/.bin/shonkwrap
+```
+
+Be sure to commit any changes to `npm-shrinkwrap.json`.
 
 The `--save` modifier and `shonkwrap` invocation above are necessary to properly
 lock down dependencies for other developers on the project, so make sure you don't
