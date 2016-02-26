@@ -161,6 +161,41 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
+func TestPGWireDBName(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGWireDBName")
+	pgURL.Path = "foo"
+	defer cleanupFn()
+	{
+		db, err := sql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.Exec(`CREATE DATABASE foo`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := db.Exec(`CREATE TABLE bar (i INT PRIMARY KEY)`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db, err := sql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`INSERT INTO bar VALUES ($1)`, 1); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
