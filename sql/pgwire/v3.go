@@ -158,6 +158,7 @@ func (c *v3Conn) parseOptions(data []byte) error {
 }
 
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
+	c.session.Database = c.opts.database
 	if authenticationHook != nil {
 		if err := authenticationHook(c.opts.user, true /* public */); err != nil {
 			return c.sendError(err.Error())
