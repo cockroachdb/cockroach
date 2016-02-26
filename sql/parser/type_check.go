@@ -105,6 +105,12 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 			return nil, err
 		}
 	}
+	if dummyVal == nil {
+		// TODO(dt): This isn't ideal -- we'll probably end up with a
+		// type error elsewhere, but it prevents a panic in the call to
+		// SetInferredType below. See #4691.
+		dummyVal = DNull
+	}
 
 	for _, when := range expr.Whens {
 		nextDummyCond, err := when.Cond.TypeCheck(args)
