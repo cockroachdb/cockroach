@@ -861,25 +861,27 @@ class MergeTrigger : public ::google::protobuf::Message {
   ::cockroach::roachpb::RangeDescriptor* release_updated_desc();
   void set_allocated_updated_desc(::cockroach::roachpb::RangeDescriptor* updated_desc);
 
-  // optional int64 subsumed_range_id = 2;
-  bool has_subsumed_range_id() const;
-  void clear_subsumed_range_id();
-  static const int kSubsumedRangeIdFieldNumber = 2;
-  ::google::protobuf::int64 subsumed_range_id() const;
-  void set_subsumed_range_id(::google::protobuf::int64 value);
+  // optional .cockroach.roachpb.RangeDescriptor subsumed_desc = 2;
+  bool has_subsumed_desc() const;
+  void clear_subsumed_desc();
+  static const int kSubsumedDescFieldNumber = 2;
+  const ::cockroach::roachpb::RangeDescriptor& subsumed_desc() const;
+  ::cockroach::roachpb::RangeDescriptor* mutable_subsumed_desc();
+  ::cockroach::roachpb::RangeDescriptor* release_subsumed_desc();
+  void set_allocated_subsumed_desc(::cockroach::roachpb::RangeDescriptor* subsumed_desc);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.MergeTrigger)
  private:
   inline void set_has_updated_desc();
   inline void clear_has_updated_desc();
-  inline void set_has_subsumed_range_id();
-  inline void clear_has_subsumed_range_id();
+  inline void set_has_subsumed_desc();
+  inline void clear_has_subsumed_desc();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::RangeDescriptor* updated_desc_;
-  ::google::protobuf::int64 subsumed_range_id_;
+  ::cockroach::roachpb::RangeDescriptor* subsumed_desc_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -2634,28 +2636,47 @@ inline void MergeTrigger::set_allocated_updated_desc(::cockroach::roachpb::Range
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.updated_desc)
 }
 
-// optional int64 subsumed_range_id = 2;
-inline bool MergeTrigger::has_subsumed_range_id() const {
+// optional .cockroach.roachpb.RangeDescriptor subsumed_desc = 2;
+inline bool MergeTrigger::has_subsumed_desc() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void MergeTrigger::set_has_subsumed_range_id() {
+inline void MergeTrigger::set_has_subsumed_desc() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void MergeTrigger::clear_has_subsumed_range_id() {
+inline void MergeTrigger::clear_has_subsumed_desc() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void MergeTrigger::clear_subsumed_range_id() {
-  subsumed_range_id_ = GOOGLE_LONGLONG(0);
-  clear_has_subsumed_range_id();
+inline void MergeTrigger::clear_subsumed_desc() {
+  if (subsumed_desc_ != NULL) subsumed_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_subsumed_desc();
 }
-inline ::google::protobuf::int64 MergeTrigger::subsumed_range_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.subsumed_range_id)
-  return subsumed_range_id_;
+inline const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::subsumed_desc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.subsumed_desc)
+  return subsumed_desc_ != NULL ? *subsumed_desc_ : *default_instance_->subsumed_desc_;
 }
-inline void MergeTrigger::set_subsumed_range_id(::google::protobuf::int64 value) {
-  set_has_subsumed_range_id();
-  subsumed_range_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.MergeTrigger.subsumed_range_id)
+inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_subsumed_desc() {
+  set_has_subsumed_desc();
+  if (subsumed_desc_ == NULL) {
+    subsumed_desc_ = new ::cockroach::roachpb::RangeDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.subsumed_desc)
+  return subsumed_desc_;
+}
+inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_subsumed_desc() {
+  clear_has_subsumed_desc();
+  ::cockroach::roachpb::RangeDescriptor* temp = subsumed_desc_;
+  subsumed_desc_ = NULL;
+  return temp;
+}
+inline void MergeTrigger::set_allocated_subsumed_desc(::cockroach::roachpb::RangeDescriptor* subsumed_desc) {
+  delete subsumed_desc_;
+  subsumed_desc_ = subsumed_desc;
+  if (subsumed_desc) {
+    set_has_subsumed_desc();
+  } else {
+    clear_has_subsumed_desc();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.subsumed_desc)
 }
 
 // -------------------------------------------------------------------

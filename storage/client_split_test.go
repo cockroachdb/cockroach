@@ -54,19 +54,6 @@ func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
-	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
-		return err
-	}
-	// Clear system counts as these are expected to vary.
-	ms.SysBytes, ms.SysCount = 0, 0
-	if !reflect.DeepEqual(expMS, ms) {
-		return util.Errorf("expected stats %+v; got %+v", expMS, ms)
-	}
-	return nil
-}
-
 // TestStoreRangeSplitAtIllegalKeys verifies a range cannot be split
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
@@ -432,6 +419,9 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
+	if err := verifyRecomputedStats(store, rng.Desc(), ms); err != nil {
+		t.Fatalf("failed to verify range's stats before split: %v", err)
+	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
@@ -465,8 +455,16 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
 	ms.SysBytes, ms.SysCount = 0, 0
-	if !reflect.DeepEqual(expMS, ms) {
+	if expMS != ms {
 		t.Errorf("expected left and right ranges to equal original: %+v + %+v != %+v", msLeft, msRight, ms)
+	}
+
+	// Stats should agree with recomputation.
+	if err := verifyRecomputedStats(store, rng.Desc(), msLeft); err != nil {
+		t.Fatalf("failed to verify left range's stats after split: %v", err)
+	}
+	if err := verifyRecomputedStats(store, rngRight.Desc(), msRight); err != nil {
+		t.Fatalf("failed to verify right range's stats after split: %v", err)
 	}
 }
 

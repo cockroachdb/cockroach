@@ -897,3 +897,26 @@ func TestSortRangeDescByAge(t *testing.T) {
 		t.Fatalf("RangeDescriptor sort by age was not correct. Diff: %s", pretty.Diff(sortedRangeDescs, rangeDescs))
 	}
 }
+
+func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
+	var ms engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
+		return err
+	}
+	// Clear system counts as these are expected to vary.
+	ms.SysBytes, ms.SysCount = 0, 0
+	if expMS != ms {
+		return fmt.Errorf("expected stats %+v; got %+v", expMS, ms)
+	}
+	return nil
+}
+
+func verifyRecomputedStats(store *storage.Store, d *roachpb.RangeDescriptor, expMS engine.MVCCStats) error {
+	now := store.Clock().Timestamp()
+	if ms, err := storage.ComputeStatsForRange(d, store.Engine(), now.WallTime); err != nil {
+		return err
+	} else if expMS != ms {
+		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
+	}
+	return nil
+}

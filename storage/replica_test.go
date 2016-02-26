@@ -2812,17 +2812,24 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 52, SysCount: 1, LastUpdateNanos: 0}
-	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
+	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+
+	// Consistent UUID needed for a deterministic SysBytes value. This is because
+	// a random UUID could have a 0x00 byte that would be escaped by the encoding,
+	// increasing the encoded size and throwing off statistics verification.
+	uuid, err := uuid.FromString("ea5b9590-a157-421b-8b93-a4caa2c41137")
+	if err != nil {
+		t.Fatal(err)
+	}
+	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid, Timestamp: tc.clock.Now()}, Sequence: 1}
 
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 90, KeyBytes: 28, ValBytes: 62, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 52, SysCount: 1, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 90, KeyBytes: 28, ValBytes: 62, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 142, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -2837,7 +2844,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 52, SysCount: 1, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -2846,7 +2853,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &dArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 52, SysCount: 1, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 

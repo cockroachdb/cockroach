@@ -403,12 +403,14 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// Resolve any explicit intents. All that are local to this range get
 	// resolved synchronously in the same batch. The remainder are collected
 	// and handed off to asynchronous processing.
-	desc := *r.Desc()
+	desc := r.Desc()
+	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
 		// pre-split one instead because it's larger).
-		desc = mergeTrigger.UpdatedDesc
+		preMergeDesc = desc
+		desc = &mergeTrigger.UpdatedDesc
 	}
 
 	var externalIntents []roachpb.Intent
@@ -418,16 +420,24 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
-				if !containsKey(desc, span.Key) {
+				if !containsKey(*desc, span.Key) {
 					externalIntents = append(externalIntents, intent)
 					return nil
 				}
-				return engine.MVCCResolveWriteIntent(batch, ms, intent)
+				resolveMs := ms
+				if preMergeDesc != nil && !containsKey(*preMergeDesc, span.Key) {
+					// If this transaction included a merge and the intents
+					// are from the subsumed range, ignore the intent resolution
+					// stats, as they will already be accounted for during the
+					// merge trigger.
+					resolveMs = nil
+				}
+				return engine.MVCCResolveWriteIntent(batch, resolveMs, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
-			inSpan, outSpans := intersectSpan(span, desc)
+			inSpan, outSpans := intersectSpan(span, *desc)
 			for _, span := range outSpans {
 				outIntent := intent
 				outIntent.Span = span
@@ -482,16 +492,16 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 
 		if err := func() error {
 			if ct.GetSplitTrigger() != nil {
-				*ms = engine.MVCCStats{} // clear stats, as split will recompute from scratch.
-				if err := r.splitTrigger(batch, ct.SplitTrigger); err != nil {
+				if err := r.splitTrigger(batch, ms, ct.SplitTrigger); err != nil {
 					return err
 				}
+				*ms = engine.MVCCStats{} // clear stats, as split recomputed.
 			}
 			if ct.GetMergeTrigger() != nil {
-				*ms = engine.MVCCStats{} // clear stats, as merge will recompute from scratch.
-				if err := r.mergeTrigger(batch, ct.MergeTrigger); err != nil {
+				if err := r.mergeTrigger(batch, ms, ct.MergeTrigger); err != nil {
 					return err
 				}
+				*ms = engine.MVCCStats{} // clear stats, as merge recomputed.
 			}
 			if ct.GetChangeReplicasTrigger() != nil {
 				if err := r.changeReplicasTrigger(batch, ct.ChangeReplicasTrigger); err != nil {
@@ -1398,26 +1408,11 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 	return reply, nil
 }
 
-func (r *Replica) computeStats(d *roachpb.RangeDescriptor, e engine.Engine, nowNanos int64) (engine.MVCCStats, error) {
-	iter := e.NewIterator(nil)
-	defer iter.Close()
-
-	ms := &engine.MVCCStats{}
-	for _, r := range makeReplicatedKeyRanges(d) {
-		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
-		if err != nil {
-			return engine.MVCCStats{}, err
-		}
-		ms.Add(msDelta)
-	}
-	return *ms, nil
-}
-
 // splitTrigger is called on a successful commit of an AdminSplit
 // transaction. It copies the sequence cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
-func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger) error {
+func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split *roachpb.SplitTrigger) error {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := r.store.Tracer().StartSpan("split")
@@ -1430,32 +1425,38 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
 	}
 
-	// Snapshot original stats from updated range. Split recomputes stats, and
-	// we need to apply the difference to store metrics.
+	// Preserve stats for presplit range and begin computing stats delta
+	// for current transaction.
 	origStats := r.GetMVCCStats()
+	deltaMs := *ms
+
+	// Account for MVCCStats' own contribution to the new range's statistics.
+	if err := deltaMs.AccountForSelf(split.NewDesc.RangeID); err != nil {
+		return util.Errorf("unable to account for MVCCStats's own stats impact: %s", err)
+	}
+
+	// Compute stats for updated range.
+	now := r.store.Clock().Timestamp()
+	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, now.WallTime)
+	if err != nil {
+		return util.Errorf("unable to compute stats for updated range after split: %s", err)
+	}
+	sp.LogEvent("computed stats for old range")
+	if err := r.stats.SetMVCCStats(batch, leftMs); err != nil {
+		return util.Errorf("unable to write MVCC stats: %s", err)
+	}
 
 	// Copy the last verification timestamp.
 	verifyTS, err := r.GetLastVerificationTimestamp()
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(batch, &deltaMs, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
-	// Compute stats for updated range.
-	now := r.store.Clock().Timestamp()
-	updatedStats, err := r.computeStats(&split.UpdatedDesc, batch, now.WallTime)
-	if err != nil {
-		return util.Errorf("unable to compute stats for updated range after split: %s", err)
-	}
-	sp.LogEvent("computed stats for old range")
-	if err := r.stats.SetMVCCStats(batch, updatedStats); err != nil {
-		return util.Errorf("unable to write MVCC stats: %s", err)
-	}
-
 	// Initialize the new range's sequence cache by copying the original's.
-	seqCount, err := r.sequence.CopyInto(batch, nil /* TODO(nvanbeschoten) */, split.NewDesc.RangeID)
+	seqCount, err := r.sequence.CopyInto(batch, &deltaMs, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
@@ -1470,12 +1471,12 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		return err
 	}
 
-	// Compute stats for new range.
-	newStats, err := r.computeStats(&split.NewDesc, batch, now.WallTime)
-	if err != nil {
-		return util.Errorf("unable to compute stats for new range after split: %s", err)
-	}
-	if err = newRng.stats.SetMVCCStats(batch, newStats); err != nil {
+	rightMs := deltaMs
+	// Add in the original range's stats.
+	rightMs.Add(origStats)
+	// Remove stats from the left side of the split.
+	rightMs.Subtract(leftMs)
+	if err = newRng.stats.SetMVCCStats(batch, rightMs); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 	sp.LogEvent("computed stats for new range")
@@ -1497,9 +1498,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 		}
 
 		// Update store stats with difference in stats before and after split.
-		newStats.Add(updatedStats)
-		newStats.Subtract(origStats)
-		r.store.metrics.addMVCCStats(newStats)
+		r.store.metrics.addMVCCStats(deltaMs)
 
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
@@ -1638,8 +1637,8 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					UpdatedDesc:     updatedLeftDesc,
-					SubsumedRangeID: rightDesc.RangeID,
+					UpdatedDesc:  updatedLeftDesc,
+					SubsumedDesc: rightDesc,
 				},
 			},
 		})
@@ -1654,7 +1653,7 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
-func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger) error {
+func (r *Replica) mergeTrigger(batch engine.Engine, ms *engine.MVCCStats, merge *roachpb.MergeTrigger) error {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
 		return util.Errorf("range and updated range start keys do not match: %s != %s",
@@ -1666,29 +1665,52 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 			desc.EndKey, merge.UpdatedDesc.EndKey)
 	}
 
-	if merge.SubsumedRangeID <= 0 {
-		return util.Errorf("subsumed  range ID must be provided: %d", merge.SubsumedRangeID)
+	subsumedRangeID := merge.SubsumedDesc.RangeID
+	if subsumedRangeID <= 0 {
+		return util.Errorf("subsumed range ID must be provided: %d", subsumedRangeID)
 	}
 
+	// Compute stats for premerged range, including current transaction.
+	var mergedMs = r.GetMVCCStats()
+	mergedMs.Add(*ms)
+
+	// Add in stats for right half of merge, excluding system-local stats, which
+	// will need to be recomputed.
+	var rightMs engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(batch, subsumedRangeID, &rightMs); err != nil {
+		return err
+	}
+	rightMs.SysBytes, rightMs.SysCount = 0, 0
+	mergedMs.Add(rightMs)
+
 	// Copy the subsumed range's sequence cache to the subsuming one.
-	_, err := r.sequence.CopyFrom(batch, nil /* TODO(nvanbenschoten) */, merge.SubsumedRangeID)
+	_, err := r.sequence.CopyFrom(batch, &mergedMs, subsumedRangeID)
 	if err != nil {
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
 
-	// Remove the subsumed range's metadata.
-	localRangeKeyPrefix := keys.MakeRangeIDPrefix(merge.SubsumedRangeID)
-	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeKeyPrefix, localRangeKeyPrefix.PrefixEnd(), 0, roachpb.ZeroTimestamp, nil, false); err != nil {
+	// Remove the subsumed range's metadata. Note that we don't need to
+	// keep track of stats here, because we already set the right range's
+	// system-local stats contribution to 0.
+	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(subsumedRangeID)
+	if _, err := engine.MVCCDeleteRange(batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), 0, roachpb.ZeroTimestamp, nil, false); err != nil {
 		return util.Errorf("cannot remove range metadata %s", err)
 	}
 
-	// Compute stats for updated range.
+	// Add in the stats for the subsumed range's range keys.
+	iter := batch.NewIterator(nil)
+	defer iter.Close()
+	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.StartKey))
+	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.EndKey))
 	now := r.store.Clock().Timestamp()
-	ms, err := r.computeStats(&merge.UpdatedDesc, batch, now.WallTime)
+	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, now.WallTime)
 	if err != nil {
-		return util.Errorf("unable to compute stats for the range after merge: %s", err)
+		return util.Errorf("unable to compute subsumed range's local stats: %s", err)
 	}
-	if err = r.stats.SetMVCCStats(batch, ms); err != nil {
+	mergedMs.Add(msRange)
+
+	// Set stats for updated range.
+	if err = r.stats.SetMVCCStats(batch, mergedMs); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -1701,7 +1723,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, merge *roachpb.MergeTrigger)
 	r.mu.Unlock()
 
 	batch.Defer(func() {
-		if err := r.store.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRangeID); err != nil {
+		if err := r.store.MergeRange(r, merge.UpdatedDesc.EndKey, subsumedRangeID); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update store after merging range: %s", err)
 		}

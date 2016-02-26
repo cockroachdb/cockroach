@@ -225,7 +225,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 	// Stats should agree with a recomputation.
 	now := r.store.Clock().Timestamp()
-	if ms, err := r.computeStats(r.Desc(), eng, now.WallTime); err != nil {
+	if ms, err := ComputeStatsForRange(r.Desc(), eng, now.WallTime); err != nil {
 		t.Errorf("failure computing range's stats: %s", err)
 	} else if ms != rs {
 		t.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", ms, rs)
