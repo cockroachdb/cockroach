@@ -80,7 +80,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	if truncatableIndexes == 0 {
 		t.Errorf("expected a value for truncatable index, got 0")
 	}
-	if oldestIndex <= firstIndex {
+	if oldestIndex < firstIndex {
 		t.Errorf("expected oldest index (%d) to be greater than or equal to first index (%d)", oldestIndex,
 			firstIndex)
 	}
