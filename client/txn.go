@@ -81,8 +81,10 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 	} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
 		ts.Proto = roachpb.Transaction{
-			Name:      ts.Proto.Name,
-			Isolation: ts.Proto.Isolation,
+			TxnMeta: roachpb.TxnMeta{
+				Isolation: ts.Proto.Isolation,
+			},
+			Name: ts.Proto.Name,
 		}
 		// Acts as a minimum priority on restart.
 		if pErr.GetTxn() != nil {

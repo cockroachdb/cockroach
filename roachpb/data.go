@@ -39,15 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-const (
-	// SequencePoisonAbort is a special value for the sequence cache which
-	// commands a TransactionAbortedError.
-	SequencePoisonAbort = math.MaxUint32
-	// SequencePoisonRestart is a special value for the sequence cache which
-	// commands a TransactionRestartError.
-	SequencePoisonRestart = math.MaxUint32 - 1
-)
-
 var (
 	// RKeyMin is a minimum key value which sorts before all other keys.
 	RKeyMin = RKey("")
@@ -573,11 +564,11 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 		TxnMeta: TxnMeta{
 			Key:       baseKey,
 			ID:        uuid.NewV4(),
+			Isolation: isolation,
 			Timestamp: now,
 		},
 		Name:          name,
 		Priority:      priority,
-		Isolation:     isolation,
 		OrigTimestamp: now,
 		MaxTimestamp:  max,
 		Sequence:      1,
