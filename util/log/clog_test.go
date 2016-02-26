@@ -551,27 +551,37 @@ func TestLogBacktraceAt(t *testing.T) {
 func TestFatalStacktraceStderr(t *testing.T) {
 	setFlags()
 	logging.stderrThreshold = NumSeverity
-	logging.toStderr = false // TODO
+	logging.toStderr = false
 	osExitFunc = func(int) {}
 
 	defer setFlags()
 	defer logging.swap(logging.newBuffers())
 
-	Fatalf("cinap")
-	cont := contents(FatalLog)
-	msg := ""
-	if !strings.Contains(cont, " cinap") {
-		msg = "panic output does not contain cinap"
-	} else if strings.Count(cont, "goroutine ") < 2 {
-		msg = "stack trace contains less than two goroutines"
-	} else if !strings.Contains(cont, "clog_test") {
-		msg = "stack trace does not contain file name"
+	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
+		traceback = level
+		Fatalf("cinap")
+		cont := contents(FatalLog)
+		if !strings.Contains(cont, " cinap") {
+			t.Fatalf("panic output does not contain cinap:\n%s", cont)
+		}
+		if !strings.Contains(cont, "clog_test") {
+			t.Fatalf("stack trace does not contain file name: %s", cont)
+		}
+		switch traceback {
+		case tracebackNone:
+			if strings.Count(cont, "goroutine ") > 0 {
+				t.Fatalf("unexpected stack trace:\n%s", cont)
+			}
+		case tracebackSingle:
+			if strings.Count(cont, "goroutine ") != 1 {
+				t.Fatalf("stack trace contains too many goroutines: %s", cont)
+			}
+		case tracebackAll:
+			if strings.Count(cont, "goroutine ") < 2 {
+				t.Fatalf("stack trace contains less than two goroutines: %s", cont)
+			}
+		}
 	}
-
-	if msg != "" {
-		t.Fatalf("%s: %s", msg, contents(FatalLog))
-	}
-
 }
 
 func BenchmarkHeader(b *testing.B) {

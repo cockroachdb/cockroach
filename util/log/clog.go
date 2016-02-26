@@ -64,6 +64,25 @@ var severityName = []string{
 	FatalLog:   "FATAL",
 }
 
+const (
+	tracebackNone = iota
+	tracebackSingle
+	tracebackAll
+)
+
+// Obey the GOTRACEBACK environment variable for determining which stacks to
+// output during a log.Fatal.
+var traceback = func() int {
+	switch os.Getenv("GOTRACEBACK") {
+	case "none":
+		return tracebackNone
+	case "single", "":
+		return tracebackSingle
+	default: // "all", "system", "crash"
+		return tracebackAll
+	}
+}()
+
 // get returns the value of the Severity.
 func (s *Severity) get() Severity {
 	return Severity(atomic.LoadInt32((*int32)(s)))
@@ -703,7 +722,12 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	// On fatal log, set all stacks.
 	var stacks []byte
 	if s == FatalLog {
-		stacks = getStacks(true)
+		switch traceback {
+		case tracebackSingle:
+			stacks = getStacks(false)
+		case tracebackAll:
+			stacks = getStacks(true)
+		}
 		logExitFunc = func(error) {} // If we get a write error, we'll still exit.
 	} else if l.traceLocation.isSet() {
 		if l.traceLocation.match(file, line) {
