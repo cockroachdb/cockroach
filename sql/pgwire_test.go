@@ -516,6 +516,13 @@ func TestPGPreparedExec(t *testing.T) {
 				base.Params(1, 2, 3).RowsAffected(3),
 			},
 		},
+		// TODO(dt): #4691.
+		// {
+		// 	`UPDATE d.t SET d = CASE i WHEN $1 THEN $3 WHEN $2 THEN $4 END WHERE i IN ($1, $2)`,
+		// 	[]preparedExecTest{
+		// 		base.Params(1, 2, 3, 4).RowsAffected(0),
+		// 	},
+		// },
 		{
 			"DROP TABLE d.t",
 			[]preparedExecTest{
