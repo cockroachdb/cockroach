@@ -1430,6 +1430,10 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			split.NewDesc.StartKey, split.NewDesc.EndKey, r)
 	}
 
+	// Snapshot original stats from updated range. Split recomputes stats, and
+	// we need to apply the difference to store metrics.
+	origStats := r.GetMVCCStats()
+
 	// Copy the last verification timestamp.
 	verifyTS, err := r.GetLastVerificationTimestamp()
 	if err != nil {
@@ -1441,12 +1445,12 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 
 	// Compute stats for updated range.
 	now := r.store.Clock().Timestamp()
-	ms, err := r.computeStats(&split.UpdatedDesc, batch, now.WallTime)
+	updatedStats, err := r.computeStats(&split.UpdatedDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
 	sp.LogEvent("computed stats for old range")
-	if err := r.stats.SetMVCCStats(batch, ms); err != nil {
+	if err := r.stats.SetMVCCStats(batch, updatedStats); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
@@ -1467,11 +1471,11 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 	}
 
 	// Compute stats for new range.
-	ms, err = r.computeStats(&split.NewDesc, batch, now.WallTime)
+	newStats, err := r.computeStats(&split.NewDesc, batch, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
-	if err = newRng.stats.SetMVCCStats(batch, ms); err != nil {
+	if err = newRng.stats.SetMVCCStats(batch, newStats); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 	sp.LogEvent("computed stats for new range")
@@ -1491,6 +1495,11 @@ func (r *Replica) splitTrigger(batch engine.Engine, split *roachpb.SplitTrigger)
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf("failed to update Store after split: %s", err)
 		}
+
+		// Update store stats with difference in stats before and after split.
+		newStats.Add(updatedStats)
+		newStats.Subtract(origStats)
+		r.store.metrics.addMVCCStats(newStats)
 
 		// To avoid leaving the new range unavailable as it waits to elect
 		// its leader, one (and only one) of the nodes should start an
