@@ -35,6 +35,11 @@ import (
 // In order to connect securely using postgres, this method will create temporary on-disk copies of
 // certain embedded security certificates. The certificates will be created in a new temporary
 // directory. The returned cleanup function will delete this temporary directory.
+// Note that two calls to this function for the same `user` will generate different
+// copies of the certificates, so the cleanup function must always be called.
+//
+// Args:
+//  prefix: A prefix to be prepended to the temp file names generated, for debugging.
 func PGUrl(t testing.TB, ts *server.TestServer, user, prefix string) (url.URL, func()) {
 	host, port, err := net.SplitHostPort(ts.ServingAddr())
 	if err != nil {
