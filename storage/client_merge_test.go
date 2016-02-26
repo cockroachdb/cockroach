@@ -359,6 +359,61 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeStats starts by splitting a range, then writing random data
+// to both sides of the split. It then merges the ranges and verifies the merged
+// range has stats consistent with recomputations.
+func TestStoreRangeMergeStats(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	defer config.TestingDisableTableSplits()()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Split the range.
+	aDesc, bDesc, err := createSplitRanges(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write some values left and right of the proposed split key.
+	writeRandomDataToRange(t, store, aDesc.RangeID, []byte("aaa"))
+	writeRandomDataToRange(t, store, bDesc.RangeID, []byte("ccc"))
+
+	// Get the range stats for both ranges now that we have data.
+	var msA, msB engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(store.Engine(), aDesc.RangeID, &msA); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.MVCCGetRangeStats(store.Engine(), bDesc.RangeID, &msB); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stats should agree with recomputation.
+	if err := verifyRecomputedStats(store, aDesc, msA); err != nil {
+		t.Fatalf("failed to verify range A's stats before split: %v", err)
+	}
+	if err := verifyRecomputedStats(store, bDesc, msB); err != nil {
+		t.Fatalf("failed to verify range B's stats before split: %v", err)
+	}
+
+	// Merge the b range back into the a range.
+	args := adminMergeArgs(roachpb.KeyMin)
+	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
+		t.Fatal(err)
+	}
+	rngMerged := store.LookupReplica(aDesc.StartKey, nil)
+
+	// Get the range stats for the merged range and verify.
+	var msMerged engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(store.Engine(), rngMerged.RangeID, &msMerged); err != nil {
+		t.Fatal(err)
+	}
+
+	// Merged stats should agree with recomputation.
+	if err := verifyRecomputedStats(store, rngMerged.Desc(), msMerged); err != nil {
+		t.Fatalf("failed to verify range's stats after merge: %v", err)
+	}
+}
+
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	defer tracing.Disable()()
 	defer config.TestingDisableTableSplits()()

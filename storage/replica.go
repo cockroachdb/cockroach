@@ -585,10 +585,10 @@ func (r *Replica) GetMVCCStats() engine.MVCCStats {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return containsKey(*r.Desc(), key)
+	return containsKey(r.Desc(), key)
 }
 
-func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
+func containsKey(desc *roachpb.RangeDescriptor, key roachpb.Key) bool {
 	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
 		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
 	}
@@ -620,8 +620,22 @@ func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
 func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
+	// Create a new batch for the command to ensure all or nothing semantics.
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
+
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	ms := engine.MVCCStats{}
+	if err := engine.MVCCPutProto(batch, &ms, key, roachpb.ZeroTimestamp, nil, &timestamp); err != nil {
+		return err
+	}
+
+	// Flush the MVCC stats to the batch.
+	if err := r.stats.MergeMVCCStats(batch, ms); err != nil {
+		log.Fatalf("setting mvcc stats in a batch should never fail: %s", err)
+	}
+
+	return batch.Commit()
 }
 
 // RaftStatus returns the current raft status of the replica.
@@ -1298,9 +1312,16 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
-	if err := setAppliedIndex(batch, r.RangeID, index); err != nil {
+	if err := setAppliedIndex(batch, &ms, r.RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
+
+	// Flush the MVCC stats to the batch.
+	if err := r.stats.MergeMVCCStats(batch, ms); err != nil {
+		// TODO(tschottdorf): ReplicaCorruptionError.
+		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
+	}
+
 	if err := batch.Commit(); err != nil {
 		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
 	} else {
@@ -1390,15 +1411,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence, even if leadership changes.
 	if ba.IsWrite() {
-		if err == nil {
-			// If command was successful, flush the MVCC stats to the batch.
-			// TODO(nvanbenschoten): this needs to happen regardless of the
-			// error at the end of this function.
-			if err := r.stats.MergeMVCCStats(btch, *ms); err != nil {
-				// TODO(tschottdorf): ReplicaCorruptionError.
-				log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
-			}
-		} else {
+		if err != nil {
 			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
 			// roachpb.Response{With->Or}Error.
 			br = &roachpb.BatchResponse{}
@@ -1408,6 +1421,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			btch = r.store.Engine().NewBatch()
 			*ms = engine.MVCCStats{}
 		}
+
 		// Only transactional requests have replay protection. If the transaction
 		// just ended (via a successful EndTransaction call), it has purged its
 		// sequence cache state and would prefer if we didn't write an entry
