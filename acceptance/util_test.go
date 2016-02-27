@@ -55,6 +55,7 @@ var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the pas
 	"cluster configurations for each test. This overrides the nodes, stores and duration flags and will run the test "+
 	"against a collection of pre-specified cluster configurations.")
 var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
+var flagPrivileged = flag.Bool("privileged", false, "run containers in privileged mode (required for nemesis tests")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
@@ -144,6 +145,8 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 	return configs
 }
 
+type configTestRunner func(*testing.T, cluster.Cluster, cluster.TestConfig)
+
 // runTestOnConfigs retrieves the full list of test configurations and runs the
 // passed in test against each on serially.
 func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
@@ -179,7 +182,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 			}
 			logDir = filepath.Join(logDir, fun)
 		}
-		l := cluster.CreateLocal(cfg, logDir, stopper)
+		l := cluster.CreateLocal(cfg, logDir, *flagPrivileged, stopper)
 		l.Start()
 		c = l
 		checkRangeReplication(t, l, 20*time.Second)
@@ -204,6 +207,13 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 func SkipUnlessLocal(t *testing.T) {
 	if *flagRemote {
 		t.Skip("skipping since not run against local cluster")
+	}
+}
+
+// SkipUnlessLocal calls t.Skip if not running with the privileged flag.
+func SkipUnlessPrivileged(t *testing.T) {
+	if !*flagPrivileged {
+		t.Skip("skipping since not run in privileged mode")
 	}
 }
 
