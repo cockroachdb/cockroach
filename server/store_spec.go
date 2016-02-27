@@ -45,26 +45,26 @@ type StoreSpec struct {
 func (ss StoreSpec) String() string {
 	var buffer bytes.Buffer
 	if len(ss.Path) != 0 {
-		buffer.WriteString(fmt.Sprintf("path=%s,", ss.Path))
+		fmt.Fprintf(&buffer, "path=%s,", ss.Path)
 	}
 	if ss.InMemory {
-		buffer.WriteString("type=mem,")
+		fmt.Fprint(&buffer, "type=mem,")
 	}
 	if ss.SizeInBytes > 0 {
-		buffer.WriteString(fmt.Sprintf("size=%s,", humanize.IBytes(ss.SizeInBytes)))
+		fmt.Fprintf(&buffer, "size=%s,", humanize.IBytes(ss.SizeInBytes))
 	}
 	if ss.SizePercent > 0 {
-		buffer.WriteString(fmt.Sprintf("size=%s%%,", humanize.Ftoa(ss.SizePercent)))
+		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
 	}
 	if len(ss.Attributes.Attrs) > 0 {
-		buffer.WriteString("attr=")
+		fmt.Fprint(&buffer, "attr=")
 		for i, attr := range ss.Attributes.Attrs {
 			if i != 0 {
-				buffer.WriteString(":")
+				fmt.Fprint(&buffer, ":")
 			}
-			buffer.WriteString(attr)
+			fmt.Fprintf(&buffer, attr)
 		}
-		buffer.WriteString(",")
+		fmt.Fprintf(&buffer, ",")
 	}
 	// Trim the extra comma from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -75,7 +75,7 @@ func (ss StoreSpec) String() string {
 
 // newStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
-// There are four possible attributes that can be passed in, comma separated:
+// There are four possible fields that can be passed in, comma separated:
 // - path=xxx The directory in which to the rocks db instance should be
 //   located, required unless using a in memory storage.
 // - type=mem This specifies that the store is an in memory storage instead of
@@ -100,28 +100,28 @@ func newStoreSpec(value string) (StoreSpec, error) {
 			continue
 		}
 		subSplits := strings.SplitN(split, "=", 2)
-		var attr string
+		var field string
 		var value string
 		if len(subSplits) == 1 {
-			attr = "path"
+			field = "path"
 			value = subSplits[0]
 		} else {
-			attr = strings.ToLower(subSplits[0])
+			field = strings.ToLower(subSplits[0])
 			value = subSplits[1]
 		}
-		if _, ok := used[attr]; ok {
-			return StoreSpec{}, fmt.Errorf("%s was used twice in store definition", attr)
+		if _, ok := used[field]; ok {
+			return StoreSpec{}, fmt.Errorf("%s field was used twice in store definition", field)
 		}
-		used[attr] = struct{}{}
+		used[field] = struct{}{}
 
-		if len(attr) == 0 {
+		if len(field) == 0 {
 			continue
 		}
 		if len(value) == 0 {
-			return StoreSpec{}, fmt.Errorf("no path specified")
+			return StoreSpec{}, fmt.Errorf("no value specified for %s", field)
 		}
 
-		switch attr {
+		switch field {
 		case "path":
 			if len(value) == 0 {
 
@@ -187,7 +187,7 @@ func newStoreSpec(value string) (StoreSpec, error) {
 				return StoreSpec{}, fmt.Errorf("%s is not a valid store type", value)
 			}
 		default:
-			return StoreSpec{}, fmt.Errorf("%s is not a valid store attribute", value)
+			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}
 	}
 	if ss.InMemory {
@@ -204,16 +204,16 @@ func newStoreSpec(value string) (StoreSpec, error) {
 	return ss, nil
 }
 
-// StoreSpecValue is a slice of StoreSpecs that implements pflag's value
+// StoreSpecList is a slice of StoreSpecs that implements pflag's value
 // interface.
-type StoreSpecValue []StoreSpec
+type StoreSpecList []StoreSpec
 
 // String returns a string representation of all the StoreSpecs. This is part
 // of pflag's value interface.
-func (ssv StoreSpecValue) String() string {
+func (ssl StoreSpecList) String() string {
 	var buffer bytes.Buffer
-	for _, ss := range ssv {
-		buffer.WriteString(fmt.Sprintf("--store=%s ", ss))
+	for _, ss := range ssl {
+		fmt.Fprintf(&buffer, "--store=%s ", ss)
 	}
 	// Trim the extra space from the end if it exists.
 	if l := buffer.Len(); l > 0 {
@@ -224,17 +224,17 @@ func (ssv StoreSpecValue) String() string {
 
 // Type returns the underlying type in string form. This is part of pflag's
 // value interface.
-func (ssv *StoreSpecValue) Type() string {
+func (ssl *StoreSpecList) Type() string {
 	return "StoreSpec"
 }
 
 // Set adds a new value to the StoreSpecValue. It is the important part of
 // pflag's value interface.
-func (ssv *StoreSpecValue) Set(value string) error {
+func (ssl *StoreSpecList) Set(value string) error {
 	storeSpec, err := newStoreSpec(value)
 	if err != nil {
 		return err
 	}
-	*ssv = append(*ssv, storeSpec)
+	*ssl = append(*ssl, storeSpec)
 	return nil
 }

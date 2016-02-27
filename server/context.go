@@ -64,7 +64,7 @@ type Context struct {
 	Addr string
 
 	// Stores is specified to enable durable key-value storage.
-	Stores StoreSpecValue
+	Stores StoreSpecList
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -124,9 +124,37 @@ type Context struct {
 	TimeUntilStoreDead time.Duration
 }
 
-func getDefaultCacheSize() uint64 {
+// getTotalMemory returns either the total system memory and if possible the
+// cgroups available memory. The first value returned is the total system
+// memory, the second value is the cgroups total available memory. If a value is
+// available for total, than it will be greater than zero and the returned error
+// corresponds to the cgroup retrieval.
+func getTotalMemory() (uint64, uint64, error) {
 	mem := sigar.Mem{}
 	if err := mem.Get(); err != nil {
+		return 0, 0, err
+	}
+	totalMem := mem.Total
+	var cgAvlMem uint64
+	if runtime.GOOS == "linux" {
+		var err error
+		var buf []byte
+		if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+			return totalMem, 0, err
+		}
+		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
+			return totalMem, 0, err
+		}
+	}
+	return totalMem, cgAvlMem, nil
+}
+
+func getDefaultCacheSize() uint64 {
+	sysMem, cgAvlMem, err := getTotalMemory()
+	if sysMem == 0 {
+		if err == nil {
+			err = fmt.Errorf("unknown error")
+		}
 		if log.V(1) {
 			log.Infof("can't retrieve system memory information (%s)\n"+
 				"\tsetting default rocksdb cache size to %s",
@@ -134,31 +162,17 @@ func getDefaultCacheSize() uint64 {
 		}
 		return defaultCacheSize
 	}
-
-	halfSysMem := mem.Total / 2
-	if runtime.GOOS == "linux" {
-		buf, err := ioutil.ReadFile(defaultCGroupMemPath)
-		if err != nil {
-			if log.V(1) {
-				log.Infof("can't read available memory from cgroups (%s)\n"+
-					"\tsetting default rocksdb cache size to %s (half of system memory)",
-					err, humanize.IBytes(halfSysMem))
-			}
-			return halfSysMem
+	halfSysMem := sysMem / 2
+	if err != nil {
+		if log.V(1) {
+			log.Infof("can't read or parse available memory from cgroups (%s)\n"+
+				"\tsetting default rocksdb cache size to %s (half of system memory)",
+				err, humanize.IBytes(halfSysMem))
 		}
-
-		cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
-		if err != nil {
-			if log.V(1) {
-				log.Infof("can't parse available memory from cgroups (%s)\n"+
-					"\tsetting default rocksdb cache size to %s (half of system memory)",
-					err, humanize.IBytes(halfSysMem))
-			}
-			return halfSysMem
-		}
-		if cgAvlMem < mem.Total {
-			return cgAvlMem / 2
-		}
+		return halfSysMem
+	}
+	if cgAvlMem > 0 && cgAvlMem < sysMem {
+		return cgAvlMem / 2
 	}
 	return halfSysMem
 }
@@ -184,7 +198,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.BalanceMode = defaultBalanceMode
 }
 
-// InitStores initializes a slice of engine.Engine objects.
+// InitStores initializes ctx.Engines based on ctx.Stores.
 func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
 	// are split evenly if there are multiple stores, but we aren't doing that
@@ -193,15 +207,22 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
-				mem := sigar.Mem{}
-				if err := mem.Get(); err != nil {
-					return err
+				sysMem, cgMem, err := getTotalMemory()
+				if sysMem == 0 {
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("could not retrieve system memory")
 				}
-				sizeInBytes = uint64(float64(mem.Total) * spec.SizePercent)
+				if cgMem > 0 {
+					sizeInBytes = uint64(float64(sysMem) * spec.SizePercent)
+				} else {
+					sizeInBytes = uint64(float64(cgMem) * spec.SizePercent)
+				}
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
-				return fmt.Errorf("%s%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					humanize.Ftoa(spec.SizePercent), humanize.IBytes(sizeInBytes), humanize.IBytes(minimumStoreSize))
+				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+					spec.SizePercent, humanize.IBytes(sizeInBytes), humanize.IBytes(minimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, spec.SizeInBytes, stopper))
 		} else {
@@ -213,8 +234,8 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				sizeInBytes = uint64(float64(fileSystemUsage.Total) * spec.SizePercent)
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
-				return fmt.Errorf("%s%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					humanize.Ftoa(spec.SizePercent), spec.Path, humanize.IBytes(sizeInBytes),
+				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+					spec.SizePercent, spec.Path, humanize.IBytes(sizeInBytes),
 					humanize.IBytes(minimumStoreSize))
 			}
 			// TODO(bram): #4621 actually hook this up to the store.
@@ -222,7 +243,11 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				ctx.MemtableBudget, stopper))
 		}
 	}
-	log.Infof("%d storage engine(s) specified", len(ctx.Engines))
+	if len(ctx.Engines) == 1 {
+		log.Infof("1 storage engine initialized")
+	} else {
+		log.Infof("%d storage engines initialized", len(ctx.Engines))
+	}
 	return nil
 }
 

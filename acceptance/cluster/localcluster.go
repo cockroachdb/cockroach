@@ -377,7 +377,6 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 	} else if *cockroachEntry != "" {
 		entrypoint = append(entrypoint, *cockroachEntry)
 	}
-	log.Infof("Cockroach Cluster CLI: %s", cmd)
 	var err error
 	node.Container, err = createContainer(
 		l,
@@ -423,7 +422,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	for _, store := range node.stores {
-		cmd = append(cmd, fmt.Sprintf("--store=attr=ssd,path=%s", store.dataStr))
+		cmd = append(cmd, fmt.Sprintf("--store=path=%s", store.dataStr))
 	}
 	// Append --join flag for all nodes except first.
 	if node.index > 0 {
@@ -445,11 +444,12 @@ func (l *LocalCluster) startNode(node *testNode) {
 	maybePanic(node.Start())
 	// Infof doesn't take positional parameters, hence the Sprintf.
 	log.Infof(fmt.Sprintf(`*** started %[1]s ***
-  ui:    %[2]s
-  trace: %[2]s/debug/requests
-  logs:  %[3]s/cockroach.INFO
-  pprof: docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'`,
-		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort))
+  ui:        %[2]s
+  trace:     %[2]s/debug/requests
+  logs:      %[3]s/cockroach.INFO
+  pprof:     docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'
+  cockroach: %[6]s`,
+		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort, cmd))
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {

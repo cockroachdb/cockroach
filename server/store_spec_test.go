@@ -17,6 +17,7 @@
 package server
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -31,114 +32,118 @@ func TestNewStoreSpec(t *testing.T) {
 
 	testCases := []struct {
 		value       string
-		expectedErr bool
+		expectedErr string
 		expected    StoreSpec
 	}{
 		// path
-		{"path=/mnt/hda1", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{",path=/mnt/hda1", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{",,,path=/mnt/hda1,,,", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"/mnt/hda1", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=", true, StoreSpec{}},
-		{"path=/mnt/hda1,path=/mnt/hda2", true, StoreSpec{}},
-		{"/mnt/hda1,path=/mnt/hda2", true, StoreSpec{}},
+		{"path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{",path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{",,,path=/mnt/hda1,,,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=", "no value specified for path", StoreSpec{}},
+		{"path=/mnt/hda1,path=/mnt/hda2", "path field was used twice in store definition", StoreSpec{}},
+		{"/mnt/hda1,path=/mnt/hda2", "path field was used twice in store definition", StoreSpec{}},
 
 		// attributes
-		{"path=/mnt/hda1,attr=ssd", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"ssd"}}}},
-		{"path=/mnt/hda1,attr=ssd:hdd", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"path=/mnt/hda1,attr=hdd:ssd", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"attr=ssd:hdd,path=/mnt/hda1", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"attr=hdd:ssd,path=/mnt/hda1,", false, StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"attr=hdd:ssd", true, StoreSpec{}},
-		{"path=/mnt/hda1,attr=", true, StoreSpec{}},
-		{"path=/mnt/hda1,attr=hdd:hdd", true, StoreSpec{}},
-		{"path=/mnt/hda1,attr=hdd,attr=ssd", true, StoreSpec{}},
+		{"path=/mnt/hda1,attr=ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"ssd"}}}},
+		{"path=/mnt/hda1,attr=ssd:hdd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"path=/mnt/hda1,attr=hdd:ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"attr=ssd:hdd,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"attr=hdd:ssd,path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"attr=hdd:ssd", "no path specified", StoreSpec{}},
+		{"path=/mnt/hda1,attr=", "no value specified for attr", StoreSpec{}},
+		{"path=/mnt/hda1,attr=hdd:hdd", "duplicate attribute given for store: hdd", StoreSpec{}},
+		{"path=/mnt/hda1,attr=hdd,attr=ssd", "attr field was used twice in store definition", StoreSpec{}},
 
 		// size
-		{"path=/mnt/hda1,size=671088640", false, StoreSpec{"/mnt/hda1", 671088640, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=20GB", false, StoreSpec{"/mnt/hda1", 20000000000, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"size=20GiB,path=/mnt/hda1", false, StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"size=0.1TiB,path=/mnt/hda1", false, StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=.1TiB", false, StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=123TB", false, StoreSpec{"/mnt/hda1", 123000000000000, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=123TiB", false, StoreSpec{"/mnt/hda1", 135239930216448, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=671088640", "", StoreSpec{"/mnt/hda1", 671088640, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=20GB", "", StoreSpec{"/mnt/hda1", 20000000000, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=123TB", "", StoreSpec{"/mnt/hda1", 123000000000000, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{"/mnt/hda1", 135239930216448, 0, false, roachpb.Attributes{Attrs: []string(nil)}}},
 		// %
-		{"path=/mnt/hda1,size=50.5%", false, StoreSpec{"/mnt/hda1", 0, 50.5, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=100%", false, StoreSpec{"/mnt/hda1", 0, 100, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=1%", false, StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=0.999999%", true, StoreSpec{}},
-		{"path=/mnt/hda1,size=100.0001%", true, StoreSpec{}},
+		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{"/mnt/hda1", 0, 50.5, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=100%", "", StoreSpec{"/mnt/hda1", 0, 100, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=1%", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=0.999999%", "store size (0.999999%) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=100.0001%", "store size (100.0001%) must be between 1% and 100%", StoreSpec{}},
 		// 0.xxx
-		{"path=/mnt/hda1,size=0.99", false, StoreSpec{"/mnt/hda1", 0, 99, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=0.5000000", false, StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=0.01", false, StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=0.009999", true, StoreSpec{}},
+		{"path=/mnt/hda1,size=0.99", "", StoreSpec{"/mnt/hda1", 0, 99, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=0.5000000", "", StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=0.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=0.009999", "store size (0.009999) must be between 1% and 100%", StoreSpec{}},
 		// .xxx
-		{"path=/mnt/hda1,size=.999", false, StoreSpec{"/mnt/hda1", 0, 99.9, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=.5000000", false, StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=.01", false, StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"path=/mnt/hda1,size=.009999", true, StoreSpec{}},
+		{"path=/mnt/hda1,size=.999", "", StoreSpec{"/mnt/hda1", 0, 99.9, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=.5000000", "", StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"path=/mnt/hda1,size=.009999", "store size (.009999) must be between 1% and 100%", StoreSpec{}},
 		// errors
-		{"path=/mnt/hda1,size=0", true, StoreSpec{}},
-		{"path=/mnt/hda1,size=abc", true, StoreSpec{}},
-		{"path=/mnt/hda1,size=", true, StoreSpec{}},
-		{"size=20GiB,path=/mnt/hda1,size=20GiB", true, StoreSpec{}},
-		{"size=123TB", true, StoreSpec{}},
+		{"path=/mnt/hda1,size=0", "store size (0) must be larger than 671088640", StoreSpec{}},
+		{"path=/mnt/hda1,size=abc", "could not parse store size (abc) strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
+		{"path=/mnt/hda1,size=", "no value specified for size", StoreSpec{}},
+		{"size=20GiB,path=/mnt/hda1,size=20GiB", "size field was used twice in store definition", StoreSpec{}},
+		{"size=123TB", "no path specified", StoreSpec{}},
 
 		// type
-		{"type=mem,size=20GiB", false, StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"size=20GiB,type=mem", false, StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"size=20.5GiB,type=mem", false, StoreSpec{"", 22011707392, 0, true, roachpb.Attributes{Attrs: []string(nil)}}},
-		{"size=20GiB,type=mem,attr=mem", false, StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}}},
-		{"type=mem,size=20", true, StoreSpec{}},
-		{"type=mem,size=", true, StoreSpec{}},
-		{"type=mem,attr=ssd", true, StoreSpec{}},
-		{"path=/mnt/hda1,type=mem", true, StoreSpec{}},
-		{"path=/mnt/hda1,type=other", true, StoreSpec{}},
-		{"path=/mnt/hda1,type=mem,size=20GiB", true, StoreSpec{}},
+		{"type=mem,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"size=20GiB,type=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"size=20.5GiB,type=mem", "", StoreSpec{"", 22011707392, 0, true, roachpb.Attributes{Attrs: []string(nil)}}},
+		{"size=20GiB,type=mem,attr=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}}},
+		{"type=mem,size=20", "store size (20) must be larger than 671088640", StoreSpec{}},
+		{"type=mem,size=", "no value specified for size", StoreSpec{}},
+		{"type=mem,attr=ssd", "size must be specified for an in memory store", StoreSpec{}},
+		{"path=/mnt/hda1,type=mem", "path specified for in memory store", StoreSpec{}},
+		{"path=/mnt/hda1,type=other", "other is not a valid store type", StoreSpec{}},
+		{"path=/mnt/hda1,type=mem,size=20GiB", "path specified for in memory store", StoreSpec{}},
 
 		// all together
-		{"path=/mnt/hda1,attr=hdd:ssd,size=20GiB", false, StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"type=mem,attr=hdd:ssd,size=20GiB", false, StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"path=/mnt/hda1,attr=hdd:ssd,size=20GiB", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"type=mem,attr=hdd:ssd,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
 
 		// other error cases
-		{"", true, StoreSpec{}},
-		{",", true, StoreSpec{}},
-		{",,,", true, StoreSpec{}},
-		{"path=/mnt/hda1,something=abc", true, StoreSpec{}},
-		{"something=abc", true, StoreSpec{}},
-		{"type=mem,other=abc", true, StoreSpec{}},
+		{"", "no value specified", StoreSpec{}},
+		{",", "no path specified", StoreSpec{}},
+		{",,,", "no path specified", StoreSpec{}},
+		{"path=/mnt/hda1,something=abc", "something is not a valid store field", StoreSpec{}},
+		{"something=abc", "something is not a valid store field", StoreSpec{}},
+		{"type=mem,other=abc", "other is not a valid store field", StoreSpec{}},
 	}
 
 	for i, testCase := range testCases {
 		storeSpec, err := newStoreSpec(testCase.value)
 		if err != nil {
-			if !testCase.expectedErr {
-				t.Errorf("%d: %s", i, err)
+			if len(testCase.expectedErr) == 0 {
+				t.Errorf("%d(%s): no expected error, got %s", i, testCase.value, err)
+			}
+			if testCase.expectedErr != fmt.Sprint(err) {
+				t.Errorf("%d(%s): expected error \"%s\" does not match actual \"%s\"", i, testCase.value,
+					testCase.expectedErr, err)
 			}
 			continue
 		}
-		if testCase.expectedErr {
-			t.Errorf("%d: expected error but there was none", i)
+		if len(testCase.expectedErr) > 0 {
+			t.Errorf("%d(%s): expected error %s but there was none", i, testCase.value, testCase.expectedErr)
 			continue
 		}
 		if !reflect.DeepEqual(testCase.expected, storeSpec) {
-			t.Errorf("%d: actual doesn't match expected\nactual:   %+v\nexpected: %+v\n", i, storeSpec,
-				testCase.expected)
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %+v\nexpected: %+v", i,
+				testCase.value, storeSpec, testCase.expected)
 		}
 
-		// Now test the String() to make sure the result can be parsed.
+		// Now test String() to make sure the result can be parsed.
 		storeSpecString := storeSpec.String()
 		storeSpec2, err := newStoreSpec(storeSpecString)
 		if err != nil {
-			t.Errorf("%d: error parsing String() result: %s", i, err)
+			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
 			continue
 		}
 		// Compare strings to deal with floats not matching exactly.
 		if !reflect.DeepEqual(storeSpecString, storeSpec2.String()) {
-			t.Errorf("%d: actual doesn't match expected\nactual:   %#+v\nexpected: %#+v\n", i, storeSpec,
-				storeSpec2)
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %#+v\nexpected: %#+v", i, testCase.value,
+				storeSpec, storeSpec2)
 		}
 	}
 }
