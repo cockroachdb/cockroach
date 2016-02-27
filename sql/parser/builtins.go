@@ -117,6 +117,15 @@ var builtins = map[string][]builtin{
 		}, typeInt),
 	},
 
+	"octet_length": {
+		stringBuiltin1(func(s string) (Datum, error) {
+			return DInt(len(s)), nil
+		}, typeInt),
+		bytesBuiltin1(func(s string) (Datum, error) {
+			return DInt(len(s)), nil
+		}, typeInt),
+	},
+
 	// TODO(pmattis): What string functions should also support bytesType?
 
 	"lower": {stringBuiltin1(func(s string) (Datum, error) {
