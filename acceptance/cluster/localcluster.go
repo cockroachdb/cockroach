@@ -355,6 +355,7 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 
 	hostConfig := container.HostConfig{
 		PublishAllPorts: true,
+		Privileged:      true,
 	}
 
 	if dns != nil {
