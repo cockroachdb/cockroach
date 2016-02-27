@@ -295,6 +295,35 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	}
 }
 
+// TestTimestampCacheLayeredRemoval verifies that all ranges that
+// are superseded when new ranges are added are properly removed.
+func TestTimestampCacheLayeredRemoval(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(maxClockOffset)
+	tc := NewTimestampCache(clock)
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
+
+	cdTS := clock.Now()
+	tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
+
+	beTS := clock.Now()
+	tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
+
+	adTS := clock.Now()
+	tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
+
+	cfTS := clock.Now()
+	tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, nil, true)
+
+	// Make sure the initial keys were removed.
+	expectedLen := 2
+	if len := tc.cache.Len(); len != expectedLen {
+		t.Errorf("expected timestamp cache to be %d, found %d", expectedLen, len)
+	}
+}
+
 func TestTimestampCacheClear(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
