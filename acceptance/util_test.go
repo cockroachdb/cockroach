@@ -121,16 +121,24 @@ func getConfigs() []cluster.TestConfig {
 func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
 	cfgs := getConfigs()
 	for _, cfg := range cfgs {
-		cluster := StartCluster(t, cfg)
-		testFunc(t, cluster, cfg)
-		cluster.AssertAndStop(t)
+		func() {
+			cluster := StartCluster(t, cfg)
+			defer cluster.AssertAndStop(t)
+			testFunc(t, cluster, cfg)
+		}()
 	}
 }
 
 // StartCluster starts a cluster from the relevant flags. All test clusters
 // should be created through this command since it sets up the logging in a
 // unified way.
-func StartCluster(t *testing.T, cfg cluster.TestConfig) cluster.Cluster {
+func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
+	var completed bool
+	defer func() {
+		if !completed && c != nil {
+			c.AssertAndStop(t)
+		}
+	}()
 	if !*flagRemote {
 		logDir := *flagLogDir
 		if logDir != "" {
@@ -141,6 +149,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) cluster.Cluster {
 		l := cluster.CreateLocal(cfg, logDir, stopper)
 		l.Start()
 		checkRangeReplication(t, l, 20*time.Second)
+		completed = true
 		return l
 	}
 	f := farmer(t)
@@ -152,6 +161,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) cluster.Cluster {
 		t.Fatalf("cluster not ready in time: %v", err)
 	}
 	checkRangeReplication(t, f, 20*time.Second)
+	completed = true
 	return f
 }
 
