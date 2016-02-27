@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
@@ -138,7 +139,6 @@ type LocalCluster struct {
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
 	logDir               string
-	keepLogs             bool
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
@@ -285,7 +285,6 @@ func (l *LocalCluster) initCluster() {
 	}
 
 	if l.logDir != "" {
-		l.keepLogs = true
 		if !filepath.IsAbs(l.logDir) {
 			l.logDir = filepath.Join(pwd, l.logDir)
 		}
@@ -431,6 +430,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--certs=/certs",
 		"--host=" + node.nodeStr,
 		"--port=" + base.DefaultPort,
+		"--log-threshold=INFO",
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	log.Warning(stores)
@@ -627,16 +627,22 @@ func (l *LocalCluster) stop() {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}
+	outputLogDir := l.logDir
 	for i, n := range l.Nodes {
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
 		maybePanic(n.Kill())
-		if len(l.logDir) > 0 {
+		if crashed && outputLogDir == "" {
+			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
+		}
+		if crashed || l.logDir != "" {
 			// TODO(bdarnell): make these filenames more consistent with
 			// structured logs?
-			file := filepath.Join(l.logDir, nodeStr(i),
+			file := filepath.Join(outputLogDir, nodeStr(i),
 				fmt.Sprintf("stderr.%s.log", strings.Replace(
 					time.Now().Format(time.RFC3339), ":", "_", -1)))
+
+			maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
 			w, err := os.Create(file)
 			maybePanic(err)
 			defer w.Close()
@@ -644,18 +650,10 @@ func (l *LocalCluster) stop() {
 			if crashed {
 				log.Infof("node %d: stderr at %s", i, file)
 			}
-		} else if crashed {
-			log.Warningf("node %d died: %s", i, ci.State)
 		}
 		maybePanic(n.Remove())
 	}
 	l.Nodes = nil
-	// Removing the log files must happen after shutting down the nodes or
-	// there might be a panic when it tries to log that it is killing the node.
-	if !l.keepLogs {
-		_ = os.RemoveAll(l.logDir)
-		l.logDir = ""
-	}
 }
 
 // ConnString creates a connections string.

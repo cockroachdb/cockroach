@@ -37,6 +37,25 @@ type Tester interface {
 	Fatalf(format string, args ...interface{})
 }
 
+type panicTesterImpl struct{}
+
+// PanicTester is a Tester which panics.
+var PanicTester Tester
+
+func (panicTesterImpl) Failed() bool { return false }
+
+func (panicTesterImpl) Error(args ...interface{}) {
+	panic(fmt.Sprint(args...))
+}
+
+func (pt panicTesterImpl) Fatal(args ...interface{}) {
+	pt.Error(args...)
+}
+
+func (panicTesterImpl) Fatalf(format string, args ...interface{}) {
+	panic(fmt.Sprintf(format, args...))
+}
+
 // tempUnixFile creates a temporary file for use with a unix domain socket.
 // TODO(bdarnell): use TempDir instead to make this atomic.
 func tempUnixFile() string {
