@@ -18,6 +18,11 @@ SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
 statement error unknown signature for LENGTH: LENGTH\(int\)
 SELECT LENGTH(23)
 
+query T
+SELECT char_length('Hello'), octet_length(b'世界');
+----
+5 6
+
 query T colnames
 SELECT UPPER('roacH7')
 ----
