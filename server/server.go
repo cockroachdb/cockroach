@@ -34,10 +34,10 @@ import (
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/opentracing/opentracing-go"
-	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
+	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"

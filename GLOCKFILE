@@ -24,6 +24,7 @@ github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb c0124c907c74b579d9d3d48eb96471bef270bc25
 github.com/cockroachdb/c-snappy 5c6d0932e0adaffce4bfca7bdf2ac37f79952ccf
+github.com/cockroachdb/cmux 112f0506e7743d64a6eb8fedbcff13d9979bbf92
 github.com/cockroachdb/pq dd29f9a2c333350480bf658e7f99c4ffdc145830
 github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
 github.com/codahale/hdrhistogram e88be87d51429689cef99043a54150d733265cd7
@@ -61,7 +62,6 @@ github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9
 github.com/russross/blackfriday 006144af03eeeff1037240a71865a9fd61f1c25f
 github.com/satori/go.uuid e673fdd4dea8a7334adbbe7f57b7e4b00bdc5502
 github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c77
-github.com/soheilhy/cmux d710784914b3024cacf5d915b5cafbd9b6a8f0fe
 github.com/spf13/cobra 65a708cee0a4424f4e353d031ce440643e312f92
 github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit 304a3dad367b395460778a969d87101b778b322f
