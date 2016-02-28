@@ -24,9 +24,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soheilhy/cmux"
 	"golang.org/x/net/http2"
 
+	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
