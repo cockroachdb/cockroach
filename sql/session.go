@@ -42,14 +42,32 @@ type SessionOffset struct {
 func (*SessionLocation) isSessionTimezone() {}
 func (*SessionOffset) isSessionTimezone()   {}
 
+// TxnStateEnum represents the state of a SQL txn.
+type TxnStateEnum int
+
+//go:generate stringer -type=TxnStateEnum
+const (
+	// No txn is in scope. Either there never was one, or it got committed/rolled back.
+	NoTxn TxnStateEnum = iota
+	// A txn is in scope.
+	Open
+	// The txn has encoutered a (non-retriable) error.
+	// Statements will be rejected until a COMMIT/ROLLBACK is seen.
+	Aborted
+	// The txn has encoutered a retriable error.
+	// Statements will be rejected until a RESTART_TRANSACTION is seen.
+	RestartWait
+	// The KV txn has been committed successfully through a RELEASE.
+	// Statements are rejected until a COMMIT is seen.
+	CommitWait
+)
+
 // SessionTransaction ...
 type SessionTransaction struct {
-	// If missing, it means we're not inside a (KV) txn.
-	Txn *roachpb.Transaction
-	// txnAborted is set once executing a statement returned an error from KV.
-	// While in this state, every subsequent statement must be rejected until a
-	// COMMIT/ROLLBACK is seen.
-	TxnAborted   bool
+	// If nil, it means we're not inside a (KV) txn.
+	Txn          *roachpb.Transaction
+	State        TxnStateEnum
+	retryIntent  bool
 	UserPriority roachpb.UserPriority
 	// Indicates that the transaction is mutating keys in the SystemConfig span.
 	MutatesSystemConfig bool
@@ -60,6 +78,7 @@ type Session struct {
 	Database string
 	Syntax   int32
 	// Info about the open transaction (if any).
+	// TODO(andrei): get rid of SessionTransaction; store the txnState directly.
 	Txn                   SessionTransaction
 	Timezone              isSessionTimezone
 	DefaultIsolationLevel roachpb.IsolationType

@@ -388,10 +388,14 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error)
 func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 	txn := NewTxn(*db)
 	txn.SetDebugName("", 1)
-	return txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
+	pErr := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) *roachpb.Error {
 			return retryable(txn)
 		})
+	if pErr != nil {
+		txn.CleanupOnError(pErr)
+	}
+	return pErr
 }
 
 // send runs the specified calls synchronously in a single batch and returns
