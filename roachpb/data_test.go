@@ -396,6 +396,7 @@ func TestTransactionString(t *testing.T) {
 	ts1 := makeTS(10, 11)
 	txn := Transaction{
 		TxnMeta: TxnMeta{
+			Isolation: SERIALIZABLE,
 			Key:       Key("foo"),
 			ID:        txnID,
 			Epoch:     2,
@@ -403,7 +404,6 @@ func TestTransactionString(t *testing.T) {
 		},
 		Name:          "name",
 		Priority:      957356782,
-		Isolation:     SERIALIZABLE,
 		Status:        COMMITTED,
 		LastHeartbeat: &ts1,
 		OrigTimestamp: makeTS(30, 31),
@@ -449,6 +449,7 @@ func TestNodeList(t *testing.T) {
 var ts = makeTS(10, 11)
 var nonZeroTxn = Transaction{
 	TxnMeta: TxnMeta{
+		Isolation: SNAPSHOT,
 		Key:       Key("foo"),
 		ID:        uuid.NewV4(),
 		Epoch:     2,
@@ -456,7 +457,6 @@ var nonZeroTxn = Transaction{
 	},
 	Name:          "name",
 	Priority:      957356782,
-	Isolation:     SNAPSHOT,
 	Status:        COMMITTED,
 	LastHeartbeat: &Timestamp{1, 2},
 	OrigTimestamp: makeTS(30, 31),
