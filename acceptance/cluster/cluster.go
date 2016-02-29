@@ -19,6 +19,9 @@ package cluster
 import (
 	"net"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.
@@ -27,12 +30,12 @@ import (
 type Cluster interface {
 	// NumNodes returns the number of nodes in the cluster, running or not.
 	NumNodes() int
-	// ConnString returns a connection string for the given node.
-	ConnString(int) string
+	// NewClient returns a kv client for the given node.
+	NewClient(*testing.T, int) (*client.DB, *stop.Stopper)
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(int) string
 	// Addr returns the TCP address for the given node.
-	Addr(i int) *net.TCPAddr
+	Addr(int) *net.TCPAddr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.

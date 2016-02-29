@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -143,7 +144,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	var session sql.Session
 	query := "CREATE DATABASE " + testdb
-	createRes := s.sqlExecutor.ExecuteStatements("root", &session, query, nil)
+	createRes := s.sqlExecutor.ExecuteStatements(security.RootUser, &session, query, nil)
 	if createRes.ResultList[0].PErr != nil {
 		t.Fatal(createRes.ResultList[0].PErr)
 	}
@@ -173,7 +174,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	grantRes := s.sqlExecutor.ExecuteStatements("root", &session, grantQuery, nil)
+	grantRes := s.sqlExecutor.ExecuteStatements(security.RootUser, &session, grantQuery, nil)
 	if grantRes.ResultList[0].PErr != nil {
 		t.Fatal(grantRes.ResultList[0].PErr)
 	}
@@ -197,7 +198,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 
 	for _, grant := range details.Grants {
 		switch grant.User {
-		case "root":
+		case security.RootUser:
 			if !reflect.DeepEqual(grant.Privileges, []string{"ALL"}) {
 				t.Fatalf("privileges %v != expected %v", details.Grants[0].Privileges, privileges)
 			}

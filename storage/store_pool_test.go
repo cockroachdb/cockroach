@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -56,7 +55,7 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
+	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))

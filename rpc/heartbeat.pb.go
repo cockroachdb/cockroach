@@ -21,6 +21,11 @@ import math "math"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -79,6 +84,68 @@ func init() {
 	proto.RegisterType((*PingRequest)(nil), "cockroach.rpc.PingRequest")
 	proto.RegisterType((*PingResponse)(nil), "cockroach.rpc.PingResponse")
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for Heartbeat service
+
+type HeartbeatClient interface {
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
+}
+
+type heartbeatClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewHeartbeatClient(cc *grpc.ClientConn) HeartbeatClient {
+	return &heartbeatClient{cc}
+}
+
+func (c *heartbeatClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	out := new(PingResponse)
+	err := grpc.Invoke(ctx, "/cockroach.rpc.Heartbeat/Ping", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Heartbeat service
+
+type HeartbeatServer interface {
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
+}
+
+func RegisterHeartbeatServer(s *grpc.Server, srv HeartbeatServer) {
+	s.RegisterService(&_Heartbeat_serviceDesc, srv)
+}
+
+func _Heartbeat_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(PingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(HeartbeatServer).Ping(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _Heartbeat_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.rpc.Heartbeat",
+	HandlerType: (*HeartbeatServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Ping",
+			Handler:    _Heartbeat_Ping_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
+
 func (m *RemoteOffset) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
