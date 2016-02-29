@@ -56,7 +56,6 @@ func MakeServer(ctx *base.Context, executor *Executor) Server {
 // present, in the same format as the request's incoming Content-Type
 // header.
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
 	method := r.URL.Path
 	if !strings.HasPrefix(method, driver.Endpoint) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
