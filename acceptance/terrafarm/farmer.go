@@ -28,8 +28,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // A Farmer sets up and manipulates a test cluster via terraform.
@@ -163,12 +166,18 @@ func (f *Farmer) Exec(i int, cmd string) error {
 	return nil
 }
 
-// ConnString returns a connection string to pass to client.Open().
-func (f *Farmer) ConnString(i int) string {
+// NewClient implements the Cluster interface.
+func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 	// TODO(tschottdorf,mberhault): TLS all the things!
-	return "rpc://" + security.RootUser + "@" +
-		net.JoinHostPort(f.Nodes()[i], base.DefaultPort) +
-		"?certs=" + "certswhocares"
+	stopper := stop.NewStopper()
+	rpcContext := rpc.NewContext(&base.Context{
+		User: security.RootUser,
+	}, nil, stopper)
+	sender, err := client.NewSender(rpcContext, f.Addr(i).String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client.NewDB(sender), stopper
 }
 
 // PGUrl returns a URL string for the given node postgres server.
