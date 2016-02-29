@@ -171,9 +171,6 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.stopper)
 	s.sqlServer = sql.MakeServer(&s.ctx.Context, s.sqlExecutor)
-	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
-		return nil, err
-	}
 
 	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlServer.Executor)
 
