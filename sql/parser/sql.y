@@ -1936,7 +1936,7 @@ simple_select:
 | select_clause UNION all_or_distinct select_clause
   {
     $$.val = &Union{
-      Type:  astUnion,
+      Type:  UnionOp,
       Left:  $1.selectStmt(),
       Right: $4.selectStmt(),
       All:   $3.bool(),
@@ -1945,7 +1945,7 @@ simple_select:
 | select_clause INTERSECT all_or_distinct select_clause
   {
     $$.val = &Union{
-      Type:  astIntersect,
+      Type:  IntersectOp,
       Left:  $1.selectStmt(),
       Right: $4.selectStmt(),
       All:   $3.bool(),
@@ -1954,7 +1954,7 @@ simple_select:
 | select_clause EXCEPT all_or_distinct select_clause
   {
     $$.val = &Union{
-      Type:  astExcept,
+      Type:  ExceptOp,
       Left:  $1.selectStmt(),
       Right: $4.selectStmt(),
       All:   $3.bool(),

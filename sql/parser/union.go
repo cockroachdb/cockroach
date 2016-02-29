@@ -26,17 +26,33 @@ import "fmt"
 
 // Union represents a UNION statement.
 type Union struct {
-	Type        string
+	Type        UnionType
 	Left, Right SelectStatement
 	All         bool
 }
 
+// UnionType represents one of the three set operations in sql.
+type UnionType int
+
 // Union.Type
 const (
-	astUnion     = "UNION"
-	astExcept    = "EXCEPT"
-	astIntersect = "INTERSECT"
+	UnionOp UnionType = iota
+	IntersectOp
+	ExceptOp
 )
+
+var unionTypeName = [...]string{
+	UnionOp:     "UNION",
+	IntersectOp: "INTERSECT",
+	ExceptOp:    "EXCEPT",
+}
+
+func (i UnionType) String() string {
+	if i < 0 || i > UnionType(len(unionTypeName)-1) {
+		return fmt.Sprintf("UnionType(%d)", i)
+	}
+	return unionTypeName[i]
+}
 
 func (node *Union) String() string {
 	all := ""

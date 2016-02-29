@@ -5666,7 +5666,7 @@ sqldefault:
 		//line sql.y:1937
 		{
 			sqlVAL.union.val = &Union{
-				Type:  astUnion,
+				Type:  UnionOp,
 				Left:  sqlDollar[1].union.selectStmt(),
 				Right: sqlDollar[4].union.selectStmt(),
 				All:   sqlDollar[3].union.bool(),
@@ -5677,7 +5677,7 @@ sqldefault:
 		//line sql.y:1946
 		{
 			sqlVAL.union.val = &Union{
-				Type:  astIntersect,
+				Type:  IntersectOp,
 				Left:  sqlDollar[1].union.selectStmt(),
 				Right: sqlDollar[4].union.selectStmt(),
 				All:   sqlDollar[3].union.bool(),
@@ -5688,7 +5688,7 @@ sqldefault:
 		//line sql.y:1955
 		{
 			sqlVAL.union.val = &Union{
-				Type:  astExcept,
+				Type:  ExceptOp,
 				Left:  sqlDollar[1].union.selectStmt(),
 				Right: sqlDollar[4].union.selectStmt(),
 				All:   sqlDollar[3].union.bool(),
