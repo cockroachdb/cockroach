@@ -457,6 +457,7 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 		} else if planMaker.txn.Proto.Status == roachpb.ABORTED {
 			// Reset to allow starting a new transaction.
 			planMaker.resetTxn()
+			result.PGTag = (*parser.RollbackTransaction)(nil).StatementTag()
 			return result, nil
 		}
 	case *parser.SetTransaction:
