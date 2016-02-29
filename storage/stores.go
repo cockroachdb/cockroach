@@ -160,24 +160,24 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	}
 
 	sp := tracing.SpanFromContext(opStores, store.Tracer(), ctx)
-	// For calls that read data within a txn, we can avoid uncertainty
-	// related retries in certain situations. If the node is in
-	// "CertainNodes", we need not worry about uncertain reads any
-	// more. Setting MaxTimestamp=OrigTimestamp for the operation
-	// accomplishes that. See roachpb.Transaction.CertainNodes for details.
-	if ba.Txn != nil && ba.Txn.CertainNodes.Contains(ba.Replica.NodeID) {
-		// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-		sp.LogEvent("read has no clock uncertainty")
-		// Copy-on-write to protect others we might be sharing the Txn with.
-		shallowTxn := *ba.Txn
-		// We set to OrigTimestamp because that works for both SNAPSHOT and
-		// SERIALIZABLE: If we used Timestamp instead, we could run into
-		// unnecessary retries at SNAPSHOT. For example, a SNAPSHOT txn at
-		// OrigTimestamp = 1000.0, Timestamp = 2000.0, MaxTimestamp = 3000.0
-		// will always read at 1000, so a MaxTimestamp of 2000 will still let
-		// it restart with uncertainty when it finds a value in (1000, 2000).
-		shallowTxn.MaxTimestamp = ba.Txn.OrigTimestamp
-		ba.Txn = &shallowTxn
+	if ba.Txn != nil {
+		// For calls that read data within a txn, we keep track of timestamps
+		// observed from the various participating nodes' HLC clocks. If we have
+		// a timestamp on file which is smaller then MaxTimestamp, we can lower
+		// MaxTimestamp accordingly. If MaxTimestamp drops below OrigTimestamp,
+		// we effectively can't see uncertainty restarts any more.
+		if maxTS := ba.Txn.GetUncertainty(ba.Replica.NodeID); maxTS.Less(ba.Txn.MaxTimestamp) {
+			// Copy-on-write to protect others we might be sharing the Txn with.
+			shallowTxn := *ba.Txn
+			log.Warningf("at %s, moving to %s (orig %s)", shallowTxn.MaxTimestamp, maxTS, shallowTxn.OrigTimestamp)
+			// The uncertainty window is [OrigTimestamp, maxTS), so if that window
+			// is empty, there won't be any uncertainty restarts.
+			if !ba.Txn.OrigTimestamp.Less(maxTS) {
+				sp.LogEvent("read has no clock uncertainty")
+			}
+			shallowTxn.MaxTimestamp.Backward(maxTS)
+			ba.Txn = &shallowTxn
+		}
 	}
 	br, pErr := store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
