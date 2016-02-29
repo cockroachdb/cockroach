@@ -28,7 +28,7 @@ import (
 )
 
 func TestDropDatabase(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
@@ -151,7 +151,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 }
 
 func TestDropIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 
@@ -218,7 +218,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 }
 
 func TestDropTable(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 

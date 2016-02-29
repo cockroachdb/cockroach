@@ -25,14 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // TestLocalKeySorting is a sanity check to make sure that
 // the non-replicated part of a store sorts before the meta.
 func TestKeySorting(t *testing.T) {
-	defer leaktest.AfterTest(t)
 	// Reminder: Increasing the last byte by one < adding a null byte.
 	if !(roachpb.RKey("").Less(roachpb.RKey("\x00")) && roachpb.RKey("\x00").Less(roachpb.RKey("\x01")) &&
 		roachpb.RKey("\x01").Less(roachpb.RKey("\x01\x00"))) {
@@ -47,7 +45,6 @@ func TestKeySorting(t *testing.T) {
 }
 
 func TestMakeKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
 	if !bytes.Equal(makeKey(roachpb.Key("A"), roachpb.Key("B")), roachpb.Key("AB")) ||
 		!bytes.Equal(makeKey(roachpb.Key("A")), roachpb.Key("A")) ||
 		!bytes.Equal(makeKey(roachpb.Key("A"), roachpb.Key("B"), roachpb.Key("C")), roachpb.Key("ABC")) {
@@ -56,7 +53,6 @@ func TestMakeKey(t *testing.T) {
 }
 
 func TestKeyAddress(t *testing.T) {
-	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		key        roachpb.Key
 		expAddress roachpb.RKey
@@ -77,7 +73,6 @@ func TestKeyAddress(t *testing.T) {
 }
 
 func TestRangeMetaKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		key, expKey roachpb.RKey
 	}{
@@ -124,7 +119,6 @@ func TestMetaPrefixLen(t *testing.T) {
 }
 
 func TestMetaScanBounds(t *testing.T) {
-	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
 		key, expStart, expEnd []byte
@@ -189,7 +183,6 @@ func TestMetaScanBounds(t *testing.T) {
 }
 
 func TestMetaReverseScanBounds(t *testing.T) {
-	defer leaktest.AfterTest(t)
 
 	testCases := []struct {
 		key              []byte
@@ -261,7 +254,6 @@ func TestMetaReverseScanBounds(t *testing.T) {
 }
 
 func TestValidateRangeMetaKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		key    []byte
 		expErr bool
@@ -282,7 +274,6 @@ func TestValidateRangeMetaKey(t *testing.T) {
 }
 
 func TestBatchRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		req [][2]string
 		exp [2]string

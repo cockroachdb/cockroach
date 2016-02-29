@@ -28,7 +28,7 @@ import (
 )
 
 func TestClientHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -46,7 +46,7 @@ func TestClientHeartbeat(t *testing.T) {
 }
 
 func TestClientNoCache(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -67,7 +67,7 @@ func TestClientNoCache(t *testing.T) {
 // TestClientHeartbeatBadServer verifies that the client is not marked
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -104,7 +104,7 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 // TestClientCloseBeforeConnect verifies that the client goroutine
 // does not leak if the client is closed before connecting.
 func TestClientCloseBeforeConnect(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	c := NewClient(
 		util.NewUnresolvedAddr("tcp", ":1337"),
@@ -115,7 +115,7 @@ func TestClientCloseBeforeConnect(t *testing.T) {
 }
 
 func TestOffsetMeasurement(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -158,7 +158,7 @@ func TestOffsetMeasurement(t *testing.T) {
 // zero offset if the heartbeat reply exceeds the
 // maximumClockReadingDelay, but not the heartbeat timeout.
 func TestDelayedOffsetMeasurement(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -203,7 +203,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 }
 
 func TestFailedOffsetMeasurement(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()

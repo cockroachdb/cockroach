@@ -286,7 +286,7 @@ func ExampleDB_Put_insecure() {
 }
 
 func TestOpenArgs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -311,7 +311,7 @@ func TestOpenArgs(t *testing.T) {
 }
 
 func TestDebugName(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
@@ -327,7 +327,7 @@ func TestDebugName(t *testing.T) {
 }
 
 func TestCommonMethods(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	batchType := reflect.TypeOf(&client.Batch{})
 	dbType := reflect.TypeOf(&client.DB{})
 	txnType := reflect.TypeOf(&client.Txn{})
@@ -404,7 +404,7 @@ func TestCommonMethods(t *testing.T) {
 // Verifies that a nested transaction returns an error if an inner txn
 // propagates an error to an outer txn.
 func TestNestedTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 

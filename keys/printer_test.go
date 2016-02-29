@@ -26,12 +26,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func TestPrettyPrint(t *testing.T) {
-	defer leaktest.AfterTest(t)
 
 	tm, _ := time.Parse(time.UnixDate, "Sat Mar  7 11:06:39 UTC 2015")
 	txnID := uuid.NewV4()

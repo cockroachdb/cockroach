@@ -25,7 +25,7 @@ import (
 )
 
 func TestNoLinkForbidden(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	if build.Default.GOPATH == "" {
 		t.Skip("GOPATH isn't set")
 	}

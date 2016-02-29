@@ -27,7 +27,7 @@ import (
 )
 
 func TestRemoteOffsetString(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ro := RemoteOffset{
 		Offset:      -501584461,
 		Uncertainty: 351698,
@@ -40,7 +40,7 @@ func TestRemoteOffsetString(t *testing.T) {
 }
 
 func TestHeartbeatReply(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano)
 	heartbeat := &HeartbeatService{
@@ -68,7 +68,7 @@ func TestHeartbeatReply(t *testing.T) {
 }
 
 func TestManualHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano)
 	manualHeartbeat := &ManualHeartbeatService{
@@ -110,7 +110,7 @@ func TestManualHeartbeat(t *testing.T) {
 }
 
 func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()

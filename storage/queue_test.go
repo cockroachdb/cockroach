@@ -102,7 +102,7 @@ func (tq *testQueueImpl) purgatoryChan() <-chan struct{} {
 
 // TestQueuePriorityQueue verifies priority queue implementation.
 func TestQueuePriorityQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Create a priority queue, put the items in it, and
 	// establish the priority queue (heap) invariants.
 	const count = 3
@@ -141,7 +141,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 // queue including adding ranges which both should and shouldn't be
 // queued, updating an existing range, and removing a range.
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
@@ -230,7 +230,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 // TestBaseQueueAdd verifies that calling Add() directly overrides the
 // ShouldQueue method.
 func TestBaseQueueAdd(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
@@ -259,7 +259,7 @@ func TestBaseQueueAdd(t *testing.T) {
 // TestBaseQueueProcess verifies that items from the queue are
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
@@ -308,7 +308,7 @@ func TestBaseQueueProcess(t *testing.T) {
 // TestBaseQueueAddRemove adds then removes a range; ensure range is
 // not processed.
 func TestBaseQueueAddRemove(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
@@ -348,7 +348,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // TestAcceptsUnsplitRanges verifies that ranges that need to split are properly
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
@@ -458,7 +458,7 @@ func (*testError) purgatoryErrorMarker() {
 // queue, items are added to the purgatory. Verifies that sending on
 // the purgatory channel causes the replicas to be reprocessed.
 func TestBaseQueuePurgatory(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 

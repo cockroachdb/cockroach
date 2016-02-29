@@ -45,6 +45,6 @@ func verifyConvergence(numNodes, maxCycles int, _ *testing.T) {
 // though two attempts so far have introduced more complexity into the
 // actual production gossip code than seems worthwhile for a unittest.
 func TestConvergence(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	verifyConvergence(10, 100, t)
 }

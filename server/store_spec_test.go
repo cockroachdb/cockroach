@@ -28,7 +28,7 @@ import (
 // TestNewStoreSpec verifies that the --store arguments are correctly parsed
 // into StoreSpecs.
 func TestNewStoreSpec(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		value       string

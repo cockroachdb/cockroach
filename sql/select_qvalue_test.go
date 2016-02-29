@@ -40,7 +40,7 @@ func testInitDummySelectNode(desc *TableDescriptor) *selectNode {
 // Test that we can resolve the qnames in an expression that has already been
 // resolved.
 func TestRetryResolveQNames(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	expr, err := parser.ParseExprTraditional(`COUNT(a)`)
 	if err != nil {

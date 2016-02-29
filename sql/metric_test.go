@@ -8,7 +8,7 @@ import (
 )
 
 func TestQueryCounts(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 
@@ -76,7 +76,7 @@ func TestQueryCounts(t *testing.T) {
 }
 
 func TestAbortCountConflictingWrites(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 
@@ -124,7 +124,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
 // results in an error during a txn.
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 

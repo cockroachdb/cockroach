@@ -56,7 +56,7 @@ func kv(k, v []byte) roachpb.KeyValue {
 }
 
 func TestObjectIDForKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		key     roachpb.RKey
@@ -88,7 +88,7 @@ func TestObjectIDForKey(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	emptyKeys := []roachpb.KeyValue{}
 	someKeys := []roachpb.KeyValue{
@@ -132,7 +132,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestGetLargestID(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		values  []roachpb.KeyValue
 		largest uint32
@@ -211,7 +211,7 @@ func TestGetLargestID(t *testing.T) {
 }
 
 func TestComputeSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	const (
 		start         = keys.MaxReservedDescID + 1

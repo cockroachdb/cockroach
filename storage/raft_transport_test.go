@@ -61,7 +61,7 @@ func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
 }
 
 func TestSendAndReceive(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), hlc.NewClock(hlc.UnixNano), stopper)
@@ -231,7 +231,7 @@ func TestSendAndReceive(t *testing.T) {
 // TestInOrderDelivery verifies that for a given pair of nodes, raft
 // messages are delivered in order.
 func TestInOrderDelivery(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), hlc.NewClock(hlc.UnixNano), stopper)

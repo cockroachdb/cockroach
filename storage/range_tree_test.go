@@ -49,7 +49,7 @@ func createTreeContext(rootKey roachpb.RKey, nodes []*roachpb.RangeTreeNode) *tr
 
 // TestIsRed ensures that the isRed function is correct.
 func TestIsRed(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		node     *roachpb.RangeTreeNode
 		expected bool
@@ -105,7 +105,7 @@ func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, k
 // TestReplaceNode ensures that the helper function replaceNode functions
 // correctly.
 func TestReplaceNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	keyRoot := roachpb.RKey("ROOT")
 	keyOld := roachpb.RKey("O")
@@ -302,7 +302,7 @@ func TestReplaceNode(t *testing.T) {
 
 // TestRotateRight ensures that right rotations occur correctly.
 func TestRotateRight(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	keyNode := roachpb.RKey("N")
 	keyRight := roachpb.RKey("R")
@@ -484,7 +484,7 @@ func TestRotateRight(t *testing.T) {
 // TestRotateLeft ensures that right rotations occur correctly. This is a
 // mirror of TestRotateRight.
 func TestRotateLeft(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	keyNode := roachpb.RKey("N")
 	keyLeft := roachpb.RKey("L")
@@ -665,7 +665,7 @@ func TestRotateLeft(t *testing.T) {
 
 // TestSwapNodes ensures that node swap needed for deletions occur correctly.
 func TestSwapNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	keyA := roachpb.RKey("A")
 	keyAParent := roachpb.RKey("AP")
@@ -1422,7 +1422,7 @@ func verifyProperty5(t *testing.T, tc *treeContext, testName string, node *roach
 // TestTree tries both inserting nodes into and deleting node from the range
 // tree. The tree is verified after each insert or delete.
 func TestTree(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	keyRoot := roachpb.RKey("m")
 	tc := createTreeContext(keyRoot, []*roachpb.RangeTreeNode{

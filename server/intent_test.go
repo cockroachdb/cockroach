@@ -31,7 +31,7 @@ import (
 )
 
 func TestIntentResolution(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		keys   []string

@@ -64,7 +64,7 @@ func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges
 // together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -92,7 +92,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // TestStoreRangeMergeMetadataCleanup tests that all metadata of a
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -170,7 +170,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // TestStoreRangeMergeWithData attempts to merge two collocate ranges
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -297,7 +297,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 // TestStoreRangeMergeLastRange verifies that merging the last range
 // fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -312,7 +312,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 // TestStoreRangeMergeNonCollocated attempts to merge two ranges
 // that are not on the same stores.
 func TestStoreRangeMergeNonCollocated(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 4)
 	defer mtc.Stop()
 
@@ -363,7 +363,7 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 // to both sides of the split. It then merges the ranges and verifies the merged
 // range has stats consistent with recomputations.
 func TestStoreRangeMergeStats(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()

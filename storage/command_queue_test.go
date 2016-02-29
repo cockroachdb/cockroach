@@ -64,7 +64,7 @@ func testCmdDone(cmdDone <-chan struct{}, wait time.Duration) bool {
 }
 
 func TestCommandQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 
@@ -92,7 +92,7 @@ func TestCommandQueue(t *testing.T) {
 // read. Since reads don't wait for reads, there was a bug in which the writer
 // would wind up waiting only for one of the two readers under it.
 func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	key := roachpb.Key("a")
 	// Add a read-only command.
@@ -138,7 +138,7 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 }
 
 func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 	// Add a read-only command.
@@ -159,7 +159,7 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 }
 
 func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 
@@ -184,7 +184,7 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 }
 
 func TestCommandQueueMultiplePendingCommands(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
@@ -219,7 +219,7 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 }
 
 func TestCommandQueueClear(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
@@ -246,7 +246,7 @@ func TestCommandQueueClear(t *testing.T) {
 // it by calling GetWait with a command whose start key is equal to
 // the end key of a previous command.
 func TestCommandQueueExclusiveEnd(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	add(cq, roachpb.Key("a"), roachpb.Key("b"), false)
 
@@ -262,7 +262,7 @@ func TestCommandQueueExclusiveEnd(t *testing.T) {
 // span would wind up waiting on overlapping previous spans, resulting
 // in deadlock.
 func TestCommandQueueSelfOverlap(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	a := roachpb.Key("a")
 	k := add(cq, a, roachpb.Key("b"), false)

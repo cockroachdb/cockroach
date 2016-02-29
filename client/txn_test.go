@@ -116,7 +116,7 @@ func testPut() roachpb.BatchRequest {
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	makeTS := func(walltime int64, logical int32) roachpb.Timestamp {
 		return roachpb.ZeroTimestamp.Add(walltime, logical)
 	}
@@ -158,7 +158,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
 	}, nil))
@@ -179,7 +179,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 // Also verifies that the UserPriority is propagated to the
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 	db.userPriority = 101
 	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
@@ -196,7 +196,7 @@ func TestTransactionConfig(t *testing.T) {
 // committed but EndTransaction is not sent if only read-only
 // operations were performed.
 func TestCommitReadOnlyTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var calls []roachpb.Method
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -218,7 +218,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 // transaction with an explicit EndTransaction call does not send
 // that call.
 func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	for _, withGet := range []bool{true, false} {
 		var calls []roachpb.Method
 		db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -247,7 +247,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 // TestCommitMutatingTransaction verifies that transaction is committed
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	var calls []roachpb.Method
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -292,7 +292,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 // TestTxnInsertBeginTransaction verifies that a begin transaction
 // request is inserted just before the first mutating command.
 func TestTxnInsertBeginTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var calls []roachpb.Method
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -315,7 +315,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 // TestBeginTransactionErrorIndex verifies that the error index is cleared
 // when a BeginTransaction command causes an error.
 func TestBeginTransactionErrorIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		pErr := roachpb.NewError(&roachpb.WriteIntentError{})
 		pErr.SetErrorIndex(0)
@@ -337,7 +337,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 // ended explicitly in the retryable func, it is not automatically
 // ended a second time at completion of retryable func.
 func TestCommitTransactionOnce(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	count := 0
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
@@ -358,7 +358,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 // TestAbortReadOnlyTransaction verifies that aborting a read-only
 // transaction does not prompt an EndTransaction call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			t.Errorf("did not expect EndTransaction")
@@ -378,7 +378,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 // able didn't, regardless of whether there is an error
 // or not.
 func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	for _, success := range []bool{true, false} {
 		expCalls := []roachpb.Method{roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
 		var calls []roachpb.Method
@@ -411,7 +411,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 // TestAbortMutatingTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
 func TestAbortMutatingTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var calls []roachpb.Method
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -438,7 +438,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 // TestRunTransactionRetryOnErrors verifies that the transaction
 // is retried on the correct errors.
 func TestRunTransactionRetryOnErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		err   error
 		retry bool // Expect retry?
@@ -489,7 +489,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 // TestAbortTransactionOnCommitErrors verifies that non-exec transactions are
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		err   error
@@ -541,7 +541,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 // TestTransactionStatus verifies that transactions always have their
 // status updated correctly.
 func TestTransactionStatus(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	db := NewDB(newTestSender(nil, nil))
 	for _, write := range []bool{true, false} {
@@ -576,7 +576,7 @@ func TestTransactionStatus(t *testing.T) {
 }
 
 func TestCommitInBatchWithResponse(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 	txn := NewTxn(*db)
 	b := &Batch{}

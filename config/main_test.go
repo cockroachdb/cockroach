@@ -16,14 +16,4 @@
 
 package config_test
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/util/leaktest"
-)
-
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
-}

@@ -26,7 +26,7 @@ import (
 
 // TestBatchPrevNext tests batch.{Prev,Next}.
 func TestBatchPrevNext(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	span := func(strs ...string) []roachpb.Span {
 		var r []roachpb.Span
 		for i, str := range strs {

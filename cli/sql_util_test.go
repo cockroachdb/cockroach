@@ -30,7 +30,7 @@ import (
 )
 
 func TestRunQuery(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(nil)
 	defer s.Stop()
 

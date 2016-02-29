@@ -45,7 +45,7 @@ var (
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	gcA := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 1})
 	gcB := NewGarbageCollector(makeTS(0, 0), config.GCPolicy{TTLSeconds: 2})
 	n := []byte("data")

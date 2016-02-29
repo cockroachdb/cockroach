@@ -24,7 +24,7 @@ import (
 )
 
 func TestNodeSetMaxSize(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes := makeNodeSet(1)
 	if !nodes.hasSpace() {
 		t.Error("set should have space")
@@ -36,7 +36,7 @@ func TestNodeSetMaxSize(t *testing.T) {
 }
 
 func TestNodeSetHasNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes := makeNodeSet(2)
 	node := roachpb.NodeID(1)
 	if nodes.hasNode(node) {
@@ -50,7 +50,7 @@ func TestNodeSetHasNode(t *testing.T) {
 }
 
 func TestNodeSetAddAndRemoveNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes := makeNodeSet(2)
 	node0 := roachpb.NodeID(1)
 	node1 := roachpb.NodeID(2)
@@ -70,7 +70,7 @@ func TestNodeSetAddAndRemoveNode(t *testing.T) {
 }
 
 func TestNodeSetFilter(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes1 := makeNodeSet(2)
 	node0 := roachpb.NodeID(1)
 	node1 := roachpb.NodeID(2)
@@ -89,7 +89,7 @@ func TestNodeSetFilter(t *testing.T) {
 }
 
 func TestNodeSetAsSlice(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes := makeNodeSet(2)
 	node0 := roachpb.NodeID(1)
 	node1 := roachpb.NodeID(2)

@@ -37,7 +37,7 @@ var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
 // TestZeroDuration verifies that specifying a zero duration sets
 // TTLStamp to max int64.
 func TestZeroDuration(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -49,7 +49,7 @@ func TestZeroDuration(t *testing.T) {
 
 // TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -69,7 +69,7 @@ func TestNewInfo(t *testing.T) {
 // TestInfoStoreGetInfo adds an info, and makes sure it can be fetched
 // via getInfo. Also, verifies a non-existent info can't be fetched.
 func TestInfoStoreGetInfo(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -94,7 +94,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 
 // Verify TTL is respected on info fetched by key.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -111,7 +111,7 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 // Add infos using same key, same and lesser timestamp; verify no
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -136,7 +136,7 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 
 // Add infos using same key, same timestamp; verify no replacement.
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -150,7 +150,7 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 // Verify that adding two infos with different hops but same keys
 // always chooses the minimum hops.
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -216,7 +216,7 @@ func createTestInfoStore(t *testing.T) *infoStore {
 
 // Check infostore delta based on info high water timestamps.
 func TestInfoStoreDelta(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	is := createTestInfoStore(t)
 
 	// Verify deltas with successive high water timestamps & min hops.
@@ -255,7 +255,7 @@ func TestInfoStoreDelta(t *testing.T) {
 // TestInfoStoreMostDistant verifies selection of most distant node &
 // associated hops.
 func TestInfoStoreMostDistant(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes := []roachpb.NodeID{
 		roachpb.NodeID(1),
 		roachpb.NodeID(2),
@@ -285,7 +285,7 @@ func TestInfoStoreMostDistant(t *testing.T) {
 // TestLeastUseful verifies that the least-contributing peer node
 // can be determined.
 func TestLeastUseful(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	nodes := []roachpb.NodeID{
 		roachpb.NodeID(1),
 		roachpb.NodeID(2),
@@ -360,7 +360,7 @@ func (cr *callbackRecord) Keys() []string {
 }
 
 func TestCallbacks(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
@@ -467,7 +467,7 @@ func TestCallbacks(t *testing.T) {
 // registered if there are items which match its regexp in the
 // infostore.
 func TestRegisterCallback(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)

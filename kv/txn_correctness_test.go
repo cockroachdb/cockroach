@@ -297,7 +297,7 @@ func enumerateIsolations(numTxns int, isolations []roachpb.IsolationType) [][]ro
 }
 
 func TestEnumerateIsolations(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	SSI := roachpb.SERIALIZABLE
 	SI := roachpb.SNAPSHOT
 	expIsolations := [][]roachpb.IsolationType{
@@ -339,7 +339,7 @@ func enumeratePriorities(priorities []int32) [][]int32 {
 }
 
 func TestEnumeratePriorities(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	p1 := int32(1)
 	p2 := int32(2)
 	p3 := int32(3)
@@ -387,7 +387,7 @@ func enumerateHistories(txns [][]*cmd, symmetric bool) [][]*cmd {
 }
 
 func TestEnumerateHistories(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	txns := parseHistories([]string{"I(A) C", "I(A) C"}, t)
 	enum := enumerateHistories(txns, false)
 	enumStrs := make([]string, len(enum))
@@ -658,7 +658,7 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 // Inconsistent analysis would typically fail with a history such as:
 //    R1(A) R2(B) W2(B) R2(A) W2(A) R1(B) C1 C2
 func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	txn1 := "R(A) R(B) SUM(C) C"
 	txn2 := "I(A) I(B) C"
 	verify := &verifier{
@@ -690,7 +690,7 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 // READ_COMMITTED and in practice requires REPEATABLE_READ to avoid.
 //   R1(A) R2(A) I1(A) C1 I2(A) C2
 func TestTxnDBLostUpdateAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	txn := "R(A) I(A) C"
 	verify := &verifier{
 		history: "R(A)",
@@ -717,7 +717,7 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 // Phantom reads would typically fail with a history such as:
 //   SC1(A-C) I2(B) C2 SC1(A-C) C1
 func TestTxnDBPhantomReadAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	txn1 := "SC(A-C) SUM(D) SC(A-C) SUM(E) C"
 	txn2 := "I(B) C"
 	verify := &verifier{
@@ -740,7 +740,7 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 // Phantom deletes would typically fail with a history such as:
 //   DR1(A-C) I2(B) C2 SC1(A-C) C1
 func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	txn1 := "DR(A-C) SC(A-C) SUM(D) C"
 	txn2 := "I(B) C"
 	verify := &verifier{
@@ -775,7 +775,7 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 // 3). Snapshot isolation, however, may not notice any conflict (see
 // history above) and may set A=1, B=1.
 func TestTxnDBWriteSkewAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	txn1 := "SC(A-C) I(A) SUM(A) C"
 	txn2 := "SC(A-C) I(B) SUM(B) C"
 	verify := &verifier{

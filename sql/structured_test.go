@@ -41,7 +41,7 @@ func makeIndexDescriptor(name string, columnNames []string) sql.IndexDescriptor 
 }
 
 func TestAllocateIDs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	desc := sql.TableDescriptor{
 		ID:       keys.MaxReservedDescID + 2,
@@ -108,7 +108,7 @@ func TestAllocateIDs(t *testing.T) {
 }
 
 func TestValidateTableDesc(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		err  string
@@ -344,7 +344,7 @@ func TestValidateTableDesc(t *testing.T) {
 }
 
 func TestColumnTypeSQLString(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		colType     sql.ColumnType

@@ -19,8 +19,8 @@ sed -i'~' -e '
     # Skip past the test declaration
     n
     # If the next line does not call AfterTest, insert it.
-    /leaktest.AfterTest/! i\
-      defer leaktest.AfterTest(t)
+    /leaktest.AfterTest(t)()/! i\
+      defer leaktest.AfterTest(t)()
   }
 ' $@
 

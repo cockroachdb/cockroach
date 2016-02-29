@@ -25,7 +25,7 @@ import (
 )
 
 func TestLeaseSet(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	type data struct {
 		version    DescriptorVersion

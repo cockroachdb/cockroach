@@ -176,7 +176,7 @@ func (c cliTest) RunWithArgs(a []string) {
 }
 
 func TestQuit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	c := newCLITest()
 	c.Run("quit")
 	// Wait until this async command stops the server.
@@ -659,7 +659,7 @@ func Example_user() {
 // TestFlagUsage is a basic test to make sure the fragile
 // help template does not break.
 func TestFlagUsage(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Override os.Stdout with our own.
 	old := os.Stdout
@@ -762,7 +762,7 @@ func Example_node() {
 }
 
 func TestNodeStatus(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	start := time.Now()
 	c := newCLITest()
@@ -919,7 +919,7 @@ func extractFields(line string) ([]string, error) {
 }
 
 func TestGenMan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Generate man pages in a temp directory.
 	manpath, err := ioutil.TempDir("", "TestGenMan")
@@ -952,7 +952,7 @@ func TestGenMan(t *testing.T) {
 }
 
 func TestGenAutocomplete(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Get a unique path to which we can write our autocomplete files.
 	acdir, err := ioutil.TempDir("", "TestGenAutoComplete")

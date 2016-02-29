@@ -84,7 +84,7 @@ func makeTS(walltime int64, logical int32) roachpb.Timestamp {
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
 func TestTxnCoordSenderAddRequest(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
@@ -125,7 +125,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
 // not-nil Txn with empty ID gets a new transaction initialized.
 func TestTxnCoordSenderBeginTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
@@ -157,7 +157,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 // TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
@@ -181,7 +181,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 // overlapping key ranges causes the coordinator to keep track only of
 // the minimum number of ranges.
 func TestTxnCoordSenderKeyRanges(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ranges := []struct {
 		start, end roachpb.Key
 	}{
@@ -226,7 +226,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 // TestTxnCoordSenderMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
 func TestTxnCoordSenderMultipleTxns(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
@@ -249,7 +249,7 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 // TestTxnCoordSenderHeartbeat verifies periodic heartbeat of the
 // transaction record.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
@@ -326,7 +326,7 @@ func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t 
 // sends resolve write intent requests and removes the transaction
 // from the txns map.
 func TestTxnCoordSenderEndTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -386,7 +386,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 // TestTxnCoordSenderAddIntentOnError verifies that intents are tracked if
 // the transaction is, even on error.
 func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -418,7 +418,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 // TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -455,7 +455,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 // TestTxnCoordSenderGC verifies that the coordinator cleans up extant
 // transactions and intents after the lastUpdateNanos exceeds the timeout.
 func TestTxnCoordSenderGC(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -492,7 +492,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	origTS := makeTS(123, 0)
 	testCases := []struct {
 		pErr             *roachpb.Error
@@ -608,7 +608,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 // TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
 // enforce that only one coordinator can be used for transactional writes.
 func TestTxnMultipleCoord(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -660,7 +660,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 // holds the writing portion of a Txn (including EndTransaction) does not
 // launch a heartbeat goroutine at all.
 func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -695,7 +695,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 // returns an error but also indicates a Writing transaction, the coordinator
 // tracks it just like a successful request.
 func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -731,7 +731,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 // TestTxnCoordSenderReleaseTxnMeta verifies that TxnCoordSender releases the
 // txnMetadata after the txn has committed succeed.
 func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	defer teardownHeartbeats(s.Sender)
@@ -815,7 +815,7 @@ func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) 
 // because it took far too much mucking with TxnCoordSender internals to mock out the sender
 // function as other tests do.
 func TestTxnCommit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	_, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
@@ -846,7 +846,7 @@ func TestTxnCommit(t *testing.T) {
 }
 
 func TestTxnAbandonCount(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
@@ -879,7 +879,7 @@ func TestTxnAbandonCount(t *testing.T) {
 }
 
 func TestTxnAbortCount(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	_, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 
@@ -908,7 +908,7 @@ func TestTxnAbortCount(t *testing.T) {
 }
 
 func TestTxnRestartCount(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	_, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 
@@ -937,7 +937,7 @@ func TestTxnRestartCount(t *testing.T) {
 }
 
 func TestTxnDurations(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual, sender, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 

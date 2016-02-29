@@ -692,7 +692,7 @@ func (t *logicTest) traceStop() {
 }
 
 func TestLogic(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer csql.TestingWaitForMetadata()()
 
 	// TODO(marc): splitting ranges at table boundaries causes
