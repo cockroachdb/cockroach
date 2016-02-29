@@ -13,11 +13,11 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
-//
-// This file implements the necessary machinery to allow filter expressions to
-// be evaluated at the scanNode level.
 
 package sql
+
+// This file implements the necessary machinery to allow filter expressions to
+// be evaluated at the scanNode level.
 
 import (
 	"fmt"
@@ -53,12 +53,11 @@ func (q *scanQValue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return q.scan.row[q.colIdx].Eval(ctx)
 }
 
-func (q *scanQValue) initQValue(s *scanNode, colIdx int) {
+func (s *scanNode) makeQValue(colIdx int) scanQValue {
 	if colIdx < 0 || colIdx >= len(s.row) {
 		panic(fmt.Sprintf("invalid colIdx %d (columns: %d)", colIdx, len(s.row)))
 	}
-	q.scan = s
-	q.colIdx = colIdx
+	return scanQValue{s, colIdx}
 }
 
 func (s *scanNode) getQValue(colIdx int) *scanQValue {

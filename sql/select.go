@@ -211,7 +211,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 		scan.setNeededColumns(neededCols)
 
 		// Compute a filter expression for the scan node.
-		conv := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
+		convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
 			qval := expr.(*qvalue)
 			if qval.colRef.table != &s.table {
 				// TODO(radu): when we will support multiple tables, this will be a valid
@@ -221,7 +221,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 			return true, scan.getQValue(qval.colRef.colIdx)
 		}
 
-		scan.filter, s.filter = splitFilter(s.filter, conv)
+		scan.filter, s.filter = splitFilter(s.filter, convFunc)
 		if s.filter != nil {
 			// Right now we support only one table, so the entire expression should be
 			// converted.

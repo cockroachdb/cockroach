@@ -337,7 +337,7 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 	n.row = make([]parser.Datum, len(visibleCols))
 	n.qvals = make([]scanQValue, len(visibleCols))
 	for i := range n.qvals {
-		n.qvals[i].initQValue(n, i)
+		n.qvals[i] = n.makeQValue(i)
 	}
 }
 
