@@ -78,16 +78,6 @@ func TestBatchSplit(t *testing.T) {
 	}
 }
 
-func TestFlagsToStr(t *testing.T) {
-	var ba BatchRequest
-	ba.Add(&PutRequest{})
-	ba.Add(&AdminSplitRequest{})
-	exp := "AdWrAl"
-	if act := flagsToStr(ba.flags()); act != exp {
-		t.Fatalf("expected %s, got %s", exp, act)
-	}
-}
-
 func TestBatchRequestGetArg(t *testing.T) {
 	testCases := []struct {
 		bu         []RequestUnion
