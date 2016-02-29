@@ -660,3 +660,11 @@ message BatchResponse {
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
+
+service Node {
+  rpc Batch (BatchRequest) returns (BatchResponse) {}
+}
+
+service Server {
+  rpc Batch (BatchRequest) returns (BatchResponse) {}
+}

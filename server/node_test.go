@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -53,20 +52,19 @@ import (
 // of engines. The server, clock and node are returned. If gossipBS is
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
+	*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
 	ctx := storage.StoreContext{}
 
 	stopper := stop.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, ctx.Clock, stopper)
 	ctx.ScanInterval = 10 * time.Hour
-	rpcServer := rpc.NewServer(nodeRPCContext)
-	grpcServer := grpc.NewServer()
+	grpcServer := rpc.NewServer(nodeRPCContext)
 	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, grpcutil.GRPCHandlerFunc(grpcServer, rpcServer), addr, tlsConfig)
+	ln, err := util.ListenAndServe(stopper, grpcServer, addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,17 +97,17 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper, kv.NewTxnMetrics(metric.NewRegistry()))
-	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
+	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, net.Addr, *Node, *stop.Stopper) {
-	rpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(rpcServer, addr, engines, roachpb.Attributes{}); err != nil {
+	*grpc.Server, net.Addr, *Node, *stop.Stopper) {
+	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
+	if err := node.start(grpcServer, addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
-	return rpcServer, addr, node, stopper
+	return grpcServer, addr, node, stopper
 }
 
 func formatKeys(keys []roachpb.Key) string {
@@ -273,9 +271,9 @@ func TestNodeJoinSelf(t *testing.T) {
 	defer engineStopper.Stop()
 	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
 	addr := util.CreateTestAddr("tcp")
-	rpcServer, addr, _, node, stopper := createTestNode(addr, engines, addr, t)
+	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, addr, t)
 	defer stopper.Stop()
-	err := node.start(rpcServer, addr, engines, roachpb.Attributes{})
+	err := node.start(grpcServer, addr, engines, roachpb.Attributes{})
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
 	}

@@ -141,7 +141,7 @@ func RunCreateCACert(certsDir string, keySize int) error {
 // RunCreateNodeCert is the entry-point from the command-line interface
 // to generate node certs and keys:
 // - node.server.{crt,key}: server cert with list of dns/ip addresses
-// - node.client.{crt,key}: client cert with "node" as the Common Name.
+// - node.client.{crt,key}: client cert with NodeUser as the Common Name.
 // We intentionally generate distinct keys for each cert.
 func RunCreateNodeCert(certsDir string, keySize int, hosts []string) error {
 	if certsDir == "" {

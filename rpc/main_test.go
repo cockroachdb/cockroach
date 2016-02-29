@@ -18,16 +18,16 @@ package rpc
 
 import (
 	"net"
-	"os"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -37,42 +37,17 @@ func init() {
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
-func TestMain(m *testing.M) {
-	defer func(retryOpts retry.Options) {
-		clientRetryOptions = retryOpts
-	}(clientRetryOptions)
-
-	clientRetryOptions = retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     1 * time.Millisecond,
-	}
-
-	os.Exit(m.Run())
-}
-
 // newNodeTestContext returns a rpc.Context for testing.
 // It is meant to be used by nodes.
 func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
-	if clock == nil {
-		clock = hlc.NewClock(hlc.UnixNano)
-	}
 	ctx := NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
 	ctx.HeartbeatInterval = 10 * time.Millisecond
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	return ctx
 }
 
-func newTestServer(t *testing.T, ctx *Context, manual bool) (*Server, net.Listener) {
-	var s *Server
-	if manual {
-		s = &Server{
-			insecure:    ctx.Insecure,
-			activeConns: make(map[net.Conn]struct{}),
-			methods:     map[string]method{},
-		}
-	} else {
-		s = NewServer(ctx)
-	}
+func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
+	s := NewServer(ctx)
 
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {

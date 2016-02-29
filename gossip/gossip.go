@@ -168,6 +168,7 @@ type Gossip struct {
 func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
+		rpcContext:        rpcContext,
 		server:            newServer(stopper),
 		outgoing:          makeNodeSet(minPeers),
 		bootstrapping:     map[string]struct{}{},
@@ -182,16 +183,6 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
 	g.SetResolvers(resolvers)
-	// The gossip RPC context doesn't measure clock offsets, isn't
-	// shared with the other RPC clients which the node may be using,
-	// and disables reconnects to make it possible to know for certain
-	// which other nodes in the cluster are incoming via gossip.
-	if rpcContext != nil {
-		g.rpcContext = rpcContext.Copy()
-		g.rpcContext.DisableCache = true
-		g.rpcContext.DisableReconnects = true
-		g.rpcContext.RemoteClocks = nil
-	}
 
 	// Add ourselves as a SystemConfig watcher.
 	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)

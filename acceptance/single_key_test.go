@@ -39,7 +39,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	initDB, initDBStopper := makeClient(t, c.ConnString(0))
+	initDB, initDBStopper := c.NewClient(t, 0)
 	defer initDBStopper.Stop()
 	if err := initDB.Put(key, 0); err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < num; i++ {
-		db, dbStopper := makeClient(t, c.ConnString(i))
+		db, dbStopper := c.NewClient(t, i)
 		defer dbStopper.Stop()
 		go func() {
 			var r result

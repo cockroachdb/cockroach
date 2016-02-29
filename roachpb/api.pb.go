@@ -127,6 +127,11 @@ import cockroach_util_tracing "github.com/cockroachdb/cockroach/util/tracing"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1076,6 +1081,125 @@ func init() {
 	proto.RegisterEnum("cockroach.roachpb.ReadConsistencyType", ReadConsistencyType_name, ReadConsistencyType_value)
 	proto.RegisterEnum("cockroach.roachpb.PushTxnType", PushTxnType_name, PushTxnType_value)
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for Node service
+
+type NodeClient interface {
+	Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error)
+}
+
+type nodeClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewNodeClient(cc *grpc.ClientConn) NodeClient {
+	return &nodeClient{cc}
+}
+
+func (c *nodeClient) Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error) {
+	out := new(BatchResponse)
+	err := grpc.Invoke(ctx, "/cockroach.roachpb.Node/Batch", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Node service
+
+type NodeServer interface {
+	Batch(context.Context, *BatchRequest) (*BatchResponse, error)
+}
+
+func RegisterNodeServer(s *grpc.Server, srv NodeServer) {
+	s.RegisterService(&_Node_serviceDesc, srv)
+}
+
+func _Node_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(BatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(NodeServer).Batch(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _Node_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.roachpb.Node",
+	HandlerType: (*NodeServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Batch",
+			Handler:    _Node_Batch_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
+
+// Client API for Server service
+
+type ServerClient interface {
+	Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error)
+}
+
+type serverClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewServerClient(cc *grpc.ClientConn) ServerClient {
+	return &serverClient{cc}
+}
+
+func (c *serverClient) Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error) {
+	out := new(BatchResponse)
+	err := grpc.Invoke(ctx, "/cockroach.roachpb.Server/Batch", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Server service
+
+type ServerServer interface {
+	Batch(context.Context, *BatchRequest) (*BatchResponse, error)
+}
+
+func RegisterServerServer(s *grpc.Server, srv ServerServer) {
+	s.RegisterService(&_Server_serviceDesc, srv)
+}
+
+func _Server_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(BatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(ServerServer).Batch(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _Server_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.roachpb.Server",
+	HandlerType: (*ServerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Batch",
+			Handler:    _Server_Batch_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
+
 func (m *ResponseHeader) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
