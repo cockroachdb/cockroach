@@ -19,7 +19,8 @@ package rpc
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -51,11 +52,9 @@ func TestHeartbeatReply(t *testing.T) {
 	request := &PingRequest{
 		Ping: "testPing",
 	}
-	var response *PingResponse
-	if responseI, err := heartbeat.Ping(request); err != nil {
+	response, err := heartbeat.Ping(context.Background(), request)
+	if err != nil {
 		t.Fatal(err)
-	} else {
-		response = responseI.(*PingResponse)
 	}
 
 	if response.Pong != request.Ping {
@@ -85,17 +84,14 @@ func TestManualHeartbeat(t *testing.T) {
 		Ping: "testManual",
 	}
 	manualHeartbeat.ready <- struct{}{}
-	var manualResponse *PingResponse
-	var regularResponse *PingResponse
-	if resp, err := regularHeartbeat.Ping(request); err != nil {
+	ctx := context.Background()
+	regularResponse, err := regularHeartbeat.Ping(ctx, request)
+	if err != nil {
 		t.Fatal(err)
-	} else {
-		regularResponse = resp.(*PingResponse)
 	}
-	if resp, err := manualHeartbeat.Ping(request); err != nil {
+	manualResponse, err := manualHeartbeat.Ping(ctx, request)
+	if err != nil {
 		t.Fatal(err)
-	} else {
-		manualResponse = resp.(*PingResponse)
 	}
 
 	// Ensure that the response is the same as with a normal heartbeat.
@@ -116,34 +112,22 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	defer stopper.Stop()
 
 	ctx := newNodeTestContext(nil, stopper)
+
 	_, ln := newTestServer(t, ctx, false)
+	remoteAddr := ln.Addr().String()
+	ctx.RemoteClocks.offsets[remoteAddr] = RemoteOffset{
+		Offset:      10,
+		Uncertainty: 5,
+		MeasuredAt:  20,
+	}
 	// Create a client and set its remote offset. On first heartbeat,
-	// it will update the server's remote clocks map. We create the
-	// client manually here to allow us to set the remote offset
-	// before the first heartbeat.
-	tlsConfig, err := ctx.GetClientTLSConfig()
+	// it will update the server's remote clocks map.
+	_, err := ctx.GRPCDial(remoteAddr)
 	if err != nil {
-		t.Fatal(err)
-	}
-	serverAddr := ln.Addr()
-	client := &Client{
-		Closed:       make(chan struct{}),
-		addr:         util.MakeUnresolvedAddr(serverAddr.Network(), serverAddr.String()),
-		tlsConfig:    tlsConfig,
-		clock:        ctx.localClock,
-		remoteClocks: ctx.RemoteClocks,
-		remoteOffset: RemoteOffset{
-			Offset:      10,
-			Uncertainty: 5,
-			MeasuredAt:  20,
-		},
-	}
-	if err = client.connect(); err != nil {
 		t.Fatal(err)
 	}
 
 	ctx.RemoteClocks.mu.Lock()
-	remoteAddr := client.RemoteAddr().String()
 	o := ctx.RemoteClocks.offsets[remoteAddr]
 	ctx.RemoteClocks.mu.Unlock()
 	expServerOffset := RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}

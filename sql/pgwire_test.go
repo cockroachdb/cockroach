@@ -337,7 +337,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Results("d"),
 		},
 		"SHOW GRANTS ON system.users": {
-			base.Results("users", "root", "DELETE,GRANT,INSERT,SELECT,UPDATE"),
+			base.Results("users", security.RootUser, "DELETE,GRANT,INSERT,SELECT,UPDATE"),
 		},
 		"SHOW INDEX FROM system.users": {
 			base.Results("users", "primary", true, 1, "username", "ASC", false),

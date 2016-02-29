@@ -18,11 +18,12 @@ package kv_test
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -35,12 +36,15 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 }
 
 func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
-	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		user, addr, security.EmbeddedCertsDir))
+	var ctx base.Context
+	ctx.InitDefaults()
+	ctx.User = user
+	ctx.Certs = security.EmbeddedCertsDir
+	sender, err := client.NewSender(rpc.NewContext(&ctx, nil, stopper), addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db
+	return client.NewDB(sender)
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
@@ -247,7 +251,7 @@ func TestAuthentication(t *testing.T) {
 	b := &client.Batch{}
 	b.InternalAddRequest(arg)
 
-	// Create a "node" client and call Run() on it which lets us build
+	// Create a security.NodeUser client and call Run() on it which lets us build
 	// our own request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
 	if pErr := db1.Run(b); pErr != nil {

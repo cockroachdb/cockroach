@@ -29,18 +29,16 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // startGossip creates and starts a gossip instance.
 func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Gossip {
-	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	addr := util.CreateTestAddr("tcp")
-	server := grpc.NewServer()
+	server := rpc.NewServer(rpcContext)
 	tlsConfig, err := rpcContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -101,11 +99,10 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 // faked gossip service just for check the client message.
 func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServer, stopper *stop.Stopper) {
 	stopper = stop.NewStopper()
-	lclock := hlc.NewClock(hlc.UnixNano)
-	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	laddr := util.CreateTestAddr("tcp")
-	lserver := grpc.NewServer()
+	lserver := rpc.NewServer(lRPCContext)
 	lTLSConfig, err := lRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -117,11 +114,10 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	local = New(lRPCContext, TestBootstrap, stopper)
 	local.start(lserver, lln.Addr())
 
-	rclock := hlc.NewClock(hlc.UnixNano)
-	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, rclock, stopper)
+	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	raddr := util.CreateTestAddr("tcp")
-	rserver := grpc.NewServer()
+	rserver := rpc.NewServer(rRPCContext)
 	rTLSConfig, err := rRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -162,8 +158,7 @@ func TestClientGossip(t *testing.T) {
 	}
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
-	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
 	util.SucceedsSoon(t, func() error {
@@ -188,8 +183,7 @@ func TestClientNodeID(t *testing.T) {
 	disconnected := make(chan *client, 1)
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
-	lclock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	// Start a gossip client.
 	c := newClient(&remote.nodeAddr)
@@ -323,11 +317,10 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	var g []*Gossip
 	var gossipAddr string
 	for i := 0; i < 3; i++ {
-		clock := hlc.NewClock(hlc.UnixNano)
-		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 		addr := util.CreateTestAddr("tcp")
-		server := grpc.NewServer()
+		server := rpc.NewServer(RPCContext)
 		TLSConfig, err := RPCContext.GetServerTLSConfig()
 		if err != nil {
 			t.Fatal(err)

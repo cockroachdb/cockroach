@@ -19,17 +19,13 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"net/url"
-	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
@@ -196,71 +192,6 @@ func NewDBWithPriority(sender Sender, userPriority roachpb.UserPriority) *DB {
 	db := NewDB(sender)
 	db.userPriority = userPriority
 	return db
-}
-
-// TODO(pmattis): Allow setting the sender/txn retry options.
-
-// Open creates a new database handle to the cockroach cluster specified by
-// addr. The cluster is identified by a URL with the format:
-//
-//   [<sender>:]//[<user>@]<host>:<port>[?certs=<dir>,priority=<val>]
-//
-// The URL scheme (<sender>) specifies which transport to use for talking to
-// the cockroach cluster. Currently allowable values are: http, https, rpc,
-// rpcs. The rpc and rpcs senders use a variant of Go's builtin rpc library for
-// communication with the cluster. This protocol is lower overhead and more
-// efficient than http. The decision between the encrypted (https, rpcs) and
-// unencrypted senders (http, rpc) depends on the settings of the cluster. A
-// given cluster supports either encrypted or unencrypted traffic, but not
-// both.
-//
-// If not specified, the <user> field defaults to "root".
-//
-// The certs parameter can be used to override the default directory to use for
-// client certificates. In tests, the directory "test_certs" uses the embedded
-// test certificates.
-//
-// The priority parameter can be used to override the default priority for
-// operations.
-func Open(stopper *stop.Stopper, addr string) (*DB, error) {
-	u, err := url.Parse(addr)
-	if err != nil {
-		return nil, err
-	}
-	ctx := &base.Context{}
-	ctx.InitDefaults()
-	if u.User != nil {
-		ctx.User = u.User.Username()
-	}
-
-	q := u.Query()
-	if dir := q["certs"]; len(dir) > 0 {
-		ctx.Certs = dir[0]
-	}
-
-	sender, err := newSender(u, ctx, stopper)
-	if err != nil {
-		return nil, err
-	}
-	if sender == nil {
-		return nil, fmt.Errorf("\"%s\" no sender specified", addr)
-	}
-
-	db := &DB{
-		sender:          sender,
-		userPriority:    roachpb.NormalUserPriority,
-		txnRetryOptions: DefaultTxnRetryOptions,
-	}
-
-	if priority := q["priority"]; len(priority) > 0 {
-		p, err := strconv.ParseFloat(priority[0], 64)
-		if err != nil {
-			return nil, err
-		}
-		db.userPriority = roachpb.UserPriority(p)
-	}
-
-	return db, nil
 }
 
 // NewBatch creates and returns a new empty batch object for use with the DB.

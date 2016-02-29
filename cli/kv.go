@@ -22,9 +22,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/stop"
 
@@ -33,20 +35,17 @@ import (
 
 func makeDBClient() (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
-
-	// TODO(marc): KV endpoints are now restricted to node users.
-	// This should probably be made more explicit.
-	db, err := client.Open(stopper, fmt.Sprintf(
-		"%s://%s@%s?certs=%s",
-		cliContext.RPCRequestScheme(),
-		security.NodeUser,
-		cliContext.Addr,
-		cliContext.Certs))
+	context := &base.Context{
+		User:     security.NodeUser,
+		Certs:    cliContext.Certs,
+		Insecure: cliContext.Insecure,
+	}
+	sender, err := client.NewSender(rpc.NewContext(context, nil, stopper), cliContext.Addr)
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)
 	}
-	return db, stopper
+	return client.NewDB(sender), stopper
 }
 
 // unquoteArg unquotes the provided argument using Go double-quoted
