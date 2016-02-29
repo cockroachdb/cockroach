@@ -179,13 +179,6 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 		}
 		return
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			if log.V(1) {
-				log.Errorf("failed to close client connection to node %d at %s: %s", nodeID, addr, err)
-			}
-		}
-	}()
 	client := NewMultiRaftClient(conn)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

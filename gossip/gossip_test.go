@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -38,9 +37,9 @@ import (
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	rpcContext := rpc.NewContext(nil, nil, stopper)
 	g := New(rpcContext, TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))

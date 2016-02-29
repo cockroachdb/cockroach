@@ -73,11 +73,6 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 			log.Errorf("failed to dial: %v", err)
 			return
 		}
-		defer func() {
-			if err := conn.Close(); err != nil {
-				log.Error(err)
-			}
-		}()
 
 		// Start gossiping.
 		if err := c.gossip(g, NewGossipClient(conn), stopper); err != nil {

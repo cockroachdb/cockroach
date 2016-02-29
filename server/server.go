@@ -24,7 +24,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/rpc"
 	"os"
 	"strings"
 	"sync"
@@ -42,7 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
-	crpc "github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/driver"
@@ -73,8 +73,7 @@ type Server struct {
 	mux                 *http.ServeMux
 	httpReady           chan struct{}
 	clock               *hlc.Clock
-	rpcContext          *crpc.Context
-	rpc                 *crpc.Server
+	rpcContext          *rpc.Context
 	grpc                *grpc.Server
 	gossip              *gossip.Gossip
 	storePool           *storage.StorePool
@@ -126,12 +125,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	s.rpcContext = crpc.NewContext(&ctx.Context, s.clock, stopper)
+	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
 	stopper.RunWorker(func() {
 		s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
 	})
-
-	s.rpc = crpc.NewServer(s.rpcContext)
 
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
@@ -165,9 +162,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
-	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
-		return nil, err
-	}
+	roachpb.RegisterServerServer(s.grpc, s.kvDB)
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -293,11 +288,9 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	s.rpcContext.SetLocalServer(s.rpc, s.ctx.Addr)
-
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
-	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(s.grpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -327,8 +320,6 @@ func (s *Server) Start() error {
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
-
 	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,

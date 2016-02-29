@@ -24,7 +24,6 @@ import (
 	"sort"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -61,7 +60,7 @@ type Cluster struct {
 // number of nodes supplied. Each node will have one store to start.
 func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script Script, rand *rand.Rand) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
+	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	storePool := storage.NewStorePool(g, clock, storage.TestTimeUntilStoreDeadOff, stopper)
 	c := &Cluster{
