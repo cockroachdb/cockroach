@@ -396,7 +396,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsSoon(t, func() error {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)

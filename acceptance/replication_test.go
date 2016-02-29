@@ -49,7 +49,7 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 
 	log.Infof("waiting for first range to have %d replicas", wantedReplicas)
 
-	util.SucceedsWithin(t, d, func() error {
+	util.SucceedsSoon(t, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")

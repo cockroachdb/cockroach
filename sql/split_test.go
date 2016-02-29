@@ -29,8 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-const rangeSplitTimeout = 10 * time.Second
-
 // getFastScanContext returns a test context with fast scan.
 func getFastScanContext() *server.Context {
 	c := server.NewTestContext()
@@ -87,7 +85,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// We split up to the largest allocated descriptor ID, be it a table
 	// or a database.
-	util.SucceedsWithin(t, rangeSplitTimeout, func() error {
+	util.SucceedsSoon(t, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
 			return err
@@ -114,7 +112,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	util.SucceedsWithin(t, rangeSplitTimeout, func() error {
+	util.SucceedsSoon(t, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
 			return err

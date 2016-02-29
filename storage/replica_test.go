@@ -50,8 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-const runUnmarshalCallbackTimeout = 100 * time.Millisecond
-
 func testRangeDescriptor() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{
 		RangeID:  1,
@@ -182,7 +180,7 @@ func (tc *testContext) Start(t testing.TB) {
 		tc.rangeID = tc.rng.RangeID
 	}
 
-	if err := tc.initConfigs(realRange); err != nil {
+	if err := tc.initConfigs(realRange, t); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -201,7 +199,7 @@ func (tc *testContext) Stop() {
 }
 
 // initConfigs creates default configuration entries.
-func (tc *testContext) initConfigs(realRange bool) error {
+func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	// Put an empty system config into gossip so that gossip callbacks get
 	// run. We're using a fake config, but it's hooked into SystemConfig.
 	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
@@ -209,11 +207,12 @@ func (tc *testContext) initConfigs(realRange bool) error {
 		return err
 	}
 
-	if err := util.IsTrueWithin(func() bool {
-		return tc.gossip.GetSystemConfig() != nil
-	}, runUnmarshalCallbackTimeout); err != nil {
-		return err
-	}
+	util.SucceedsSoon(t, func() error {
+		if tc.gossip.GetSystemConfig() == nil {
+			return util.Errorf("expected non-nil system config")
+		}
+		return nil
+	})
 
 	return nil
 }
@@ -598,21 +597,12 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	verifySystem := func() bool {
-		return util.IsTrueWithin(func() bool {
-			cfg := tc.gossip.GetSystemConfig()
-			if cfg == nil {
-				return false
-			}
-			numValues := len(cfg.Values)
-			return numValues == 1 && cfg.Values[numValues-1].Key.Equal(key)
-		}, runUnmarshalCallbackTimeout) == nil
-	}
-
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if verifySystem() {
-		t.Errorf("not expecting gossip of new config until new lease is acquired")
+	if cfg := tc.gossip.GetSystemConfig(); cfg != nil {
+		if nv := len(cfg.Values); nv == 1 && cfg.Values[nv-1].Key.Equal(key) {
+			t.Errorf("unexpected gossip of system config: %s", cfg)
+		}
 	}
 
 	// Expire our own lease which we automagically acquired due to being
@@ -645,9 +635,21 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 			StoreID:   1,
 		},
 	})
-	if !verifySystem() {
-		t.Errorf("expected gossip of new config")
-	}
+
+	util.SucceedsSoon(t, func() error {
+		cfg := tc.gossip.GetSystemConfig()
+		if cfg == nil {
+			return util.Errorf("expected non-nil system config")
+		}
+		numValues := len(cfg.Values)
+		if numValues != 1 {
+			return util.Errorf("num config values != 1; got %d", numValues)
+		}
+		if k := cfg.Values[numValues-1].Key; !k.Equal(key) {
+			return util.Errorf("invalid key for config value (%q != %q)", k, key)
+		}
+		return nil
+	})
 }
 
 // TestRangeTSCacheLowWaterOnLease verifies that the low water mark is
@@ -2128,7 +2130,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 
 	rightRng, txn := setupResolutionTest(t, tc, key, splitKey)
 
-	util.SucceedsWithin(t, 5*time.Second, func() error {
+	util.SucceedsSoon(t, func() error {
 		if gr, _, err := tc.rng.Get(tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
 			return err
 		} else if gr.Value != nil {
@@ -2179,7 +2181,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	// happened and subsequently issue a bogus Put which is likely to make it
 	// into Raft only after a rogue GCRequest (at least sporadically), which
 	// would trigger a Fatal from the command filter.
-	util.SucceedsWithin(t, 5*time.Second, func() error {
+	util.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&count) == 0 {
 			return util.Errorf("intent resolution not attempted yet")
 		} else if pErr := tc.store.DB().Put("panama", "banana"); pErr != nil {
@@ -3653,7 +3655,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 
 	// In the loop, wait until the intent is aborted. Then write a "real" value
 	// there and verify that we can now load the data as expected.
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsSoon(t, func() error {
 		if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
 			keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {
 			return err
