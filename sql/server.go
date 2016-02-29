@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -118,11 +117,6 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(body); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-// RegisterRPC registers the SQL RPC endpoint.
-func (s Server) RegisterRPC(rpcServer *rpc.Server) error {
-	return rpcServer.RegisterPublic(driver.RPCMethod, s.executeCmd, &driver.Request{})
 }
 
 func (s Server) executeCmd(argsI proto.Message) (proto.Message, error) {
