@@ -17,32 +17,56 @@
 package interval
 
 import (
+	"bytes"
 	"container/list"
 	"fmt"
 )
 
 // RangeGroup represents a set of possibly disjointed Ranges. The
-// primary use case of the interface is to add ranges to the group
-// and observe whether the addition increases the size of the group
-// or not, indicating whether the new range's interval is redundant,
-// or if it is needed for the full composition of the group. Because
+// interface exposes methods to manipulate the group by adding and
+// subtracting Ranges. All methods requiring a Range will panic
+// if the provided range is inverted or empty.
+//
+// One use case of the interface is to add ranges to the group and
+// observe whether the addition increases the size of the group or
+// not, indicating whether the new range's interval is redundant, or
+// if it is needed for the full composition of the group. Because
 // the RangeGroup builds as more ranges are added, insertion order of
 // the ranges is critical. For instance, if two identical ranges are
 // added, only the first to be added with Add will return true, as it
 // will be the only one to expand the group.
+//
+// Another use case of the interface is to add and subtract ranges as
+// needed to the group, allowing the internals of the implementation
+// to coalesce and split ranges when needed to factor the group to
+// its minimum number of disjoint ranges.
 type RangeGroup interface {
 	// Add will attempt to add the provided Range to the RangeGroup,
 	// returning whether the addition increased the range of the group
-	// or not. The method will panic if the provided range is inverted
-	// or empty.
+	// or not.
 	Add(Range) bool
+	// Sub will attempt to remove the provided Range from the RangeGroup,
+	// returning whether the subtraction reduced the range of the group
+	// or not.
+	Sub(Range) bool
+	// Clear clears all ranges from the RangeGroup, resetting it to be
+	// used again.
+	Clear()
+	// Encloses returns whether the provided Range is fully contained
+	// within the group of Ranges in the RangeGroup.
+	Encloses(Range) bool
+	// ForEach calls the provided function on all Ranges stored in
+	// the group. An error is returned indicating whether the callback
+	// function saw an error, whereupon the Range iteration will halt
+	// (potentially prematurely) and the error will be returned from ForEach
+	// itself. If no error is returned from the callback, the method
+	// will visit all Ranges in the group before returning a nil error.
+	ForEach(func(Range) error) error
 	// Len returns the number of Ranges currently within the RangeGroup.
 	// This will always be equal to or less than the number of ranges added,
 	// as ranges that overlap will merge to produce a single larger range.
 	Len() int
-	// Clear clears all ranges from the RangeGroup, resetting it to be
-	// used again.
-	Clear()
+	fmt.Stringer
 }
 
 // rangeList is an implementation of a RangeGroup using a linked
@@ -107,16 +131,113 @@ func (rg *rangeList) Add(r Range) bool {
 	return true
 }
 
-// Len implements RangeGroup. It returns the number of ranges in
-// the rangeList.
-func (rg *rangeList) Len() int {
-	return rg.ll.Len()
+// Sub implements RangeGroup. It iterates over the current ranges in the
+// rangeList to find which overlap with the range to subtract. For all
+// ranges that overlap with the provided range, the overlapping segment of
+// the range is removed. If the provided range fully contains a range in
+// the rangeList, the range in the rangeList will be removed. The method
+// returns whether the subtraction resulted in any decrease to the size
+// of the RangeGroup.
+func (rg *rangeList) Sub(r Range) bool {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	dec := false
+	for e := rg.ll.Front(); e != nil; {
+		er := e.Value.(Range)
+		switch {
+		case er.OverlapExclusive(r):
+			sCmp := er.Start.Compare(r.Start)
+			eCmp := er.End.Compare(r.End)
+
+			delStart := sCmp >= 0
+			delEnd := eCmp <= 0
+			cont := eCmp < 0
+
+			switch {
+			case delStart && delEnd:
+				// Remove the entire range.
+				nextE := e.Next()
+				rg.ll.Remove(e)
+				e = nextE
+			case delStart:
+				// Remove the start of the range by truncating.
+				er.Start = r.End
+				e.Value = er
+				e = e.Next()
+			case delEnd:
+				// Remove the end of the range by truncating.
+				er.End = r.Start
+				e.Value = er
+				e = e.Next()
+			default:
+				// Remove the middle of the range by splitting and truncating.
+				oldEnd := er.End
+				er.End = r.Start
+				e.Value = er
+
+				rSplit := Range{Start: r.End, End: oldEnd}
+				newE := rg.ll.InsertAfter(rSplit, e)
+				e = newE.Next()
+			}
+
+			dec = true
+			if !cont {
+				return dec
+			}
+		case r.End.Compare(er.Start) <= 0:
+			// Past where overlapping ranges would be.
+			return dec
+		default:
+			e = e.Next()
+		}
+	}
+	return dec
 }
 
 // Clear implements RangeGroup. It clears all ranges from the
 // rangeList.
 func (rg *rangeList) Clear() {
 	rg.ll.Init()
+}
+
+// Encloses implements RangeGroup. It returns whether the provided
+// Range is fully contained within the group of Ranges in the rangeList.
+func (rg *rangeList) Encloses(r Range) bool {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	for e := rg.ll.Front(); e != nil; e = e.Next() {
+		er := e.Value.(Range)
+		switch {
+		case contains(er, r):
+			return true
+		case r.End.Compare(er.Start) <= 0:
+			return false
+		}
+	}
+	return false
+}
+
+// ForEach implements RangeGroup. It calls the provided function f
+// on all ranges stored in the rangeList.
+func (rg *rangeList) ForEach(f func(Range) error) error {
+	for e := rg.ll.Front(); e != nil; e = e.Next() {
+		if err := f(e.Value.(Range)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Len implements RangeGroup. It returns the number of ranges in
+// the rangeList.
+func (rg *rangeList) Len() int {
+	return rg.ll.Len()
+}
+
+func (rg *rangeList) String() string {
+	return rgString(rg)
 }
 
 // rangeTree is an implementation of a RangeGroup using an interval
@@ -183,10 +304,10 @@ func (rt *rangeTree) Add(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	key := rt.makeKey(r)
-	overlaps := rt.t.Get(key.r)
+	overlaps := rt.t.Get(r)
 	if len(overlaps) == 0 {
-		if err := rt.insertKey(key); err != nil {
+		key := rt.makeKey(r)
+		if err := rt.t.Insert(&key, false /* !fast */); err != nil {
 			panic(err)
 		}
 		return true
@@ -195,7 +316,7 @@ func (rt *rangeTree) Add(r Range) bool {
 
 	// If a current range fully contains the new range, no
 	// need to add it.
-	if first.Contains(key) {
+	if contains(first.r, r) {
 		return false
 	}
 
@@ -212,11 +333,86 @@ func (rt *rangeTree) Add(r Range) bool {
 	return true
 }
 
-// insertKey inserts the rangeKey into the rangeTree's interval tree.
-// This is split into a helper method so that key will only escape to
-// the heap when the insertion case is needed and Insert is called.
-func (rt *rangeTree) insertKey(key rangeKey) error {
-	return rt.t.Insert(&key, false /* !fast */)
+// Sub implements RangeGroup. It first uses the interval tree to lookup
+// the current ranges which overlap with the range to subtract. For all
+// ranges that overlap with the provided range, the overlapping segment of
+// the range is removed. If the provided range fully contains a range in
+// the rangeTree, the range in the rangeTree will be removed. The method
+// returns whether the subtraction resulted in any decrease to the size
+// of the RangeGroup.
+func (rt *rangeTree) Sub(r Range) bool {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	overlaps := rt.t.Get(r)
+	if len(overlaps) == 0 {
+		return false
+	}
+
+	for _, o := range overlaps {
+		rk := o.(*rangeKey)
+		sCmp := rk.r.Start.Compare(r.Start)
+		eCmp := rk.r.End.Compare(r.End)
+
+		delStart := sCmp >= 0
+		delEnd := eCmp <= 0
+
+		switch {
+		case delStart && delEnd:
+			// Remove the entire range.
+			if err := rt.t.Delete(o, true /* fast */); err != nil {
+				panic(err)
+			}
+		case delStart:
+			// Remove the start of the range by truncating.
+			rk.r.Start = r.End
+		case delEnd:
+			// Remove the end of the range by truncating.
+			rk.r.End = r.Start
+		default:
+			// Remove the middle of the range by splitting.
+			oldEnd := rk.r.End
+			rk.r.End = r.Start
+
+			rSplit := Range{Start: r.End, End: oldEnd}
+			rKey := rt.makeKey(rSplit)
+			if err := rt.t.Insert(&rKey, true /* fast */); err != nil {
+				panic(err)
+			}
+		}
+	}
+	rt.t.AdjustRanges()
+	return true
+}
+
+// Clear implements RangeGroup. It clears all rangeKeys from the rangeTree.
+func (rt *rangeTree) Clear() {
+	rt.t = Tree{Overlapper: Range.OverlapInclusive}
+}
+
+// Encloses implements RangeGroup. It returns whether the provided
+// Range is fully contained within the group of Ranges in the rangeTree.
+func (rt *rangeTree) Encloses(r Range) bool {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	overlaps := rt.t.Get(r)
+	if len(overlaps) != 1 {
+		return false
+	}
+	first := overlaps[0].(*rangeKey)
+	return contains(first.r, r)
+}
+
+// ForEach implements RangeGroup. It calls the provided function f
+// on all ranges stored in the rangeTree.
+func (rt *rangeTree) ForEach(f func(Range) error) error {
+	var err error
+	rt.t.Do(func(i Interface) bool {
+		err = f(i.Range())
+		return err != nil
+	})
+	return err
 }
 
 // Len implements RangeGroup. It returns the number of rangeKeys in
@@ -225,9 +421,8 @@ func (rt *rangeTree) Len() int {
 	return rt.t.Len()
 }
 
-// Clear implements RangeGroup. It clears all rangeKeys from the rangeTree.
-func (rt *rangeTree) Clear() {
-	rt.t = Tree{Overlapper: Range.OverlapInclusive}
+func (rt *rangeTree) String() string {
+	return rgString(rt)
 }
 
 // contains returns if the range in the out range fully contains the
@@ -248,4 +443,23 @@ func merge(l, r Range) Range {
 		end = r.End
 	}
 	return Range{Start: start, End: end}
+}
+
+// rgString returns a string representation of the ranges in a RangeGroup.
+func rgString(rg RangeGroup) string {
+	var buffer bytes.Buffer
+	buffer.WriteRune('[')
+	space := false
+	if err := rg.ForEach(func(r Range) error {
+		if space {
+			buffer.WriteRune(' ')
+		}
+		buffer.WriteString(r.String())
+		space = true
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	buffer.WriteRune(']')
+	return buffer.String()
 }

@@ -9,6 +9,7 @@ package interval
 import (
 	"bytes"
 	"errors"
+	"fmt"
 
 	"github.com/biogo/store/llrb"
 )
@@ -63,6 +64,16 @@ func (r Range) OverlapExclusive(other Range) bool {
 	return r.End.Compare(other.Start) > 0 && r.Start.Compare(other.End) < 0
 }
 
+// Equal returns whether the two ranges are equal.
+func (r Range) Equal(other Range) bool {
+	return r.End.Equal(other.Start) && r.Start.Equal(other.End)
+}
+
+// String implements the Stringer interface.
+func (r Range) String() string {
+	return fmt.Sprintf("[%x-%x)", r.Start, r.End)
+}
+
 // An Interface is a type that can be inserted into a Tree.
 type Interface interface {
 	Range() Range
@@ -84,6 +95,13 @@ type Comparable []byte
 //
 func (c Comparable) Compare(o Comparable) int {
 	return bytes.Compare(c, o)
+}
+
+// Equal returns a boolean indicating if the given comparables are equal to
+// each other. Note that this has measurably better performance than
+// Compare() == 0, so it should be used when only equality state is needed.
+func (c Comparable) Equal(o Comparable) bool {
+	return bytes.Equal(c, o)
 }
 
 // A Node represents a node in a Tree.
