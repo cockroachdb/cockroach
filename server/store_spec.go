@@ -205,15 +205,18 @@ func newStoreSpec(value string) (StoreSpec, error) {
 	return ss, nil
 }
 
-// StoreSpecList is a slice of StoreSpecs that implements pflag's value
+// StoreSpecList contains a slice of StoreSpecs that implements pflag's value
 // interface.
-type StoreSpecList []StoreSpec
+type StoreSpecList struct {
+	Specs   []StoreSpec
+	updated bool // updated is used to determine if specs only contain the default value.
+}
 
 // String returns a string representation of all the StoreSpecs. This is part
 // of pflag's value interface.
 func (ssl StoreSpecList) String() string {
 	var buffer bytes.Buffer
-	for _, ss := range ssl {
+	for _, ss := range ssl.Specs {
 		fmt.Fprintf(&buffer, "--store=%s ", ss)
 	}
 	// Trim the extra space from the end if it exists.
@@ -232,10 +235,15 @@ func (ssl *StoreSpecList) Type() string {
 // Set adds a new value to the StoreSpecValue. It is the important part of
 // pflag's value interface.
 func (ssl *StoreSpecList) Set(value string) error {
-	storeSpec, err := newStoreSpec(value)
+	spec, err := newStoreSpec(value)
 	if err != nil {
 		return err
 	}
-	*ssl = append(*ssl, storeSpec)
+	if !ssl.updated {
+		ssl.Specs = []StoreSpec{spec}
+		ssl.updated = true
+	} else {
+		ssl.Specs = append(ssl.Specs, spec)
+	}
 	return nil
 }
