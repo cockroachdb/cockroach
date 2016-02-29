@@ -17,7 +17,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 
@@ -81,19 +80,7 @@ const (
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
-	flagMax                // sentinel
 )
-
-var flagMap = map[int]string{
-	isAdmin:    "Ad",
-	isRead:     "Rd",
-	isWrite:    "Wr",
-	isTxn:      "", // not useful to print this
-	isTxnWrite: "", // not useful to print this
-	isRange:    "Rg",
-	isReverse:  "Rv",
-	isAlone:    "Al",
-}
 
 // IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {
@@ -140,10 +127,6 @@ type Response interface {
 // into a single one.
 type Combinable interface {
 	Combine(Response) error
-}
-
-func combineError(a, b interface{}) error {
-	return fmt.Errorf("illegal combination: (%T).Combine(%T)", a, b)
 }
 
 // Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
@@ -531,16 +514,6 @@ func NewReverseScan(key, endKey Key, maxResults int64) Request {
 		},
 		MaxResults: maxResults,
 	}
-}
-
-func flagsToStr(flags int) string {
-	var buf bytes.Buffer
-	for flag := 1; flag < flagMax; flag = flag << 1 {
-		if (flags & flag) != 0 {
-			buf.WriteString(flagMap[flag])
-		}
-	}
-	return buf.String()
 }
 
 func (*GetRequest) flags() int                { return isRead | isTxn }
