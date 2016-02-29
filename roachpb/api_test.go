@@ -22,12 +22,12 @@ import (
 )
 
 // TestCombinable tests the correct behaviour of some types that implement
-// the Combinable interface, notably {Scan,DeleteRange}Response and
+// the combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
 func TestCombinable(t *testing.T) {
-	// Test that GetResponse doesn't have anything to do with Combinable.
-	if _, ok := interface{}(&GetResponse{}).(Combinable); ok {
-		t.Fatalf("GetResponse implements Combinable, so presumably all Response types will")
+	// Test that GetResponse doesn't have anything to do with combinable.
+	if _, ok := interface{}(&GetResponse{}).(combinable); ok {
+		t.Fatalf("GetResponse implements combinable, so presumably all Response types will")
 	}
 	// Test that {Scan,DeleteRange}Response properly implement it.
 	sr1 := &ScanResponse{
@@ -37,8 +37,8 @@ func TestCombinable(t *testing.T) {
 		},
 	}
 
-	if _, ok := interface{}(sr1).(Combinable); !ok {
-		t.Fatalf("ScanResponse does not implement Combinable")
+	if _, ok := interface{}(sr1).(combinable); !ok {
+		t.Fatalf("ScanResponse does not implement combinable")
 	}
 
 	sr2 := &ScanResponse{
@@ -54,10 +54,10 @@ func TestCombinable(t *testing.T) {
 		Rows:           append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
 	}
 
-	if err := sr1.Combine(sr2); err != nil {
+	if err := sr1.combine(sr2); err != nil {
 		t.Fatal(err)
 	}
-	if err := sr1.Combine(&ScanResponse{}); err != nil {
+	if err := sr1.combine(&ScanResponse{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -69,8 +69,8 @@ func TestCombinable(t *testing.T) {
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 100}},
 		Keys:           []Key{[]byte("1")},
 	}
-	if _, ok := interface{}(dr1).(Combinable); !ok {
-		t.Fatalf("DeleteRangeResponse does not implement Combinable")
+	if _, ok := interface{}(dr1).(combinable); !ok {
+		t.Fatalf("DeleteRangeResponse does not implement combinable")
 	}
 	dr2 := &DeleteRangeResponse{
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 1}},
@@ -84,10 +84,10 @@ func TestCombinable(t *testing.T) {
 		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
 		Keys:           []Key{[]byte("1"), []byte("2")},
 	}
-	if err := dr2.Combine(dr3); err != nil {
+	if err := dr2.combine(dr3); err != nil {
 		t.Fatal(err)
 	}
-	if err := dr1.Combine(dr2); err != nil {
+	if err := dr1.combine(dr2); err != nil {
 		t.Fatal(err)
 	}
 

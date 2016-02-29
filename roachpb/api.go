@@ -121,17 +121,17 @@ type Response interface {
 	Verify(req Request) error
 }
 
-// Combinable is implemented by response types whose corresponding
+// combinable is implemented by response types whose corresponding
 // requests may cross range boundaries, such as Scan or DeleteRange.
-// Combine() allows responses from individual ranges to be aggregated
+// combine() allows responses from individual ranges to be aggregated
 // into a single one.
-type Combinable interface {
-	Combine(Response) error
+type combinable interface {
+	combine(combinable) error
 }
 
-// Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
+// combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
-func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) error {
+func (rh *ResponseHeader) combine(otherRH *ResponseHeader) error {
 	if rh != nil && otherRH != nil {
 		if ts := otherRH.Timestamp; rh.Timestamp.Less(ts) {
 			rh.Timestamp = ts
@@ -143,47 +143,47 @@ func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) error {
 	return nil
 }
 
-// Combine implements the Combinable interface.
-func (sr *ScanResponse) Combine(c Response) error {
+// combine implements the combinable interface.
+func (sr *ScanResponse) combine(c combinable) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
-		if err := sr.Header().Combine(otherSR.Header()); err != nil {
+		if err := sr.Header().combine(otherSR.Header()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Combine implements the Combinable interface.
-func (sr *ReverseScanResponse) Combine(c Response) error {
+// combine implements the combinable interface.
+func (sr *ReverseScanResponse) combine(c combinable) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
-		if err := sr.Header().Combine(otherSR.Header()); err != nil {
+		if err := sr.Header().combine(otherSR.Header()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Combine implements the Combinable interface.
-func (dr *DeleteRangeResponse) Combine(c Response) error {
+// combine implements the combinable interface.
+func (dr *DeleteRangeResponse) combine(c combinable) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
 		dr.Keys = append(dr.Keys, otherDR.Keys...)
-		if err := dr.Header().Combine(otherDR.Header()); err != nil {
+		if err := dr.Header().combine(otherDR.Header()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Combine implements the Combinable interface.
-func (rr *ResolveIntentRangeResponse) Combine(c Response) error {
+// combine implements the combinable interface.
+func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
-		if err := rr.Header().Combine(otherRR.Header()); err != nil {
+		if err := rr.Header().combine(otherRR.Header()); err != nil {
 			return err
 		}
 	}
