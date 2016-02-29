@@ -22,13 +22,13 @@ import (
 )
 
 // NewNodeTestBaseContext creates a base context for testing.
-// This uses embedded certs and the "node" user (default node user).
-// The "node" user has both server and client certificates.
+// This uses embedded certs and the default node user.
+// The default node user has both server and client certificates.
 func NewNodeTestBaseContext() *base.Context {
 	return NewTestBaseContext(security.NodeUser)
 }
 
-// NewTestBaseContext creates a secure base context for 'user'.
+// NewTestBaseContext creates a secure base context for user.
 func NewTestBaseContext(user string) *base.Context {
 	return &base.Context{
 		Certs: security.EmbeddedCertsDir,

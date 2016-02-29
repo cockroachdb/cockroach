@@ -34,7 +34,7 @@ var (
 )
 
 // RenameDatabase renames the database.
-// Privileges: "root" user.
+// Privileges: security.RootUser.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.Error) {

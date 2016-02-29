@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -55,15 +54,13 @@ type Network struct {
 
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(nodeCount int) *Network {
-	clock := hlc.NewClock(hlc.UnixNano)
-
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
 		Stopper: stop.NewStopper(),
 	}
-	n.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, clock, n.Stopper)
+	n.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, nil, n.Stopper)
 	var err error
 	n.tlsConfig, err = n.rpcContext.GetServerTLSConfig()
 	if err != nil {
@@ -90,7 +87,7 @@ func NewNetwork(nodeCount int) *Network {
 
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode() (*Node, error) {
-	server := grpc.NewServer()
+	server := rpc.NewServer(n.rpcContext)
 	testAddr := util.CreateTestAddr("tcp")
 	ln, err := util.ListenAndServe(n.Stopper, server, testAddr, n.tlsConfig)
 	if err != nil {

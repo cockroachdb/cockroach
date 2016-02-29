@@ -192,7 +192,7 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		checkGossip(t, c, waitTime, hasSentinel)
 
 		for i := 0; i < num; i++ {
-			db, dbStopper := makeClient(t, c.ConnString(i))
+			db, dbStopper := c.NewClient(t, i)
 			if i == 0 {
 				if err := db.Del("count"); err != nil {
 					t.Fatal(err)

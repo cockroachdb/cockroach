@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -31,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -64,7 +61,7 @@ func TestSendAndReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), hlc.NewClock(hlc.UnixNano), stopper)
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 	g.SetNodeID(roachpb.NodeID(1))
 
@@ -97,13 +94,12 @@ func TestSendAndReceive(t *testing.T) {
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
 		nodeID := nextNodeID
 		nextNodeID++
-		rpcServer := rpc.NewServer(nodeRPCContext)
-		grpcServer := grpc.NewServer()
+		grpcServer := rpc.NewServer(nodeRPCContext)
 		tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
-		ln, err := util.ListenAndServe(stopper, grpcutil.GRPCHandlerFunc(grpcServer, rpcServer), util.CreateTestAddr("tcp"), tlsConfig)
+		ln, err := util.ListenAndServe(stopper, grpcServer, util.CreateTestAddr("tcp"), tlsConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -234,16 +230,15 @@ func TestInOrderDelivery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), hlc.NewClock(hlc.UnixNano), stopper)
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
 	g := gossip.New(nodeRPCContext, gossip.TestBootstrap, stopper)
 
-	rpcServer := rpc.NewServer(nodeRPCContext)
-	grpcServer := grpc.NewServer()
+	grpcServer := rpc.NewServer(nodeRPCContext)
 	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, grpcutil.GRPCHandlerFunc(grpcServer, rpcServer), util.CreateTestAddr("tcp"), tlsConfig)
+	ln, err := util.ListenAndServe(stopper, grpcServer, util.CreateTestAddr("tcp"), tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
