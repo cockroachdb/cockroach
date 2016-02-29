@@ -34,6 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
+// nodeIDSlice implements sort.Interface.
+type nodeIDSlice []roachpb.NodeID
+
+func (n nodeIDSlice) Len() int           { return len(n) }
+func (n nodeIDSlice) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n nodeIDSlice) Less(i, j int) bool { return n[i] < n[j] }
+
 // Cluster maintains a list of all nodes, stores and ranges as well as any
 // shared resources.
 type Cluster struct {
@@ -389,7 +396,7 @@ func (c *Cluster) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Cluster Info:\tEpoch - %d\n", c.epoch)
 
-	var nodeIDs roachpb.NodeIDSlice
+	var nodeIDs nodeIDSlice
 	for nodeID := range c.nodes {
 		nodeIDs = append(nodeIDs, nodeID)
 	}
