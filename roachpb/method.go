@@ -19,6 +19,7 @@ package roachpb
 // Method is the enumerated type for methods.
 type Method int
 
+//go:generate stringer -type=Method
 const (
 	// Get fetches the value for a key from the KV map, respecting a
 	// possibly historical timestamp. If the timestamp is 0, returns
