@@ -436,3 +436,25 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 		t.Errorf("expected %s %s; got %s %s", ts2, tc.lowWater, rTS, wTS)
 	}
 }
+
+func BenchmarkTimestampCacheInsertion(b *testing.B) {
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	tc := NewTimestampCache(clock)
+
+	for i := 0; i < b.N; i++ {
+		tc.Clear(clock)
+
+		cdTS := clock.Now()
+		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
+
+		beTS := clock.Now()
+		tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
+
+		adTS := clock.Now()
+		tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
+
+		cfTS := clock.Now()
+		tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, nil, true)
+	}
+}
