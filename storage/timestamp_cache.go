@@ -17,11 +17,13 @@
 package storage
 
 import (
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/interval"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -47,6 +49,7 @@ const (
 type TimestampCache struct {
 	cache            *cache.IntervalCache
 	lowWater, latest roachpb.Timestamp
+	rg               interval.RangeGroup // avoids allocating in Add.
 }
 
 // A cacheValue combines the timestamp with an optional txn ID.
@@ -75,6 +78,7 @@ func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 	tc := &TimestampCache{
 		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		rg:    interval.NewRangeTree(),
 	}
 	tc.Clear(clock)
 	tc.cache.Config.ShouldEvict = tc.shouldEvict
@@ -114,32 +118,87 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
-		// Check existing, overlapping entries. Remove superseded
-		// entries or return without adding this entry if necessary.
+		defer tc.rg.Clear()
+
 		key := tc.cache.MakeKey(start, end)
-		for _, o := range tc.cache.GetOverlaps(key.Start, key.End) {
-			ce := o.Value.(*cacheValue)
-			if ce.readOnly != readOnly {
-				continue
-			}
-			if o.Key.Contains(key) {
-				if !ce.timestamp.Less(timestamp) {
-					return // don't add this key; there's already a cache entry with >= timestamp.
-				}
-				if key.Contains(*o.Key) {
-					// The keys are equal, update the existing cache entry.
-					*ce = cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+		overlaps := tc.cache.GetOverlaps(key.Start, key.End)
+		overlaps = filterReadOrWrite(overlaps, readOnly)
+
+		// Check existing, overlapping entries. Remove/replace superseded
+		// entries or return without adding this entry if necessary.
+		introduced := false
+		sort.Sort(tsValSorter(overlaps))
+		for i := len(overlaps) - 1; i >= 0; i-- {
+			c := overlaps[i]
+			cv := c.Value.(*cacheValue)
+
+			// Because there is no guarantee the new key will have a greater timestamp
+			// than other keys, we must wait to insert it into the RangeGroup until we
+			// find the correct position in the sorting.
+			if !introduced && cv.timestamp.Less(timestamp) {
+				introduced = true
+				if !tc.rg.Add(key.Range) {
+					// Don't add this key; there's already a union of cache entries with
+					// >= timestamps. Note that in this case, no entries will be added to
+					// the cache such that no keys would need to be deleted because they
+					// are no longer the most recent, so we can just return.
 					return
 				}
-			} else if key.Contains(*o.Key) && !timestamp.Less(ce.timestamp) {
-				tc.cache.Del(o.Key) // delete existing key; this cache entry supersedes.
+			}
+
+			// If the entry is no longer the most recent for any part of its range, we
+			// can remove it. However, if the entry's range adds to the RangeGroup, that
+			// means that it is the most recent for at least some part of the range and
+			// shouldn't be removed.
+			if !tc.rg.Add(c.Key.Range) {
+				if introduced && key.Range.Equal(c.Key.Range) {
+					// The ranges are equal, update the existing cache entry instead
+					// of deleting and reinserting the same range.
+					*cv = cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+					return
+				}
+				// Delete existing key; a set of cache entries with greater timestamps
+				// that are already in the RangeGroup fully supersede.
+				tc.cache.Del(c.Key)
 			}
 		}
-		entry := makeCacheEntry(
-			key, cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly})
+		// Handle the case where the new key is the oldest overlapping key.
+		if !introduced && !tc.rg.Add(key.Range) {
+			// Don't add this key; there's already union of cache entries with >= timestamp.
+			return
+		}
+
+		value := cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+		entry := makeCacheEntry(key, value)
 		tc.cache.AddEntry(entry)
 	}
 }
+
+// filterReadOrWrite filters out either the read-only or the read-write
+// values from the provided slice, depending on the second provided argument.
+func filterReadOrWrite(ts []cache.Overlap, keepReadOnly bool) []cache.Overlap {
+	rmIdx := len(ts)
+	for i := 0; i < rmIdx; {
+		cv := ts[i].Value.(*cacheValue)
+		if cv.readOnly == keepReadOnly {
+			i++
+		} else {
+			ts[i], ts[rmIdx-1] = ts[rmIdx-1], ts[i]
+			rmIdx--
+		}
+	}
+	return ts[:rmIdx]
+}
+
+// tsValSorter attaches the methods of sort.Interface to []cache.Overlap, sorting
+// in increasing timestamp order.
+type tsValSorter []cache.Overlap
+
+func (t tsValSorter) Len() int { return len(t) }
+func (t tsValSorter) Less(i, j int) bool {
+	return t[i].Value.(*cacheValue).timestamp.Less(t[j].Value.(*cacheValue).timestamp)
+}
+func (t tsValSorter) Swap(i, j int) { t[i], t[j] = t[j], t[i] }
 
 // GetMax returns the maximum read and write timestamps which overlap
 // the interval spanning from start to end. Cached timestamps matching

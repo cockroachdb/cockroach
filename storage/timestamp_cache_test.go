@@ -295,6 +295,35 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	}
 }
 
+// TestTimestampCacheLayeredRemoval verifies that all ranges that
+// are superseded when new ranges are added are properly removed.
+func TestTimestampCacheLayeredRemoval(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(maxClockOffset)
+	tc := NewTimestampCache(clock)
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
+
+	cdTS := clock.Now()
+	tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
+
+	beTS := clock.Now()
+	tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
+
+	adTS := clock.Now()
+	tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
+
+	cfTS := clock.Now()
+	tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, nil, true)
+
+	// Make sure the initial keys were removed.
+	expectedLen := 2
+	if len := tc.cache.Len(); len != expectedLen {
+		t.Errorf("expected timestamp cache to be %d, found %d", expectedLen, len)
+	}
+}
+
 func TestTimestampCacheClear(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
@@ -434,5 +463,28 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	// Fetching with txn ID "2" gets ts2 for read and low water mark for write.
 	if rTS, wTS := tc.GetMax(roachpb.Key("a"), nil, txn2ID); !rTS.Equal(ts2) || !wTS.Equal(tc.lowWater) {
 		t.Errorf("expected %s %s; got %s %s", ts2, tc.lowWater, rTS, wTS)
+	}
+}
+
+func BenchmarkTimestampCacheInsertion(b *testing.B) {
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	tc := NewTimestampCache(clock)
+
+	for i := 0; i < b.N; i++ {
+		tc.Clear(clock)
+		manual.Increment(1)
+
+		cdTS := clock.Now()
+		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
+
+		beTS := clock.Now()
+		tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, nil, true)
+
+		adTS := clock.Now()
+		tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, nil, true)
+
+		cfTS := clock.Now()
+		tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, nil, true)
 	}
 }
