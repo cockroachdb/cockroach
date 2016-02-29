@@ -207,10 +207,9 @@ enum TransactionStatus {
   ABORTED = 2;
 }
 
-// NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
-// adding to the set and Contains() verifying membership.
-message NodeList {
-  repeated int32 nodes = 1 [packed = true, (gogoproto.casttype) = "NodeID"];
+message NodeWithTimestamp {
+  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  optional Timestamp max_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // TxnMeta is the metadata of a Transaction record.
@@ -281,7 +280,7 @@ message Transaction {
   // Bits of this mechanism are found in the local sender, the range and the
   // txn_coord_sender, with brief comments referring here.
   // See https://github.com/cockroachdb/cockroach/pull/221.
-  optional NodeList certain_nodes = 8 [(gogoproto.nullable) = false];
+  repeated NodeWithTimestamp max_timestamps = 8 [(gogoproto.nullable) = false];
   // Writing is true if the transaction has previously executed a successful
   // write request, i.e. a request that may have left intents (across retries).
   optional bool Writing = 9 [(gogoproto.nullable) = false];

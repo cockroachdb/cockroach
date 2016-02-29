@@ -52,9 +52,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* InternalCommitTrigger_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   InternalCommitTrigger_reflection_ = NULL;
-const ::google::protobuf::Descriptor* NodeList_descriptor_ = NULL;
+const ::google::protobuf::Descriptor* NodeWithTimestamp_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
-  NodeList_reflection_ = NULL;
+  NodeWithTimestamp_reflection_ = NULL;
 const ::google::protobuf::Descriptor* TxnMeta_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   TxnMeta_reflection_ = NULL;
@@ -249,20 +249,21 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       sizeof(InternalCommitTrigger),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, _internal_metadata_),
       -1);
-  NodeList_descriptor_ = file->message_type(10);
-  static const int NodeList_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, nodes_),
+  NodeWithTimestamp_descriptor_ = file->message_type(10);
+  static const int NodeWithTimestamp_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeWithTimestamp, node_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeWithTimestamp, max_timestamp_),
   };
-  NodeList_reflection_ =
+  NodeWithTimestamp_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
-      NodeList_descriptor_,
-      NodeList::default_instance_,
-      NodeList_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, _has_bits_[0]),
+      NodeWithTimestamp_descriptor_,
+      NodeWithTimestamp::default_instance_,
+      NodeWithTimestamp_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeWithTimestamp, _has_bits_[0]),
       -1,
       -1,
-      sizeof(NodeList),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, _internal_metadata_),
+      sizeof(NodeWithTimestamp),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeWithTimestamp, _internal_metadata_),
       -1);
   TxnMeta_descriptor_ = file->message_type(11);
   static const int TxnMeta_offsets_[5] = {
@@ -292,7 +293,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, last_heartbeat_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, orig_timestamp_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, max_timestamp_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, certain_nodes_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, max_timestamps_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, writing_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, sequence_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, intents_),
@@ -395,7 +396,7 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       InternalCommitTrigger_descriptor_, &InternalCommitTrigger::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-      NodeList_descriptor_, &NodeList::default_instance());
+      NodeWithTimestamp_descriptor_, &NodeWithTimestamp::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       TxnMeta_descriptor_, &TxnMeta::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
@@ -431,8 +432,8 @@ void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto() {
   delete ModifiedSpanTrigger_reflection_;
   delete InternalCommitTrigger::default_instance_;
   delete InternalCommitTrigger_reflection_;
-  delete NodeList::default_instance_;
-  delete NodeList_reflection_;
+  delete NodeWithTimestamp::default_instance_;
+  delete NodeWithTimestamp_reflection_;
   delete TxnMeta::default_instance_;
   delete TxnMeta_reflection_;
   delete Transaction::default_instance_;
@@ -493,45 +494,47 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "icas_trigger\030\003 \001(\0132(.cockroach.roachpb.C"
     "hangeReplicasTrigger\022E\n\025modified_span_tr"
     "igger\030\004 \001(\0132&.cockroach.roachpb.Modified"
-    "SpanTrigger:\004\210\240\037\001\"\'\n\010NodeList\022\033\n\005nodes\030\001"
-    " \003(\005B\014\020\001\372\336\037\006NodeID\"\355\001\n\007TxnMeta\022E\n\002id\030\001 \001"
-    "(\014B9\342\336\037\002ID\332\336\037/github.com/cockroachdb/coc"
-    "kroach/util/uuid.UUID\0229\n\tisolation\030\002 \001(\016"
-    "2 .cockroach.roachpb.IsolationTypeB\004\310\336\037\000"
-    "\022\024\n\003key\030\003 \001(\014B\007\372\336\037\003Key\022\023\n\005epoch\030\004 \001(\rB\004\310"
-    "\336\037\000\0225\n\ttimestamp\030\005 \001(\0132\034.cockroach.roach"
-    "pb.TimestampB\004\310\336\037\000\"\365\003\n\013Transaction\0222\n\004me"
-    "ta\030\001 \001(\0132\032.cockroach.roachpb.TxnMetaB\010\310\336"
-    "\037\000\320\336\037\001\022\022\n\004name\030\002 \001(\tB\004\310\336\037\000\022\026\n\010priority\030\003"
-    " \001(\005B\004\310\336\037\000\022:\n\006status\030\004 \001(\0162$.cockroach.r"
-    "oachpb.TransactionStatusB\004\310\336\037\000\0224\n\016last_h"
-    "eartbeat\030\005 \001(\0132\034.cockroach.roachpb.Times"
-    "tamp\022:\n\016orig_timestamp\030\006 \001(\0132\034.cockroach"
-    ".roachpb.TimestampB\004\310\336\037\000\0229\n\rmax_timestam"
-    "p\030\007 \001(\0132\034.cockroach.roachpb.TimestampB\004\310"
-    "\336\037\000\0228\n\rcertain_nodes\030\010 \001(\0132\033.cockroach.r"
-    "oachpb.NodeListB\004\310\336\037\000\022\025\n\007Writing\030\t \001(\010B\004"
-    "\310\336\037\000\022\026\n\010Sequence\030\n \001(\rB\004\310\336\037\000\022.\n\007Intents\030"
-    "\013 \003(\0132\027.cockroach.roachpb.SpanB\004\310\336\037\000:\004\230\240"
-    "\037\000\"\244\001\n\006Intent\022/\n\004span\030\001 \001(\0132\027.cockroach."
-    "roachpb.SpanB\010\310\336\037\000\320\336\037\001\022-\n\003txn\030\002 \001(\0132\032.co"
-    "ckroach.roachpb.TxnMetaB\004\310\336\037\000\022:\n\006status\030"
-    "\003 \001(\0162$.cockroach.roachpb.TransactionSta"
-    "tusB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005start\030\001 \001(\0132\034.coc"
-    "kroach.roachpb.TimestampB\004\310\336\037\000\0226\n\nexpira"
-    "tion\030\002 \001(\0132\034.cockroach.roachpb.Timestamp"
-    "B\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockroach.roac"
-    "hpb.ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"a\n\022Seq"
-    "uenceCacheEntry\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n"
-    "\ttimestamp\030\002 \001(\0132\034.cockroach.roachpb.Tim"
-    "estampB\004\310\336\037\000*^\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007"
-    "\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022"
-    "\013\n\007DECIMAL\020\005\022\016\n\nTIMESERIES\020d*>\n\021ReplicaC"
-    "hangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REP"
-    "LICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALI"
-    "ZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transacti"
-    "onStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007"
-    "ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3108);
+    "SpanTrigger:\004\210\240\037\001\"y\n\021NodeWithTimestamp\022)"
+    "\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006NodeI"
+    "D\0229\n\rmax_timestamp\030\002 \001(\0132\034.cockroach.roa"
+    "chpb.TimestampB\004\310\336\037\000\"\355\001\n\007TxnMeta\022E\n\002id\030\001"
+    " \001(\014B9\342\336\037\002ID\332\336\037/github.com/cockroachdb/c"
+    "ockroach/util/uuid.UUID\0229\n\tisolation\030\002 \001"
+    "(\0162 .cockroach.roachpb.IsolationTypeB\004\310\336"
+    "\037\000\022\024\n\003key\030\003 \001(\014B\007\372\336\037\003Key\022\023\n\005epoch\030\004 \001(\rB"
+    "\004\310\336\037\000\0225\n\ttimestamp\030\005 \001(\0132\034.cockroach.roa"
+    "chpb.TimestampB\004\310\336\037\000\"\377\003\n\013Transaction\0222\n\004"
+    "meta\030\001 \001(\0132\032.cockroach.roachpb.TxnMetaB\010"
+    "\310\336\037\000\320\336\037\001\022\022\n\004name\030\002 \001(\tB\004\310\336\037\000\022\026\n\010priority"
+    "\030\003 \001(\005B\004\310\336\037\000\022:\n\006status\030\004 \001(\0162$.cockroach"
+    ".roachpb.TransactionStatusB\004\310\336\037\000\0224\n\016last"
+    "_heartbeat\030\005 \001(\0132\034.cockroach.roachpb.Tim"
+    "estamp\022:\n\016orig_timestamp\030\006 \001(\0132\034.cockroa"
+    "ch.roachpb.TimestampB\004\310\336\037\000\0229\n\rmax_timest"
+    "amp\030\007 \001(\0132\034.cockroach.roachpb.TimestampB"
+    "\004\310\336\037\000\022B\n\016max_timestamps\030\010 \003(\0132$.cockroac"
+    "h.roachpb.NodeWithTimestampB\004\310\336\037\000\022\025\n\007Wri"
+    "ting\030\t \001(\010B\004\310\336\037\000\022\026\n\010Sequence\030\n \001(\rB\004\310\336\037\000"
+    "\022.\n\007Intents\030\013 \003(\0132\027.cockroach.roachpb.Sp"
+    "anB\004\310\336\037\000:\004\230\240\037\000\"\244\001\n\006Intent\022/\n\004span\030\001 \001(\0132"
+    "\027.cockroach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\022-\n\003tx"
+    "n\030\002 \001(\0132\032.cockroach.roachpb.TxnMetaB\004\310\336\037"
+    "\000\022:\n\006status\030\003 \001(\0162$.cockroach.roachpb.Tr"
+    "ansactionStatusB\004\310\336\037\000\"\265\001\n\005Lease\0221\n\005start"
+    "\030\001 \001(\0132\034.cockroach.roachpb.TimestampB\004\310\336"
+    "\037\000\0226\n\nexpiration\030\002 \001(\0132\034.cockroach.roach"
+    "pb.TimestampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.co"
+    "ckroach.roachpb.ReplicaDescriptorB\004\310\336\037\000:"
+    "\004\230\240\037\000\"a\n\022SequenceCacheEntry\022\024\n\003key\030\001 \001(\014"
+    "B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach"
+    ".roachpb.TimestampB\004\310\336\037\000*^\n\tValueType\022\013\n"
+    "\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020"
+    "\003\022\010\n\004TIME\020\004\022\013\n\007DECIMAL\020\005\022\016\n\nTIMESERIES\020d"
+    "*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022"
+    "\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationTyp"
+    "e\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*"
+    "B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOM"
+    "MITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3200);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -544,7 +547,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
   ChangeReplicasTrigger::default_instance_ = new ChangeReplicasTrigger();
   ModifiedSpanTrigger::default_instance_ = new ModifiedSpanTrigger();
   InternalCommitTrigger::default_instance_ = new InternalCommitTrigger();
-  NodeList::default_instance_ = new NodeList();
+  NodeWithTimestamp::default_instance_ = new NodeWithTimestamp();
   TxnMeta::default_instance_ = new TxnMeta();
   Transaction::default_instance_ = new Transaction();
   Intent::default_instance_ = new Intent();
@@ -560,7 +563,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
   ChangeReplicasTrigger::default_instance_->InitAsDefaultInstance();
   ModifiedSpanTrigger::default_instance_->InitAsDefaultInstance();
   InternalCommitTrigger::default_instance_->InitAsDefaultInstance();
-  NodeList::default_instance_->InitAsDefaultInstance();
+  NodeWithTimestamp::default_instance_->InitAsDefaultInstance();
   TxnMeta::default_instance_->InitAsDefaultInstance();
   Transaction::default_instance_->InitAsDefaultInstance();
   Intent::default_instance_->InitAsDefaultInstance();
@@ -4705,94 +4708,114 @@ void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroach::roa
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int NodeList::kNodesFieldNumber;
+const int NodeWithTimestamp::kNodeIdFieldNumber;
+const int NodeWithTimestamp::kMaxTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
-NodeList::NodeList()
+NodeWithTimestamp::NodeWithTimestamp()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.NodeWithTimestamp)
 }
 
-void NodeList::InitAsDefaultInstance() {
+void NodeWithTimestamp::InitAsDefaultInstance() {
+  max_timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
 }
 
-NodeList::NodeList(const NodeList& from)
+NodeWithTimestamp::NodeWithTimestamp(const NodeWithTimestamp& from)
   : ::google::protobuf::Message(),
     _internal_metadata_(NULL) {
   SharedCtor();
   MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.NodeWithTimestamp)
 }
 
-void NodeList::SharedCtor() {
+void NodeWithTimestamp::SharedCtor() {
   _cached_size_ = 0;
+  node_id_ = 0;
+  max_timestamp_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
-NodeList::~NodeList() {
-  // @@protoc_insertion_point(destructor:cockroach.roachpb.NodeList)
+NodeWithTimestamp::~NodeWithTimestamp() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.NodeWithTimestamp)
   SharedDtor();
 }
 
-void NodeList::SharedDtor() {
+void NodeWithTimestamp::SharedDtor() {
   if (this != default_instance_) {
+    delete max_timestamp_;
   }
 }
 
-void NodeList::SetCachedSize(int size) const {
+void NodeWithTimestamp::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const ::google::protobuf::Descriptor* NodeList::descriptor() {
+const ::google::protobuf::Descriptor* NodeWithTimestamp::descriptor() {
   protobuf_AssignDescriptorsOnce();
-  return NodeList_descriptor_;
+  return NodeWithTimestamp_descriptor_;
 }
 
-const NodeList& NodeList::default_instance() {
+const NodeWithTimestamp& NodeWithTimestamp::default_instance() {
   if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   return *default_instance_;
 }
 
-NodeList* NodeList::default_instance_ = NULL;
+NodeWithTimestamp* NodeWithTimestamp::default_instance_ = NULL;
 
-NodeList* NodeList::New(::google::protobuf::Arena* arena) const {
-  NodeList* n = new NodeList;
+NodeWithTimestamp* NodeWithTimestamp::New(::google::protobuf::Arena* arena) const {
+  NodeWithTimestamp* n = new NodeWithTimestamp;
   if (arena != NULL) {
     arena->Own(n);
   }
   return n;
 }
 
-void NodeList::Clear() {
-  nodes_.Clear();
+void NodeWithTimestamp::Clear() {
+  if (_has_bits_[0 / 32] & 3u) {
+    node_id_ = 0;
+    if (has_max_timestamp()) {
+      if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+    }
+  }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->Clear();
   }
 }
 
-bool NodeList::MergePartialFromCodedStream(
+bool NodeWithTimestamp::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.NodeWithTimestamp)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // repeated int32 nodes = 1 [packed = true];
+      // optional int32 node_id = 1;
       case 1: {
-        if (tag == 10) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitive<
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, this->mutable_nodes())));
-        } else if (tag == 8) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitiveNoInline<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 1, 10, input, this->mutable_nodes())));
+                 input, &node_id_)));
+          set_has_node_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_max_timestamp;
+        break;
+      }
+
+      // optional .cockroach.roachpb.Timestamp max_timestamp = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_max_timestamp:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_max_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -4814,79 +4837,77 @@ bool NodeList::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.NodeWithTimestamp)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.NodeWithTimestamp)
   return false;
 #undef DO_
 }
 
-void NodeList::SerializeWithCachedSizes(
+void NodeWithTimestamp::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.NodeList)
-  // repeated int32 nodes = 1 [packed = true];
-  if (this->nodes_size() > 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteTag(1, ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED, output);
-    output->WriteVarint32(_nodes_cached_byte_size_);
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.NodeWithTimestamp)
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
   }
-  for (int i = 0; i < this->nodes_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32NoTag(
-      this->nodes(i), output);
+
+  // optional .cockroach.roachpb.Timestamp max_timestamp = 2;
+  if (has_max_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->max_timestamp_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
   }
-  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.NodeWithTimestamp)
 }
 
-::google::protobuf::uint8* NodeList::SerializeWithCachedSizesToArray(
+::google::protobuf::uint8* NodeWithTimestamp::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.NodeList)
-  // repeated int32 nodes = 1 [packed = true];
-  if (this->nodes_size() > 0) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteTagToArray(
-      1,
-      ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED,
-      target);
-    target = ::google::protobuf::io::CodedOutputStream::WriteVarint32ToArray(
-      _nodes_cached_byte_size_, target);
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.NodeWithTimestamp)
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->node_id(), target);
   }
-  for (int i = 0; i < this->nodes_size(); i++) {
+
+  // optional .cockroach.roachpb.Timestamp max_timestamp = 2;
+  if (has_max_timestamp()) {
     target = ::google::protobuf::internal::WireFormatLite::
-      WriteInt32NoTagToArray(this->nodes(i), target);
+      WriteMessageNoVirtualToArray(
+        2, *this->max_timestamp_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
   }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.NodeList)
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.NodeWithTimestamp)
   return target;
 }
 
-int NodeList::ByteSize() const {
+int NodeWithTimestamp::ByteSize() const {
   int total_size = 0;
 
-  // repeated int32 nodes = 1 [packed = true];
-  {
-    int data_size = 0;
-    for (int i = 0; i < this->nodes_size(); i++) {
-      data_size += ::google::protobuf::internal::WireFormatLite::
-        Int32Size(this->nodes(i));
-    }
-    if (data_size > 0) {
+  if (_has_bits_[0 / 32] & 3u) {
+    // optional int32 node_id = 1;
+    if (has_node_id()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(data_size);
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->node_id());
     }
-    GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-    _nodes_cached_byte_size_ = data_size;
-    GOOGLE_SAFE_CONCURRENT_WRITES_END();
-    total_size += data_size;
-  }
 
+    // optional .cockroach.roachpb.Timestamp max_timestamp = 2;
+    if (has_max_timestamp()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->max_timestamp_);
+    }
+
+  }
   if (_internal_metadata_.have_unknown_fields()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -4898,10 +4919,10 @@ int NodeList::ByteSize() const {
   return total_size;
 }
 
-void NodeList::MergeFrom(const ::google::protobuf::Message& from) {
+void NodeWithTimestamp::MergeFrom(const ::google::protobuf::Message& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  const NodeList* source = 
-      ::google::protobuf::internal::DynamicCastToGenerated<const NodeList>(
+  const NodeWithTimestamp* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const NodeWithTimestamp>(
           &from);
   if (source == NULL) {
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
@@ -4910,81 +4931,126 @@ void NodeList::MergeFrom(const ::google::protobuf::Message& from) {
   }
 }
 
-void NodeList::MergeFrom(const NodeList& from) {
+void NodeWithTimestamp::MergeFrom(const NodeWithTimestamp& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  nodes_.MergeFrom(from.nodes_);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_node_id()) {
+      set_node_id(from.node_id());
+    }
+    if (from.has_max_timestamp()) {
+      mutable_max_timestamp()->::cockroach::roachpb::Timestamp::MergeFrom(from.max_timestamp());
+    }
+  }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
   }
 }
 
-void NodeList::CopyFrom(const ::google::protobuf::Message& from) {
+void NodeWithTimestamp::CopyFrom(const ::google::protobuf::Message& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-void NodeList::CopyFrom(const NodeList& from) {
+void NodeWithTimestamp::CopyFrom(const NodeWithTimestamp& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool NodeList::IsInitialized() const {
+bool NodeWithTimestamp::IsInitialized() const {
 
   return true;
 }
 
-void NodeList::Swap(NodeList* other) {
+void NodeWithTimestamp::Swap(NodeWithTimestamp* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void NodeList::InternalSwap(NodeList* other) {
-  nodes_.UnsafeArenaSwap(&other->nodes_);
+void NodeWithTimestamp::InternalSwap(NodeWithTimestamp* other) {
+  std::swap(node_id_, other->node_id_);
+  std::swap(max_timestamp_, other->max_timestamp_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
 }
 
-::google::protobuf::Metadata NodeList::GetMetadata() const {
+::google::protobuf::Metadata NodeWithTimestamp::GetMetadata() const {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::Metadata metadata;
-  metadata.descriptor = NodeList_descriptor_;
-  metadata.reflection = NodeList_reflection_;
+  metadata.descriptor = NodeWithTimestamp_descriptor_;
+  metadata.reflection = NodeWithTimestamp_reflection_;
   return metadata;
 }
 
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
-// NodeList
+// NodeWithTimestamp
 
-// repeated int32 nodes = 1 [packed = true];
-int NodeList::nodes_size() const {
-  return nodes_.size();
+// optional int32 node_id = 1;
+bool NodeWithTimestamp::has_node_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void NodeList::clear_nodes() {
-  nodes_.Clear();
+void NodeWithTimestamp::set_has_node_id() {
+  _has_bits_[0] |= 0x00000001u;
 }
- ::google::protobuf::int32 NodeList::nodes(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeList.nodes)
-  return nodes_.Get(index);
+void NodeWithTimestamp::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000001u;
 }
- void NodeList::set_nodes(int index, ::google::protobuf::int32 value) {
-  nodes_.Set(index, value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.NodeList.nodes)
+void NodeWithTimestamp::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
 }
- void NodeList::add_nodes(::google::protobuf::int32 value) {
-  nodes_.Add(value);
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.NodeList.nodes)
+ ::google::protobuf::int32 NodeWithTimestamp::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeWithTimestamp.node_id)
+  return node_id_;
 }
- const ::google::protobuf::RepeatedField< ::google::protobuf::int32 >&
-NodeList::nodes() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.NodeList.nodes)
-  return nodes_;
+ void NodeWithTimestamp::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.NodeWithTimestamp.node_id)
 }
- ::google::protobuf::RepeatedField< ::google::protobuf::int32 >*
-NodeList::mutable_nodes() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.NodeList.nodes)
-  return &nodes_;
+
+// optional .cockroach.roachpb.Timestamp max_timestamp = 2;
+bool NodeWithTimestamp::has_max_timestamp() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void NodeWithTimestamp::set_has_max_timestamp() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void NodeWithTimestamp::clear_has_max_timestamp() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void NodeWithTimestamp::clear_max_timestamp() {
+  if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_max_timestamp();
+}
+const ::cockroach::roachpb::Timestamp& NodeWithTimestamp::max_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeWithTimestamp.max_timestamp)
+  return max_timestamp_ != NULL ? *max_timestamp_ : *default_instance_->max_timestamp_;
+}
+::cockroach::roachpb::Timestamp* NodeWithTimestamp::mutable_max_timestamp() {
+  set_has_max_timestamp();
+  if (max_timestamp_ == NULL) {
+    max_timestamp_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeWithTimestamp.max_timestamp)
+  return max_timestamp_;
+}
+::cockroach::roachpb::Timestamp* NodeWithTimestamp::release_max_timestamp() {
+  clear_has_max_timestamp();
+  ::cockroach::roachpb::Timestamp* temp = max_timestamp_;
+  max_timestamp_ = NULL;
+  return temp;
+}
+void NodeWithTimestamp::set_allocated_max_timestamp(::cockroach::roachpb::Timestamp* max_timestamp) {
+  delete max_timestamp_;
+  max_timestamp_ = max_timestamp;
+  if (max_timestamp) {
+    set_has_max_timestamp();
+  } else {
+    clear_has_max_timestamp();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeWithTimestamp.max_timestamp)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
@@ -5625,7 +5691,7 @@ const int Transaction::kStatusFieldNumber;
 const int Transaction::kLastHeartbeatFieldNumber;
 const int Transaction::kOrigTimestampFieldNumber;
 const int Transaction::kMaxTimestampFieldNumber;
-const int Transaction::kCertainNodesFieldNumber;
+const int Transaction::kMaxTimestampsFieldNumber;
 const int Transaction::kWritingFieldNumber;
 const int Transaction::kSequenceFieldNumber;
 const int Transaction::kIntentsFieldNumber;
@@ -5642,7 +5708,6 @@ void Transaction::InitAsDefaultInstance() {
   last_heartbeat_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
   orig_timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
   max_timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
-  certain_nodes_ = const_cast< ::cockroach::roachpb::NodeList*>(&::cockroach::roachpb::NodeList::default_instance());
 }
 
 Transaction::Transaction(const Transaction& from)
@@ -5663,7 +5728,6 @@ void Transaction::SharedCtor() {
   last_heartbeat_ = NULL;
   orig_timestamp_ = NULL;
   max_timestamp_ = NULL;
-  certain_nodes_ = NULL;
   writing_ = false;
   sequence_ = 0u;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -5681,7 +5745,6 @@ void Transaction::SharedDtor() {
     delete last_heartbeat_;
     delete orig_timestamp_;
     delete max_timestamp_;
-    delete certain_nodes_;
   }
 }
 
@@ -5719,7 +5782,7 @@ void Transaction::Clear() {
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  if (_has_bits_[0 / 32] & 255u) {
+  if (_has_bits_[0 / 32] & 127u) {
     ZR_(priority_, status_);
     if (has_meta()) {
       if (meta_ != NULL) meta_->::cockroach::roachpb::TxnMeta::Clear();
@@ -5736,15 +5799,13 @@ void Transaction::Clear() {
     if (has_max_timestamp()) {
       if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
     }
-    if (has_certain_nodes()) {
-      if (certain_nodes_ != NULL) certain_nodes_->::cockroach::roachpb::NodeList::Clear();
-    }
   }
   ZR_(writing_, sequence_);
 
 #undef ZR_HELPER_
 #undef ZR_
 
+  max_timestamps_.Clear();
   intents_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5861,19 +5922,23 @@ bool Transaction::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(66)) goto parse_certain_nodes;
+        if (input->ExpectTag(66)) goto parse_max_timestamps;
         break;
       }
 
-      // optional .cockroach.roachpb.NodeList certain_nodes = 8;
+      // repeated .cockroach.roachpb.NodeWithTimestamp max_timestamps = 8;
       case 8: {
         if (tag == 66) {
-         parse_certain_nodes:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_certain_nodes()));
+         parse_max_timestamps:
+          DO_(input->IncrementRecursionDepth());
+         parse_loop_max_timestamps:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtualNoRecursionDepth(
+                input, add_max_timestamps()));
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(66)) goto parse_loop_max_timestamps;
+        input->UnsafeDecrementRecursionDepth();
         if (input->ExpectTag(72)) goto parse_Writing;
         break;
       }
@@ -5995,10 +6060,10 @@ void Transaction::SerializeWithCachedSizes(
       7, *this->max_timestamp_, output);
   }
 
-  // optional .cockroach.roachpb.NodeList certain_nodes = 8;
-  if (has_certain_nodes()) {
+  // repeated .cockroach.roachpb.NodeWithTimestamp max_timestamps = 8;
+  for (unsigned int i = 0, n = this->max_timestamps_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      8, *this->certain_nodes_, output);
+      8, this->max_timestamps(i), output);
   }
 
   // optional bool Writing = 9;
@@ -6077,11 +6142,11 @@ void Transaction::SerializeWithCachedSizes(
         7, *this->max_timestamp_, target);
   }
 
-  // optional .cockroach.roachpb.NodeList certain_nodes = 8;
-  if (has_certain_nodes()) {
+  // repeated .cockroach.roachpb.NodeWithTimestamp max_timestamps = 8;
+  for (unsigned int i = 0, n = this->max_timestamps_size(); i < n; i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        8, *this->certain_nodes_, target);
+        8, this->max_timestamps(i), target);
   }
 
   // optional bool Writing = 9;
@@ -6112,7 +6177,7 @@ void Transaction::SerializeWithCachedSizes(
 int Transaction::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 255u) {
+  if (_has_bits_[0 / 32] & 127u) {
     // optional .cockroach.roachpb.TxnMeta meta = 1;
     if (has_meta()) {
       total_size += 1 +
@@ -6161,13 +6226,6 @@ int Transaction::ByteSize() const {
           *this->max_timestamp_);
     }
 
-    // optional .cockroach.roachpb.NodeList certain_nodes = 8;
-    if (has_certain_nodes()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->certain_nodes_);
-    }
-
   }
   if (_has_bits_[8 / 32] & 768u) {
     // optional bool Writing = 9;
@@ -6183,6 +6241,14 @@ int Transaction::ByteSize() const {
     }
 
   }
+  // repeated .cockroach.roachpb.NodeWithTimestamp max_timestamps = 8;
+  total_size += 1 * this->max_timestamps_size();
+  for (int i = 0; i < this->max_timestamps_size(); i++) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        this->max_timestamps(i));
+  }
+
   // repeated .cockroach.roachpb.Span Intents = 11;
   total_size += 1 * this->intents_size();
   for (int i = 0; i < this->intents_size(); i++) {
@@ -6216,6 +6282,7 @@ void Transaction::MergeFrom(const ::google::protobuf::Message& from) {
 
 void Transaction::MergeFrom(const Transaction& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  max_timestamps_.MergeFrom(from.max_timestamps_);
   intents_.MergeFrom(from.intents_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_meta()) {
@@ -6239,9 +6306,6 @@ void Transaction::MergeFrom(const Transaction& from) {
     }
     if (from.has_max_timestamp()) {
       mutable_max_timestamp()->::cockroach::roachpb::Timestamp::MergeFrom(from.max_timestamp());
-    }
-    if (from.has_certain_nodes()) {
-      mutable_certain_nodes()->::cockroach::roachpb::NodeList::MergeFrom(from.certain_nodes());
     }
   }
   if (from._has_bits_[8 / 32] & (0xffu << (8 % 32))) {
@@ -6286,7 +6350,7 @@ void Transaction::InternalSwap(Transaction* other) {
   std::swap(last_heartbeat_, other->last_heartbeat_);
   std::swap(orig_timestamp_, other->orig_timestamp_);
   std::swap(max_timestamp_, other->max_timestamp_);
-  std::swap(certain_nodes_, other->certain_nodes_);
+  max_timestamps_.UnsafeArenaSwap(&other->max_timestamps_);
   std::swap(writing_, other->writing_);
   std::swap(sequence_, other->sequence_);
   intents_.UnsafeArenaSwap(&other->intents_);
@@ -6580,47 +6644,34 @@ void Transaction::set_allocated_max_timestamp(::cockroach::roachpb::Timestamp* m
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.max_timestamp)
 }
 
-// optional .cockroach.roachpb.NodeList certain_nodes = 8;
-bool Transaction::has_certain_nodes() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+// repeated .cockroach.roachpb.NodeWithTimestamp max_timestamps = 8;
+int Transaction::max_timestamps_size() const {
+  return max_timestamps_.size();
 }
-void Transaction::set_has_certain_nodes() {
-  _has_bits_[0] |= 0x00000080u;
+void Transaction::clear_max_timestamps() {
+  max_timestamps_.Clear();
 }
-void Transaction::clear_has_certain_nodes() {
-  _has_bits_[0] &= ~0x00000080u;
+const ::cockroach::roachpb::NodeWithTimestamp& Transaction::max_timestamps(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.max_timestamps)
+  return max_timestamps_.Get(index);
 }
-void Transaction::clear_certain_nodes() {
-  if (certain_nodes_ != NULL) certain_nodes_->::cockroach::roachpb::NodeList::Clear();
-  clear_has_certain_nodes();
+::cockroach::roachpb::NodeWithTimestamp* Transaction::mutable_max_timestamps(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.max_timestamps)
+  return max_timestamps_.Mutable(index);
 }
-const ::cockroach::roachpb::NodeList& Transaction::certain_nodes() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.certain_nodes)
-  return certain_nodes_ != NULL ? *certain_nodes_ : *default_instance_->certain_nodes_;
+::cockroach::roachpb::NodeWithTimestamp* Transaction::add_max_timestamps() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.max_timestamps)
+  return max_timestamps_.Add();
 }
-::cockroach::roachpb::NodeList* Transaction::mutable_certain_nodes() {
-  set_has_certain_nodes();
-  if (certain_nodes_ == NULL) {
-    certain_nodes_ = new ::cockroach::roachpb::NodeList;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.certain_nodes)
-  return certain_nodes_;
+::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeWithTimestamp >*
+Transaction::mutable_max_timestamps() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.max_timestamps)
+  return &max_timestamps_;
 }
-::cockroach::roachpb::NodeList* Transaction::release_certain_nodes() {
-  clear_has_certain_nodes();
-  ::cockroach::roachpb::NodeList* temp = certain_nodes_;
-  certain_nodes_ = NULL;
-  return temp;
-}
-void Transaction::set_allocated_certain_nodes(::cockroach::roachpb::NodeList* certain_nodes) {
-  delete certain_nodes_;
-  certain_nodes_ = certain_nodes;
-  if (certain_nodes) {
-    set_has_certain_nodes();
-  } else {
-    clear_has_certain_nodes();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.certain_nodes)
+const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeWithTimestamp >&
+Transaction::max_timestamps() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.max_timestamps)
+  return max_timestamps_;
 }
 
 // optional bool Writing = 9;
