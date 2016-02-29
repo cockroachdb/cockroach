@@ -389,35 +389,6 @@ func TestConnectionSettings(t *testing.T) {
 	}
 }
 
-func TestProtocols(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Test that all of the network protocols work.
-	for _, scheme := range []string{"http", "https", "rpc", "rpcs"} {
-		func() {
-			// Start test server in insecure mode.
-			s := &server.TestServer{}
-			s.Ctx = server.NewTestContext()
-			s.Ctx.Insecure = (scheme == "http" || scheme == "rpc")
-			if err := s.Start(); err != nil {
-				t.Fatalf("Could not start server: %v", err)
-			}
-			defer s.Stop()
-
-			db, err := sql.Open("cockroach",
-				scheme+"://node@"+s.ServingAddr()+"?certs="+s.Ctx.Certs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
-
-			if _, err := db.Exec(`SELECT 1`); err != nil {
-				t.Fatal(err)
-			}
-		}()
-	}
-}
-
 // concurrentIncrements starts two Goroutines in parallel, both of which
 // read the integer stored at the other's key, increment and update their own.
 // It checks that the outcome is serializable, i.e. exactly one of the
