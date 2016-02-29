@@ -41,7 +41,7 @@ type checkGossipFunc func(map[string]interface{}) error
 // retrying for up to the given duration.
 func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
 	f checkGossipFunc) {
-	util.SucceedsWithin(t, d, func() error {
+	err := util.RetryForDuration(d, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")
@@ -65,6 +65,9 @@ func checkGossip(t *testing.T, c cluster.Cluster, d time.Duration,
 
 		return nil
 	})
+	if err != nil {
+		t.Fatal(util.ErrorfSkipFrames(1, "condition failed to evaluate within %s: %s", d, err))
+	}
 }
 
 // hasPeers returns a checkGossipFunc that passes when the given

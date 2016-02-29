@@ -60,30 +60,14 @@ func TestCreateTestAddr(t *testing.T) {
 	verifyAddr(CreateTestAddr("tcp"), t)
 }
 
-func TestTrueWithin(t *testing.T) {
-	// Start with a function that never returns true.
-	if err := IsTrueWithin(func() bool { return false }, 1*time.Millisecond); err == nil {
-		t.Error("expected true within to fail on method which always returns false")
-	}
-	// Try a method which always returns true.
-	if err := IsTrueWithin(func() bool { return true }, 1*time.Millisecond); err != nil {
-		t.Errorf("unexpected error on method which always returns true: %v", err)
-	}
-	// Try a method which returns true on 5th invocation.
-	count := 0
-	if err := IsTrueWithin(func() bool { count++; return count >= 5 }, 1*time.Millisecond); err != nil {
-		t.Errorf("unexpected error on method which returns true after 5 invocations: %v", err)
-	}
-}
-
-func TestSucceedsWithin(t *testing.T) {
+func TestSucceedsSoon(t *testing.T) {
 	// Try a method which always succeeds.
-	SucceedsWithin(t, 1*time.Millisecond, func() error { return nil })
+	SucceedsSoon(t, func() error { return nil })
 
 	// Try a method which succeeds after a known duration.
 	start := time.Now()
 	duration := time.Millisecond * 10
-	SucceedsWithin(t, 100*duration, func() error {
+	SucceedsSoon(t, func() error {
 		elapsed := time.Since(start)
 		if elapsed > duration {
 			return nil

@@ -229,7 +229,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		ts[i] = b.Results[0].Rows[0].Timestamp()
 		log.Infof("%d: %d.%d", i, ts[i].Unix(), ts[i].Nanosecond())
 		if i == 0 {
-			util.SucceedsWithin(t, time.Second, func() error {
+			util.SucceedsSoon(t, func() error {
 				// Enforce that when we write the second key, it's written
 				// with a strictly higher timestamp. We're dropping logical
 				// ticks and the clock may just have been pushed into the

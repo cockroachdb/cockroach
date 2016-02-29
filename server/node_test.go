@@ -48,8 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-const testTimeout = 3 * time.Second
-
 // createTestNode creates an rpc server using the specified address,
 // gossip instance, KV database and a node using the specified slice
 // of engines. The server, clock and node are returned. If gossipBS is
@@ -195,7 +193,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit until we can find the
 	// new node.
-	util.SucceedsWithin(t, testTimeout, func() error {
+	util.SucceedsSoon(t, func() error {
 		if n := node.stores.GetStoreCount(); n != 3 {
 			return util.Errorf("expected 3 stores but got %d", n)
 		}
@@ -237,14 +235,17 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.stores.GetStoreCount() == 1 }, testTimeout); err != nil {
-		t.Fatal(err)
-	}
+	util.SucceedsSoon(t, func() error {
+		if sc := node2.stores.GetStoreCount(); sc != 1 {
+			return util.Errorf("GetStoreCount() expected 1; got %d", sc)
+		}
+		return nil
+	})
 
 	// Verify node1 sees node2 via gossip and vice versa.
 	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
-	util.SucceedsWithin(t, 50*time.Millisecond, func() error {
+	util.SucceedsSoon(t, func() error {
 		var nodeDesc1 roachpb.NodeDescriptor
 		if err := node1.ctx.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
 			return err
@@ -472,7 +473,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	// Wait for full replication of initial ranges.
 	initialRanges := int32(ExpectedInitialRangeCount())
-	util.SucceedsWithin(t, testTimeout, func() error {
+	util.SucceedsSoon(t, func() error {
 		for i := 1; i <= int(initialRanges); i++ {
 			if s.RaftStatus(roachpb.RangeID(i)) == nil {
 				return util.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
