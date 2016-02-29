@@ -29,6 +29,7 @@ import (
 type NodeID int32
 
 // NodeIDSlice implements sort.Interface.
+// TODO(tschottdorf): can remove/move to storage/simulation/cluster.go.
 type NodeIDSlice []NodeID
 
 func (n NodeIDSlice) Len() int           { return len(n) }

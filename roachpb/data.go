@@ -592,7 +592,7 @@ func (t Transaction) Clone() Transaction {
 		h := *t.LastHeartbeat
 		t.LastHeartbeat = &h
 	}
-	t.CertainNodes.Nodes = append([]NodeID(nil), t.CertainNodes.Nodes...)
+	t.MaxTimestamps = append([]NodeWithTimestamp(nil), t.MaxTimestamps...)
 	// Note that we're not cloning the span keys under the assumption that the
 	// keys themselves are not mutable.
 	t.Intents = append([]Span(nil), t.Intents...)
@@ -754,8 +754,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// Copy the list of nodes without time uncertainty.
-	t.CertainNodes = NodeList{Nodes: append(NodeIDSlice(nil),
-		o.CertainNodes.Nodes...)}
+	t.MaxTimestamps = append([]NodeWithTimestamp(nil), o.MaxTimestamps...)
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
@@ -797,20 +796,42 @@ func (t Transaction) Short() string {
 	return t.ID.String()[:8]
 }
 
-// Add adds the given NodeID to the interface (unless already present)
-// and restores ordering.
-func (s *NodeList) Add(nodeID NodeID) {
-	if !s.Contains(nodeID) {
-		s.Nodes = append(s.Nodes, nodeID)
-		sort.Sort(NodeIDSlice(s.Nodes))
+type maxTimestamps []NodeWithTimestamp
+
+func (mt maxTimestamps) Len() int           { return len(mt) }
+func (mt maxTimestamps) Swap(i, j int)      { mt[i], mt[j] = mt[j], mt[i] }
+func (mt maxTimestamps) Less(i, j int) bool { return mt[i].NodeID < mt[j].NodeID }
+
+func (mt maxTimestamps) find(nodeID NodeID) (int, Timestamp) {
+	i := sort.Search(len(mt), func(i int) bool { return mt[i].NodeID >= nodeID })
+	found := i < len(mt) && mt[i].NodeID == nodeID
+	if !found {
+		return -1, MaxTimestamp
+	}
+	return i, mt[i].MaxTimestamp
+}
+
+// UpdateUncertainty is to remember a timestamp off a node's clock for future
+// operations on that node. When multiple calls are made for a single nodeID,
+// the lowest timestamp prevails.
+func (t *Transaction) UpdateUncertainty(nodeID NodeID, maxTS Timestamp) {
+	i, _ := maxTimestamps(t.MaxTimestamps).find(nodeID)
+	if i < 0 {
+		t.MaxTimestamps = append(t.MaxTimestamps, NodeWithTimestamp{
+			NodeID: nodeID, MaxTimestamp: maxTS,
+		})
+		sort.Sort(maxTimestamps(t.MaxTimestamps))
+	} else {
+		t.MaxTimestamps[i].MaxTimestamp.Backward(maxTS)
 	}
 }
 
-// Contains returns true if the underlying slice contains the given NodeID.
-func (s NodeList) Contains(nodeID NodeID) bool {
-	ns := s.Nodes
-	i := sort.Search(len(ns), func(i int) bool { return NodeID(ns[i]) >= nodeID })
-	return i < len(ns) && NodeID(ns[i]) == nodeID
+// GetUncertainty returns the lowest timestamp recorded for the given node.
+// When reading from that node, MaxTimestamp can be lowered to the timestamp
+// returned by this method. If no entry is found, MaxTimestamp is be returned.
+func (t Transaction) GetUncertainty(nodeID NodeID) Timestamp {
+	_, ts := maxTimestamps(t.MaxTimestamps).find(nodeID)
+	return ts
 }
 
 var _ fmt.Stringer = &Lease{}
