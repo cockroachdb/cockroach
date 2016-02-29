@@ -17,6 +17,7 @@
 package cluster
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
@@ -46,7 +49,7 @@ import (
 
 const (
 	builderImage   = "cockroachdb/builder"
-	builderTag     = "20160218-125307"
+	builderTag     = "20160229-011129"
 	dockerspyImage = "cockroachdb/docker-spy"
 	dockerspyTag   = "20160209-143235"
 	domain         = "local"
@@ -55,6 +58,8 @@ const (
 )
 
 const defaultTCP nat.Port = base.DefaultPort + "/tcp"
+
+var defaultPort, _ = strconv.Atoi(base.DefaultPort)
 
 var cockroachImage = flag.String("i", builderImageFull, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
@@ -669,6 +674,19 @@ func (l *LocalCluster) Addr(i int) *net.TCPAddr {
 	return l.Nodes[i].Addr()
 }
 
+// InternalAddr returns the address used for inter-node communication.
+func (l *LocalCluster) InternalAddr(i int) *net.TCPAddr {
+	c := l.Nodes[i]
+	containerInfo, err := c.Inspect()
+	if err != nil {
+		return nil
+	}
+	return &net.TCPAddr{
+		IP:   net.ParseIP(containerInfo.NetworkSettings.IPAddress),
+		Port: defaultPort,
+	}
+}
+
 // PGUrl returns a URL string for the given node postgres server.
 func (l *LocalCluster) PGUrl(i int) string {
 	certUser := security.RootUser
@@ -704,4 +722,49 @@ func (l *LocalCluster) Restart(i int) error {
 // URL returns the base url.
 func (l *LocalCluster) URL(i int) string {
 	return "https://" + l.Addr(i).String()
+}
+
+// ExecRoot runs a command as root.
+func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
+	cfg := types.ExecConfig{
+		Container:    l.Nodes[i].Container.id,
+		User:         "root",
+		Privileged:   true,
+		Cmd:          cmd,
+		AttachStderr: true,
+		AttachStdout: true,
+	}
+	resp, err := l.client.ContainerExecCreate(cfg)
+	if err != nil {
+		return err
+	}
+	var outputStream, errorStream bytes.Buffer
+	{
+		resp, err := l.client.ContainerExecAttach(resp.ID, cfg)
+		if err != nil {
+			return err
+		}
+		ch := make(chan error)
+		go func() {
+			_, err := stdcopy.StdCopy(&outputStream, &errorStream, resp.Reader)
+			ch <- err
+		}()
+		defer resp.Close()
+		if err := <-ch; err != nil {
+			return err
+		}
+	}
+	{
+		resp, err := l.client.ContainerExecInspect(resp.ID)
+		if err != nil {
+			return err
+		}
+		if resp.Running {
+			return util.Errorf("command still running")
+		}
+		if resp.ExitCode != 0 {
+			return fmt.Errorf("error executing %s:\n%s\n%s", strings.Join(cmd, " "), outputStream.String(), errorStream.String())
+		}
+	}
+	return nil
 }

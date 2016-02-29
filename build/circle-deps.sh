@@ -128,7 +128,7 @@ ls -lah "${builder_dir}"
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-fetch_docker "builder" "20160218-125307"
+fetch_docker "builder" "20160229-011129"
 
 fetch_docker "docker-spy" "20160209-143235"
 

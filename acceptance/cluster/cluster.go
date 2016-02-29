@@ -31,7 +31,10 @@ type Cluster interface {
 	ConnString(int) string
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(int) string
-	// Addr returns the TCP address for the given node.
+	// Addr returns the TCP address used for inter-node communication.
+	InternalAddr(i int) *net.TCPAddr
+	// Addr returns the external TCP address for the given node, i.e. the one
+	// the test runner can use to talk to the node.
 	Addr(i int) *net.TCPAddr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
@@ -40,6 +43,8 @@ type Cluster interface {
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
 	AssertAndStop(*testing.T)
+	// ExecRoot executes the given command with super-user privileges.
+	ExecRoot(i int, cmd []string) error
 	// Kill terminates the cockroach process running on the given node number.
 	// The given integer must be in the range [0,NumNodes()-1].
 	Kill(int) error

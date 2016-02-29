@@ -116,9 +116,11 @@ func getConfigs() []cluster.TestConfig {
 	return []cluster.TestConfig{readConfigFromFlags()}
 }
 
+type configTestRunner func(*testing.T, cluster.Cluster, cluster.TestConfig)
+
 // runTestOnConfigs retrieves the full list of test configurations and runs the
 // passed in test against each on serially.
-func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
+func runTestOnConfigs(t *testing.T, testFunc configTestRunner) {
 	cfgs := getConfigs()
 	for _, cfg := range cfgs {
 		func() {
