@@ -94,9 +94,6 @@ var (
 	localRaftTruncatedStateSuffix = []byte("rftt")
 	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
 	localRangeLeaderLeaseSuffix = []byte("rll-")
-	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
-	// last verification timestamp (for checking integrity of on-disk data).
-	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
 	// localRangeStatsSuffix is the suffix for range statistics.
 	localRangeStatsSuffix = []byte("stat")
 
@@ -112,6 +109,9 @@ var (
 	localRaftLastIndexSuffix = []byte("rfti")
 	// localRaftLogSuffix is the suffix for the raft log.
 	localRaftLogSuffix = []byte("rftl")
+	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
+	// last verification timestamp (for checking integrity of on-disk data).
+	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
 
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The
