@@ -451,7 +451,11 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (Result, 
 		// transaction from being called within an auto-transaction below.
 		planMaker.setTxn(e.newTxn(planMaker.session), time.Now())
 		planMaker.txn.SetDebugName("sql", 0)
-	case *parser.CommitTransaction, *parser.RollbackTransaction:
+	case *parser.CommitTransaction:
+		if planMaker.txn == nil || planMaker.txn.Proto.Status == roachpb.ABORTED {
+			return result, roachpb.NewError(errNoTransactionInProgress)
+		}
+	case *parser.RollbackTransaction:
 		if planMaker.txn == nil {
 			return result, roachpb.NewError(errNoTransactionInProgress)
 		} else if planMaker.txn.Proto.Status == roachpb.ABORTED {
