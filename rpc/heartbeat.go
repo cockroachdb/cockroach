@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/net/context"
+	"google.golang.org/grpc/peer"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 var _ security.RequestWithUser = &PingRequest{}
@@ -53,26 +55,19 @@ type HeartbeatService struct {
 	remoteClockMonitor *RemoteClockMonitor
 }
 
-// Register this service on the given RPC server.
-func (hs *HeartbeatService) Register(server *Server) error {
-	if err := server.Register("Heartbeat.Ping", hs.Ping, &PingRequest{}); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Ping echos the contents of the request to the response, and returns the
 // server's current clock value, allowing the requester to measure its clock.
 // The requester should also estimate its offset from this server along
 // with the requester's address.
-func (hs *HeartbeatService) Ping(argsI proto.Message) (proto.Message, error) {
-	args := argsI.(*PingRequest)
+func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
 	reply := &PingResponse{}
 	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
+	if peer, ok := peer.FromContext(ctx); ok {
+		hs.remoteClockMonitor.UpdateOffset(peer.Addr.String(), serverOffset)
+	}
 	reply.ServerTime = hs.clock.PhysicalNow()
 	return reply, nil
 }
@@ -87,16 +82,8 @@ type ManualHeartbeatService struct {
 	stopper *stop.Stopper
 }
 
-// Register this service on the given RPC server.
-func (mhs *ManualHeartbeatService) Register(server *Server) error {
-	if err := server.Register("Heartbeat.Ping", mhs.Ping, &PingRequest{}); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
-func (mhs *ManualHeartbeatService) Ping(args proto.Message) (proto.Message, error) {
+func (mhs *ManualHeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
 	select {
 	case <-mhs.ready:
 	case <-mhs.stopper.ShouldStop():
@@ -105,5 +92,5 @@ func (mhs *ManualHeartbeatService) Ping(args proto.Message) (proto.Message, erro
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
 	}
-	return hs.Ping(args)
+	return hs.Ping(ctx, args)
 }

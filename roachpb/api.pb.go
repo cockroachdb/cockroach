@@ -126,6 +126,11 @@ import cockroach_util_tracing "github.com/cockroachdb/cockroach/util/tracing"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1075,6 +1080,125 @@ func init() {
 	proto.RegisterEnum("cockroach.roachpb.ReadConsistencyType", ReadConsistencyType_name, ReadConsistencyType_value)
 	proto.RegisterEnum("cockroach.roachpb.PushTxnType", PushTxnType_name, PushTxnType_value)
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for Internal service
+
+type InternalClient interface {
+	Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error)
+}
+
+type internalClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewInternalClient(cc *grpc.ClientConn) InternalClient {
+	return &internalClient{cc}
+}
+
+func (c *internalClient) Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error) {
+	out := new(BatchResponse)
+	err := grpc.Invoke(ctx, "/cockroach.roachpb.Internal/Batch", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Internal service
+
+type InternalServer interface {
+	Batch(context.Context, *BatchRequest) (*BatchResponse, error)
+}
+
+func RegisterInternalServer(s *grpc.Server, srv InternalServer) {
+	s.RegisterService(&_Internal_serviceDesc, srv)
+}
+
+func _Internal_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(BatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(InternalServer).Batch(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _Internal_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.roachpb.Internal",
+	HandlerType: (*InternalServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Batch",
+			Handler:    _Internal_Batch_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
+
+// Client API for External service
+
+type ExternalClient interface {
+	Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error)
+}
+
+type externalClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewExternalClient(cc *grpc.ClientConn) ExternalClient {
+	return &externalClient{cc}
+}
+
+func (c *externalClient) Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchResponse, error) {
+	out := new(BatchResponse)
+	err := grpc.Invoke(ctx, "/cockroach.roachpb.External/Batch", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for External service
+
+type ExternalServer interface {
+	Batch(context.Context, *BatchRequest) (*BatchResponse, error)
+}
+
+func RegisterExternalServer(s *grpc.Server, srv ExternalServer) {
+	s.RegisterService(&_External_serviceDesc, srv)
+}
+
+func _External_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(BatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(ExternalServer).Batch(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _External_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.roachpb.External",
+	HandlerType: (*ExternalServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Batch",
+			Handler:    _External_Batch_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
+
 func (m *ResponseHeader) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)

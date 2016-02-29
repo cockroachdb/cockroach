@@ -29,14 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-var (
-	// How often the cluster offset is measured.
-	monitorInterval time.Duration
-)
-
-func init() {
-	monitorInterval = defaultHeartbeatInterval * 10
-}
+// How often the cluster offset is measured.
+var monitorInterval = defaultHeartbeatInterval * 10
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
