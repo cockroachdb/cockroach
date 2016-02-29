@@ -108,10 +108,6 @@ module Components {
          * the query.
          */
         drawGraph: MithrilElementConfig = (element: Element, isInitialized: boolean, context: any) => {
-          if (!isInitialized) {
-            nv.addGraph(this.chart);
-          }
-
           // TODO(mrtracy): Update if axis changes. NVD3 unfortunately
           // breaks mithril's assumption that everything is rendering
           // after every change, so we need to figure out the best way
