@@ -368,15 +368,14 @@ func (m *InternalCommitTrigger) GetModifiedSpanTrigger() *ModifiedSpanTrigger {
 	return nil
 }
 
-// NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
-// adding to the set and Contains() verifying membership.
-type NodeList struct {
-	Nodes []NodeID `protobuf:"varint,1,rep,packed,name=nodes,casttype=NodeID" json:"nodes,omitempty"`
+type NodeWithTimestamp struct {
+	NodeID       NodeID    `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	MaxTimestamp Timestamp `protobuf:"bytes,2,opt,name=max_timestamp" json:"max_timestamp"`
 }
 
-func (m *NodeList) Reset()         { *m = NodeList{} }
-func (m *NodeList) String() string { return proto.CompactTextString(m) }
-func (*NodeList) ProtoMessage()    {}
+func (m *NodeWithTimestamp) Reset()         { *m = NodeWithTimestamp{} }
+func (m *NodeWithTimestamp) String() string { return proto.CompactTextString(m) }
+func (*NodeWithTimestamp) ProtoMessage()    {}
 
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
@@ -447,7 +446,7 @@ type Transaction struct {
 	// Bits of this mechanism are found in the local sender, the range and the
 	// txn_coord_sender, with brief comments referring here.
 	// See https://github.com/cockroachdb/cockroach/pull/221.
-	CertainNodes NodeList `protobuf:"bytes,8,opt,name=certain_nodes" json:"certain_nodes"`
+	MaxTimestamps []NodeWithTimestamp `protobuf:"bytes,8,rep,name=max_timestamps" json:"max_timestamps"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
 	Writing bool `protobuf:"varint,9,opt,name=Writing" json:"Writing"`
@@ -513,7 +512,7 @@ func init() {
 	proto.RegisterType((*ChangeReplicasTrigger)(nil), "cockroach.roachpb.ChangeReplicasTrigger")
 	proto.RegisterType((*ModifiedSpanTrigger)(nil), "cockroach.roachpb.ModifiedSpanTrigger")
 	proto.RegisterType((*InternalCommitTrigger)(nil), "cockroach.roachpb.InternalCommitTrigger")
-	proto.RegisterType((*NodeList)(nil), "cockroach.roachpb.NodeList")
+	proto.RegisterType((*NodeWithTimestamp)(nil), "cockroach.roachpb.NodeWithTimestamp")
 	proto.RegisterType((*TxnMeta)(nil), "cockroach.roachpb.TxnMeta")
 	proto.RegisterType((*Transaction)(nil), "cockroach.roachpb.Transaction")
 	proto.RegisterType((*Intent)(nil), "cockroach.roachpb.Intent")
@@ -868,7 +867,7 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *NodeList) Marshal() (data []byte, err error) {
+func (m *NodeWithTimestamp) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -878,29 +877,22 @@ func (m *NodeList) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *NodeList) MarshalTo(data []byte) (int, error) {
+func (m *NodeWithTimestamp) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if len(m.Nodes) > 0 {
-		data13 := make([]byte, len(m.Nodes)*10)
-		var j12 int
-		for _, num1 := range m.Nodes {
-			num := uint64(num1)
-			for num >= 1<<7 {
-				data13[j12] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j12++
-			}
-			data13[j12] = uint8(num)
-			j12++
-		}
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(j12))
-		i += copy(data[i:], data13[:j12])
+	data[i] = 0x8
+	i++
+	i = encodeVarintData(data, i, uint64(m.NodeID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n12, err := m.MaxTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n12
 	return i, nil
 }
 
@@ -923,11 +915,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.ID.Size()))
-		n14, err := m.ID.MarshalTo(data[i:])
+		n13, err := m.ID.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n13
 	}
 	data[i] = 0x10
 	i++
@@ -944,11 +936,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x2a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n15, err := m.Timestamp.MarshalTo(data[i:])
+	n14, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n15
+	i += n14
 	return i, nil
 }
 
@@ -970,11 +962,11 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.TxnMeta.Size()))
-	n16, err := m.TxnMeta.MarshalTo(data[i:])
+	n15, err := m.TxnMeta.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n16
+	i += n15
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Name)))
@@ -989,36 +981,40 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n17, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n16, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n17
+		i += n16
 	}
 	data[i] = 0x32
 	i++
 	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n18, err := m.OrigTimestamp.MarshalTo(data[i:])
+	n17, err := m.OrigTimestamp.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
+	data[i] = 0x3a
+	i++
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n18, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n18
-	data[i] = 0x3a
-	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n19, err := m.MaxTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if len(m.MaxTimestamps) > 0 {
+		for _, msg := range m.MaxTimestamps {
+			data[i] = 0x42
+			i++
+			i = encodeVarintData(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
-	i += n19
-	data[i] = 0x42
-	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n20, err := m.CertainNodes.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n20
 	data[i] = 0x48
 	i++
 	if m.Writing {
@@ -1063,19 +1059,19 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Span.Size()))
-	n21, err := m.Span.MarshalTo(data[i:])
+	n19, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n21
+	i += n19
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n22, err := m.Txn.MarshalTo(data[i:])
+	n20, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n20
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.Status))
@@ -1100,27 +1096,27 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n23, err := m.Start.MarshalTo(data[i:])
+	n21, err := m.Start.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n22, err := m.Expiration.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n22
+	data[i] = 0x1a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n23, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n23
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n24, err := m.Expiration.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n24
-	data[i] = 0x1a
-	i++
-	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n25, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n25
 	return i, nil
 }
 
@@ -1148,11 +1144,11 @@ func (m *SequenceCacheEntry) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n26, err := m.Timestamp.MarshalTo(data[i:])
+	n24, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n26
+	i += n24
 	return i, nil
 }
 
@@ -1304,16 +1300,12 @@ func (m *InternalCommitTrigger) Size() (n int) {
 	return n
 }
 
-func (m *NodeList) Size() (n int) {
+func (m *NodeWithTimestamp) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Nodes) > 0 {
-		l = 0
-		for _, e := range m.Nodes {
-			l += sovData(uint64(e))
-		}
-		n += 1 + sovData(uint64(l)) + l
-	}
+	n += 1 + sovData(uint64(m.NodeID))
+	l = m.MaxTimestamp.Size()
+	n += 1 + l + sovData(uint64(l))
 	return n
 }
 
@@ -1352,8 +1344,12 @@ func (m *Transaction) Size() (n int) {
 	n += 1 + l + sovData(uint64(l))
 	l = m.MaxTimestamp.Size()
 	n += 1 + l + sovData(uint64(l))
-	l = m.CertainNodes.Size()
-	n += 1 + l + sovData(uint64(l))
+	if len(m.MaxTimestamps) > 0 {
+		for _, e := range m.MaxTimestamps {
+			l = e.Size()
+			n += 1 + l + sovData(uint64(l))
+		}
+	}
 	n += 2
 	n += 1 + sovData(uint64(m.Sequence))
 	if len(m.Intents) > 0 {
@@ -2582,7 +2578,7 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *NodeList) Unmarshal(data []byte) error {
+func (m *NodeWithTimestamp) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2605,74 +2601,61 @@ func (m *NodeList) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: NodeList: wiretype end group for non-group")
+			return fmt.Errorf("proto: NodeWithTimestamp: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: NodeList: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: NodeWithTimestamp: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType == 2 {
-				var packedLen int
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowData
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := data[iNdEx]
-					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			}
+			m.NodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
 				}
-				if packedLen < 0 {
-					return ErrInvalidLengthData
-				}
-				postIndex := iNdEx + packedLen
-				if postIndex > l {
+				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				for iNdEx < postIndex {
-					var v NodeID
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowData
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := data[iNdEx]
-						iNdEx++
-						v |= (NodeID(b) & 0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					m.Nodes = append(m.Nodes, v)
+				b := data[iNdEx]
+				iNdEx++
+				m.NodeID |= (NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
 				}
-			} else if wireType == 0 {
-				var v NodeID
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowData
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := data[iNdEx]
-					iNdEx++
-					v |= (NodeID(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				m.Nodes = append(m.Nodes, v)
-			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
 			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxTimestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MaxTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
@@ -3096,7 +3079,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CertainNodes", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxTimestamps", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3120,7 +3103,8 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.CertainNodes.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			m.MaxTimestamps = append(m.MaxTimestamps, NodeWithTimestamp{})
+			if err := m.MaxTimestamps[len(m.MaxTimestamps)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

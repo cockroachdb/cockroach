@@ -420,28 +420,32 @@ func TestTransactionString(t *testing.T) {
 	_ = txnEmpty.String() // prevent regression of NPE
 }
 
-// TestNodeList verifies that its exported methods Add() and Contain()
-// operate as expected.
-func TestNodeList(t *testing.T) {
-	sn := NodeList{}
-	items := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
-	for i := range items {
-		n := NodeID(items[i])
-		if sn.Contains(n) {
-			t.Fatalf("%d: false positive hit for %d on slice %v",
-				i, n, sn.Nodes)
+// TestTransactionUncertainty verifies that txn.{Get,Update}Uncertainty work as
+// advertised.
+func TestTransactionUncertainty(t *testing.T) {
+	txn := Transaction{}
+	mkTS := func(nodeID NodeID) Timestamp {
+		return ZeroTimestamp.Add(rand.New(rand.NewSource(int64(nodeID))).Int63(), 0)
+	}
+	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
+	for i, n := range ids {
+		nodeID := NodeID(n)
+		if ts := txn.GetUncertainty(nodeID); ts != MaxTimestamp {
+			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
-		// Add this item and, for good measure, all the previous ones.
-		for j := i; j >= 0; j-- {
-			sn.Add(NodeID(items[j]))
+		txn.UpdateUncertainty(nodeID, mkTS(nodeID))
+		if exp, act := i+1, len(txn.MaxTimestamps); act != exp {
+			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.MaxTimestamps)
 		}
-		if nodes := sn.Nodes; len(nodes) != i+1 {
-			t.Fatalf("%d: missing values or duplicates: %v",
-				i, nodes)
-		}
-		if !sn.Contains(n) {
-			t.Fatalf("%d: false negative hit for %d on slice %v",
-				i, n, sn.Nodes)
+		for j, m := range ids[:i+1] {
+			checkID := NodeID(m)
+			var exp Timestamp
+			if j <= i+1 {
+				exp = mkTS(checkID)
+			}
+			if act := txn.GetUncertainty(checkID); !act.Equal(exp) {
+				t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
+			}
 		}
 	}
 }
@@ -461,12 +465,10 @@ var nonZeroTxn = Transaction{
 	LastHeartbeat: &Timestamp{1, 2},
 	OrigTimestamp: makeTS(30, 31),
 	MaxTimestamp:  makeTS(40, 41),
-	CertainNodes: NodeList{
-		Nodes: []NodeID{101, 103, 105},
-	},
-	Writing:  true,
-	Sequence: 123,
-	Intents:  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	MaxTimestamps: []NodeWithTimestamp{{NodeID: 1, MaxTimestamp: makeTS(1, 2)}},
+	Writing:       true,
+	Sequence:      123,
+	Intents:       []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 }
 
 func TestTransactionUpdate(t *testing.T) {
