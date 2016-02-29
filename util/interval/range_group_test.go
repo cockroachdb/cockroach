@@ -19,20 +19,21 @@ package interval
 import (
 	"bytes"
 	"crypto/rand"
+	"reflect"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
-func TestRangeListSingleRangeAndClear(t *testing.T) {
-	testRangeGroupSingleRangeAndClear(t, NewRangeList())
+func TestRangeListAddSingleRangeAndClear(t *testing.T) {
+	testRangeGroupAddSingleRangeAndClear(t, NewRangeList())
 }
 
-func TestRangeTreeSingleRangeAndClear(t *testing.T) {
-	testRangeGroupSingleRangeAndClear(t, NewRangeTree())
+func TestRangeTreeAddSingleRangeAndClear(t *testing.T) {
+	testRangeGroupAddSingleRangeAndClear(t, NewRangeTree())
 }
 
-func testRangeGroupSingleRangeAndClear(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddSingleRangeAndClear(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x02}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -47,15 +48,15 @@ func testRangeGroupSingleRangeAndClear(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListTwoRangesBefore(t *testing.T) {
-	testRangeGroupTwoRangesBefore(t, NewRangeList())
+func TestRangeListAddTwoRangesBefore(t *testing.T) {
+	testRangeGroupAddTwoRangesBefore(t, NewRangeList())
 }
 
-func TestRangeTreeTwoRangesBefore(t *testing.T) {
-	testRangeGroupTwoRangesBefore(t, NewRangeTree())
+func TestRangeTreeAddTwoRangesBefore(t *testing.T) {
+	testRangeGroupAddTwoRangesBefore(t, NewRangeTree())
 }
 
-func testRangeGroupTwoRangesBefore(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddTwoRangesBefore(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x03}, End: []byte{0x04}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -68,15 +69,15 @@ func testRangeGroupTwoRangesBefore(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListTwoRangesAfter(t *testing.T) {
-	testRangeGroupTwoRangesAfter(t, NewRangeList())
+func TestRangeListAddTwoRangesAfter(t *testing.T) {
+	testRangeGroupAddTwoRangesAfter(t, NewRangeList())
 }
 
-func TestRangeTreeTwoRangesAfter(t *testing.T) {
-	testRangeGroupTwoRangesAfter(t, NewRangeTree())
+func TestRangeTreeAddTwoRangesAfter(t *testing.T) {
+	testRangeGroupAddTwoRangesAfter(t, NewRangeTree())
 }
 
-func testRangeGroupTwoRangesAfter(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddTwoRangesAfter(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x02}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -89,15 +90,15 @@ func testRangeGroupTwoRangesAfter(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListTwoRangesMergeForward(t *testing.T) {
-	testRangeGroupTwoRangesMergeForward(t, NewRangeList())
+func TestRangeListAddTwoRangesMergeForward(t *testing.T) {
+	testRangeGroupAddTwoRangesMergeForward(t, NewRangeList())
 }
 
-func TestRangeTreeTwoRangesMergeForward(t *testing.T) {
-	testRangeGroupTwoRangesMergeForward(t, NewRangeTree())
+func TestRangeTreeAddTwoRangesMergeForward(t *testing.T) {
+	testRangeGroupAddTwoRangesMergeForward(t, NewRangeTree())
 }
 
-func testRangeGroupTwoRangesMergeForward(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddTwoRangesMergeForward(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x03}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -110,15 +111,15 @@ func testRangeGroupTwoRangesMergeForward(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListTwoRangesMergeBackwards(t *testing.T) {
-	testRangeGroupTwoRangesMergeBackwards(t, NewRangeList())
+func TestRangeListAddTwoRangesMergeBackwards(t *testing.T) {
+	testRangeGroupAddTwoRangesMergeBackwards(t, NewRangeList())
 }
 
-func TestRangeTreeTwoRangesMergeBackwards(t *testing.T) {
-	testRangeGroupTwoRangesMergeBackwards(t, NewRangeTree())
+func TestRangeTreeAddTwoRangesMergeBackwards(t *testing.T) {
+	testRangeGroupAddTwoRangesMergeBackwards(t, NewRangeTree())
 }
 
-func testRangeGroupTwoRangesMergeBackwards(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddTwoRangesMergeBackwards(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x03}, End: []byte{0x04}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -131,15 +132,15 @@ func testRangeGroupTwoRangesMergeBackwards(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListTwoRangesWithin(t *testing.T) {
-	testRangeGroupTwoRangesWithin(t, NewRangeList())
+func TestRangeListAddTwoRangesWithin(t *testing.T) {
+	testRangeGroupAddTwoRangesWithin(t, NewRangeList())
 }
 
-func TestRangeTreeTwoRangesWithin(t *testing.T) {
-	testRangeGroupTwoRangesWithin(t, NewRangeTree())
+func TestRangeTreeAddTwoRangesWithin(t *testing.T) {
+	testRangeGroupAddTwoRangesWithin(t, NewRangeTree())
 }
 
-func testRangeGroupTwoRangesWithin(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddTwoRangesWithin(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x04}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -152,15 +153,15 @@ func testRangeGroupTwoRangesWithin(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListTwoRangesSurround(t *testing.T) {
-	testRangeGroupTwoRangesSurround(t, NewRangeList())
+func TestRangeListAddTwoRangesSurround(t *testing.T) {
+	testRangeGroupAddTwoRangesSurround(t, NewRangeList())
 }
 
-func TestRangeTreeTwoRangesSurround(t *testing.T) {
-	testRangeGroupTwoRangesSurround(t, NewRangeTree())
+func TestRangeTreeAddTwoRangesSurround(t *testing.T) {
+	testRangeGroupAddTwoRangesSurround(t, NewRangeTree())
 }
 
-func testRangeGroupTwoRangesSurround(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddTwoRangesSurround(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x02}, End: []byte{0x03}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -173,15 +174,15 @@ func testRangeGroupTwoRangesSurround(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListThreeRangesMergeInOrder(t *testing.T) {
-	testRangeGroupThreeRangesMergeInOrder(t, NewRangeList())
+func TestRangeListAddThreeRangesMergeInOrder(t *testing.T) {
+	testRangeGroupAddThreeRangesMergeInOrder(t, NewRangeList())
 }
 
-func TestRangeTreeThreeRangesMergeInOrder(t *testing.T) {
-	testRangeGroupThreeRangesMergeInOrder(t, NewRangeTree())
+func TestRangeTreeAddThreeRangesMergeInOrder(t *testing.T) {
+	testRangeGroupAddThreeRangesMergeInOrder(t, NewRangeTree())
 }
 
-func testRangeGroupThreeRangesMergeInOrder(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddThreeRangesMergeInOrder(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x03}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -197,15 +198,15 @@ func testRangeGroupThreeRangesMergeInOrder(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListThreeRangesMergeOutOfOrder(t *testing.T) {
-	testRangeGroupThreeRangesMergeOutOfOrder(t, NewRangeList())
+func TestRangeListAddThreeRangesMergeOutOfOrder(t *testing.T) {
+	testRangeGroupAddThreeRangesMergeOutOfOrder(t, NewRangeList())
 }
 
-func TestRangeTreeThreeRangesMergeOutOfOrder(t *testing.T) {
-	testRangeGroupThreeRangesMergeOutOfOrder(t, NewRangeTree())
+func TestRangeTreeAddThreeRangesMergeOutOfOrder(t *testing.T) {
+	testRangeGroupAddThreeRangesMergeOutOfOrder(t, NewRangeTree())
 }
 
-func testRangeGroupThreeRangesMergeOutOfOrder(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddThreeRangesMergeOutOfOrder(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x03}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -221,15 +222,15 @@ func testRangeGroupThreeRangesMergeOutOfOrder(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListThreeRangesMergeReverseOrder(t *testing.T) {
-	testRangeGroupThreeRangesMergeReverseOrder(t, NewRangeList())
+func TestRangeListAddThreeRangesMergeReverseOrder(t *testing.T) {
+	testRangeGroupAddThreeRangesMergeReverseOrder(t, NewRangeList())
 }
 
-func TestRangeTreeThreeRangesMergeReverseOrder(t *testing.T) {
-	testRangeGroupThreeRangesMergeReverseOrder(t, NewRangeTree())
+func TestRangeTreeAddThreeRangesMergeReverseOrder(t *testing.T) {
+	testRangeGroupAddThreeRangesMergeReverseOrder(t, NewRangeTree())
 }
 
-func testRangeGroupThreeRangesMergeReverseOrder(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddThreeRangesMergeReverseOrder(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x04}, End: []byte{0x06}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -245,15 +246,15 @@ func testRangeGroupThreeRangesMergeReverseOrder(t *testing.T, rg RangeGroup) {
 	}
 }
 
-func TestRangeListThreeRangesSuperset(t *testing.T) {
-	testRangeGroupThreeRangesSuperset(t, NewRangeList())
+func TestRangeListAddThreeRangesSuperset(t *testing.T) {
+	testRangeGroupAddThreeRangesSuperset(t, NewRangeList())
 }
 
-func TestRangeTreeThreeRangesSuperset(t *testing.T) {
-	testRangeGroupThreeRangesSuperset(t, NewRangeTree())
+func TestRangeTreeAddThreeRangesSuperset(t *testing.T) {
+	testRangeGroupAddThreeRangesSuperset(t, NewRangeTree())
 }
 
-func testRangeGroupThreeRangesSuperset(t *testing.T, rg RangeGroup) {
+func testRangeGroupAddThreeRangesSuperset(t *testing.T, rg RangeGroup) {
 	if added := rg.Add(Range{Start: []byte{0x01}, End: []byte{0x02}}); !added {
 		t.Errorf("added new range to range group, wanted true added flag; got false")
 	}
@@ -269,6 +270,245 @@ func testRangeGroupThreeRangesSuperset(t *testing.T, rg RangeGroup) {
 	}
 }
 
+func TestRangeListSubRanges(t *testing.T) {
+	testRangeGroupSubRanges(t, NewRangeList())
+}
+
+func TestRangeTreeSubRanges(t *testing.T) {
+	testRangeGroupSubRanges(t, NewRangeTree())
+}
+
+func testRangeGroupSubRanges(t *testing.T, rg RangeGroup) {
+	oneRange := []Range{{Start: []byte{0x01}, End: []byte{0x05}}}
+	twoRanges := []Range{
+		{Start: []byte{0x01}, End: []byte{0x05}},
+		{Start: []byte{0x07}, End: []byte{0x0f}},
+	}
+
+	tests := []struct {
+		add []Range
+		sub Range
+		rem bool
+		res []Range
+	}{
+		{
+			add: oneRange,
+			sub: Range{Start: []byte{0x10}, End: []byte{0x11}},
+			rem: false,
+			res: []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+		},
+		{
+			add: oneRange,
+			sub: Range{Start: []byte{0x01}, End: []byte{0x05}},
+			rem: true,
+			res: []Range{},
+		},
+		{
+			add: oneRange,
+			sub: Range{Start: []byte{0x00}, End: []byte{0x06}},
+			rem: true,
+			res: []Range{},
+		},
+		{
+			add: oneRange,
+			sub: Range{Start: []byte{0x04}, End: []byte{0x06}},
+			rem: true,
+			res: []Range{{Start: []byte{0x01}, End: []byte{0x04}}},
+		},
+		{
+			add: oneRange,
+			sub: Range{Start: []byte{0x01}, End: []byte{0x03}},
+			rem: true,
+			res: []Range{{Start: []byte{0x03}, End: []byte{0x05}}},
+		},
+		{
+			add: oneRange,
+			sub: Range{Start: []byte{0x02}, End: []byte{0x04}},
+			rem: true,
+			res: []Range{
+				{Start: []byte{0x01}, End: []byte{0x02}},
+				{Start: []byte{0x04}, End: []byte{0x05}},
+			},
+		},
+		{
+			add: twoRanges,
+			sub: Range{Start: []byte{0x10}, End: []byte{0x11}},
+			rem: false,
+			res: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x07}, End: []byte{0x0f}},
+			},
+		},
+		{
+			add: twoRanges,
+			sub: Range{Start: []byte{0x01}, End: []byte{0x04}},
+			rem: true,
+			res: []Range{
+				{Start: []byte{0x04}, End: []byte{0x05}},
+				{Start: []byte{0x07}, End: []byte{0x0f}},
+			},
+		},
+		{
+			add: twoRanges,
+			sub: Range{Start: []byte{0x01}, End: []byte{0x05}},
+			rem: true,
+			res: []Range{{Start: []byte{0x07}, End: []byte{0x0f}}},
+		},
+		{
+			add: twoRanges,
+			sub: Range{Start: []byte{0x03}, End: []byte{0x09}},
+			rem: true,
+			res: []Range{
+				{Start: []byte{0x01}, End: []byte{0x03}},
+				{Start: []byte{0x09}, End: []byte{0x0f}},
+			},
+		},
+		{
+			add: twoRanges,
+			sub: Range{Start: []byte{0x03}, End: []byte{0xff}},
+			rem: true,
+			res: []Range{
+				{Start: []byte{0x01}, End: []byte{0x03}},
+			},
+		},
+		{
+			add: twoRanges,
+			sub: Range{Start: []byte{0x00}, End: []byte{0x09}},
+			rem: true,
+			res: []Range{
+				{Start: []byte{0x09}, End: []byte{0x0f}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		rg.Clear()
+
+		for _, r := range test.add {
+			if added := rg.Add(r); !added {
+				t.Errorf("added new range %v to empty range group, wanted true added flag; got false", r)
+			}
+		}
+		str := rg.String()
+
+		if rem := rg.Sub(test.sub); rem != test.rem {
+			t.Errorf("subtracted %v from range group %s, wanted %t removed flag; got %t", test.sub, str, test.rem, rem)
+		}
+
+		if l, el := rg.Len(), len(test.res); l != el {
+			t.Errorf("subtracted %v from range group %s, wanted %b remaining ranges; got %b", test.sub, str, el, l)
+		} else {
+			ranges := make([]Range, 0, l)
+			if err := rg.ForEach(func(r Range) error {
+				ranges = append(ranges, r)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(ranges, test.res) {
+				t.Errorf("subtracted %v from range group %s, wanted the remaining ranges %v; got %v", test.sub, str, test.res, ranges)
+			}
+		}
+	}
+}
+
+func TestRangeListEnclosesRange(t *testing.T) {
+	testRangeGroupEnclosesRange(t, NewRangeList())
+}
+
+func TestRangeTreeEnclosesRange(t *testing.T) {
+	testRangeGroupEnclosesRange(t, NewRangeTree())
+}
+
+func testRangeGroupEnclosesRange(t *testing.T, rg RangeGroup) {
+	twoRanges := []Range{
+		{Start: []byte{0x01}, End: []byte{0x05}},
+		{Start: []byte{0x07}, End: []byte{0x0f}},
+	}
+
+	tests := []struct {
+		r    Range
+		want bool
+	}{
+		{
+			r:    Range{Start: []byte{0x10}, End: []byte{0x11}},
+			want: false,
+		},
+		{
+			r:    Range{Start: []byte{0x01}, End: []byte{0x04}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x01}, End: []byte{0x05}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x01}, End: []byte{0x0f}},
+			want: false,
+		},
+		{
+			r:    Range{Start: []byte{0x07}, End: []byte{0x0f}},
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		rg.Clear()
+
+		for _, r := range twoRanges {
+			if added := rg.Add(r); !added {
+				t.Errorf("added new range %v to empty range group, wanted true added flag; got false", r)
+			}
+		}
+
+		if enc := rg.Encloses(test.r); enc != test.want {
+			t.Errorf("testing if range group %v encloses range %v, wanted %t; got %t", rg, test.r, test.want, enc)
+		}
+	}
+}
+
+func TestRangeListStringer(t *testing.T) {
+	testRangeGroupStringer(t, NewRangeList())
+}
+
+func TestRangeTreeStringer(t *testing.T) {
+	testRangeGroupStringer(t, NewRangeTree())
+}
+
+func testRangeGroupStringer(t *testing.T, rg RangeGroup) {
+	tests := []struct {
+		rngs []Range
+		str  string
+	}{
+		{
+			rngs: []Range{},
+			str:  "[]",
+		},
+		{
+			rngs: []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+			str:  "[{01-05}]",
+		},
+		{
+			rngs: []Range{
+				{Start: []byte{0x01}, End: []byte{0x05}},
+				{Start: []byte{0x09}, End: []byte{0xff}},
+			},
+			str: "[{01-05} {09-ff}]",
+		},
+	}
+
+	for _, test := range tests {
+		rg.Clear()
+		for _, r := range test.rngs {
+			rg.Add(r)
+		}
+		if str := rg.String(); str != test.str {
+			t.Errorf("added new ranges %v to range group, wanted string value %s; got %s", test.rngs, test.str, str)
+		}
+	}
+}
+
 func TestRangeListAndRangeGroupIdentical(t *testing.T) {
 	const trials = 5
 	for tr := 0; tr < trials; tr++ {
@@ -276,18 +516,58 @@ func TestRangeListAndRangeGroupIdentical(t *testing.T) {
 		rt := NewRangeTree()
 
 		const iters = 20
+		const nBytes = 3
 		for i := 0; i < iters; i++ {
-			r := getRandomRange(t, 3)
-			listAdded := rl.Add(r)
-			treeAdded := rt.Add(r)
+			lStr := rl.String()
+			tStr := rt.String()
+			if lStr != tStr {
+				t.Errorf("expected string value for RangeList and RangeTree to be the same; got %s for RangeList and %s for RangeTree", lStr, tStr)
+			}
+
+			ar := getRandomRange(t, nBytes)
+			listAdded := rl.Add(ar)
+			treeAdded := rt.Add(ar)
 			if listAdded != treeAdded {
-				t.Errorf("expected adding %s to RangeList and RangeTree to produce the same result; got %t from RangeList and %t from RangeTree", r, listAdded, treeAdded)
+				t.Errorf("expected adding %s to RangeList %v and RangeTree %v to produce the same result; got %t from RangeList and %t from RangeTree", ar, rl, rt, listAdded, treeAdded)
+			}
+
+			sr := getRandomRange(t, nBytes)
+			listSubtracted := rl.Sub(sr)
+			treeSubtracted := rt.Sub(sr)
+			if listSubtracted != treeSubtracted {
+				t.Errorf("expected subtracting %s from RangeList %v and RangeTree %v to produce the same result; got %t from RangeList and %t from RangeTree", sr, rl, rt, listSubtracted, treeSubtracted)
+			}
+
+			er := getRandomRange(t, nBytes)
+			listEncloses := rl.Encloses(er)
+			treeEncloses := rt.Encloses(er)
+			if listEncloses != treeEncloses {
+				t.Errorf("expected RangeList %v and RangeTree %v to return the same enclosing state for %v; got %t from RangeList and %t from RangeTree", rl, rt, er, listEncloses, treeEncloses)
 			}
 
 			listLen := rl.Len()
 			treeLen := rt.Len()
 			if listLen != treeLen {
 				t.Errorf("expected RangeList and RangeTree to have the same length; got %d from RangeList and %d from RangeTree", listLen, treeLen)
+			}
+
+			listRngs := make([]Range, 0, rl.Len())
+			treeRngs := make([]Range, 0, rt.Len())
+			if err := rl.ForEach(func(r Range) error {
+				listRngs = append(listRngs, r)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := rt.ForEach(func(r Range) error {
+				treeRngs = append(treeRngs, r)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(listRngs, treeRngs) {
+				t.Fatalf(`expected RangeList and RangeTree to contain the same ranges; started with %s, added %v, and subtracted %v to get %v for RangeList and %v for RangeTree`, lStr, ar, sr, rl, rt)
 			}
 		}
 	}
