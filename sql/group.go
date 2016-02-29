@@ -44,13 +44,6 @@ var aggregates = map[string]func() aggregateImpl{
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the selectNode as necessary.
 func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb.Error) {
-	// Make sure there are no aggregation functions in the select's WHERE clause.
-	// We don't want to check n.Where because it could contain subqueries (which we
-	// already expanded).
-	if p.aggregateInExpr(s.filter) {
-		return nil, roachpb.NewUErrorf("aggregate functions are not allowed in WHERE")
-	}
-
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).

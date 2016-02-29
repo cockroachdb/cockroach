@@ -137,6 +137,11 @@ type scanNode struct {
 	explain          explainMode
 	explainValue     parser.Datum
 	debugVals        debugValues
+
+	// filter that can be evaluated using only this table/index; it contains scanQValues.
+	filter parser.Expr
+	// qvalues (one per column) which can be part of the filter expression.
+	qvals []scanQValue
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -330,6 +335,10 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 		n.valNeededForCol[i] = true
 	}
 	n.row = make([]parser.Datum, len(visibleCols))
+	n.qvals = make([]scanQValue, len(visibleCols))
+	for i := range n.qvals {
+		n.qvals[i].initQValue(n, i)
+	}
 }
 
 // initScan initializes but does not perform the key-value scan.
@@ -583,19 +592,27 @@ func (n *scanNode) maybeOutputRow() bool {
 				n.row[i] = parser.DNull
 			}
 		}
-		if n.explainValue != nil {
-			n.explainDebug(true)
+
+		// Run the filter.
+		passesFilter, err := runFilter(n.filter, n.planner.evalCtx)
+		if err != nil {
+			n.pErr = roachpb.NewError(err)
+			return true
 		}
-		return true
+		if n.explainValue != nil {
+			n.explainDebug(true, passesFilter)
+			return true
+		}
+		return passesFilter
 	} else if n.explainValue != nil {
-		n.explainDebug(false)
+		n.explainDebug(false, false)
 		return true
 	}
 	return false
 }
 
 // explainDebug fills in n.debugVals.
-func (n *scanNode) explainDebug(endOfRow bool) {
+func (n *scanNode) explainDebug(endOfRow bool, passesFilter bool) {
 	n.debugVals.rowIdx = n.rowIndex
 	n.debugVals.key = n.prettyKey()
 
@@ -611,7 +628,11 @@ func (n *scanNode) explainDebug(endOfRow bool) {
 		n.debugVals.value = n.explainValue.String()
 	}
 	if endOfRow {
-		n.debugVals.output = debugValueRow
+		if passesFilter {
+			n.debugVals.output = debugValueRow
+		} else {
+			n.debugVals.output = debugValueFiltered
+		}
 		n.rowIndex++
 	} else {
 		n.debugVals.output = debugValuePartial

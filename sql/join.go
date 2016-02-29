@@ -48,9 +48,6 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	table.initDescDefaults()
 	table.initOrdering(0)
 
-	// TODO(radu): the join node should be aware of any filtering expressions that refer only to
-	// columns in the index to filter out rows during the join.
-
 	colIDtoRowIndex := map[ColumnID]int{}
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
 		idx, ok := indexScan.colIdxMap[colID]
@@ -68,13 +65,27 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	}
 
 	for i := range indexScan.valNeededForCol {
-		// We transfer valNeededForCol to the table node
+		// We transfer valNeededForCol to the table node.
 		table.valNeededForCol[i] = indexScan.valNeededForCol[i]
 
 		// For the index node, we set valNeededForCol for columns that are part of the index.
 		id := indexScan.visibleCols[i].ID
 		_, found := colIDtoRowIndex[id]
 		indexScan.valNeededForCol[i] = found
+	}
+
+	if indexScan.filter != nil {
+		// Transfer the filter to the table node. We must first convert the scanQValues associated
+		// with indexNode.
+		convFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
+			qval := expr.(*scanQValue)
+			return true, table.getQValue(qval.colIdx)
+		}
+		table.filter = exprConvertVars(indexScan.filter, convFunc)
+
+		// TODO(radu): the join node should be aware of any filtering expressions that refer only to
+		// columns in the index to filter out rows during the join.
+		indexScan.filter = nil
 	}
 
 	indexScan.initOrdering(exactPrefix)

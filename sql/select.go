@@ -116,12 +116,13 @@ func (s *selectNode) Next() bool {
 		}
 		row := s.table.node.Values()
 		s.qvals.populateQVals(row)
-		output := s.filterRow()
-		if s.pErr != nil {
+		passesFilter, err := runFilter(s.filter, s.planner.evalCtx)
+		if err != nil {
+			s.pErr = roachpb.NewError(err)
 			return false
 		}
 
-		if output {
+		if passesFilter {
 			s.renderRow()
 			return true
 		} else if s.explain == explainDebug {
@@ -208,6 +209,24 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 			neededCols[i] = ok
 		}
 		scan.setNeededColumns(neededCols)
+
+		// Compute a filter expression for the scan node.
+		conv := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
+			qval := expr.(*qvalue)
+			if qval.colRef.table != &s.table {
+				// TODO(radu): when we will support multiple tables, this will be a valid
+				// case.
+				panic("scan qvalue refers to unknown table")
+			}
+			return true, scan.getQValue(qval.colRef.colIdx)
+		}
+
+		scan.filter, s.filter = splitFilter(s.filter, conv)
+		if s.filter != nil {
+			// Right now we support only one table, so the entire expression should be
+			// converted.
+			panic(fmt.Sprintf("residual filter `%s` (scan filter `%s`)", s.filter, scan.filter))
+		}
 
 		plan := p.selectIndex(s, scan, ordering, grouping)
 
@@ -345,7 +364,18 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		return s.pErr
 	}
 	s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
-	return s.pErr
+	if s.pErr != nil {
+		return s.pErr
+	}
+
+	// Make sure there are no aggregation functions in the filter (after subqueries have been
+	// expanded).
+	if s.planner.aggregateInExpr(s.filter) {
+		s.pErr = roachpb.NewUErrorf("aggregate functions are not allowed in WHERE")
+		return s.pErr
+	}
+
+	return nil
 }
 
 // colIndex takes an expression that refers to a column using an integer, verifies it refers to a
@@ -592,7 +622,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
 func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) planNode {
-	if s.desc.isEmpty() || (sel.filter == nil && ordering == nil) {
+	if s.desc.isEmpty() || (s.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
 		return s
@@ -623,12 +653,12 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		c.init(s)
 	}
 
-	if sel.filter != nil {
+	if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs, equivalent := analyzeExpr(sel.filter)
+		exprs, equivalent := analyzeExpr(s.filter)
 		if log.V(2) {
-			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", sel.filter, exprs, equivalent)
+			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -642,7 +672,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		// If the simplified expression is equivalent and there is a single
 		// disjunction, use it for the filter instead of the original expression.
 		if equivalent && len(exprs) == 1 {
-			sel.filter = joinAndExprs(exprs[0])
+			s.filter = joinAndExprs(exprs[0])
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
@@ -695,7 +725,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		// There are no spans to scan.
 		return &emptyNode{}
 	}
-	sel.filter = applyConstraints(sel.filter, c.constraints)
+	s.filter = applyConstraints(s.filter, c.constraints)
 	s.reverse = c.reverse
 
 	var plan planNode
@@ -706,7 +736,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		plan = makeIndexJoin(s, c.exactPrefix)
 	}
 
-	if grouping && len(ordering) == 1 && len(s.spans) == 1 && sel.filter == nil {
+	if grouping && len(ordering) == 1 && len(s.spans) == 1 && s.filter == nil && sel.filter == nil {
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
@@ -718,7 +748,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 	}
 
 	if log.V(3) {
-		log.Infof("%s: filter=%v", c.index.Name, sel.filter)
+		log.Infof("%s: filter=%v", c.index.Name, s.filter)
 		for i, span := range s.spans {
 			log.Infof("%s/%d: %s", c.index.Name, i, prettySpan(span, 2))
 		}
@@ -857,16 +887,15 @@ func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering co
 	}
 }
 
-func (v *indexInfo) findColumnInTuple(tuple *parser.Tuple, colID ColumnID) int {
-	for i, val := range tuple.Exprs {
-		qval, ok := val.(*qvalue)
-		// TODO(radu): when we will have multiple FROMs, we should check
-		// that the qval refers to us.
-		if ok && v.desc.Columns[qval.colRef.colIdx].ID == colID {
-			return i
-		}
+func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
+	switch q := expr.(type) {
+	case *qvalue:
+		return true, q.colRef.colIdx
+
+	case *scanQValue:
+		return true, q.colIdx
 	}
-	return -1
+	return false, -1
 }
 
 // makeConstraints populates the indexInfo.constraints field based on the
@@ -947,15 +976,14 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 		for _, e := range andExprs {
 			if c, ok := e.(*parser.ComparisonExpr); ok {
 				var tupleMap []int
-				switch t := c.Left.(type) {
-				case *qvalue:
-					if v.desc.Columns[t.colRef.colIdx].ID != colID {
-						// This expression refers to a column other than the one we're
-						// looking for.
-						continue
-					}
 
-				case *parser.Tuple:
+				if ok, colIdx := getQValColIdx(c.Left); ok && v.desc.Columns[colIdx].ID != colID {
+					// This expression refers to a column other than the one we're
+					// looking for.
+					continue
+				}
+
+				if t, ok := c.Left.(*parser.Tuple); ok {
 					// If we have a tuple comparison we need to rearrange the comparison
 					// so that the order of the columns in the tuple matches the order in
 					// the index. For example, for an index on (a, b), the tuple
@@ -964,7 +992,14 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					// but simply provide a mapping from the order in the tuple to the
 					// order in the index.
 					for _, colID := range v.index.ColumnIDs[i:] {
-						idx := v.findColumnInTuple(t, colID)
+						idx := -1
+						for i, val := range t.Exprs {
+							ok, colIdx := getQValColIdx(val)
+							if ok && v.desc.Columns[colIdx].ID == colID {
+								idx = i
+								break
+							}
+						}
 						if idx == -1 {
 							break
 						}
