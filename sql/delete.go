@@ -182,6 +182,10 @@ func (p *planner) fastDelete(rows planNode, result *returningNode, autoCommit bo
 	sel := rows.(*selectNode)
 	scan := sel.table.node.(*scanNode)
 
+	if !scan.initScan() {
+		return nil, scan.pErr
+	}
+
 	for _, span := range scan.spans {
 		if log.V(2) {
 			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
@@ -200,10 +204,6 @@ func (p *planner) fastDelete(rows planNode, result *returningNode, autoCommit bo
 		if pErr := p.txn.Run(b); pErr != nil {
 			return nil, pErr
 		}
-	}
-
-	if !scan.initScan() {
-		return nil, scan.pErr
 	}
 
 	for _, r := range b.Results {
