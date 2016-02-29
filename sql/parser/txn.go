@@ -102,3 +102,24 @@ type RollbackTransaction struct{}
 func (node *RollbackTransaction) String() string {
 	return "ROLLBACK TRANSACTION"
 }
+
+// RestartTransaction represents a RESTART TRANSACTION statement.
+type RestartTransaction struct{}
+
+func (node *RestartTransaction) String() string {
+	return "RESTART TRANSACTION"
+}
+
+// ReleaseTransaction represents a RELEASE TRANSACTION statement.
+type ReleaseTransaction struct{}
+
+func (node *ReleaseTransaction) String() string {
+	return "RELEASE TRANSACTION"
+}
+
+// RetryIntent represents a RETRY INTENT statement.
+type RetryIntent struct{}
+
+func (node *RetryIntent) String() string {
+	return "RETRY INTENT"
+}

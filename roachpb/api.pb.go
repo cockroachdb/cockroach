@@ -105,6 +105,7 @@
 		LeaseVersionChangedError
 		DidntUpdateDescriptorError
 		SqlTransactionAbortedError
+		SqlTransactionCommittedError
 		ExistingSchemaChangeLeaseError
 		ErrorDetail
 		ErrPosition

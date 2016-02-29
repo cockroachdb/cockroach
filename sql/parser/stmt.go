@@ -172,7 +172,25 @@ func (*RenameTable) StatementType() StatementType { return DDL }
 func (*RenameTable) StatementTag() string { return "RENAME TABLE" }
 
 // StatementType implements the Statement interface.
+func (*ReleaseTransaction) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ReleaseTransaction) StatementTag() string { return "RELEASE" }
+
+// StatementType implements the Statement interface.
+func (*RestartTransaction) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*RestartTransaction) StatementTag() string { return "RESTART" }
+
+// StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*RetryIntent) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*RetryIntent) StatementTag() string { return "RETRY INTENT" }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Revoke) StatementTag() string { return "REVOKE" }

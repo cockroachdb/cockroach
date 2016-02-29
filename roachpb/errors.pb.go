@@ -22,9 +22,10 @@ var _ = math.Inf
 type TransactionRestart int32
 
 const (
-	// ABORT (the default) is for errors that are considered permanent
-	// and should abort the transaction.
-	TransactionRestart_ABORT TransactionRestart = 0
+	// NONE (the default) is either for errors that are considered permanent
+	// and should abort the transaction, or for errors that have no impact
+	// on the transaction at all (e.g. ConditionFailedError).
+	TransactionRestart_NONE TransactionRestart = 0
 	// BACKOFF is for errors that can retried by restarting the transaction
 	// after an exponential backoff.
 	TransactionRestart_BACKOFF TransactionRestart = 1
@@ -34,12 +35,12 @@ const (
 )
 
 var TransactionRestart_name = map[int32]string{
-	0: "ABORT",
+	0: "NONE",
 	1: "BACKOFF",
 	2: "IMMEDIATE",
 }
 var TransactionRestart_value = map[string]int32{
-	"ABORT":     0,
+	"NONE":      0,
 	"BACKOFF":   1,
 	"IMMEDIATE": 2,
 }
@@ -278,11 +279,22 @@ func (*DidntUpdateDescriptorError) ProtoMessage()    {}
 
 // An SqlTransactionAbortedError indicates that a current transaction is aborted.
 type SqlTransactionAbortedError struct {
+	// If not empty, this will be appended after the default error message.
+	CustomMsg string `protobuf:"bytes,1,opt,name=custom_msg" json:"custom_msg"`
 }
 
 func (m *SqlTransactionAbortedError) Reset()         { *m = SqlTransactionAbortedError{} }
 func (m *SqlTransactionAbortedError) String() string { return proto.CompactTextString(m) }
 func (*SqlTransactionAbortedError) ProtoMessage()    {}
+
+// An SqlTransactionCommittedError indicates that a current transaction is already committed
+// (probably as a result of a RELEASE statement).
+type SqlTransactionCommittedError struct {
+}
+
+func (m *SqlTransactionCommittedError) Reset()         { *m = SqlTransactionCommittedError{} }
+func (m *SqlTransactionCommittedError) String() string { return proto.CompactTextString(m) }
+func (*SqlTransactionCommittedError) ProtoMessage()    {}
 
 // An ExistingSchemaChangeLeaseError indicates that an outstanding
 // schema change lease exists.
@@ -316,8 +328,9 @@ type ErrorDetail struct {
 	ReplicaCorruption         *ReplicaCorruptionError         `protobuf:"bytes,17,opt,name=replica_corruption" json:"replica_corruption,omitempty"`
 	LeaseVersionChanged       *LeaseVersionChangedError       `protobuf:"bytes,18,opt,name=lease_version_changed" json:"lease_version_changed,omitempty"`
 	DidntUpdateDescriptor     *DidntUpdateDescriptorError     `protobuf:"bytes,19,opt,name=didnt_update_descriptor" json:"didnt_update_descriptor,omitempty"`
-	SqlTranasctionAborted     *SqlTransactionAbortedError     `protobuf:"bytes,20,opt,name=sql_tranasction_aborted" json:"sql_tranasction_aborted,omitempty"`
+	SqlTransactionAborted     *SqlTransactionAbortedError     `protobuf:"bytes,20,opt,name=sql_transaction_aborted" json:"sql_transaction_aborted,omitempty"`
 	ExistingSchemeChangeLease *ExistingSchemaChangeLeaseError `protobuf:"bytes,21,opt,name=existing_scheme_change_lease" json:"existing_scheme_change_lease,omitempty"`
+	SqlTransactionCommitted   *SqlTransactionCommittedError   `protobuf:"bytes,22,opt,name=sql_transaction_committed" json:"sql_transaction_committed,omitempty"`
 }
 
 func (m *ErrorDetail) Reset()         { *m = ErrorDetail{} }
@@ -382,6 +395,7 @@ func init() {
 	proto.RegisterType((*LeaseVersionChangedError)(nil), "cockroach.roachpb.LeaseVersionChangedError")
 	proto.RegisterType((*DidntUpdateDescriptorError)(nil), "cockroach.roachpb.DidntUpdateDescriptorError")
 	proto.RegisterType((*SqlTransactionAbortedError)(nil), "cockroach.roachpb.SqlTransactionAbortedError")
+	proto.RegisterType((*SqlTransactionCommittedError)(nil), "cockroach.roachpb.SqlTransactionCommittedError")
 	proto.RegisterType((*ExistingSchemaChangeLeaseError)(nil), "cockroach.roachpb.ExistingSchemaChangeLeaseError")
 	proto.RegisterType((*ErrorDetail)(nil), "cockroach.roachpb.ErrorDetail")
 	proto.RegisterType((*ErrPosition)(nil), "cockroach.roachpb.ErrPosition")
@@ -911,6 +925,28 @@ func (m *SqlTransactionAbortedError) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintErrors(data, i, uint64(len(m.CustomMsg)))
+	i += copy(data[i:], m.CustomMsg)
+	return i, nil
+}
+
+func (m *SqlTransactionCommittedError) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SqlTransactionCommittedError) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
 	return i, nil
 }
 
@@ -1145,13 +1181,13 @@ func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 		}
 		i += n30
 	}
-	if m.SqlTranasctionAborted != nil {
+	if m.SqlTransactionAborted != nil {
 		data[i] = 0xa2
 		i++
 		data[i] = 0x1
 		i++
-		i = encodeVarintErrors(data, i, uint64(m.SqlTranasctionAborted.Size()))
-		n31, err := m.SqlTranasctionAborted.MarshalTo(data[i:])
+		i = encodeVarintErrors(data, i, uint64(m.SqlTransactionAborted.Size()))
+		n31, err := m.SqlTransactionAborted.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1168,6 +1204,18 @@ func (m *ErrorDetail) MarshalTo(data []byte) (int, error) {
 			return 0, err
 		}
 		i += n32
+	}
+	if m.SqlTransactionCommitted != nil {
+		data[i] = 0xb2
+		i++
+		data[i] = 0x1
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.SqlTransactionCommitted.Size()))
+		n33, err := m.SqlTransactionCommitted.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n33
 	}
 	return i, nil
 }
@@ -1227,11 +1275,11 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x22
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.UnexposedTxn.Size()))
-		n33, err := m.UnexposedTxn.MarshalTo(data[i:])
+		n34, err := m.UnexposedTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n33
+		i += n34
 	}
 	data[i] = 0x28
 	i++
@@ -1240,21 +1288,21 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x32
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
-		n34, err := m.Detail.MarshalTo(data[i:])
+		n35, err := m.Detail.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n34
+		i += n35
 	}
 	if m.Index != nil {
 		data[i] = 0x3a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
-		n35, err := m.Index.MarshalTo(data[i:])
+		n36, err := m.Index.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n35
+		i += n36
 	}
 	return i, nil
 }
@@ -1460,6 +1508,14 @@ func (m *DidntUpdateDescriptorError) Size() (n int) {
 func (m *SqlTransactionAbortedError) Size() (n int) {
 	var l int
 	_ = l
+	l = len(m.CustomMsg)
+	n += 1 + l + sovErrors(uint64(l))
+	return n
+}
+
+func (m *SqlTransactionCommittedError) Size() (n int) {
+	var l int
+	_ = l
 	return n
 }
 
@@ -1548,12 +1604,16 @@ func (m *ErrorDetail) Size() (n int) {
 		l = m.DidntUpdateDescriptor.Size()
 		n += 2 + l + sovErrors(uint64(l))
 	}
-	if m.SqlTranasctionAborted != nil {
-		l = m.SqlTranasctionAborted.Size()
+	if m.SqlTransactionAborted != nil {
+		l = m.SqlTransactionAborted.Size()
 		n += 2 + l + sovErrors(uint64(l))
 	}
 	if m.ExistingSchemeChangeLease != nil {
 		l = m.ExistingSchemeChangeLease.Size()
+		n += 2 + l + sovErrors(uint64(l))
+	}
+	if m.SqlTransactionCommitted != nil {
+		l = m.SqlTransactionCommitted.Size()
 		n += 2 + l + sovErrors(uint64(l))
 	}
 	return n
@@ -1660,11 +1720,14 @@ func (this *ErrorDetail) GetValue() interface{} {
 	if this.DidntUpdateDescriptor != nil {
 		return this.DidntUpdateDescriptor
 	}
-	if this.SqlTranasctionAborted != nil {
-		return this.SqlTranasctionAborted
+	if this.SqlTransactionAborted != nil {
+		return this.SqlTransactionAborted
 	}
 	if this.ExistingSchemeChangeLease != nil {
 		return this.ExistingSchemeChangeLease
+	}
+	if this.SqlTransactionCommitted != nil {
+		return this.SqlTransactionCommitted
 	}
 	return nil
 }
@@ -1710,9 +1773,11 @@ func (this *ErrorDetail) SetValue(value interface{}) bool {
 	case *DidntUpdateDescriptorError:
 		this.DidntUpdateDescriptor = vt
 	case *SqlTransactionAbortedError:
-		this.SqlTranasctionAborted = vt
+		this.SqlTransactionAborted = vt
 	case *ExistingSchemaChangeLeaseError:
 		this.ExistingSchemeChangeLease = vt
+	case *SqlTransactionCommittedError:
+		this.SqlTransactionCommitted = vt
 	default:
 		return false
 	}
@@ -3346,6 +3411,85 @@ func (m *SqlTransactionAbortedError) Unmarshal(data []byte) error {
 			return fmt.Errorf("proto: SqlTransactionAbortedError: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CustomMsg", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CustomMsg = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipErrors(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthErrors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SqlTransactionCommittedError) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowErrors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SqlTransactionCommittedError: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SqlTransactionCommittedError: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -4075,7 +4219,7 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 20:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SqlTranasctionAborted", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SqlTransactionAborted", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4099,10 +4243,10 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.SqlTranasctionAborted == nil {
-				m.SqlTranasctionAborted = &SqlTransactionAbortedError{}
+			if m.SqlTransactionAborted == nil {
+				m.SqlTransactionAborted = &SqlTransactionAbortedError{}
 			}
-			if err := m.SqlTranasctionAborted.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.SqlTransactionAborted.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4136,6 +4280,39 @@ func (m *ErrorDetail) Unmarshal(data []byte) error {
 				m.ExistingSchemeChangeLease = &ExistingSchemaChangeLeaseError{}
 			}
 			if err := m.ExistingSchemeChangeLease.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 22:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SqlTransactionCommitted", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthErrors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SqlTransactionCommitted == nil {
+				m.SqlTransactionCommitted = &SqlTransactionCommittedError{}
+			}
+			if err := m.SqlTransactionCommitted.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

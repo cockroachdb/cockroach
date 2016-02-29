@@ -18,38 +18,129 @@ package sql_test
 
 import (
 	"bytes"
+	"database/sql"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	_ "github.com/cockroachdb/pq"
 )
 
-type filterVals struct {
-	sync.Mutex
-	vals          []string
-	restartCounts map[string]int
+type failureRecord struct {
+	err error
+	txn *roachpb.Transaction
 }
 
-func injectRetriableErrors(
-	_ roachpb.StoreID, req roachpb.Request, hdr roachpb.Header,
-	magicVals *filterVals) error {
-	magicVals.Lock()
-	defer magicVals.Unlock()
-	cput, ok := req.(*roachpb.ConditionalPutRequest)
-	if !ok {
-		return nil
+type filterVals struct {
+	sync.Mutex
+	// key -> number of times an retriable error will be injected when that key
+	// is written.
+	restartCounts map[string]int
+	// key -> number of times a TransactionAborted error will be injected when
+	// that key is written. Note that injecting this is pretty funky: it can only
+	// be done on the first write of a txn, otherwise the previously written
+	// intents will linger on.
+	abortCounts map[string]int
+	// Keys for which we injected an error.
+	failedValues map[string]failureRecord
+}
+
+func createFilterVals(
+	restartCounts map[string]int,
+	abortCounts map[string]int) *filterVals {
+	return &filterVals{
+		restartCounts: restartCounts,
+		abortCounts:   abortCounts,
+		failedValues:  map[string]failureRecord{}}
+}
+
+// checkCorrectTxn checks that the current txn is the correct one, according to
+// the way the previous txn that tried to write value failed.
+func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transaction) {
+	failureRec, found := magicVals.failedValues[value]
+	if !found {
+		return
 	}
-	for _, val := range magicVals.vals {
-		if magicVals.restartCounts[val] < 2 && bytes.Contains(cput.Value.RawBytes, []byte(val)) {
-			magicVals.restartCounts[val]++
-			return roachpb.NewReadWithinUncertaintyIntervalError(
-				roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)
+	switch failureRec.err.(type) {
+	case *roachpb.TransactionAbortedError:
+		// The previous txn should have been aborted, so check that we're running
+		// in a new one.
+		if *failureRec.txn.TxnMeta.ID == *txn.TxnMeta.ID {
+			panic(fmt.Sprintf("new transaction for value \"%s\" is the same "+
+				"as the old one", value))
+		}
+	default:
+		// The previous txn should have been restarted, so we should be running in
+		// the same one.
+		if *failureRec.txn.TxnMeta.ID != *txn.TxnMeta.ID {
+			// panic and not t.Fatal because this runs on a different goroutine
+			panic(fmt.Sprintf("new transaction for value \"%s\" (%s) "+
+				"is not the same as the old one (%s)", value,
+				txn.TxnMeta.ID, failureRec.txn.TxnMeta.ID))
 		}
 	}
-	return nil
+	// Don't check this value in subsequent transactions.
+	delete(magicVals.failedValues, value)
+}
+
+func injectErrors(
+	_ roachpb.StoreID, req roachpb.Request,
+	hdr roachpb.Header, magicVals *filterVals) error {
+	magicVals.Lock()
+	defer magicVals.Unlock()
+
+	switch req := req.(type) {
+	case *roachpb.ConditionalPutRequest:
+		for key, count := range magicVals.restartCounts {
+			checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn)
+			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
+				magicVals.restartCounts[key]--
+				err := roachpb.NewReadWithinUncertaintyIntervalError(
+					roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)
+				magicVals.failedValues[string(req.Value.RawBytes)] =
+					failureRecord{err, hdr.Txn}
+				return err
+			}
+		}
+		for key, count := range magicVals.abortCounts {
+			checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn)
+			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
+				magicVals.abortCounts[key]--
+				err := roachpb.NewTransactionAbortedError()
+				magicVals.failedValues[string(req.Value.RawBytes)] =
+					failureRecord{err, hdr.Txn}
+				return err
+			}
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+// checkRestart checks that there are no errors left to inject.
+func checkRestarts(t *testing.T, magicVals *filterVals) {
+	magicVals.Lock()
+	defer magicVals.Unlock()
+	for key, count := range magicVals.restartCounts {
+		if count != 0 {
+			file, line, _ := caller.Lookup(1)
+			t.Fatalf("%s:%d: INSERT for \"%s\" still has to be retried %d times",
+				file, line, key, count)
+		}
+	}
+	for key, count := range magicVals.abortCounts {
+		if count != 0 {
+			file, line, _ := caller.Lookup(1)
+			t.Fatalf("%s:%d: INSERT for \"%s\" still has to be aborted %d times",
+				file, line, key, count)
+		}
+	}
 }
 
 // TestTxnRestart tests the logic in the sql executor for automatically retrying
@@ -71,26 +162,31 @@ func TestTxnRestart(t *testing.T) {
 	// do that.
 	sqlDB.SetMaxOpenConns(1)
 
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
 	// Set up error injection that causes retries.
-	magicVals := &filterVals{
-		restartCounts: make(map[string]int),
-		vals:          []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"},
+	magicVals := createFilterVals(nil, nil)
+	magicVals.restartCounts = map[string]int{
+		"boulanger": 2,
+		"dromedary": 2,
+		"fajita":    2,
+		"hooly":     2,
+		"josephine": 2,
+		"laureal":   2,
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
-			return injectRetriableErrors(sid, req, hdr, magicVals)
+			return injectErrors(sid, req, hdr, magicVals)
 		})
-	func() {
-		if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v TEXT);
-`); err != nil {
-			t.Fatal(err)
-		}
 
-		// Test that implicit txns - txns for which we see all the statements and prefixes
-		// of txns (statements batched together with the BEGIN stmt) - are retried.
-		if _, err := sqlDB.Exec(`
+	// Test that implicit txns - txns for which we see all the statements and prefixes
+	// of txns (statements batched together with the BEGIN stmt) - are retried.
+	if _, err := sqlDB.Exec(`
 INSERT INTO t.test (k, v) VALUES ('a', 'boulanger');
 BEGIN;
 INSERT INTO t.test (k, v) VALUES ('c', 'dromedary');
@@ -101,29 +197,22 @@ BEGIN;
 INSERT INTO t.test (k, v) VALUES ('i', 'josephine');
 INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 `); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
+		t.Fatal(err)
+	}
 	cleanupFilter()
 
-	for _, val := range magicVals.vals {
-		if magicVals.restartCounts[val] != 2 {
-			t.Errorf("INSERT for %s has been retried %d times, instead of 2",
-				val, magicVals.restartCounts[val])
-		}
-	}
+	checkRestarts(t, magicVals)
 
 	// Now test that we don't retry what we shouldn't: insert an error into a txn
 	// we can't automatically retry (because it spans requests).
 
-	magicVals = &filterVals{
-		vals:          []string{"hooly"},
-		restartCounts: make(map[string]int),
+	magicVals = createFilterVals(nil, nil)
+	magicVals.restartCounts = map[string]int{
+		"hooly": 2,
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
 		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
-			return injectRetriableErrors(sid, req, hdr, magicVals)
+			return injectErrors(sid, req, hdr, magicVals)
 		})
 	defer cleanupFilter()
 
@@ -141,5 +230,272 @@ BEGIN;
 	if err == nil || !strings.Contains(
 		err.Error(), "encountered previous write with future timestamp") {
 		t.Errorf("didn't get expected injected error. Got: %s", err)
+	}
+}
+
+// exec takes a closure and executes it repeatedly as long as it says it needs
+// to be retried.
+// TODO(andrei): change this to return an error and make runTestTxn inspect the
+// error to see if it's retriable once we get a retriable error code.
+func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("RETRY INTENT; SET TRANSACTION PRIORITY LOW;"); err != nil {
+		t.Fatal(err)
+	}
+
+	for fn(tx) {
+		if _, err := tx.Exec("RESTART TRANSACTION"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Returns true on retriable errors.
+func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
+	injectReleaseError *bool, sqlDB *sql.DB, tx *sql.Tx) bool {
+	retriesNeeded :=
+		(magicVals.restartCounts["boulanger"] + magicVals.abortCounts["boulanger"]) > 0
+	var err error
+	if retriesNeeded {
+		_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (1, 'boulanger')")
+		if err == nil || !strings.Contains(err.Error(), expectedErr) {
+			t.Fatalf("expected to fail here. err: %s", err)
+		}
+		return true
+	}
+	// Now the INSERT should succeed.
+	_, err = tx.Exec("DELETE FROM t.test WHERE true; INSERT INTO t.test (k, v) VALUES (0, 'sentinel');")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retriesNeeded = *injectReleaseError
+	if retriesNeeded {
+		*injectReleaseError = false
+		pushTxn(t, sqlDB, 0)
+	}
+	_, err = tx.Exec("RELEASE TRANSACTION")
+	if retriesNeeded {
+		if err == nil {
+			t.Fatal("expected RELEASE to fail")
+		}
+		return true
+	} else {
+		if err != nil {
+			t.Fatal(err)
+		}
+		return false
+	}
+}
+
+// pushTxn writes to a key (with retries) and as a side effect pushes a txn
+// that had an intent on that key.
+// This cannot be done as an injected error, since we want the pusher to clean
+// up the intents of the pushee.
+func pushTxn(t *testing.T, sqlDB *sql.DB, key int) {
+	// Execute all statements in one batch so that the server retries it
+	// automatically in case our txn (the pusher) fails to push the victim. Even
+	// though it starts with a HIGH priority, that's no guarantee it'll always
+	// succeed from the first try.
+	insertCmd := fmt.Sprintf("INSERT INTO t.test (k, v) VALUES "+
+		"(%d, 'Boris the Soviet Transaction Hammer')", key)
+	if _, err := sqlDB.Exec(
+		fmt.Sprintf("BEGIN; SET TRANSACTION PRIORITY HIGH; %s; COMMIT;", insertCmd)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUserTxnRestart tests user-directed txn restarts.
+// The test will inject and otherwise create retriable errors of various kinds
+// and checks that we still manage to run a txn despite them.
+func TestTxnUserRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set up error injection that causes retries.
+	testCases := []struct {
+		magicVals   *filterVals
+		expectedErr string
+	}{
+		{
+			magicVals: createFilterVals(
+				map[string]int{"boulanger": 2}, // restartCounts
+				nil),
+			expectedErr: "encountered previous write with future timestamp",
+		},
+		{
+			magicVals: createFilterVals(
+				nil,
+				map[string]int{"boulanger": 2}), // abortCounts
+			expectedErr: "txn aborted",
+		},
+	}
+
+	for _, tc := range testCases {
+		log.Infof("starting test for: %+v", tc)
+		cleanupFilter := cmdFilters.AppendFilter(
+			func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+				return injectErrors(sid, req, hdr, tc.magicVals)
+			})
+
+		// Also inject an error at RELEASE time, besides the error injected by magicVals.
+		injectReleaseError := true
+
+		// This is the magic. Run the txn closure until all the retries are exhausted.
+		exec(t, sqlDB, func(tx *sql.Tx) bool {
+			return runTestTxn(t, tc.magicVals, tc.expectedErr, &injectReleaseError, sqlDB, tx)
+		})
+		checkRestarts(t, tc.magicVals)
+
+		// Check that we only wrote the sentinel row.
+		rows, err := sqlDB.Query("SELECT * FROM t.test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var k int
+			var v string
+			err = rows.Scan(&k, &v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if k != 0 || v != "sentinel" {
+				t.Fatalf("didn't find expected row: %d %s", k, v)
+			}
+		}
+		// Clean up the table for the next test iteration.
+		_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows.Close()
+		cleanupFilter()
+	}
+}
+
+// Test that rando commands while in COMMIT_WAIT return a particular error.
+func TestCommitWaitState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	server, sqlDB, _ := setup(t)
+	defer cleanup(server, sqlDB)
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("RETRY INTENT; RELEASE;"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'sentinel');")
+	if err == nil || !strings.Contains(err.Error(),
+		"current transaction is committed") {
+		t.Fatal(err)
+	}
+	// Rollback should respond with a COMMIT command tag.
+	err = tx.Rollback()
+	if err == nil || !strings.Contains(err.Error(), "unexpected command tag COMMIT") {
+		t.Fatal(err)
+	}
+}
+
+// Test that if there's an error on COMMIT that needs to be reported to the used
+// the txn will be rolled back. As opposed to an error on a COMMIT in an auto-retry
+// txn, where we retry the txn (not tested here).
+func TestErrorOnCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	server, sqlDB, _ := setup(t)
+	defer cleanup(server, sqlDB)
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("RETRY INTENT; SET TRANSACTION PRIORITY LOW;"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'sentinel');"); err != nil {
+		t.Fatal(err)
+	}
+
+	pushTxn(t, sqlDB, 0)
+
+	if err = tx.Commit(); err == nil {
+		t.Fatal("expected commit to fail")
+	}
+
+	// Check that there's no error reading and we don't see any rows.
+	var rows *sql.Rows
+	if rows, err = sqlDB.Query("SELECT * FROM t.test"); err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var k int
+		var v string
+		_ = rows.Scan(&k, &v)
+		if k != 0 || v != "Boris the Soviet Transaction Hammer" {
+			t.Fatalf("found unexpected row: %d %s", k, v)
+		}
+	}
+	rows.Close()
+}
+
+// TestRestartStatement tests that issuing a RESTART outside of a txn produces
+// the proper error.
+func TestRestartStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	server, sqlDB, _ := setup(t)
+	defer cleanup(server, sqlDB)
+
+	// RESTART without a transaction
+	_, err := sqlDB.Exec("RESTART TRANSACTION")
+	if err == nil || !strings.Contains(err.Error(),
+		"the transaction is not in a retriable state") {
+		t.Fatal("expected to fail here. err: ", err)
+	}
+
+	// RESTART in a non-retriable transaction
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("RETRY INTENT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec("BOGUS SQL STATEMENT"); err == nil {
+		t.Fatalf("expected to fail here. err: %s", err)
+	}
+	_, err = tx.Exec("RESTART TRANSACTION")
+	if err == nil || !strings.Contains(err.Error(),
+		"RETRY INTENT has not been used or a non-retriable error was encountered") {
+		t.Fatal("expected to fail here. err: ", err)
 	}
 }
