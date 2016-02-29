@@ -194,15 +194,22 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		if !c.doingExtendedQueryMessage {
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte
-			switch {
-			case c.session.Txn.TxnAborted:
+			switch c.session.Txn.State {
+			case sql.ABORTED:
 				txnStatus = 'E'
-			case c.session.Txn.Txn != nil:
-				// We're in a PENDING txn.
+			case sql.OPEN:
 				txnStatus = 'T'
-			case c.session.Txn.Txn == nil:
+			case sql.RESTART_WAIT:
+				// This state is not part of the Postgres protocol.
+				txnStatus = 'R'
+			case sql.NO_TXN:
 				// We're not in a txn (i.e. the last txn was committed).
 				txnStatus = 'I'
+			case sql.COMMIT_WAIT:
+				// We need to lie to pgwire and claim that we're still
+				// in a txn. Otherwise drivers freak out.
+				// This state is not part of the Postgres protocol.
+				txnStatus = 'T'
 			}
 
 			if log.V(2) {

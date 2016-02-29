@@ -551,12 +551,28 @@ func (*DidntUpdateDescriptorError) message(_ *Error) string {
 var _ ErrorDetailInterface = &DidntUpdateDescriptorError{}
 
 // Error formats error.
+func (e *SqlTransactionCommittedError) Error() string {
+	return e.message(nil)
+}
+
+// message returns an error message.
+func (e *SqlTransactionCommittedError) message(_ *Error) string {
+	return "current transaction is committed, commands ignored until end of transaction block"
+}
+
+var _ ErrorDetailInterface = &SqlTransactionCommittedError{}
+
+// Error formats error.
 func (e *SqlTransactionAbortedError) Error() string {
 	return e.message(nil)
 }
 
 // message returns an error message.
-func (*SqlTransactionAbortedError) message(_ *Error) string {
+func (e *SqlTransactionAbortedError) message(_ *Error) string {
+	if e.CustomMsg != "" {
+		return "current transaction is aborted, commands ignored until " +
+			"end of transaction block; " + e.CustomMsg
+	}
 	return "current transaction is aborted, commands ignored until end of transaction block"
 }
 
