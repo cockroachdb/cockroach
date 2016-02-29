@@ -135,50 +135,58 @@ Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
 
 	"store": wrapText(`
-A storage device, use the "path" parameter to specify a directory. For example:`) + `
+The file path to a storage device. This flag must be specified separately for
+each storage device, for example:`) + `
 
-  --store=path=/mnt/ssd01
+  --store=/mnt/ssd01 --store=/mnt/ssd02 --store=/mnt/hda1
 
 ` + wrapText(`
-For each storage device, a new --store argument is required.
+For each store, the "attr" and "size" fields can be used to specify device
+attributes and a maximum store size (see below). When one or both of these
+fields are set, the "path" field label must be used for the path to the storage
+device, for example:`) + `
 
-A store can also specify a colon-separated list of device attributes using the
-"attr" parameter. Device attributes are used to match capabilities for storage
-of individual databases or tables. For example, an OLTP database would probably
-want to only allocate space for its tables on solid state devices, whereas
+  --store=path=/mnt/ssd01,attr=ssd,size=20GiB
+
+` + wrapText(`
+In most cases, node-level attributes are preferable to store-level attributes.
+However, the "attr" field can be used to match capabilities for storage of
+individual databases or tables. For example, an OLTP database would probably
+want to allocate space for its tables only on solid state devices, whereas
 append-only time series might prefer cheaper spinning drives. Typical
 attributes include whether the store is flash (ssd), spinny disk (hdd), or
-in-memory (mem). Device attributes might also include speeds and other specs
-(7200rpm, 200kiops, etc.). For example:`) + `
+in-memory (mem), as well as speeds and other specs. Attributes can be arbitrary
+strings separated by colons, for example: :`) + `
 
-  --store=attr=hdd:7200rpm,path=/mnt/hda1
-  --store=attr=ssd,path=/mnt/ssd01
-
-` + wrapText(`
-A store can also specify a maximum size using the "size" parameter. This size
-is not a guaranteed maximum but is used to when calculating free space for
-rebalancing purposes. The size can be specified in bytes. For example:`) + `
-
-  --store=path=/mnt/ssd01,size=10000000000  -> 10000000000 bytes
-  --store=path=/mnt/ssd01,size=20GB         -> 20000000000 bytes
-  --store=path=/mnt/ssd01,size=20GiB        -> 21474836480 bytes
-  --store=path=/mnt/ssd01,size=0.02TiB      -> 21474836480 bytes
+  --store=path=/mnt/hda1,attr=hdd:7200rpm
 
 ` + wrapText(`
-Or as a percentage of either total hard drive space or memory. For example:`) + `
+The store size in the "size" field is not a guaranteed maximum but is used when
+calculating free space for rebalancing purposes. The size can be specified
+either in a bytes-based unit or as a percentage of hard drive space,
+for example: :`) + `
 
-  --store=path=/mnt/ssd01,size=20%          -> 20% of available space
-  --store=path=/mnt/ssd01,size=0.2          -> 20% of available space
-  --store=path=/mnt/ssd01,size=.2           -> 20% of available space
+  --store=path=/mnt/ssd01,size=10000000000     -> 10000000000 bytes
+  --store-path=/mnt/ssd01,size=20GB            -> 20000000000 bytes
+  --store-path=/mnt/ssd01,size=20GiB           -> 21474836480 bytes
+  --store-path=/mnt/ssd01,size=0.02TiB         -> 21474836480 bytes
+  --store=path=/mnt/ssd01,size=20%             -> 20% of available space
+  --store=path=/mnt/ssd01,size=0.2             -> 20% of available space
+  --store=path=/mnt/ssd01,size=.2              -> 20% of available space
 
 ` + wrapText(`
-For an in-memory store, use the "type" parameter and set it to "mem". An
-in-memory store requires that a "size" is specified an that no "path" is
-supplied. Note that the size in this case is a hard limit. For example:`) + `
+For an in-memory store, the "type" and "size" fields are required, and the
+"path" field is forbidden. The "type" field must be set to "mem", and the
+"size" field must be set to the true maximum bytes or percentage of available
+memory that the store may consume, for example:`) + `
 
   --store=type=mem,size=20GiB
-  --store=type=mem,attr=mem,size=90%
-`,
+  --store=type=mem,size=90%
+
+` + wrapText(`
+Commas are forbidden in all values, since they are used to separate fields.
+Also, if you use equal signs in the file path to a store, you must use the
+"path" field label.`),
 	"time-until-store-dead": wrapText(`
 Adjusts the timeout for stores. If there's been no gossiped update
 from a store after this time, the store is considered unavailable.
