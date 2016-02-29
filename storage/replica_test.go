@@ -2229,7 +2229,6 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 // contact with the Range in the same epoch.
 func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	defer t.Skip("TODO(tschottdorf): currently cannot poison effectively on restarts")
 	key := roachpb.Key("a")
 
 	// Isolation of the pushee and whether we're going to abort it.
@@ -2328,8 +2327,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 		}
 	}
 
-	// `false` disabled; see the call to Skip above.
-	for _, abort := range []bool{ /* false, */ true} {
+	for _, abort := range []bool{false, true} {
 		run(abort, roachpb.SERIALIZABLE)
 		run(abort, roachpb.SNAPSHOT)
 	}
@@ -2368,7 +2366,7 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	// Poison the sequence cache to trigger TransactionAbortedError.
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, roachpb.SequencePoisonAbort, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2822,7 +2820,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 90, KeyBytes: 28, ValBytes: 62, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 52, SysCount: 1, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 92, KeyBytes: 28, ValBytes: 64, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 52, SysCount: 1, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
