@@ -191,7 +191,7 @@ check:
            test ! -s forbidden.log
 	@rm -f forbidden.log
 	@echo "ineffassign"
-	@! ineffassign . | grep -vF gossip/gossip.pb.go
+	@! ineffassign . | grep -vE 'roachpb/data.pb.go|gossip/gossip.pb.go'
 	@echo "errcheck"
 	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
 	@echo "returncheck"

@@ -28,6 +28,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -424,28 +425,28 @@ func TestTransactionString(t *testing.T) {
 // advertised.
 func TestTransactionUncertainty(t *testing.T) {
 	txn := Transaction{}
-	mkTS := func(nodeID NodeID) Timestamp {
-		return ZeroTimestamp.Add(rand.New(rand.NewSource(int64(nodeID))).Int63(), 0)
-	}
+	rng, seed := randutil.NewPseudoRand()
+	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
+	timestamps := make(map[NodeID]Timestamp, len(ids))
+	for i := 0; i < len(ids); i++ {
+		timestamps[NodeID(i)] = ZeroTimestamp.Add(rng.Int63(), 0)
+	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
 		if ts := txn.GetUncertainty(nodeID); ts != MaxTimestamp {
 			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
-		txn.UpdateUncertainty(nodeID, mkTS(nodeID))
+		txn.UpdateUncertainty(nodeID, timestamps[nodeID])
 		if exp, act := i+1, len(txn.MaxTimestamps); act != exp {
 			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.MaxTimestamps)
 		}
-		for j, m := range ids[:i+1] {
-			checkID := NodeID(m)
-			var exp Timestamp
-			if j <= i+1 {
-				exp = mkTS(checkID)
-			}
-			if act := txn.GetUncertainty(checkID); !act.Equal(exp) {
-				t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
-			}
+	}
+	for _, m := range ids {
+		checkID := NodeID(m)
+		exp := timestamps[checkID]
+		if act := txn.GetUncertainty(checkID); !act.Equal(exp) {
+			t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
 		}
 	}
 }
@@ -465,7 +466,7 @@ var nonZeroTxn = Transaction{
 	LastHeartbeat: &Timestamp{1, 2},
 	OrigTimestamp: makeTS(30, 31),
 	MaxTimestamp:  makeTS(40, 41),
-	MaxTimestamps: []NodeWithTimestamp{{NodeID: 1, MaxTimestamp: makeTS(1, 2)}},
+	MaxTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
 	Writing:       true,
 	Sequence:      123,
 	Intents:       []Span{{Key: []byte("a"), EndKey: []byte("b")}},

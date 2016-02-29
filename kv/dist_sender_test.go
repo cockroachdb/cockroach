@@ -378,10 +378,12 @@ func TestOwnNodeCertain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var act []roachpb.NodeWithTimestamp
+	act := make(map[roachpb.NodeID]roachpb.Timestamp)
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		act = append([]roachpb.NodeWithTimestamp(nil), ba.Txn.MaxTimestamps...)
+		for k, v := range ba.Txn.MaxTimestamps {
+			act[k] = v
+		}
 		return ba.CreateReply(), nil
 	}
 
@@ -400,8 +402,8 @@ func TestOwnNodeCertain(t *testing.T) {
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}
-	if len(act) != 1 || act[0].NodeID != expNodeID || !act[0].MaxTimestamp.Equal(expTS) {
-		t.Fatalf("got %v, expected only entry for %d with timestamp %s", act, expNodeID, expTS)
+	if actTS, ok := act[expNodeID]; !ok || len(act) != 1 || !actTS.Equal(expTS) {
+		t.Fatalf("unexpected resulting map: %v", act)
 	}
 
 }
