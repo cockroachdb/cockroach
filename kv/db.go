@@ -18,14 +18,15 @@ package kv
 
 import (
 	"golang.org/x/net/context"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 var allExternalMethods = [...]roachpb.Request{
@@ -60,25 +61,32 @@ func NewDBServer(ctx *base.Context, sender client.Sender, stopper *stop.Stopper)
 	}
 }
 
-// RegisterRPC registers the RPC endpoints.
-func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
-	const method = "Server.Batch"
-	return rpcServer.Register(method, s.executeCmd, &roachpb.BatchRequest{})
-}
+// Batch implements the roachpb.KVServer interface.
+func (s *DBServer) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	// TODO(marc): this code is duplicated in server/node.go, which should be
+	// fixed. Also, grpc's authentication model doesn't really fit with the
+	// current design of the security package - that should be fixed.
+	if peer, ok := peer.FromContext(ctx); ok {
+		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
+			certUser, err := security.GetCertificateUser(&tlsInfo.State)
+			if err != nil {
+				return nil, err
+			}
+			if certUser != security.NodeUser {
+				return nil, util.Errorf("user %s is not allowed", certUser)
+			}
+		}
+	}
 
-// executeCmd interprets the given message as a *roachpb.BatchRequest and sends it
-// via the local sender.
-func (s *DBServer) executeCmd(argsI proto.Message) (proto.Message, error) {
 	var br *roachpb.BatchResponse
 	var err error
 
 	f := func() {
-		ba := argsI.(*roachpb.BatchRequest)
-		if err = verifyRequest(ba); err != nil {
+		if err = verifyRequest(args); err != nil {
 			return
 		}
 		var pErr *roachpb.Error
-		br, pErr = s.sender.Send(context.TODO(), *ba)
+		br, pErr = s.sender.Send(context.TODO(), *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
 		}
