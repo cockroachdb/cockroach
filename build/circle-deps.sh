@@ -96,6 +96,7 @@ fi
 
 shard1_done="${HOME}/shard1"
 shard2_done="${HOME}/shard2"
+shard3_done="${HOME}/shard3"
 
 function notify() {
   if is_shard 1; then
@@ -111,6 +112,14 @@ function notify() {
       time ssh node0 touch "${shard2_done}"
     else
       touch "${shard2_done}"
+    fi
+  fi
+
+  if is_shard 3; then
+    if ! is_shard 0; then
+      time ssh node0 touch "${shard3_done}"
+    else
+      touch "${shard3_done}"
     fi
   fi
 }
@@ -190,7 +199,7 @@ if is_shard 0; then
   set +x
   start=$(date +%s)
   while :; do
-    if [ -e "${shard1_done}" -a -e "${shard2_done}" ]; then
+    if [ -e "${shard1_done}" -a -e "${shard2_done}" -a -e "${shard3_done}" ]; then
       break
     fi
     sleep 1
