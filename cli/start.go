@@ -101,17 +101,12 @@ uninitialized, specify the --join flag to point to any healthy node
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
-	// Add in the default store now if none were specified.
-	if len(cliContext.Stores) == 0 {
-		cliContext.Stores = []server.StoreSpec{{Path: "cockroach-data"}}
-	}
-
 	// Default the log directory to the the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
 	f := flag.Lookup("log-dir")
 	if !log.DirSet() {
-		for _, spec := range cliContext.Stores {
+		for _, spec := range cliContext.Stores.Specs {
 			if spec.InMemory {
 				continue
 			}
@@ -157,7 +152,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
 	fmt.Fprintf(tw, "sql:\t%s\n", cliContext.PGURL(connUser))
 	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-	for i, spec := range cliContext.Stores {
+	for i, spec := range cliContext.Stores.Specs {
 		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 	}
 	if err := tw.Flush(); err != nil {

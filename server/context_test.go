@@ -29,7 +29,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ctx := NewContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
-	ctx.Stores = []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}
+	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := ctx.InitStores(stopper); err != nil {
@@ -50,7 +50,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ctx := NewContext()
 	ctx.JoinUsing = "localhost:12345,,localhost:23456"
-	ctx.Stores = []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}
+	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := ctx.InitStores(stopper); err != nil {
