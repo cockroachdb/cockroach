@@ -726,6 +726,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		return &emptyNode{}
 	}
 	s.filter = applyConstraints(s.filter, c.constraints)
+	noFilter := (s.filter == nil)
 	s.reverse = c.reverse
 
 	var plan planNode
@@ -733,10 +734,11 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		s.initOrdering(c.exactPrefix)
 		plan = s
 	} else {
+		// Note: makeIndexJoin can modify s.filter.
 		plan = makeIndexJoin(s, c.exactPrefix)
 	}
 
-	if grouping && len(ordering) == 1 && len(s.spans) == 1 && s.filter == nil && sel.filter == nil {
+	if grouping && len(ordering) == 1 && len(s.spans) == 1 && noFilter && sel.filter == nil {
 		// If grouping has a desired order and there is a single span for which the
 		// filter is true, check to see if the ordering matches the desired
 		// ordering. If it does we can limit the scan to a single key.
