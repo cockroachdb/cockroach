@@ -67,11 +67,11 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 	}{
 		{keys.SequenceCacheKey(r.RangeID, testTxnID, testTxnEpoch, 2), ts0},
 		{keys.SequenceCacheKey(r.RangeID, testTxnID, testTxnEpoch, 1), ts0},
-		{keys.RangeLastVerificationTimestampKey(r.RangeID), ts0},
 		{keys.RangeStatsKey(r.RangeID), ts0},
 		{keys.RaftHardStateKey(r.RangeID), ts0},
 		{keys.RaftLogKey(r.RangeID, 1), ts0},
 		{keys.RaftLogKey(r.RangeID, 2), ts0},
+		{keys.RangeLastVerificationTimestampKey(r.RangeID), ts0},
 		{keys.RangeDescriptorKey(desc.StartKey), ts},
 		{keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.NewV4()), ts0},
 		{keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), uuid.NewV4()), ts0},

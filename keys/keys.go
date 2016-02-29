@@ -142,12 +142,6 @@ func RangeLeaderLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, localRangeLeaderLeaseSuffix, nil)
 }
 
-// RangeLastVerificationTimestampKey returns a range-local key for
-// the range's last verification timestamp.
-func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRangeLastVerificationTimestampSuffix, nil)
-}
-
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Range ID.
 func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {
@@ -195,6 +189,12 @@ func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	key := RaftLogPrefix(rangeID)
 	key = encoding.EncodeUint64Ascending(key, logIndex)
 	return key
+}
+
+// RangeLastVerificationTimestampKey returns a range-local key for
+// the range's last verification timestamp.
+func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, localRangeLastVerificationTimestampSuffix, nil)
 }
 
 // MakeRangeKey creates a range-local key based on the range
