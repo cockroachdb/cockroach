@@ -34,7 +34,7 @@ func TestPut(t *testing.T) {
 }
 
 func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	db, dbStopper := makeClient(t, c.ConnString(0))
+	db, dbStopper := c.NewClient(t, 0)
 	defer dbStopper.Stop()
 
 	errs := make(chan error, c.NumNodes())

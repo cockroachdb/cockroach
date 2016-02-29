@@ -28,14 +28,15 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -75,25 +76,21 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 }
 
 func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
-	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		user, addr, security.EmbeddedCertsDir))
+	rpcContext := rpc.NewContext(&base.Context{
+		User:  user,
+		Certs: security.EmbeddedCertsDir,
+	}, nil, stopper)
+	sender, err := client.NewSender(rpcContext, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db
+	return client.NewDB(sender)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(stopper *stop.Stopper, addr string, priority roachpb.UserPriority) (*client.DB, *notifyingSender) {
-	db, err := client.Open(stopper, fmt.Sprintf("rpcs://%s@%s?certs=%s",
-		security.NodeUser,
-		addr,
-		security.EmbeddedCertsDir))
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority) (*client.DB, *notifyingSender) {
+	db := createTestClient(t, stopper, addr)
 	sender := &notifyingSender{wrapped: db.GetSender()}
 	return client.NewDBWithPriority(sender, priority), sender
 }
@@ -143,7 +140,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 			txnPri = 2
 		}
 
-		db, sender := createTestNotifyClient(s.Stopper(), s.ServingAddr(), -clientPri)
+		db, sender := createTestNotifyClient(t, s.Stopper(), s.ServingAddr(), -clientPri)
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
@@ -626,12 +623,6 @@ func TestClientPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
-
-	oldHealthyTimeout := client.HealthyTimeout
-	client.HealthyTimeout = 250 * time.Millisecond
-	defer func() {
-		client.HealthyTimeout = oldHealthyTimeout
-	}()
 
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.

@@ -17,16 +17,9 @@
 package client
 
 import (
-	"fmt"
-	"net/url"
-	"sync"
-
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Sender is the interface used to call into a Cockroach instance.
@@ -42,38 +35,6 @@ type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchRespo
 // Send calls f(ctx, c).
 func (f SenderFunc) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
-}
-
-// newSenderFunc creates a new sender for the registered scheme.
-type newSenderFunc func(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error)
-
-var senders = struct {
-	sync.Mutex
-	m map[string]newSenderFunc
-}{m: map[string]newSenderFunc{}}
-
-// RegisterSender registers the specified function to be used for
-// creation of a new sender when the specified scheme is encountered.
-func RegisterSender(scheme string, f newSenderFunc) {
-	if f == nil {
-		log.Fatalf("unable to register nil function for \"%s\"", scheme)
-	}
-	senders.Lock()
-	defer senders.Unlock()
-	if _, ok := senders.m[scheme]; ok {
-		log.Fatalf("sender already registered for \"%s\"", scheme)
-	}
-	senders.m[scheme] = f
-}
-
-func newSender(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error) {
-	senders.Lock()
-	defer senders.Unlock()
-	f := senders.m[u.Scheme]
-	if f == nil {
-		return nil, fmt.Errorf("no sender registered for \"%s\"", u.Scheme)
-	}
-	return f(u, ctx, stopper)
 }
 
 // SendWrappedWith is a convenience function which wraps the request in a batch
