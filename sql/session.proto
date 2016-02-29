@@ -21,6 +21,23 @@ option go_package = "sql";
 import "cockroach/roachpb/data.proto";
 import weak "gogoproto/gogo.proto";
 
+enum TxnState {
+  option (gogoproto.goproto_enum_prefix) = false;
+	// No txn is in scope. Either there never was one, or it got committed/rolled back.
+  NO_TXN = 0;
+	// A txn is in scope.
+  OPEN = 1;
+	// The txn has encoutered a (non-retriable) error.
+	// Statements will be rejected until a COMMIT/ROLLBACK is seen.
+  ABORTED = 2;
+	// The txn has encoutered a retriable error.
+	// Statements will be rejected until a RESTART_TRANSACTION is seen.
+  RESTART_WAIT = 3;
+	// The KV txn has been committed successfully through a RELEASE.
+	// Statements are rejected until a COMMIT is seen.
+	COMMIT_WAIT = 4;
+}
+
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
   optional int32 syntax = 2 [(gogoproto.nullable) = false];
@@ -35,10 +52,11 @@ message Session {
   message Transaction {
     // If missing, it means we're not inside a (KV) txn.
     optional roachpb.Transaction txn = 1;
-    // txnAborted is set once executing a statement returned an error from KV.
-    // While in this state, every subsequent statement must be rejected until
-    // a COMMIT/ROLLBACK is seen.
-    optional bool txnAborted = 2 [(gogoproto.nullable) = false];
+    optional TxnState state = 2 [(gogoproto.nullable) = false];
+	  // If set, the user declared the intention to retry the txn in case of retriable
+	  // errors. The txn will enter the RETRY_WAIT state in case of such errors.
+    optional bool retryIntent = 6 [(gogoproto.nullable) = false];
+
     // Timestamp to be used by SQL (transaction_timestamp()) in the above
     // transaction. Note: this is not the transaction timestamp in
     // roachpb.Transaction above, although it probably should be (#4393).

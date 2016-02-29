@@ -486,7 +486,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 	}
 }
 
-// TestAbortTransactionOnCommitErrors verifies that non-exec transactions are
+// TestAbortTransactionOnCommitErrors verifies that transactions are
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -46,6 +46,8 @@ var DefaultTxnRetryOptions = retry.Options{
 // method out of the Txn method set.
 type txnSender Txn
 
+// Send updates the transaction on error. Depending on the error type, the
+// transaction might be replaced by a new one.
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
@@ -90,7 +92,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		if pErr.GetTxn() != nil {
 			ts.Proto.Priority = pErr.GetTxn().Priority
 		}
-	} else if pErr.TransactionRestart != roachpb.TransactionRestart_ABORT {
+	} else if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
 		ts.Proto.Update(pErr.GetTxn())
 	}
 	return nil, pErr
@@ -448,7 +450,10 @@ type TxnExecOptions struct {
 // that a ROLLBACK will reset the state. Neither opt.AutoRetry not opt.AutoCommit
 // can be set in this case.
 //
-// If an error is returned, the txn has been aborted.
+// When this method returns, txn might be in any state; it might need to be
+// cleaned up, depending on the error returned. In case of
+// TransactionAbortedError, txn is reset to a fresh transaction, ready to be
+// used.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
 	fn func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
@@ -467,7 +472,7 @@ RetryLoop:
 		pErr = fn(txn, &opt)
 		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
 			// fn succeeded, but didn't commit.
-			pErr = txn.commit(nil)
+			pErr = txn.CommitNoCleanup()
 		}
 
 		if pErr == nil {
@@ -498,10 +503,8 @@ RetryLoop:
 				txn.DebugName(), pErr)
 		}
 	}
-	if txn != nil && pErr != nil {
-		// TODO(andrei): don't do Cleanup() on retriable errors here.
-		// Let the sql executor do it.
-		txn.CleanupOnError(pErr)
+	if txn == nil {
+		return pErr
 	}
 	if pErr != nil {
 		pErr.StripErrorTransaction()

@@ -20,6 +20,56 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+type TxnState int32
+
+const (
+	// No txn is in scope. Either there never was one, or it got committed/rolled back.
+	NO_TXN TxnState = 0
+	// A txn is in scope.
+	OPEN TxnState = 1
+	// The txn has encoutered a (non-retriable) error.
+	// Statements will be rejected until a COMMIT/ROLLBACK is seen.
+	ABORTED TxnState = 2
+	// The txn has encoutered a retriable error.
+	// Statements will be rejected until a RESTART_TRANSACTION is seen.
+	RESTART_WAIT TxnState = 3
+	// The KV txn has been committed successfully through a RELEASE.
+	// Statements are rejected until a COMMIT is seen.
+	COMMIT_WAIT TxnState = 4
+)
+
+var TxnState_name = map[int32]string{
+	0: "NO_TXN",
+	1: "OPEN",
+	2: "ABORTED",
+	3: "RESTART_WAIT",
+	4: "COMMIT_WAIT",
+}
+var TxnState_value = map[string]int32{
+	"NO_TXN":       0,
+	"OPEN":         1,
+	"ABORTED":      2,
+	"RESTART_WAIT": 3,
+	"COMMIT_WAIT":  4,
+}
+
+func (x TxnState) Enum() *TxnState {
+	p := new(TxnState)
+	*p = x
+	return p
+}
+func (x TxnState) String() string {
+	return proto.EnumName(TxnState_name, int32(x))
+}
+func (x *TxnState) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(TxnState_value, data, "TxnState")
+	if err != nil {
+		return err
+	}
+	*x = TxnState(value)
+	return nil
+}
+
 type Session struct {
 	Database string `protobuf:"bytes,1,opt,name=database" json:"database"`
 	Syntax   int32  `protobuf:"varint,2,opt,name=syntax" json:"syntax"`
@@ -135,11 +185,11 @@ func (*Session_Timestamp) ProtoMessage()    {}
 
 type Session_Transaction struct {
 	// If missing, it means we're not inside a (KV) txn.
-	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
-	// txnAborted is set once executing a statement returned an error from KV.
-	// While in this state, every subsequent statement must be rejected until
-	// a COMMIT/ROLLBACK is seen.
-	TxnAborted bool `protobuf:"varint,2,opt,name=txnAborted" json:"txnAborted"`
+	Txn   *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
+	State TxnState                        `protobuf:"varint,2,opt,name=state,enum=cockroach.sql.TxnState" json:"state"`
+	// If set, the user declared the intention to retry the txn in case of retriable
+	// errors. The txn will enter the RETRY_WAIT state in case of such errors.
+	RetryIntent bool `protobuf:"varint,6,opt,name=retryIntent" json:"retryIntent"`
 	// Timestamp to be used by SQL (transaction_timestamp()) in the above
 	// transaction. Note: this is not the transaction timestamp in
 	// roachpb.Transaction above, although it probably should be (#4393).
@@ -158,6 +208,7 @@ func init() {
 	proto.RegisterType((*Session)(nil), "cockroach.sql.Session")
 	proto.RegisterType((*Session_Timestamp)(nil), "cockroach.sql.Session.Timestamp")
 	proto.RegisterType((*Session_Transaction)(nil), "cockroach.sql.Session.Transaction")
+	proto.RegisterEnum("cockroach.sql.TxnState", TxnState_name, TxnState_value)
 }
 func (m *Session) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -268,12 +319,7 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 	}
 	data[i] = 0x10
 	i++
-	if m.TxnAborted {
-		data[i] = 1
-	} else {
-		data[i] = 0
-	}
-	i++
+	i = encodeVarintSession(data, i, uint64(m.State))
 	data[i] = 0x1a
 	i++
 	i = encodeVarintSession(data, i, uint64(m.TxnTimestamp.Size()))
@@ -288,6 +334,14 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x28
 	i++
 	if m.MutatesSystemConfig {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	data[i] = 0x30
+	i++
+	if m.RetryIntent {
 		data[i] = 1
 	} else {
 		data[i] = 0
@@ -366,10 +420,11 @@ func (m *Session_Transaction) Size() (n int) {
 		l = m.Txn.Size()
 		n += 1 + l + sovSession(uint64(l))
 	}
-	n += 2
+	n += 1 + sovSession(uint64(m.State))
 	l = m.TxnTimestamp.Size()
 	n += 1 + l + sovSession(uint64(l))
 	n += 9
+	n += 2
 	n += 2
 	return n
 }
@@ -735,9 +790,9 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TxnAborted", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
 			}
-			var v int
+			m.State = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowSession
@@ -747,12 +802,11 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				m.State |= (TxnState(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.TxnAborted = bool(v != 0)
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field TxnTimestamp", wireType)
@@ -821,6 +875,26 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 				}
 			}
 			m.MutatesSystemConfig = bool(v != 0)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RetryIntent", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.RetryIntent = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])
