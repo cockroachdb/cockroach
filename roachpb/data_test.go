@@ -28,6 +28,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -402,12 +403,12 @@ func TestTransactionString(t *testing.T) {
 			Epoch:     2,
 			Timestamp: makeTS(20, 21),
 		},
-		Name:          "name",
-		Priority:      957356782,
-		Status:        COMMITTED,
-		LastHeartbeat: &ts1,
-		OrigTimestamp: makeTS(30, 31),
-		MaxTimestamp:  makeTS(40, 41),
+		Name:              "name",
+		Priority:          957356782,
+		Status:            COMMITTED,
+		LastHeartbeat:     &ts1,
+		OrigTimestamp:     makeTS(30, 31),
+		ObservedTimestamp: makeTS(40, 41),
 	}
 	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
 		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41`
@@ -420,32 +421,33 @@ func TestTransactionString(t *testing.T) {
 	_ = txnEmpty.String() // prevent regression of NPE
 }
 
-// TestTransactionUncertainty verifies that txn.{Get,Update}Uncertainty work as
+// TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
 // advertised.
-func TestTransactionUncertainty(t *testing.T) {
-	txn := Transaction{}
-	mkTS := func(nodeID NodeID) Timestamp {
-		return ZeroTimestamp.Add(rand.New(rand.NewSource(int64(nodeID))).Int63(), 0)
-	}
+func TestTransactionObservedTimestamp(t *testing.T) {
+	txn := Transaction{ObservedTimestamp: ZeroTimestamp.Add(12345678, 9)}
+	rng, seed := randutil.NewPseudoRand()
+	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
+	timestamps := make(map[NodeID]Timestamp, len(ids))
+	for i := 0; i < len(ids); i++ {
+		timestamps[NodeID(i)] = ZeroTimestamp.Add(rng.Int63n(txn.ObservedTimestamp.WallTime), 0)
+	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
-		if ts := txn.GetUncertainty(nodeID); ts != MaxTimestamp {
+		if ts := txn.GetObservedTimestamp(nodeID); ts != txn.ObservedTimestamp {
 			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
-		txn.UpdateUncertainty(nodeID, mkTS(nodeID))
-		if exp, act := i+1, len(txn.MaxTimestamps); act != exp {
-			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.MaxTimestamps)
+		txn.UpdateObservedTimestamp(nodeID, timestamps[nodeID])
+		txn.UpdateObservedTimestamp(nodeID, MaxTimestamp) // should be noop
+		if exp, act := i+1, len(txn.ObservedTimestamps); act != exp {
+			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.ObservedTimestamps)
 		}
-		for j, m := range ids[:i+1] {
-			checkID := NodeID(m)
-			var exp Timestamp
-			if j <= i+1 {
-				exp = mkTS(checkID)
-			}
-			if act := txn.GetUncertainty(checkID); !act.Equal(exp) {
-				t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
-			}
+	}
+	for _, m := range ids {
+		checkID := NodeID(m)
+		exp := timestamps[checkID]
+		if act := txn.GetObservedTimestamp(checkID); !act.Equal(exp) {
+			t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
 		}
 	}
 }
@@ -459,16 +461,16 @@ var nonZeroTxn = Transaction{
 		Epoch:     2,
 		Timestamp: makeTS(20, 21),
 	},
-	Name:          "name",
-	Priority:      957356782,
-	Status:        COMMITTED,
-	LastHeartbeat: &Timestamp{1, 2},
-	OrigTimestamp: makeTS(30, 31),
-	MaxTimestamp:  makeTS(40, 41),
-	MaxTimestamps: []NodeWithTimestamp{{NodeID: 1, MaxTimestamp: makeTS(1, 2)}},
-	Writing:       true,
-	Sequence:      123,
-	Intents:       []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	Name:               "name",
+	Priority:           957356782,
+	Status:             COMMITTED,
+	LastHeartbeat:      &Timestamp{1, 2},
+	OrigTimestamp:      makeTS(30, 31),
+	ObservedTimestamp:  makeTS(40, 41),
+	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
+	Writing:            true,
+	Sequence:           123,
+	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 }
 
 func TestTransactionUpdate(t *testing.T) {

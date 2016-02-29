@@ -324,7 +324,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 	}
 }
 
-// TestUncertaintyMaxTimestampForwarding checks that we correctly read
+// TestUncertaintyObservedTimestampForwarding checks that we correctly read
 // from hosts for which we control the uncertainty by checking that
 // when a transaction restarts after an uncertain read, it will also
 // take into account the target node's clock at the time of the failed
@@ -333,7 +333,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 // This is a prerequisite for being able to prevent further uncertainty
 // restarts for that node and transaction without sacrificing correctness.
 // See roachpb.Transaction.CertainNodes for details.
-func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
+func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)

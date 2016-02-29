@@ -452,7 +452,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		ba.Timestamp = ds.clock.Now()
 	}
 
-	if ba.Txn != nil && len(ba.Txn.MaxTimestamps) == 0 {
+	if ba.Txn != nil && len(ba.Txn.ObservedTimestamps) == 0 {
 		// Ensure the local NodeID is marked as free from clock offset;
 		// the transaction's timestamp was taken off the local clock.
 		if nDesc := ds.getNodeDescriptor(); nDesc != nil {
@@ -466,15 +466,14 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 			// First, get a shallow clone of our txn (since that holds the
 			// NodeList struct).
 			txnShallow := *ba.Txn
-			// Next, zero out the NodeList pointer. That makes sure that
-			// if we had something of size zero but with capacity, we don't
-			// re-use the existing space (which others may also use).
-			// This is just to satisfy paranoia/OCD and not expected to matter
-			// in practice.
-			txnShallow.MaxTimestamps = nil
+			// Next, zero the existing data. That makes sure that if we had
+			// something of size zero but with capacity, we don't re-use the
+			// existing space (which others may also use). This is just to
+			// satisfy paranoia/OCD and not expected to matter in practice.
+			txnShallow.ObservedTimestamps = nil
 			// OrigTimestamp is the HLC timestamp at which the Txn started, so
 			// this effectively means no more uncertainty on this node.
-			txnShallow.UpdateUncertainty(nDesc.NodeID, txnShallow.OrigTimestamp)
+			txnShallow.UpdateObservedTimestamp(nDesc.NodeID, txnShallow.OrigTimestamp)
 			ba.Txn = &txnShallow
 		}
 	}

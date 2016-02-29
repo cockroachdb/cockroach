@@ -378,10 +378,12 @@ func TestOwnNodeCertain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var act []roachpb.NodeWithTimestamp
+	act := make(map[roachpb.NodeID]roachpb.Timestamp)
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
-		act = append([]roachpb.NodeWithTimestamp(nil), ba.Txn.MaxTimestamps...)
+		for k, v := range ba.Txn.ObservedTimestamps {
+			act[k] = v
+		}
 		return ba.CreateReply(), nil
 	}
 
@@ -396,12 +398,17 @@ func TestOwnNodeCertain(t *testing.T) {
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
 	if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
-		Txn: &roachpb.Transaction{OrigTimestamp: expTS},
+		// ObservedTimestamp is set very high so that all uncertainty updates have
+		// effect.
+		Txn: &roachpb.Transaction{OrigTimestamp: expTS, ObservedTimestamp: roachpb.MaxTimestamp},
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}
-	if len(act) != 1 || act[0].NodeID != expNodeID || !act[0].MaxTimestamp.Equal(expTS) {
-		t.Fatalf("got %v, expected only entry for %d with timestamp %s", act, expNodeID, expTS)
+	exp := map[roachpb.NodeID]roachpb.Timestamp{
+		expNodeID: expTS,
+	}
+	if !reflect.DeepEqual(exp, act) {
+		t.Fatalf("wanted %v, got %v", exp, act)
 	}
 
 }

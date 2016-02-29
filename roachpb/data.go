@@ -567,11 +567,11 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 			Isolation: isolation,
 			Timestamp: now,
 		},
-		Name:          name,
-		Priority:      priority,
-		OrigTimestamp: now,
-		MaxTimestamp:  max,
-		Sequence:      1,
+		Name:              name,
+		Priority:          priority,
+		OrigTimestamp:     now,
+		ObservedTimestamp: max,
+		Sequence:          1,
 	}
 }
 
@@ -592,7 +592,13 @@ func (t Transaction) Clone() Transaction {
 		h := *t.LastHeartbeat
 		t.LastHeartbeat = &h
 	}
-	t.MaxTimestamps = append([]NodeWithTimestamp(nil), t.MaxTimestamps...)
+	mt := t.ObservedTimestamps
+	if mt != nil {
+		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		for k, v := range mt {
+			t.ObservedTimestamps[k] = v
+		}
+	}
 	// Note that we're not cloning the span keys under the assumption that the
 	// keys themselves are not mutable.
 	t.Intents = append([]Span(nil), t.Intents...)
@@ -745,7 +751,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	t.Timestamp.Forward(o.Timestamp)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
-	t.MaxTimestamp.Forward(o.MaxTimestamp)
+	t.ObservedTimestamp.Forward(o.ObservedTimestamp)
 	if o.LastHeartbeat != nil {
 		if t.LastHeartbeat == nil {
 			t.LastHeartbeat = &Timestamp{}
@@ -753,8 +759,15 @@ func (t *Transaction) Update(o *Transaction) {
 		t.LastHeartbeat.Forward(*o.LastHeartbeat)
 	}
 
-	// Copy the list of nodes without time uncertainty.
-	t.MaxTimestamps = append([]NodeWithTimestamp(nil), o.MaxTimestamps...)
+	// Absorb the collected clock uncertainty information.
+	if len(o.ObservedTimestamps) > 0 {
+		if t.ObservedTimestamps == nil {
+			t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		}
+		for k, v := range o.ObservedTimestamps {
+			t.ObservedTimestamps[k] = v
+		}
+	}
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
@@ -784,7 +797,7 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.ObservedTimestamp)
 	return buf.String()
 }
 
@@ -796,42 +809,31 @@ func (t Transaction) Short() string {
 	return t.ID.String()[:8]
 }
 
-type maxTimestamps []NodeWithTimestamp
-
-func (mt maxTimestamps) Len() int           { return len(mt) }
-func (mt maxTimestamps) Swap(i, j int)      { mt[i], mt[j] = mt[j], mt[i] }
-func (mt maxTimestamps) Less(i, j int) bool { return mt[i].NodeID < mt[j].NodeID }
-
-func (mt maxTimestamps) find(nodeID NodeID) (int, Timestamp) {
-	i := sort.Search(len(mt), func(i int) bool { return mt[i].NodeID >= nodeID })
-	found := i < len(mt) && mt[i].NodeID == nodeID
-	if !found {
-		return -1, MaxTimestamp
+// UpdateObservedTimestamp stores a timestamp off a node's clock for future
+// operations in the transaction. When multiple calls are made for a single
+// nodeID, the lowest timestamp prevails. Calls with timestamps above
+// t.ObservedTimestamp have no effect.
+func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
+	if !maxTS.Less(t.ObservedTimestamp) {
+		return
 	}
-	return i, mt[i].MaxTimestamp
-}
-
-// UpdateUncertainty is to remember a timestamp off a node's clock for future
-// operations on that node. When multiple calls are made for a single nodeID,
-// the lowest timestamp prevails.
-func (t *Transaction) UpdateUncertainty(nodeID NodeID, maxTS Timestamp) {
-	i, _ := maxTimestamps(t.MaxTimestamps).find(nodeID)
-	if i < 0 {
-		t.MaxTimestamps = append(t.MaxTimestamps, NodeWithTimestamp{
-			NodeID: nodeID, MaxTimestamp: maxTS,
-		})
-		sort.Sort(maxTimestamps(t.MaxTimestamps))
-	} else {
-		t.MaxTimestamps[i].MaxTimestamp.Backward(maxTS)
+	if t.ObservedTimestamps == nil {
+		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+	}
+	if ts, ok := t.ObservedTimestamps[nodeID]; !ok || maxTS.Less(ts) {
+		t.ObservedTimestamps[nodeID] = maxTS
 	}
 }
 
-// GetUncertainty returns the lowest timestamp recorded for the given node.
-// When reading from that node, MaxTimestamp can be lowered to the timestamp
-// returned by this method. If no entry is found, MaxTimestamp is be returned.
-func (t Transaction) GetUncertainty(nodeID NodeID) Timestamp {
-	_, ts := maxTimestamps(t.MaxTimestamps).find(nodeID)
-	return ts
+// GetObservedTimestamp returns the lowest HLC timestamp recorded from the given node's
+// clock during this transaction.
+// When reading from that node, ObservedTimestamp can be lowered to the timestamp
+// returned by this method. If no entry is found, t.ObservedTimestamp is returned.
+func (t Transaction) GetObservedTimestamp(nodeID NodeID) Timestamp {
+	if ts, ok := t.ObservedTimestamps[nodeID]; ok {
+		return ts
+	}
+	return t.ObservedTimestamp
 }
 
 var _ fmt.Stringer = &Lease{}
