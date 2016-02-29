@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const splitTimeout = 10 * time.Second
@@ -51,19 +52,6 @@ func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
 		},
 		SplitKey: splitKey,
 	}
-}
-
-func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
-	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
-		return err
-	}
-	// Clear system counts as these are expected to vary.
-	ms.SysBytes, ms.SysCount = 0, 0
-	if !reflect.DeepEqual(expMS, ms) {
-		return util.Errorf("expected stats %+v; got %+v", expMS, ms)
-	}
-	return nil
 }
 
 // TestStoreRangeSplitAtIllegalKeys verifies a range cannot be split
@@ -424,23 +412,15 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Write random data.
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < 100; i++ {
-		key := append([]byte(nil), keyPrefix...)
-		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		key = keys.MakeNonColumnKey(key)
-		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val)
-		if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-			RangeID: rng.RangeID,
-		}, &pArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
+	writeRandomDataToRange(t, store, rng.RangeID, keyPrefix)
+
 	// Get the range stats now that we have data.
 	var ms engine.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID, &ms); err != nil {
 		t.Fatal(err)
+	}
+	if err := verifyRecomputedStats(store, rng.Desc(), ms); err != nil {
+		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
@@ -475,8 +455,16 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
 	ms.SysBytes, ms.SysCount = 0, 0
-	if !reflect.DeepEqual(expMS, ms) {
+	if expMS != ms {
 		t.Errorf("expected left and right ranges to equal original: %+v + %+v != %+v", msLeft, msRight, ms)
+	}
+
+	// Stats should agree with recomputation.
+	if err := verifyRecomputedStats(store, rng.Desc(), msLeft); err != nil {
+		t.Fatalf("failed to verify left range's stats after split: %v", err)
+	}
+	if err := verifyRecomputedStats(store, rngRight.Desc(), msRight); err != nil {
+		t.Fatalf("failed to verify right range's stats after split: %v", err)
 	}
 }
 
@@ -996,5 +984,61 @@ func TestLeaderAfterSplit(t *testing.T) {
 	incArgs = incrementArgs(rightKey, 2)
 	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+func BenchmarkStoreRangeSplit(b *testing.B) {
+	defer tracing.Disable()()
+	defer config.TestingDisableTableSplits()()
+	store, stopper := createTestStore(b)
+	defer stopper.Stop()
+
+	// Perform initial split of ranges.
+	sArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	if _, err := client.SendWrapped(rg1(store), nil, &sArgs); err != nil {
+		b.Fatal(err)
+	}
+
+	// Write some values left and right of the split key.
+	aDesc := store.LookupReplica([]byte("a"), nil).Desc()
+	bDesc := store.LookupReplica([]byte("c"), nil).Desc()
+	writeRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
+	writeRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
+
+	// Merge the b range back into the a range.
+	mArgs := adminMergeArgs(roachpb.KeyMin)
+	if _, err := client.SendWrapped(rg1(store), nil, &mArgs); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Split the range.
+		b.StartTimer()
+		if _, err := client.SendWrapped(rg1(store), nil, &sArgs); err != nil {
+			b.Fatal(err)
+		}
+
+		// Merge the ranges.
+		b.StopTimer()
+		if _, err := client.SendWrapped(rg1(store), nil, &mArgs); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func writeRandomDataToRange(t testing.TB, store *storage.Store, rangeID roachpb.RangeID, keyPrefix []byte) {
+	src := rand.New(rand.NewSource(0))
+	for i := 0; i < 100; i++ {
+		key := append([]byte(nil), keyPrefix...)
+		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
+		key = keys.MakeNonColumnKey(key)
+		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
+		pArgs := putArgs(key, val)
+		if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+			RangeID: rangeID,
+		}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 }

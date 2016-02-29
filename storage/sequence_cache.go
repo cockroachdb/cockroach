@@ -152,8 +152,6 @@ func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, *uuid.UUID, roa
 		})
 }
 
-// TODO(nvanbenschoten): We pass MVCCStats in, but the actual key handling is
-// too low level to update it.
 func copySeqCache(e engine.Engine, ms *engine.MVCCStats, srcID, dstID roachpb.RangeID, keyMin, keyMax engine.MVCCKey) (int, error) {
 	var scratch [64]byte
 	var count int
@@ -178,9 +176,17 @@ func copySeqCache(e engine.Engine, ms *engine.MVCCStats, srcID, dstID roachpb.Ra
 			value.ClearChecksum()
 			value.InitChecksum(key)
 			meta.RawBytes = value.RawBytes
-			_, _, err = engine.PutProto(e, encKey, meta)
+
+			keyBytes, valBytes, err := engine.PutProto(e, encKey, meta)
+			if err != nil {
+				return false, err
+			}
 			count++
-			return false, err
+			if ms != nil {
+				ms.SysBytes += keyBytes + valBytes
+				ms.SysCount++
+			}
+			return false, nil
 		})
 	return count, err
 }
@@ -210,7 +216,7 @@ func (sc *SequenceCache) CopyFrom(e engine.Engine, ms *engine.MVCCStats, originR
 // Del removes all sequence cache entries for the given transaction.
 func (sc *SequenceCache) Del(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID) error {
 	startKey := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
-	_, err := engine.MVCCDeleteRange(e, nil /* TODO(nvanbenschoten) */, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */, false /*returnKeys*/)
+	_, err := engine.MVCCDeleteRange(e, ms, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */, false /*returnKeys*/)
 	return err
 }
 

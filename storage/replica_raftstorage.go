@@ -272,11 +272,11 @@ func (r *Replica) loadAppliedIndexLocked(eng engine.Engine) (uint64, error) {
 }
 
 // setAppliedIndex persists a new applied index.
-func setAppliedIndex(eng engine.Engine, rangeID roachpb.RangeID, appliedIndex uint64) error {
+func setAppliedIndex(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, appliedIndex uint64) error {
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 
-	return engine.MVCCPut(eng, nil, /* stats */
+	return engine.MVCCPut(eng, ms,
 		keys.RaftAppliedIndexKey(rangeID),
 		roachpb.ZeroTimestamp,
 		value,

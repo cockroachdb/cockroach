@@ -123,3 +123,21 @@ func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 	rs.AgeTo(nowNanos)
 	return rs.GCBytesAge
 }
+
+// ComputeStatsForRange computes the stats for a given range by
+// iterating over all key ranges for the given range that should
+// be accounted for in its stats.
+func ComputeStatsForRange(d *roachpb.RangeDescriptor, e engine.Engine, nowNanos int64) (engine.MVCCStats, error) {
+	iter := e.NewIterator(nil)
+	defer iter.Close()
+
+	ms := engine.MVCCStats{}
+	for _, r := range makeReplicatedKeyRanges(d) {
+		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
+		if err != nil {
+			return engine.MVCCStats{}, err
+		}
+		ms.Add(msDelta)
+	}
+	return ms, nil
+}

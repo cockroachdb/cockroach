@@ -985,7 +985,9 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Verification timestamp.
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
+	// TODO(nvanbenschoten) update stats again here when #4710 is resolved
+	// and the LastVerificationTimestampKey is replicated again.
+	if err := engine.MVCCPutProto(batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta2.
@@ -2021,7 +2023,7 @@ func (s *Store) ComputeMVCCStatsTest() (engine.MVCCStats, error) {
 	now := s.Clock().PhysicalNow()
 	visitor.Visit(func(r *Replica) bool {
 		var stats engine.MVCCStats
-		stats, err = r.computeStats(r.Desc(), s.Engine(), now)
+		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
 			return false
 		}

@@ -293,11 +293,17 @@ func (*SplitTrigger) ProtoMessage()    {}
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
 // command. It provides the updated range descriptor that now encompasses
-// what was originally both ranges. This information allows the final bookkeeping
-// for the merge to be completed and put into operation.
+// what was originally both ranges and the soon to be invalid range
+// descriptor that used to cover the subsumed half of the merge. This
+// information allows the final bookkeeping for the merge to be completed
+// and put into operation.
 type MergeTrigger struct {
-	UpdatedDesc     RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
-	SubsumedRangeID RangeID         `protobuf:"varint,2,opt,name=subsumed_range_id,casttype=RangeID" json:"subsumed_range_id"`
+	// The updated range descriptor that now encompasses what was originally
+	// both ranges.
+	UpdatedDesc RangeDescriptor `protobuf:"bytes,1,opt,name=updated_desc" json:"updated_desc"`
+	// The soon to be invalid range descriptor that used to cover the subsumed
+	// half of the merge.
+	SubsumedDesc RangeDescriptor `protobuf:"bytes,2,opt,name=subsumed_desc" json:"subsumed_desc"`
 }
 
 func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
@@ -734,9 +740,14 @@ func (m *MergeTrigger) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n6
-	data[i] = 0x10
+	data[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.SubsumedRangeID))
+	i = encodeVarintData(data, i, uint64(m.SubsumedDesc.Size()))
+	n7, err := m.SubsumedDesc.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n7
 	return i, nil
 }
 
@@ -761,11 +772,11 @@ func (m *ChangeReplicasTrigger) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n7, err := m.Replica.MarshalTo(data[i:])
+	n8, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n8
 	if len(m.UpdatedReplicas) > 0 {
 		for _, msg := range m.UpdatedReplicas {
 			data[i] = 0x1a
@@ -829,41 +840,41 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.SplitTrigger.Size()))
-		n8, err := m.SplitTrigger.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n8
-	}
-	if m.MergeTrigger != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
-		n9, err := m.MergeTrigger.MarshalTo(data[i:])
+		n9, err := m.SplitTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n9
 	}
-	if m.ChangeReplicasTrigger != nil {
-		data[i] = 0x1a
+	if m.MergeTrigger != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
-		n10, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
+		i = encodeVarintData(data, i, uint64(m.MergeTrigger.Size()))
+		n10, err := m.MergeTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n10
 	}
-	if m.ModifiedSpanTrigger != nil {
-		data[i] = 0x22
+	if m.ChangeReplicasTrigger != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintData(data, i, uint64(m.ModifiedSpanTrigger.Size()))
-		n11, err := m.ModifiedSpanTrigger.MarshalTo(data[i:])
+		i = encodeVarintData(data, i, uint64(m.ChangeReplicasTrigger.Size()))
+		n11, err := m.ChangeReplicasTrigger.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n11
+	}
+	if m.ModifiedSpanTrigger != nil {
+		data[i] = 0x22
+		i++
+		i = encodeVarintData(data, i, uint64(m.ModifiedSpanTrigger.Size()))
+		n12, err := m.ModifiedSpanTrigger.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
 	}
 	return i, nil
 }
@@ -884,22 +895,22 @@ func (m *NodeList) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.Nodes) > 0 {
-		data13 := make([]byte, len(m.Nodes)*10)
-		var j12 int
+		data14 := make([]byte, len(m.Nodes)*10)
+		var j13 int
 		for _, num1 := range m.Nodes {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				data13[j12] = uint8(uint64(num)&0x7f | 0x80)
+				data14[j13] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j12++
+				j13++
 			}
-			data13[j12] = uint8(num)
-			j12++
+			data14[j13] = uint8(num)
+			j13++
 		}
 		data[i] = 0xa
 		i++
-		i = encodeVarintData(data, i, uint64(j12))
-		i += copy(data[i:], data13[:j12])
+		i = encodeVarintData(data, i, uint64(j13))
+		i += copy(data[i:], data14[:j13])
 	}
 	return i, nil
 }
@@ -923,11 +934,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.ID.Size()))
-		n14, err := m.ID.MarshalTo(data[i:])
+		n15, err := m.ID.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n15
 	}
 	data[i] = 0x10
 	i++
@@ -944,11 +955,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x2a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n15, err := m.Timestamp.MarshalTo(data[i:])
+	n16, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n15
+	i += n16
 	return i, nil
 }
 
@@ -970,11 +981,11 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.TxnMeta.Size()))
-	n16, err := m.TxnMeta.MarshalTo(data[i:])
+	n17, err := m.TxnMeta.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n16
+	i += n17
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Name)))
@@ -989,36 +1000,36 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n17, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n18, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n17
+		i += n18
 	}
 	data[i] = 0x32
 	i++
 	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n18, err := m.OrigTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
-	data[i] = 0x3a
-	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n19, err := m.MaxTimestamp.MarshalTo(data[i:])
+	n19, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n19
-	data[i] = 0x42
+	data[i] = 0x3a
 	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n20, err := m.CertainNodes.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n20, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n20
+	data[i] = 0x42
+	i++
+	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
+	n21, err := m.CertainNodes.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
 	data[i] = 0x48
 	i++
 	if m.Writing {
@@ -1063,19 +1074,19 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Span.Size()))
-	n21, err := m.Span.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n21
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n22, err := m.Txn.MarshalTo(data[i:])
+	n22, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n22
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
+	n23, err := m.Txn.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.Status))
@@ -1100,27 +1111,27 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n23, err := m.Start.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n23
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n24, err := m.Expiration.MarshalTo(data[i:])
+	n24, err := m.Start.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n24
-	data[i] = 0x1a
+	data[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n25, err := m.Replica.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n25, err := m.Expiration.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n25
+	data[i] = 0x1a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n26, err := m.Replica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n26
 	return i, nil
 }
 
@@ -1148,11 +1159,11 @@ func (m *SequenceCacheEntry) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n26, err := m.Timestamp.MarshalTo(data[i:])
+	n27, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n26
+	i += n27
 	return i, nil
 }
 
@@ -1255,7 +1266,8 @@ func (m *MergeTrigger) Size() (n int) {
 	_ = l
 	l = m.UpdatedDesc.Size()
 	n += 1 + l + sovData(uint64(l))
-	n += 1 + sovData(uint64(m.SubsumedRangeID))
+	l = m.SubsumedDesc.Size()
+	n += 1 + l + sovData(uint64(l))
 	return n
 }
 
@@ -2142,10 +2154,10 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SubsumedRangeID", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubsumedDesc", wireType)
 			}
-			m.SubsumedRangeID = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowData
@@ -2155,11 +2167,22 @@ func (m *MergeTrigger) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.SubsumedRangeID |= (RangeID(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.SubsumedDesc.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])
