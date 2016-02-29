@@ -315,3 +315,23 @@ func getRandomByteSlice(t *testing.T, n int) []byte {
 	}
 	return s
 }
+
+func BenchmarkRangeList(b *testing.B) {
+	benchmarkRangeGroup(b, NewRangeList())
+}
+
+func BenchmarkRangeTree(b *testing.B) {
+	benchmarkRangeGroup(b, NewRangeTree())
+}
+
+func benchmarkRangeGroup(b *testing.B, rg RangeGroup) {
+	for i := 0; i < b.N; i++ {
+		rg.Add(Range{Start: []byte{0x01}, End: []byte{0x02}})
+		rg.Add(Range{Start: []byte{0x04}, End: []byte{0x06}})
+		rg.Add(Range{Start: []byte{0x00}, End: []byte{0x02}})
+		rg.Add(Range{Start: []byte{0x01}, End: []byte{0x06}})
+		rg.Add(Range{Start: []byte{0x05}, End: []byte{0x15}})
+		rg.Add(Range{Start: []byte{0x25}, End: []byte{0x30}})
+		rg.Clear()
+	}
+}
