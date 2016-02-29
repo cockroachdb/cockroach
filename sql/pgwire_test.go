@@ -704,6 +704,31 @@ func TestPGCommandTags(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tx, err = db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("INSERT INTO testing.tags VALUES (4, 1)"); err != nil {
+		t.Fatal(err)
+	}
+	// Rollback also checks the correct tag is returned.
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err = db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An error will abort the server's transaction.
+	if _, err := tx.Exec("INSERT INTO testing.tags VALUES (4, 1), (4, 1)"); err == nil {
+		t.Fatal("expected an error on duplicate k")
+	}
+	// Rollback, even of an aborted txn, should also return the correct tag.
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
 	// cockroachdb/pq has a special-case for INSERT (due to oids), so test insert and update statements.
 	res, err := db.Exec("INSERT INTO testing.tags VALUES (1, 1), (2, 2)")
 	if err != nil {
