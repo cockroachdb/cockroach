@@ -38,7 +38,7 @@ func newInfo(val float64) Info {
 }
 
 func TestExpired(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	i := newInfo(float64(1))
 	if i.expired(i.Value.Timestamp.WallTime) {
@@ -50,7 +50,7 @@ func TestExpired(t *testing.T) {
 }
 
 func TestIsFresh(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	i := newInfo(float64(1))
 	if !i.isFresh(i.OrigStamp - 1) {

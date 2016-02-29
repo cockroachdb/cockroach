@@ -27,7 +27,7 @@ import (
 )
 
 func TestPrivilege(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	descriptor := sql.NewDefaultPrivilegeDescriptor()
 
 	testCases := []struct {
@@ -90,7 +90,7 @@ func TestPrivilege(t *testing.T) {
 
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	id := sql.ID(keys.MaxReservedDescID + 1)
 	descriptor := sql.NewDefaultPrivilegeDescriptor()
 	if err := descriptor.Validate(id); err != nil {
@@ -123,7 +123,7 @@ func TestPrivilegeValidate(t *testing.T) {
 // TestSystemPrivilegeValidate exercises validation for system descriptors.
 // We use 1 (the system database ID).
 func TestSystemPrivilegeValidate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	id := sql.ID(1)
 	allowedPrivileges := sql.SystemAllowedPrivileges[id]
 

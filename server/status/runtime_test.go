@@ -25,7 +25,7 @@ import (
 )
 
 func TestRuntimeStatRecorder(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(100)
 	recorder := NewRuntimeStatRecorder(roachpb.NodeID(1), hlc.NewClock(manual.UnixNano))
 

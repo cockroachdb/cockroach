@@ -65,7 +65,7 @@ func getJSON(url string) (interface{}, error) {
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -85,7 +85,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 // TestAdminDebugPprof verifies that pprof tools are available.
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -101,7 +101,7 @@ func TestAdminDebugPprof(t *testing.T) {
 // TestAdminDebugTrace verifies that the net/trace endpoints are available
 // via /debug/{requests,events}.
 func TestAdminNetTrace(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -135,7 +135,7 @@ func apiGet(s *TestServer, path string, v interface{}) error {
 }
 
 func TestAdminAPIDatabases(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -215,7 +215,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 }
 
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -225,7 +225,7 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 }
 
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 

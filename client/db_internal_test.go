@@ -26,7 +26,7 @@ import (
 // TestClientTxnSequenceNumber verifies that the sequence number is increased
 // between calls.
 func TestClientTxnSequenceNumber(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	count := 0
 	var curSeq uint32
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {

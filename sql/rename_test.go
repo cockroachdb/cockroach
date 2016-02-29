@@ -28,7 +28,7 @@ import (
 // TestRenameTable tests the table descriptor changes during
 // a rename operation.
 func TestRenameTable(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)

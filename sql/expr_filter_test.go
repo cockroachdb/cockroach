@@ -52,7 +52,7 @@ func countVars(expr parser.Expr) (numQNames, numQValues int) {
 }
 
 func TestSplitFilter(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// In each testcase, we are splitting the filter in expr according to the set of variables in
 	// vars.

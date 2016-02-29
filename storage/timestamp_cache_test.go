@@ -31,7 +31,7 @@ const (
 )
 
 func TestTimestampCache(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -104,7 +104,7 @@ func TestTimestampCache(t *testing.T) {
 // TestTimestampCacheSetLowWater verifies that setting the low
 // water mark moves max timestamps forward as appropriate.
 func TestTimestampCacheSetLowWater(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -153,7 +153,7 @@ func TestTimestampCacheSetLowWater(t *testing.T) {
 // TestTimestampCacheEviction verifies the eviction of
 // timestamp cache entries after MinTSCacheWindow interval.
 func TestTimestampCacheEviction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -175,7 +175,7 @@ func TestTimestampCacheEviction(t *testing.T) {
 }
 
 func TestTimestampCacheMergeInto(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 
@@ -246,7 +246,7 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 // is chosen if previous entries have ranges which are layered over
 // each other.
 func TestTimestampCacheLayeredIntervals(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -296,7 +296,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 }
 
 func TestTimestampCacheClear(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -323,7 +323,7 @@ func TestTimestampCacheClear(t *testing.T) {
 // in the timestamp cache which completely "covers" an older
 // entry will replace it.
 func TestTimestampCacheReplacements(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
@@ -375,7 +375,7 @@ func TestTimestampCacheReplacements(t *testing.T) {
 // TestTimestampCacheWithTxnID verifies that timestamps matching
 // the specified txn ID are ignored.
 func TestTimestampCacheWithTxnID(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
@@ -406,7 +406,7 @@ func TestTimestampCacheWithTxnID(t *testing.T) {
 // TestTimestampCacheReadVsWrite verifies that the timestamp cache
 // can differentiate between read and write timestamp.
 func TestTimestampCacheReadVsWrite(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)

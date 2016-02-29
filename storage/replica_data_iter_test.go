@@ -99,7 +99,7 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 // TestReplicaDataIterator verifies correct operation of iterator if
 // a range contains no data and never has.
 func TestReplicaDataIteratorEmptyRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -128,7 +128,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 // and verifies it's empty. Finally, it verifies the pre and post
 // ranges still contain the expected data.
 func TestReplicaDataIterator(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}

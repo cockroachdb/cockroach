@@ -28,7 +28,7 @@ import (
 )
 
 func TestDesiredAggregateOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string

@@ -33,7 +33,7 @@ func (h *Heartbeat) Ping(args proto.Message) (proto.Message, error) {
 }
 
 func TestDuplicateRegistration(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
@@ -50,7 +50,7 @@ func TestDuplicateRegistration(t *testing.T) {
 }
 
 func TestUnregisteredMethod(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	nodeContext := newNodeTestContext(nil, stopper)

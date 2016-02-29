@@ -37,7 +37,7 @@ import (
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -57,7 +57,7 @@ func TestGossipInfoStore(t *testing.T) {
 }
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Set up an http server for testing the http load balancer.
 	i := 0
@@ -116,7 +116,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 // TestGossipCullNetwork verifies that a client will be culled from
 // the network periodically (at cullInterval duration intervals).
 func TestGossipCullNetwork(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Create the local gossip and minPeers peers.
 	stopper := stop.NewStopper()

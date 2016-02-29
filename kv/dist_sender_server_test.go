@@ -48,7 +48,7 @@ import (
 // proceed in the event that a write intent is extant at the meta
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -93,7 +93,7 @@ func setupMultipleRanges(t *testing.T, ts *server.TestServer, splitAt ...string)
 }
 
 func TestMultiRangeBatchBounded(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
@@ -136,7 +136,7 @@ func TestMultiRangeBatchBounded(t *testing.T) {
 // multi-range request deals with a range without any active requests after
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "c", "d")
@@ -156,7 +156,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 // TestMultiRangeScanReverseScanDeleteResolve verifies that Scan, ReverseScan,
 // DeleteRange and ResolveIntentRange work across ranges.
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")
@@ -210,7 +210,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // across ranges that doesn't require read consistency will set a timestamp
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	s := server.StartTestServer(t)
 	defer s.Stop()
@@ -307,7 +307,7 @@ func initReverseScanTestEnv(s *server.TestServer, t *testing.T) *client.DB {
 // TestSingleRangeReverseScan verifies that ReverseScan gets the right results
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := initReverseScanTestEnv(s, t)
@@ -345,7 +345,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // TestMultiRangeReverseScan verifies that ReverseScan gets the right results
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := initReverseScanTestEnv(s, t)
@@ -367,7 +367,7 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // TestReverseScanWithSplitAndMerge verifies that ReverseScan gets the right results
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := initReverseScanTestEnv(s, t)
@@ -398,7 +398,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 }
 
 func TestBadRequest(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	t.Skip("#4653")
 	s := server.StartTestServer(t)
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -430,7 +430,7 @@ func TestBadRequest(t *testing.T) {
 // sequence cache is not updated with RangeKeyMismatchError. This is a
 // higher-level version of TestSequenceCacheShouldCache.
 func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b", "c")
@@ -468,7 +468,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 // propagates the txn data to a next iteration. Use txn.Writing field to
 // verify that.
 func TestPropagateTxnOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Set up a filter to so that the first CPut operation will
 	// get a ReadWithinUncertaintyIntervalError.
@@ -546,7 +546,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 // but verifies that txn data are propagated to the next iteration on
 // TransactionPushError.
 func TestPropagateTxnOnPushError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")

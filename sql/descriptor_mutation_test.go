@@ -181,7 +181,7 @@ func (mt mutationTest) writeMutation(m csql.DescriptorMutation) {
 }
 
 func TestOperationsWithColumnMutation(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
@@ -362,7 +362,7 @@ func (mt mutationTest) writeIndexMutation(index string, m csql.DescriptorMutatio
 }
 
 func TestOperationsWithIndexMutation(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect.
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
@@ -492,7 +492,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 }
 
 func TestCommandsWithPendingMutations(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()

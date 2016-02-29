@@ -102,7 +102,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 // and checks that all created intents are resolved. This includes both intents
 // which are resolved synchronously with EndTransaction and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -133,7 +133,7 @@ func TestRangeSplitMeta(t *testing.T) {
 // 10 concurrent goroutines are each running successive transactions
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -178,7 +178,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // TestRangeSplitsWithWritePressure sets the zone config max bytes for
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Override default zone config.
 	previousMaxBytes := config.DefaultZoneConfig.RangeMaxBytes
 	config.DefaultZoneConfig.RangeMaxBytes = 1 << 18
@@ -231,7 +231,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // TestRangeSplitsWithSameKeyTwice check that second range split
 // on the same splitKey should not cause infinite retry loop.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 

@@ -97,7 +97,7 @@ func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
 func TestMVCCStatsAddSubAgeTo(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	goldMS := MVCCStats{
 		KeyBytes:        1,
 		KeyCount:        1,
@@ -224,7 +224,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 // a\x00<t=1>
 // a\x00<t=0>
 func TestMVCCKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	aKey := roachpb.Key("a")
 	a0Key := roachpb.Key("a\x00")
 	keys := mvccKeys{
@@ -246,7 +246,7 @@ func TestMVCCKeys(t *testing.T) {
 }
 
 func TestMVCCEmptyKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -269,7 +269,7 @@ func TestMVCCEmptyKey(t *testing.T) {
 }
 
 func TestMVCCGetNotExist(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -284,7 +284,7 @@ func TestMVCCGetNotExist(t *testing.T) {
 }
 
 func TestMVCCPutWithTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -306,7 +306,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 }
 
 func TestMVCCPutWithoutTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -331,7 +331,7 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 // TestMVCCPutOutOfOrder tests a scenario where a put operation of an
 // older timestamp comes after a put operation of a newer timestamp.
 func TestMVCCPutOutOfOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -373,7 +373,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 // TestMVCCIncrement verifies increment behavior. In particular,
 // incrementing a non-existent key by 0 will create the value.
 func TestMVCCIncrement(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -406,7 +406,7 @@ func TestMVCCIncrement(t *testing.T) {
 // called with an old timestamp. The test verifies that a value is
 // read with the same timestamp as we use to write a value.
 func TestMVCCIncrementOldTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -438,7 +438,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 }
 
 func TestMVCCUpdateExistingKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -484,7 +484,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 }
 
 func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -506,7 +506,7 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 }
 
 func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -521,7 +521,7 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 }
 
 func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -536,7 +536,7 @@ func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
 }
 
 func TestMVCCGetNoMoreOldVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Need to handle the case here where the scan takes us to the
 	// next key, which may not match the key we're looking for. In
 	// other words, if we're looking for a<T=2>, and we have the
@@ -569,7 +569,7 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 // a transaction reads a key at a timestamp that has versions newer than that
 // timestamp, but older than the transaction's MaxTimestamp.
 func TestMVCCGetUncertainty(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -635,7 +635,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 }
 
 func TestMVCCGetAndDelete(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -676,7 +676,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 }
 
 func TestMVCCDeleteMissingKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
@@ -691,7 +691,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 }
 
 func TestMVCCGetAndDeleteInTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -727,7 +727,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 }
 
 func TestMVCCGetWriteIntentError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -752,7 +752,7 @@ func mkVal(s string, ts roachpb.Timestamp) roachpb.Value {
 }
 
 func TestMVCCScanWriteIntentError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -864,7 +864,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 // TestMVCCGetInconsistent verifies the behavior of get with
 // consistent set to false.
 func TestMVCCGetInconsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -915,7 +915,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 // TestMVCCGetProtoInconsistent verifies the behavior of GetProto with
 // consistent set to false.
 func TestMVCCGetProtoInconsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1010,7 +1010,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 }
 
 func TestMVCCScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1071,7 +1071,7 @@ func TestMVCCScan(t *testing.T) {
 }
 
 func TestMVCCScanMaxNum(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1093,7 +1093,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 }
 
 func TestMVCCScanWithKeyPrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1129,7 +1129,7 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 }
 
 func TestMVCCScanInTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1167,7 +1167,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 // TestMVCCScanInconsistent writes several values, some as intents and
 // verifies that the scan sees only the committed versions.
 func TestMVCCScanInconsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1241,7 +1241,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 }
 
 func TestMVCCDeleteRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1307,7 +1307,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 }
 
 func TestMVCCDeleteRangeFailed(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1329,7 +1329,7 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 }
 
 func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1346,7 +1346,7 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 }
 
 func TestMVCCConditionalPut(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1438,7 +1438,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 // TestMVCCReverseScan verifies that MVCCReverseScan scans [start,
 // end) in descending order of keys.
 func TestMVCCReverseScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1476,7 +1476,7 @@ func TestMVCCReverseScan(t *testing.T) {
 }
 
 func TestMVCCResolveTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1520,7 +1520,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 // basis for comparison first, and then may fail later with a
 // WriteTooOldError if that timestamp isn't recent.
 func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1552,7 +1552,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 }
 
 func TestMVCCAbortTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1584,7 +1584,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 }
 
 func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1626,7 +1626,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 }
 
 func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1687,7 +1687,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 // reads using epoch 2 to verify that values written during different
 // transaction epochs are not visible.
 func TestMVCCReadWithDiffEpochs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1732,7 +1732,7 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 // TestMVCCReadWithOldEpoch writes a value first using epoch 2, then
 // reads using epoch 1 to verify that the read will fail.
 func TestMVCCReadWithOldEpoch(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1753,7 +1753,7 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 // resolved by other actors; the intents shouldn't become invisible
 // to pushed txn.
 func TestMVCCReadWithPushedTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1775,7 +1775,7 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 }
 
 func TestMVCCResolveWithDiffEpochs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1812,7 +1812,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 }
 
 func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1855,7 +1855,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 }
 
 func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1898,7 +1898,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 }
 
 func TestMVCCResolveTxnNoOps(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -1929,7 +1929,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 }
 
 func TestMVCCResolveTxnRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2001,7 +2001,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 }
 
 func TestValidSplitKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		key   roachpb.Key
 		valid bool
@@ -2031,7 +2031,7 @@ func TestValidSplitKeys(t *testing.T) {
 }
 
 func TestFindSplitKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -2072,7 +2072,7 @@ func TestFindSplitKey(t *testing.T) {
 // TestFindValidSplitKeys verifies split keys are located such that
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
 		keys     []roachpb.Key
@@ -2186,7 +2186,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 // TestFindBalancedSplitKeys verifies split keys are located such that
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
 		keySizes []int
@@ -2320,7 +2320,7 @@ func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 // a transaction, then resolves the intent, manually verifying the
 // mvcc stats at each step.
 func TestMVCCStatsBasic(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2533,7 +2533,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 // stats match a manual computation of range stats via a scan of the
 // underlying engine.
 func TestMVCCStatsWithRandomRuns(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	rng, seed := randutil.NewPseudoRand()
 	log.Infof("using pseudo random number generator with seed %d", seed)
 	stopper := stop.NewStopper()
@@ -2643,7 +2643,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 // sends an MVCC GC request and verifies cleared values and updated
 // stats.
 func TestMVCCGarbageCollect(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2746,7 +2746,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 }
 
 func TestMVCCComputeStatsError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2769,7 +2769,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 // TestMVCCGarbageCollectNonDeleted verifies that the first value for
 // a key cannot be GC'd if it's not deleted.
 func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2817,7 +2817,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 
 // TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
 func TestMVCCGarbageCollectIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2848,7 +2848,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 // an intent at an epoch that is lower than the epoch of the intent
 // leaves the intent untouched.
 func TestResolveIntentWithLowerEpoch(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
@@ -2875,7 +2875,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 }
 
 func TestWillOverflow(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		a, b     int64

@@ -59,7 +59,7 @@ func createTestSequenceCache(t *testing.T, rangeID roachpb.RangeID, stopper *sto
 }
 
 func TestSequenceCacheEncodeDecode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	const rangeID = 123
 	const expSeq = 987
 	key := keys.SequenceCacheKey(rangeID, testTxnID, testTxnEpoch, expSeq)
@@ -81,7 +81,7 @@ func TestSequenceCacheEncodeDecode(t *testing.T) {
 // TestSequenceCachePutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
 func TestSequenceCachePutGetClearData(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
@@ -139,7 +139,7 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 
 // TestSequenceCacheEmptyParams tests operation with empty parameters.
 func TestSequenceCacheEmptyParams(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
@@ -158,7 +158,7 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 // TestSequenceCacheCopyInto tests that entries in one cache get
 // transferred correctly to another cache using CopyInto().
 func TestSequenceCacheCopyInto(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc1, e := createTestSequenceCache(t, 1, stopper)
@@ -190,7 +190,7 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 // TestSequenceCacheCopyFrom tests that entries in one cache get
 // transferred correctly to another cache using CopyFrom().
 func TestSequenceCacheCopyFrom(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rc1, e := createTestSequenceCache(t, 1, stopper)
@@ -223,7 +223,7 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 
 // TestSequenceCacheShouldCache verifies conditions for caching responses.
 func TestSequenceCacheShouldCache(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sc, _ := createTestSequenceCache(t, 1, stopper)

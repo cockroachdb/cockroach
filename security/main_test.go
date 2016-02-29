@@ -17,11 +17,8 @@
 package security_test
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
@@ -36,7 +33,3 @@ func ResetTest() {
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
-}

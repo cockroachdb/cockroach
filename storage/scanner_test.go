@@ -184,7 +184,7 @@ func (tq *testQueue) isDone() bool {
 // TestScannerAddToQueues verifies that ranges are added to and
 // removed from multiple queues.
 func TestScannerAddToQueues(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q1, q2 := &testQueue{}, &testQueue{}
@@ -230,7 +230,7 @@ func TestScannerAddToQueues(t *testing.T) {
 // TestScannerTiming verifies that ranges are scanned, regardless
 // of how many, to match scanInterval.
 func TestScannerTiming(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	const count = 3
 	const runTime = 100 * time.Millisecond
 	const maxError = 7500 * time.Microsecond
@@ -264,7 +264,7 @@ func TestScannerTiming(t *testing.T) {
 
 // TestScannerPaceInterval tests that paceInterval returns the correct interval.
 func TestScannerPaceInterval(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	const count = 3
 	durations := []time.Duration{
 		30 * time.Millisecond,
@@ -300,7 +300,7 @@ func TestScannerPaceInterval(t *testing.T) {
 
 // TestScannerEmptyRangeSet verifies that an empty range set doesn't busy loop.
 func TestScannerEmptyRangeSet(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
 	s := newReplicaScanner(1*time.Millisecond, 0, ranges)

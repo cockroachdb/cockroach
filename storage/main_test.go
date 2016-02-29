@@ -17,11 +17,11 @@
 package storage_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -33,5 +33,5 @@ func init() {
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
-	leaktest.TestMainWithLeakCheck(m)
+	os.Exit(m.Run())
 }

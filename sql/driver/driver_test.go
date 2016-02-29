@@ -54,7 +54,7 @@ func cleanup(s *server.TestServer, db *sql.DB) {
 }
 
 func TestDates(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// From https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 	locationNames := []string{
@@ -108,7 +108,7 @@ func testDatesInternal(t *testing.T, loc *time.Location) {
 }
 
 func TestPlaceholders(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// loc is selected so that timeVal below maps to a different date in
 	// loc and UTC.
@@ -305,7 +305,7 @@ CREATE TABLE t.alltypes (
 }
 
 func TestConnectionSettings(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(nil)
 	url := fmt.Sprintf(
 		"https://%s@%s?certs=%s&time_zone=%s",
@@ -390,7 +390,7 @@ func TestConnectionSettings(t *testing.T) {
 }
 
 func TestProtocols(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Test that all of the network protocols work.
 	for _, scheme := range []string{"http", "https", "rpc", "rpcs"} {
@@ -500,7 +500,7 @@ func concurrentIncrements(db *sql.DB, t *testing.T) {
 // documentation and adds another layer of confidence that transactions
 // are serializable and performant even at the SQL layer.
 func TestConcurrentIncrements(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, db := setup(t, time.Local)
 	defer cleanup(s, db)
 

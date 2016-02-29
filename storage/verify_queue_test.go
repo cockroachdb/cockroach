@@ -30,7 +30,7 @@ import (
 // indicates that a range should be queued for verification if the
 // time since last verification exceeds the threshold limit.
 func TestVerifyQueueShouldQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

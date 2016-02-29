@@ -25,7 +25,7 @@ import (
 )
 
 func TestLoadTLSConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	config, err := security.LoadServerTLSConfig(security.EmbeddedCertsDir, "node")
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)

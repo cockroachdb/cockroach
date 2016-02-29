@@ -78,7 +78,7 @@ func waitForConfigChange(t *testing.T, s *testServer) (*config.SystemConfig, err
 
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Disable splitting. We're using bad attributes in zone configs
 	// to be able to match.
 	defer config.TestingDisableTableSplits()()

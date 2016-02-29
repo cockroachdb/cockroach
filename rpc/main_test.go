@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 		MaxBackoff:     1 * time.Millisecond,
 	}
 
-	leaktest.TestMainWithLeakCheck(m)
+	os.Exit(m.Run())
 }
 
 // newNodeTestContext returns a rpc.Context for testing.

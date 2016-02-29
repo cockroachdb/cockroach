@@ -153,7 +153,7 @@ func (t *parallelTest) run(dir string) {
 }
 
 func TestParallel(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	paths, err := filepath.Glob(*paralleltestdata)
 	if err != nil {

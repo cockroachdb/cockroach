@@ -53,14 +53,14 @@ var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
 func TestSelfBootstrap(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 }
 
 // TestHealth verifies that health endpoint return "ok".
 func TestHealth(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 	url := testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
@@ -86,7 +86,7 @@ func TestHealth(t *testing.T) {
 // TestPlainHTTPServer verifies that we can serve plain http and talk to it.
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Create a custom context. The default one has a default --certs value.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
@@ -140,7 +140,7 @@ func TestPlainHTTPServer(t *testing.T) {
 // disabling decompression on a custom client's Transport and setting
 // it conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 	client, err := testContext.GetHTTPClient()
@@ -203,7 +203,7 @@ func TestAcceptEncoding(t *testing.T) {
 // TestMultiRangeScanDeleteRange tests that commands which access multiple
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()
@@ -290,7 +290,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 // TestMultiRangeScanWithMaxResults tests that commands which access multiple
 // ranges with MaxResults parameter are carried out properly.
 func TestMultiRangeScanWithMaxResults(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		splitKeys []roachpb.Key
 		keys      []roachpb.Key
@@ -350,7 +350,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 }
 
 func TestSQLServer(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -408,7 +408,7 @@ func TestSQLServer(t *testing.T) {
 }
 
 func TestSystemConfigGossip(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -501,7 +501,7 @@ func checkOfficialize(t *testing.T, network, oldAddrString, newAddrString, expAd
 }
 
 func TestOfficializeAddr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	hostname, err := os.Hostname()
 	if err != nil {

@@ -71,7 +71,7 @@ func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
 }
 
 func TestMakeConstraints(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -181,7 +181,7 @@ func indexToDirs(index *IndexDescriptor) []encoding.Direction {
 }
 
 func TestMakeSpans(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr         string
@@ -374,7 +374,7 @@ func TestMakeSpans(t *testing.T) {
 }
 
 func TestExactPrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -406,7 +406,7 @@ func TestExactPrefix(t *testing.T) {
 }
 
 func TestApplyConstraints(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string

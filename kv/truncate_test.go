@@ -13,7 +13,7 @@ import (
 )
 
 func TestTruncate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	loc := func(s string) string {
 		return string(keys.RangeDescriptorKey(roachpb.RKey(s)))
 	}

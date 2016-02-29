@@ -57,7 +57,7 @@ func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
 // TestStoreRangeSplitAtIllegalKeys verifies a range cannot be split
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -79,7 +79,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // TestStoreRangeSplitAtTablePrefix verifies a range can be split at
 // UserTableDataMin and still gossip the SystemConfig properly.
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -130,7 +130,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 // TestStoreRangeSplitInsideRow verifies an attempt to split a range inside of
 // a table row will cause a split at a boundary between rows.
 func TestStoreRangeSplitInsideRow(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -185,7 +185,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 // arrived for same key. The first one succeeds and second would try
 // to split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -209,7 +209,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // of the same range are executed serially, and all but the first fail
 // because the split key is invalid after the first split succeeds.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -252,7 +252,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // resulting ranges respond to the right key ranges and that their stats
 // and sequence cache have been properly accounted for.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -391,7 +391,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 // splits it halfway and verifies the two splits have stats exactly equaling
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -504,7 +504,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 // splitting. It further verifies that the range is in fact split on
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, stopper := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
@@ -559,7 +559,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // zone config that updates the max bytes is set and triggers a range
 // split.
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, stopper := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
@@ -593,7 +593,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 // TestStoreRangeSystemSplits verifies that splits are based on the contents of
 // the SystemConfig span.
 func TestStoreRangeSystemSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -788,7 +788,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 // so the split completes before it sees a competing snapshot. This is
 // the more common outcome in practice.
 func TestSplitSnapshotRace_SplitWins(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
 	defer mtc.Stop()
 
@@ -821,7 +821,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 // so target node sees a raft snapshot before it has processed the split,
 // so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
 	defer mtc.Stop()
 
@@ -875,7 +875,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 // cache), then some of them may not be reflected in the timestamp cache of the
 // new range, in which case this test would fail.
 func TestStoreSplitReadRace(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer func() { storage.TestingCommandFilter = nil }()
 	defer config.TestingDisableTableSplits()()
 	splitKey := roachpb.Key("a")
@@ -956,7 +956,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 // TestLeaderAfterSplit verifies that a raft group created by a split
 // elects a leader without waiting for an election timeout.
 func TestLeaderAfterSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	storeContext := storage.TestStoreContext
 	storeContext.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{

@@ -17,11 +17,8 @@
 package server_test
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func init() {
@@ -29,7 +26,3 @@ func init() {
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
-}

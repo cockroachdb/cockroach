@@ -44,7 +44,7 @@ import (
 // uncommitted writes cannot be read outside of the txn but can be
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 	value := []byte("value")
@@ -240,7 +240,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 // TestTxnDBUncertainty verifies that transactions restart correctly and
 // finally read the correct value when encountering writes in the near future.
 func TestTxnDBUncertainty(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Make sure that we notice immediately if any kind of backing off is
 	// happening. Restore the previous options after this test is done to avoid
 	// interfering with other tests.
@@ -280,7 +280,7 @@ func TestTxnDBUncertainty(t *testing.T) {
 // node would lead to thousands of transaction restarts and almost certainly a
 // test timeout.
 func TestUncertaintyRestarts(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
@@ -334,7 +334,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 // restarts for that node and transaction without sacrificing correctness.
 // See roachpb.Transaction.CertainNodes for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
@@ -406,7 +406,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 // commit. A bug in the EndTransaction implementation used to compare
 // the transaction's current timestamp instead of original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -448,7 +448,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 // than 10 seconds.
 // See issue #676 for full details about original bug.
 func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -523,7 +523,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // reading before and after the split will read the same values.
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -613,7 +613,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 // no timestamp regression error in the event that a pushed txn record disagrees
 // with the original timestamp of a restarted transaction.
 func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 

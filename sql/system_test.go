@@ -27,7 +27,7 @@ import (
 )
 
 func TestInitialKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	ms := sql.MakeMetadataSchema()
 	// IDGenerator + 2 for each system object in the default schema.

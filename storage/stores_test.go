@@ -31,7 +31,7 @@ import (
 )
 
 func TestStoresAddStore(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	ls.AddStore(&store)
@@ -44,7 +44,7 @@ func TestStoresAddStore(t *testing.T) {
 }
 
 func TestStoresRemoveStore(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 
 	storeID := roachpb.StoreID(89)
@@ -59,7 +59,7 @@ func TestStoresRemoveStore(t *testing.T) {
 }
 
 func TestStoresGetStoreCount(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
@@ -75,7 +75,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 }
 
 func TestStoresVisitStores(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
@@ -101,7 +101,7 @@ func TestStoresVisitStores(t *testing.T) {
 }
 
 func TestStoresGetStore(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ls := NewStores(hlc.NewClock(hlc.UnixNano))
 	store := Store{}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
@@ -123,7 +123,7 @@ func TestStoresGetStore(t *testing.T) {
 }
 
 func TestStoresLookupReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	ctx := TestStoreContext
@@ -210,7 +210,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 
 // TestStoresGossipStorage verifies reading and writing of bootstrap info.
 func TestStoresGossipStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop()
 	ls.AddStore(stores[0])
@@ -261,7 +261,7 @@ func TestStoresGossipStorage(t *testing.T) {
 // TestStoresGossipStorageReadLatest verifies that the latest
 // bootstrap info from multiple stores is returned on Read.
 func TestStoresGossipStorageReadLatest(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop()
 	ls.AddStore(stores[0])

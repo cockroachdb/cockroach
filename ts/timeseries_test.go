@@ -42,7 +42,7 @@ func tsdp(ts time.Duration, val float64) *TimeSeriesDatapoint {
 // TestToInternal verifies the conversion of TimeSeriesData to internal storage
 // format is correct.
 func TestToInternal(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tcases := []struct {
 		keyDuration    int64
 		sampleDuration int64

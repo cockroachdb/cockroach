@@ -196,7 +196,7 @@ func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.S
 }
 
 func TestAllocatorSimpleRetrieval(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
@@ -210,7 +210,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 }
 
 func TestAllocatorNoAvailableDisks(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, _, _, a := createTestAllocator()
 	defer stopper.Stop()
 	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
@@ -223,7 +223,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 }
 
 func TestAllocatorThreeDisksSameDC(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
@@ -260,7 +260,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 }
 
 func TestAllocatorTwoDatacenters(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
@@ -288,7 +288,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 }
 
 func TestAllocatorExistingReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
@@ -310,7 +310,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 // will be relaxed in order to match nodes lacking required attributes,
 // if necessary to find an allocation target.
 func TestAllocatorRelaxConstraints(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
@@ -358,7 +358,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 // TestAllocatorRandomAllocation verifies that allocations bias
 // towards least loaded stores.
 func TestAllocatorRandomAllocation(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
@@ -403,7 +403,7 @@ func TestAllocatorRandomAllocation(t *testing.T) {
 // TestAllocatorRebalance verifies that rebalance targets are chosen
 // randomly from amongst stores over the minAvailCapacityThreshold.
 func TestAllocatorRebalance(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
@@ -455,7 +455,7 @@ func TestAllocatorRebalance(t *testing.T) {
 // TestAllocatorRebalance verifies that only rebalance targets within
 // a standard deviation of the mean are chosen.
 func TestAllocatorRebalanceByCapacity(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
@@ -505,7 +505,7 @@ func TestAllocatorRebalanceByCapacity(t *testing.T) {
 // chosen by range counts in the event that available capacities
 // exceed the maxAvailCapacityThreshold.
 func TestAllocatorRebalanceByCount(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
@@ -555,7 +555,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 // TestAllocatorRemoveTarget verifies that the replica chosen by RemoveTarget is
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
 
@@ -653,7 +653,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 }
 
 func TestAllocatorComputeAction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, _, sp, a := createTestAllocator()
 	defer stopper.Stop()
 
