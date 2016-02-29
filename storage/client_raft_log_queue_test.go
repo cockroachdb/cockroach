@@ -52,7 +52,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Get the raft leader (and ensure one exists).
 	rangeID := mtc.stores[0].LookupReplica([]byte("a"), nil).RangeID
-	raftLeaderRepl := mtc.getRaftLeader(rangeID, time.Second)
+	raftLeaderRepl := mtc.getRaftLeader(rangeID)
 	if raftLeaderRepl == nil {
 		t.Fatalf("could not find raft leader replica for range %d", rangeID)
 	}
@@ -72,7 +72,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// Sadly, occasionally the queue has a race with the force processing so
 	// this succeeds within will captures those rare cases.
 	var afterTruncationIndex uint64
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		// Force a truncation check.
 		for _, store := range mtc.stores {
 			store.ForceRaftLogScanAndProcess()

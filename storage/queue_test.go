@@ -18,7 +18,6 @@ package storage
 
 import (
 	"container/heap"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-const queueItemProcessTimeout = 250 * time.Millisecond
 
 func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 	stopper := stop.NewStopper()
@@ -54,11 +51,12 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 	}
 
 	// Wait for SystemConfig.
-	if err := util.IsTrueWithin(func() bool {
-		return g.GetSystemConfig() != nil
-	}, 100*time.Millisecond); err != nil {
-		t.Fatal(err)
-	}
+	util.SucceedsWithin(t, func() error {
+		if g.GetSystemConfig() == nil {
+			return util.Errorf("expected non-nil system config")
+		}
+		return nil
+	})
 
 	return g, stopper
 }
@@ -291,18 +289,20 @@ func TestBaseQueueProcess(t *testing.T) {
 	}
 
 	testQueue.blocker <- struct{}{}
-	if err := util.IsTrueWithin(func() bool {
-		return atomic.LoadInt32(&testQueue.processed) == 1
-	}, queueItemProcessTimeout); err != nil {
-		t.Error(err)
-	}
+	util.SucceedsWithin(t, func() error {
+		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(1) {
+			return util.Errorf("expected %d processed replicas; got %d", 1, pc)
+		}
+		return nil
+	})
 
 	testQueue.blocker <- struct{}{}
-	if err := util.IsTrueWithin(func() bool {
-		return atomic.LoadInt32(&testQueue.processed) >= 2
-	}, queueItemProcessTimeout); err != nil {
-		t.Error(err)
-	}
+	util.SucceedsWithin(t, func() error {
+		if pc := atomic.LoadInt32(&testQueue.processed); pc < int32(2) {
+			return util.Errorf("expected >= %d processed replicas; got %d", 2, pc)
+		}
+		return nil
+	})
 }
 
 // TestBaseQueueAddRemove adds then removes a range; ensure range is
@@ -406,11 +406,12 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.MaybeAdd(neverSplits, roachpb.ZeroTimestamp)
 	bq.MaybeAdd(willSplit, roachpb.ZeroTimestamp)
 
-	if err := util.IsTrueWithin(func() bool {
-		return atomic.LoadInt32(&testQueue.processed) == 2
-	}, queueItemProcessTimeout); err != nil {
-		t.Error(err)
-	}
+	util.SucceedsWithin(t, func() error {
+		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(2) {
+			return util.Errorf("expected %d processed replicas; got %d", 2, pc)
+		}
+		return nil
+	})
 
 	if pc := atomic.LoadInt32(&queued); pc != 2 {
 		t.Errorf("expected queued count of 2; got %d", pc)
@@ -434,11 +435,12 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.MaybeAdd(neverSplits, roachpb.ZeroTimestamp)
 	bq.MaybeAdd(willSplit, roachpb.ZeroTimestamp)
 
-	if err := util.IsTrueWithin(func() bool {
-		return atomic.LoadInt32(&testQueue.processed) == 3
-	}, queueItemProcessTimeout); err != nil {
-		t.Error(err)
-	}
+	util.SucceedsWithin(t, func() error {
+		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(3) {
+			return util.Errorf("expected %d processed replicas; got %d", 3, pc)
+		}
+		return nil
+	})
 
 	if pc := atomic.LoadInt32(&queued); pc != 3 {
 		t.Errorf("expected queued count of 3; got %d", pc)
@@ -486,9 +488,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		bq.MaybeAdd(r, roachpb.ZeroTimestamp)
 	}
 
-	util.SucceedsWithin(t, queueItemProcessTimeout, func() error {
+	util.SucceedsWithin(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount) {
-			return fmt.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
+			return util.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
 		}
 		return nil
 	})
@@ -507,9 +509,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	// Now, signal that purgatoried replicas should retry.
 	testQueue.pChan <- struct{}{}
 
-	util.SucceedsWithin(t, queueItemProcessTimeout, func() error {
+	util.SucceedsWithin(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*2) {
-			return fmt.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
+			return util.Errorf("expected %d processed replicas; got %d", replicaCount*2, pc)
 		}
 		return nil
 	})
@@ -529,9 +531,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	testQueue.err = nil
 	testQueue.pChan <- struct{}{}
 
-	util.SucceedsWithin(t, queueItemProcessTimeout, func() error {
+	util.SucceedsWithin(t, func() error {
 		if pc := atomic.LoadInt32(&testQueue.processed); pc != int32(replicaCount*3) {
-			return fmt.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
+			return util.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
 		}
 		return nil
 	})

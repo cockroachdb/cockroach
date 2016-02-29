@@ -67,7 +67,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	}
 
 	// Wait for that command to execute on all the followers.
-	util.SucceedsWithin(t, 5*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
 			val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
@@ -350,7 +350,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			EndKey: keys.RangeMetaKey(roachpb.RKeyMax),
 		},
 	}
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		_, pErr := client.SendWrapped(rg1(store), nil, &scanArgs)
 		return pErr.GoError()
 	})

@@ -265,10 +265,10 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// Verify 3 heartbeats.
 	var heartbeatTS roachpb.Timestamp
 	for i := 0; i < 3; i++ {
-		if err := util.IsTrueWithin(func() bool {
+		util.SucceedsWithin(t, func() error {
 			ok, txn, pErr := getTxn(s.Sender, &initialTxn.Proto)
 			if !ok || pErr != nil {
-				return false
+				return util.Errorf("got txn: %t: %s", ok, pErr)
 			}
 			// Advance clock by 1ns.
 			// Locking the TxnCoordSender to prevent a data race.
@@ -277,12 +277,10 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			s.Sender.Unlock()
 			if heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
-				return true
+				return nil
 			}
-			return false
-		}, 50*time.Millisecond); err != nil {
-			t.Error("expected initial heartbeat within 50ms")
-		}
+			return util.Errorf("expected heartbeat")
+		})
 	}
 }
 
@@ -303,7 +301,7 @@ func getTxn(coord *TxnCoordSender, txn *roachpb.Transaction) (bool, *roachpb.Tra
 }
 
 func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
-	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+	util.SucceedsWithin(t, func() error {
 		coord.Lock()
 		l := len(coord.txns)
 		coord.Unlock()
@@ -476,15 +474,16 @@ func TestTxnCoordSenderGC(t *testing.T) {
 
 	txnID := *txn.Proto.ID
 
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
 		s.Sender.Lock()
 		_, ok := s.Sender.txns[txnID]
 		s.Sender.Unlock()
-		return !ok
-	}, 50*time.Millisecond); err != nil {
-		t.Error("expected garbage collection")
-	}
+		if ok {
+			return util.Errorf("expected garbage collection")
+		}
+		return nil
+	})
 
 	verifyCleanup(key, s.Sender, s.Eng, t)
 }
@@ -757,7 +756,7 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits, abandons, aborts, restarts int64) {
 	metrics := sender.metrics
 
-	util.SucceedsWithin(t, 5*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		testcases := []struct {
 			name string
 			a, e int64

@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-const cleanMVCCScanTimeout = 500 * time.Millisecond
-
 // setTestRetryOptions sets client retry options for speedier testing.
 func setTestRetryOptions() func() {
 	origRetryOpts := client.DefaultTxnRetryOptions
@@ -118,15 +116,12 @@ func TestRangeSplitMeta(t *testing.T) {
 		log.Infof("split at key %q complete", splitKey)
 	}
 
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, func() error {
 		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
-			log.Infof("mvcc scan should be clean: %s", err)
-			return false
+			return util.Errorf("failed to verify no dangling intents: %s", err)
 		}
-		return true
-	}, cleanMVCCScanTimeout); err != nil {
-		t.Error("failed to verify no dangling intents within 500ms")
-	}
+		return nil
+	})
 }
 
 // TestRangeSplitsWithConcurrentTxns does 5 consecutive splits while
@@ -197,16 +192,17 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	go startTestWriter(s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
 
 	// Check that we split 5 times in allotted time.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, func() error {
 		// Scan the txn records.
 		rows, err := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
-			t.Fatalf("failed to scan meta2 keys: %s", err)
+			return util.Errorf("failed to scan meta2 keys: %s", err)
 		}
-		return len(rows) >= 5
-	}, 6*time.Second); err != nil {
-		t.Errorf("failed to split 5 times: %s", err)
-	}
+		if lr := len(rows); lr < 5 {
+			return util.Errorf("expected >= 5 scans; got %d", lr)
+		}
+		return nil
+	})
 	close(done)
 	wg.Wait()
 
@@ -214,18 +210,15 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// intents are in flight, causing them to fail with range key
 	// mismatch errors. However, LocalSender should retry in these
 	// cases. Check here via MVCC scan that there are no dangling write
-	// intents. We do this using an IsTrueWithin construct to account
+	// intents. We do this using a SucceedsWithin construct to account
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, func() error {
 		if _, _, err := engine.MVCCScan(s.Eng, keys.LocalMax, roachpb.KeyMax, 0, roachpb.MaxTimestamp, true, nil); err != nil {
-			log.Infof("mvcc scan should be clean: %s", err)
-			return false
+			return util.Errorf("failed to verify no dangling intents: %s", err)
 		}
-		return true
-	}, cleanMVCCScanTimeout); err != nil {
-		t.Error("failed to verify no dangling intents within 500ms")
-	}
+		return nil
+	})
 }
 
 // TestRangeSplitsWithSameKeyTwice check that second range split

@@ -93,7 +93,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 // waitUntilDead will block until the specified store is marked as dead.
 func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roachpb.StoreID) {
 	lastTime := time.Now()
-	util.SucceedsWithin(t, 10*TestTimeUntilStoreDead, func() error {
+	util.SucceedsWithin(t, func() error {
 		curTime := time.Now()
 		mc.Increment(curTime.UnixNano() - lastTime.UnixNano())
 		lastTime = curTime

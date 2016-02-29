@@ -853,16 +853,14 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, func() error {
 		for _, test := range testData {
-			if test.rng.GetMaxBytes() != test.expMaxBytes {
-				return false
+			if mb := test.rng.GetMaxBytes(); mb != test.expMaxBytes {
+				return util.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
 			}
 		}
-		return true
-	}, 500*time.Millisecond); err != nil {
-		t.Errorf("range max bytes values did not change as expected: %s", err)
-	}
+		return nil
+	})
 }
 
 // TestStoreResolveWriteIntent adds write intent and then verifies
@@ -1284,7 +1282,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 		}
 		// However, it will be read eventually, as B's intent can be
 		// resolved asynchronously as txn B is committed.
-		util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+		util.SucceedsWithin(t, func() error {
 			if reply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 				ReadConsistency: roachpb.INCONSISTENT,
 			}, &gArgs); pErr != nil {
@@ -1488,7 +1486,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 
 	// Scan the range repeatedly until we've verified count.
 	sArgs := scanArgs(keys[0], keys[9].Next())
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		if reply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &sArgs); pErr != nil {

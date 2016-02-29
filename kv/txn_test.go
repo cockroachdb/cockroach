@@ -579,16 +579,17 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		// Wait till split complete.
 		// Check that we split 1 times in allotted time.
-		if err := util.IsTrueWithin(func() bool {
+		util.SucceedsWithin(t, func() error {
 			// Scan the meta records.
 			rows, spErr := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 			if spErr != nil {
 				t.Fatalf("failed to scan meta2 keys: %s", spErr)
 			}
-			return len(rows) >= 2
-		}, 6*time.Second); err != nil {
-			t.Errorf("failed to split 1 times: %s", err)
-		}
+			if len(rows) >= 2 {
+				return nil
+			}
+			return util.Errorf("failed to split")
+		})
 		// Notify txnA put(c).
 		ch <- struct{}{}
 		// Wait for txnA finish commit.

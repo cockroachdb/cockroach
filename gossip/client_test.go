@@ -166,7 +166,7 @@ func TestClientGossip(t *testing.T) {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, lclock, stopper)
 	client.start(local, disconnected, rpcContext, stopper)
 
-	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+	util.SucceedsWithin(t, func() error {
 		if _, err := remote.GetInfo("local-key"); err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	local.startClient(&lAddr, stopper)
 	local.mu.Unlock()
 	local.manage()
-	util.SucceedsWithin(t, 10*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		ok := local.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
 		if !ok && verifyServerMaps(local, 0) {
 			return nil
@@ -257,7 +257,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Unlock()
 	local.manage()
 	remote.manage()
-	util.SucceedsWithin(t, 10*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
 		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
@@ -296,7 +296,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	remote.mu.Unlock()
 	local.manage()
 	remote.manage()
-	util.SucceedsWithin(t, 10*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		// Verify that the remote server has only a single incoming
 		// connection and the local server has only a single outgoing
 		// connection.
@@ -352,7 +352,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		gnode.Start(server, ln.Addr())
 	}
 
-	util.SucceedsWithin(t, 5*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		// The first gossip node should have two gossip client address
 		// in nodeMap if these three gossip nodes registered success.
 		g[0].mu.Lock()

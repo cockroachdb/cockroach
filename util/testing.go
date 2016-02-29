@@ -152,40 +152,22 @@ func CreateTestAddr(network string) net.Addr {
 	panic(fmt.Sprintf("unknown network type: %s", network))
 }
 
-// IsTrueWithin returns an error if the supplied function fails to
-// evaluate to true within the specified duration. The function is
-// invoked immediately at first and then successively with an
-// exponential backoff starting at 1ns and ending at the specified
-// duration.
-//
-// This method is deprecated; use SucceedsWithin instead.
-// TODO(bdarnell): convert existing uses of IsTrueWithin to SucceedsWithin.
-func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
-	total := time.Duration(0)
-	for wait := time.Duration(1); total < duration; wait *= 2 {
-		if trueFunc() {
-			return nil
-		}
-		time.Sleep(wait)
-		total += wait
-	}
-	return ErrorfSkipFrames(1, "condition failed to evaluate true within %s", duration)
-}
+const defaultSucceedsWithinDuration = 15 * time.Second
 
 // SucceedsWithin fails the test (with t.Fatal) unless the supplied
-// function runs without error within the specified duration. The
+// function runs without error within a preset maximum duration. The
 // function is invoked immediately at first and then successively with
-// an exponential backoff starting at 1ns and ending at the specified
-// duration.
-func SucceedsWithin(t Tester, duration time.Duration, fn func() error) {
-	SucceedsWithinDepth(1, t, duration, fn)
+// an exponential backoff starting at 1ns and ending at the maximum
+// duration (currently 15s).
+func SucceedsWithin(t Tester, fn func() error) {
+	SucceedsWithinDepth(1, t, fn)
 }
 
 // SucceedsWithinDepth is like SucceedsWithin() but with an additional
 // stack depth offset.
-func SucceedsWithinDepth(depth int, t Tester, duration time.Duration, fn func() error) {
-	if err := RetryForDuration(duration, fn); err != nil {
-		t.Fatal(ErrorfSkipFrames(1+depth, "condition failed to evaluate within %s: %s", duration, err))
+func SucceedsWithinDepth(depth int, t Tester, fn func() error) {
+	if err := RetryForDuration(defaultSucceedsWithinDuration, fn); err != nil {
+		t.Fatal(ErrorfSkipFrames(1+depth, "condition failed to evaluate within %s: %s", defaultSucceedsWithinDuration, err))
 	}
 }
 

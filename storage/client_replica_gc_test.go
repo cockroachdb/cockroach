@@ -52,7 +52,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if rct == nil || rct.ChangeType != roachpb.REMOVE_REPLICA {
 			return nil
 		}
-		util.SucceedsWithin(t, time.Second, func() error {
+		util.SucceedsWithin(t, func() error {
 			r, err := mtc.stores[0].GetReplica(rangeID)
 			if err != nil {
 				return err
@@ -74,7 +74,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc.unreplicateRange(rangeID, 1)
 
 	// Make sure the range is removed from the store.
-	util.SucceedsWithin(t, 10*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		if _, err := mtc.stores[1].GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {
 			return util.Errorf("expected range removal")
 		}
@@ -111,7 +111,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 		storage.DefaultLeaderLeaseDuration) + 1)
 
 	// Make sure the range is removed from the store.
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		store := mtc.stores[1]
 		store.ForceReplicaGCScanAndProcess()
 		if _, err := store.GetReplica(rangeID); !testutils.IsError(err, "range .* was not found") {

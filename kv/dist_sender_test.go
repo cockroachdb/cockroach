@@ -723,7 +723,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 5}); err != nil {
 		t.Fatal(err)
 	}
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		desc := ds.getNodeDescriptor()
 		if desc != nil && desc.NodeID == 5 {
 			return nil

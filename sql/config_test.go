@@ -19,7 +19,6 @@ package sql_test
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -37,7 +36,7 @@ var configDescKey = sql.MakeDescMetadataKey(keys.MaxReservedDescID)
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
-func forceNewConfig(t *testing.T, s *testServer) (*config.SystemConfig, error) {
+func forceNewConfig(t *testing.T, s *testServer) *config.SystemConfig {
 	configID++
 	configDesc := &sql.Descriptor{
 		Union: &sql.Descriptor_Database{
@@ -59,21 +58,24 @@ func forceNewConfig(t *testing.T, s *testServer) (*config.SystemConfig, error) {
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t *testing.T, s *testServer) (*config.SystemConfig, error) {
+func waitForConfigChange(t *testing.T, s *testServer) *config.SystemConfig {
 	var foundDesc sql.Descriptor
 	var cfg *config.SystemConfig
-	return cfg, util.IsTrueWithin(func() bool {
+	util.SucceedsWithin(t, func() error {
 		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
 			if val := cfg.GetValue(configDescKey); val != nil {
 				if err := val.GetProto(&foundDesc); err != nil {
 					t.Fatal(err)
 				}
-				return foundDesc.GetDatabase().GetID() == configID
+				if id := foundDesc.GetDatabase().GetID(); id != configID {
+					return util.Errorf("expected database id %d; got %d", configID, id)
+				}
+				return nil
 			}
 		}
-
-		return false
-	}, 10*time.Second)
+		return util.Errorf("got nil system config")
+	})
+	return cfg
 }
 
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
@@ -127,10 +129,7 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 	expectedCounter++
 
-	cfg, err := forceNewConfig(t, s)
-	if err != nil {
-		t.Fatalf("failed to get latest system config: %s", err)
-	}
+	cfg := forceNewConfig(t, s)
 
 	// We have no custom zone configs.
 	testCases := []struct {
@@ -186,10 +185,7 @@ func TestGetZoneConfig(t *testing.T) {
 		}
 	}
 
-	cfg, err = forceNewConfig(t, s)
-	if err != nil {
-		t.Fatalf("failed to get latest system config: %s", err)
-	}
+	cfg = forceNewConfig(t, s)
 
 	testCases = []struct {
 		key     roachpb.RKey

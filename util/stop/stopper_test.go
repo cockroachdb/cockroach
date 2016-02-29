@@ -283,10 +283,12 @@ func TestStopperNumTasks(t *testing.T) {
 		// Close the channel to let the task proceed.
 		close(c)
 		expNum := len(tasks[i+1:])
-		err := util.IsTrueWithin(func() bool { return s.NumTasks() == expNum }, 20*time.Millisecond)
-		if err != nil {
-			t.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, s.NumTasks())
-		}
+		util.SucceedsWithin(t, func() error {
+			if nt := s.NumTasks(); nt != expNum {
+				return util.Errorf("%d: stopper should have %d running tasks, got %d", i, expNum, nt)
+			}
+			return nil
+		})
 	}
 	// The taskmap should've been cleared out.
 	if m := s.RunningTasks(); len(m) != 0 {

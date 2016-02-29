@@ -25,7 +25,6 @@ import (
 	"os"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
@@ -803,7 +802,7 @@ func TestPGWireMetrics(t *testing.T) {
 
 	// Verify connection counter.
 	expectConns := func(n int) {
-		util.SucceedsWithin(t, 3*time.Second, func() error {
+		util.SucceedsWithin(t, func() error {
 			if conns := s.MustGetPGWireCounter("conns"); conns != int64(n) {
 				return util.Errorf("connections %d != expected %d", conns, n)
 			}

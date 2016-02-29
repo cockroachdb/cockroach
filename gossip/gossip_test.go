@@ -137,7 +137,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Unlock()
 	local.manage()
 
-	util.SucceedsWithin(t, 10*time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		// Verify that a client is closed within the cull interval.
 		if len(local.Outgoing()) == minPeers-1 {
 			return nil

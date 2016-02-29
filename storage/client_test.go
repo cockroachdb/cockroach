@@ -64,8 +64,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-const replicationTimeout = 5 * time.Second
-
 // Check that Stores implements the RangeDescriptorDB interface.
 var _ kv.RangeDescriptorDB = &storage.Stores{}
 
@@ -101,7 +99,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
-	sCtx.ScanMaxIdleTime = splitTimeout / 10
+	sCtx.ScanMaxIdleTime = 1 * time.Second
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ kv.SendOptions, _ kv.ReplicaSlice,
@@ -277,7 +275,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 
 	// Wait for gossip to startup.
-	util.SucceedsWithin(t, 100*time.Millisecond, func() error {
+	util.SucceedsWithin(t, func() error {
 		if m.gossip.GetSystemConfig() == nil {
 			return util.Errorf("system config not available")
 		}
@@ -682,7 +680,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 	}
 
 	// Wait for the replication to complete on all destination nodes.
-	util.SucceedsWithin(m.t, replicationTimeout, func() error {
+	util.SucceedsWithin(m.t, func() error {
 		for _, dest := range dests {
 			// Use LookupRange(keys) instead of GetRange(rangeID) to ensure that the
 			// snapshot has been transferred and the descriptor initialized.
@@ -745,8 +743,8 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 // waitForValues waits up to the given duration for the integer values
 // at the given key to match the expected slice (across all engines).
 // Fails the test if they do not match.
-func (m *multiTestContext) waitForValues(key roachpb.Key, d time.Duration, expected []int64) {
-	util.SucceedsWithinDepth(1, m.t, d, func() error {
+func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
+	util.SucceedsWithinDepth(1, m.t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return util.Errorf("expected %v, got %v", expected, actual)
@@ -764,9 +762,9 @@ func (m *multiTestContext) expireLeaderLeases() {
 
 // getRaftLeader returns the replica that is the current raft leader for the
 // specified rangeID.
-func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID, d time.Duration) *storage.Replica {
+func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
 	var raftLeaderRepl *storage.Replica
-	util.SucceedsWithinDepth(1, m.t, d, func() error {
+	util.SucceedsWithinDepth(1, m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
 		var latestTerm uint64

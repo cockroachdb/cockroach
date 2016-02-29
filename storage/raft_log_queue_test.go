@@ -19,7 +19,6 @@ package storage
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -107,7 +106,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// Once truncated, we should have no truncatable indexes. If this turns out
 	// to be flaky, we can remove it as the same functionality is tested in
 	// client_raft_log_queue_test.
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsWithin(t, func() error {
 		store.ForceRaftLogScanAndProcess()
 		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
 		if err != nil {
