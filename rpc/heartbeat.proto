@@ -47,8 +47,6 @@ message PingRequest {
   optional string ping = 1 [(gogoproto.nullable) = false];
   // The last offset the client measured with the server.
   optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
-  // The address of the client.
-  optional string addr = 3 [(gogoproto.nullable) = false];
 }
 
 // A PingResponse contains the echoed ping request string.
@@ -56,4 +54,8 @@ message PingResponse {
   // An echo of value sent with PingRequest.
   optional string pong = 1 [(gogoproto.nullable) = false];
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
+}
+
+service Heartbeat {
+  rpc Ping (PingRequest) returns (PingResponse) {}
 }

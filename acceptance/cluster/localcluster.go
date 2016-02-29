@@ -31,16 +31,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/base"
+	roachClient "github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -646,11 +650,18 @@ func (l *LocalCluster) stop() {
 	l.Nodes = nil
 }
 
-// ConnString creates a connections string.
-func (l *LocalCluster) ConnString(i int) string {
-	return "rpcs://" + security.NodeUser + "@" +
-		l.Addr(i).String() +
-		"?certs=" + l.CertsDir
+// NewClient implements the Cluster interface.
+func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.Stopper) {
+	stopper := stop.NewStopper()
+	rpcContext := rpc.NewContext(&base.Context{
+		User:  security.NodeUser,
+		Certs: l.CertsDir,
+	}, nil, stopper)
+	sender, err := roachClient.NewSender(rpcContext, l.Addr(i).String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return roachClient.NewDB(sender), stopper
 }
 
 // Addr returns the TCP address for the given node.

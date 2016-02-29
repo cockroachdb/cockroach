@@ -28,7 +28,7 @@ func NewNodeTestBaseContext() *base.Context {
 	return NewTestBaseContext(security.NodeUser)
 }
 
-// NewTestBaseContext creates a secure base context for 'user'.
+// NewTestBaseContext creates a secure base context for user.
 func NewTestBaseContext(user string) *base.Context {
 	return &base.Context{
 		Certs: security.EmbeddedCertsDir,

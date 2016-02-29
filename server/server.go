@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/rpc"
 	"os"
 	"strings"
 	"sync"
@@ -39,7 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
-	crpc "github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
@@ -68,8 +68,7 @@ type Server struct {
 	ctx                 *Context
 	mux                 *http.ServeMux
 	clock               *hlc.Clock
-	rpcContext          *crpc.Context
-	rpc                 *crpc.Server
+	rpcContext          *rpc.Context
 	grpc                *grpc.Server
 	gossip              *gossip.Gossip
 	storePool           *storage.StorePool
@@ -119,12 +118,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	s.rpcContext = crpc.NewContext(&ctx.Context, s.clock, stopper)
+	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
 	stopper.RunWorker(func() {
 		s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
 	})
-
-	s.rpc = crpc.NewServer(s.rpcContext)
 
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
@@ -154,13 +151,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.Tracer, s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
-	s.grpc = grpc.NewServer()
+	s.grpc = rpc.NewServer(s.rpcContext)
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
-	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
-		return nil, err
-	}
+	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -195,6 +190,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
+	roachpb.RegisterInternalServer(s.grpc, s.node)
+
 	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
@@ -242,6 +239,7 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.ctx.Addr = unresolvedAddr.String()
+	s.rpcContext.SetLocalInternalServer(s.node, s.ctx.Addr)
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldDrain()
@@ -288,11 +286,9 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	s.rpcContext.SetLocalServer(s.rpc, s.ctx.Addr)
-
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
-	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -319,8 +315,6 @@ func (s *Server) Start() error {
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
-
 	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,

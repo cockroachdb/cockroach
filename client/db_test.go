@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -283,31 +282,6 @@ func ExampleDB_Put_insecure() {
 
 	// Output:
 	// aa=1
-}
-
-func TestOpenArgs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := server.StartTestServer(t)
-	defer s.Stop()
-
-	testCases := []struct {
-		addr      string
-		expectErr bool
-	}{
-		{"rpcs://" + server.TestUser + "@" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir, false},
-		{"rpcs://" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir, false},
-		{"rpcs://" + s.ServingAddr() + "?certs=foo", true},
-		{s.ServingAddr(), true},
-	}
-
-	for _, test := range testCases {
-		_, err := client.Open(s.Stopper(), test.addr)
-		if test.expectErr && err == nil {
-			t.Errorf("Open(%q): expected an error; got %v", test.addr, err)
-		} else if !test.expectErr && err != nil {
-			t.Errorf("Open(%q): expected no errors; got %v", test.addr, err)
-		}
-	}
 }
 
 func TestDebugName(t *testing.T) {

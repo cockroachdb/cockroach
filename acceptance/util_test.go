@@ -38,10 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
@@ -176,15 +174,6 @@ func SkipUnlessLocal(t *testing.T) {
 	if *flagRemote {
 		t.Skip("skipping since not run against local cluster")
 	}
-}
-
-func makeClient(t *testing.T, str string) (*client.DB, *stop.Stopper) {
-	stopper := stop.NewStopper()
-	db, err := client.Open(stopper, str)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db, stopper
 }
 
 func makePGClient(t *testing.T, dest string) *sql.DB {
