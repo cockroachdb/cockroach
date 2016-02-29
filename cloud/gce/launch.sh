@@ -13,7 +13,7 @@ source config.sh
 DATA_DIR="data"
 LOG_DIR="logs"
 STORES="ssd=${DATA_DIR}"
-COMMON_FLAGS="--log-dir=${LOG_DIR} --logtostderr=false --stores=${STORES}"
+COMMON_FLAGS="--log-dir=${LOG_DIR} --logtostderr=false ${STORES}"
 START_FLAGS="--insecure --addr=${LOCAL_ADDRESS}:${PORT}"
 
 action=$1

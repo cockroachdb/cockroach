@@ -76,7 +76,7 @@ the standard output.`),
 A comma-separated list of addresses to use when a new node is joining
 an existing cluster. For the first node in a cluster, --join should
 NOT be specified. Each address in the list has an optional type:
-[type=]<address>. An unspecified type means ip address or dns.  Type
+[type=]<address>. An unspecified type means ip address or dns. Type
 is one of:`) + `
 
   - tcp: (default if type is omitted): plain ip address or hostname.
@@ -134,33 +134,53 @@ duration.`),
 Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
 
-	"stores": wrapText(`
-A comma-separated list of file paths to storage devices, for example:`) + `
+	"store": wrapText(`
+A storage device, use the "path" parameter to specify a directory. For example:`) + `
 
-  --stores=/mnt/ssd01,/mnt/ssd02
+  --store=path=/mnt/ssd01
 
 ` + wrapText(`
-Stores can also specify a colon-separated list of device attributes
-as a prefix to the filepaths. Device attributes are used to match
-capabilities for storage of individual databases or tables. For
-example, an OLTP database would probably want to only allocate space
-for its tables on solid state devices, whereas append-only time
-series might prefer cheaper spinning drives. Typical attributes
-include whether the store is flash (ssd), spinny disk (hdd), or
-in-memory (mem). Device attributes might also include speeds and
-other specs (7200rpm, 200kiops, etc.). For example:`) + `
+For each storage device, a new --store argument is required.
 
-  --stores=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02
+A store can also specify a colon-separated list of device attributes using the
+"attr" parameter. Device attributes are used to match capabilities for storage
+of individual databases or tables. For example, an OLTP database would probably
+want to only allocate space for its tables on solid state devices, whereas
+append-only time series might prefer cheaper spinning drives. Typical
+attributes include whether the store is flash (ssd), spinny disk (hdd), or
+in-memory (mem). Device attributes might also include speeds and other specs
+(7200rpm, 200kiops, etc.). For example:`) + `
 
-` + wrapText(`For an in-memory store, specify an integer instead of a
-filepath. This value represents the maximum size in bytes the in-memory
-store may consume:`) + `
+  --store=attr=hdd:7200rpm,path=/mnt/hda1
+  --store=attr=ssd,path=/mnt/ssd01
 
-  --stores=mem=1073741824,ssd=/mnt/ssd01
+` + wrapText(`
+A store can also specify a maximum size using the "size" parameter. This size
+is not a guaranteed maximum but is used to when calculating free space for
+rebalancing purposes. The size can be specified in bytes. For example:`) + `
+
+  --store=path=/mnt/ssd01,size=10000000000  -> 10000000000 bytes
+  --store=path=/mnt/ssd01,size=20GB         -> 20000000000 bytes
+  --store=path=/mnt/ssd01,size=20GiB        -> 21474836480 bytes
+  --store=path=/mnt/ssd01,size=0.02TiB      -> 21474836480 bytes
+
+` + wrapText(`
+Or as a percentage of either total hard drive space or memory. For example:`) + `
+
+  --store=path=/mnt/ssd01,size=20%          -> 20% of available space
+  --store=path=/mnt/ssd01,size=0.2          -> 20% of available space
+  --store=path=/mnt/ssd01,size=.2           -> 20% of available space
+
+` + wrapText(`
+For an in-memory store, use the "type" parameter and set it to "mem". An
+in-memory store requires that a "size" is specified an that no "path" is
+supplied. Note that the size in this case is a hard limit. For example:`) + `
+
+  --store=type=mem,size=20GiB
+  --store=type=mem,attr=mem,size=90%
 `,
-
 	"time-until-store-dead": wrapText(`
-Adjusts the timeout for stores.  If there's been no gossiped updated
+Adjusts the timeout for stores. If there's been no gossiped update
 from a store after this time, the store is considered unavailable.
 Replicas on an unavailable store will be moved to available ones.`),
 
@@ -237,7 +257,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&connHost, "host", "", usage("host"))
 		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
-		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
+		f.VarP(&ctx.Stores, "store", "s", usage("store"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
 		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, usage("metrics-frequency"))
 		f.Var(&ctx.BalanceMode, "balance-mode", usage("balance-mode"))
@@ -259,15 +279,15 @@ func initFlags(ctx *Context) {
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))
 
-		if err := startCmd.MarkFlagRequired("stores"); err != nil {
+		if err := startCmd.MarkFlagRequired("store"); err != nil {
 			panic(err)
 		}
 	}
 
 	{
 		f := exterminateCmd.Flags()
-		f.StringVar(&ctx.Stores, "stores", ctx.Stores, usage("stores"))
-		if err := exterminateCmd.MarkFlagRequired("stores"); err != nil {
+		f.Var(&ctx.Stores, "store", usage("store"))
+		if err := exterminateCmd.MarkFlagRequired("store"); err != nil {
 			panic(err)
 		}
 	}
