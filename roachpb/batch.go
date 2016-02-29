@@ -141,10 +141,10 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 	for i, l := 0, len(br.Responses); i < l; i++ {
 		valLeft := br.Responses[i].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
-		args, lOK := valLeft.(Combinable)
-		reply, rOK := valRight.(Combinable)
+		cValLeft, lOK := valLeft.(combinable)
+		cValRight, rOK := valRight.(combinable)
 		if lOK && rOK {
-			if err := args.Combine(reply.(Response)); err != nil {
+			if err := cValLeft.combine(cValRight); err != nil {
 				return err
 			}
 			continue
