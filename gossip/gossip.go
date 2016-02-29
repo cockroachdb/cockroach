@@ -158,6 +158,10 @@ type Gossip struct {
 	resolvers      []resolver.Resolver
 	resolversTried map[int]struct{} // Set of attempted resolver indexes
 	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
+
+	// Membership sets for resolvers and bootstrap addresses.
+	resolverAddrs  map[util.UnresolvedAddr]struct{}
+	bootstrapAddrs map[util.UnresolvedAddr]struct{}
 }
 
 // New creates an instance of a gossip node.
@@ -174,6 +178,8 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
+		resolverAddrs:     map[util.UnresolvedAddr]struct{}{},
+		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
 	g.SetResolvers(resolvers)
 	// The gossip RPC context doesn't measure clock offsets, isn't
@@ -207,10 +213,16 @@ func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.is.NodeID != 0 && g.is.NodeID != nodeID {
-		// TODO(spencer): change this to a panic after fixing unittests
-		//   which do invoke this with different node IDs.
-		log.Errorf("different node IDs were set for the same gossip instance (%d, %d)", g.is.NodeID, nodeID)
+		panic(fmt.Sprintf("different node IDs were set for the same gossip instance (%d, %d)", g.is.NodeID, nodeID))
 	}
+	g.is.NodeID = nodeID
+}
+
+// ResetNodeID resets the infostore's node ID.
+// NOTE: use only from unittests.
+func (g *Gossip) ResetNodeID(nodeID roachpb.NodeID) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.is.NodeID = nodeID
 }
 
@@ -277,7 +289,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 		for _, addr := range storedBI.Addresses {
 			// If the address is new, and isn't our own address, add it.
 			if _, ok := existing[makeKey(addr)]; !ok && addr != g.is.NodeAddr {
-				g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
+				g.maybeAddBootstrapAddress(addr)
 			}
 		}
 		// Persist merged addresses.
@@ -294,12 +306,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// any which haven't already been added.
 	newResolverFound := false
 	for _, addr := range g.bootstrapInfo.Addresses {
-		r, err := resolver.NewResolverFromUnresolvedAddr(addr)
-		if err != nil {
-			log.Warningf("bad node address %s: %s", addr, err)
-			continue
-		}
-		if g.haveResolver(r) {
+		if !g.maybeAddResolver(addr) {
 			continue
 		}
 		// If we find a new resolver, reset the resolver index so that the
@@ -308,7 +315,6 @@ func (g *Gossip) SetStorage(storage Storage) error {
 			newResolverFound = true
 			g.resolverIdx = len(g.resolvers) - 1
 		}
-		g.resolvers = append(g.resolvers, r)
 	}
 
 	// If a new resolver was found, immediately signal bootstrap.
@@ -376,28 +382,31 @@ func (g *Gossip) SimulationCycle() {
 	g.simulationCycler.Broadcast()
 }
 
-// haveResolver returns whether the specified resolver is already in
-// the gossip node's list of resolvers. The caller must hold the
-// gossip mutex.
-// TODO(spencer): sort and binary search.
-func (g *Gossip) haveResolver(r resolver.Resolver) bool {
-	for _, ex := range g.resolvers {
-		if ex.Type() == r.Type() && ex.Addr() == r.Addr() {
-			return true
+// maybeAddResolver creates and adds a resolver for the specified
+// address if one does not already exist. Returns whether a new
+// resolver was added. The caller must hold the gossip mutex.
+func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
+	if _, ok := g.resolverAddrs[addr]; !ok {
+		r, err := resolver.NewResolverFromUnresolvedAddr(addr)
+		if err != nil {
+			log.Warningf("bad address %s: %s", addr, err)
+			return false
 		}
+		g.resolvers = append(g.resolvers, r)
+		g.resolverAddrs[addr] = struct{}{}
+		return true
 	}
 	return false
 }
 
-// haveBootstrapAddress returns whether there is already a bootstrap
-// address matching the specified address. The caller must hold the
-// gossip mutex.
-// TODO(spencer): sort and binary search.
-func (g *Gossip) haveBootstrapAddress(addr util.UnresolvedAddr) bool {
-	for _, ex := range g.bootstrapInfo.Addresses {
-		if ex == addr {
-			return true
-		}
+// maybeAddBootstrapAddress adds the specified address to the list of
+// bootstrap addresses if not already present. Returns whether a new
+// bootstrap address was added. The caller must hold the gossip mutex.
+func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr) bool {
+	if _, ok := g.bootstrapAddrs[addr]; !ok {
+		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
+		g.bootstrapAddrs[addr] = struct{}{}
+		return true
 	}
 	return false
 }
@@ -449,25 +458,18 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	}
 	g.nodeDescs[desc.NodeID] = &desc
 
-	// Add this new node to our list of resolvers so we can keep
-	// connecting to gossip if the original resolvers go offline.
-	r, err := resolver.NewResolverFromUnresolvedAddr(desc.Address)
-	if err != nil {
-		log.Warningf("bad address from gossip node %s: %s", desc, err)
-		return
-	}
-	if !g.haveResolver(r) {
-		g.resolvers = append(g.resolvers, r)
-	}
-	// Add new address to bootstrap info and persist if possible.
-	if !g.haveBootstrapAddress(desc.Address) {
-		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, desc.Address)
-		if g.storage != nil {
-			// TODO(spencer): need to clean up ancient gossip nodes, which
-			//   will otherwise stick around in the bootstrap info forever.
-			if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-				log.Error(err)
-			}
+	// Add this new node address (if it's not already there) to our list
+	// of resolvers so we can keep connecting to gossip if the original
+	// resolvers go offline.
+	g.maybeAddResolver(desc.Address)
+
+	// Add new address (if it's not already there) to bootstrap info and
+	// persist if possible.
+	if g.maybeAddBootstrapAddress(desc.Address) && g.storage != nil {
+		// TODO(spencer): need to clean up ancient gossip nodes, which
+		//   will otherwise stick around in the bootstrap info forever.
+		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+			log.Error(err)
 		}
 	}
 }

@@ -555,11 +555,14 @@ func (m *multiTestContext) addStore() {
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
 	m.mu.Unlock()
-
-	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
+	// Because we use a single gossip instance, make sure we always
+	// reset the node ID before setting the node descriptor and calling
+	// start.
+	m.gossip.ResetNodeID(0)
+	if err := store.Start(stopper); err != nil {
 		m.t.Fatal(err)
 	}
-	if err := store.Start(stopper); err != nil {
+	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
 		m.t.Fatal(err)
 	}
 	store.WaitForInit()
@@ -599,6 +602,8 @@ func (m *multiTestContext) restartStore(i int) {
 
 	ctx := m.makeContext(i)
 	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	// Because we use a single gossip instance, reset node ID before calling Start().
+	m.gossip.ResetNodeID(0)
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
