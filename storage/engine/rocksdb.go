@@ -22,9 +22,9 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"syscall"
 	"unsafe"
 
+	"github.com/cloudfoundry/gosigar"
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -53,12 +53,13 @@ type RocksDB struct {
 	dir            string             // The data directory
 	cacheSize      uint64             // Memory to use to cache values.
 	memtableBudget uint64             // Memory to use for the memory table.
+	maxSize        int64              // Used for calculating rebalancing and free space.
 	stopper        *stop.Stopper
 	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget uint64,
+func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget uint64, maxSize int64,
 	stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic(util.Errorf("dir must be non-empty"))
@@ -68,6 +69,7 @@ func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget 
 		dir:            dir,
 		cacheSize:      cacheSize,
 		memtableBudget: memtableBudget,
+		maxSize:        maxSize,
 		stopper:        stopper,
 		deallocated:    make(chan struct{}),
 	}
@@ -198,18 +200,51 @@ func (r *RocksDB) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)
 
 // Capacity queries the underlying file system for disk capacity information.
 func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
-	var fs syscall.Statfs_t
-	var capacity roachpb.StoreCapacity
+	fileSystemUsage := sigar.FileSystemUsage{}
 	dir := r.dir
 	if dir == "" {
 		dir = "/tmp"
 	}
-	if err := syscall.Statfs(dir, &fs); err != nil {
-		return capacity, err
+	if err := fileSystemUsage.Get(dir); err != nil {
+		return roachpb.StoreCapacity{}, err
 	}
-	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
-	capacity.Available = int64(fs.Bsize) * int64(fs.Bavail)
-	return capacity, nil
+
+	// Convert the fileSystemUsage amount to int64 from uint64.
+	fsuTotal := int64(fileSystemUsage.Total)
+	if fsuTotal < 0 {
+		return roachpb.StoreCapacity{}, fmt.Errorf("Cockroach does not support disks of size %d.", fileSystemUsage.Total)
+	}
+	fsuAvail := int64(fileSystemUsage.Avail)
+	if fsuAvail < 0 {
+		return roachpb.StoreCapacity{}, fmt.Errorf("Cockroach does not support disks of size %d.", fileSystemUsage.Avail)
+	}
+
+	// No size limitation have been placed on the store size.
+	if r.maxSize == 0 {
+		return roachpb.StoreCapacity{
+			Capacity:  fsuTotal,
+			Available: fsuAvail,
+		}, nil
+	}
+
+	var capacity, reserved, available int64
+	// Calculate the amount of space that should be reserved.
+	if r.maxSize < fsuTotal {
+		reserved = fsuTotal - r.maxSize
+		capacity = r.maxSize
+	} else {
+		capacity = fsuTotal
+	}
+
+	// We should never have a negative amount of available space.
+	if reserved < fsuAvail {
+		available = fsuAvail - reserved
+	}
+
+	return roachpb.StoreCapacity{
+		Capacity:  capacity,
+		Available: available,
+	}, nil
 }
 
 // CompactRange compacts the specified key range. Specifying nil for
