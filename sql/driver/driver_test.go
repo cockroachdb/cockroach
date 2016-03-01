@@ -499,8 +499,9 @@ func concurrentIncrements(db *sql.DB, t *testing.T) {
 // test for the KV layer. This Belt and Suspenders test is mostly
 // documentation and adds another layer of confidence that transactions
 // are serializable and performant even at the SQL layer.
+// TODO(andrei): move this test over to use pgwire. Also make it do retries
+// on retriable errors.
 func TestConcurrentIncrements(t *testing.T) {
-	t.Skipf("TODO(andrei): #4752")
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t, time.Local)
 	defer cleanup(s, db)
