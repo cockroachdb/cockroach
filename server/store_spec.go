@@ -29,13 +29,13 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-var minimumStoreSize = 10 * uint64(config.DefaultZoneConfig().RangeMaxBytes)
+var minimumStoreSize = 10 * int64(config.DefaultZoneConfig().RangeMaxBytes)
 
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
 	Path        string
-	SizeInBytes uint64
+	SizeInBytes int64
 	SizePercent float64
 	InMemory    bool
 	Attributes  roachpb.Attributes
@@ -51,7 +51,7 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
 	if ss.SizeInBytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanize.IBytes(ss.SizeInBytes))
+		fmt.Fprintf(&buffer, "size=%s,", humanize.IBytes(uint64(ss.SizeInBytes)))
 	}
 	if ss.SizePercent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
@@ -156,9 +156,11 @@ func newStoreSpec(value string) (StoreSpec, error) {
 					return StoreSpec{}, fmt.Errorf("store size (%s) must be between 1%% and 100%%", value)
 				}
 			} else {
-				// Value is a specific size in bytes.
-				var err error
-				if ss.SizeInBytes, err = humanize.ParseBytes(value); err != nil {
+				// Value is a specific size in bytes. The backwards ordering
+				// is due to the linter complaining.
+				if sib, err := humanize.ParseBytes(value); err == nil {
+					ss.SizeInBytes = int64(sib)
+				} else {
 					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
 				}
 				if ss.SizeInBytes < minimumStoreSize {

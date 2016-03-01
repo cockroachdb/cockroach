@@ -44,7 +44,7 @@ func openStore(cmd *cobra.Command, args []string, stopper *stop.Stopper) (engine
 	}
 	dir := args[0]
 
-	db := engine.NewRocksDB(roachpb.Attributes{}, dir, 0, 0, stopper)
+	db := engine.NewRocksDB(roachpb.Attributes{}, dir, 0, 0, 0, stopper)
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
