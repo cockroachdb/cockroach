@@ -63,7 +63,6 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 
 	// Unmarshal query request.
 	reqBody, err := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

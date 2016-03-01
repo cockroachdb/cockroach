@@ -131,9 +131,8 @@ func TestSSLEnforcement(t *testing.T) {
 			nodeCertsContext, true, http.StatusOK},
 		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(testCertsContext),
 			testCertsContext, true, http.StatusOK},
-		// TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/4718
-		//{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(noCertsContext),
-		//	noCertsContext, true, http.StatusUnauthorized},
+		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(noCertsContext),
+			noCertsContext, true, http.StatusUnauthorized},
 		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(insecureContext),
 			insecureContext, false, -1},
 	}

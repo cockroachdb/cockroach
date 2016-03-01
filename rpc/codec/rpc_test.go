@@ -416,7 +416,6 @@ func benchmarkEchoProtoHTTP(b *testing.B, size int) {
 	go func() {
 		if err := http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqBody, err := ioutil.ReadAll(r.Body)
-			defer r.Body.Close()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
