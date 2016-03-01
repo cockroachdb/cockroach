@@ -78,14 +78,18 @@ func NewTracer() opentracing.Tracer {
 	return newTracer()
 }
 
-// SpanFromContext returns the Span optained from the context or, if none is
-// found, a new one started through the tracer.
-func SpanFromContext(opName string, tracer opentracing.Tracer, ctx context.Context) opentracing.Span {
+// SpanFromContext returns the Span obtained from the context or, if none is
+// found, a new one started through the tracer. Callers should call (or defer)
+// the returned cleanup func as well to ensure that the span is Finish()ed, but
+// callers should *not* attempt to call Finish directly -- in the case where the
+// span was obtained from the context, it is not the caller's to Finish.
+func SpanFromContext(opName string, tracer opentracing.Tracer, ctx context.Context) (opentracing.Span, func()) {
 	sp := opentracing.SpanFromContext(ctx)
 	if sp == nil {
-		return tracer.StartSpan(opName)
+		sp = tracer.StartSpan(opName)
+		return sp, sp.Finish
 	}
-	return sp
+	return sp, func() {}
 }
 
 // Disable is for benchmarking use and causes all future tracers to deal in
