@@ -500,6 +500,7 @@ func concurrentIncrements(db *sql.DB, t *testing.T) {
 // documentation and adds another layer of confidence that transactions
 // are serializable and performant even at the SQL layer.
 func TestConcurrentIncrements(t *testing.T) {
+	t.Skipf("TODO(andrei): #4752")
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t, time.Local)
 	defer cleanup(s, db)
