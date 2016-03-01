@@ -415,7 +415,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error
 	// We compute a new deadline here using time.Now() instead of using
 	// expiration.GoTime() because in many tests database time uses
 	// a fake clock.
-	ctx, cancel := context.WithDeadline(r.context(), time.Now().Add(duration))
+	ctx, cancel := context.WithTimeout(r.context(), duration)
 	defer cancel()
 
 	// Send lease request directly to raft in order to skip unnecessary
