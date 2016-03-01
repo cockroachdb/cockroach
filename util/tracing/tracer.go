@@ -80,12 +80,13 @@ func NewTracer() opentracing.Tracer {
 
 // SpanFromContext returns the Span optained from the context or, if none is
 // found, a new one started through the tracer.
-func SpanFromContext(opName string, tracer opentracing.Tracer, ctx context.Context) opentracing.Span {
+func SpanFromContext(opName string, tracer opentracing.Tracer, ctx context.Context) (opentracing.Span, func()) {
 	sp := opentracing.SpanFromContext(ctx)
 	if sp == nil {
-		return tracer.StartSpan(opName)
+		sp = tracer.StartSpan(opName)
+		return sp, sp.Finish
 	}
-	return sp
+	return sp, func() {}
 }
 
 // Disable is for benchmarking use and causes all future tracers to deal in

@@ -91,7 +91,9 @@ func TestInvalidAddrLength(t *testing.T) {
 
 	// The provided replicas is nil, so its length will be always less than the
 	// specified response number
-	opts := SendOptions{Trace: tracing.NewTracer().StartSpan("node test")}
+	sp := tracing.NewTracer().StartSpan("node test")
+	defer sp.Finish()
+	opts := SendOptions{Trace: sp}
 	ret, err := send(opts, nil, roachpb.BatchRequest{}, nil)
 
 	// the expected return is nil and SendError
@@ -112,11 +114,14 @@ func TestSendToOneClient(t *testing.T) {
 	s, ln := newTestServer(t, ctx)
 	registerBatch(t, s, 0)
 
+	sp := tracing.NewTracer().StartSpan("node test")
+	defer sp.Finish()
+
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
-		Trace:           tracing.NewTracer().StartSpan("node test"),
+		Trace:           sp,
 	}
 	reply, err := sendBatch(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
@@ -158,11 +163,14 @@ func TestRetryableError(t *testing.T) {
 		}
 	}()
 
+	sp := tracing.NewTracer().StartSpan("node test")
+	defer sp.Finish()
+
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
-		Trace:           tracing.NewTracer().StartSpan("node test"),
+		Trace:           sp,
 	}
 	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
@@ -188,11 +196,14 @@ func TestUnretryableError(t *testing.T) {
 	nodeContext := newNodeTestContext(nil, stopper)
 	_, ln := newTestServer(t, nodeContext)
 
+	sp := tracing.NewTracer().StartSpan("node test")
+	defer sp.Finish()
+
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
-		Trace:           tracing.NewTracer().StartSpan("node test"),
+		Trace:           sp,
 	}
 
 	sendOneFn = func(client *batchClient, timeout time.Duration,
@@ -232,11 +243,14 @@ func TestClientNotReady(t *testing.T) {
 	s, ln := newTestServer(t, nodeContext)
 	registerBatch(t, s, 50*time.Millisecond)
 
+	sp := tracing.NewTracer().StartSpan("node test")
+	defer sp.Finish()
+
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Nanosecond,
 		Timeout:         100 * time.Nanosecond,
-		Trace:           tracing.NewTracer().StartSpan("node test"),
+		Trace:           sp,
 	}
 
 	// Send RPC to an address where no server is running.
@@ -325,11 +339,14 @@ func TestComplexScenarios(t *testing.T) {
 			serverAddrs = append(serverAddrs, ln.Addr())
 		}
 
+		sp := tracing.NewTracer().StartSpan("node test")
+		defer sp.Finish()
+
 		opts := SendOptions{
 			Ordering:        orderStable,
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
-			Trace:           tracing.NewTracer().StartSpan("node test"),
+			Trace:           sp,
 		}
 
 		// Mock sendOne.

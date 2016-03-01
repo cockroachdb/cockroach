@@ -159,7 +159,8 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		return nil, roachpb.NewError(err)
 	}
 
-	sp := tracing.SpanFromContext(opStores, store.Tracer(), ctx)
+	sp, cleanupSp := tracing.SpanFromContext(opStores, store.Tracer(), ctx)
+	defer cleanupSp()
 	// For calls that read data within a txn, we can avoid uncertainty
 	// related retries in certain situations. If the node is in
 	// "CertainNodes", we need not worry about uncertain reads any

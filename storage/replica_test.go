@@ -482,11 +482,14 @@ func TestRangeLeaderLease(t *testing.T) {
 		t.Errorf("expected another replica to have leader lease")
 	}
 
-	pErr := tc.rng.redirectOnOrAcquireLeaderLease(tc.rng.store.Tracer().StartSpan("test"))
-	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
-		t.Fatalf("wanted NotLeaderError, got %s", pErr)
+	{
+		sp := tc.rng.store.Tracer().StartSpan("test")
+		defer sp.Finish()
+		pErr := tc.rng.redirectOnOrAcquireLeaderLease(sp)
+		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
+			t.Fatalf("wanted NotLeaderError, got %s", pErr)
+		}
 	}
-
 	// Advance clock past expiration and verify that another has
 	// leader lease will not be true.
 	tc.manualClock.Increment(21) // 21ns pass
@@ -505,8 +508,12 @@ func TestRangeLeaderLease(t *testing.T) {
 		}
 	}
 
-	if _, ok := rng.redirectOnOrAcquireLeaderLease(tc.rng.store.Tracer().StartSpan("test")).GetDetail().(*roachpb.NotLeaderError); !ok {
-		t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
+	{
+		sp := tc.rng.store.Tracer().StartSpan("test")
+		defer sp.Finish()
+		if _, ok := rng.redirectOnOrAcquireLeaderLease(sp).GetDetail().(*roachpb.NotLeaderError); !ok {
+			t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
+		}
 	}
 }
 

@@ -233,9 +233,11 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 		Reverse:         useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
+	trace := ds.Tracer.StartSpan("range lookup")
+	defer trace.Finish()
 	// TODO(tschottdorf) consider a Trace here, potentially that of the request
 	// that had the cache miss and waits for the result.
-	br, err := ds.sendRPC(ds.Tracer.StartSpan("range lookup"), desc.RangeID, replicas, orderRandom, ba)
+	br, err := ds.sendRPC(trace, desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +526,8 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
-	sp := tracing.SpanFromContext(opDistSender, ds.Tracer, ctx)
+	sp, cleanupSp := tracing.SpanFromContext(opDistSender, ds.Tracer, ctx)
+	defer cleanupSp()
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.

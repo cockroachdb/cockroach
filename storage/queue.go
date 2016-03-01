@@ -410,8 +410,10 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// order to be processed, check whether this replica has leader lease
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
+		span := repl.store.Tracer().StartSpan("queue")
+		defer span.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(repl.store.Tracer().StartSpan("queue")); err != nil {
+		if err := repl.redirectOnOrAcquireLeaderLease(span); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return nil
 		}
