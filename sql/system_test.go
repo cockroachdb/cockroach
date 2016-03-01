@@ -27,12 +27,16 @@ import (
 )
 
 func TestInitialKeys(t *testing.T) {
+	const nonSystemDesc = 1
+	const keysPerDesc = 2
+	const nonDescKeys = 2
+
 	defer leaktest.AfterTest(t)()
 
 	ms := sql.MakeMetadataSchema()
-	// IDGenerator + 2 for each system object in the default schema.
 	kv := ms.GetInitialValues()
-	if actual, expected := len(kv), 3+2*sql.NumSystemDescriptors; actual != expected {
+	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+sql.NumSystemDescriptors)
+	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
 
@@ -41,8 +45,8 @@ func TestInitialKeys(t *testing.T) {
 		"CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
 		privilege.List{privilege.ALL})
 	kv = ms.GetInitialValues()
-	// IDGenerator + 2 for each descriptor in the schema.
-	if actual, expected := len(kv), 1+2*ms.DescriptorCount(); actual != expected {
+	expected = nonDescKeys + keysPerDesc*ms.DescriptorCount()
+	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
 

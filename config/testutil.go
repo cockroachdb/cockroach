@@ -86,5 +86,5 @@ func testingZoneConfigHook(_ SystemConfig, id uint32) (*ZoneConfig, error) {
 	if zone, ok := testingZoneConfig[id]; ok {
 		return zone, nil
 	}
-	return DefaultZoneConfig, nil
+	return &defaultZoneConfig, nil
 }
