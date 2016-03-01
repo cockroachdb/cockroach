@@ -83,9 +83,10 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
-	var dummyCond, dummyVal Datum
+	var dummyCond Datum
 
-	valArgType := DummyBool
+	// If expr.Expr is nil, the WHEN clauses contain boolean expressions.
+	condArgType := DummyBool
 	if expr.Expr != nil {
 		var err error
 		dummyCond, err = expr.Expr.TypeCheck(args)
@@ -93,16 +94,20 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 			return nil, err
 		}
 		if _, ok := dummyCond.(DValArg); ok {
-			return nil, fmt.Errorf("unsupported case expression type: %s", dummyCond.Type())
+			return nil, fmt.Errorf("cannot infer type for parameter %s", dummyCond)
 		}
-		valArgType = dummyCond
+		condArgType = dummyCond
 	}
 
+	dummyVal := DNull
 	if expr.Else != nil {
 		var err error
 		dummyVal, err = expr.Else.TypeCheck(args)
 		if err != nil {
 			return nil, err
+		}
+		if _, ok := dummyVal.(DValArg); ok {
+			return nil, fmt.Errorf("cannot infer type for parameter %s", dummyVal)
 		}
 	}
 
@@ -111,7 +116,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		if set, err := args.SetInferredType(nextDummyCond, valArgType); err != nil {
+		if set, err := args.SetInferredType(nextDummyCond, condArgType); err != nil {
 			return nil, err
 		} else if set != nil {
 			nextDummyCond = set
@@ -126,12 +131,15 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := nextDummyVal.(DValArg); ok && dummyVal == DNull {
+			return nil, fmt.Errorf("cannot infer type for parameter %s", nextDummyVal)
+		}
 		if set, err := args.SetInferredType(nextDummyVal, dummyVal); err != nil {
 			return nil, err
 		} else if set != nil {
 			nextDummyVal = set
 		}
-		if dummyVal == nil || dummyVal == DNull {
+		if dummyVal == DNull {
 			dummyVal = nextDummyVal
 		} else if !(nextDummyVal == DNull || nextDummyVal.TypeEqual(dummyVal)) {
 			return nil, fmt.Errorf("incompatible value types %s, %s", dummyVal.Type(), nextDummyVal.Type())
