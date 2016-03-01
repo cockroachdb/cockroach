@@ -194,29 +194,28 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				if err != nil {
 					return fmt.Errorf("could not retrieve system memory")
 				}
-				sizeInBytes = uint64(float64(sysMem) * spec.SizePercent)
+				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, humanize.IBytes(sizeInBytes), humanize.IBytes(minimumStoreSize))
+					spec.SizePercent, humanize.IBytes(uint64(sizeInBytes)), humanize.IBytes(uint64(minimumStoreSize)))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, spec.SizeInBytes, stopper))
+			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, uint64(sizeInBytes), stopper))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
 					return err
 				}
-				sizeInBytes = uint64(float64(fileSystemUsage.Total) * spec.SizePercent)
+				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, spec.Path, humanize.IBytes(sizeInBytes),
-					humanize.IBytes(minimumStoreSize))
+					spec.SizePercent, spec.Path, humanize.IBytes(uint64(sizeInBytes)),
+					humanize.IBytes(uint64(minimumStoreSize)))
 			}
-			// TODO(bram): #4621 actually hook this up to the store.
 			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path, ctx.CacheSize,
-				ctx.MemtableBudget, stopper))
+				ctx.MemtableBudget, sizeInBytes, stopper))
 		}
 	}
 	if len(ctx.Engines) == 1 {

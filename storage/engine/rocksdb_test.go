@@ -81,7 +81,7 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 	const cacheSize = 0
 	const memtableBudget = 512 << 20 // 512 MB
 	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, stopper)
+	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, 0, stopper)
 	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -586,7 +586,7 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 		}
 		stopper := stop.NewStopper()
 		dupRocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize,
-			rocksdb.memtableBudget, stopper)
+			rocksdb.memtableBudget, 0, stopper)
 		if err := dupRocksdb.Open(); err != nil {
 			b.Fatal(err)
 		}
