@@ -9,7 +9,7 @@ module Components {
 
   export module Topbar {
     export function controller(): void {}
-    export function view(ctrl: any, args: {title?: string; updated: number; titleImage?: MithrilVirtualElement; }): MithrilVirtualElement {
+    export function view(ctrl: any, args: {title?: string|MithrilVirtualElement; updated: number; titleImage?: MithrilVirtualElement; }): MithrilVirtualElement {
       let updatedStr: string = "-";
       if (args.updated !== 0 && args.updated !== -Infinity) {
         updatedStr = Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(args.updated)));

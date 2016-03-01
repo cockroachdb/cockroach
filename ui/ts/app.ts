@@ -10,6 +10,7 @@
 /// <reference path="pages/helpus.ts" />
 /// <reference path="pages/helpusprompt.ts" />
 /// <reference path="pages/events.ts" />
+/// <reference path="pages/databases.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -28,6 +29,9 @@ m.route(document.getElementById("root"), "/cluster", {
   "/node/:node_id/:detail": AdminViews.Nodes.NodePage,
   "/nodes/:node_id/:detail": AdminViews.Nodes.NodePage,
   "/sql": AdminViews.SQL.Page,
+  "/databases": AdminViews.Databases.DatabaseListPage,
+  "/databases/:database": AdminViews.Databases.DatabasePage,
+  "/databases/:database/tables/:table": AdminViews.Databases.TablePage,
   "/help-us/:detail": AdminViews.HelpUs.Page,
   "/cluster": AdminViews.Cluster.Page,
 });

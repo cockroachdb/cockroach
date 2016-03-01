@@ -49,7 +49,7 @@ module AdminViews {
                 } else if (type === "DateVal") {
                   viewVal = moment.utc(0).add(payload.DateVal, "days").format("YYYY-MM-DD");
                 } else {
-                  viewVal = payload[type].toString();
+                  viewVal = payload && payload[type] && payload[type].toString() || "NULL";
                 }
                 return viewVal;
               },
