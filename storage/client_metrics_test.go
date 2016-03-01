@@ -55,7 +55,7 @@ func checkCounter(t *testing.T, s *storage.Store, key string, e int64) {
 }
 
 func TestStoreStatsSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 

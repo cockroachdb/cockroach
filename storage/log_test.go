@@ -34,7 +34,7 @@ import (
 )
 
 func TestLogSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -121,7 +121,7 @@ func TestLogSplits(t *testing.T) {
 }
 
 func TestLogRebalances(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 

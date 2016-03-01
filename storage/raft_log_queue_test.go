@@ -29,7 +29,7 @@ import (
 // TestGetTruncatableIndexes verifies that the correctly returns when there are
 // indexes to be truncated.
 func TestGetTruncatableIndexes(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	if _, err := store.GetReplica(0); err == nil {

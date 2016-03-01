@@ -48,7 +48,7 @@ func verifyOrdering(attrs []string, replicas ReplicaSlice, prefixLen int) bool {
 }
 
 func TestReplicaSetSortByCommonAttributePrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	replicaAttrs := [][]string{
 		{"us-west-1a", "gpu"},
 		{"us-east-1a", "pdu1", "gpu"},
@@ -97,7 +97,7 @@ func createReplicaSlice() ReplicaSlice {
 }
 
 func TestReplicaSetMoveToFront(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	rs := createReplicaSlice()
 	rs.MoveToFront(0)
 	exp := []roachpb.StoreID{1, 2, 3, 4, 5}
@@ -126,7 +126,7 @@ func verifyRandPermOrdering(startIndex int, topIndex int, exp []roachpb.StoreID,
 }
 
 func TestReplicaSetRandPerm(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	verifyRandPermOrdering(2, 2, []roachpb.StoreID{1, 2, 3, 4, 5}, t)
 	verifyRandPermOrdering(3, 4, []roachpb.StoreID{1, 2, 3, 5, 4}, t)
 	verifyRandPermOrdering(0, 2, []roachpb.StoreID{3, 1, 2, 4, 5}, t)

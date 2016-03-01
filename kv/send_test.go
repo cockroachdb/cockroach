@@ -87,7 +87,7 @@ func (n Node) Batch(args proto.Message) (proto.Message, error) {
 }
 
 func TestInvalidAddrLength(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// The provided replicas is nil, so its length will be always less than the
 	// specified response number
@@ -103,7 +103,7 @@ func TestInvalidAddrLength(t *testing.T) {
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -130,7 +130,7 @@ func TestSendToOneClient(t *testing.T) {
 // TestRetryableError verifies that Send returns a retryable error
 // when it hits an RPC error.
 func TestRetryableError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	clientStopper := stop.NewStopper()
 	defer clientStopper.Stop()
@@ -180,7 +180,7 @@ func TestRetryableError(t *testing.T) {
 // TestUnretryableError verifies that Send returns an unretryable
 // error when it hits a critical error.
 func TestUnretryableError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -221,7 +221,7 @@ func TestUnretryableError(t *testing.T) {
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -282,7 +282,7 @@ func TestClientNotReady(t *testing.T) {
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()

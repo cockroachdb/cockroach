@@ -140,7 +140,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 
 // TestClientGossip verifies a client can gossip a delta to the server.
 func TestClientGossip(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	local := startGossip(1, stopper, t)
 	remote := startGossip(2, stopper, t)
@@ -179,7 +179,7 @@ func TestClientGossip(t *testing.T) {
 
 // TestClientNodeID verifies a client's gossip request with correct NodeID.
 func TestClientNodeID(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	local, remote, stopper := startFakeServerGossips(t)
 	nodeID := roachpb.NodeID(1)
@@ -217,7 +217,7 @@ func verifyServerMaps(g *Gossip, expCount int) bool {
 // will drop an outgoing client connection that is already an
 // inbound client connection of another node.
 func TestClientDisconnectLoopback(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t)
@@ -240,7 +240,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 // will drop an outgoing client connection that is already an
 // inbound client connection of another node.
 func TestClientDisconnectRedundant(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t)
@@ -279,7 +279,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 // TestClientDisallowMultipleConns verifies that the server disallows
 // multiple connections from the same client node ID.
 func TestClientDisallowMultipleConns(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t)
@@ -315,7 +315,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 
 // TestClientRegisterInitNodeID verifies two client's gossip request with NodeID 0.
 func TestClientRegisterWithInitNodeID(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 

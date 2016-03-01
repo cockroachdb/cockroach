@@ -31,7 +31,7 @@ import (
 // TestReplicaGCQueueDropReplica verifies that a removed replica is
 // immediately cleaned up.
 func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	const numStores = 3
 	rangeID := roachpb.RangeID(1)
@@ -85,7 +85,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 // TestReplicaGCQueueDropReplicaOnScan verifies that the range GC queue
 // removes a range from a store that no longer should have a replica.
 func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()

@@ -27,7 +27,7 @@ import (
 )
 
 func TestStdFlagToPflag(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
@@ -40,7 +40,7 @@ func TestStdFlagToPflag(t *testing.T) {
 }
 
 func TestNoLinkForbidden(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	if build.Default.GOPATH == "" {
 		t.Skip("GOPATH isn't set")
 	}
@@ -61,7 +61,7 @@ func TestNoLinkForbidden(t *testing.T) {
 }
 
 func TestByteFlagValue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	f := startCmd.Flags()
 	args := []string{"--cache-size", "100MB", "--memtable-budget", "42GiB"}

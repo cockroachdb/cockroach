@@ -108,7 +108,7 @@ func (fs fakeStore) Registry() *metric.Registry {
 // statistics from various registries, both for Time Series and for Status
 // Summaries.
 func TestMetricsRecorder(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	// Fake descriptors and stats for status summaries.
 	nodeDesc := roachpb.NodeDescriptor{

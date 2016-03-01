@@ -25,7 +25,7 @@ import (
 )
 
 func TestRangeStatsEmpty(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -39,7 +39,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 }
 
 func TestRangeStatsInit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -69,7 +69,7 @@ func TestRangeStatsInit(t *testing.T) {
 }
 
 func TestRangeStatsMerge(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}

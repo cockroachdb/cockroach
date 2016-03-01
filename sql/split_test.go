@@ -73,7 +73,7 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 // TestSplitOnTableBoundaries verifies that ranges get split
 // as new tables get created.
 func TestSplitOnTableBoundaries(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, kvDB := setupWithContext(t, getFastScanContext())
 	defer cleanup(s, sqlDB)
 

@@ -26,7 +26,7 @@ import (
 )
 
 func TestDataKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		name        string
 		source      string

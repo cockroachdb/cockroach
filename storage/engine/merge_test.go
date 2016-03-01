@@ -89,7 +89,7 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 // TestGoMerge tests the function goMerge but not the integration with
 // the storage engines. For that, see the engine tests.
 func TestGoMerge(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Let's start with stuff that should go wrong.
 	badCombinations := []struct {
 		existing, update []byte

@@ -87,7 +87,7 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 // TestGossipStorage verifies that a gossip node can join the cluster
 // using the bootstrap hosts in a gossip.Storage object.
 func TestGossipStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	network := simulation.NewNetwork(3)
 	defer network.Stop()

@@ -30,7 +30,7 @@ import (
 // TestRaftLogQueue verifies that the raft log queue correctly truncates the
 // raft log.
 func TestRaftLogQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := new(multiTestContext)
 

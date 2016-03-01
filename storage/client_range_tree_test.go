@@ -175,7 +175,7 @@ func verifyProperty5(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testN
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range
 // tree and first node. SetupRangeTree is called via store.BootstrapRange.
 func TestSetupRangeTree(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()
@@ -193,7 +193,7 @@ func TestSetupRangeTree(t *testing.T) {
 // TestTree is a similar to the TestTree test in range_tree_test but this one
 // performs actual splits and merges.
 func TestTree(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()

@@ -48,7 +48,7 @@ func defTestCase(expected, expectedReverse int, desired columnOrdering) desiredC
 }
 
 func TestComputeOrderingMatch(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	e := struct{}{}
 	asc := encoding.Ascending

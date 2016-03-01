@@ -104,7 +104,7 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 }
 
 func TestSplitOrExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -125,7 +125,7 @@ func TestSplitOrExpr(t *testing.T) {
 }
 
 func TestSplitAndExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -146,7 +146,7 @@ func TestSplitAndExpr(t *testing.T) {
 }
 
 func TestSimplifyExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -256,7 +256,7 @@ func TestSimplifyExpr(t *testing.T) {
 }
 
 func TestSimplifyNotExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr       string
@@ -298,7 +298,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 }
 
 func TestSimplifyAndExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -325,7 +325,7 @@ func TestSimplifyAndExpr(t *testing.T) {
 }
 
 func TestSimplifyAndExprCheck(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr       string
@@ -539,7 +539,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 }
 
 func TestSimplifyOrExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string
@@ -560,7 +560,7 @@ func TestSimplifyOrExpr(t *testing.T) {
 }
 
 func TestSimplifyOrExprCheck(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
 		expr     string

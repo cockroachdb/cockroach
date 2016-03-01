@@ -59,7 +59,7 @@ func mustGetInt(v *roachpb.Value) int64 {
 // TestStoreRecoverFromEngine verifies that the store recovers all ranges and their contents
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
@@ -155,7 +155,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // TestStoreRecoverWithErrors verifies that even commands that fail are marked as
 // applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer func() { storage.TestingCommandFilter = nil }()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -213,7 +213,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 // TestReplicateRange verifies basic replication functionality by creating two stores
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
@@ -275,7 +275,7 @@ func TestReplicateRange(t *testing.T) {
 // TestRestoreReplicas ensures that consensus group membership is properly
 // persisted to disk and restored when a node is stopped and restarted.
 func TestRestoreReplicas(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
@@ -361,7 +361,7 @@ func TestRestoreReplicas(t *testing.T) {
 }
 
 func TestFailedReplicaChange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer func() { storage.TestingCommandFilter = nil }()
 
 	var runFilter atomic.Value
@@ -435,7 +435,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
@@ -522,7 +522,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 // TestStoreRangeUpReplicate verifies that the replication queue will notice
 // under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -583,7 +583,7 @@ func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roa
 // tests, as can a similar situation where the first store is no longer the leader of
 // the first range; this verifies that those tests will not be affected.
 func TestUnreplicateFirstRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
@@ -602,7 +602,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 // TestStoreRangeDownReplicate verifies that the replication queue will notice
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
 	store0 := mtc.stores[0]
@@ -671,7 +671,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 // TestChangeReplicasDuplicateError tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -735,7 +735,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 // TestProgressWithDownNode verifies that a surviving quorum can make progress
 // with a downed node.
 func TestProgressWithDownNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -782,7 +782,7 @@ func TestProgressWithDownNode(t *testing.T) {
 }
 
 func TestReplicateAddAndRemove(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testFunc := func(addFirst bool) {
 		mtc := startMultiTestContext(t, 4)
@@ -872,7 +872,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
 // suppressing elections in an idle cluster.
 func TestRaftHeartbeats(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
@@ -899,7 +899,7 @@ func TestRaftHeartbeats(t *testing.T) {
 // TestReplicateAfterSplit verifies that a new replica whose start key
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
 
@@ -950,7 +950,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 // TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
 // transactions are performed on the range descriptor.
 func TestRangeDescriptorSnapshotRace(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 1)
 	defer mtc.Stop()
@@ -1017,7 +1017,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 // TestRaftAfterRemoveRange verifies that the raft state removes
 // a remote node correctly after the Replica was removed from the Store.
 func TestRaftAfterRemoveRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -1081,7 +1081,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // it's better than any other tests we have for this (increasing the
 // number of repetitions adds an unacceptable amount of test runtime).
 func TestRaftRemoveRace(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
@@ -1097,7 +1097,7 @@ func TestRaftRemoveRace(t *testing.T) {
 // TestStoreRangeRemoveDead verifies that if a store becomes dead, the
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	mtc.Start(t, 3)
@@ -1162,7 +1162,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 // TestStoreRangeRebalance verifies that the replication queue will take
 // rebalancing opportunities and add a new replica on another store.
 func TestStoreRangeRebalance(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	t.Skipf("TODO(pmattis): #4378, #3092")
 
 	// Start multiTestContext with replica rebalancing enabled.
@@ -1237,7 +1237,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 // it yet because it was down or partitioned away when it happened)
 // cannot cause other removed nodes to recreate their ranges.
 func TestReplicateRogueRemovedNode(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
@@ -1330,7 +1330,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 }
 
 func TestReplicateReAddAfterDown(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
@@ -1379,7 +1379,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 // RangeNotFoundError (not RaftGroupDeletedError, and even before
 // the ReplicaGCQueue has run).
 func TestLeaderRemoveSelf(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()
@@ -1409,7 +1409,7 @@ func TestLeaderRemoveSelf(t *testing.T) {
 // replica has been removed but not yet GC'd (and therefore
 // does not have an active raft group).
 func TestRemoveRangeWithoutGC(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()

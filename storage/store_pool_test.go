@@ -67,7 +67,7 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 // TestStorePoolGossipUpdate ensures that the gossip callback in StorePool
 // correctly updates a store's details.
 func TestStorePoolGossipUpdate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
@@ -116,7 +116,7 @@ func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roa
 // TestStorePoolDies ensures that a store is marked as dead after it
 // times out and that it will be revived after a new update is received.
 func TestStorePoolDies(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, mc, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
@@ -216,7 +216,7 @@ func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) erro
 // TestStorePoolGetStoreList ensures that the store list returns only stores
 // that are alive and match the attribute criteria.
 func TestStorePoolGetStoreList(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
@@ -284,7 +284,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 }
 
 func TestStorePoolGetStoreDetails(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
@@ -300,7 +300,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 }
 
 func TestStorePoolFindDeadReplicas(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper, g, mc, sp := createTestStorePool(TestTimeUntilStoreDead)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)

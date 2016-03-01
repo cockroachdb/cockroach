@@ -28,7 +28,7 @@ import (
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, kvDB := setup(t)
 	defer cleanup(s, sqlDB)
 

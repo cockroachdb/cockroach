@@ -58,7 +58,7 @@ func metaKey(key roachpb.RKey) []byte {
 // TestUpdateRangeAddressing verifies range addressing records are
 // correctly updated on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -206,7 +206,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // attempt to update range addressing records that would allow a split
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	left := &roachpb.RangeDescriptor{StartKey: roachpb.RKeyMin, EndKey: meta1Key(roachpb.RKey("a"))}
 	right := &roachpb.RangeDescriptor{StartKey: meta1Key(roachpb.RKey("a")), EndKey: roachpb.RKeyMax}
 	if err := splitRangeAddressing(&client.Batch{}, left, right); err == nil {

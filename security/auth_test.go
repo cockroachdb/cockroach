@@ -51,7 +51,7 @@ func makeFakeTLSState(commonNames []string, chainLengths []int) *tls.ConnectionS
 }
 
 func TestGetCertificateUser(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Nil TLS state.
 	if _, err := security.GetCertificateUser(nil); err == nil {
 		t.Error("unexpected success")
@@ -83,7 +83,7 @@ func TestGetCertificateUser(t *testing.T) {
 }
 
 func TestAuthenticationHook(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Proto that does not implement GetUser.
 	badRequest := &roachpb.GetResponse{}
 	goodRequest := &roachpb.BatchRequest{}

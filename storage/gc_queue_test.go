@@ -47,7 +47,7 @@ func makeTS(nanos int64, logical int32) roachpb.Timestamp {
 // Ranges are queued for GC based on two conditions. The age of bytes
 // available to be GC'd, and the age of unresolved intents.
 func TestGCQueueShouldQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -149,7 +149,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 // TestGCQueueProcess creates test data in the range over various time
 // scales and verifies that scan queue process properly GCs test data.
 func TestGCQueueProcess(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -302,7 +302,7 @@ func TestGCQueueProcess(t *testing.T) {
 }
 
 func TestGCQueueTransactionTable(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	const now time.Duration = 3 * 24 * time.Hour
 	const tTxnThreshold = now - txnCleanupThreshold
@@ -432,7 +432,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 // TestGCQueueIntentResolution verifies intent resolution with many
 // intents spanning just two transactions.
 func TestGCQueueIntentResolution(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

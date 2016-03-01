@@ -77,7 +77,7 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 // TestMoveLocalReplicaToFront verifies that optimizeReplicaOrder correctly
 // move the local replica to the front.
 func TestMoveLocalReplicaToFront(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCase := []struct {
 		slice         ReplicaSlice
 		localNodeDesc roachpb.NodeDescriptor
@@ -134,7 +134,7 @@ func TestMoveLocalReplicaToFront(t *testing.T) {
 // leader, attributes and required consistency to determine where to send
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	rangeID := roachpb.RangeID(99)
@@ -362,7 +362,7 @@ func (mdb mockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachp
 }
 
 func TestOwnNodeCertain(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	const expNodeID = 42
@@ -410,7 +410,7 @@ func TestOwnNodeCertain(t *testing.T) {
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
 // leader cache and retries when receiving a NotLeaderError.
 func TestRetryOnNotLeaderError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	leader := roachpb.ReplicaDescriptor{
@@ -455,7 +455,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 // TestRetryOnDescriptorLookupError verifies that the DistSender retries a descriptor
 // lookup on retryable errors.
 func TestRetryOnDescriptorLookupError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 
@@ -499,7 +499,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 }
 
 func TestEvictCacheOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// if rpcError is true, the first attempt gets an RPC error, otherwise
 	// the RPC call succeeds but there is an error in the RequestHeader.
 	// Currently leader and cached range descriptor are treated equally.
@@ -566,7 +566,7 @@ func TestEvictCacheOnError(t *testing.T) {
 // network and a mock of Send, and verifies that the DistSender correctly
 // retries upon encountering a stale entry in its range descriptor cache.
 func TestRetryOnWrongReplicaError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	// Updated below, after it has first been returned.
@@ -620,7 +620,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 }
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	n := simulation.NewNetwork(3)
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	if _, err := ds.FirstRange(); err == nil {
@@ -659,7 +659,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 // TestSendRPCRetry verifies that sendRPC failed on first address but succeed on
 // second address, the second reply should be successfully returned back.
 func TestSendRPCRetry(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
@@ -714,7 +714,7 @@ func TestSendRPCRetry(t *testing.T) {
 // TestGetNodeDescriptor checks that the Node descriptor automatically gets
 // looked up from Gossip.
 func TestGetNodeDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	ds := NewDistSender(&DistSenderContext{}, g)
@@ -737,7 +737,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 // merge. It is verified that the DistSender scans the correct keyrange exactly
 // once.
 func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 	// Assume we have two ranges, [a-b) and [b-KeyMax).
@@ -816,7 +816,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 // TestRangeLookupOptionOnReverseScan verifies that a lookup triggered by a
 // ReverseScan request has the useReverseScan specified.
 func TestRangeLookupOptionOnReverseScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 
@@ -846,7 +846,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 // TestTruncateWithSpanAndDescriptor verifies that a batch request is truncated with a
 // range span and the range of a descriptor found in cache.
 func TestTruncateWithSpanAndDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 
@@ -955,7 +955,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 // request, we can avoid an infinite txn restart error (otherwise
 // caused by hitting the sequence cache).
 func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 
@@ -1051,7 +1051,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 // like it's going to be dispatched to more than one range, it will be split
 // up if it it contains EndTransaction.
 func TestMultiRangeSplitEndTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	g, s := makeTestGossip(t)
 	defer s()
 

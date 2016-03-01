@@ -139,7 +139,7 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.Range
 }
 
 func TestRangeCacheAssumptions(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	expKeyMin := meta(meta(meta(roachpb.RKey("test"))))
 	if !bytes.Equal(expKeyMin, roachpb.RKeyMin) {
 		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)
@@ -151,7 +151,7 @@ func TestRangeCacheAssumptions(t *testing.T) {
 // store for the cache, and measures how often that backing store is
 // lookuped when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		db.splitRange(t, roachpb.RKey(string(char)))
@@ -221,7 +221,7 @@ func TestRangeCache(t *testing.T) {
 // TestRangeCacheClearOverlapping verifies that existing, overlapping
 // cached entries are cleared when adding a new entry.
 func TestRangeCacheClearOverlapping(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	defDesc := &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -292,7 +292,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 // a Meta1key which sorts before Meta2Prefix\x00, causing a panic. The fix was
 // simply to increment the meta key for StartKey, not StartKey itself.
 func TestRangeCacheClearOverlappingMeta(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	firstDesc := &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -327,7 +327,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 // TestGetCachedRangeDescriptorInclusive verifies the correctness of the result
 // that is returned by getCachedRangeDescriptor with inclusive=true.
 func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	testData := []*roachpb.RangeDescriptor{
 		{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},

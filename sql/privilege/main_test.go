@@ -16,16 +16,9 @@
 
 package privilege_test
 
-import (
-	"testing"
+import
 
-	"github.com/cockroachdb/cockroach/util/leaktest"
-	// Needed for the -verbosity flag on circleci tests.
-	_ "github.com/cockroachdb/cockroach/util/log"
-)
+// Needed for the -verbosity flag on circleci tests.
+_ "github.com/cockroachdb/cockroach/util/log"
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
-}

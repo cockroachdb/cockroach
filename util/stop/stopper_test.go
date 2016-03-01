@@ -28,7 +28,7 @@ import (
 )
 
 func TestStopper(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	running := make(chan struct{})
 	waiting := make(chan struct{})
@@ -78,7 +78,7 @@ func (bc *blockingCloser) Close() {
 }
 
 func TestStopperIsStopped(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	bc := newBlockingCloser()
 	s.AddCloser(bc)
@@ -105,7 +105,7 @@ func TestStopperIsStopped(t *testing.T) {
 }
 
 func TestStopperMultipleStopees(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	const count = 3
 	s := stop.NewStopper()
 
@@ -125,7 +125,7 @@ func TestStopperMultipleStopees(t *testing.T) {
 }
 
 func TestStopperStartFinishTasks(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 
 	if !s.RunTask(func() {
@@ -149,7 +149,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 }
 
 func TestStopperRunWorker(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	s.RunWorker(func() {
 		select {
@@ -172,7 +172,7 @@ func TestStopperRunWorker(t *testing.T) {
 
 // TestStopperQuiesce tests coordinate drain with Quiesce.
 func TestStopperQuiesce(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var stoppers []*stop.Stopper
 	for i := 0; i < 3; i++ {
 		stoppers = append(stoppers, stop.NewStopper())
@@ -234,7 +234,7 @@ func (tc *testCloser) Close() {
 }
 
 func TestStopperClosers(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	var tc1, tc2 testCloser
 	s.AddCloser(&tc1)
@@ -246,7 +246,7 @@ func TestStopperClosers(t *testing.T) {
 }
 
 func TestStopperNumTasks(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	var tasks []chan bool
 	for i := 0; i < 3; i++ {
@@ -301,7 +301,7 @@ func TestStopperNumTasks(t *testing.T) {
 // RunAsyncTask has a similar bit of logic, but it is not testable because
 // we cannot insert a recover() call in the right place.
 func TestStopperRunTaskPanic(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	// If RunTask were not panic-safe, Stop() would deadlock.
 	defer s.Stop()
@@ -316,7 +316,7 @@ func TestStopperRunTaskPanic(t *testing.T) {
 }
 
 func TestStopperShouldDrain(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	running := make(chan struct{})
 	runningTask := make(chan struct{})

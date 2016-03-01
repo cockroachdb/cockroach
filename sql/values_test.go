@@ -30,7 +30,7 @@ import (
 )
 
 func TestValues(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	p := planner{}
 
@@ -126,7 +126,7 @@ type boolAlias bool
 type stringAlias string
 
 func TestGolangParams(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Each test case pairs an arbitrary value and parser.Datum which has the same
 	// type
 	testCases := []struct {

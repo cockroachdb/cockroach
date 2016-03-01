@@ -40,7 +40,7 @@ import (
 // clocks when executing a command, even if the leader's clock is far
 // in the future.
 func TestRangeCommandClockUpdate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	const numNodes = 3
 	var manuals []*hlc.ManualClock
@@ -96,7 +96,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 // TestRejectFutureCommand verifies that leaders reject commands that
 // would cause a large time jump.
 func TestRejectFutureCommand(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	const maxOffset = 100 * time.Millisecond
 	manual := hlc.NewManualClock(0)
@@ -182,7 +182,7 @@ func TestRejectFutureCommand(t *testing.T) {
 // 6) When the Writer attempts to commit its txn, the txn will be restarted
 //    again at a new epoch timestamp T+200, which will finally succeed.
 func TestTxnPutOutOfOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
@@ -322,7 +322,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // TestRangeLookupUseReverse tests whether the results and the results count
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()

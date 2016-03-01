@@ -17,14 +17,4 @@
 
 package stop_test
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/util/leaktest"
-)
-
 //go:generate ../leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
-}

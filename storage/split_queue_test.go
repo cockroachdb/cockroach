@@ -31,7 +31,7 @@ import (
 // TestSplitQueueShouldQueue verifies shouldQueue method correctly
 // combines splits in zone configs with the size of the range.
 func TestSplitQueueShouldQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

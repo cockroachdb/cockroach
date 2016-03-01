@@ -842,7 +842,7 @@ func truncateLogArgs(index uint64) roachpb.TruncateLogRequest {
 }
 
 func TestSortRangeDescByAge(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var replicaDescs []roachpb.ReplicaDescriptor
 	var rangeDescs []*roachpb.RangeDescriptor
 

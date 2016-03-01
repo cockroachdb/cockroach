@@ -28,7 +28,7 @@ import (
 )
 
 func TestHttpQuery(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tsrv := &server.TestServer{}
 	if err := tsrv.Start(); err != nil {
 		t.Fatal(err)

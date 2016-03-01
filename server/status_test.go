@@ -45,7 +45,7 @@ import (
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -72,7 +72,7 @@ func TestStatusLocalStacks(t *testing.T) {
 // TestStatusJson verifies that status endpoints return expected Json results.
 // The content type of the responses is always util.JSONContentType.
 func TestStatusJson(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -143,7 +143,7 @@ func TestStatusJson(t *testing.T) {
 // TestStatusGossipJson ensures that the output response for the full gossip
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
 
@@ -288,7 +288,7 @@ func startServer(t *testing.T) TestServer {
 // local/logfiles/{filename}, local/log and local/log/{level} function
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	dir, err := ioutil.TempDir("", "local_log_test")
 	if err != nil {
 		t.Fatal(err)
@@ -454,7 +454,7 @@ func TestStatusLocalLogs(t *testing.T) {
 // TestNodeStatusResponse verifies that node status returns the expected
 // results.
 func TestNodeStatusResponse(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
 	defer ts.Stop()
 
@@ -494,7 +494,7 @@ func TestNodeStatusResponse(t *testing.T) {
 // TestStoreStatusResponse verifies that node status returns the expected
 // results.
 func TestStoreStatusResponse(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
 	defer ts.Stop()
 
@@ -545,7 +545,7 @@ func TestStoreStatusResponse(t *testing.T) {
 // TestMetricsRecording verifies that Node statistics are periodically recorded
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tsrv := TestServer{}
 	tsrv.Ctx = NewTestContext()
 	tsrv.Ctx.MetricsFrequency = 5 * time.Millisecond

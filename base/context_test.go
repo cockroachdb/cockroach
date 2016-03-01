@@ -25,7 +25,7 @@ import (
 )
 
 func TestClientSSLSettings(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	certsDir := security.EmbeddedCertsDir
 
 	testCases := []struct {
@@ -72,7 +72,7 @@ func TestClientSSLSettings(t *testing.T) {
 }
 
 func TestServerSSLSettings(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	certsDir := security.EmbeddedCertsDir
 
 	testCases := []struct {

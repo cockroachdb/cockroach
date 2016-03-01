@@ -31,7 +31,7 @@ import (
 )
 
 func TestSchemaChangeLease(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	server, sqlDB, _ := setup(t)
 	defer cleanup(server, sqlDB)
 
@@ -112,7 +112,7 @@ func validExpirationTime(expirationTime int64) bool {
 }
 
 func TestSchemaChangeProcess(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
@@ -279,7 +279,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 }
 
 func TestAsyncSchemaChanger(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Disable synchronous schema change execution so
 	// the asynchronous schema changer executes all
 	// schema changes.

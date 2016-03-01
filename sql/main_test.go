@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func init() {
@@ -38,10 +37,6 @@ func init() {
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
-}
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.

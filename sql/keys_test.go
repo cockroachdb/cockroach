@@ -25,7 +25,7 @@ import (
 )
 
 func TestNormalizeName(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		in, expected string
 	}{
@@ -42,7 +42,7 @@ func TestNormalizeName(t *testing.T) {
 }
 
 func TestKeyAddress(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		key roachpb.Key
 	}{

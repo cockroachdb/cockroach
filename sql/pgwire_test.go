@@ -50,7 +50,7 @@ func trivialQuery(pgURL url.URL) error {
 }
 
 func TestPGWire(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	certUser := server.TestUser
 	certPath := security.ClientCertPath(security.EmbeddedCertsDir, certUser)
@@ -161,7 +161,7 @@ func TestPGWire(t *testing.T) {
 }
 
 func TestPGWireDBName(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	s := server.StartTestServer(t)
 	defer s.Stop()
@@ -196,7 +196,7 @@ func TestPGWireDBName(t *testing.T) {
 }
 
 func TestPGPrepareFail(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	s := server.StartTestServer(t)
 	defer s.Stop()
@@ -260,7 +260,7 @@ func (p preparedQueryTest) Error(err string) preparedQueryTest {
 }
 
 func TestPGPreparedQuery(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var base preparedQueryTest
 	queryTests := map[string][]preparedQueryTest{
 		"SELECT $1 > 0": {
@@ -459,7 +459,7 @@ func (p preparedExecTest) Error(err string) preparedExecTest {
 }
 
 func TestPGPreparedExec(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	var base preparedExecTest
 	execTests := []struct {
 		query string
@@ -582,7 +582,7 @@ func TestPGPreparedExec(t *testing.T) {
 // Names should be qualified automatically during Prepare when a database name
 // was given in the connection string.
 func TestPGPrepareNameQual(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -632,7 +632,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -673,7 +673,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 // Unfortunately cockroachdb/pq doesn't expose returned command tags directly, but we can test
 // the methods where it depends on their values (Begin, Commit, RowsAffected for INSERTs).
 func TestPGCommandTags(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -766,7 +766,7 @@ func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesI
 }
 
 func TestPGWireMetrics(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	s := server.StartTestServer(t)
 	defer s.Stop()
@@ -833,7 +833,7 @@ func TestPGWireMetrics(t *testing.T) {
 }
 
 func TestPrepareSyntax(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	s := server.StartTestServer(t)
 	defer s.Stop()

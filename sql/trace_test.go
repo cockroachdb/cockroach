@@ -81,7 +81,7 @@ func prettyPrint(m [][]string) string {
 }
 
 func TestExplainTrace(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, sqlDB, _ := setup(t)
 	defer cleanup(s, sqlDB)
 

@@ -244,7 +244,7 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 // TestRangeContains verifies that the range uses Key.Address() in
 // order to properly resolve addresses for local keys.
 func TestRangeContains(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
@@ -306,7 +306,7 @@ func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 // different read consistencies. Note that this unittest plays
 // fast and loose with granting leader leases.
 func TestRangeReadConsistency(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -382,7 +382,7 @@ func TestRangeReadConsistency(t *testing.T) {
 // command the proposing node no longer holds the leader lease, an error is
 // returned. This prevents regression of #1483.
 func TestApplyCmdLeaseError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -423,7 +423,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 }
 
 func TestRangeRangeBoundsChecking(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -446,7 +446,7 @@ func hasLease(rng *Replica, timestamp roachpb.Timestamp) (bool, bool) {
 }
 
 func TestRangeLeaderLease(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -511,7 +511,7 @@ func TestRangeLeaderLease(t *testing.T) {
 }
 
 func TestRangeNotLeaderError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -572,7 +572,7 @@ func TestRangeNotLeaderError(t *testing.T) {
 // TestRangeGossipConfigsOnLease verifies that config info is gossiped
 // upon acquisition of the leader lease.
 func TestRangeGossipConfigsOnLease(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -657,7 +657,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 // lease after not holding it and it is not set when the node is
 // granted the leader lease when it was the last holder.
 func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -726,7 +726,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 // TODO(mrtracy): This should probably be tested in client_raft_test package,
 // using a real second store.
 func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -760,7 +760,7 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -786,7 +786,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 
 // TestRangeGossipAllConfigs verifies that all config types are gossiped.
 func TestRangeGossipAllConfigs(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -821,7 +821,7 @@ func maybeWrapWithBeginTransaction(sender client.Sender, ctx context.Context, he
 // TestRangeNoGossipConfig verifies that certain commands (e.g.,
 // reads, writes in uncommitted transactions) do not trigger gossip.
 func TestRangeNoGossipConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -866,7 +866,7 @@ func TestRangeNoGossipConfig(t *testing.T) {
 // TestRangeNoGossipFromNonLeader verifies that a non-leader replica
 // does not gossip configurations.
 func TestRangeNoGossipFromNonLeader(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1064,7 +1064,7 @@ func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roa
 // TestAcquireLeaderLease verifies that the leader lease is acquired
 // for read and write methods.
 func TestAcquireLeaderLease(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	gArgs := getArgs([]byte("a"))
 	pArgs := putArgs([]byte("b"), []byte("1"))
@@ -1105,7 +1105,7 @@ func TestAcquireLeaderLease(t *testing.T) {
 // TestRangeUpdateTSCache verifies that reads and writes update the
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1154,7 +1154,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // pending commands to complete through Raft before being executed on
 // range.
 func TestRangeCommandQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
@@ -1270,7 +1270,7 @@ func TestRangeCommandQueue(t *testing.T) {
 // TestRangeCommandQueueInconsistent verifies that inconsistent reads need
 // not wait for pending commands to complete through Raft.
 func TestRangeCommandQueueInconsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer func() { TestingCommandFilter = nil }()
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{}, 1)
@@ -1342,7 +1342,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 // TestRangeUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestRangeUseTSCache(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1371,7 +1371,7 @@ func TestRangeUseTSCache(t *testing.T) {
 // TestRangeNoTSCacheInconsistent verifies that the timestamp cache
 // is not affected by inconsistent reads.
 func TestRangeNoTSCacheInconsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1405,7 +1405,7 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 // commands do not update the timestamp cache if they result in
 // failure.
 func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1453,7 +1453,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 // read and write commands within the same transaction do not cause
 // the write to receive an incremented timestamp.
 func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1515,7 +1515,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 // client in the event that a sequence cache entry is found but is not
 // decodable.
 func TestRangeSequenceCacheReadError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1554,7 +1554,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 // TestRangeSequenceCacheStoredError verifies that if a cached entry is present,
 // a transaction restart error is returned.
 func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1613,7 +1613,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 // TestEndTransactionDeadline verifies that EndTransaction respects the
 // transaction deadline.
 func TestEndTransactionDeadline(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1679,7 +1679,7 @@ func TestEndTransactionDeadline(t *testing.T) {
 // TestEndTransactionWithMalformedSplitTrigger verifies an
 // EndTransaction call with a malformed commit trigger fails.
 func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1714,7 +1714,7 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 // TestEndTransactionBeforeHeartbeat verifies that a transaction
 // can be committed/aborted before being heartbeat.
 func TestEndTransactionBeforeHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Don't automatically GC the Txn record: We want to heartbeat the
 	// committed Transaction and compare it against our expectations.
 	// When it's removed, the heartbeat would recreate it.
@@ -1768,7 +1768,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 // TestEndTransactionAfterHeartbeat verifies that a transaction
 // can be committed/aborted after being heartbeat.
 func TestEndTransactionAfterHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1823,7 +1823,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 // greater than the transaction timestamp, depending on the isolation
 // level.
 func TestEndTransactionWithPushedTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1888,7 +1888,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 // TestEndTransactionWithIncrementedEpoch verifies that txn ended with
 // a higher epoch (and priority) correctly assumes the higher epoch.
 func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1937,7 +1937,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 // are checked such as transaction already being committed or
 // aborted, or timestamp or epoch regression.
 func TestEndTransactionWithErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1986,7 +1986,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 // garbage-collected upon EndTransaction iff all of the supplied intents are
 // local relative to the transaction record's location.
 func TestEndTransactionLocalGC(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	defer func() { TestingCommandFilter = nil }()
 	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
@@ -2080,7 +2080,7 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey
 // TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
 // request resolves only local intents within the same batch.
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
@@ -2121,7 +2121,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 // external intents of a transaction after EndTransaction, the transaction and
 // sequence cache records are purged on the local range (and only there).
 func TestEndTransactionDirectGC(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
@@ -2156,7 +2156,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 // TestEndTransactionDirectGCFailure verifies that no immediate GC takes place
 // if external intents can't be resolved (see also TestEndTransactionDirectGC).
 func TestEndTransactionDirectGCFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
@@ -2194,7 +2194,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 // TestEndTransactionDirectGC_1PC runs a test similar to TestEndTransactionDirectGC
 // for the case of a transaction which is contained in a single batch.
 func TestEndTransactionDirectGC_1PC(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	for _, commit := range []bool{true, false} {
 		func() {
 			tc := testContext{}
@@ -2230,7 +2230,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 // poisoned and the pushee is presented with a txn retry or abort on its next
 // contact with the Range in the same epoch.
 func TestSequenceCachePoisonOnResolve(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	key := roachpb.Key("a")
 
 	// Isolation of the pushee and whether we're going to abort it.
@@ -2338,7 +2338,7 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 // TestSequenceCacheError verifies that roachpb.Errors returned by checkSequenceCache
 // have txns that are identical to txns stored in Transaction{Retry,Aborted}Error.
 func TestSequenceCacheError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2386,7 +2386,7 @@ func TestSequenceCacheError(t *testing.T) {
 
 // TestPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestPushTxnBadKey(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2405,7 +2405,7 @@ func TestPushTxnBadKey(t *testing.T) {
 // TestPushTxnAlreadyCommittedOrAborted verifies success
 // (noop) in event that pushee is already committed or aborted.
 func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// This test simulates running into an open intent and resolving it using
 	// the transaction record. If we auto-gc'ed entries here, the entry would
 	// be deleted and the intents resolved instantaneously on successful commit
@@ -2454,7 +2454,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 // epoch and timestamp if greater. In all test cases, the
 // priorities are set such that the push will succeed.
 func TestPushTxnUpgradeExistingTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2515,7 +2515,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 // hasn't been heartbeat within 2x the heartbeat interval can be
 // pushed/aborted.
 func TestPushTxnHeartbeatTimeout(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2592,7 +2592,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 // are ordered by txn timestamp, with the more recent timestamp
 // being pushable.
 func TestPushTxnPriorities(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2662,7 +2662,7 @@ func TestPushTxnPriorities(t *testing.T) {
 // PENDING, but has its txn Timestamp moved forward to the pusher's
 // txn Timestamp + 1.
 func TestPushTxnPushTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2705,7 +2705,7 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 // noop. We do this by ensuring that priorities would otherwise make
 // pushing impossible.
 func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2742,7 +2742,7 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 
 // TestRangeResolveIntentRange verifies resolving a range of intents.
 func TestRangeResolveIntentRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2799,7 +2799,7 @@ func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.M
 // in the right ways, not the exact amounts. If the encodings change,
 // will need to update this test.
 func TestRangeStatsComputation(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -2862,7 +2862,7 @@ func TestRangeStatsComputation(t *testing.T) {
 // robustly at the engine level; this test is intended only to show
 // that values passed to Merge are being merged.
 func TestMerge(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2902,7 +2902,7 @@ func TestMerge(t *testing.T) {
 // prefix of the raft logs (modifying FirstIndex() and making them
 // inaccessible via Entries()).
 func TestTruncateLog(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3007,7 +3007,7 @@ func TestTruncateLog(t *testing.T) {
 // TestConditionFailedError tests that a ConditionFailedError correctly
 // bubbles up from MVCC to Range.
 func TestConditionFailedError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3044,7 +3044,7 @@ func TestConditionFailedError(t *testing.T) {
 // TestReplicaSetsEqual tests to ensure that intersectReplicaSets
 // returns the correct responses.
 func TestReplicaSetsEqual(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expected bool
 		a        []roachpb.ReplicaDescriptor
@@ -3071,7 +3071,7 @@ func TestReplicaSetsEqual(t *testing.T) {
 }
 
 func TestAppliedIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3105,7 +3105,7 @@ func TestAppliedIndex(t *testing.T) {
 // TestReplicaCorruption verifies that a replicaCorruptionError correctly marks
 // the range as corrupt.
 func TestReplicaCorruption(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	defer func() { TestingCommandFilter = nil }()
 	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
@@ -3138,7 +3138,7 @@ func TestReplicaCorruption(t *testing.T) {
 // TestChangeReplicasDuplicateError tests that a replica change that would
 // use a NodeID twice in the replica configuration fails.
 func TestChangeReplicasDuplicateError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3162,7 +3162,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // descriptor we would've otherwise discarded in a reverse scan; verify that
 // we don't erroneously return that descriptor (recently fixed bug) if the
 func TestRangeDanglingMetaIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	// Test RangeLookup with Scan.
 	testRangeDanglingMetaIntent(t, false)
 	// Test RangeLookup with ReverseScan.
@@ -3275,7 +3275,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 // TestRangeLookupUseReverseScan verifies the correctness of the results which are retrieved
 // from RangeLookup by using ReverseScan.
 func TestRangeLookupUseReverseScan(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3393,7 +3393,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 }
 
 func TestRangeLookup(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3504,7 +3504,7 @@ func BenchmarkWriteCmdWithEventsAndConsumer(b *testing.B) {
 // TestRequestLeaderEncounterGroupDeleteError verifies that a request leader proposal which fails with
 // RaftGroupDeletedError is converted to a RangeNotFoundError in the Store.
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		rng: &Replica{},
 	}
@@ -3538,7 +3538,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 }
 
 func TestIntentIntersect(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	iPt := roachpb.Span{
 		Key:    roachpb.Key("asd"),
 		EndKey: nil,
@@ -3606,7 +3606,7 @@ func TestIntentIntersect(t *testing.T) {
 // batch results in an error with an index, the index of this command
 // is stored into the error.
 func TestBatchErrorWithIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3639,7 +3639,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 // TestReplicaLoadSystemConfigSpanIntent verifies that intents on the SystemConfigSpan
 // cause an error, but trigger asynchronous cleanup.
 func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3681,7 +3681,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 }
 
 func TestReplicaDestroy(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3711,7 +3711,7 @@ func TestReplicaDestroy(t *testing.T) {
 }
 
 func TestEntries(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3832,7 +3832,7 @@ func TestEntries(t *testing.T) {
 }
 
 func TestTerm(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -3915,7 +3915,7 @@ func TestTerm(t *testing.T) {
 }
 
 func TestGCIncorrectRange(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

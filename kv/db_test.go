@@ -46,7 +46,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 // TestKVDBCoverage verifies that all methods may be invoked on the
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -151,7 +151,7 @@ func TestKVDBCoverage(t *testing.T) {
 }
 
 func TestKVDBInternalMethods(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -191,7 +191,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 // TestKVDBTransaction verifies that transactions work properly over
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
@@ -238,7 +238,7 @@ func TestKVDBTransaction(t *testing.T) {
 
 // TestAuthentication tests authentication for the KV endpoint.
 func TestAuthentication(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	t.Skip("#4653")
 	s := server.StartTestServer(t)
 	defer s.Stop()

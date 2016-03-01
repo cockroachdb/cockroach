@@ -103,7 +103,7 @@ func createTestNotifyClient(stopper *stop.Stopper, addr string, priority roachpb
 // where the non-transactional put can push the txn, we expect the
 // transaction's value to be written after all retries are complete.
 func TestClientRetryNonTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	s.SetRangeRetryOptions(retry.Options{
@@ -237,7 +237,7 @@ func setTxnRetryBackoff(backoff time.Duration) func() {
 // TestClientRunTransaction verifies some simple transaction isolation
 // semantics.
 func TestClientRunTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	defer setTxnRetryBackoff(1 * time.Millisecond)()
@@ -298,7 +298,7 @@ func TestClientRunTransaction(t *testing.T) {
 // TestClientGetAndPutProto verifies gets and puts of protobufs using the
 // client's convenience methods.
 func TestClientGetAndPutProto(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -329,7 +329,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 // TestClientGetAndPut verifies gets and puts of using the client's convenience
 // methods.
 func TestClientGetAndPut(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -356,7 +356,7 @@ func TestClientGetAndPut(t *testing.T) {
 // gob codec because gob treats pointer values and non-pointer values
 // as equivalent and elides zero-valued defaults on decode.
 func TestClientEmptyValues(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -386,7 +386,7 @@ func TestClientEmptyValues(t *testing.T) {
 // results.
 // TODO(tschottdorf): some assertions disabled, see #1891.
 func TestClientBatch(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -606,7 +606,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 // for the concrete situation described in:
 // https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
 func TestConcurrentIncrements(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
@@ -623,7 +623,7 @@ func TestConcurrentIncrements(t *testing.T) {
 
 // TestClientPermissions verifies permission enforcement.
 func TestClientPermissions(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
