@@ -32,8 +32,9 @@ import (
 // installed on the underlying persistent storage before a cockroach store can
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
-	descs  []metadataDescriptor
-	tables []metadataTable
+	descs   []metadataDescriptor
+	tables  []metadataTable
+	otherKV []roachpb.KeyValue
 }
 
 type metadataDescriptor struct {
@@ -130,6 +131,10 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 		desc := createTableDescriptor(tbl.id, dbID, tbl.definition, tbl.privileges)
 		addDescriptor(dbID, &desc)
 	}
+
+	// Other key/value generation that doesn't fit into databases and
+	// tables. This can be used to add initial entries to a table.
+	ret = append(ret, ms.otherKV...)
 
 	// Sort returned key values; this is valuable because it matches the way the
 	// objects would be sorted if read from the engine.

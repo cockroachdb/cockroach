@@ -29,7 +29,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-var minimumStoreSize = 10 * uint64(config.DefaultZoneConfig.RangeMaxBytes)
+var minimumStoreSize = 10 * uint64(config.DefaultZoneConfig().RangeMaxBytes)
 
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.

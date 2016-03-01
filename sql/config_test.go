@@ -89,6 +89,22 @@ func TestGetZoneConfig(t *testing.T) {
 
 	expectedCounter := uint32(keys.MaxReservedDescID + 1)
 
+	defaultZoneConfig := config.DefaultZoneConfig()
+	defaultZoneConfig.RangeMinBytes = 1 << 20
+	defaultZoneConfig.RangeMaxBytes = 1 << 20
+	defaultZoneConfig.GC.TTLSeconds = 60
+
+	{
+		buf, err := proto.Marshal(&defaultZoneConfig)
+		if err != nil {
+			t.Fatal(err)
+		}
+		objID := keys.RootNamespaceID
+		if _, err = sqlDB.Exec(`UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf); err != nil {
+			t.Fatalf("problem writing zone %+v: %s", defaultZoneConfig, err)
+		}
+	}
+
 	// Naming scheme for database and tables:
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
@@ -134,18 +150,18 @@ func TestGetZoneConfig(t *testing.T) {
 	// We have no custom zone configs.
 	testCases := []struct {
 		key     roachpb.RKey
-		zoneCfg config.ZoneConfig
+		zoneCfg *config.ZoneConfig
 	}{
-		{roachpb.RKeyMin, *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(0), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(db1), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(db2), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(tb11), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(tb12), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(tb21), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(tb22), *config.DefaultZoneConfig},
+		{roachpb.RKeyMin, &defaultZoneConfig},
+		{keys.MakeTablePrefix(0), &defaultZoneConfig},
+		{keys.MakeTablePrefix(1), &defaultZoneConfig},
+		{keys.MakeTablePrefix(keys.MaxReservedDescID), &defaultZoneConfig},
+		{keys.MakeTablePrefix(db1), &defaultZoneConfig},
+		{keys.MakeTablePrefix(db2), &defaultZoneConfig},
+		{keys.MakeTablePrefix(tb11), &defaultZoneConfig},
+		{keys.MakeTablePrefix(tb12), &defaultZoneConfig},
+		{keys.MakeTablePrefix(tb21), &defaultZoneConfig},
+		{keys.MakeTablePrefix(tb22), &defaultZoneConfig},
 	}
 
 	for tcNum, tc := range testCases {
@@ -154,7 +170,7 @@ func TestGetZoneConfig(t *testing.T) {
 			t.Fatalf("#%d: err=%s", tcNum, err)
 		}
 
-		if !reflect.DeepEqual(*zoneCfg, tc.zoneCfg) {
+		if !reflect.DeepEqual(zoneCfg, tc.zoneCfg) {
 			t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
 		}
 	}
@@ -189,18 +205,18 @@ func TestGetZoneConfig(t *testing.T) {
 
 	testCases = []struct {
 		key     roachpb.RKey
-		zoneCfg config.ZoneConfig
+		zoneCfg *config.ZoneConfig
 	}{
-		{roachpb.RKeyMin, *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(0), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(1), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(keys.MaxReservedDescID), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(db1), db1Cfg},
-		{keys.MakeTablePrefix(db2), *config.DefaultZoneConfig},
-		{keys.MakeTablePrefix(tb11), tb11Cfg},
-		{keys.MakeTablePrefix(tb12), db1Cfg},
-		{keys.MakeTablePrefix(tb21), tb21Cfg},
-		{keys.MakeTablePrefix(tb22), *config.DefaultZoneConfig},
+		{roachpb.RKeyMin, &defaultZoneConfig},
+		{keys.MakeTablePrefix(0), &defaultZoneConfig},
+		{keys.MakeTablePrefix(1), &defaultZoneConfig},
+		{keys.MakeTablePrefix(keys.MaxReservedDescID), &defaultZoneConfig},
+		{keys.MakeTablePrefix(db1), &db1Cfg},
+		{keys.MakeTablePrefix(db2), &defaultZoneConfig},
+		{keys.MakeTablePrefix(tb11), &tb11Cfg},
+		{keys.MakeTablePrefix(tb12), &db1Cfg},
+		{keys.MakeTablePrefix(tb21), &tb21Cfg},
+		{keys.MakeTablePrefix(tb22), &defaultZoneConfig},
 	}
 
 	for tcNum, tc := range testCases {
@@ -209,7 +225,7 @@ func TestGetZoneConfig(t *testing.T) {
 			t.Fatalf("#%d: err=%s", tcNum, err)
 		}
 
-		if !reflect.DeepEqual(*zoneCfg, tc.zoneCfg) {
+		if !reflect.DeepEqual(zoneCfg, tc.zoneCfg) {
 			t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
 		}
 	}
