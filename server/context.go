@@ -185,6 +185,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.BalanceMode = defaultBalanceMode
+	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})
 }
 
 // InitStores initializes ctx.Engines based on ctx.Stores.
@@ -192,7 +193,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
 	// are split evenly if there are multiple stores, but we aren't doing that
 	// currently.
-	for _, spec := range ctx.Stores {
+	for _, spec := range ctx.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
