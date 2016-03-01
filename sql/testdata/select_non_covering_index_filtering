@@ -1,0 +1,105 @@
+# These tests verify that while we are joining an index with the table, we
+# evaluate what parts of the filter we can using the columns in the index
+# to avoid unnecessary lookups in the table.
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  s STRING,
+  INDEX bc (b, c)
+)
+
+statement ok
+INSERT INTO t VALUES
+  (1, 1, 1, '11'),
+  (2, 1, 2, '12'),
+  (3, 1, 3, '13'),
+  (4, 2, 1, '21'),
+  (5, 2, 2, '22'),
+  (6, 2, 3, '23'),
+  (7, 3, 1, '31'),
+  (8, 3, 2, '32'),
+  (9, 3, 3, '33')
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE b = 2 AND c % 2 = 0
+----
+0 index-join
+1 scan       t@bc /2-/3
+1 scan       t@primary
+
+# We do NOT look up the table row for '21' and '23'.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
+----
+0 /t/bc/2/1/4    NULL FILTERED
+1 /t/bc/2/2/5    NULL PARTIAL
+0 /t/primary/5   NULL PARTIAL
+0 /t/primary/5/b 2    PARTIAL
+0 /t/primary/5/c 2    PARTIAL
+0 /t/primary/5/s '22' ROW
+2 /t/bc/2/3/6    NULL FILTERED
+
+query ITT
+EXPLAIN SELECT * FROM t WHERE b = 2 AND c != b
+----
+0 index-join
+1 scan       t@bc /2-/3
+1 scan       t@primary
+
+# We do NOT look up the table row for '22'.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c != b
+----
+0 /t/bc/2/1/4    NULL PARTIAL
+0 /t/primary/4   NULL PARTIAL
+0 /t/primary/4/b 2    PARTIAL
+0 /t/primary/4/c 1    PARTIAL
+0 /t/primary/4/s '21' ROW
+1 /t/bc/2/2/5    NULL FILTERED
+2 /t/bc/2/3/6    NULL PARTIAL
+1 /t/primary/6   NULL PARTIAL
+1 /t/primary/6/b 2    PARTIAL
+1 /t/primary/6/c 3    PARTIAL
+1 /t/primary/6/s '23' ROW
+
+# We do NOT look up the table row for '22'.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c != b AND s <> '21'
+----
+0 /t/bc/2/1/4    NULL PARTIAL
+0 /t/primary/4   NULL PARTIAL
+0 /t/primary/4/b 2    PARTIAL
+0 /t/primary/4/c 1    PARTIAL
+0 /t/primary/4/s '21' FILTERED
+1 /t/bc/2/2/5    NULL FILTERED
+2 /t/bc/2/3/6    NULL PARTIAL
+1 /t/primary/6   NULL PARTIAL
+1 /t/primary/6/b 2    PARTIAL
+1 /t/primary/6/c 3    PARTIAL
+1 /t/primary/6/s '23' ROW
+
+# We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM t WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))
+----
+0 /t/bc/2/1/4    NULL FILTERED
+1 /t/bc/2/2/5    NULL FILTERED
+2 /t/bc/2/3/6    NULL PARTIAL
+0 /t/primary/6   NULL PARTIAL
+0 /t/primary/6/b 2    PARTIAL
+0 /t/primary/6/c 3    PARTIAL
+0 /t/primary/6/s '23' FILTERED
+3 /t/bc/3/1/7    NULL FILTERED
+4 /t/bc/3/2/8    NULL PARTIAL
+1 /t/primary/8   NULL PARTIAL
+1 /t/primary/8/b 3    PARTIAL
+1 /t/primary/8/c 2    PARTIAL
+1 /t/primary/8/s '32' FILTERED
+5 /t/bc/3/3/9    NULL PARTIAL
+2 /t/primary/9   NULL PARTIAL
+2 /t/primary/9/b 3    PARTIAL
+2 /t/primary/9/c 3    PARTIAL
+2 /t/primary/9/s '33' ROW

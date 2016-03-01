@@ -83,9 +83,16 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 		}
 		table.filter = exprConvertVars(indexScan.filter, convFunc)
 
-		// TODO(radu): the join node should be aware of any filtering expressions that refer only to
-		// columns in the index to filter out rows during the join.
-		indexScan.filter = nil
+		// Now we split the filter by extracting the part that can be evaluated using just the index
+		// columns.
+		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
+			colIdx := expr.(*scanQValue).colIdx
+			if !indexScan.valNeededForCol[colIdx] {
+				return false, nil
+			}
+			return true, indexScan.getQValue(colIdx)
+		}
+		indexScan.filter, table.filter = splitFilter(table.filter, splitFunc)
 	}
 
 	indexScan.initOrdering(exactPrefix)
