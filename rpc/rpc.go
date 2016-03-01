@@ -21,7 +21,6 @@ type Context struct {
 	RemoteClocks      *RemoteClockMonitor
 	DisableCache      bool // Disable client cache when calling NewClient()
 	DisableReconnects bool // Disable client reconnects
-	HealthWait        time.Duration
 
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
@@ -37,7 +36,6 @@ func NewContext(context *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 		localClock:   clock,
 		Stopper:      stopper,
 		RemoteClocks: newRemoteClockMonitor(clock),
-		HealthWait:   5 * time.Second,
 	}
 	return ctx
 }
