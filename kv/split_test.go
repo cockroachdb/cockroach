@@ -175,9 +175,9 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Override default zone config.
-	previousMaxBytes := config.DefaultZoneConfig.RangeMaxBytes
-	config.DefaultZoneConfig.RangeMaxBytes = 1 << 18
-	defer func() { config.DefaultZoneConfig.RangeMaxBytes = previousMaxBytes }()
+	cfg := config.DefaultZoneConfig()
+	cfg.RangeMaxBytes = 1 << 18
+	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	s := createTestDB(t)
 	// This is purely to silence log spam.

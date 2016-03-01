@@ -16,7 +16,10 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/config"
+import (
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/keys"
+)
 
 func init() {
 	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
@@ -48,9 +51,10 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, erro
 			// This is a table descriptor. Lookup its parent database zone config.
 			return GetZoneConfig(cfg, uint32(tableDesc.ParentID))
 		}
+		// The default zone config is stored under ID 0 (the root namespace ID).
+		return GetZoneConfig(cfg, keys.RootNamespaceID)
 	}
 
-	// No descriptor or not a table. This table/db could have been deleted, just
-	// return the default config.
-	return config.DefaultZoneConfig, nil
+	// No descriptor or not a table.
+	return nil, nil
 }

@@ -321,6 +321,11 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
+	if isSystemConfigID(tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		p.txn.SetSystemConfigTrigger()
+	}
+
 	if autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction

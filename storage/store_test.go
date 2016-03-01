@@ -835,11 +835,11 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin, nil),
-			config.DefaultZoneConfig.RangeMaxBytes},
+			config.DefaultZoneConfig().RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(baseID), t),
 			1 << 20},
 		{splitTestRange(store, keys.MakeTablePrefix(baseID), keys.MakeTablePrefix(baseID+1), t),
-			config.DefaultZoneConfig.RangeMaxBytes},
+			config.DefaultZoneConfig().RangeMaxBytes},
 		{splitTestRange(store, keys.MakeTablePrefix(baseID+1), keys.MakeTablePrefix(baseID+2), t),
 			2 << 20},
 	}

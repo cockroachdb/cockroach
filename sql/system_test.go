@@ -32,7 +32,7 @@ func TestInitialKeys(t *testing.T) {
 	ms := sql.MakeMetadataSchema()
 	// IDGenerator + 2 for each system object in the default schema.
 	kv := ms.GetInitialValues()
-	if actual, expected := len(kv), 3+2*sql.NumSystemDescriptors; actual != expected {
+	if actual, expected := len(kv), 4+2*sql.NumSystemDescriptors; actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
 
@@ -42,7 +42,7 @@ func TestInitialKeys(t *testing.T) {
 		privilege.List{privilege.ALL})
 	kv = ms.GetInitialValues()
 	// IDGenerator + 2 for each descriptor in the schema.
-	if actual, expected := len(kv), 1+2*ms.DescriptorCount(); actual != expected {
+	if actual, expected := len(kv), 2+2*ms.DescriptorCount(); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
 

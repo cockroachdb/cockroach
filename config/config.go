@@ -36,16 +36,16 @@ const (
 )
 
 var (
-	// DefaultZoneConfig is the default zone configuration
-	// used when no custom config has been specified.
-	DefaultZoneConfig = &ZoneConfig{
+	// defaultZoneConfig is the default zone configuration used when no custom
+	// config has been specified.
+	defaultZoneConfig = ZoneConfig{
 		ReplicaAttrs: []roachpb.Attributes{
 			{},
 			{},
 			{},
 		},
-		RangeMinBytes: 1048576,
-		RangeMaxBytes: 67108864,
+		RangeMinBytes: 1 << 20,
+		RangeMaxBytes: 64 << 20,
 		GC: GCPolicy{
 			TTLSeconds: 24 * 60 * 60, // 1 day
 		},
@@ -88,6 +88,29 @@ func TestingTableSplitsDisabled() bool {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	return testingDisableTableSplits
+}
+
+// DefaultZoneConfig is the default zone configuration used when no custom
+// config has been specified.
+func DefaultZoneConfig() ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return defaultZoneConfig
+}
+
+// TestingSetDefaultZoneConfig is a testing-only function that changes the
+// default zone config and returns a function that reverts the change.
+func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
+	testingLock.Lock()
+	oldConfig := defaultZoneConfig
+	defaultZoneConfig = cfg
+	testingLock.Unlock()
+
+	return func() {
+		testingLock.Lock()
+		defaultZoneConfig = oldConfig
+		testingLock.Unlock()
+	}
 }
 
 // Validate verifies some ZoneConfig fields.
@@ -268,11 +291,15 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 // GetZoneConfigForKey looks up the zone config for the range containing 'key'.
 // It is the caller's responsibility to ensure that the range does not need to be split.
 func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
-	if objectID, ok := ObjectIDForKey(key); ok {
-		return s.getZoneConfigForID(objectID)
+	objectID, ok := ObjectIDForKey(key)
+	if !ok {
+		// Not in the structured data namespace.
+		objectID = keys.RootNamespaceID
+	} else if objectID <= keys.MaxReservedDescID {
+		// For now, only user databases and tables get custom zone configs.
+		objectID = keys.RootNamespaceID
 	}
-	// Not in the structured data namespace.
-	return DefaultZoneConfig, nil
+	return s.getZoneConfigForID(objectID)
 }
 
 // getZoneConfigForID looks up the zone config for the object (table or database)
@@ -284,11 +311,10 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
 	if hook == nil {
 		return nil, util.Errorf("ZoneConfigHook not set, unable to lookup zone config")
 	}
-	// For now, only user databases and tables get custom zone configs.
-	if id <= keys.MaxReservedDescID {
-		return DefaultZoneConfig, nil
+	if cfg, err := hook(s, id); cfg != nil || err != nil {
+		return cfg, err
 	}
-	return hook(s, id)
+	return &defaultZoneConfig, nil
 }
 
 // ComputeSplitKeys takes a start and end key and returns an array of keys
