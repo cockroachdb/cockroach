@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"time"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
@@ -286,7 +285,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-func (n *Node) start(grpcServer *grpc.Server, addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
+func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
 	n.initDescriptor(addr, attrs)
 
 	// Initialize stores, including bootstrapping new ones.
@@ -322,8 +321,6 @@ func (n *Node) start(grpcServer *grpc.Server, addr net.Addr, engines []engine.En
 
 	n.startComputePeriodicMetrics(n.stopper)
 	n.startGossip(n.stopper)
-
-	roachpb.RegisterNodeServer(grpcServer, n)
 
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil

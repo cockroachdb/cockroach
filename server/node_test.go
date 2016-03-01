@@ -97,6 +97,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper, kv.NewTxnMetrics(metric.NewRegistry()))
+	roachpb.RegisterNodeServer(grpcServer, node)
 	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
 
@@ -104,7 +105,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(grpcServer, addr, engines, roachpb.Attributes{}); err != nil {
+	if err := node.start(addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
@@ -271,9 +272,9 @@ func TestNodeJoinSelf(t *testing.T) {
 	defer engineStopper.Stop()
 	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
 	addr := util.CreateTestAddr("tcp")
-	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, addr, t)
+	_, addr, _, node, stopper := createTestNode(addr, engines, addr, t)
 	defer stopper.Stop()
-	err := node.start(grpcServer, addr, engines, roachpb.Attributes{})
+	err := node.start(addr, engines, roachpb.Attributes{})
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
 	}
@@ -301,9 +302,9 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	server, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	_, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	stopper.Stop()
-	if err := node.start(server, serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
+	if err := node.start(serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
 }
