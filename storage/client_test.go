@@ -914,9 +914,8 @@ func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.M
 	return nil
 }
 
-func verifyRecomputedStats(store *storage.Store, d *roachpb.RangeDescriptor, expMS engine.MVCCStats) error {
-	now := store.Clock().Timestamp()
-	if ms, err := storage.ComputeStatsForRange(d, store.Engine(), now.WallTime); err != nil {
+func verifyRecomputedStats(eng engine.Engine, d *roachpb.RangeDescriptor, expMS engine.MVCCStats) error {
+	if ms, err := storage.ComputeStatsForRange(d, eng, 0); err != nil {
 		return err
 	} else if expMS != ms {
 		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)

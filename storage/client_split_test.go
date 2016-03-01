@@ -413,11 +413,13 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	writeRandomDataToRange(t, store, rng.RangeID, keyPrefix)
 
 	// Get the range stats now that we have data.
+	snap := store.Engine().NewSnapshot()
+	defer snap.Close()
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(snap, rng.RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyRecomputedStats(store, rng.Desc(), ms); err != nil {
+	if err := verifyRecomputedStats(snap, rng.Desc(), ms); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
 
@@ -432,12 +434,14 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	snap = store.Engine().NewSnapshot()
+	defer snap.Close()
 	var msLeft, msRight engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID, &msLeft); err != nil {
+	if err := engine.MVCCGetRangeStats(snap, rng.RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupReplica(midKey, nil)
-	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.RangeID, &msRight); err != nil {
+	if err := engine.MVCCGetRangeStats(snap, rngRight.RangeID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -458,10 +462,10 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(store, rng.Desc(), msLeft); err != nil {
+	if err := verifyRecomputedStats(snap, rng.Desc(), msLeft); err != nil {
 		t.Fatalf("failed to verify left range's stats after split: %v", err)
 	}
-	if err := verifyRecomputedStats(store, rngRight.Desc(), msRight); err != nil {
+	if err := verifyRecomputedStats(snap, rngRight.Desc(), msRight); err != nil {
 		t.Fatalf("failed to verify right range's stats after split: %v", err)
 	}
 }
