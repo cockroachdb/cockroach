@@ -73,7 +73,6 @@
 		ChangeReplicasTrigger
 		ModifiedSpanTrigger
 		InternalCommitTrigger
-		NodeWithTimestamp
 		TxnMeta
 		Transaction
 		Intent

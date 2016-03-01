@@ -163,9 +163,13 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	if ba.Txn != nil {
 		// For calls that read data within a txn, we keep track of timestamps
 		// observed from the various participating nodes' HLC clocks. If we have
-		// a timestamp on file which is smaller then MaxTimestamp, we can lower
-		// MaxTimestamp accordingly. If MaxTimestamp drops below OrigTimestamp,
-		// we effectively can't see uncertainty restarts any more.
+		// a timestamp on file for this Node which is smaller than MaxTimestamp,
+		// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
+		// OrigTimestamp, we effectively can't see uncertainty restarts any
+		// more.
+		// Note that it's not an issue if MaxTimestamp propagates back out to
+		// the client via a returned Transaction update - when updating a Txn
+		// from another, the larger MaxTimestamp wins.
 		if maxTS := ba.Txn.GetUncertainty(ba.Replica.NodeID); maxTS.Less(ba.Txn.MaxTimestamp) {
 			// Copy-on-write to protect others we might be sharing the Txn with.
 			shallowTxn := *ba.Txn
