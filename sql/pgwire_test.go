@@ -211,16 +211,18 @@ func TestPGPrepareFail(t *testing.T) {
 	defer db.Close()
 
 	testFailures := map[string]string{
-		"SELECT $1 = $1":                           "pq: unsupported comparison operator: <parameter> = <parameter>",
-		"SELECT $1 > 0 AND NOT $1":                 "pq: incompatible NOT argument type: int",
-		"SELECT $1":                                "pq: could not determine data type of parameter $1",
-		"SELECT $1 + $1":                           "pq: unsupported binary operator: <parameter> + <parameter>",
-		"SELECT now() + $1":                        "pq: unsupported binary operator: <timestamp> + <parameter>",
-		"SELECT CASE $1 WHEN 1 THEN 1 END":         "pq: unsupported case expression type: parameter",
-		"SELECT CASE 1 WHEN 2 THEN 1 ELSE $1 END":  "pq: incompatible value types parameter, int",
-		"SELECT CASE 1 WHEN 2 THEN $2 ELSE $1 END": "pq: could not determine data type of parameter $1",
-		"CREATE TABLE $1 (id INT)":                 "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
-		"UPDATE d.t SET s = i + $1":                "pq: value type int doesn't match type STRING of column \"s\"",
+		"SELECT $1 = $1":                                "pq: unsupported comparison operator: <parameter> = <parameter>",
+		"SELECT $1 > 0 AND NOT $1":                      "pq: incompatible NOT argument type: int",
+		"SELECT $1":                                     "pq: could not determine data type of parameter $1",
+		"SELECT $1 + $1":                                "pq: unsupported binary operator: <parameter> + <parameter>",
+		"SELECT now() + $1":                             "pq: unsupported binary operator: <timestamp> + <parameter>",
+		"SELECT CASE $1 WHEN 1 THEN 1 END":              "pq: cannot infer type for parameter $1",
+		"SELECT CASE WHEN TRUE THEN $1 END":             "pq: cannot infer type for parameter $1",
+		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END":     "pq: cannot infer type for parameter $2",
+		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END":      "pq: cannot infer type for parameter $1",
+		"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END": "pq: cannot infer type for parameter $1",
+		"CREATE TABLE $1 (id INT)":                      "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
+		"UPDATE d.t SET s = i + $1":                     "pq: value type int doesn't match type STRING of column \"s\"",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
@@ -348,6 +350,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SELECT (SELECT 1+$1)": {
 			base.Params(1).Results(2),
+		},
+		"SELECT CASE WHEN $1 THEN $2 ELSE 3 END": {
+			base.Params(true, 2).Results(2),
+			base.Params(false, 2).Results(3),
 		},
 		// TODO(mjibson): test date/time types
 
