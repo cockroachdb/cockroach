@@ -139,7 +139,7 @@ func (l queueLog) Infof(logv bool, format string, a ...interface{}) {
 }
 
 func (l queueLog) Errorf(format string, a ...interface{}) {
-	log.Errorf(l.prefix+format, a...)
+	log.ErrorfDepth(1, l.prefix+format, a...)
 	l.traceLog.Errorf(format, a...)
 }
 

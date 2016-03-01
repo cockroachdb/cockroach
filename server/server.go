@@ -71,7 +71,6 @@ type Server struct {
 	Tracer              opentracing.Tracer
 	ctx                 *Context
 	mux                 *http.ServeMux
-	httpReady           chan struct{}
 	clock               *hlc.Clock
 	rpcContext          *crpc.Context
 	rpc                 *crpc.Server
@@ -117,12 +116,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
-		Tracer:    tracing.NewTracer(),
-		ctx:       ctx,
-		mux:       http.NewServeMux(),
-		httpReady: make(chan struct{}),
-		clock:     hlc.NewClock(hlc.UnixNano),
-		stopper:   stopper,
+		Tracer:  tracing.NewTracer(),
+		ctx:     ctx,
+		mux:     http.NewServeMux(),
+		clock:   hlc.NewClock(hlc.UnixNano),
+		stopper: stopper,
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
@@ -209,6 +207,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
+	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx)
 
 	return s, nil
 }
@@ -216,6 +215,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 // Start starts the server on the specified port, starts gossip and
 // initializes the node using the engines from the server's context.
 func (s *Server) Start() error {
+	s.initHTTP()
+
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -320,10 +321,7 @@ func (s *Server) Start() error {
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
-	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx)
-
 	log.Infof("starting %s/postgres server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
-	s.initHTTP()
 
 	return nil
 }
@@ -352,8 +350,6 @@ func (s *Server) initHTTP() {
 	// The SQL endpoints handles its own authentication, verifying user
 	// credentials against the requested user.
 	s.mux.Handle(driver.Endpoint, s.sqlServer)
-
-	close(s.httpReady)
 }
 
 // startWriteSummaries begins periodically persisting status summaries for the
@@ -423,15 +419,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.stopper.RunTask(func() {
 		// This is our base handler, so catch all panics and make sure they stick.
 		defer log.FatalOnPanic()
-
-		// If the server isn't ready, return 503 HTTP response.
-		select {
-		case <-s.httpReady:
-			// Proceed.
-		default:
-			http.Error(w, "node not yet available", http.StatusServiceUnavailable)
-			return
-		}
 
 		// Disable caching of responses.
 		w.Header().Set("Cache-control", "no-cache")
