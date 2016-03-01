@@ -132,6 +132,7 @@ func TestSplitFilter(t *testing.T) {
 			return false, nil
 		}
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
+		exprStr := expr.String()
 		res, rem := splitFilter(expr, conv)
 		// We use Sprint to handle the 'nil' case correctly.
 		resStr := fmt.Sprint(res)
@@ -153,6 +154,11 @@ func TestSplitFilter(t *testing.T) {
 		if numQNames != 0 {
 			t.Errorf("`%s` split along (%s): remainder expressions `%s` has converted qvalues!",
 				d.expr, strings.Join(d.vars, ","), remStr)
+		}
+		// Verify the original expression didn't change.
+		if exprStr != expr.String() {
+			t.Errorf("Expression changed after splitFilter; before: `%s` after: `%s`",
+				exprStr, expr.String())
 		}
 	}
 }

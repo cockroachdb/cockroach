@@ -72,6 +72,11 @@ func (v *varConvertVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pa
 	}
 
 	if varExpr, ok := expr.(parser.VariableExpr); ok {
+		// Ignore ValArgs
+		if _, isValArg := expr.(parser.ValArg); isValArg {
+			return false, expr
+		}
+
 		ok, converted := v.conv(varExpr)
 		if !ok {
 			// variable not in the "restricted" set of variables.
@@ -81,9 +86,11 @@ func (v *varConvertVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pa
 			v.checkFailed = true
 			return false, expr
 		}
-		if !v.justCheck {
-			return true, converted
+
+		if v.justCheck {
+			return false, expr
 		}
+		return false, converted
 	}
 
 	return true, expr
@@ -245,4 +252,18 @@ func splitFilter(expr parser.Expr, conv varConvertFunc) (restricted, remainder p
 		remainder = nil
 	}
 	return restricted, remainder
+}
+
+// runFilter runs a filter expression and returs whether the filter passes.
+func runFilter(filter parser.Expr, evalCtx parser.EvalContext) (bool, error) {
+	if filter == nil {
+		return true, nil
+	}
+
+	d, err := filter.Eval(evalCtx)
+	if err != nil {
+		return false, err
+	}
+
+	return d != parser.DNull && bool(d.(parser.DBool)), nil
 }
