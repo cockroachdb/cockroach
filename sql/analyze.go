@@ -129,7 +129,7 @@ func simplifyExpr(e parser.Expr) (simplified parser.Expr, equivalent bool) {
 		return simplifyOrExpr(t)
 	case *parser.ComparisonExpr:
 		return simplifyComparisonExpr(t)
-	case *qvalue, parser.DBool:
+	case *qvalue, *scanQValue, parser.DBool:
 		return e, true
 	}
 	// We don't know how to simplify expressions that fall through to here, so
@@ -1218,7 +1218,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 			switch n.Operator {
 			case parser.IsNotDistinctFrom:
 				switch n.Left.(type) {
-				case *qvalue:
+				case *qvalue, *scanQValue:
 					// Transform "a IS NOT DISTINCT FROM NULL" into "a IS NULL".
 					return &parser.ComparisonExpr{
 						Operator: parser.Is,
@@ -1228,7 +1228,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 				}
 			case parser.IsDistinctFrom:
 				switch n.Left.(type) {
-				case *qvalue:
+				case *qvalue, *scanQValue:
 					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
 					return &parser.ComparisonExpr{
 						Operator: parser.IsNot,
@@ -1238,7 +1238,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 				}
 			case parser.Is, parser.IsNot:
 				switch n.Left.(type) {
-				case *qvalue:
+				case *qvalue, *scanQValue:
 					// "a IS {,NOT} NULL" can be used during index selection to restrict
 					// the range of scanned keys.
 					return n, true
@@ -1394,7 +1394,7 @@ func isDatum(e parser.Expr) bool {
 // qvalues.
 func isVar(e parser.Expr) bool {
 	switch t := e.(type) {
-	case *qvalue:
+	case *qvalue, *scanQValue:
 		return true
 
 	case *parser.Tuple:
@@ -1418,6 +1418,12 @@ func varEqual(a, b parser.Expr) bool {
 		switch tb := b.(type) {
 		case *qvalue:
 			return ta.colRef == tb.colRef
+		}
+
+	case *scanQValue:
+		switch tb := b.(type) {
+		case *scanQValue:
+			return ta.colIdx == tb.colIdx
 		}
 
 	case *parser.Tuple:

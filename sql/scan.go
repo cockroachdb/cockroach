@@ -137,6 +137,11 @@ type scanNode struct {
 	explain          explainMode
 	explainValue     parser.Datum
 	debugVals        debugValues
+
+	// filter that can be evaluated using only this table/index; it contains scanQValues.
+	filter parser.Expr
+	// qvalues (one per column) which can be part of the filter expression.
+	qvals []scanQValue
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -330,6 +335,10 @@ func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit i
 		n.valNeededForCol[i] = true
 	}
 	n.row = make([]parser.Datum, len(visibleCols))
+	n.qvals = make([]scanQValue, len(visibleCols))
+	for i := range n.qvals {
+		n.qvals[i] = n.makeQValue(i)
+	}
 }
 
 // initScan initializes but does not perform the key-value scan.
@@ -583,19 +592,27 @@ func (n *scanNode) maybeOutputRow() bool {
 				n.row[i] = parser.DNull
 			}
 		}
-		if n.explainValue != nil {
-			n.explainDebug(true)
+
+		// Run the filter.
+		passesFilter, err := runFilter(n.filter, n.planner.evalCtx)
+		if err != nil {
+			n.pErr = roachpb.NewError(err)
+			return true
 		}
-		return true
+		if n.explainValue != nil {
+			n.explainDebug(true, passesFilter)
+			return true
+		}
+		return passesFilter
 	} else if n.explainValue != nil {
-		n.explainDebug(false)
+		n.explainDebug(false, false)
 		return true
 	}
 	return false
 }
 
 // explainDebug fills in n.debugVals.
-func (n *scanNode) explainDebug(endOfRow bool) {
+func (n *scanNode) explainDebug(endOfRow bool, passesFilter bool) {
 	n.debugVals.rowIdx = n.rowIndex
 	n.debugVals.key = n.prettyKey()
 
@@ -611,7 +628,11 @@ func (n *scanNode) explainDebug(endOfRow bool) {
 		n.debugVals.value = n.explainValue.String()
 	}
 	if endOfRow {
-		n.debugVals.output = debugValueRow
+		if passesFilter {
+			n.debugVals.output = debugValueRow
+		} else {
+			n.debugVals.output = debugValueFiltered
+		}
 		n.rowIndex++
 	} else {
 		n.debugVals.output = debugValuePartial
@@ -643,4 +664,44 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 	d, err := unmarshalColumnValue(kind, kv.Value)
 	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil
+}
+
+// scanQValue implements the parser.VariableExpr interface and is used as a replacement node for
+// QualifiedNames in expressions that can change their values for each row.
+//
+// It is analogous to qvalue but allows expressions to be evaluated in the context of a scanNode.
+type scanQValue struct {
+	scan   *scanNode
+	colIdx int
+}
+
+var _ parser.VariableExpr = &scanQValue{}
+
+func (*scanQValue) Variable() {}
+
+func (q *scanQValue) String() string {
+	return string(q.scan.resultColumns[q.colIdx].Name)
+}
+
+func (q *scanQValue) Walk(_ parser.Visitor) parser.Expr {
+	panic("not implemented")
+}
+
+func (q *scanQValue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
+	return q.scan.resultColumns[q.colIdx].Typ.TypeCheck(args)
+}
+
+func (q *scanQValue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
+	return q.scan.row[q.colIdx].Eval(ctx)
+}
+
+func (n *scanNode) makeQValue(colIdx int) scanQValue {
+	if colIdx < 0 || colIdx >= len(n.row) {
+		panic(fmt.Sprintf("invalid colIdx %d (columns: %d)", colIdx, len(n.row)))
+	}
+	return scanQValue{n, colIdx}
+}
+
+func (n *scanNode) getQValue(colIdx int) *scanQValue {
+	return &n.qvals[colIdx]
 }
