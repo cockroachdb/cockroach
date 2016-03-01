@@ -464,15 +464,14 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 			// First, get a shallow clone of our txn (since that holds the
 			// NodeList struct).
 			txnShallow := *ba.Txn
-			// Next, zero out the NodeList pointer. That makes sure that
-			// if we had something of size zero but with capacity, we don't
-			// re-use the existing space (which others may also use).
-			// This is just to satisfy paranoia/OCD and not expected to matter
-			// in practice.
+			// Next, zero the existing data. That makes sure that if we had
+			// something of size zero but with capacity, we don't re-use the
+			// existing space (which others may also use). This is just to
+			// satisfy paranoia/OCD and not expected to matter in practice.
 			txnShallow.MaxTimestamps = nil
 			// OrigTimestamp is the HLC timestamp at which the Txn started, so
 			// this effectively means no more uncertainty on this node.
-			txnShallow.UpdateUncertainty(nDesc.NodeID, txnShallow.OrigTimestamp)
+			txnShallow.UpdateMaxTimestamp(nDesc.NodeID, txnShallow.OrigTimestamp)
 			ba.Txn = &txnShallow
 		}
 	}

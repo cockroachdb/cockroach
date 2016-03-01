@@ -170,7 +170,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		// Note that it's not an issue if MaxTimestamp propagates back out to
 		// the client via a returned Transaction update - when updating a Txn
 		// from another, the larger MaxTimestamp wins.
-		if maxTS := ba.Txn.GetUncertainty(ba.Replica.NodeID); maxTS.Less(ba.Txn.MaxTimestamp) {
+		if maxTS := ba.Txn.GetMaxTimestamp(ba.Replica.NodeID); maxTS.Less(ba.Txn.MaxTimestamp) {
 			// Copy-on-write to protect others we might be sharing the Txn with.
 			shallowTxn := *ba.Txn
 			log.Warningf("at %s, moving to %s (orig %s)", shallowTxn.MaxTimestamp, maxTS, shallowTxn.OrigTimestamp)

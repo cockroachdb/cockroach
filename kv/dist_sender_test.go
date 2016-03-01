@@ -402,8 +402,11 @@ func TestOwnNodeCertain(t *testing.T) {
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}
-	if actTS, ok := act[expNodeID]; !ok || len(act) != 1 || !actTS.Equal(expTS) {
-		t.Fatalf("unexpected resulting map: %v", act)
+	exp := map[roachpb.NodeID]roachpb.Timestamp{
+		expNodeID: expTS,
+	}
+	if !reflect.DeepEqual(exp, act) {
+		t.Fatalf("wanted %v, got %v", exp, act)
 	}
 
 }

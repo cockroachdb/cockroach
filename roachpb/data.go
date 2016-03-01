@@ -593,7 +593,7 @@ func (t Transaction) Clone() Transaction {
 		t.LastHeartbeat = &h
 	}
 	mt := t.MaxTimestamps
-	if len(mt) > 0 {
+	if mt != nil {
 		t.MaxTimestamps = make(map[NodeID]Timestamp)
 		for k, v := range mt {
 			t.MaxTimestamps[k] = v
@@ -809,10 +809,10 @@ func (t Transaction) Short() string {
 	return t.ID.String()[:8]
 }
 
-// UpdateUncertainty is to remember a timestamp off a node's clock for future
+// UpdateMaxTimestamp is to remember a timestamp off a node's clock for future
 // operations on that node. When multiple calls are made for a single nodeID,
 // the lowest timestamp prevails.
-func (t *Transaction) UpdateUncertainty(nodeID NodeID, maxTS Timestamp) {
+func (t *Transaction) UpdateMaxTimestamp(nodeID NodeID, maxTS Timestamp) {
 	if t.MaxTimestamps == nil {
 		t.MaxTimestamps = make(map[NodeID]Timestamp)
 	}
@@ -821,15 +821,15 @@ func (t *Transaction) UpdateUncertainty(nodeID NodeID, maxTS Timestamp) {
 	}
 }
 
-// GetUncertainty returns the lowest timestamp recorded for the given node.
+// GetMaxTimestamp returns the lowest HLC timestamp recorded from the given node's
+// clock during this transaction.
 // When reading from that node, MaxTimestamp can be lowered to the timestamp
-// returned by this method. If no entry is found, MaxTimestamp is be returned.
-func (t Transaction) GetUncertainty(nodeID NodeID) Timestamp {
-	ts, ok := t.MaxTimestamps[nodeID]
-	if !ok {
-		return MaxTimestamp
+// returned by this method. If no entry is found, t.MaxTimestamp is returned.
+func (t Transaction) GetMaxTimestamp(nodeID NodeID) Timestamp {
+	if ts, ok := t.MaxTimestamps[nodeID]; ok {
+		return ts
 	}
-	return ts
+	return t.MaxTimestamp
 }
 
 var _ fmt.Stringer = &Lease{}

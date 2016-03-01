@@ -424,7 +424,7 @@ func TestTransactionString(t *testing.T) {
 // TestTransactionUncertainty verifies that txn.{Get,Update}Uncertainty work as
 // advertised.
 func TestTransactionUncertainty(t *testing.T) {
-	txn := Transaction{}
+	txn := Transaction{MaxTimestamp: ZeroTimestamp.Add(123, 456)}
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
@@ -434,10 +434,10 @@ func TestTransactionUncertainty(t *testing.T) {
 	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
-		if ts := txn.GetUncertainty(nodeID); ts != MaxTimestamp {
+		if ts := txn.GetMaxTimestamp(nodeID); ts != txn.MaxTimestamp {
 			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
-		txn.UpdateUncertainty(nodeID, timestamps[nodeID])
+		txn.UpdateMaxTimestamp(nodeID, timestamps[nodeID])
 		if exp, act := i+1, len(txn.MaxTimestamps); act != exp {
 			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.MaxTimestamps)
 		}
@@ -445,7 +445,7 @@ func TestTransactionUncertainty(t *testing.T) {
 	for _, m := range ids {
 		checkID := NodeID(m)
 		exp := timestamps[checkID]
-		if act := txn.GetUncertainty(checkID); !act.Equal(exp) {
+		if act := txn.GetMaxTimestamp(checkID); !act.Equal(exp) {
 			t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
 		}
 	}
