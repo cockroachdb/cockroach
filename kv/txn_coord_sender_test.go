@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // senderFn is a function that implements a Sender.
@@ -511,10 +512,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On uncertainty error, new epoch begins and node is seen.
 			// Timestamp moves ahead of the existing write.
-			pErr: roachpb.NewError(&roachpb.ReadWithinUncertaintyIntervalError{
+			pErr: roachpb.NewErrorWithTxn(&roachpb.ReadWithinUncertaintyIntervalError{
 				NodeID:            1,
 				ExistingTimestamp: origTS.Add(10, 10),
-			}),
+			},
+				&roachpb.Transaction{}),
 			expEpoch:  1,
 			expPri:    1,
 			expTS:     origTS.Add(10, 11),
@@ -533,11 +535,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
 			// Additionally, priority ratchets up to just below the pusher's.
-			pErr: roachpb.NewError(&roachpb.TransactionPushError{
+			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 				PusheeTxn: roachpb.Transaction{
 					TxnMeta:  roachpb.TxnMeta{Timestamp: origTS.Add(10, 10)},
 					Priority: int32(10)},
-			}),
+			},
+				&roachpb.Transaction{}),
 			expEpoch:  1,
 			expPri:    9,
 			expTS:     origTS.Add(10, 11),
@@ -696,34 +699,44 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
+	defer stopper.Stop()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
 
-	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		txn := ba.Txn.Clone()
-		txn.Writing = true
-		pErr := roachpb.NewError(roachpb.NewTransactionRetryError())
-		pErr.SetTxn(&txn)
-		return nil, pErr
-	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
-	defer stopper.Stop()
-
-	var ba roachpb.BatchRequest
-	key := roachpb.Key("test")
-	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
-	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
-	ba.Add(&roachpb.EndTransactionRequest{})
-	ba.Txn = &roachpb.Transaction{Name: "test"}
-	if _, pErr := ts.Send(context.Background(), ba); !testutils.IsPError(pErr, "retry txn") {
-		t.Fatalf("unexpected error: %v", pErr)
+	testPErrs := []*roachpb.Error{
+		roachpb.NewError(roachpb.NewTransactionRetryError()),
+		roachpb.NewError(roachpb.NewTransactionAbortedError()),
+		roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
+			TxnMeta: roachpb.TxnMeta{
+				ID: uuid.NewV4(),
+			}})),
+		roachpb.NewErrorf("testError"),
 	}
+	for i, testPErr := range testPErrs {
+		ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			txn := ba.Txn.Clone()
+			txn.Writing = true
+			testPErr.SetTxn(&txn)
+			return nil, testPErr
+		}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
 
-	defer teardownHeartbeats(ts)
-	ts.Lock()
-	defer ts.Unlock()
-	if len(ts.txns) != 1 {
-		t.Fatalf("expected transaction to be tracked")
+		var ba roachpb.BatchRequest
+		key := roachpb.Key("test")
+		ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
+		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
+		ba.Add(&roachpb.EndTransactionRequest{})
+		ba.Txn = &roachpb.Transaction{Name: "test"}
+		if _, pErr := ts.Send(context.Background(), ba); !testutils.IsPError(pErr, testPErr.Message) {
+			t.Errorf("%d: unexpected error: expected %v but got %v", i, testPErr, pErr)
+		}
+
+		defer teardownHeartbeats(ts)
+		ts.Lock()
+		defer ts.Unlock()
+		if len(ts.txns) != 1 {
+			t.Errorf("%d: expected transaction to be tracked", i)
+		}
 	}
 }
 
