@@ -36,7 +36,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
-	sc := storage.TestStoreContext
+	sc := storage.TestStoreContext()
 	sc.RaftTickInterval = time.Hour * 24
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc.storeContext = &sc

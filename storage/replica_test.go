@@ -126,7 +126,7 @@ func (tc *testContext) Start(t testing.TB) {
 	}
 
 	if tc.store == nil {
-		ctx := TestStoreContext
+		ctx := TestStoreContext()
 		ctx.Clock = tc.clock
 		ctx.Gossip = tc.gossip
 		ctx.Transport = tc.transport
@@ -261,7 +261,7 @@ func TestRangeContains(t *testing.T) {
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, stopper)
 	clock := hlc.NewClock(hlc.UnixNano)
-	ctx := TestStoreContext
+	ctx := TestStoreContext()
 	ctx.Clock = clock
 	ctx.Transport = NewDummyRaftTransport()
 	store := NewStore(ctx, e, &roachpb.NodeDescriptor{NodeID: 1})

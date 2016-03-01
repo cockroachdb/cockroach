@@ -128,7 +128,7 @@ func createTestStoreWithoutStart(t *testing.T) (*Store, *hlc.ManualClock, *stop.
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), stopper)
-	ctx := TestStoreContext
+	ctx := TestStoreContext()
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
@@ -172,7 +172,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *stop.Stopper) {
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := TestStoreContext
+	ctx := TestStoreContext()
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	stopper := stop.NewStopper()
@@ -244,7 +244,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
-	ctx := TestStoreContext
+	ctx := TestStoreContext()
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.Transport = NewDummyRaftTransport()

@@ -93,7 +93,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
 	if sCtx == nil {
 		// make a copy
-		ctx := storage.TestStoreContext
+		ctx := storage.TestStoreContext()
 		sCtx = &ctx
 	}
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
@@ -463,7 +463,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	if m.storeContext != nil {
 		ctx = *m.storeContext
 	} else {
-		ctx = storage.TestStoreContext
+		ctx = storage.TestStoreContext()
 	}
 	ctx.Clock = m.clocks[i]
 	ctx.DB = m.db

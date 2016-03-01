@@ -955,7 +955,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 // elects a leader without waiting for an election timeout.
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeContext := storage.TestStoreContext
+	storeContext := storage.TestStoreContext()
 	storeContext.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
 		storeContext: &storeContext,

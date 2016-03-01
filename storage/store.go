@@ -78,21 +78,23 @@ var (
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     2,
 	}
+)
 
-	// TestStoreContext has some fields initialized with values relevant
-	// in tests.
-	TestStoreContext = StoreContext{
+var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
+	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
+	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
+}
+
+// TestStoreContext has some fields initialized with values relevant
+// in tests.
+func TestStoreContext() StoreContext {
+	return StoreContext{
 		Tracer:                     tracing.NewTracer(),
 		RaftTickInterval:           100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks: 1,
 		RaftElectionTimeoutTicks:   2,
 		ScanInterval:               10 * time.Minute,
 	}
-)
-
-var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
-	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
-	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
