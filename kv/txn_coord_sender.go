@@ -309,7 +309,8 @@ func (tc *TxnCoordSender) startStats() {
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	sp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
+	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
+	defer cleanupSp()
 	// TODO(tschottdorf): real tracing should still propagate here, but the
 	// serialization is currently pretty slow and that sucks for benchmarks.
 	if sp.BaggageItem(tracing.Snowball) != "" {
@@ -695,7 +696,8 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	sp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
+	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
+	defer cleanupSp()
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	// If the request was successful but we're in a transaction which needs to
