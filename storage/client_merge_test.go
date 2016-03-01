@@ -380,18 +380,20 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Get the range stats for both ranges now that we have data.
 	var msA, msB engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), aDesc.RangeID, &msA); err != nil {
+	snap := store.Engine().NewSnapshot()
+	defer snap.Close()
+	if err := engine.MVCCGetRangeStats(snap, aDesc.RangeID, &msA); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCGetRangeStats(store.Engine(), bDesc.RangeID, &msB); err != nil {
+	if err := engine.MVCCGetRangeStats(snap, bDesc.RangeID, &msB); err != nil {
 		t.Fatal(err)
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(store, aDesc, msA); err != nil {
+	if err := verifyRecomputedStats(snap, aDesc, msA); err != nil {
 		t.Fatalf("failed to verify range A's stats before split: %v", err)
 	}
-	if err := verifyRecomputedStats(store, bDesc, msB); err != nil {
+	if err := verifyRecomputedStats(snap, bDesc, msB); err != nil {
 		t.Fatalf("failed to verify range B's stats before split: %v", err)
 	}
 
@@ -403,14 +405,16 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	rngMerged := store.LookupReplica(aDesc.StartKey, nil)
 
 	// Get the range stats for the merged range and verify.
+	snap = store.Engine().NewSnapshot()
+	defer snap.Close()
 	var msMerged engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rngMerged.RangeID, &msMerged); err != nil {
+	if err := engine.MVCCGetRangeStats(snap, rngMerged.RangeID, &msMerged); err != nil {
 		t.Fatal(err)
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(store, rngMerged.Desc(), msMerged); err != nil {
-		t.Fatalf("failed to verify range's stats after merge: %v", err)
+	if err := verifyRecomputedStats(snap, rngMerged.Desc(), msMerged); err != nil {
+		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }
 
