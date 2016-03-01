@@ -124,9 +124,9 @@ type Context struct {
 	TimeUntilStoreDead time.Duration
 }
 
-// getTotalMemory returns either the total system memory or if possible the
+// GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
-func getTotalMemory() (uint64, error) {
+func GetTotalMemory() (uint64, error) {
 	mem := sigar.Mem{}
 	if err := mem.Get(); err != nil {
 		return 0, err
@@ -153,19 +153,6 @@ func getTotalMemory() (uint64, error) {
 	return totalMem, nil
 }
 
-func getDefaultCacheSize() uint64 {
-	sysMem, err := getTotalMemory()
-	if err != nil {
-		if log.V(1) {
-			log.Infof("can't retrieve system memory information (%s)\n"+
-				"\tsetting default rocksdb cache size to %s",
-				err, humanize.IBytes(defaultCacheSize))
-		}
-		return defaultCacheSize
-	}
-	return sysMem / 2
-}
-
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	ctx := &Context{}
@@ -174,11 +161,17 @@ func NewContext() *Context {
 }
 
 // InitDefaults sets up the default values for a Context.
+//
+// Note: This method should only perform simple initialization of fields
+// because it is called very early in the lifetime of a cockroach process at
+// which point we do not know if we are initializing a server or using the
+// cli. Do not call any functions which could log or error. In fact, it is best
+// if you don't call any other functions at all.
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
 	ctx.MaxOffset = defaultMaxOffset
-	ctx.CacheSize = getDefaultCacheSize()
+	ctx.CacheSize = defaultCacheSize
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
@@ -197,7 +190,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
-				sysMem, err := getTotalMemory()
+				sysMem, err := GetTotalMemory()
 				if err != nil {
 					return fmt.Errorf("could not retrieve system memory")
 				}
