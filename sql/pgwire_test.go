@@ -364,6 +364,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(3).Results(3, 4),
 		},
 		*/
+		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
+			base.Params(10, 5).Results(10),
+		},
 	}
 
 	s := server.StartTestServer(t)
@@ -414,7 +417,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		}
 	}
 
-	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (a INT)`); err != nil {
+	initStmt := `CREATE DATABASE d; CREATE TABLE d.t (a INT); INSERT INTO d.t VALUES (10),(11)`
+	if _, err := db.Exec(initStmt); err != nil {
 		t.Fatal(err)
 	}
 
