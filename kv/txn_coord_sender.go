@@ -698,8 +698,6 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
 	defer cleanupSp()
-	newTxn := &roachpb.Transaction{}
-	newTxn.Update(ba.Txn)
 	// If the request was successful but we're in a transaction which needs to
 	// restart but doesn't know it yet, let it restart now (as opposed to
 	// waiting until EndTransaction).
@@ -709,11 +707,17 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		br = nil
 	}
 
+	newTxn := &roachpb.Transaction{}
+	newTxn.Update(ba.Txn)
+	if pErr == nil {
+		newTxn.Update(br.Txn)
+	} else {
+		newTxn.Update(pErr.GetTxn())
+	}
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
 	switch t := pErr.GetDetail().(type) {
 	case nil:
-		newTxn.Update(br.Txn)
 		// Move txn timestamp forward to response timestamp if applicable.
 		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
 		// Looks like this isn't necessary any more, nor did it prevent a bug
@@ -731,7 +735,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		if t.NodeID == 0 {
 			panic("no replica set in header on uncertainty restart")
 		}
-		newTxn.Update(pErr.GetTxn())
 		// No more restarts for this node for anything after ExistingTimestamp.
 		newTxn.UpdateObservedTimestamp(t.NodeID, t.ExistingTimestamp)
 		// If the reader encountered a newer write within the uncertainty
@@ -741,27 +744,20 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		candidateTS.Backward(t.ExistingTimestamp.Add(0, 1))
 		newTxn.Timestamp.Forward(candidateTS)
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
-		pErr.SetTxn(newTxn)
 	case *roachpb.TransactionAbortedError:
-		newTxn.Update(pErr.GetTxn())
 		// Increase timestamp if applicable.
 		newTxn.Timestamp.Forward(pErr.GetTxn().Timestamp)
 		newTxn.Priority = pErr.GetTxn().Priority
-		pErr.SetTxn(newTxn)
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
-		defer tc.cleanupTxn(sp, *pErr.GetTxn())
+		defer tc.cleanupTxn(sp, *newTxn)
 	case *roachpb.TransactionPushError:
-		newTxn.Update(pErr.GetTxn())
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
-		pErr.SetTxn(newTxn)
 	case *roachpb.TransactionRetryError:
-		newTxn.Update(pErr.GetTxn())
 		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
-		pErr.SetTxn(newTxn)
 	default:
 		if pErr.GetTxn() != nil {
 			if pErr.CanRetry() {
@@ -773,6 +769,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				// can come from a unique index violation.
 			}
 		}
+	}
+	if pErr != nil && pErr.GetTxn() != nil {
+		pErr.SetTxn(newTxn)
 	}
 
 	if newTxn.ID == nil {
