@@ -17,13 +17,33 @@
 package rpc
 
 import (
+	"net"
 	"testing"
+
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
+	s := grpc.NewServer()
+
+	tlsConfig, err := ctx.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addr := util.CreateTestAddr("tcp")
+	ln, err := util.ListenAndServe(ctx.Stopper, s, addr, tlsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return s, ln
+}
 
 func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
