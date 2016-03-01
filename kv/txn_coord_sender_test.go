@@ -727,6 +727,41 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	}
 }
 
+// TestTxnCoordSenderInternalError is similar to TestTxnCoordSenderErrorWithIntent,
+// but the send returns an internal error instead of NewTransactionRetryError.
+func TestTxnCoordSenderInternalError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(20)
+
+	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		txn := ba.Txn.Clone()
+		txn.Writing = true
+		pErr := roachpb.NewErrorWithTxn(util.Errorf("testError"), &txn)
+		return nil, pErr
+	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+	defer stopper.Stop()
+
+	var ba roachpb.BatchRequest
+	key := roachpb.Key("test")
+	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
+	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
+	ba.Add(&roachpb.EndTransactionRequest{})
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	if _, pErr := ts.Send(context.Background(), ba); !testutils.IsPError(pErr, "testError") {
+		t.Fatalf("unexpected error: %v", pErr)
+	}
+
+	defer teardownHeartbeats(ts)
+	ts.Lock()
+	defer ts.Unlock()
+	if len(ts.txns) != 1 {
+		t.Fatalf("expected transaction to be tracked")
+	}
+}
+
 // TestTxnCoordSenderReleaseTxnMeta verifies that TxnCoordSender releases the
 // txnMetadata after the txn has committed succeed.
 func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {

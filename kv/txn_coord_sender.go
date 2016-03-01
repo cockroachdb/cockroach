@@ -769,6 +769,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				// continue its transaction after receiving ConditionFailedError, which
 				// can come from a unique index violation.
 			}
+			newTxn.Update(pErr.GetTxn())
+			pErr.SetTxn(newTxn)
 		}
 	}
 
