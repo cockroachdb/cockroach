@@ -731,7 +731,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		}
 		newTxn.Update(pErr.GetTxn())
 		// No more restarts for this node for anything after ExistingTimestamp.
-		newTxn.UpdateUncertainty(t.NodeID, t.ExistingTimestamp)
+		newTxn.UpdateMaxTimestamp(t.NodeID, t.ExistingTimestamp)
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
 		// up to MaxTimestamp, whichever comes first.
