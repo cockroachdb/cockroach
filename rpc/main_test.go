@@ -17,16 +17,11 @@
 package rpc
 
 import (
-	"net"
-	"testing"
 	"time"
-
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -44,21 +39,4 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	ctx.HeartbeatInterval = 10 * time.Millisecond
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	return ctx
-}
-
-func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
-	s := NewServer(ctx)
-
-	tlsConfig, err := ctx.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	addr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServe(ctx.Stopper, s, addr, tlsConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return s, ln
 }
