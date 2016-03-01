@@ -19,6 +19,7 @@ package client
 import (
 	"net"
 	"net/url"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -72,24 +73,26 @@ func newRPCSender(server string, context *base.Context, stopper *stop.Stopper) (
 	}, nil
 }
 
-// Batch sends a request to Cockroach via RPC. Errors which are retryable are
-// retried with backoff in a loop using the default retry options. Other errors
-// sending the request are retried indefinitely using the same client command
-// ID to avoid reporting failure when in fact the command may have gone through
-// and been executed successfully. We retry here to eventually get through with
-// the same client command ID and be given the cached response.
+// HealthyTimeout is the timeout waiting for RPC client to become healthy.
+var HealthyTimeout = 2 * time.Second
+
+// Send sends a request to Cockroach via RPC.
 func (s *rpcSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	if !s.client.WaitHealthy() {
-		return nil, roachpb.NewErrorf("failed to send RPC request %s: client is unhealthy", method)
+	var pErr *roachpb.Error
+	br := &roachpb.BatchResponse{}
+
+	// Wait for client to become healthy with a maximum timeout.
+	select {
+	case <-s.client.Healthy():
+	case <-time.After(HealthyTimeout):
+		return br, roachpb.NewErrorf("failed to send RPC request %s: client is unhealthy", method)
 	}
 
-	br := &roachpb.BatchResponse{}
 	if err := s.client.Call(method, &ba, br); err != nil {
 		log.Errorf("failed to send RPC request %s: %s", method, err)
 		return nil, roachpb.NewError(err)
 	}
-
-	pErr := br.Error
+	pErr = br.Error
 	br.Error = nil
 	return br, pErr
 }

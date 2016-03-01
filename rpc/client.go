@@ -90,8 +90,6 @@ type Client struct {
 	closer, Closed    chan struct{}
 	conn              unsafe.Pointer // holds a `internalConn`
 	healthy           atomic.Value   // holds a `chan struct{}` exposed in `Healthy`
-	healthWaitTime    time.Time
-	healthReceived    chan struct{}
 	tlsConfig         *tls.Config
 	disableReconnects bool
 	clock             *hlc.Clock
@@ -153,8 +151,6 @@ func NewClient(addr net.Addr, context *Context) *Client {
 	}
 
 	c.healthy.Store(make(chan struct{}))
-	c.healthWaitTime = time.Now().Add(context.HealthWait)
-	c.healthReceived = make(chan struct{})
 
 	if !context.DisableCache {
 		clients[key] = c
@@ -223,30 +219,6 @@ func (c *Client) isHealthy() bool {
 	return false
 }
 
-// WaitHealthy returns the health of the Client. On the first connection of a
-// newly-created Client, WaitHealthy will block for up to Context.HealthWait if
-// its health has not yet been determined.
-func (c *Client) WaitHealthy() bool {
-	// If we shouldn't wait for healthy, return immediately. The healthReceived
-	// channel is closed after we receive the first health indication for the
-	// client (i.e. (un)successful heartbeat or failure to open the connection).
-	select {
-	case <-c.healthReceived:
-		return c.isHealthy()
-	default:
-	}
-
-	if delta := c.healthWaitTime.Sub(time.Now()); delta > 0 {
-		select {
-		case <-time.After(delta):
-		case <-c.healthReceived:
-			return c.isHealthy()
-		case <-c.closer:
-		}
-	}
-	return false
-}
-
 // Close closes the client, removing it from the clients cache and returning
 // when the heartbeat goroutine has exited.
 func (c *Client) Close() {
@@ -283,14 +255,6 @@ func (c *Client) maybeClose(extCloser <-chan struct{}) bool {
 // or unhealthy and reconnecting appropriately until either the Client or the
 // supplied channel is closed.
 func (c *Client) runHeartbeat(retryOpts retry.Options) {
-	healthReceived := c.healthReceived
-	setHealthReceived := func() {
-		if healthReceived != nil {
-			close(healthReceived)
-			healthReceived = nil
-		}
-	}
-
 	isHealthy := false
 	setHealthy := func() {
 		if isHealthy {
@@ -298,14 +262,12 @@ func (c *Client) runHeartbeat(retryOpts retry.Options) {
 		}
 		isHealthy = true
 		close(c.healthy.Load().(chan struct{}))
-		setHealthReceived()
 	}
 	setUnhealthy := func() {
 		if isHealthy {
 			isHealthy = false
 			c.healthy.Store(make(chan struct{}))
 		}
-		setHealthReceived()
 	}
 
 	var err = errUnstarted // initial condition

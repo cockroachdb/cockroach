@@ -627,6 +627,12 @@ func TestClientPermissions(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
+	oldHealthyTimeout := client.HealthyTimeout
+	client.HealthyTimeout = 250 * time.Millisecond
+	defer func() {
+		client.HealthyTimeout = oldHealthyTimeout
+	}()
+
 	// NodeUser certs are required for all KV operations.
 	// RootUser has no KV privileges whatsoever.
 	nodeClient := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
