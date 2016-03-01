@@ -52,21 +52,20 @@ func injectRetriableErrors(
 func TestTxnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func() { storage.TestingCommandFilter = nil }()
-	server, sqlDB, _ := setup(t)
-	defer cleanup(server, sqlDB)
-
 	// Set up error injection useful later in the test.
 	var magicValsLock sync.Mutex
 	magicValsLock.Lock()
 	restarts := make(map[string]int)
 	magicVals := []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"}
 	magicValsLock.Unlock()
-	storage.TestingCommandFilter =
-		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
-			magicValsLock.Lock()
-			defer magicValsLock.Unlock()
-			return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
-		}
+	storage.TestingCommandFilter = func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+		magicValsLock.Lock()
+		defer magicValsLock.Unlock()
+		return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
+	}
+
+	server, sqlDB, _ := setup(t)
+	defer cleanup(server, sqlDB)
 
 	// Make sure all the commands we send in this test are sent over the same connection.
 	// This is a bit of a hack; in Go you're not supposed to have connection state
