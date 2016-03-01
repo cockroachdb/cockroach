@@ -1169,7 +1169,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 	mtc := &multiTestContext{
 		storeContext: &storage.StoreContext{},
 	}
-	*mtc.storeContext = storage.TestStoreContext
+	*mtc.storeContext = storage.TestStoreContext()
 	mtc.storeContext.AllocatorOptions = storage.AllocatorOptions{
 		AllowRebalance: true,
 		Deterministic:  true,
