@@ -19,7 +19,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -29,68 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
-
-type span struct {
-	start roachpb.Key // inclusive key
-	end   roachpb.Key // exclusive key
-	count int64
-}
-
-type spans []span
-
-// implement Sort.Interface
-func (a spans) Len() int           { return len(a) }
-func (a spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a spans) Less(i, j int) bool { return a[i].start.Compare(a[j].start) < 0 }
-
-// prettyKey pretty-prints the specified key, skipping over the first `skip`
-// fields. The pretty printed key looks like:
-//
-//   /Table/<tableID>/<indexID>/...
-//
-// We always strip off the /Table prefix and then `skip` more fields. Note that
-// this assumes that the fields themselves do not contain '/', but that is
-// currently true for the fields we care about stripping (the table and index
-// ID).
-func prettyKey(key roachpb.Key, skip int) string {
-	p := key.String()
-	for i := 0; i <= skip; i++ {
-		n := strings.IndexByte(p[1:], '/')
-		if n == -1 {
-			return ""
-		}
-		p = p[n+1:]
-	}
-	return p
-}
-
-func prettyDatums(vals []parser.Datum) string {
-	var buf bytes.Buffer
-	for _, v := range vals {
-		fmt.Fprintf(&buf, "/%v", v)
-	}
-	return buf.String()
-}
-
-func prettySpan(span span, skip int) string {
-	var buf bytes.Buffer
-	if span.count != 0 {
-		fmt.Fprintf(&buf, "%d:", span.count)
-	}
-	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.start, skip), prettyKey(span.end, skip))
-	return buf.String()
-}
-
-func prettySpans(spans []span, skip int) string {
-	var buf bytes.Buffer
-	for i, span := range spans {
-		if i > 0 {
-			buf.WriteString(" ")
-		}
-		buf.WriteString(prettySpan(span, skip))
-	}
-	return buf.String()
-}
 
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
@@ -125,15 +62,13 @@ type scanNode struct {
 	columnDirs       []encoding.Direction
 	ordering         orderingInfo
 	pErr             *roachpb.Error
-	indexKey         []byte            // the index key of the current row
-	kvs              []client.KeyValue // the raw key/value pairs
-	kvIndex          int               // current index into the key/value pairs
-	rowIndex         int               // the index of the current row
-	colID            ColumnID          // column ID of the current key
-	valTypes         []parser.Datum    // the index key value types for the current row
-	vals             []parser.Datum    // the index key values for the current row
-	implicitValTypes []parser.Datum    // the implicit value types for unique indexes
-	implicitVals     []parser.Datum    // the implicit values for unique indexes
+	indexKey         []byte         // the index key of the current row
+	rowIndex         int            // the index of the current row
+	colID            ColumnID       // column ID of the current key
+	valTypes         []parser.Datum // the index key value types for the current row
+	vals             []parser.Datum // the index key values for the current row
+	implicitValTypes []parser.Datum // the implicit value types for unique indexes
+	implicitVals     []parser.Datum // the implicit values for unique indexes
 	explain          explainMode
 	explainValue     parser.Datum
 	debugVals        debugValues
@@ -142,6 +77,12 @@ type scanNode struct {
 	filter parser.Expr
 	// qvalues (one per column) which can be part of the filter expression.
 	qvals []scanQValue
+
+	scanInitialized bool
+	fetcher         kvFetcher
+	// The current key/value, unless kvEnd is true.
+	kv    client.KeyValue
+	kvEnd bool
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -163,6 +104,17 @@ func (n *scanNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
+// nextKey gets the next key and sets kv and kvEnd. Returns false on errors.
+func (n *scanNode) nextKey() bool {
+	var ok bool
+	ok, n.kv, n.pErr = n.fetcher.nextKV()
+	if n.pErr != nil {
+		return false
+	}
+	n.kvEnd = !ok
+	return true
+}
+
 func (n *scanNode) Next() bool {
 	tracing.AnnotateTrace()
 
@@ -170,11 +122,13 @@ func (n *scanNode) Next() bool {
 		return false
 	}
 
-	if n.kvs == nil {
+	if !n.scanInitialized {
 		if !n.initScan() {
+			// Hit error.
 			return false
 		}
-		if !n.fetchKVs() {
+		if !n.nextKey() {
+			// Hit error.
 			return false
 		}
 	}
@@ -189,13 +143,18 @@ func (n *scanNode) Next() bool {
 		if n.maybeOutputRow() {
 			return n.pErr == nil
 		}
-		if n.kvIndex == len(n.kvs) {
+		if n.kvEnd {
+			// End of scan.
 			return false
 		}
-		if !n.processKV(n.kvs[n.kvIndex]) {
+		if !n.processKV(n.kv) {
+			// Hit error.
 			return false
 		}
-		n.kvIndex++
+		if !n.nextKey() {
+			// Hit error.
+			return false
+		}
 	}
 }
 
@@ -378,38 +337,9 @@ func (n *scanNode) initScan() bool {
 			n.implicitVals = make([]parser.Datum, len(n.implicitValTypes))
 		}
 	}
-	return true
-}
 
-// fetchKVs fetches spans from the kv. initScan should be called first.
-//
-// TODO(pmattis): The key-value scan currently reads all of the key-value
-// pairs, but they could just as easily be read in chunks. Probably worthwhile
-// to separate out the retrieval of the key-value pairs into a separate
-// structure.
-func (n *scanNode) fetchKVs() bool {
-	// Retrieve all the spans.
-	b := &client.Batch{}
-	if n.reverse {
-		for i := len(n.spans) - 1; i >= 0; i-- {
-			b.ReverseScan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
-		}
-	} else {
-		for i := 0; i < len(n.spans); i++ {
-			b.Scan(n.spans[i].start, n.spans[i].end, n.spans[i].count)
-		}
-	}
-	if n.pErr = n.txn.Run(b); n.pErr != nil {
-		return false
-	}
-
-	for _, result := range b.Results {
-		if n.kvs == nil {
-			n.kvs = result.Rows
-		} else {
-			n.kvs = append(n.kvs, result.Rows...)
-		}
-	}
+	n.fetcher = makeKVFetcher(n.txn, n.spans, n.reverse)
+	n.scanInitialized = true
 	return true
 }
 
@@ -578,8 +508,8 @@ func (n *scanNode) maybeOutputRow() bool {
 	// secondary index as secondary indexes have only one key per row.
 
 	if n.indexKey != nil &&
-		(n.isSecondaryIndex || n.kvIndex == len(n.kvs) ||
-			!bytes.HasPrefix(n.kvs[n.kvIndex].Key, n.indexKey)) {
+		(n.isSecondaryIndex || n.kvEnd ||
+			!bytes.HasPrefix(n.kv.Key, n.indexKey)) {
 		// The current key belongs to a new row. Output the current row.
 		n.indexKey = nil
 
