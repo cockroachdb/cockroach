@@ -107,7 +107,7 @@ func TestGossipStorage(t *testing.T) {
 	network.RunUntilFullyConnected()
 
 	// Wait long enough for storage to get the expected number of addresses.
-	util.SucceedsWithin(t, 500*time.Millisecond, func() error {
+	util.SucceedsSoon(t, func() error {
 		for _, p := range stores {
 			if p.Len() != 2 {
 				return util.Errorf("incorrect number of addresses: expected 2; got %d", p.Len())

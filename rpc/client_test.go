@@ -233,16 +233,14 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	<-c.Healthy()
 
 	// Synchronously wait on missing the next heartbeat.
-	if err := util.IsTrueWithin(func() bool {
+	util.SucceedsSoon(t, func() error {
 		select {
 		case <-c.Healthy():
-			return false
+			return util.Errorf("unexpectedly healthy client")
 		default:
-			return true
+			return nil
 		}
-	}, context.HeartbeatTimeout*10); err != nil {
-		t.Fatal(err)
-	}
+	})
 	if !proto.Equal(&c.remoteOffset, &RemoteOffset{}) {
 		t.Errorf("expected offset %v, actual %v",
 			RemoteOffset{}, c.remoteOffset)

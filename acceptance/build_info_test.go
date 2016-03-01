@@ -31,7 +31,7 @@ func TestBuildInfo(t *testing.T) {
 func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	checkGossip(t, c, 20*time.Second, hasPeers(c.NumNodes()))
 
-	util.SucceedsWithin(t, 10*time.Second, func() error {
+	util.SucceedsSoon(t, func() error {
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")

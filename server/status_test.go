@@ -562,7 +562,7 @@ func TestMetricsRecording(t *testing.T) {
 
 	// Verify that metrics for the current timestamp are recorded. This should
 	// be true very quickly.
-	util.SucceedsWithin(t, time.Second, func() error {
+	util.SucceedsSoon(t, func() error {
 		now := tsrv.Clock().PhysicalNow()
 		if err := checkTimeSeriesKey(now, "cr.store.livebytes.1"); err != nil {
 			return err
