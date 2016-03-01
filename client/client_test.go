@@ -655,6 +655,7 @@ func TestClientPermissions(t *testing.T) {
 
 	value := []byte("value")
 	for tcNum, tc := range testCases {
+		log.Infof("node client: %t, path: %s", tc.client == nodeClient, tc.path)
 		pErr := tc.client.Put(tc.path, value)
 		if pErr == nil != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, pErr)

@@ -424,12 +424,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// This is our base handler, so catch all panics and make sure they stick.
 		defer log.FatalOnPanic()
 
-		// Wait for the http server to be ready. This is temporary code; the
-		// old comment stated:
-		// If server is not available, return 503 http response code.
-		// TODO(spencerkimball): reintroduce the logic described above, but
-		// without reintroducing #4723.
-		<-s.httpReady
+		// If the server isn't ready, return 503 HTTP response.
+		select {
+		case <-s.httpReady:
+			// Proceed.
+		default:
+			http.Error(w, "node not yet available", http.StatusServiceUnavailable)
+			return
+		}
 
 		// Disable caching of responses.
 		w.Header().Set("Cache-control", "no-cache")
