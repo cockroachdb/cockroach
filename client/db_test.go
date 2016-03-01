@@ -364,6 +364,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "DebugName"}:                 {},
 		key{txnType, "InternalSetPriority"}:       {},
 		key{txnType, "NewBatch"}:                  {},
+		key{txnType, "Exec"}:                      {},
 		key{txnType, "Run"}:                       {},
 		key{txnType, "RunWithResponse"}:           {},
 		key{txnType, "SetDebugName"}:              {},

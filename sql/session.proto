@@ -26,18 +26,24 @@ message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
   optional int32 syntax = 2 [(gogoproto.nullable) = false];
   message Transaction {
-    optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
-    // Timestamp to be used by SQL in the above transaction. Note: this is not the
-    // transaction timestamp in roachpb.Transaction above.
-    optional driver.Datum.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-    optional double user_priority = 3 [(gogoproto.nullable) = false,
+    // If missing, it means we're not inside a (KV) txn.
+    optional roachpb.Transaction txn = 1;
+    // txnAborted is set once executing a statement returned an error from KV.
+    // While in this state, every subsequent statement must be rejected until
+    // a COMMIT/ROLLBACK is seen.
+    optional bool txnAborted = 2 [(gogoproto.nullable) = false];
+    // Timestamp to be used by SQL (transaction_timestamp()) in the above
+    // transaction. Note: this is not the transaction timestamp in
+    // roachpb.Transaction above, although it probably should be (#4393).
+    optional driver.Datum.Timestamp txn_timestamp = 3 [(gogoproto.nullable) = false];
+    optional double user_priority = 4 [(gogoproto.nullable) = false,
         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.UserPriority"];
+    // Indicates that the transaction is mutating keys in the
+    // SystemConfig span.
+    optional bool mutates_system_config = 5 [(gogoproto.nullable) = false];
   }
-  // Open transaction.
-  optional Transaction txn = 3;
-  // Indicates that the above transaction is mutating keys in the
-  // SystemConfig span.
-  optional bool mutates_system_config = 4 [(gogoproto.nullable) = false];
+  // Info about the open transaction (if any).
+  optional Transaction txn = 3 [(gogoproto.nullable) = false];
   oneof timezone {
     // A time zone; LOCAL or DEFAULT imply UTC.
     string location = 5;

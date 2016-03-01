@@ -181,9 +181,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 	tableDesc := desc.GetTable()
 
-	_, i, err := tableDesc.FindIndexByName("foo")
+	status, i, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if status != sql.DescriptorActive {
+		t.Fatal("Index 'foo' is not active.")
 	}
 	indexPrefix := sql.MakeIndexKeyPrefix(tableDesc.ID, tableDesc.Indexes[i].ID)
 

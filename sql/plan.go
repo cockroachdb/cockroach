@@ -29,20 +29,17 @@ import (
 
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
+// Create new instances using `makePlanner()`.
 type planner struct {
-	txn           *client.Txn
-	session       Session
+	txn *client.Txn
+	// As the planner executes statements, it may change the current user session.
+	session       *Session
 	user          string
 	evalCtx       parser.EvalContext
 	leases        []*LeaseState
 	leaseMgr      *LeaseManager
 	systemConfig  config.SystemConfig
 	databaseCache *databaseCache
-	// List of schema changers (one for each outstanding
-	// schema change) created by commands in a transaction.
-	// The executor commits the transaction and then calls exec()
-	// on these schema changers to roll out the new schema.
-	schemaChangers []SchemaChanger
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -54,6 +51,16 @@ type planner struct {
 	isAggregateVisitor isAggregateVisitor
 	params             parameters
 	subqueryVisitor    subqueryVisitor
+
+	// Callback used when a node wants to schedule a SchemaChanger
+	// for execution at the end of the current transaction.
+	schemaChangeCallback func(schemaChanger SchemaChanger)
+}
+
+func makePlanner() *planner {
+	// init with an empty session. We can't leave this nil because too much code
+	// looks in the session for the current database.
+	return &planner{session: &Session{}}
 }
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
@@ -254,13 +261,17 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *r
 
 // notify that an outstanding schema change exists for the table.
 func (p *planner) notifySchemaChange(id ID, mutationID MutationID) {
-	p.schemaChangers = append(p.schemaChangers, SchemaChanger{
+	sc := SchemaChanger{
 		tableID:    id,
 		mutationID: mutationID,
 		nodeID:     p.evalCtx.NodeID,
 		cfg:        p.systemConfig,
 		leaseMgr:   p.leaseMgr,
-	})
+	}
+	if p.schemaChangeCallback == nil {
+		panic("Schema changer encountered on planner not configured with a schemaChangeCallback")
+	}
+	p.schemaChangeCallback(sc)
 }
 
 func (p *planner) releaseLeases(db client.DB) {

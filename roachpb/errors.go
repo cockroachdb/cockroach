@@ -347,6 +347,8 @@ func NewTransactionAbortedError() *TransactionAbortedError {
 // NewTransactionPushError initializes a new TransactionPushError.
 // The argument is copied.
 func NewTransactionPushError(pusheeTxn Transaction) *TransactionPushError {
+	// Note: this error will cause a txn restart. The error that the client
+	// receives contains a txn that might have a modified priority.
 	return &TransactionPushError{PusheeTxn: pusheeTxn.Clone()}
 }
 
