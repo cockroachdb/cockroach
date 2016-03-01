@@ -239,7 +239,6 @@ func TestKVDBTransaction(t *testing.T) {
 // TestAuthentication tests authentication for the KV endpoint.
 func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#4653")
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
