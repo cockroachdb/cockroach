@@ -196,6 +196,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
+	roachpb.RegisterNodeServer(s.grpc, s.node)
+
 	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
@@ -291,7 +293,7 @@ func (s *Server) Start() error {
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
-	if err := s.node.start(s.grpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
