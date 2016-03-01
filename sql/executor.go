@@ -774,11 +774,15 @@ func (e *Executor) execStmtsInCurrentTxn(
 		if checkStmtStringChange {
 			stmtStrBefore = stmt.String()
 		}
-		res, pErr, txnDone := e.execStmtInCurrentTransaction(
-			stmt, planMaker,
-			txnState.aborted, implicitTxn,
-			txnBeginning && (i == 0), /* firstInTxn */
-			stmtTimestamp)
+		var res Result
+		var pErr *roachpb.Error
+		if txnState.state() == abortedTransaction {
+			res, pErr = e.execStmtInAbortedTxn(stmt, txnState)
+		} else {
+			res, pErr = e.execStmtInCurrentTxn(
+				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
+				stmtTimestamp, txnState)
+		}
 		if checkStmtStringChange {
 			after := stmt.String()
 			if after != stmtStrBefore {
@@ -786,30 +790,49 @@ func (e *Executor) execStmtsInCurrentTxn(
 					stmtStrBefore, after))
 			}
 		}
+		results = append(results, res)
 		if pErr != nil {
-			results = append(results, Result{PErr: pErr})
-			txnState.aborted = true
+			// After an error happened, skip executing all the remaining statements
+			// in this batch.  This is Postgres behavior, and it makes sense as the
+			// protocol doesn't let you return results after an error.
 			return results, nil, pErr
 		}
-		results = append(results, res)
-		if txnDone {
+		if txnState.state() == noTransaction {
 			// If the transaction is done, return the remaining statements to
 			// be executed as a different group.
-			txnState.aborted = false
-			txnState.txn = nil
 			return results, stmts[i+1:], nil
 		}
 	}
+	// If we got here, we've managed to consume all statements and we're still in a txn.
 	return results, nil, nil
 }
 
-// execStmtInCurrentTransaction executes one statement in the context
+// execStmtInAbortedMode executes on statement in a txn that's in aborted mode.
+// Everything but COMMIT/ROLLBACK cause errors.
+func (e *Executor) execStmtInAbortedTxn(
+	stmt parser.Statement, txnState *txnState) (Result, *roachpb.Error) {
+	if txnState.state() != abortedTransaction {
+		panic("execStmtInAbortedTxn called outside of an aborted txn")
+	}
+	switch stmt.(type) {
+	case *parser.CommitTransaction, *parser.RollbackTransaction:
+		// Reset the state to allow new transactions to start.
+		// Note: postgres replies to COMMIT of failed txn with "ROLLBACK" too.
+		result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
+		txnState.aborted = false
+		txnState.txn = nil
+		return result, nil
+	default:
+		pErr := roachpb.NewError(&roachpb.SqlTransactionAbortedError{})
+		return Result{PErr: pErr}, pErr
+	}
+}
+
+// execStmtInCurrentTxn executes one statement in the context
 // of the planner's transaction (which is assumed to exist).
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
 // and delegates everything else to `execStmt`.
 // It binds placeholders.
-// It also handles the Executor's "aborted mode", where it short-circuits execution if
-// the current transaction has been aborted.
 //
 // The current transaction might be committed/rolled back when this returns.
 //
@@ -827,29 +850,19 @@ func (e *Executor) execStmtsInCurrentTxn(
 //
 // Returns:
 // - a Result
-// - an error, if any
-// - a bool indicating whether the SQL txn is done (set) or not.
-func (e *Executor) execStmtInCurrentTransaction(
+// - an error, if any. In case of error, the result returned also reflect
+// reflects this error.
+func (e *Executor) execStmtInCurrentTxn(
 	stmt parser.Statement, planMaker *planner,
-	abortedMode bool,
 	implicitTxn bool,
 	firstInTxn bool,
-	stmtTimestamp parser.DTimestamp) (Result, *roachpb.Error, bool) {
-	// Short-circuit if we're in aborted mode.
-	if abortedMode {
-		switch stmt.(type) {
-		case *parser.CommitTransaction, *parser.RollbackTransaction:
-			// Reset the state to allow new transactions to start.
-			// Note: postgres replies to COMMIT of failed txn with "ROLLBACK" too.
-			result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
-			return result, nil, true
-		default:
-			return Result{}, roachpb.NewError(&roachpb.SqlTransactionAbortedError{}), false
-		}
+	stmtTimestamp parser.DTimestamp,
+	txnState *txnState) (Result, *roachpb.Error) {
+	if txnState.state() != openTransaction {
+		panic("execStmtInCurrentTxn called outside of an open txn")
 	}
-
 	if planMaker.txn == nil {
-		panic("running execStmtInCurrentTransaction outside of a transaction")
+		panic("execStmtInCurrentTxn called with the a txn not set on the planner")
 	}
 
 	planMaker.evalCtx.StmtTimestamp = stmtTimestamp
@@ -859,28 +872,38 @@ func (e *Executor) execStmtInCurrentTransaction(
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
-			return Result{}, roachpb.NewError(errTransactionInProgress), false
+			txnState.aborted = true
+			pErr := roachpb.NewError(errTransactionInProgress)
+			return Result{PErr: pErr}, pErr
 		}
-	case *parser.CommitTransaction, *parser.RollbackTransaction:
+	case *parser.CommitTransaction, *parser.RollbackTransaction, *parser.SetTransaction:
 		if implicitTxn {
-			return Result{}, roachpb.NewError(errNoTransactionInProgress), false
-		}
-	case *parser.SetTransaction:
-		if implicitTxn {
-			return Result{}, roachpb.NewError(errNoTransactionInProgress), false
+			txnState.aborted = true
+			pErr := roachpb.NewError(errNoTransactionInProgress)
+			return Result{PErr: pErr}, pErr
 		}
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
 	stmt, err := parser.FillArgs(stmt, &planMaker.params)
 	if err != nil {
-		return Result{}, roachpb.NewError(err), false
+		txnState.aborted = true
+		pErr := roachpb.NewError(err)
+		return Result{PErr: pErr}, pErr
 	}
 
 	result, pErr := e.execStmt(stmt, planMaker, time.Now(),
 		implicitTxn /* autoCommit */)
 	txnDone := planMaker.txn == nil
-	return result, pErr, txnDone
+	if pErr != nil {
+		result = Result{PErr: pErr}
+		txnState.aborted = true
+	}
+	if txnDone {
+		txnState.aborted = false
+		txnState.txn = nil
+	}
+	return result, pErr
 }
 
 // the current transaction might have been committed/rolled back when this returns.
