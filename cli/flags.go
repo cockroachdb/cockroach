@@ -36,6 +36,10 @@ var maxResults int64
 var connURL string
 var connUser, connHost, connPort, connDBName string
 
+// cliContext is the CLI Context used for the command-line client.
+var cliContext = NewContext()
+var cacheSize *bytesValue
+
 var flagUsage = map[string]string{
 	"attrs": wrapText(`
 An ordered, colon-separated list of node attributes. Attributes are
@@ -204,14 +208,22 @@ Database user name.`),
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
 
-type bytesValue uint64
+type bytesValue struct {
+	val   *uint64
+	isSet bool
+}
+
+func newBytesValue(val *uint64) *bytesValue {
+	return &bytesValue{val: val}
+}
 
 func (b *bytesValue) Set(s string) error {
 	v, err := humanize.ParseBytes(s)
 	if err != nil {
 		return err
 	}
-	*b = bytesValue(v)
+	*b.val = v
+	b.isSet = true
 	return nil
 }
 
@@ -223,7 +235,7 @@ func (b *bytesValue) String() string {
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return humanize.IBytes(uint64(*b))
+	return humanize.IBytes(*b.val)
 }
 
 func wrapText(s string) string {
@@ -281,8 +293,9 @@ func initFlags(ctx *Context) {
 		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, usage("linearizable"))
 
 		// Engine flags.
-		f.Var((*bytesValue)(&ctx.CacheSize), "cache-size", usage("cache-size"))
-		f.Var((*bytesValue)(&ctx.MemtableBudget), "memtable-budget", usage("memtable-budget"))
+		cacheSize = newBytesValue(&ctx.CacheSize)
+		f.Var(cacheSize, "cache-size", usage("cache-size"))
+		f.Var(newBytesValue(&ctx.MemtableBudget), "memtable-budget", usage("memtable-budget"))
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, usage("scan-interval"))
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))
@@ -290,6 +303,19 @@ func initFlags(ctx *Context) {
 		if err := startCmd.MarkFlagRequired("store"); err != nil {
 			panic(err)
 		}
+
+		// Ensure the cliContext has been initialized for the start command when
+		// "help start" is run. This might be a bit of over-polish as all it is
+		// doing is ensuring that the default value of the --cache-size flag is
+		// correct.
+		fn := startCmd.HelpFunc()
+		startCmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+			initStartContext(cliContext)
+			if flag := f.Lookup("cache-size"); flag != nil {
+				flag.DefValue = cacheSize.String()
+			}
+			fn(c, args)
+		})
 	}
 
 	{
