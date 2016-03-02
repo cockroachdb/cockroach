@@ -89,6 +89,19 @@ func prettySpans(spans []span, skip int) string {
 	return buf.String()
 }
 
+// kvBatchSize is the number of keys we request at a time.
+// On a single node, 1000 was enough to avoid any performance degradation. On multi-node clusters,
+// we want bigger chunks to make up for the higher latency.
+// TODO(radu): parameters like this should be configurable
+var kvBatchSize = 10000
+
+// SetKVBatchSize changes the kvFetcher batch size, and returns a function that restores it.
+func SetKVBatchSize(val int) func() {
+	oldVal := kvBatchSize
+	kvBatchSize = val
+	return func() { kvBatchSize = oldVal }
+}
+
 // kvFetcher handles retrieval of key/values.
 type kvFetcher struct {
 	// "Constant" fields, provided by the caller.
@@ -96,59 +109,119 @@ type kvFetcher struct {
 	spans   spans
 	reverse bool
 
-	fetched bool
-	kvs     []client.KeyValue
-	kvIndex int
+	fetchEnd     bool
+	kvs          []client.KeyValue
+	kvIndex      int
+	totalFetched int64
 }
 
 func makeKVFetcher(txn *client.Txn, spans spans, reverse bool) kvFetcher {
 	return kvFetcher{txn: txn, spans: spans, reverse: reverse}
 }
 
-// fetch retrieves all spans from the kv
-//
-// TODO(radu): The key-value scan currently reads all of the key-value
-// pairs, but they could just as easily be read in chunks. Probably worthwhile
-// to separate out the retrieval of the key-value pairs into a separate
-// structure.
+// fetch retrieves spans from the kv
 func (f *kvFetcher) fetch() *roachpb.Error {
 	// Retrieve all the spans.
 	b := &client.Batch{}
-	if f.reverse {
-		for i := len(f.spans) - 1; i >= 0; i-- {
-			b.ReverseScan(f.spans[i].start, f.spans[i].end, f.spans[i].count)
+
+	// TODO(radu): until we have a per-batch limit (issue #4696), we
+	// only do batching if we have a single span.
+	if len(f.spans) == 1 {
+		count := int64(kvBatchSize)
+		if f.spans[0].count != 0 {
+			if f.spans[0].count <= f.totalFetched {
+				panic(fmt.Sprintf("trying to fetch beyond span count %d (fetched: %d)",
+					f.spans[0].count, f.totalFetched))
+			}
+			remaining := f.spans[0].count - f.totalFetched
+			if count > remaining {
+				count = remaining
+			}
+		}
+		if f.reverse {
+			end := f.spans[0].end
+			if len(f.kvs) > 0 {
+				// the new range ends at the last key (non-inclusive)
+				end = f.kvs[len(f.kvs)-1].Key
+				if end.Equal(f.spans[0].start) {
+					// No more keys
+					f.kvs = nil
+					f.fetchEnd = true
+					return nil
+				}
+			}
+			b.ReverseScan(f.spans[0].start, end, count)
+		} else {
+			start := f.spans[0].start
+			if len(f.kvs) > 0 {
+				// the new range starts after the last key
+				start = f.kvs[len(f.kvs)-1].Key.Next()
+				if start.Equal(f.spans[0].end) {
+					// No more keys
+					f.kvs = nil
+					f.fetchEnd = true
+					return nil
+				}
+			}
+			b.Scan(start, f.spans[0].end, count)
 		}
 	} else {
-		for i := 0; i < len(f.spans); i++ {
-			b.Scan(f.spans[i].start, f.spans[i].end, f.spans[i].count)
+		if f.reverse {
+			for i := len(f.spans) - 1; i >= 0; i-- {
+				b.ReverseScan(f.spans[i].start, f.spans[i].end, f.spans[i].count)
+			}
+		} else {
+			for i := 0; i < len(f.spans); i++ {
+				b.Scan(f.spans[i].start, f.spans[i].end, f.spans[i].count)
+			}
 		}
 	}
 	if pErr := f.txn.Run(b); pErr != nil {
 		return pErr
 	}
 
-	for _, result := range b.Results {
-		if f.kvs == nil {
-			f.kvs = result.Rows
-		} else {
-			f.kvs = append(f.kvs, result.Rows...)
+	if f.kvs == nil {
+		numResults := 0
+		for _, result := range b.Results {
+			numResults += len(result.Rows)
 		}
+		f.kvs = make([]client.KeyValue, 0, numResults)
+	} else {
+		f.kvs = f.kvs[:0]
 	}
-	f.fetched = true
+
+	for _, result := range b.Results {
+		f.kvs = append(f.kvs, result.Rows...)
+	}
+
+	f.totalFetched += int64(len(f.kvs))
+	f.kvIndex = 0
+
+	if !(len(f.spans) == 1 && len(f.kvs) == kvBatchSize &&
+		(f.spans[0].count == 0 || f.spans[0].count > f.totalFetched)) {
+		f.fetchEnd = true
+	}
+
+	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
+	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the
+	// total number of fetches that happen in parallel (and thus the amount of resources we use).
 	return nil
 }
 
 // nextKV returns the next key/value (initiating fetches as necessary). When there are no more keys,
 // returns false and an empty key/value.
 func (f *kvFetcher) nextKV() (bool, client.KeyValue, *roachpb.Error) {
-	if !f.fetched {
+	if f.kvIndex == len(f.kvs) {
+		if f.fetchEnd {
+			return false, client.KeyValue{}, nil
+		}
 		pErr := f.fetch()
 		if pErr != nil {
 			return false, client.KeyValue{}, pErr
 		}
-	}
-	if f.kvIndex == len(f.kvs) {
-		return false, client.KeyValue{}, nil
+		if len(f.kvs) == 0 {
+			return false, client.KeyValue{}, nil
+		}
 	}
 	f.kvIndex++
 	return true, f.kvs[f.kvIndex-1], nil
