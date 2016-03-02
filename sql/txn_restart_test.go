@@ -19,7 +19,6 @@ package sql_test
 import (
 	"bytes"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -48,23 +47,18 @@ func injectRetriableErrors(
 // txns in case of retriable errors.
 func TestTxnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/4753")
-	defer func() { storage.TestingCommandFilter = nil }()
-	server, sqlDB, _ := setup(t)
-	defer cleanup(server, sqlDB)
 
-	// Set up error injection useful later in the test.
-	var magicValsLock sync.Mutex
-	magicValsLock.Lock()
+	// Set up error injection that causes retries, to be used later in the test.
+	// This needs to be set up before the server is started.
 	restarts := make(map[string]int)
 	magicVals := []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"}
-	magicValsLock.Unlock()
-	storage.TestingCommandFilter =
+	cleanupFilter := storage.GetTestingCommandFilters().AppendFilter(
 		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
-			magicValsLock.Lock()
-			defer magicValsLock.Unlock()
 			return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
-		}
+		})
+
+	server, sqlDB, _ := setup(t)
+	defer cleanup(server, sqlDB)
 
 	// Make sure all the commands we send in this test are sent over the same connection.
 	// This is a bit of a hack; in Go you're not supposed to have connection state
@@ -83,8 +77,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 
-	// Test that implicit txns, txns for which we see all the statements and prefixes
-	// of txns (statements batched together with the BEGIN stmt) are retried.
+	// Test that implicit txns - txns for which we see all the statements and prefixes
+	// of txns (statements batched together with the BEGIN stmt) - are retried.
 	if _, err := sqlDB.Exec(`
 INSERT INTO t.test (k, v) VALUES ('a', 'boulanger');
 BEGIN;
@@ -99,22 +93,25 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 		t.Fatal(err)
 	}
 
-	{
-		magicValsLock.Lock()
-		for _, val := range magicVals {
-			if restarts[val] != 2 {
-				t.Errorf("INSERT for %s has been retried %d times, instead of 2",
-					val, restarts[val])
-			}
+	cleanupFilter()
+
+	for _, val := range magicVals {
+		if restarts[val] != 2 {
+			t.Errorf("INSERT for %s has been retried %d times, instead of 2",
+				val, restarts[val])
 		}
-
-		// Now test that we don't retry what we shouldn't: insert an error into a txn
-		// we can't automatically retry (because it spans requests).
-
-		magicVals = []string{"hooly"}
-		restarts = make(map[string]int)
-		magicValsLock.Unlock()
 	}
+
+	// Now test that we don't retry what we shouldn't: insert an error into a txn
+	// we can't automatically retry (because it spans requests).
+
+	magicVals = []string{"hooly"}
+	restarts = make(map[string]int)
+	cleanupFilter = storage.GetTestingCommandFilters().AppendFilter(
+		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+			return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
+		})
+	defer cleanupFilter()
 
 	// Start a txn.
 	if _, err := sqlDB.Exec(`

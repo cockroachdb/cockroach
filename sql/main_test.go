@@ -82,7 +82,7 @@ func checkEndTransactionTrigger(_ roachpb.StoreID, req roachpb.Request, _ roachp
 
 type testServer struct {
 	server.TestServer
-	cleanupFn func()
+	cleanupFns []func()
 }
 
 func setupTestServer(t *testing.T) *testServer {
@@ -90,8 +90,9 @@ func setupTestServer(t *testing.T) *testServer {
 }
 
 func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
-	storage.TestingCommandFilter = checkEndTransactionTrigger
+	storage.GetTestingCommandFilters().AppendFilter(checkEndTransactionTrigger)
 	s := &testServer{TestServer: server.TestServer{Ctx: ctx}}
+	s.cleanupFns = append(s.cleanupFns, func() { storage.GetTestingCommandFilters().Reset() })
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -111,17 +112,16 @@ func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *sql.DB, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.cleanupFn = cleanupFn
+	s.cleanupFns = append(s.cleanupFns, cleanupFn)
 
 	return s, sqlDB, s.DB()
 }
 
 func cleanupTestServer(s *testServer) {
 	s.Stop()
-	if s.cleanupFn != nil {
-		s.cleanupFn()
+	for _, fn := range s.cleanupFns {
+		fn()
 	}
-	storage.TestingCommandFilter = nil
 }
 
 func cleanup(s *testServer, db *sql.DB) {
