@@ -607,10 +607,12 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 		colRef := columnRef{&s.table, colOrder.colIdx}
 		renderIdx, ok := s.findRenderIndexForCol(colRef)
 		if !ok {
-			break
+			return ordering
 		}
 		ordering.addColumn(renderIdx, colOrder.direction)
 	}
+	// We added all columns in fromOrder; we can copy the distinct flag.
+	ordering.unique = fromOrder.unique
 	return ordering
 }
 
