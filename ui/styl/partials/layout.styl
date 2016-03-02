@@ -32,13 +32,14 @@ $subnav-background  = $secondary-gray-3
 html
 body
   height 100%
+  min-width 1480px
   background-color $secondary-gray-4
 
 #root
   position relative
   padding-left $nav-width
   min-height 100% // TODO or calc(100% - 4rem)
-  min-width 1500px
+  min-width 100%
 
   &:after
     content ""
@@ -62,7 +63,7 @@ body
 
   .topbar + &
     padding-top $top-bar-height + 10px
-    width 1500px
+    width 100%
 
   .nav + &
     padding-top $top-bar-height + $subnav-height + 10px
@@ -178,6 +179,34 @@ button
   img
     position relative
     top 8px
+
+  .health
+    font-variant small-caps
+    display block
+
+    span.health-icon
+      display inline-block
+      padding 0 3px
+      height 21px
+      border-radius 100%
+
+    .icon-check-circle
+      color $main-green
+    .icon-x
+      color $secondary-red
+    .icon-skull
+      background-color $secondary-gray-11
+      color white
+
+    *
+      display inline
+
+    .unreachable-text
+      position relative
+      top -3px
+      font-variant normal
+      font-family Lato-Medium
+      color $secondary-gray-2
 
   .info-container
     display inline-block
