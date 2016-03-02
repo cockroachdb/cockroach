@@ -63,6 +63,21 @@ func StartTestServer(t util.Tester) *TestServer {
 	return s
 }
 
+// StartTestServerJoining starts an in-memory test server that attempts to join `other`.
+func StartTestServerJoining(t util.Tester, other *TestServer) *TestServer {
+	s := &TestServer{Ctx: NewTestContext()}
+	s.Ctx.JoinUsing = other.ServingAddr()
+	if err := s.Start(); err != nil {
+		if t != nil {
+			t.Fatalf("Could not start server: %v", err)
+		} else {
+			log.Fatalf("Could not start server: %v", err)
+		}
+	}
+	log.Infof("Node ID: %d", s.Gossip().GetNodeID())
+	return s
+}
+
 // StartInsecureTestServer starts an insecure in-memory test server.
 func StartInsecureTestServer(t util.Tester) *TestServer {
 	s := &TestServer{Ctx: NewTestContext()}
@@ -203,6 +218,11 @@ func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
 	stopper.AddCloser(stop.CloserFn(func() {
 		config.DefaultZoneConfig = oldDefaultZC
 	}))
+
+	// Needs to be called before NewServer to ensure resolvers are initialized.
+	if err := ts.Ctx.InitNode(); err != nil {
+		return err
+	}
 
 	var err error
 	ts.Server, err = NewServer(ts.Ctx, stopper)
