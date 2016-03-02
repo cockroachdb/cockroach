@@ -769,6 +769,9 @@ func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return false, expr
 	}
+	if d == nil {
+		d = DNull
+	}
 	return true, d
 }
 
