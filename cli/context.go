@@ -16,7 +16,6 @@
 
 package cli
 
-// Context holds parameters needed to setup a server.
 import "github.com/cockroachdb/cockroach/server"
 
 // Context contains global settings for the command-line client.

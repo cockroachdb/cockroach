@@ -39,9 +39,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// cliContext is the CLI Context used for the command-line client.
-var cliContext = NewContext()
-
 var errMissingParams = errors.New("missing or invalid parameters")
 
 // panicGuard wraps an errorless command into one wrapping panics into errors.
@@ -101,6 +98,12 @@ uninitialized, specify the --join flag to point to any healthy node
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
+	if !cacheSize.isSet {
+		if size, err := server.GetTotalMemory(); err == nil {
+			cliContext.CacheSize = size / 2
+		}
+	}
+
 	// Default the log directory to the the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
