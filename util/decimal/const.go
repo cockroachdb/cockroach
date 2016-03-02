@@ -26,14 +26,20 @@ const Precision = 16
 
 // Read-only constants used for compuation.
 var (
-	decimalHalf  = inf.NewDec(5, 1)
-	decimalOne   = inf.NewDec(1, 0)
-	decimalTwo   = inf.NewDec(2, 0)
-	decimalLog2  = new(inf.Dec)
-	decimalLog10 = new(inf.Dec)
+	decimalHalf       = inf.NewDec(5, 1)
+	decimalOneEighth  = new(inf.Dec)
+	decimalOne        = inf.NewDec(1, 0)
+	decimalTwo        = inf.NewDec(2, 0)
+	decimalThree      = inf.NewDec(3, 0)
+	decimalEight      = inf.NewDec(8, 0)
+	decimalLog2       = new(inf.Dec)
+	decimalLog10      = new(inf.Dec)
+	decimalCbrtC1     = new(inf.Dec)
+	decimalCbrtC2     = new(inf.Dec)
+	decimalCbrtC3     = new(inf.Dec)
 	// Unused constants for now.
-	// decimalE     = new(inf.Dec)
-	// decimalPi    = new(inf.Dec)
+	// decimalE          = new(inf.Dec)
+	// decimalPi         = new(inf.Dec)
 )
 
 func init() {
@@ -42,6 +48,19 @@ func init() {
 	}
 	if _, ok := decimalLog10.SetString(strLog10); !ok {
 		panic("error setting log(10)")
+	}
+	if _, ok := decimalOneEighth.SetString("0.125"); !ok {
+		panic("error setting 0.125")
+	}
+
+	if _, ok := decimalCbrtC1.SetString("-0.46946116"); !ok {
+		panic("error setting -0.46946116")
+	}
+	if _, ok := decimalCbrtC2.SetString("1.072302"); !ok {
+		panic("error setting 1.072302")
+	}
+	if _, ok := decimalCbrtC3.SetString("0.3812513"); !ok {
+		panic("error setting 0.3812513")
 	}
 	// if _, ok := decimalE.SetString(strE); !ok {
 	// 	panic("error setting e")
