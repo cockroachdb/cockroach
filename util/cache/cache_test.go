@@ -102,6 +102,22 @@ func TestCacheDel(t *testing.T) {
 	}
 }
 
+func TestCacheAddDelEntry(t *testing.T) {
+	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
+	e := &Entry{Key: testKey("myKey"), Value: 1234}
+	mc.AddEntry(e)
+	if val, ok := mc.Get(testKey("myKey")); !ok {
+		t.Fatal("TestDel returned no match")
+	} else if val != 1234 {
+		t.Fatalf("TestDel failed. Expected %d, got %v", 1234, val)
+	}
+
+	mc.DelEntry(e)
+	if _, ok := mc.Get(testKey("myKey")); ok {
+		t.Fatal("TestRemove returned a removed entry")
+	}
+}
+
 func TestCacheEviction(t *testing.T) {
 	mc := NewUnorderedCache(Config{Policy: CacheLRU, ShouldEvict: evictTwoOrMore})
 	// Insert two keys into cache which only holds 1.

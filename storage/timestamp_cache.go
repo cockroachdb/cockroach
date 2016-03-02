@@ -152,7 +152,6 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old: ------------
 					//
 					// New: ------------
-					// Res: ------------ (new)
 					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
 					cache.MoveToEnd(o.Entry)
 					return
@@ -163,9 +162,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old:   --------
 					//
 					// Old:
-					// TODO(nvanbenschoten) Avoid internal lookup of overlapping entry on deletion
-					// by adding a cache.DelEntry method and including the entry in a cache.Overlap.
-					cache.Del(o.Key)
+					cache.DelEntry(o.Entry)
 				case sCmp > 0 && eCmp < 0:
 					// Old contains new; split up old into two.
 					//

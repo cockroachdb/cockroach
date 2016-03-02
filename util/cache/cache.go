@@ -192,8 +192,14 @@ func (bc *baseCache) Get(key interface{}) (value interface{}, ok bool) {
 
 // Del removes the provided key from the cache.
 func (bc *baseCache) Del(key interface{}) {
-	if e := bc.store.get(key); e != nil {
-		bc.removeElement(e)
+	e := bc.store.get(key)
+	bc.DelEntry(e)
+}
+
+// DelEntry removes the provided entry from the cache.
+func (bc *baseCache) DelEntry(entry *Entry) {
+	if entry != nil {
+		bc.removeElement(entry)
 	}
 }
 
