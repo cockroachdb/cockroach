@@ -77,13 +77,109 @@ const (
 	opReplica = "replica"
 )
 
+// CommandFilter is the types of function to use with CommandFilters.
+type CommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
+
 // TestingCommandFilter may be set in tests to intercept the handling
 // of commands and artificially generate errors. Return nil to continue
 // with regular processing or non-nil to terminate processing with the
 // returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results
 // each time.
-var TestingCommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
+//
+// DEPRECATED: writing to this directly is deprecated. Use CommandFilters
+// for registering filter functions.
+var TestingCommandFilter CommandFilter
+
+// CommandFilters provides facilities for registering "TestingCommandFilters"
+// (i.e. functions to be run on every replica command).
+// This should be used as a singleton, through GetTestingCommandFilters().
+// CommandFilters is thread-safe.
+type CommandFilters struct {
+	sync.Mutex
+	filters []struct {
+		id     int
+		filter CommandFilter
+	}
+	nextID int
+}
+
+// Singleton CommandFilters.
+var commandFiltersSingleton CommandFilters
+var commandFilterInit sync.Once
+
+// GetTestingCommandFilters returns a CommandFilters singleton.
+//
+// Note that this overrides TestingCommandFilters, so it shouldn't be
+// used with modules that write TestingCommandFilter directly.
+// Also note that, in order to avoid data races, this should be called for the
+// first time before executing and KV commands, since Replica reads
+// TestingCommandFilter unsynchronized. Before server startup would be a good
+// time to call this.  But once you've ensured this is called once before the
+// server starts, subsequent calls can be done at any time as they no longer
+// race with anyone.
+func GetTestingCommandFilters() *CommandFilters {
+	commandFilterInit.Do(func() {
+		TestingCommandFilter = commandFiltersSingleton.runFilters
+	})
+	return &commandFiltersSingleton
+}
+
+// runFilters executes the registered filters, stopping at the first one
+// that returns an error.
+func (c *CommandFilters) runFilters(
+	sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+
+	c.Lock()
+	defer c.Unlock()
+	for _, f := range c.filters {
+		err := f.filter(sid, req, hdr)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AppendFilter registers a filter function to run after all the previously
+// registered filtes.
+// Returns a closure that the client must run for doing cleanup when the
+// filter should be deregistered.
+func (c *CommandFilters) AppendFilter(filter CommandFilter) func() {
+	c.Lock()
+	defer c.Unlock()
+	id := c.nextID
+	c.nextID++
+	c.filters = append(c.filters, struct {
+		id     int
+		filter CommandFilter
+	}{id, filter})
+
+	return func() {
+		c.removeFilter(id)
+	}
+}
+
+// removeFilter removes a filter previously registered. Meant to be used as the
+// closure returned by AppendFilter.
+func (c *CommandFilters) removeFilter(id int) {
+	c.Lock()
+	defer c.Unlock()
+	for i, f := range c.filters {
+		if f.id == id {
+			c.filters = append(c.filters[:i], c.filters[i+1:]...)
+			return
+		}
+	}
+	panic(fmt.Sprintf("failed to find filter with id: %d. Maybe someone called Reset()?", id))
+}
+
+// Reset deregisters all the filters.
+func (c *CommandFilters) Reset() {
+	c.Lock()
+	defer c.Unlock()
+	c.filters = c.filters[:0]
+}
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
