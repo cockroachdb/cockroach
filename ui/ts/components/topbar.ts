@@ -1,5 +1,7 @@
 // source: components/topbar.ts
 
+/// <reference path="./health.ts" />
+
 // Author: Max Lang (max@cockroachlabs.com)
 
 module Components {
@@ -18,7 +20,7 @@ module Components {
       return m(".topbar", [
         (args.title && m("h2", args.title) || (args.titleImage)),
         m(".info-container", [
-          // TODO: health
+          m(".health", [m("strong", "health:"), m.component(Components.Health, {})]),
           m(".last-updated", [ m("strong", "Updated: "), updatedStr ]),
         ]),
       ]);
