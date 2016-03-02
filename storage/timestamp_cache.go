@@ -55,7 +55,6 @@ type TimestampCache struct {
 type cacheValue struct {
 	timestamp roachpb.Timestamp
 	txnID     *uuid.UUID // Nil for no transaction
-	readOnly  bool       // Command is read-only
 }
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -153,7 +152,9 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old: ------------
 					//
 					// New: ------------
-					*cv = cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+					// Res: ------------ (new)
+					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
+					cache.MoveToEnd(o.Entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
 					// New contains or is equal to old; delete old.
@@ -175,11 +176,9 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					oldEnd := o.Key.End
 					o.Key.End = r.Start
 
-					// TODO(nvanbenschoten) Is it ok that this new interval will mess up the
-					// cache's FIFO ordering?
 					key := cache.MakeKey(r.End, oldEnd)
 					entry := makeCacheEntry(key, *cv)
-					cache.AddEntry(entry)
+					cache.AddEntryAfter(entry, o.Entry)
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
 					//

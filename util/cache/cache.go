@@ -135,17 +135,30 @@ func (bc *baseCache) init(store cacheStore) {
 
 // Add adds a value to the cache.
 func (bc *baseCache) Add(key, value interface{}) {
-	bc.add(key, value, nil)
+	bc.add(key, value, nil, nil)
 }
 
 // AddEntry adds a value to the cache. It provides an alternative interface to
 // Add which the caller can use to reduce allocations by bundling the Entry
 // structure with the key and value to be stored.
 func (bc *baseCache) AddEntry(entry *Entry) {
-	bc.add(entry.Key, entry.Value, entry)
+	bc.add(entry.Key, entry.Value, entry, nil)
 }
 
-func (bc *baseCache) add(key, value interface{}, entry *Entry) {
+// AddEntryAfter adds a value to the cache, making sure that it is placed after
+// the second entry in the eviction queue. It provides an alternative interface to
+// Add which the caller can use to reduce allocations by bundling the Entry
+// structure with the key and value to be stored.
+func (bc *baseCache) AddEntryAfter(entry, after *Entry) {
+	bc.add(entry.Key, entry.Value, entry, after)
+}
+
+// MoveToEnd moves the entry to the end of the eviction queue.
+func (bc *baseCache) MoveToEnd(entry *Entry) {
+	bc.ll.MoveToFront(entry.le)
+}
+
+func (bc *baseCache) add(key, value interface{}, entry, after *Entry) {
 	if e := bc.store.get(key); e != nil {
 		bc.access(e)
 		e.Value = value
@@ -156,7 +169,11 @@ func (bc *baseCache) add(key, value interface{}, entry *Entry) {
 		e = &Entry{Key: key, Value: value}
 	}
 	if bc.Policy != CacheNone {
-		e.le = bc.ll.PushFront(e)
+		if after != nil {
+			e.le = bc.ll.InsertBefore(e, after.le)
+		} else {
+			e.le = bc.ll.PushFront(e)
+		}
 	}
 	bc.store.add(e)
 	// Evict as many elements as we can.
@@ -467,6 +484,7 @@ func (ic *IntervalCache) length() int {
 
 // Overlap contains the key/value pair for one overlap instance.
 type Overlap struct {
+	Entry *Entry
 	Key   *IntervalKey
 	Value interface{}
 }
@@ -488,6 +506,7 @@ func (ic *IntervalCache) doOverlaps(i interval.Interface) bool {
 	e := i.(*Entry)
 	ic.access(e) // maintain cache eviction ordering
 	ic.overlaps = append(ic.overlaps, Overlap{
+		Entry: e,
 		Key:   e.Key.(*IntervalKey),
 		Value: e.Value,
 	})
