@@ -377,6 +377,8 @@ func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reve
 			ordering.addColumn(idx, dir)
 		}
 	}
+	// We included any implicit columns, so the results are unique.
+	ordering.unique = true
 	return ordering
 }
 
