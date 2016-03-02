@@ -17,11 +17,13 @@
 package storage
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/interval"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -45,8 +47,9 @@ const (
 // with monotonic increases. The low water mark is initialized to
 // the current system time plus the maximum clock offset.
 type TimestampCache struct {
-	cache            *cache.IntervalCache
+	rCache, wCache   *cache.IntervalCache
 	lowWater, latest roachpb.Timestamp
+	rg               interval.RangeGroup // avoids allocating in Add
 }
 
 // A cacheValue combines the timestamp with an optional txn ID.
@@ -74,17 +77,21 @@ func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 // hybrid clock.
 func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 	tc := &TimestampCache{
-		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		rCache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		wCache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		rg:     interval.NewRangeTree(),
 	}
 	tc.Clear(clock)
-	tc.cache.Config.ShouldEvict = tc.shouldEvict
+	tc.rCache.Config.ShouldEvict = tc.shouldEvict
+	tc.wCache.Config.ShouldEvict = tc.shouldEvict
 	return tc
 }
 
 // Clear clears the cache and resets the low water mark to the
 // current time plus the maximum clock offset.
 func (tc *TimestampCache) Clear(clock *hlc.Clock) {
-	tc.cache.Clear()
+	tc.rCache.Clear()
+	tc.wCache.Clear()
 	tc.lowWater = clock.Now()
 	tc.lowWater.WallTime += clock.MaxOffset().Nanoseconds()
 	tc.latest = tc.lowWater
@@ -114,61 +121,154 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
-		// Check existing, overlapping entries. Remove superseded
-		// entries or return without adding this entry if necessary.
-		key := tc.cache.MakeKey(start, end)
-		for _, o := range tc.cache.GetOverlaps(key.Start, key.End) {
-			ce := o.Value.(*cacheValue)
-			if ce.readOnly != readOnly {
-				continue
-			}
-			if o.Key.Contains(key) {
-				if !ce.timestamp.Less(timestamp) {
-					return // don't add this key; there's already a cache entry with >= timestamp.
-				}
-				if key.Contains(*o.Key) {
-					// The keys are equal, update the existing cache entry.
-					*ce = cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+		var rg interval.RangeGroup
+		rStart := interval.Comparable(start)
+		rEnd := interval.Comparable(end)
+		r := interval.Range{Start: rStart, End: rEnd}
+
+		cache := tc.wCache
+		if readOnly {
+			cache = tc.rCache
+		}
+
+		// Check existing, overlapping entries and truncate/split/remove if
+		// superseded and in the past. If existing entries are in the future,
+		// subtract from the range/ranges that need to be added to cache.
+		for _, o := range cache.GetOverlaps(start, end) {
+			cv := o.Value.(*cacheValue)
+			if !timestamp.Less(cv.timestamp) {
+				// The existing interval has a timestamp less than or equal to the new interval.
+				// Compare interval ranges to determine how to modify existing interval.
+				sCmp := rStart.Compare(o.Key.Start)
+				eCmp := rEnd.Compare(o.Key.End)
+				switch {
+				case sCmp == 0 && eCmp == 0:
+					// New and old are equal; replace old with new and avoid the need to insert new.
+					//
+					// New: ------------
+					// Old: ------------
+					//
+					// Res: ------------ (new)
+					*cv = cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
 					return
+				case sCmp <= 0 && eCmp >= 0:
+					// New contains old; delete old.
+					//
+					// New: ------------
+					// Old:   --------
+					//
+					// Res:
+					// TODO(nvanbenschoten) Avoid internal lookup of overlapping entry on deletion
+					// by adding a cache.DelEntry method and including the entry in a cache.Overlap.
+					cache.Del(o.Key)
+				case sCmp > 0 && eCmp < 0:
+					// Old contains new; split up old into two.
+					//
+					// New:     ----
+					// Old: ------------
+					//
+					// Res: ----    ----
+					oldEnd := o.Key.End
+					o.Key.End = rStart
+
+					// TODO(nvanbenschoten) Is it ok that this new interval will mess up the
+					// cache's FIFO ordering?
+					key := cache.MakeKey(rEnd, oldEnd)
+					entry := makeCacheEntry(key, *cv)
+					cache.AddEntry(entry)
+				case eCmp >= 0:
+					// Partial overlap; truncate old end.
+					//
+					// New:     --------
+					// Old: --------
+					//
+					// Res: ----
+					o.Key.End = rStart
+				case sCmp <= 0:
+					// Partial overlap; truncate old start.
+					//
+					// New: --------
+					// Old:     --------
+					//
+					// Res:         ----
+					o.Key.Start = rEnd
+				default:
+					panic(fmt.Sprintf("no overlap between %v and %v", o.Key.Range, r))
 				}
-			} else if key.Contains(*o.Key) && !timestamp.Less(ce.timestamp) {
-				tc.cache.Del(o.Key) // delete existing key; this cache entry supersedes.
+			} else {
+				// The existing interval has a timestamp greater than the new interval.
+				if rg == nil {
+					// Only use the RangeGroup when subranges start getting removed to avoid
+					// allocations for the common path.
+					rg = tc.rg
+					tc.rg.Add(r)
+					defer rg.Clear()
+				}
+				rg.Sub(o.Key.Range)
 			}
 		}
-		entry := makeCacheEntry(
-			key, cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly})
-		tc.cache.AddEntry(entry)
+
+		value := cacheValue{timestamp: timestamp, txnID: txnID, readOnly: readOnly}
+		if rg == nil {
+			key := cache.MakeKey(r.Start, r.End)
+			entry := makeCacheEntry(key, value)
+			cache.AddEntry(entry)
+		} else {
+			if err := rg.ForEach(func(r interval.Range) error {
+				key := cache.MakeKey(r.Start, r.End)
+				entry := makeCacheEntry(key, value)
+				cache.AddEntry(entry)
+				return nil
+			}); err != nil {
+				panic(err)
+			}
+		}
 	}
 }
 
-// GetMax returns the maximum read and write timestamps which overlap
+// GetMaxRead returns the maximum read timestamps which overlap
 // the interval spanning from start to end. Cached timestamps matching
 // the specified txnID are not considered. If no part of the specified
-// range is overlapped by timestamps in the cache, the low water
-// timestamp is returned for both read and write timestamps.
+// range is overlapped by timestamps from different transactions in the
+// cache, the low water timestamp is returned for the read timestamps.
+func (tc *TimestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) roachpb.Timestamp {
+	return tc.getMax(start, end, txnID, true)
+}
+
+// GetMaxWrite returns the maximum write timestamps which overlap
+// the interval spanning from start to end. Cached timestamps matching
+// the specified txnID are not considered. If no part of the specified
+// range is overlapped by timestamps from different transactions in the
+// cache, the low water timestamp is returned for the write timestamps.
 //
 // The txn ID prevents restarts with a pattern like: read("a"),
 // write("a"). The read adds a timestamp for "a". Then the write (for
 // the same transaction) would get that as the max timestamp and be
 // forced to increment it. This allows timestamps from the same txn
-// to be ignored.
-func (tc *TimestampCache) GetMax(start, end roachpb.Key, txnID *uuid.UUID) (roachpb.Timestamp, roachpb.Timestamp) {
+// to be ignored because the write would instead get the low water
+// timestamp.
+func (tc *TimestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) roachpb.Timestamp {
+	return tc.getMax(start, end, txnID, false)
+}
+
+func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readOnly bool) roachpb.Timestamp {
 	if len(end) == 0 {
 		end = start.Next()
 	}
-	maxR := tc.lowWater
-	maxW := tc.lowWater
-	for _, o := range tc.cache.GetOverlaps(start, end) {
+	max := tc.lowWater
+	cache := tc.wCache
+	if readOnly {
+		cache = tc.rCache
+	}
+	for _, o := range cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
 		if ce.txnID == nil || txnID == nil || !roachpb.TxnIDEqual(txnID, ce.txnID) {
-			if ce.readOnly && maxR.Less(ce.timestamp) {
-				maxR = ce.timestamp
-			} else if !ce.readOnly && maxW.Less(ce.timestamp) {
-				maxW = ce.timestamp
+			if max.Less(ce.timestamp) {
+				max = ce.timestamp
 			}
 		}
 	}
-	return maxR, maxW
+	return max
 }
 
 // MergeInto merges all entries from this timestamp cache into the
@@ -177,19 +277,39 @@ func (tc *TimestampCache) GetMax(start, end roachpb.Key, txnID *uuid.UUID) (roac
 // before merging in the source.
 func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 	if clear {
-		dest.cache.Clear()
+		dest.rCache.Clear()
+		dest.wCache.Clear()
 		dest.lowWater = tc.lowWater
 		dest.latest = tc.latest
+
+		// Because we just cleared the destination cache, we can directly
+		// insert entries from this cache.
+		hardMerge := func(srcCache, destCache *cache.IntervalCache) {
+			srcCache.Do(func(k, v interface{}) {
+				// Cache entries are mutable (see Add), so we give each cache its own
+				// unique copy.
+				entry := makeCacheEntry(*k.(*cache.IntervalKey), *v.(*cacheValue))
+				destCache.AddEntry(entry)
+			})
+		}
+		hardMerge(tc.rCache, dest.rCache)
+		hardMerge(tc.wCache, dest.wCache)
 	} else {
 		dest.lowWater.Forward(tc.lowWater)
 		dest.latest.Forward(tc.latest)
+
+		// The cache was not cleared before, so we can't just insert entries because
+		// intervals may need to be adjusted or removed to maintain the non-overlapping
+		// guarantee.
+		softMerge := func(srcCache *cache.IntervalCache, readOnly bool) {
+			srcCache.Do(func(k, v interface{}) {
+				key, val := *k.(*cache.IntervalKey), *v.(*cacheValue)
+				dest.Add(roachpb.Key(key.Start), roachpb.Key(key.End), val.timestamp, val.txnID, readOnly)
+			})
+		}
+		softMerge(tc.rCache, true)
+		softMerge(tc.wCache, false)
 	}
-	tc.cache.Do(func(k, v interface{}) {
-		// Cache entries are mutable (see Add), so we give each cache its own
-		// unique copy.
-		entry := makeCacheEntry(*k.(*cache.IntervalKey), *v.(*cacheValue))
-		dest.cache.AddEntry(entry)
-	})
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no

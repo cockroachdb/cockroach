@@ -292,6 +292,12 @@ func testRangeGroupSubRanges(t *testing.T, rg RangeGroup) {
 		res []Range
 	}{
 		{
+			add: []Range{},
+			sub: Range{Start: []byte{0x10}, End: []byte{0x11}},
+			rem: false,
+			res: []Range{},
+		},
+		{
 			add: oneRange,
 			sub: Range{Start: []byte{0x10}, End: []byte{0x11}},
 			rem: false,
