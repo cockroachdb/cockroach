@@ -83,17 +83,31 @@ const (
 // returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results
 // each time.
-var TestingCommandFilter testingFilterFunc
+var TestingCommandFilter TestingFilterFunc
 
-type testingFilterFunc func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
+type TestingFilterFunc func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
 
-func RunWithTestingCommandFilter(f func(), filter testingFilterFunc) {
+func RunWithTestingCommandFilter(f func(setFilter func(TestingFilterFunc))) {
 	if TestingCommandFilter != nil {
 		panic("TestingCommandFilter not nil when attempting to set it")
 	}
-	TestingCommandFilter = filter
+	var mu sync.RWMutex
+	var filter TestingFilterFunc
+	TestingCommandFilter = func(s roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		mu.RLock()
+		defer mu.RUnlock()
+		if filter != nil {
+			return filter(s, args, h)
+		}
+		return nil
+	}
 	defer func() { TestingCommandFilter = nil }()
-	f()
+	setFilter := func(newFilter TestingFilterFunc) {
+		mu.Lock()
+		filter = newFilter
+		mu.Unlock()
+	}
+	f(setFilter)
 }
 
 // This flag controls whether Transaction entries are automatically gc'ed
