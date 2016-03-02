@@ -58,7 +58,7 @@ fairly closely. In particular, you want to watch out for proper
 punctuation and capitalization in comments. We use two-space indents
 in non-Go code (in Go, we follow `gofmt` which indents with
 tabs). Format your code assuming it will be read in a window 100
-columns wide. Wrap code and comments at 100 characters unless doing so
+columns wide. Wrap code at 100 characters and comments at 80 unless doing so
 makes the code less legible.
 
 ### Code review workflow
