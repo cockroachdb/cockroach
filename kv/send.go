@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
+	"os"
 	"time"
 
 	"golang.org/x/net/context"
@@ -80,11 +80,80 @@ func newRPCError(err error) rpcError {
 // and without a positive outlook.
 func (r rpcError) CanRetry() bool { return true }
 
-type batchClient struct {
-	remoteAddr net.Addr
-	conn       *grpc.ClientConn
-	client     roachpb.InternalClient
+type batchClient interface {
+	roachpb.InternalClient
+
+	Args() *roachpb.BatchRequest
+	RemoteAddr() string
+	isReady() (bool, error)
+	waitForReady(context.Context) error
+}
+
+type localBatchClient struct {
+	internalServer roachpb.InternalServer
+
 	args       roachpb.BatchRequest
+	remoteAddr string
+}
+
+func (lbc *localBatchClient) Batch(ctx context.Context, in *roachpb.BatchRequest, _ ...grpc.CallOption) (*roachpb.BatchResponse, error) {
+	return lbc.internalServer.Batch(ctx, in)
+}
+
+func (lbc *localBatchClient) Args() *roachpb.BatchRequest {
+	return &lbc.args
+}
+
+func (lbc *localBatchClient) RemoteAddr() string {
+	return lbc.remoteAddr
+}
+
+func (*localBatchClient) isReady() (bool, error) {
+	return true, nil
+}
+
+func (*localBatchClient) waitForReady(_ context.Context) error {
+	return nil
+}
+
+type remoteBatchClient struct {
+	roachpb.InternalClient
+
+	args       roachpb.BatchRequest
+	conn       *grpc.ClientConn
+	remoteAddr string
+}
+
+func (rbc *remoteBatchClient) Args() *roachpb.BatchRequest {
+	return &rbc.args
+}
+
+func (rbc *remoteBatchClient) RemoteAddr() string {
+	return rbc.remoteAddr
+}
+
+func (rbc *remoteBatchClient) isReady() (bool, error) {
+	clientState, err := rbc.conn.State()
+	if err != nil {
+		return false, err
+	}
+	return clientState == grpc.Ready, nil
+}
+
+func (rbc *remoteBatchClient) waitForReady(ctx context.Context) error {
+	addr := rbc.RemoteAddr()
+	conn := rbc.conn
+
+	for clientState, err := conn.State(); clientState != grpc.Ready; clientState, err = conn.WaitForStateChange(ctx, clientState) {
+		if err != nil {
+			return util.Errorf("rpc to %s failed: %s", addr, err)
+		}
+		if clientState == grpc.Shutdown {
+			return util.Errorf("rpc to %s failed as client connection was closed", addr)
+		}
+	}
+
+	return nil
 }
 
 func shuffleClients(clients []batchClient) {
@@ -117,18 +186,30 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
-		conn, err := ctx.GRPCDial(replica.NodeDesc.Address.String())
-		if err != nil {
-			return nil, err
-		}
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
-		clients = append(clients, batchClient{
-			remoteAddr: &replica.NodeDesc.Address,
-			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
-			args:       argsCopy,
-		})
+		remoteAddr := replica.NodeDesc.Address.String()
+
+		if enableLocalCalls && ctx.LocalInternalServer != nil && remoteAddr == ctx.LocalAddr {
+			clients = append(clients, &localBatchClient{
+				internalServer: ctx.LocalInternalServer,
+
+				args:       argsCopy,
+				remoteAddr: remoteAddr,
+			})
+		} else {
+			conn, err := ctx.GRPCDial(replica.NodeDesc.Address.String())
+			if err != nil {
+				return nil, err
+			}
+			clients = append(clients, &remoteBatchClient{
+				InternalClient: roachpb.NewInternalClient(conn),
+
+				args:       argsCopy,
+				conn:       conn,
+				remoteAddr: remoteAddr,
+			})
+		}
 	}
 
 	var orderedClients []batchClient
@@ -139,11 +220,11 @@ func send(opts SendOptions, replicas ReplicaSlice,
 		// Randomly permute order, but keep known-unhealthy clients last.
 		var nHealthy int
 		for i, client := range clients {
-			clientState, err := client.conn.State()
+			isReady, err := client.isReady()
 			if err != nil {
 				return nil, err
 			}
-			if clientState == grpc.Ready {
+			if isReady {
 				clients[i], clients[nHealthy] = clients[nHealthy], clients[i]
 				nHealthy++
 			}
@@ -218,6 +299,10 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	}
 }
 
+// Allow local calls to be dispatched directly to the local server without
+// sending an RPC.
+var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") != "0"
+
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
 
@@ -228,32 +313,26 @@ var sendOneFn = sendOne
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
 func sendOne(client batchClient, timeout time.Duration, trace opentracing.Span, done chan batchCall) {
-	addr := client.remoteAddr
+	addr := client.RemoteAddr()
 	if log.V(2) {
-		log.Infof("sending request to %s: %+v", addr, client.args)
+		log.Infof("sending request to %s: %+v", addr, client.Args())
 	}
 	trace.LogEvent(fmt.Sprintf("sending to %s", addr))
 
 	go func() {
 		// TODO(tamird/tschottdorf): pass this in from DistSender.
 		ctx := context.TODO()
+
 		if timeout != 0 {
 			ctx, _ = context.WithTimeout(ctx, timeout)
 		}
-		for clientState, err := client.conn.State(); clientState != grpc.Ready; clientState, err = client.conn.WaitForStateChange(ctx, clientState) {
-			if err != nil {
-				done <- batchCall{err: newRPCError(
-					util.Errorf("rpc to %s failed: %s", addr, err))}
-				return
-			}
-			if clientState == grpc.Shutdown {
-				done <- batchCall{err: newRPCError(
-					util.Errorf("rpc to %s failed as client connection was closed", addr))}
-				return
-			}
+
+		if err := client.waitForReady(ctx); err != nil {
+			done <- batchCall{err: newRPCError(err)}
+			return
 		}
 
-		reply, err := client.client.Batch(ctx, &client.args)
+		reply, err := client.Batch(ctx, client.Args())
 		done <- batchCall{reply: reply, err: err}
 	}()
 }

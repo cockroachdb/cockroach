@@ -245,6 +245,7 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.ctx.Addr = unresolvedAddr.String()
+	s.rpcContext.SetLocalInternalServer(s.node, s.ctx.Addr)
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldDrain()

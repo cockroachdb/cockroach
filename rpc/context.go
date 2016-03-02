@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -52,6 +53,9 @@ type Context struct {
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
 
+	LocalInternalServer roachpb.InternalServer
+	LocalAddr           string
+
 	conns struct {
 		sync.Mutex
 		cache map[string]*grpc.ClientConn
@@ -93,6 +97,12 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 	})
 
 	return ctx
+}
+
+// SetLocalInternalServer sets the context's local internal batch server.
+func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer, addr string) {
+	ctx.LocalInternalServer = internalServer
+	ctx.LocalAddr = addr
 }
 
 func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
