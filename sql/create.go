@@ -24,7 +24,7 @@ import (
 )
 
 // CreateDatabase creates a database.
-// Privileges: "root" user.
+// Privileges: security.RootUser user.
 //   Notes: postgres requires superuser or "CREATEDB".
 //          mysql uses the mysqladmin command.
 func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.Error) {

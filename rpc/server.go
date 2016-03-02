@@ -87,7 +87,7 @@ func NewServer(context *Context) *Server {
 // argument of the same type as `reqPrototype`. Both the argument and
 // return value of 'handler' should be a pointer to a protocol message
 // type. The handler function will be executed in a new goroutine.
-// Only the "node" system user is allowed to use these endpoints.
+// Only the security.NodeUser system user is allowed to use these endpoints.
 func (s *Server) Register(name string,
 	handler func(proto.Message) (proto.Message, error),
 	reqPrototype proto.Message) error {
@@ -110,7 +110,7 @@ func (s *Server) RegisterPublic(name string,
 // RPC server's goroutine guarantees that the order of requests as
 // they were read from the connection is preserved.
 // If 'public' is true, all users may call this method, otherwise
-// "node" users only.
+// only the security.NodeUser system user may.
 func (s *Server) RegisterAsync(name string, public bool,
 	handler func(proto.Message, func(proto.Message, error)),
 	reqPrototype proto.Message) error {
