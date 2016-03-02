@@ -57,7 +57,7 @@ type Context struct {
 	Certs string
 
 	// User running this process. It could be the user under which
-	// the server is running ("node"), or the user passed in client calls.
+	// the server is running or the user passed in client calls.
 	User string
 
 	// Protects both clientTLSConfig and serverTLSConfig.

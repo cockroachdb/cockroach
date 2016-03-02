@@ -1,5 +1,5 @@
 # Test default table-level permissions.
-# Default user is "root".
+# Default user is root.
 statement ok
 CREATE DATABASE a
 

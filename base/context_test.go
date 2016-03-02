@@ -39,12 +39,12 @@ func TestClientSSLSettings(t *testing.T) {
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, "foobar", "node", "http", true, true, false},
+		{true, "foobar", security.NodeUser, "http", true, true, false},
 		{true, certsDir, "not-a-user", "http", true, true, false},
 		{false, certsDir, "not-a-user", "https", false, true, false},
-		{false, "", "node", "https", true, false, true},
-		{false, certsDir, "node", "https", true, false, false},
-		{false, "/dev/null", "node", "https", false, false, false},
+		{false, "", security.NodeUser, "https", true, false, true},
+		{false, certsDir, security.NodeUser, "https", true, false, false},
+		{false, "/dev/null", security.NodeUser, "https", false, false, false},
 	}
 
 	for tcNum, tc := range testCases {

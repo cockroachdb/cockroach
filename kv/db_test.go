@@ -247,8 +247,8 @@ func TestAuthentication(t *testing.T) {
 	b := &client.Batch{}
 	b.InternalAddRequest(arg)
 
-	// Create a "node" client and call Run() on it which lets us build
-	// our own request, specifying the user.
+	// Create a node user client and call Run() on it which lets us build our own
+	// request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
 	if pErr := db1.Run(b); pErr != nil {
 		t.Fatal(pErr)

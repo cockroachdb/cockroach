@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 )
 
-// NewNodeTestBaseContext creates a base context for testing.
-// This uses embedded certs and the "node" user (default node user).
-// The "node" user has both server and client certificates.
+// NewNodeTestBaseContext creates a base context for testing. This uses
+// embedded certs and the default node user. The default node user has both
+// server and client certificates.
 func NewNodeTestBaseContext() *base.Context {
 	return NewTestBaseContext(security.NodeUser)
 }
