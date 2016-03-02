@@ -1741,8 +1741,8 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pErr)
 				return
 			}
-			if pErr := r.resolveIntents(ctxWithTimeout, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
-				log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
+			if pErr := r.resolveIntents(ctx, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
+				log.Warningc(ctx, "failed to resolve intents: %s", pErr)
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
@@ -1881,7 +1881,11 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			sp := r.store.Tracer().StartSpan("resolve intents")
 			defer sp.Finish()
 			ctx, _ = opentracing.ContextWithSpan(ctx, sp)
-			_, pErr := r.addWriteCmd(ctx, baLocal, &wg)
+			// Always operate with a timeout when resolving intents: this
+			// prevents rare shutdown timeouts in tests.
+			ctxWithTimeout, cancel := context.WithTimeout(ctx, rpc.DefaultRPCTimeout)
+			defer cancel()
+			_, pErr := r.addWriteCmd(ctxWithTimeout, baLocal, &wg)
 			return pErr
 		}
 		wg.Add(1)
