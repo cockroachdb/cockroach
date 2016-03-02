@@ -39,7 +39,6 @@ import (
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
-	"github.com/docker/engine-api/types/strslice"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 )
@@ -246,7 +245,7 @@ func (l *LocalCluster) runDockerSpy() {
 		l,
 		container.Config{
 			Image: dockerspyImage + ":" + dockerspyTag,
-			Cmd:   strslice.New("--dns-domain=" + domain),
+			Cmd:   []string{"--dns-domain=" + domain},
 		}, container.HostConfig{
 			Binds:           []string{"/var/run/docker.sock:/var/run/docker.sock"},
 			PublishAllPorts: true,
@@ -337,7 +336,7 @@ func (l *LocalCluster) initCluster() {
 		container.Config{
 			Image:      *cockroachImage,
 			Volumes:    vols,
-			Entrypoint: strslice.New("/bin/true"),
+			Entrypoint: []string{"/bin/true"},
 		}, container.HostConfig{
 			Binds:           binds,
 			PublishAllPorts: true,
@@ -386,8 +385,8 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 			ExposedPorts: map[nat.Port]struct{}{
 				defaultTCP: {},
 			},
-			Entrypoint: strslice.New(entrypoint...),
-			Cmd:        strslice.New(cmd...),
+			Entrypoint: entrypoint,
+			Cmd:        cmd,
 			Labels: map[string]string{
 				// Allow for `docker ps --filter label=Hostname=roach0` or `--filter label=Roach`.
 				"Hostname": hostname,

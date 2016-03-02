@@ -318,8 +318,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			TracerState: ba.Trace.Context,
 			Baggage:     ba.Trace.Baggage,
 		}
-		if err := tc.tracer.Injector(opentracing.SplitBinary).
-			InjectSpan(sp, carrier); err != nil {
+		if err := tc.tracer.Inject(sp, opentracing.SplitBinary, carrier); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		// TODO(tschottdorf): this isn't pretty; should make it better.
