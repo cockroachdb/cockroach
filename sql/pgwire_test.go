@@ -359,6 +359,7 @@ func TestPGPreparedQuery(t *testing.T) {
 
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
 			base.Params(1).Results(1),
+			base.Params(nil).Results(1),
 		},
 		/* TODO(mjibson): fix #4658
 		"INSERT INTO d.T VALUES ($1) RETURNING $1": {
