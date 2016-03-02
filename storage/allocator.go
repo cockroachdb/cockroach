@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -144,6 +145,24 @@ func (*allocatorError) purgatoryErrorMarker() {}
 
 var _ purgatoryError = &allocatorError{}
 
+// allocatorRand pairs a rand.Rand with a mutex.
+// TODO: Allocator is typically only accessed from a single thread (the
+// replication queue), but this assumption is broken in tests which force
+// replication scans. If those tests can be modified to suspend the normal
+// replication queue during the forced scan, then this rand could be used
+// without a mutex.
+type allocatorRand struct {
+	*sync.Mutex
+	*rand.Rand
+}
+
+func makeAllocatorRand(source rand.Source) allocatorRand {
+	return allocatorRand{
+		Mutex: &sync.Mutex{},
+		Rand:  rand.New(source),
+	}
+}
+
 // AllocatorOptions are configurable options which effect the way that the
 // replicate queue will handle rebalancing opportunities.
 type AllocatorOptions struct {
@@ -180,7 +199,7 @@ type AllocatorOptions struct {
 // rebalanceFromMean from the mean.
 type Allocator struct {
 	storePool *StorePool
-	randGen   *rand.Rand
+	randGen   allocatorRand
 	options   AllocatorOptions
 	balancer  balancer
 }
@@ -193,19 +212,18 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
-	randGen := rand.New(randSource)
 	a := Allocator{
 		storePool: storePool,
-		randGen:   randGen,
 		options:   options,
+		randGen:   makeAllocatorRand(randSource),
 	}
 
 	// Instantiate balancer based on provided options.
 	switch options.Mode {
 	case BalanceModeUsage:
-		a.balancer = usageBalancer{randGen}
+		a.balancer = usageBalancer{a.randGen}
 	case BalanceModeRangeCount:
-		a.balancer = rangeCountBalancer{randGen}
+		a.balancer = rangeCountBalancer{a.randGen}
 	default:
 		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %s", options.Mode.String()))
 	}
@@ -350,7 +368,7 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 	// In production, add some random jitter to shouldRebalance.
-	if !a.options.Deterministic && a.randGen.Float32() > rebalanceShouldRebalanceChance {
+	if a.randomlyIgnoreRebalance() {
 		return false
 	}
 	if log.V(2) {
@@ -370,6 +388,15 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 
 	// ShouldRebalance is true if a suitable replacement can be found.
 	return a.balancer.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
+}
+
+func (a Allocator) randomlyIgnoreRebalance() bool {
+	if a.options.Deterministic {
+		return false
+	}
+	a.randGen.Lock()
+	defer a.randGen.Unlock()
+	return a.randGen.Float32() > rebalanceShouldRebalanceChance
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.

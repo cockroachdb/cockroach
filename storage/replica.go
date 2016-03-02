@@ -1881,7 +1881,11 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			sp := r.store.Tracer().StartSpan("resolve intents")
 			defer sp.Finish()
 			ctx, _ = opentracing.ContextWithSpan(ctx, sp)
-			_, pErr := r.addWriteCmd(ctx, baLocal, &wg)
+			// Always operate with a timeout when resolving intents: this
+			// prevents rare shutdown timeouts in tests.
+			ctxWithTimeout, cancel := context.WithTimeout(ctx, rpc.DefaultRPCTimeout)
+			defer cancel()
+			_, pErr := r.addWriteCmd(ctxWithTimeout, baLocal, &wg)
 			return pErr
 		}
 		wg.Add(1)
