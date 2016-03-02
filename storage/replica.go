@@ -83,7 +83,18 @@ const (
 // returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results
 // each time.
-var TestingCommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
+var TestingCommandFilter testingFilterFunc
+
+type testingFilterFunc func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
+
+func RunWithTestingCommandFilter(f func(), filter testingFilterFunc) {
+	if TestingCommandFilter != nil {
+		panic("TestingCommandFilter not nil when attempting to set it")
+	}
+	TestingCommandFilter = filter
+	defer func() { TestingCommandFilter = nil }()
+	f()
+}
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
