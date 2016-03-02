@@ -90,6 +90,7 @@ func setupTestServer(t *testing.T) *testServer {
 }
 
 func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
+	// TODO(tschottdorf): extract out this particular usage of testServer.
 	storage.TestingCommandFilter = checkEndTransactionTrigger
 	s := &testServer{TestServer: server.TestServer{Ctx: ctx}}
 	if err := s.Start(); err != nil {

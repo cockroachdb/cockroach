@@ -32,6 +32,13 @@ import (
 // immediately cleaned up.
 func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.RunWithTestingCommandFilter(func(setFilter func(storage.TestingFilterFunc)) {
+		testReplicaGCQueueDropReplicaDirect(t, setFilter)
+	})
+}
+
+func testReplicaGCQueueDropReplicaDirect(t *testing.T, setFilter func(storage.TestingFilterFunc)) {
+	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	const numStores = 3
 	rangeID := roachpb.RangeID(1)
@@ -43,7 +50,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// no GC will take place since the consistent RangeLookup hits the first
 	// Node. We use the TestingCommandFilter to make sure that the second Node
 	// waits for the first.
-	storage.TestingCommandFilter = func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		et, ok := args.(*roachpb.EndTransactionRequest)
 		if !ok || id != 2 {
 			return nil
@@ -63,9 +70,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			return nil
 		})
 		return nil
-	}
-
-	defer func() { storage.TestingCommandFilter = nil }()
+	})
 
 	mtc.Start(t, numStores)
 	defer mtc.Stop()

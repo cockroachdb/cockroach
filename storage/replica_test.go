@@ -1162,17 +1162,23 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // range.
 func TestRangeCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testRangeCommandQueue(t, setFilter)
+	})
+}
+
+func testRangeCommandQueue(t *testing.T, setFilter func(TestingFilterFunc)) {
+	defer leaktest.AfterTest(t)()
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
-	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(_ roachpb.StoreID, _ roachpb.Request, h roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, _ roachpb.Request, h roachpb.Header) error {
 		if h.UserPriority == 42 {
 			blockingStart <- struct{}{}
 			<-blockingDone
 		}
 		return nil
-	}
+	})
 
 	tc := testContext{}
 	tc.Start(t)
@@ -1278,11 +1284,16 @@ func TestRangeCommandQueue(t *testing.T) {
 // not wait for pending commands to complete through Raft.
 func TestRangeCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { TestingCommandFilter = nil }()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testRangeCommandQueueInconsistent(t, setFilter)
+	})
+}
+func testRangeCommandQueueInconsistent(t *testing.T, setFilter func(TestingFilterFunc)) {
+	defer leaktest.AfterTest(t)()
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{}, 1)
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if put, ok := args.(*roachpb.PutRequest); ok {
 			putBytes, err := put.Value.GetBytes()
 			if err != nil {
@@ -1300,7 +1311,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 		}
 
 		return nil
-	}
+	})
 
 	tc := testContext{}
 	tc.Start(t)
@@ -2017,15 +2028,21 @@ func TestEndTransactionWithErrors(t *testing.T) {
 // local relative to the transaction record's location.
 func TestEndTransactionLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testEndTransactionLocalGC(t, setFilter)
+	})
+}
+
+func testEndTransactionLocalGC(t *testing.T, setFilter func(TestingFilterFunc)) {
+	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
-	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		// Make sure the direct GC path doesn't interfere with this test.
 		if args.Method() == roachpb.GC {
 			return util.Errorf("boom")
 		}
 		return nil
-	}
+	})
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -2111,16 +2128,21 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey
 // request resolves only local intents within the same batch.
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testEndTransactionResolveOnlyLocalIntents(t, setFilter)
+	})
+}
+
+func testEndTransactionResolveOnlyLocalIntents(t *testing.T, setFilter func(TestingFilterFunc)) {
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
-	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 			return util.Errorf("boom")
 		}
 		return nil
-	}
+	})
 	tc.Start(t)
 	defer tc.Stop()
 
@@ -2187,12 +2209,17 @@ func TestEndTransactionDirectGC(t *testing.T) {
 // if external intents can't be resolved (see also TestEndTransactionDirectGC).
 func TestEndTransactionDirectGCFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testEndTransactionDirectGCFailure(t, setFilter)
+	})
+}
+
+func testEndTransactionDirectGCFailure(t *testing.T, setFilter func(TestingFilterFunc)) {
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
-	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 			atomic.AddInt64(&count, 1)
 			return util.Errorf("boom")
@@ -2200,7 +2227,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 			t.Fatalf("unexpected GCRequest: %+v", args)
 		}
 		return nil
-	}
+	})
 	tc.Start(t)
 	defer tc.Stop()
 
@@ -3136,14 +3163,18 @@ func TestAppliedIndex(t *testing.T) {
 // the range as corrupt.
 func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testReplicaCorruption(t, setFilter)
+	})
+}
 
-	defer func() { TestingCommandFilter = nil }()
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+func testReplicaCorruption(t *testing.T, setFilter func(TestingFilterFunc)) {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if args.Header().Key.Equal(roachpb.Key("boom")) {
 			return newReplicaCorruptionError()
 		}
 		return nil
-	}
+	})
 
 	tc := testContext{}
 	tc.Start(t)
