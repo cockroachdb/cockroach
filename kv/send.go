@@ -239,7 +239,8 @@ func sendOne(client batchClient, timeout time.Duration, trace opentracing.Span, 
 	trace.LogEvent(fmt.Sprintf("sending to %s", addr))
 
 	go func() {
-		ctx := context.Background()
+		// TODO(tamird/tschottdorf): pass this in from DistSender.
+		ctx := context.TODO()
 		if timeout != 0 {
 			ctx, _ = context.WithTimeout(ctx, timeout)
 		}
@@ -256,7 +257,7 @@ func sendOne(client batchClient, timeout time.Duration, trace opentracing.Span, 
 			}
 		}
 
-		reply, err := client.nodeClient.Batch(context.Background(), &client.args)
+		reply, err := client.nodeClient.Batch(ctx, &client.args)
 		done <- batchCall{reply: reply, err: err}
 	}()
 }

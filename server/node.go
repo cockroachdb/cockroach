@@ -562,9 +562,11 @@ func (n *Node) computePeriodicMetrics() error {
 
 // Batch implements the roachpb.KVServer interface.
 func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-	// TODO(marc): this code is duplicated in kv/db.go, which should be
-	// fixed. Also, grpc's authentication model doesn't really fit with the
-	// current design of the security package - that should be fixed.
+	// TODO(marc): this code is duplicated in kv/db.go, which should be fixed.
+	// Also, grpc's authentication model (which gives credential access in the
+	// request handler) doesn't really fit with the current design of the
+	// security package (which assumes that TLS state is only given at connection
+	// time) - that should be fixed.
 	if peer, ok := peer.FromContext(ctx); ok {
 		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
 			certUser, err := security.GetCertificateUser(&tlsInfo.State)
