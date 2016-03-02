@@ -96,11 +96,6 @@ func shuffleClients(clients []batchClient) {
 // replicas. On success, Send returns the first successful reply. Otherwise,
 // Send returns an error if and as soon as the number of failed RPCs exceeds
 // the available endpoints less the number of required replies.
-//
-// TODO(pmattis): Get rid of the getArgs function which requires the caller to
-// maintain a map from address to replica. Instead, pass in the list of
-// replicas instead of a list of addresses and use that to populate the
-// requests.
 func send(opts SendOptions, replicas ReplicaSlice,
 	args roachpb.BatchRequest, context *rpc.Context) (proto.Message, error) {
 	sp := opts.Trace // must not be nil
