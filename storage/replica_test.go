@@ -1617,6 +1617,27 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	}
 }
 
+// TestRangeSequenceCacheOnlyWithIntent verifies that a transactional command
+// which goes through Raft but is not a transactional write (i.e. does not
+// leave intents) passes the sequence cache unhindered.
+func TestRangeSequenceCacheOnlyWithIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	txn := newTransaction("test", []byte("test"), 10, roachpb.SERIALIZABLE, tc.clock)
+	txn.Sequence = 100
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	args, h := heartbeatArgs(txn)
+	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); !testutils.IsPError(pErr, "record not present") {
+		t.Fatal(pErr)
+	}
+}
+
 // TestEndTransactionDeadline verifies that EndTransaction respects the
 // transaction deadline.
 func TestEndTransactionDeadline(t *testing.T) {

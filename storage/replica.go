@@ -1355,11 +1355,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	btch := r.store.Engine().NewBatch()
 
 	// Check the sequence for this batch. Only applies to transactional
-	// requests: on a cache hit, the transaction is instructed to restart.
-	// The epoch check allows us to poison the sequence cache to avoid
+	// requests which write intents (for example HeartbeatTxn does not get
+	// hindered by this). On a cache hit, the transaction is instructed to
+	// restart. The epoch check allows us to poison the sequence cache to avoid
 	// anomalies when we know that the transaction has been aborted or pushed,
 	// but it itself does not.
-	if ba.IsWrite() && ba.Txn != nil {
+	if ba.Txn != nil && ba.IsTransactionWrite() {
 		if err := r.checkSequenceCache(btch, *ba.Txn); err != nil {
 			return btch, nil, nil, err
 		}
@@ -1414,15 +1415,16 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			*ms = engine.MVCCStats{}
 		}
 
-		// Only transactional requests have replay protection. If the transaction
-		// just ended (via a successful EndTransaction call), it has purged its
-		// sequence cache state and would prefer if we didn't write an entry
-		// which would then need to be GCed on the slow path. See
-		// (*Replica).adjustResponseCache for a more salient explanation of
-		// why that is ok.
 		if ba.Txn != nil {
+			// Only transactional requests which leave intents have replay
+			// protection. In the particular case of a txn which just ended
+			// (via a successful EndTransaction call), it has purged its
+			// sequence cache state and would prefer if we didn't write an
+			// entry which would then need to be GCed on the slow path. See
+			// (*Replica).adjustResponseCache for a more salient explanation
+			// of why that is ok.
 			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
-			if !isEndTxn || err != nil {
+			if (!isEndTxn && ba.IsTransactionWrite()) || err != nil {
 				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
 					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
 					// TODO(tschottdorf): ReplicaCorruptionError.
@@ -1466,7 +1468,8 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 	if err != nil {
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
-			log.Infof("found sequence cache entry for %s@%d", txn.Short(), txn.Sequence)
+			log.Infof("found sequence cache entry for %s@epo=%d,seq=%d: epo=%d,seq=%d", txn.Short(),
+				txn.Epoch, txn.Sequence, epoch, sequence)
 		}
 		newTxn := txn.Clone()
 		newTxn.Timestamp.Forward(entry.Timestamp)
