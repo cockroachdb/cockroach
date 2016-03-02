@@ -410,12 +410,12 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error
 	ba.RangeID = r.RangeID
 	ba.Add(args)
 
-	// The raft command becomes moot after its expiration, so give it a
-	// context with a deadline.
-	// We compute a new deadline here using time.Now() instead of using
-	// expiration.GoTime() because in many tests database time uses
-	// a fake clock.
-	ctx, cancel := context.WithDeadline(r.context(), time.Now().Add(duration))
+	// The raft command becomes moot after its expiration, so give it an expiring
+	// context.
+	//
+	// We use a timeout here instead of a deadline of expiration.GoTime() because
+	// database time uses a fake clock in many tests.
+	ctx, cancel := context.WithTimeout(r.context(), duration)
 	defer cancel()
 
 	// Send lease request directly to raft in order to skip unnecessary
