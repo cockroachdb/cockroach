@@ -71,34 +71,18 @@ func (nt *netTraceWrapTracer) StartSpanWithOptions(opts opentracing.StartSpanOpt
 	return &netTraceWrapSpan{Span: nt.wrap.StartSpanWithOptions(opts), tr: trace.New(family, opts.OperationName)}
 }
 
-type netTraceWrapInjector struct {
-	wrap opentracing.Injector
-}
-
-func (ntwi *netTraceWrapInjector) InjectSpan(span opentracing.Span, carrier interface{}) error {
+func (nt *netTraceWrapTracer) Inject(span opentracing.Span, format, carrier interface{}) error {
 	realSpan, ok := span.(*netTraceWrapSpan)
 	if !ok {
 		// If the incoming span wasn't wrapped, hope for the best and let the
 		// injector do its thing.
-		return ntwi.wrap.InjectSpan(span, carrier)
+		return nt.wrap.Inject(span, format, carrier)
 	}
-	return ntwi.wrap.InjectSpan(realSpan.Span, carrier)
+	return nt.wrap.Inject(realSpan.Span, format, carrier)
 }
 
-func (nt *netTraceWrapTracer) Injector(format interface{}) opentracing.Injector {
-	return &netTraceWrapInjector{nt.wrap.Injector(format)}
-}
-
-type netTraceWrapExtractor struct {
-	wrap opentracing.Extractor
-}
-
-func (nt *netTraceWrapTracer) Extractor(format interface{}) opentracing.Extractor {
-	return &netTraceWrapExtractor{nt.wrap.Extractor(format)}
-}
-
-func (ntwe *netTraceWrapExtractor) JoinTrace(opName string, carrier interface{}) (opentracing.Span, error) {
-	sp, err := ntwe.wrap.JoinTrace(opName, carrier)
+func (nt *netTraceWrapTracer) Join(opName string, format, carrier interface{}) (opentracing.Span, error) {
+	sp, err := nt.wrap.Join(opName, format, carrier)
 	if err != nil {
 		return nil, err
 	}

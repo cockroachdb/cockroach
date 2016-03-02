@@ -42,7 +42,7 @@ func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
 func JoinOrNew(tr opentracing.Tracer, ws WireSpan, opName string) (opentracing.Span, error) {
 	if len(ws.Context) > 0 { // reducing allocs
 		carrier := opentracing.SplitBinaryCarrier{TracerState: ws.Context, Baggage: ws.Baggage}
-		sp, err := tr.Extractor(opentracing.SplitBinary).JoinTrace(opName, &carrier)
+		sp, err := tr.Join(opName, opentracing.SplitBinary, &carrier)
 		switch err {
 		case nil:
 			sp.LogEvent(opName)

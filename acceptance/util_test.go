@@ -32,7 +32,6 @@ import (
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
-	"github.com/docker/engine-api/types/strslice"
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
@@ -254,7 +253,7 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 			"PGSSLCERT=/certs/node.client.crt",
 			"PGSSLKEY=/certs/node.client.key",
 		},
-		Cmd: strslice.New(cmd...),
+		Cmd: cmd,
 	}
 	hostConfig := container.HostConfig{
 		Binds:       []string{l.CertsDir + ":/certs"},
