@@ -1,6 +1,6 @@
 # This test verifies that when a SNAPSHOT transaction reads without
 # uncertainty, it actually does that. We had a performance bug which caused the
-# MaxTimestamp to be set to the Timestamp instead of OrigTimestamp on such
+# ObservedTimestamp to be set to the Timestamp instead of OrigTimestamp on such
 # reads, which always left the interval (OrigTimestamp, Timestamp) open to
 # read uncertainty errors.
 
@@ -40,7 +40,7 @@ SELECT * FROM t
 user root
 
 # This insert forces TransactionA's timestamp ahead, so that we have
-# OrigTimestamp < InsertTS < Timestamp < MaxTimestamp
+# OrigTimestamp < InsertTS < Timestamp < ObservedTimestamp
 statement ok
 INSERT INTO t VALUES (2)
 

@@ -732,11 +732,12 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 			panic("no replica set in header on uncertainty restart")
 		}
 		newTxn.Update(pErr.GetTxn())
-		newTxn.CertainNodes.Add(t.NodeID)
+		// No more restarts for this node for anything after ExistingTimestamp.
+		newTxn.UpdateObservedTimestamp(t.NodeID, t.ExistingTimestamp)
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
-		// up to MaxTimestamp, whichever comes first.
-		candidateTS := newTxn.MaxTimestamp
+		// up to ObservedTimestamp, whichever comes first.
+		candidateTS := newTxn.ObservedTimestamp
 		candidateTS.Backward(t.ExistingTimestamp.Add(0, 1))
 		newTxn.Timestamp.Forward(candidateTS)
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)

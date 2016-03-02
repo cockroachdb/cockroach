@@ -567,11 +567,11 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 			Isolation: isolation,
 			Timestamp: now,
 		},
-		Name:          name,
-		Priority:      priority,
-		OrigTimestamp: now,
-		MaxTimestamp:  max,
-		Sequence:      1,
+		Name:              name,
+		Priority:          priority,
+		OrigTimestamp:     now,
+		ObservedTimestamp: max,
+		Sequence:          1,
 	}
 }
 
@@ -592,7 +592,13 @@ func (t Transaction) Clone() Transaction {
 		h := *t.LastHeartbeat
 		t.LastHeartbeat = &h
 	}
-	t.CertainNodes.Nodes = append([]NodeID(nil), t.CertainNodes.Nodes...)
+	mt := t.ObservedTimestamps
+	if mt != nil {
+		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		for k, v := range mt {
+			t.ObservedTimestamps[k] = v
+		}
+	}
 	// Note that we're not cloning the span keys under the assumption that the
 	// keys themselves are not mutable.
 	t.Intents = append([]Span(nil), t.Intents...)
@@ -745,7 +751,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	t.Timestamp.Forward(o.Timestamp)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
-	t.MaxTimestamp.Forward(o.MaxTimestamp)
+	t.ObservedTimestamp.Forward(o.ObservedTimestamp)
 	if o.LastHeartbeat != nil {
 		if t.LastHeartbeat == nil {
 			t.LastHeartbeat = &Timestamp{}
@@ -753,9 +759,15 @@ func (t *Transaction) Update(o *Transaction) {
 		t.LastHeartbeat.Forward(*o.LastHeartbeat)
 	}
 
-	// Copy the list of nodes without time uncertainty.
-	t.CertainNodes = NodeList{Nodes: append(NodeIDSlice(nil),
-		o.CertainNodes.Nodes...)}
+	// Absorb the collected clock uncertainty information.
+	if len(o.ObservedTimestamps) > 0 {
+		if t.ObservedTimestamps == nil {
+			t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		}
+		for k, v := range o.ObservedTimestamps {
+			t.ObservedTimestamps[k] = v
+		}
+	}
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
@@ -785,7 +797,7 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
+		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.ObservedTimestamp)
 	return buf.String()
 }
 
@@ -797,20 +809,31 @@ func (t Transaction) Short() string {
 	return t.ID.String()[:8]
 }
 
-// Add adds the given NodeID to the interface (unless already present)
-// and restores ordering.
-func (s *NodeList) Add(nodeID NodeID) {
-	if !s.Contains(nodeID) {
-		s.Nodes = append(s.Nodes, nodeID)
-		sort.Sort(NodeIDSlice(s.Nodes))
+// UpdateObservedTimestamp stores a timestamp off a node's clock for future
+// operations in the transaction. When multiple calls are made for a single
+// nodeID, the lowest timestamp prevails. Calls with timestamps above
+// t.ObservedTimestamp have no effect.
+func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
+	if !maxTS.Less(t.ObservedTimestamp) {
+		return
+	}
+	if t.ObservedTimestamps == nil {
+		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+	}
+	if ts, ok := t.ObservedTimestamps[nodeID]; !ok || maxTS.Less(ts) {
+		t.ObservedTimestamps[nodeID] = maxTS
 	}
 }
 
-// Contains returns true if the underlying slice contains the given NodeID.
-func (s NodeList) Contains(nodeID NodeID) bool {
-	ns := s.Nodes
-	i := sort.Search(len(ns), func(i int) bool { return NodeID(ns[i]) >= nodeID })
-	return i < len(ns) && NodeID(ns[i]) == nodeID
+// GetObservedTimestamp returns the lowest HLC timestamp recorded from the given node's
+// clock during this transaction.
+// When reading from that node, ObservedTimestamp can be lowered to the timestamp
+// returned by this method. If no entry is found, t.ObservedTimestamp is returned.
+func (t Transaction) GetObservedTimestamp(nodeID NodeID) Timestamp {
+	if ts, ok := t.ObservedTimestamps[nodeID]; ok {
+		return ts
+	}
+	return t.ObservedTimestamp
 }
 
 var _ fmt.Stringer = &Lease{}

@@ -374,16 +374,6 @@ func (m *InternalCommitTrigger) GetModifiedSpanTrigger() *ModifiedSpanTrigger {
 	return nil
 }
 
-// NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
-// adding to the set and Contains() verifying membership.
-type NodeList struct {
-	Nodes []NodeID `protobuf:"varint,1,rep,packed,name=nodes,casttype=NodeID" json:"nodes,omitempty"`
-}
-
-func (m *NodeList) Reset()         { *m = NodeList{} }
-func (m *NodeList) String() string { return proto.CompactTextString(m) }
-func (*NodeList) ProtoMessage()    {}
-
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
 	// id is a unique UUID value which identifies the transaction.
@@ -429,31 +419,21 @@ type Transaction struct {
 	// transaction will retry.
 	OrigTimestamp Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
-	// timestamps between timestamp and max_timestamp trigger a txn
+	// timestamps between timestamp and observed_timestamp trigger a txn
 	// retry error, unless the node being read is listed in certain_nodes
 	// (in which case no more read uncertainty can occur).
-	// The case max_timestamp < timestamp is possible for transactions which have
-	// been pushed; in this case, max_timestamp should be ignored.
-	MaxTimestamp Timestamp `protobuf:"bytes,7,opt,name=max_timestamp" json:"max_timestamp"`
-	// A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
-	// occurred during a prior read. The purpose of keeping this information is
-	// that as a reaction to this error, the transaction's timestamp is forwarded
-	// appropriately to reflect that node's clock uncertainty. Future reads to
-	// the same node are therefore freed from uncertainty restarts.
-	//
-	// The exact mechanism is that upon encountering the above error, the trans-
-	// action will have to retry with a higher timestamp. This higher timestamp
-	// is either the one of the encountered future write returned in the error
-	// or (if higher, which is in the majority of cases), the time of the node
-	// serving the key at the time of the failed read.
-	// Additionally storing the node, we make sure to set max_timestamp=timestamp
-	// at the time of the read for nodes whose clock we've taken into account,
-	// which amounts to reading without any uncertainty.
-	//
-	// Bits of this mechanism are found in the local sender, the range and the
-	// txn_coord_sender, with brief comments referring here.
-	// See https://github.com/cockroachdb/cockroach/pull/221.
-	CertainNodes NodeList `protobuf:"bytes,8,opt,name=certain_nodes" json:"certain_nodes"`
+	// The case observed_timestamp < timestamp is possible for transactions which have
+	// been pushed; in this case, observed_timestamp should be ignored.
+	ObservedTimestamp Timestamp `protobuf:"bytes,7,opt,name=observed_timestamp" json:"observed_timestamp"`
+	// A map of NodeID to timestamps as observed from their local clock during
+	// this transaction. The purpose of this map is to avoid uncertainty related
+	// restarts which normally occur when reading a value in the near future as
+	// per the observed_timestamp field.
+	// When this map holds a corresponding entry for the node the current request
+	// is executing on, we can run the command with the map's timestamp as the
+	// top boundary of our uncertainty interval, limiting (and often avoiding)
+	// uncertainty restarts.
+	ObservedTimestamps map[NodeID]Timestamp `protobuf:"bytes,8,rep,name=observed_timestamps,castkey=NodeID" json:"observed_timestamps" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
 	Writing bool `protobuf:"varint,9,opt,name=Writing" json:"Writing"`
@@ -519,7 +499,6 @@ func init() {
 	proto.RegisterType((*ChangeReplicasTrigger)(nil), "cockroach.roachpb.ChangeReplicasTrigger")
 	proto.RegisterType((*ModifiedSpanTrigger)(nil), "cockroach.roachpb.ModifiedSpanTrigger")
 	proto.RegisterType((*InternalCommitTrigger)(nil), "cockroach.roachpb.InternalCommitTrigger")
-	proto.RegisterType((*NodeList)(nil), "cockroach.roachpb.NodeList")
 	proto.RegisterType((*TxnMeta)(nil), "cockroach.roachpb.TxnMeta")
 	proto.RegisterType((*Transaction)(nil), "cockroach.roachpb.Transaction")
 	proto.RegisterType((*Intent)(nil), "cockroach.roachpb.Intent")
@@ -879,42 +858,6 @@ func (m *InternalCommitTrigger) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *NodeList) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *NodeList) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Nodes) > 0 {
-		data14 := make([]byte, len(m.Nodes)*10)
-		var j13 int
-		for _, num1 := range m.Nodes {
-			num := uint64(num1)
-			for num >= 1<<7 {
-				data14[j13] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j13++
-			}
-			data14[j13] = uint8(num)
-			j13++
-		}
-		data[i] = 0xa
-		i++
-		i = encodeVarintData(data, i, uint64(j13))
-		i += copy(data[i:], data14[:j13])
-	}
-	return i, nil
-}
-
 func (m *TxnMeta) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -934,11 +877,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.ID.Size()))
-		n15, err := m.ID.MarshalTo(data[i:])
+		n13, err := m.ID.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n13
 	}
 	data[i] = 0x10
 	i++
@@ -955,11 +898,11 @@ func (m *TxnMeta) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x2a
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n16, err := m.Timestamp.MarshalTo(data[i:])
+	n14, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n16
+	i += n14
 	return i, nil
 }
 
@@ -981,11 +924,11 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.TxnMeta.Size()))
-	n17, err := m.TxnMeta.MarshalTo(data[i:])
+	n15, err := m.TxnMeta.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n15
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Name)))
@@ -1000,36 +943,49 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintData(data, i, uint64(m.LastHeartbeat.Size()))
-		n18, err := m.LastHeartbeat.MarshalTo(data[i:])
+		n16, err := m.LastHeartbeat.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n18
+		i += n16
 	}
 	data[i] = 0x32
 	i++
 	i = encodeVarintData(data, i, uint64(m.OrigTimestamp.Size()))
-	n19, err := m.OrigTimestamp.MarshalTo(data[i:])
+	n17, err := m.OrigTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n17
 	data[i] = 0x3a
 	i++
-	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
-	n20, err := m.MaxTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.ObservedTimestamp.Size()))
+	n18, err := m.ObservedTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
-	data[i] = 0x42
-	i++
-	i = encodeVarintData(data, i, uint64(m.CertainNodes.Size()))
-	n21, err := m.CertainNodes.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	i += n18
+	if len(m.ObservedTimestamps) > 0 {
+		for k := range m.ObservedTimestamps {
+			data[i] = 0x42
+			i++
+			v := m.ObservedTimestamps[k]
+			msgSize := (&v).Size()
+			mapSize := 1 + sovData(uint64(k)) + 1 + msgSize + sovData(uint64(msgSize))
+			i = encodeVarintData(data, i, uint64(mapSize))
+			data[i] = 0x8
+			i++
+			i = encodeVarintData(data, i, uint64(k))
+			data[i] = 0x12
+			i++
+			i = encodeVarintData(data, i, uint64((&v).Size()))
+			n19, err := (&v).MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n19
+		}
 	}
-	i += n21
 	data[i] = 0x48
 	i++
 	if m.Writing {
@@ -1074,19 +1030,19 @@ func (m *Intent) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Span.Size()))
-	n22, err := m.Span.MarshalTo(data[i:])
+	n20, err := m.Span.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n20
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-	n23, err := m.Txn.MarshalTo(data[i:])
+	n21, err := m.Txn.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n23
+	i += n21
 	data[i] = 0x18
 	i++
 	i = encodeVarintData(data, i, uint64(m.Status))
@@ -1111,27 +1067,27 @@ func (m *Lease) MarshalTo(data []byte) (int, error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintData(data, i, uint64(m.Start.Size()))
-	n24, err := m.Start.MarshalTo(data[i:])
+	n22, err := m.Start.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n22
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n23, err := m.Expiration.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
+	data[i] = 0x1a
+	i++
+	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
+	n24, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n24
-	data[i] = 0x12
-	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
-	n25, err := m.Expiration.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n25
-	data[i] = 0x1a
-	i++
-	i = encodeVarintData(data, i, uint64(m.Replica.Size()))
-	n26, err := m.Replica.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n26
 	return i, nil
 }
 
@@ -1159,11 +1115,11 @@ func (m *SequenceCacheEntry) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n27, err := m.Timestamp.MarshalTo(data[i:])
+	n25, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n27
+	i += n25
 	return i, nil
 }
 
@@ -1316,19 +1272,6 @@ func (m *InternalCommitTrigger) Size() (n int) {
 	return n
 }
 
-func (m *NodeList) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Nodes) > 0 {
-		l = 0
-		for _, e := range m.Nodes {
-			l += sovData(uint64(e))
-		}
-		n += 1 + sovData(uint64(l)) + l
-	}
-	return n
-}
-
 func (m *TxnMeta) Size() (n int) {
 	var l int
 	_ = l
@@ -1362,10 +1305,17 @@ func (m *Transaction) Size() (n int) {
 	}
 	l = m.OrigTimestamp.Size()
 	n += 1 + l + sovData(uint64(l))
-	l = m.MaxTimestamp.Size()
+	l = m.ObservedTimestamp.Size()
 	n += 1 + l + sovData(uint64(l))
-	l = m.CertainNodes.Size()
-	n += 1 + l + sovData(uint64(l))
+	if len(m.ObservedTimestamps) > 0 {
+		for k, v := range m.ObservedTimestamps {
+			_ = k
+			_ = v
+			l = v.Size()
+			mapEntrySize := 1 + sovData(uint64(k)) + 1 + l + sovData(uint64(l))
+			n += mapEntrySize + 1 + sovData(uint64(mapEntrySize))
+		}
+	}
 	n += 2
 	n += 1 + sovData(uint64(m.Sequence))
 	if len(m.Intents) > 0 {
@@ -2605,118 +2555,6 @@ func (m *InternalCommitTrigger) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *NodeList) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowData
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: NodeList: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: NodeList: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType == 2 {
-				var packedLen int
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowData
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := data[iNdEx]
-					iNdEx++
-					packedLen |= (int(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				if packedLen < 0 {
-					return ErrInvalidLengthData
-				}
-				postIndex := iNdEx + packedLen
-				if postIndex > l {
-					return io.ErrUnexpectedEOF
-				}
-				for iNdEx < postIndex {
-					var v NodeID
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowData
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := data[iNdEx]
-						iNdEx++
-						v |= (NodeID(b) & 0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					m.Nodes = append(m.Nodes, v)
-				}
-			} else if wireType == 0 {
-				var v NodeID
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowData
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := data[iNdEx]
-					iNdEx++
-					v |= (NodeID(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				m.Nodes = append(m.Nodes, v)
-			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipData(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthData
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *TxnMeta) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -3089,7 +2927,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxTimestamp", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ObservedTimestamp", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3113,13 +2951,13 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.MaxTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ObservedTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CertainNodes", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ObservedTimestamps", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3143,9 +2981,85 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.CertainNodes.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var mapkey int32
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				mapkey |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var mapmsglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				mapmsglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if mapmsglen < 0 {
+				return ErrInvalidLengthData
+			}
+			postmsgIndex := iNdEx + mapmsglen
+			if mapmsglen < 0 {
+				return ErrInvalidLengthData
+			}
+			if postmsgIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := &Timestamp{}
+			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
 				return err
 			}
+			iNdEx = postmsgIndex
+			if m.ObservedTimestamps == nil {
+				m.ObservedTimestamps = make(map[NodeID]Timestamp)
+			}
+			m.ObservedTimestamps[NodeID(mapkey)] = *mapvalue
 			iNdEx = postIndex
 		case 9:
 			if wireType != 0 {

@@ -73,7 +73,6 @@
 		ChangeReplicasTrigger
 		ModifiedSpanTrigger
 		InternalCommitTrigger
-		NodeList
 		TxnMeta
 		Transaction
 		Intent
