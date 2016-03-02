@@ -6,7 +6,6 @@
 /// <reference path="pages/log.ts" />
 /// <reference path="pages/cluster.ts" />
 /// <reference path="pages/nodes.ts" />
-/// <reference path="pages/stores.ts" />
 /// <reference path="pages/sql.ts" />
 /// <reference path="pages/helpus.ts" />
 /// <reference path="pages/helpusprompt.ts" />
@@ -28,12 +27,6 @@ m.route(document.getElementById("root"), "/cluster", {
   "/nodes/:node_id": AdminViews.Nodes.NodePage,
   "/node/:node_id/:detail": AdminViews.Nodes.NodePage,
   "/nodes/:node_id/:detail": AdminViews.Nodes.NodePage,
-  "/store": AdminViews.Stores.StorePage,
-  "/stores": AdminViews.Stores.StoresPage,
-  "/store/:store_id": AdminViews.Stores.StorePage,
-  "/stores/:store_id": AdminViews.Stores.StorePage,
-  "/store/:store_id/:detail": AdminViews.Stores.StorePage,
-  "/stores/:store_id/:detail": AdminViews.Stores.StorePage,
   "/sql": AdminViews.SQL.Page,
   "/help-us/:detail": AdminViews.HelpUs.Page,
   "/cluster": AdminViews.Cluster.Page,

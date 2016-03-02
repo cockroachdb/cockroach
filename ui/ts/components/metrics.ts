@@ -61,8 +61,8 @@ module Components {
             this.chart = nv.models.lineChart();
           }
           this.chart
-            .x((d: Models.Proto.Datapoint) => new Date(Utils.Convert.NanoToMilli(d.timestamp_nanos)))
-            .y((d: Models.Proto.Datapoint) => d.value)
+            .x((d: Models.Proto.Datapoint) => new Date(Utils.Convert.NanoToMilli(d && d.timestamp_nanos)))
+            .y((d: Models.Proto.Datapoint) => d && d.value)
             // .interactive(true)
             .useInteractiveGuideline(true)
             .showLegend(true)
