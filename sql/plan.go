@@ -307,6 +307,10 @@ type planNode interface {
 	PErr() *roachpb.Error
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan() (name, description string, children []planNode)
+	// SetLimitHint tells this node to optimize things under the assumption that we will only need
+	// the first `numRows` rows. This is only a hint; the node must still be able to produce all
+	// results if requested.
+	SetLimitHint(numRows int64)
 }
 
 var _ planNode = &distinctNode{}
@@ -353,3 +357,5 @@ func (e *emptyNode) Next() bool {
 	e.results = false
 	return r
 }
+
+func (*emptyNode) SetLimitHint(_ int64) {}

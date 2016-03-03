@@ -119,3 +119,5 @@ func (n *explainTraceNode) Values() parser.DTuple {
 func (*explainTraceNode) DebugValues() debugValues {
 	panic("debug mode not implemented in explainTraceNode")
 }
+
+func (*explainTraceNode) SetLimitHint(_ int64) {}

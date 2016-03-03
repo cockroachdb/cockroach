@@ -153,3 +153,5 @@ func (n *distinctNode) ExplainPlan() (string, string, []planNode) {
 	}
 	return "distinct", description, []planNode{n.planNode}
 }
+
+func (*distinctNode) SetLimitHint(_ int64) {}

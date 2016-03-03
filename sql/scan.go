@@ -81,8 +81,9 @@ type scanNode struct {
 	scanInitialized bool
 	fetcher         kvFetcher
 	// The current key/value, unless kvEnd is true.
-	kv    client.KeyValue
-	kvEnd bool
+	kv        client.KeyValue
+	kvEnd     bool
+	limitHint int64
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -102,6 +103,10 @@ func (n *scanNode) DebugValues() debugValues {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
 	return n.debugVals
+}
+
+func (n *scanNode) SetLimitHint(numRows int64) {
+	n.limitHint = numRows
 }
 
 // nextKey gets the next key and sets kv and kvEnd. Returns false on errors.
@@ -338,7 +343,22 @@ func (n *scanNode) initScan() bool {
 		}
 	}
 
-	n.fetcher = makeKVFetcher(n.txn, n.spans, n.reverse)
+	// If we have a limit hint, we limit the first batch size. Subsequent batches use the normal
+	// size, to avoid making things too slow (e.g. in case we have a very restrictive filter and
+	// actually have to retrieve a lot of rows).
+	firstBatchLimit := n.limitHint
+	if firstBatchLimit != 0 {
+		// For a secondary index, we have one key per row.
+		if !n.isSecondaryIndex {
+			// We have a sentinel key per row plus at most one key per non-PK column. Of course, we
+			// may have other keys due to a schema change, but this is only a hint.
+			firstBatchLimit *= int64(1 + len(n.visibleCols) - len(n.index.ColumnIDs))
+		}
+		// We need an extra key to make sure we form the last row.
+		firstBatchLimit++
+	}
+
+	n.fetcher = makeKVFetcher(n.txn, n.spans, n.reverse, firstBatchLimit)
 	n.scanInitialized = true
 	return true
 }

@@ -105,9 +105,10 @@ func SetKVBatchSize(val int) func() {
 // kvFetcher handles retrieval of key/values.
 type kvFetcher struct {
 	// "Constant" fields, provided by the caller.
-	txn     *client.Txn
-	spans   spans
-	reverse bool
+	txn             *client.Txn
+	spans           spans
+	reverse         bool
+	firstBatchLimit int64
 
 	fetchEnd     bool
 	kvs          []client.KeyValue
@@ -115,8 +116,13 @@ type kvFetcher struct {
 	totalFetched int64
 }
 
-func makeKVFetcher(txn *client.Txn, spans spans, reverse bool) kvFetcher {
-	return kvFetcher{txn: txn, spans: spans, reverse: reverse}
+// makeKVFetcher initializes a kvFetcher for the given spans. If non-zero, firstBatchLimit limits
+// the size of the first batch (subsequent batches use the default size).
+func makeKVFetcher(txn *client.Txn, spans spans, reverse bool, firstBatchLimit int64) kvFetcher {
+	if firstBatchLimit < 0 {
+		panic(fmt.Sprintf("invalid batch limit %d", firstBatchLimit))
+	}
+	return kvFetcher{txn: txn, spans: spans, reverse: reverse, firstBatchLimit: firstBatchLimit}
 }
 
 // fetch retrieves spans from the kv
@@ -128,6 +134,9 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 	// only do batching if we have a single span.
 	if len(f.spans) == 1 {
 		count := int64(kvBatchSize)
+		if f.firstBatchLimit != 0 && f.firstBatchLimit < count && len(f.kvs) == 0 {
+			count = f.firstBatchLimit
+		}
 		if f.spans[0].count != 0 {
 			if f.spans[0].count <= f.totalFetched {
 				panic(fmt.Sprintf("trying to fetch beyond span count %d (fetched: %d)",
