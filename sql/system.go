@@ -17,7 +17,9 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -154,6 +156,21 @@ func createTableDescriptor(id, parentID ID, schema string, privileges *Privilege
 	return desc
 }
 
+// Create the key/value pairs for the default zone config entry.
+func createDefaultZoneConfig() []roachpb.KeyValue {
+	var ret []roachpb.KeyValue
+	value := roachpb.Value{}
+	desc := config.DefaultZoneConfig()
+	if err := value.SetProto(&desc); err != nil {
+		log.Fatalf("could not marshal %v", desc)
+	}
+	ret = append(ret, roachpb.KeyValue{
+		Key:   MakeZoneKey(keys.RootNamespaceID),
+		Value: value,
+	})
+	return ret
+}
+
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
 // System database and its tables. The descriptors for these objects exist
 // statically in this file, but a MetadataSchema can be used to persist these
@@ -171,6 +188,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// Add other system tables.
 	target.AddTable(keys.LeaseTableID, leaseTableSchema, privilege.List{privilege.ALL})
+
+	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
 
 // isSystemConfigID returns true if this ID is for a system config object.

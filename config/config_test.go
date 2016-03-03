@@ -18,6 +18,7 @@ package config_test
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
@@ -233,6 +234,7 @@ func TestComputeSplits(t *testing.T) {
 	// Real SQL system with reserved non-system and user database.
 	allSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
+	sort.Sort(roachpb.KeyValueByKey(allSql))
 
 	allUserSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
 	allReservedSplits := []uint32{reservedStart, reservedStart + 1, reservedStart + 2}

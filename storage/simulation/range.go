@@ -50,7 +50,7 @@ func newRange(rangeID roachpb.RangeID, allocator storage.Allocator) *Range {
 		desc: roachpb.RangeDescriptor{
 			RangeID: rangeID,
 		},
-		zone:      *config.DefaultZoneConfig,
+		zone:      config.DefaultZoneConfig(),
 		replicas:  make(map[roachpb.StoreID]replica),
 		allocator: allocator,
 	}

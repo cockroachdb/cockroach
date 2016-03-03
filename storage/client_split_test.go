@@ -600,6 +600,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	defer stopper.Stop()
 
 	initialSystemValues := sql.MakeMetadataSchema().GetInitialValues()
+	var userTableMax int
 	// Write the initial sql values to the system DB as well
 	// as the equivalent of table descriptors for X user tables.
 	// This does two things:
@@ -607,8 +608,12 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
 	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
 		txn.SetSystemConfigTrigger()
 		for i, kv := range initialSystemValues {
+			if !bytes.HasPrefix(kv.Key, prefix) {
+				continue
+			}
 			bytes, err := kv.Value.GetBytes()
 			if err != nil {
 				log.Info(err)
@@ -619,6 +624,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			}
 
 			descID := keys.MaxReservedDescID + i + 1
+			userTableMax = i + 1
 
 			// We don't care about the values, just the keys.
 			k := sql.MakeDescMetadataKey(sql.ID(descID))
@@ -661,7 +667,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		})
 	}
 
-	verifySplitsAtTablePrefixes(len(initialSystemValues))
+	verifySplitsAtTablePrefixes(userTableMax)
 
 	numTotalValues := keys.MaxSystemConfigDescID + 5
 

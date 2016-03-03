@@ -494,6 +494,14 @@ range_max_bytes: 67108864
 
 	// Output:
 	// zone ls
+	// Object 0:
+	// replicas:
+	// - attrs: []
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 86400
+	//
 	// zone set 100 replicas:
 	// - attrs: [us-east-1a,ssd]
 	// - attrs: [us-east-1b,ssd]
@@ -503,6 +511,14 @@ range_max_bytes: 67108864
 	//
 	// INSERT 1
 	// zone ls
+	// Object 0:
+	// replicas:
+	// - attrs: []
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 86400
+	//
 	// Object 100:
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -526,6 +542,14 @@ range_max_bytes: 67108864
 	// zone rm 100
 	// DELETE 1
 	// zone ls
+	// Object 0:
+	// replicas:
+	// - attrs: []
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 86400
+	//
 }
 
 func Example_sql() {
