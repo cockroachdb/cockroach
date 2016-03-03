@@ -280,6 +280,8 @@ func initFlags(ctx *Context) {
 	// The --log-dir default changes depending on the command. Avoid confusion by
 	// simply clearing it.
 	pf.Lookup("log-dir").DefValue = ""
+	// If no value is specified for --alsologtostderr output everything.
+	pf.Lookup("alsologtostderr").NoOptDefVal = "INFO"
 
 	{
 		f := startCmd.Flags()

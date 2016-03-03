@@ -50,7 +50,7 @@ func EnableLogFileOutput(dir string) {
 	defer logging.mu.Unlock()
 	logDir = dir
 	logging.toStderr = false
-	logging.alsoToStderr = true
+	logging.stderrThreshold = InfoLog
 }
 
 // DisableLogFileOutput turns off logging. For unittesting only.
@@ -62,7 +62,7 @@ func DisableLogFileOutput() {
 	}
 	logDir = ""
 	logging.toStderr = true
-	logging.alsoToStderr = false
+	logging.stderrThreshold = NumSeverity
 }
 
 // logDepth uses the PrintWith to format the output string and
