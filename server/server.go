@@ -415,31 +415,26 @@ func (s *Server) Stop() {
 // ServeHTTP is necessary to implement the http.Handler interface. It
 // will snappy a response if the appropriate request headers are set.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Check if we're draining; if so return 503, service unavailable.
-	if !s.stopper.RunTask(func() {
-		// This is our base handler, so catch all panics and make sure they stick.
-		defer log.FatalOnPanic()
+	// This is our base handler, so catch all panics and make sure they stick.
+	defer log.FatalOnPanic()
 
-		// Disable caching of responses.
-		w.Header().Set("Cache-control", "no-cache")
+	// Disable caching of responses.
+	w.Header().Set("Cache-control", "no-cache")
 
-		ae := r.Header.Get(util.AcceptEncodingHeader)
-		switch {
-		case strings.Contains(ae, util.SnappyEncoding):
-			w.Header().Set(util.ContentEncodingHeader, util.SnappyEncoding)
-			s := newSnappyResponseWriter(w)
-			defer s.Close()
-			w = s
-		case strings.Contains(ae, util.GzipEncoding):
-			w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
-			gzw := newGzipResponseWriter(w)
-			defer gzw.Close()
-			w = gzw
-		}
-		s.mux.ServeHTTP(w, r)
-	}) {
-		http.Error(w, "service is draining", http.StatusServiceUnavailable)
+	ae := r.Header.Get(util.AcceptEncodingHeader)
+	switch {
+	case strings.Contains(ae, util.SnappyEncoding):
+		w.Header().Set(util.ContentEncodingHeader, util.SnappyEncoding)
+		s := newSnappyResponseWriter(w)
+		defer s.Close()
+		w = s
+	case strings.Contains(ae, util.GzipEncoding):
+		w.Header().Set(util.ContentEncodingHeader, util.GzipEncoding)
+		gzw := newGzipResponseWriter(w)
+		defer gzw.Close()
+		w = gzw
 	}
+	s.mux.ServeHTTP(w, r)
 }
 
 type gzipResponseWriter struct {
