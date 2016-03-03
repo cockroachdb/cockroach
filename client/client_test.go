@@ -22,6 +22,7 @@ package client_test
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -77,8 +78,10 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 
 func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
 	rpcContext := rpc.NewContext(&base.Context{
-		User:  user,
-		Certs: security.EmbeddedCertsDir,
+		User:       user,
+		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
+		SSLCertKey: filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user)),
 	}, nil, stopper)
 	sender, err := client.NewSender(rpcContext, addr)
 	if err != nil {

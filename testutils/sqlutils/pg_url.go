@@ -17,10 +17,12 @@
 package sqlutils
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -51,9 +53,9 @@ func PGUrl(t testing.TB, ts *server.TestServer, user, prefix string) (url.URL, f
 		t.Fatal(err)
 	}
 
-	caPath := security.CACertPath(security.EmbeddedCertsDir)
-	certPath := security.ClientCertPath(security.EmbeddedCertsDir, user)
-	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, user)
+	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
+	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
 
 	// Copy these assets to disk from embedded strings, so this test can
 	// run from a standalone binary.

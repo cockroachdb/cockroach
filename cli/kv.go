@@ -36,9 +36,11 @@ import (
 func makeDBClient() (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	context := &base.Context{
-		User:     security.NodeUser,
-		Certs:    cliContext.Certs,
-		Insecure: cliContext.Insecure,
+		User:       security.NodeUser,
+		SSLCA:      cliContext.SSLCA,
+		SSLCert:    cliContext.SSLCert,
+		SSLCertKey: cliContext.SSLCertKey,
+		Insecure:   cliContext.Insecure,
 	}
 	sender, err := client.NewSender(rpc.NewContext(context, nil, stopper), cliContext.Addr)
 	if err != nil {

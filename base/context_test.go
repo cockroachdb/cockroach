@@ -17,6 +17,8 @@
 package base_test
 
 import (
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -24,14 +26,20 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+func fillCertPaths(context *base.Context, user string) {
+	context.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	context.SSLCAKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey)
+	context.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
+	context.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
+}
+
 func TestClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	certsDir := security.EmbeddedCertsDir
 
 	testCases := []struct {
 		// args
 		insecure bool
-		certs    string
+		hasCerts bool
 		user     string
 		// output
 		requestScheme string
@@ -39,16 +47,19 @@ func TestClientSSLSettings(t *testing.T) {
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, "foobar", security.NodeUser, "http", true, true, false},
-		{true, certsDir, "not-a-user", "http", true, true, false},
-		{false, certsDir, "not-a-user", "https", false, true, false},
-		{false, "", security.NodeUser, "https", true, false, true},
-		{false, certsDir, security.NodeUser, "https", true, false, false},
-		{false, "/dev/null", security.NodeUser, "https", false, false, false},
+		{true, false, security.NodeUser, "http", true, true, false},
+		{true, true, "not-a-user", "http", true, true, false},
+		{false, true, "not-a-user", "https", false, true, false},
+		{false, false, security.NodeUser, "https", true, false, true},
+		{false, true, security.NodeUser, "https", true, false, false},
+		{false, true, "bad-user", "https", false, false, false},
 	}
 
 	for tcNum, tc := range testCases {
-		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs, User: tc.user}
+		ctx := &base.Context{Insecure: tc.insecure, User: tc.user}
+		if tc.hasCerts {
+			fillCertPaths(ctx, tc.user)
+		}
 		if ctx.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
 		}
@@ -73,25 +84,27 @@ func TestClientSSLSettings(t *testing.T) {
 
 func TestServerSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	certsDir := security.EmbeddedCertsDir
 
 	testCases := []struct {
 		// args
 		insecure bool
-		certs    string
+		hasCerts bool
 		// output
 		requestScheme string
 		configSuccess bool
 		nilConfig     bool
 	}{
-		{true, "foobar", "http", true, true},
-		{false, "", "https", false, false},
-		{false, certsDir, "https", true, false},
-		{false, "/dev/null", "https", false, false},
+		{true, false, "http", true, true},
+		{false, false, "https", false, false},
+		{false, true, "https", true, false},
+		{false, false, "https", false, false},
 	}
 
 	for tcNum, tc := range testCases {
-		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs, User: security.NodeUser}
+		ctx := &base.Context{Insecure: tc.insecure, User: security.NodeUser}
+		if tc.hasCerts {
+			fillCertPaths(ctx, security.NodeUser)
+		}
 		if ctx.HTTPRequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
 		}

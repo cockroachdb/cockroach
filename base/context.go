@@ -30,7 +30,6 @@ import (
 // Base context defaults.
 const (
 	defaultInsecure = false
-	defaultCertsDir = "certs"
 	defaultUser     = security.RootUser
 	rpcScheme       = "rpc"
 	rpcsScheme      = "rpcs"
@@ -61,9 +60,11 @@ type Context struct {
 	// This is really not recommended.
 	Insecure bool
 
-	// Certs specifies a directory containing RSA key and x509 certs.
-	// Required unless Insecure is true.
-	Certs string
+	// SSLCA and others contain the paths to the ssl certificates and keys.
+	SSLCA      string // CA certificate
+	SSLCAKey   string // CA key (to sign only)
+	SSLCert    string // Client/server certificate
+	SSLCertKey string // Client/server key
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
@@ -86,7 +87,6 @@ type Context struct {
 // InitDefaults sets up the default values for a context.
 func (ctx *Context) InitDefaults() {
 	ctx.Insecure = defaultInsecure
-	ctx.Certs = defaultCertsDir
 	ctx.User = defaultUser
 }
 
@@ -117,8 +117,9 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	}
 
 	ctx.clientTLSConfig.once.Do(func() {
-		if ctx.Certs != "" {
-			ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err = security.LoadClientTLSConfig(ctx.Certs, ctx.User)
+		if ctx.SSLCert != "" {
+			ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err = security.LoadClientTLSConfig(
+				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 			if ctx.clientTLSConfig.err != nil {
 				ctx.clientTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
 			}
@@ -141,8 +142,9 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	}
 
 	ctx.serverTLSConfig.once.Do(func() {
-		if ctx.Certs != "" {
-			ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err = security.LoadServerTLSConfig(ctx.Certs, ctx.User)
+		if ctx.SSLCert != "" {
+			ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err = security.LoadServerTLSConfig(
+				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 			if ctx.serverTLSConfig.err != nil {
 				ctx.serverTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.serverTLSConfig.err)
 			}

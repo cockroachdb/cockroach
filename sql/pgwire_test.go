@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -52,9 +53,8 @@ func trivialQuery(pgURL url.URL) error {
 func TestPGWire(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	certUser := server.TestUser
-	certPath := security.ClientCertPath(security.EmbeddedCertsDir, certUser)
-	keyPath := security.ClientKeyPath(security.EmbeddedCertsDir, certUser)
+	certPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTestUserCert)
+	keyPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTestUserKey)
 
 	tempDir, err := ioutil.TempDir("", "TestPGWire")
 	if err != nil {
@@ -130,7 +130,7 @@ func TestPGWire(t *testing.T) {
 		}
 
 		{
-			for _, optUser := range []string{certUser, security.RootUser} {
+			for _, optUser := range []string{server.TestUser, security.RootUser} {
 				requirePgUrlWithCert := basePgUrl
 				requirePgUrlWithCert.User = url.User(optUser)
 				requirePgUrlWithCert.RawQuery = fmt.Sprintf("sslmode=require&sslcert=%s&sslkey=%s",
@@ -143,7 +143,7 @@ func TestPGWire(t *testing.T) {
 						t.Error(err)
 					}
 				} else {
-					if optUser == certUser {
+					if optUser == server.TestUser {
 						if err != nil {
 							t.Error(err)
 						}

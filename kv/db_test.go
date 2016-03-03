@@ -18,6 +18,8 @@ package kv_test
 
 import (
 	"bytes"
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -39,7 +41,9 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 	var ctx base.Context
 	ctx.InitDefaults()
 	ctx.User = user
-	ctx.Certs = security.EmbeddedCertsDir
+	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
+	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
 	sender, err := client.NewSender(rpc.NewContext(&ctx, nil, stopper), addr)
 	if err != nil {
 		t.Fatal(err)
