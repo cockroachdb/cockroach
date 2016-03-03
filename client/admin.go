@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,8 +46,17 @@ type AdminClient struct {
 }
 
 // NewAdminClient returns a new 'configType' admin client, talking to 'address'.
-func NewAdminClient(ctx *base.Context, address, configType string) AdminClient {
-	return AdminClient{ctx, address, configType}
+func NewAdminClient(ctx *base.Context, address, configType string) (AdminClient, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return AdminClient{}, err
+	}
+	if len(host) == 0 {
+		host = "localhost"
+	}
+	address = net.JoinHostPort(host, port)
+
+	return AdminClient{ctx, address, configType}, nil
 }
 
 // adminURI builds a base URI for the embedded 'configType'

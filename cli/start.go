@@ -250,17 +250,21 @@ will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runQuit),
+	RunE:         runQuit,
 }
 
 // runQuit accesses the quit shutdown path.
-func runQuit(_ *cobra.Command, _ []string) {
-	admin := client.NewAdminClient(&cliContext.Context.Context, cliContext.Addr, client.Quit)
+func runQuit(_ *cobra.Command, _ []string) error {
+	admin, err := client.NewAdminClient(&cliContext.Context.Context, cliContext.Addr, client.Quit)
+	if err != nil {
+		return err
+	}
 	body, err := admin.Get()
 	// TODO(tschottdorf): needs cleanup. An error here can happen if the shutdown
 	// happened faster than the HTTP request made it back.
 	if err != nil {
-		panicf("shutdown node error: %s", err)
+		return err
 	}
 	fmt.Printf("node drained and shutdown: %s\n", body)
+	return nil
 }
