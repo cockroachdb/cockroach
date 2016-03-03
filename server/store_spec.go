@@ -162,7 +162,7 @@ func newStoreSpec(value string) (StoreSpec, error) {
 					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
 				}
 				if ss.SizeInBytes < minimumStoreSize {
-					return StoreSpec{}, fmt.Errorf("store size (%s) must be larger than %d", value, minimumStoreSize)
+					return StoreSpec{}, fmt.Errorf("store size (%s) must be larger than %s", value, humanize.IBytes(minimumStoreSize))
 				}
 			}
 		case "attr":
