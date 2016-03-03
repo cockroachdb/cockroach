@@ -243,7 +243,6 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	return z.Round(z, s, inf.RoundHalfUp)
 }
 
-
 // Cbrt calculates the cube root of x to the specified scale
 // and stores the result in z, which is also the return value.
 //
@@ -252,74 +251,79 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 // then iterate:
 //     x_{n+1} = 1/3 * ( 2 * x_n + (d / x_n / x_n) ).
 func Cbrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
-	// Allocate if needed
-	if z == nil {
+	switch z {
+	case nil:
 		z = new(inf.Dec)
+	case x:
+		x = new(inf.Dec)
+		x.Set(z)
 	}
 
 	// Validate the sign of x.
-	if x.Sign() == 0 {
-		z.SetUnscaled(0).SetScale(0)
-		return z
-	}
-
-	if x.Sign() < 0 {
-		// Make sure args aren't mutated.
+	switch x.Sign() {
+	case -1:
+		// Make sure args aren't mutated and return -Cbrt(-x).
 		x = new(inf.Dec).Neg(x)
 		z = Cbrt(z, x, s)
 		return z.Neg(z)
+	case 0:
+		return z.SetUnscaled(0).SetScale(0)
 	}
 
-	// we follow Ken Turkowski paper to find the initial estimate
-	r := new(inf.Dec).Set(x)
+	z.Set(x)
 	ex := 0
 
-	for r.Cmp(decimalOneEighth) < 0 {
+	// Follow Ken Turkowski paper:
+	// https://people.freebsd.org/~lstewart/references/apple_tr_kt32_cuberoot.pdf
+	//
+	// Computing the cube root of any number is reduced to computing
+	// the cube root of a number between 0.125 and 1.
+	for z.Cmp(decimalOneEighth) < 0 {
 		ex--
-		r.Mul(r, decimalEight)
+		z.Mul(z, decimalEight)
 	}
 
-	for r.Cmp(decimalOne) > 0 {
+	for z.Cmp(decimalOne) > 0 {
 		ex++
-		r.Mul(r, decimalOneEighth)
+		z.Mul(z, decimalOneEighth)
 	}
 
-    // r = (-0.46946116 * r + 1.072302) * r + 0.3812513;
-	r0 := new(inf.Dec).Set(r)
-	r.Mul(r, decimalCbrtC1)
-	r.Add(r, decimalCbrtC2)
-	r.Mul(r, r0)
-	r.Add(r, decimalCbrtC3)
+	// Use this polynomial to approximates the cube root between 0.125 and 1.
+	// z = (-0.46946116 * z + 1.072302) * z + 0.3812513
+	z0 := new(inf.Dec).Set(z)
+	z.Mul(z, decimalCbrtC1)
+	z.Add(z, decimalCbrtC2)
+	z.Mul(z, z0)
+	z.Add(z, decimalCbrtC3)
 
 	for ex < 0 {
 		ex++
-		r.Mul(r, decimalHalf)
+		z.Mul(z, decimalHalf)
 	}
 
 	for ex > 0 {
 		ex--
-		r.Mul(r, decimalTwo)
+		z.Mul(z, decimalTwo)
 	}
 
-	r0.Set(r)
-	//temp := new(inf.Dec)
+	z0.Set(z)
 
 	// Loop until convergence.
 	for loop := newLoop("cbrt", x, s, 1); ; {
-	    // r = (2.0 * r0 +  x / (r0 * r0) ) / 3.0;
-	    r.Set(r0)
-	    r.Mul(r, r0)
-		r.QuoRound(x, r, s, inf.RoundHalfUp)
-		r.Add(r, r0)
-		r.Add(r, r0)
-		r.QuoRound(r, decimalThree, s, inf.RoundHalfUp)
+		// z = (2.0 * z0 +  x / (z0 * z0) ) / 3.0;
+		z.Set(z0)
+		z.Mul(z, z0)
+		z.QuoRound(x, z, s+2, inf.RoundHalfUp)
+		z.Add(z, z0)
+		z.Add(z, z0)
+		z.QuoRound(z, decimalThree, s+2, inf.RoundHalfUp)
 
-		if loop.done(r) {
+		if loop.done(z) {
 			break
 		}
-		r0.Set(r)
+		z0.Set(z)
 	}
 
 	// Round to the desired scale.
-	return z.Round(r, s, inf.RoundHalfUp)
+	return z.Round(z, s, inf.RoundHalfUp)
 }
