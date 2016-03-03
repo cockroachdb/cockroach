@@ -145,7 +145,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fmetadata_2eproto() {
   static const int StoreCapacity_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, capacity_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, available_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, rangecount_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreCapacity, range_count_),
   };
   StoreCapacity_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -272,19 +272,19 @@ void protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto() {
     "\n\003key\030\001 \001(\014B\010\372\336\037\004RKey\022\023\n\005black\030\002 \001(\010B\004\310\336"
     "\037\000\022\034\n\nparent_key\030\003 \001(\014B\010\372\336\037\004RKey\022\032\n\010left"
     "_key\030\004 \001(\014B\010\372\336\037\004RKey\022\033\n\tright_key\030\005 \001(\014B"
-    "\010\372\336\037\004RKey\"Z\n\rStoreCapacity\022\026\n\010Capacity\030\001"
-    " \001(\003B\004\310\336\037\000\022\027\n\tAvailable\030\002 \001(\003B\004\310\336\037\000\022\030\n\nR"
-    "angeCount\030\003 \001(\005B\004\310\336\037\000\"\246\001\n\016NodeDescriptor"
-    "\022)\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006Nod"
-    "eID\0225\n\007address\030\002 \001(\0132\036.cockroach.util.Un"
-    "resolvedAddrB\004\310\336\037\000\0222\n\005attrs\030\003 \001(\0132\035.cock"
-    "roach.roachpb.AttributesB\004\310\336\037\000\"\344\001\n\017Store"
-    "Descriptor\022,\n\010store_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007St"
-    "oreID\372\336\037\007StoreID\0222\n\005attrs\030\002 \001(\0132\035.cockro"
-    "ach.roachpb.AttributesB\004\310\336\037\000\0225\n\004node\030\003 \001"
-    "(\0132!.cockroach.roachpb.NodeDescriptorB\004\310"
-    "\336\037\000\0228\n\010capacity\030\004 \001(\0132 .cockroach.roachp"
-    "b.StoreCapacityB\004\310\336\037\000B\tZ\007roachpbX\001", 1274);
+    "\010\372\336\037\004RKey\"[\n\rStoreCapacity\022\026\n\010capacity\030\001"
+    " \001(\003B\004\310\336\037\000\022\027\n\tavailable\030\002 \001(\003B\004\310\336\037\000\022\031\n\013r"
+    "ange_count\030\003 \001(\005B\004\310\336\037\000\"\246\001\n\016NodeDescripto"
+    "r\022)\n\007node_id\030\001 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\372\336\037\006No"
+    "deID\0225\n\007address\030\002 \001(\0132\036.cockroach.util.U"
+    "nresolvedAddrB\004\310\336\037\000\0222\n\005attrs\030\003 \001(\0132\035.coc"
+    "kroach.roachpb.AttributesB\004\310\336\037\000\"\344\001\n\017Stor"
+    "eDescriptor\022,\n\010store_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007S"
+    "toreID\372\336\037\007StoreID\0222\n\005attrs\030\002 \001(\0132\035.cockr"
+    "oach.roachpb.AttributesB\004\310\336\037\000\0225\n\004node\030\003 "
+    "\001(\0132!.cockroach.roachpb.NodeDescriptorB\004"
+    "\310\336\037\000\0228\n\010capacity\030\004 \001(\0132 .cockroach.roach"
+    "pb.StoreCapacityB\004\310\336\037\000B\tZ\007roachpbX\001", 1275);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/metadata.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -2586,7 +2586,7 @@ void StoreCapacity::SharedCtor() {
   _cached_size_ = 0;
   capacity_ = GOOGLE_LONGLONG(0);
   available_ = GOOGLE_LONGLONG(0);
-  rangecount_ = 0;
+  range_count_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2634,7 +2634,7 @@ void StoreCapacity::Clear() {
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  ZR_(capacity_, rangecount_);
+  ZR_(capacity_, range_count_);
 
 #undef ZR_HELPER_
 #undef ZR_
@@ -2655,7 +2655,7 @@ bool StoreCapacity::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 Capacity = 1;
+      // optional int64 capacity = 1;
       case 1: {
         if (tag == 8) {
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
@@ -2665,14 +2665,14 @@ bool StoreCapacity::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_Available;
+        if (input->ExpectTag(16)) goto parse_available;
         break;
       }
 
-      // optional int64 Available = 2;
+      // optional int64 available = 2;
       case 2: {
         if (tag == 16) {
-         parse_Available:
+         parse_available:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &available_)));
@@ -2680,18 +2680,18 @@ bool StoreCapacity::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_RangeCount;
+        if (input->ExpectTag(24)) goto parse_range_count;
         break;
       }
 
-      // optional int32 RangeCount = 3;
+      // optional int32 range_count = 3;
       case 3: {
         if (tag == 24) {
-         parse_RangeCount:
+         parse_range_count:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &rangecount_)));
-          set_has_rangecount();
+                 input, &range_count_)));
+          set_has_range_count();
         } else {
           goto handle_unusual;
         }
@@ -2724,19 +2724,19 @@ failure:
 void StoreCapacity::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.roachpb.StoreCapacity)
-  // optional int64 Capacity = 1;
+  // optional int64 capacity = 1;
   if (has_capacity()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->capacity(), output);
   }
 
-  // optional int64 Available = 2;
+  // optional int64 available = 2;
   if (has_available()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->available(), output);
   }
 
-  // optional int32 RangeCount = 3;
-  if (has_rangecount()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->rangecount(), output);
+  // optional int32 range_count = 3;
+  if (has_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->range_count(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -2749,19 +2749,19 @@ void StoreCapacity::SerializeWithCachedSizes(
 ::google::protobuf::uint8* StoreCapacity::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.StoreCapacity)
-  // optional int64 Capacity = 1;
+  // optional int64 capacity = 1;
   if (has_capacity()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->capacity(), target);
   }
 
-  // optional int64 Available = 2;
+  // optional int64 available = 2;
   if (has_available()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->available(), target);
   }
 
-  // optional int32 RangeCount = 3;
-  if (has_rangecount()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->rangecount(), target);
+  // optional int32 range_count = 3;
+  if (has_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->range_count(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -2776,25 +2776,25 @@ int StoreCapacity::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & 7u) {
-    // optional int64 Capacity = 1;
+    // optional int64 capacity = 1;
     if (has_capacity()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->capacity());
     }
 
-    // optional int64 Available = 2;
+    // optional int64 available = 2;
     if (has_available()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->available());
     }
 
-    // optional int32 RangeCount = 3;
-    if (has_rangecount()) {
+    // optional int32 range_count = 3;
+    if (has_range_count()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->rangecount());
+          this->range_count());
     }
 
   }
@@ -2830,8 +2830,8 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
     if (from.has_available()) {
       set_available(from.available());
     }
-    if (from.has_rangecount()) {
-      set_rangecount(from.rangecount());
+    if (from.has_range_count()) {
+      set_range_count(from.range_count());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -2863,7 +2863,7 @@ void StoreCapacity::Swap(StoreCapacity* other) {
 void StoreCapacity::InternalSwap(StoreCapacity* other) {
   std::swap(capacity_, other->capacity_);
   std::swap(available_, other->available_);
-  std::swap(rangecount_, other->rangecount_);
+  std::swap(range_count_, other->range_count_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -2880,7 +2880,7 @@ void StoreCapacity::InternalSwap(StoreCapacity* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // StoreCapacity
 
-// optional int64 Capacity = 1;
+// optional int64 capacity = 1;
 bool StoreCapacity::has_capacity() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -2895,16 +2895,16 @@ void StoreCapacity::clear_capacity() {
   clear_has_capacity();
 }
  ::google::protobuf::int64 StoreCapacity::capacity() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.Capacity)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.capacity)
   return capacity_;
 }
  void StoreCapacity::set_capacity(::google::protobuf::int64 value) {
   set_has_capacity();
   capacity_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.Capacity)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.capacity)
 }
 
-// optional int64 Available = 2;
+// optional int64 available = 2;
 bool StoreCapacity::has_available() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -2919,37 +2919,37 @@ void StoreCapacity::clear_available() {
   clear_has_available();
 }
  ::google::protobuf::int64 StoreCapacity::available() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.Available)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.available)
   return available_;
 }
  void StoreCapacity::set_available(::google::protobuf::int64 value) {
   set_has_available();
   available_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.Available)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.available)
 }
 
-// optional int32 RangeCount = 3;
-bool StoreCapacity::has_rangecount() const {
+// optional int32 range_count = 3;
+bool StoreCapacity::has_range_count() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-void StoreCapacity::set_has_rangecount() {
+void StoreCapacity::set_has_range_count() {
   _has_bits_[0] |= 0x00000004u;
 }
-void StoreCapacity::clear_has_rangecount() {
+void StoreCapacity::clear_has_range_count() {
   _has_bits_[0] &= ~0x00000004u;
 }
-void StoreCapacity::clear_rangecount() {
-  rangecount_ = 0;
-  clear_has_rangecount();
+void StoreCapacity::clear_range_count() {
+  range_count_ = 0;
+  clear_has_range_count();
 }
- ::google::protobuf::int32 StoreCapacity::rangecount() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.RangeCount)
-  return rangecount_;
+ ::google::protobuf::int32 StoreCapacity::range_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.range_count)
+  return range_count_;
 }
- void StoreCapacity::set_rangecount(::google::protobuf::int32 value) {
-  set_has_rangecount();
-  rangecount_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.RangeCount)
+ void StoreCapacity::set_range_count(::google::protobuf::int32 value) {
+  set_has_range_count();
+  range_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.range_count)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -99,9 +99,9 @@ module Models {
      * StoreCapacity details the used and available capacity of a store.
      */
     export interface StoreCapacity {
-      Capacity: number;
-      Available: number;
-      RangeCount: number;
+      capacity: number;
+      available: number;
+      range_count: number;
     }
 
     /**

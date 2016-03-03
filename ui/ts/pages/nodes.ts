@@ -552,11 +552,11 @@ module AdminViews {
                     ]),
                     m("tr.stat", [
                       m("td.title", "Available Capacity"),
-                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.Available)),
+                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.available)),
                     ]),
                     m("tr.stat", [
                       m("td.title", "Total Capacity"),
-                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.Capacity)),
+                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.capacity)),
                     ]),
                   ])),
                 ]);
