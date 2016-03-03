@@ -94,6 +94,15 @@ module Models {
         config: xhrConfig,
         method: "POST",
         data: data,
+        // Otherwise this breaks when if don't receive JSON
+        deserialize: (d): any => {
+          try {
+            return JSON.parse(d);
+          } catch (e) {
+            console.error(e);
+            return null;
+          }
+        },
       });
 
       if (parse) {
