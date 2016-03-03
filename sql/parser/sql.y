@@ -1839,18 +1839,11 @@ select_no_parens:
   simple_select
 | select_clause sort_clause
   {
-    $$.val = $1.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $2.orderBy()
-    }
+    $$.val = &SelectOrderLimit{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
   }
 | select_clause opt_sort_clause select_limit
   {
-    $$.val = $1.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $2.orderBy()
-      s.Limit = $3.limit()
-    }
+    $$.val = &SelectOrderLimit{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit()}
   }
 | with_clause select_clause
   {
@@ -1858,18 +1851,11 @@ select_no_parens:
   }
 | with_clause select_clause sort_clause
   {
-    $$.val = $2.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $3.orderBy()
-    }
+    $$.val = &SelectOrderLimit{Select: $2.selectStmt(), OrderBy: $3.orderBy()}
   }
 | with_clause select_clause opt_sort_clause select_limit
   {
-    $$.val = $2.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $3.orderBy()
-      s.Limit = $4.limit()
-    }
+    $$.val = &SelectOrderLimit{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
   }
 
 select_clause:

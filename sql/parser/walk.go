@@ -602,6 +602,63 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 }
 
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *SelectOrderLimit) CopyNode() *SelectOrderLimit {
+	stmtCopy := *stmt
+	stmtCopy.OrderBy = make([]*Order, len(stmt.OrderBy))
+	for i, o := range stmt.OrderBy {
+		oCopy := *o
+		stmtCopy.OrderBy[i] = &oCopy
+	}
+	if stmt.Limit != nil {
+		lCopy := *stmt.Limit
+		stmtCopy.Limit = &lCopy
+	}
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *SelectOrderLimit) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	sel, changed := WalkStmt(v, stmt.Select)
+	if changed {
+		if ret == stmt {
+			ret = stmt.CopyNode()
+		}
+		ret.Select = sel.(SelectStatement)
+	}
+	for i, expr := range stmt.OrderBy {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.OrderBy[i].Expr = e
+		}
+	}
+	if stmt.Limit != nil {
+		if stmt.Limit.Offset != nil {
+			e, changed := WalkExpr(v, stmt.Limit.Offset)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Limit.Offset = e
+			}
+		}
+		if stmt.Limit.Count != nil {
+			e, changed := WalkExpr(v, stmt.Limit.Count)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Limit.Count = e
+			}
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Set) CopyNode() *Set {
 	stmtCopy := *stmt
 	stmtCopy.Values = Exprs(append([]Expr(nil), stmt.Values...))
@@ -695,6 +752,7 @@ var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
 var _ WalkableStmt = &ParenSelect{}
 var _ WalkableStmt = &Select{}
+var _ WalkableStmt = &SelectOrderLimit{}
 var _ WalkableStmt = &Set{}
 var _ WalkableStmt = &Update{}
 var _ WalkableStmt = &Values{}

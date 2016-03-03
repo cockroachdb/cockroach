@@ -190,6 +190,12 @@ func (*Select) StatementType() StatementType { return Rows }
 func (*Select) StatementTag() string { return "SELECT" }
 
 // StatementType implements the Statement interface.
+func (*SelectOrderLimit) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*SelectOrderLimit) StatementTag() string { return "SELECT" }
+
+// StatementType implements the Statement interface.
 func (*Set) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.

@@ -179,7 +179,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	}
 
 	// NB: both orderBy and groupBy are passed and can modify the selectNode but orderBy must do so first.
-	sort, pErr := p.orderBy(parsed, s)
+	sort, pErr := p.orderBy(parsed.OrderBy, s)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -245,7 +245,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 	s.ordering = s.computeOrdering(s.table.node.Ordering())
 
 	// Wrap this node as necessary.
-	limit, err := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
+	limit, err := p.limit(parsed.Limit, p.distinct(parsed, sort.wrap(group.wrap(s))))
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -384,28 +384,6 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 	}
 
 	return nil
-}
-
-// colIndex takes an expression that refers to a column using an integer, verifies it refers to a
-// valid render target and returns the corresponding column index. For example:
-//    SELECT a from T ORDER by 1
-// Here "1" refers to the first render target "a". The returned index is 0.
-func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
-	switch i := expr.(type) {
-	case parser.DInt:
-		index := int(i)
-		if numCols := s.numOriginalCols; index < 1 || index > numCols {
-			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
-		}
-		return index - 1, nil
-
-	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
-
-	default:
-		// expr doesn't look like a col index (i.e. not a constant).
-		return -1, nil
-	}
 }
 
 // checkRenderStar checks if the SelectExpr is a QualifiedName with a StarIndirection suffix. If so,

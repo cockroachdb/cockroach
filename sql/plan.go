@@ -136,6 +136,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.RollbackTransaction(n)
 	case *parser.Select:
 		return p.Select(n)
+	case *parser.SelectOrderLimit:
+		return p.SelectOrderLimit(n, autoCommit)
 	case *parser.Set:
 		return p.Set(n)
 	case *parser.SetTimeZone:
