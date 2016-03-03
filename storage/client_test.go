@@ -79,11 +79,18 @@ func rg1(s *storage.Store) client.Sender {
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper) {
+	sCtx := storage.TestStoreContext()
+	return createTestStoreWithContext(t, &sCtx)
+}
+
+func createTestStoreWithContext(t testing.TB, sCtx *storage.StoreContext) (
+	*storage.Store, *stop.Stopper) {
+
 	stopper := stop.NewStopper()
 	store := createTestStoreWithEngine(t,
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
-		true, nil, stopper)
+		true, sCtx, stopper)
 	return store, stopper
 }
 

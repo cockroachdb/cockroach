@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -69,31 +68,33 @@ func TestIntentResolution(t *testing.T) {
 
 	splitKey := []byte("s")
 	results := map[string]struct{}{}
-	defer func() { storage.TestingCommandFilter = nil }()
 	for i, tc := range testCases {
 		var mu sync.Mutex
 		closer := make(chan struct{}, 2)
-		storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			mu.Lock()
-			defer mu.Unlock()
-			header := args.Header()
-			// Ignore anything outside of the intent key range of "a" - "z"
-			if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
+
+		ctx := NewTestContext()
+		ctx.TestingMocker.TestingCommandFilter =
+			func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				mu.Lock()
+				defer mu.Unlock()
+				header := args.Header()
+				// Ignore anything outside of the intent key range of "a" - "z"
+				if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
+					return nil
+				}
+				switch args.(type) {
+				case *roachpb.ResolveIntentRequest:
+					results[string(header.Key)] = struct{}{}
+				case *roachpb.ResolveIntentRangeRequest:
+					results[fmt.Sprintf("%s-%s", header.Key, header.EndKey)] = struct{}{}
+				}
+				if len(results) == len(tc.exp) {
+					closer <- struct{}{}
+				}
 				return nil
 			}
-			switch args.(type) {
-			case *roachpb.ResolveIntentRequest:
-				results[string(header.Key)] = struct{}{}
-			case *roachpb.ResolveIntentRangeRequest:
-				results[fmt.Sprintf("%s-%s", header.Key, header.EndKey)] = struct{}{}
-			}
-			if len(results) == len(tc.exp) {
-				closer <- struct{}{}
-			}
-			return nil
-		}
 		func() {
-			s := StartTestServer(t)
+			s := StartTestServerWithContext(t, ctx)
 			defer s.Stop()
 
 			go func() {
