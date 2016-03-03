@@ -77,7 +77,7 @@ const (
 	opReplica = "replica"
 )
 
-// CommandFilter is the types of function to use with CommandFilters.
+// CommandFilter is the type of function to use with CommandFilters.
 type CommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
 
 // TestingCommandFilter may be set in tests to intercept the handling
@@ -96,7 +96,7 @@ var TestingCommandFilter CommandFilter
 // This should be used as a singleton, through GetTestingCommandFilters().
 // CommandFilters is thread-safe.
 type CommandFilters struct {
-	sync.Mutex
+	sync.RWMutex
 	filters []struct {
 		id     int
 		filter CommandFilter
@@ -113,7 +113,7 @@ var commandFilterInit sync.Once
 // Note that this overrides TestingCommandFilters, so it shouldn't be
 // used with modules that write TestingCommandFilter directly.
 // Also note that, in order to avoid data races, this should be called for the
-// first time before executing and KV commands, since Replica reads
+// first time before executing any KV commands, since Replica reads
 // TestingCommandFilter unsynchronized. Before server startup would be a good
 // time to call this.  But once you've ensured this is called once before the
 // server starts, subsequent calls can be done at any time as they no longer
@@ -130,11 +130,10 @@ func GetTestingCommandFilters() *CommandFilters {
 func (c *CommandFilters) runFilters(
 	sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
 
-	c.Lock()
-	defer c.Unlock()
+	c.RLock()
+	defer c.RUnlock()
 	for _, f := range c.filters {
-		err := f.filter(sid, req, hdr)
-		if err != nil {
+		if err := f.filter(sid, req, hdr); err != nil {
 			return err
 		}
 	}
@@ -142,7 +141,7 @@ func (c *CommandFilters) runFilters(
 }
 
 // AppendFilter registers a filter function to run after all the previously
-// registered filtes.
+// registered filters.
 // Returns a closure that the client must run for doing cleanup when the
 // filter should be deregistered.
 func (c *CommandFilters) AppendFilter(filter CommandFilter) func() {
