@@ -450,6 +450,13 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 			t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
 		}
 	}
+
+	var emptyTxn Transaction
+	ts := ZeroTimestamp.Add(1, 2)
+	emptyTxn.UpdateObservedTimestamp(NodeID(1), ts)
+	if actTS := emptyTxn.GetObservedTimestamp(NodeID(1)); !actTS.Equal(ts) {
+		t.Fatalf("unexpected: %s (wanted %s)", actTS, ts)
+	}
 }
 
 var ts = makeTS(10, 11)

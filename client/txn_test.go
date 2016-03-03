@@ -443,7 +443,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		err   error
 		retry bool // Expect retry?
 	}{
-		{&roachpb.ReadWithinUncertaintyIntervalError{}, true},
+		{roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp), true},
 		{&roachpb.TransactionAbortedError{}, true},
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},
@@ -495,7 +495,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		err   error
 		abort bool
 	}{
-		{&roachpb.ReadWithinUncertaintyIntervalError{}, true},
+		{roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp), true},
 		{&roachpb.TransactionAbortedError{}, false},
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},

@@ -697,14 +697,6 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
 	defer cleanupSp()
-	// If the request was successful but we're in a transaction which needs to
-	// restart but doesn't know it yet, let it restart now (as opposed to
-	// waiting until EndTransaction).
-	if pErr == nil && br.Txn != nil && br.Txn.Isolation == roachpb.SERIALIZABLE &&
-		!br.Txn.OrigTimestamp.Equal(br.Txn.Timestamp) {
-		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), br.Txn)
-		br = nil
-	}
 
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
@@ -713,6 +705,16 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	} else {
 		newTxn.Update(pErr.GetTxn())
 	}
+
+	// If the request was successful but we're in a transaction which needs to
+	// restart but doesn't know it yet, let it restart now (as opposed to
+	// waiting until EndTransaction).
+	if pErr == nil && newTxn.Isolation == roachpb.SERIALIZABLE &&
+		!newTxn.OrigTimestamp.Equal(newTxn.Timestamp) {
+		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), br.Txn)
+		br = nil
+	}
+
 	// TODO(bdarnell): We're writing to errors here (and where using ErrorWithIndex);
 	// since there's no concept of ownership copy-on-write is always preferable.
 	switch t := pErr.GetDetail().(type) {
@@ -729,19 +731,10 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:
-		// Mark the host as certain. See the protobuf comment for
-		// Transaction.CertainNodes for details.
-		if t.NodeID == 0 {
-			panic("no replica set in header on uncertainty restart")
-		}
-		// No more restarts for this node for anything after ExistingTimestamp.
-		newTxn.UpdateObservedTimestamp(t.NodeID, t.ExistingTimestamp)
 		// If the reader encountered a newer write within the uncertainty
-		// interval, move the timestamp forward, just past that write or
-		// up to ObservedTimestamp, whichever comes first.
-		candidateTS := newTxn.ObservedTimestamp
-		candidateTS.Backward(t.ExistingTimestamp.Add(0, 1))
-		newTxn.Timestamp.Forward(candidateTS)
+		// interval, we advance the txn's timestamp just past the last observed
+		// timestamp from the node.
+		newTxn.Timestamp.Forward(newTxn.GetObservedTimestamp(pErr.OriginNode))
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
 	case *roachpb.TransactionAbortedError:
 		// Increase timestamp if applicable.
