@@ -160,6 +160,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.ShowTables(n)
 	case *parser.Truncate:
 		return p.Truncate(n)
+	case *parser.Union:
+		return p.Union(n, autoCommit)
 	case *parser.Update:
 		return p.Update(n, autoCommit)
 	case *parser.Values:
@@ -321,6 +323,7 @@ var _ planNode = &scanNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &valuesNode{}
 var _ planNode = &selectNode{}
+var _ planNode = &unionNode{}
 var _ planNode = &emptyNode{}
 var _ planNode = &explainDebugNode{}
 var _ planNode = &explainTraceNode{}
