@@ -37,11 +37,13 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 	// TODO(marc): KV endpoints are now restricted to node users.
 	// This should probably be made more explicit.
 	db, err := client.Open(stopper, fmt.Sprintf(
-		"%s://%s@%s?certs=%s",
+		"%s://%s@%s?sslca=%s&sslcert=%s&sslcertkey=%s",
 		cliContext.RPCRequestScheme(),
 		security.NodeUser,
 		cliContext.Addr,
-		cliContext.Certs))
+		cliContext.SSLCA,
+		cliContext.SSLCert,
+		cliContext.SSLCertKey))
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)

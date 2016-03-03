@@ -167,8 +167,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 func (f *Farmer) ConnString(i int) string {
 	// TODO(tschottdorf,mberhault): TLS all the things!
 	return "rpc://" + security.RootUser + "@" +
-		net.JoinHostPort(f.Nodes()[i], base.DefaultPort) +
-		"?certs=" + "certswhocares"
+		net.JoinHostPort(f.Nodes()[i], base.DefaultPort)
 }
 
 // PGUrl returns a URL string for the given node postgres server.

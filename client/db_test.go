@@ -18,6 +18,7 @@ package client_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -294,9 +295,17 @@ func TestOpenArgs(t *testing.T) {
 		addr      string
 		expectErr bool
 	}{
-		{"rpcs://" + server.TestUser + "@" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir, false},
-		{"rpcs://" + s.ServingAddr() + "?certs=" + security.EmbeddedCertsDir, false},
-		{"rpcs://" + s.ServingAddr() + "?certs=foo", true},
+		{"rpcs://" + server.TestUser + "@" + s.ServingAddr() +
+			"?sslca=" + filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert) +
+			"&sslcert=" + filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTestUserCert) +
+			"&sslcertkey=" + filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTestUserKey),
+			false},
+		{"rpcs://" + s.ServingAddr() +
+			"?sslca=" + filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert) +
+			"&sslcert=" + filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert) +
+			"&sslcertkey=" + filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
+			false},
+		{"rpcs://" + s.ServingAddr() + "?sslcert=foo", true},
 		{s.ServingAddr(), true},
 	}
 

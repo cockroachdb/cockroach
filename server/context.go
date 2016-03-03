@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -267,9 +266,9 @@ func (ctx *Context) PGURL(user string) *url.URL {
 		options.Add("sslmode", "disable")
 	} else {
 		options.Add("sslmode", "verify-full")
-		options.Add("sslcert", absPath(security.ClientCertPath(ctx.Certs, user)))
-		options.Add("sslkey", absPath(security.ClientKeyPath(ctx.Certs, user)))
-		options.Add("sslrootcert", absPath(security.CACertPath(ctx.Certs)))
+		options.Add("sslcert", absPath(ctx.SSLCert))
+		options.Add("sslkey", absPath(ctx.SSLCertKey))
+		options.Add("sslrootcert", absPath(ctx.SSLCA))
 	}
 	return &url.URL{
 		Scheme:   "postgresql",

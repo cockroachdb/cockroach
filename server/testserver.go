@@ -19,6 +19,7 @@ package server
 import (
 	"fmt"
 	"net"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -82,7 +83,6 @@ func StartTestServerJoining(t util.Tester, other *TestServer) *TestServer {
 func StartInsecureTestServer(t util.Tester) *TestServer {
 	s := &TestServer{Ctx: NewTestContext()}
 	s.Ctx.Insecure = true
-	s.Ctx.Certs = ""
 
 	if err := s.Start(); err != nil {
 		if t != nil {
@@ -105,12 +105,18 @@ func NewTestContext() *Context {
 	// uncertainty intervals.
 	ctx.MaxOffset = 50 * time.Millisecond
 
+	// Test servers start in secure mode by default.
+	ctx.Insecure = false
+
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetReadFileFn(securitytest.Asset)
 	// in their init to mock out the file system calls for calls to AssetFS,
 	// which has the test certs compiled in. Typically this is done
 	// once per package, in main_test.go.
-	ctx.Certs = security.EmbeddedCertsDir
+	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
+	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
+
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).
