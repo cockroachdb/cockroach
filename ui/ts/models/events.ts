@@ -146,6 +146,8 @@ module Models {
           });
           this.normalizedRows = this.convertToNormalizedRows(<RangeRow[]>promises[0], <EventRow[]>promises[1]);
           this.updated = moment();
+        }).catch((error) => {
+          this.normalizedRows = [];
         });
       }
 
