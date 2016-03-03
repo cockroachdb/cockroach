@@ -38,10 +38,7 @@ func injectRetriableErrors(
 	for _, val := range magicVals {
 		if restarts[val] < 2 && bytes.Contains(cput.Value.RawBytes, []byte(val)) {
 			restarts[val]++
-			return &roachpb.ReadWithinUncertaintyIntervalError{
-				Timestamp:         hdr.Timestamp,
-				ExistingTimestamp: hdr.Timestamp,
-			}
+			return roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)
 		}
 	}
 	return nil

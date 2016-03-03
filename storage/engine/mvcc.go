@@ -722,10 +722,8 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 			// absolute time if the writer had a fast clock.
 			// The reader should try again with a later timestamp than the
 			// one given below.
-			return nil, nil, &roachpb.ReadWithinUncertaintyIntervalError{
-				Timestamp:         timestamp,
-				ExistingTimestamp: meta.Timestamp,
-			}
+			return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
+				timestamp, meta.Timestamp)
 		}
 
 		// We want to know if anything has been written ahead of timestamp, but
@@ -767,10 +765,8 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 			// value, but there is another previous write with the same issues as in
 			// the second case, so the reader will have to come again with a higher
 			// read timestamp.
-			return nil, nil, &roachpb.ReadWithinUncertaintyIntervalError{
-				Timestamp:         timestamp,
-				ExistingTimestamp: unsafeKey.Timestamp,
-			}
+			return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
+				timestamp, unsafeKey.Timestamp)
 		}
 		// Fifth case: There's no value in our future up to ObservedTimestamp, and those
 		// are the only ones that we're not certain about. The correct key has

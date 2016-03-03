@@ -300,9 +300,13 @@ func TestUncertaintyRestarts(t *testing.T) {
 	i := -1
 	tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 		i++
+
+		// Initial Get to set the timestamp.
+		if _, pErr := txn.Get(key.Next()); pErr != nil {
+			return pErr
+		}
 		s.Manual.Increment(1)
 		futureTS := s.Clock.Now()
-		futureTS.WallTime++
 		value.SetBytes([]byte(fmt.Sprintf("value-%d", i)))
 		if err := engine.MVCCPut(s.Eng, nil, key, futureTS, value, nil); err != nil {
 			t.Fatal(err)
@@ -317,22 +321,16 @@ func TestUncertaintyRestarts(t *testing.T) {
 		return nil
 	})
 	if i != 1 {
-		t.Errorf("txn restarted %d times, expected only one restart", i)
+		t.Fatalf("txn restarted %d times, expected only one restart", i)
 	}
 	if tErr != nil {
 		t.Fatal(tErr)
 	}
 }
 
-// TestUncertaintyObservedTimestampForwarding checks that we correctly read
-// from hosts for which we control the uncertainty by checking that
-// when a transaction restarts after an uncertain read, it will also
-// take into account the target node's clock at the time of the failed
-// read when forwarding the read timestamp.
-//
-// This is a prerequisite for being able to prevent further uncertainty
-// restarts for that node and transaction without sacrificing correctness.
-// See roachpb.Transaction.CertainNodes for details.
+// TestUncertaintyObservedTimestampForwarding checks that when receiving an
+// uncertainty restart on a node, the next attempt to read (at the increased
+// timestamp) is free from uncertainty. See roachpb.Transaction for details.
 func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -370,6 +368,11 @@ func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 		if _, pErr := txn.Scan("t", roachpb.Key("t").Next(), 0); pErr != nil {
 			t.Fatal(pErr)
 		}
+		// This is a bit of a hack for the sake of this test: By visiting the
+		// node above, we've made a note of its clock, which allows us to
+		// prevent the restart. But we want to catch the restart, so reset the
+		// observed timestamps.
+		txn.Proto.ResetObservedTimestamps()
 
 		// The server's clock suddenly jumps ahead of keyFast's timestamp.
 		s.Manual.Set(2*offsetNS + 1)
@@ -381,19 +384,19 @@ func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 		// There will be exactly one restart here.
 		if gr, pErr := txn.Get(keySlow); pErr != nil {
 			if i != 1 {
-				t.Errorf("unexpected transaction error: %s", pErr)
+				t.Fatalf("unexpected transaction error: %s", pErr)
 			}
 			return pErr
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valSlow) {
-			t.Errorf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
+			t.Fatalf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
 		}
 
 		// The node should already be certain, so we expect no restart here
 		// and to read the correct key.
 		if gr, pErr := txn.Get(keyFast); pErr != nil {
-			t.Errorf("second Get failed with %s", pErr)
+			t.Fatalf("second Get failed with %s", pErr)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
-			t.Errorf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
+			t.Fatalf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
 		}
 		return nil
 	}); tErr != nil {
