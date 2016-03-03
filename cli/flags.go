@@ -277,6 +277,9 @@ func initFlags(ctx *Context) {
 		pf.AddFlag(pflag.PFlagFromGoFlag(f))
 	})
 
+	// If no value is specified for --alsologtostderr output everything.
+	pf.Lookup("alsologtostderr").NoOptDefVal = "INFO"
+
 	{
 		f := startCmd.Flags()
 

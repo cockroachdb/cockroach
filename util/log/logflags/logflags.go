@@ -56,11 +56,10 @@ var _ flag.Value = &atomicBool{}
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
 // locked while the boolean variables are accessed during flag updates.
-func InitFlags(mu sync.Locker, toStderr *bool, alsoToStderr *bool, logDir flag.Value,
+func InitFlags(mu sync.Locker, toStderr *bool, logDir flag.Value,
 	color *string, verbosity, vmodule, traceLocation flag.Value) {
 	*toStderr = true // wonky way of specifying a default
 	flag.Var(&atomicBool{Locker: mu, b: toStderr}, "logtostderr", "log to standard error instead of files")
-	flag.Var(&atomicBool{Locker: mu, b: alsoToStderr}, "alsologtostderr", "log to standard error as well as files")
 	flag.StringVar(color, "color", "auto", "colorize standard error output according to severity")
 	flag.Var(verbosity, "verbosity", "log level for V logs")
 	flag.Var(vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")

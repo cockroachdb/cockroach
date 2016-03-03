@@ -716,11 +716,10 @@ Available Commands:
   debug       debugging commands
 
 Flags:
-      --alsologtostderr value[=true]   log to standard error as well as files
+      --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default ERROR)
       --color value                    colorize standard error output according to severity (default "auto")
       --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
       --log-dir value                  if non-empty, write log files in this directory (default "` + os.TempDir() + `")
-      --log-threshold value            logs at or above this threshold go to stderr (default ERROR)
       --logtostderr value[=true]       log to standard error instead of files
       --verbosity value                log level for V logs
       --vmodule value                  comma-separated list of pattern=N settings for file-filtered logging

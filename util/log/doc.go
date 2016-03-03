@@ -46,7 +46,7 @@
 //
 //	--logtostderr=true
 //		Logs are written to standard error instead of to files.
-//	--alsologtostderr=false
+//	--alsologtostderr=INFO
 //		Logs are written to standard error as well as to files.
 //	--log-dir=""
 //		Log files will be written to this directory instead of the

@@ -132,6 +132,12 @@ func SeverityByName(s string) (Severity, bool) {
 			return Severity(i), true
 		}
 	}
+	switch s {
+	case "TRUE":
+		return InfoLog, true
+	case "FALSE":
+		return NumSeverity, true
+	}
 	return 0, false
 }
 
@@ -610,7 +616,7 @@ type loggingT struct {
 	colorProfile    *colorProfile // Set via call to getTermColorProfile
 
 	// Level flag. Handled atomically.
-	stderrThreshold Severity // The -stderrthreshold flag.
+	stderrThreshold Severity // The -alsologtostderr flag.
 
 	// freeList is a list of byte buffers, maintained under freeListMu.
 	freeList *buffer
@@ -623,8 +629,7 @@ type loggingT struct {
 	// used to synchronize logging.
 
 	// Boolean flags. Also protected by mu (see flags.go).
-	toStderr     bool // The -logtostderr flag.
-	alsoToStderr bool // The -alsologtostderr flag.
+	toStderr bool // The -logtostderr flag.
 
 	mu sync.Mutex
 	// file holds writer for each of the log types.
@@ -738,7 +743,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if l.toStderr {
 		l.outputToStderr(entry, stacks)
 	} else {
-		if l.alsoToStderr || s >= l.stderrThreshold.get() {
+		if s >= l.stderrThreshold.get() {
 			l.outputToStderr(entry, stacks)
 		}
 		if l.file[s] == nil {
@@ -1069,8 +1074,6 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 			line = 1
 		}
 	}
-	// printWithFileLine with alsoToStderr=true, so standard log messages
-	// always appear on standard error.
 	logging.outputLogEntry(Severity(lb), file, line, text)
 	return len(b), nil
 }
