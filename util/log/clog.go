@@ -605,7 +605,7 @@ func Flush() {
 
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
-	color           string        // The -color flag.
+	nocolor         bool          // The -nocolor flag.
 	hasColorProfile bool          // True if the color profile has been determined
 	colorProfile    *colorProfile // Set via call to getTermColorProfile
 
@@ -817,7 +817,7 @@ func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
 func (l *loggingT) getTermColorProfile() *colorProfile {
 	if !l.hasColorProfile {
 		l.hasColorProfile = true
-		if l.color == "auto" {
+		if !l.nocolor {
 			fi, _ := os.Stderr.Stat() // get the FileInfo struct describing the standard input.
 			if (fi.Mode() & os.ModeCharDevice) != 0 {
 				term := os.Getenv("TERM")
