@@ -215,29 +215,32 @@ First shuts down the system and then destroys all data held by the
 node, cycling through each store specified by --store flags.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runExterminate),
+	RunE:         runExterminate,
 }
 
 // runExterminate destroys the data held in the specified stores.
-func runExterminate(_ *cobra.Command, _ []string) {
+func runExterminate(_ *cobra.Command, _ []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := cliContext.InitStores(stopper); err != nil {
-		panicf("failed to initialize context: %s", err)
+		return util.Errorf("failed to initialize context: %s", err)
 	}
 
-	runQuit(nil, nil)
+	if err := runQuit(nil, nil); err != nil {
+		return err
+	}
 
 	// Exterminate all data held in specified stores.
 	for _, e := range cliContext.Engines {
 		if rocksdb, ok := e.(*engine.RocksDB); ok {
 			log.Infof("exterminating data from store %s", e)
 			if err := rocksdb.Destroy(); err != nil {
-				panicf("unable to destroy store %s: %s", e, err)
+				return util.Errorf("unable to destroy store %s: %s", e, err)
 			}
 		}
 	}
 	log.Infof("exterminated all data from stores %s", cliContext.Engines)
+	return nil
 }
 
 // quitCmd command shuts down the node server.
