@@ -99,39 +99,14 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A mergeRangeCmd command merges a range.
-var mergeRangeCmd = &cobra.Command{
-	Use:   "merge [options] <key>",
-	Short: "merges a range",
-	Long: `
-Merges the range containing <key> with the immediate successor range.
-`,
-	SilenceUsage: true,
-	RunE:         panicGuard(runMergeRange),
-}
-
-func runMergeRange(cmd *cobra.Command, args []string) {
-	if len(args) != 1 {
-		mustUsage(cmd)
-		return
-	}
-
-	kvDB, stopper := makeDBClient()
-	defer stopper.Stop()
-	if err := kvDB.AdminMerge(args[0]); err != nil {
-		panicf("merge failed: %s\n", err)
-	}
-}
-
 var rangeCmds = []*cobra.Command{
 	lsRangesCmd,
 	splitRangeCmd,
-	mergeRangeCmd,
 }
 
 var rangeCmd = &cobra.Command{
 	Use:   "range",
-	Short: "list, split and merge ranges",
+	Short: "list and split ranges",
 	Run: func(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 	},
