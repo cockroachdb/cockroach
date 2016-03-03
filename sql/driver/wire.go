@@ -26,10 +26,6 @@ import (
 var _ driver.Valuer = Datum{}
 
 const (
-	// Endpoint is the URL path prefix which accepts incoming
-	// HTTP requests for the SQL API.
-	Endpoint = "/sql/"
-
 	// secondsInDay is the number of seconds in a day.
 	secondsInDay = 24 * 60 * 60
 )

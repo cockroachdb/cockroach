@@ -45,7 +45,6 @@ import (
 	crpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
@@ -79,7 +78,6 @@ type Server struct {
 	storePool           *storage.StorePool
 	db                  *client.DB
 	kvDB                *kv.DBServer
-	sqlServer           sql.Server
 	pgServer            pgwire.Server
 	node                *Node
 	recorder            *status.MetricsRecorder
@@ -170,9 +168,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.stopper)
-	s.sqlServer = sql.MakeServer(&s.ctx.Context, s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlServer.Executor)
+	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -312,7 +309,7 @@ func (s *Server) Start() error {
 	// Begin recording status summaries.
 	s.startWriteSummaries()
 
-	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
+	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
@@ -343,10 +340,6 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(healthEndpoint, s.status)
 	s.mux.Handle(ts.URLPrefix, s.tsServer)
-
-	// The SQL endpoints handles its own authentication, verifying user
-	// credentials against the requested user.
-	s.mux.Handle(driver.Endpoint, s.sqlServer)
 }
 
 // startWriteSummaries begins periodically persisting status summaries for the
