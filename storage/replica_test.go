@@ -686,7 +686,7 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	now := roachpb.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
 	tc.rng.mu.Lock()
-	baseRTS, _ := tc.rng.mu.tsCache.GetMax(roachpb.Key("a"), nil /* end */, nil /* txn */)
+	baseRTS := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */, nil /* txn */)
 	tc.rng.mu.Unlock()
 	baseLowWater := baseRTS.WallTime
 
@@ -720,7 +720,8 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 		})
 		// Verify expected low water mark.
 		tc.rng.mu.Lock()
-		rTS, wTS := tc.rng.mu.tsCache.GetMax(roachpb.Key("a"), nil, nil)
+		rTS := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
+		wTS := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
 		tc.rng.mu.Unlock()
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got %d, %d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
@@ -1141,17 +1142,20 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	tc.rng.mu.Lock()
 	defer tc.rng.mu.Unlock()
-	rTS, wTS := tc.rng.mu.tsCache.GetMax(roachpb.Key("a"), nil, nil)
+	rTS := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
+	wTS := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s", rTS, wTS)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, wTS = tc.rng.mu.tsCache.GetMax(roachpb.Key("b"), nil, nil)
+	rTS = tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("b"), nil, nil)
+	wTS = tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("b"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s", rTS, wTS)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, wTS = tc.rng.mu.tsCache.GetMax(roachpb.Key("c"), nil, nil)
+	rTS = tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("c"), nil, nil)
+	wTS = tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("c"), nil, nil)
 	if rTS.WallTime != 0 || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s", rTS, wTS)
 	}

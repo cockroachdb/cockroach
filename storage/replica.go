@@ -926,21 +926,21 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 				if ba.Txn != nil {
 					txnID = ba.Txn.ID
 				}
-				rTS, wTS := r.mu.tsCache.GetMax(header.Key, header.EndKey, txnID)
 
 				// Always push the timestamp forward if there's been a read which
 				// occurred after our txn timestamp.
-				if !rTS.Less(ba.Timestamp) {
+				if rTS := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey, txnID); !rTS.Less(ba.Timestamp) {
 					ba.Timestamp = rTS.Next()
 				}
-				// If there's a newer write timestamp...
-				if !wTS.Less(ba.Timestamp) {
-					// If we're in a txn, we still go ahead and try the write since
-					// we want to avoid restarting the transaction in the event that
-					// there isn't an intent or the intent can be pushed by us.
-					//
-					// If we're not in a txn, it's trivial to just advance our timestamp.
-					if ba.Txn == nil {
+
+				// If we're in a txn, we still go ahead and try the write since
+				// we want to avoid restarting the transaction in the event that
+				// there isn't an intent or the intent can be pushed by us.
+				//
+				// If we're not in a txn, it's trivial to just advance our timestamp.
+				if ba.Txn == nil {
+					// If there's a newer write timestamp...
+					if wTS := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey, txnID); !wTS.Less(ba.Timestamp) {
 						ba.Timestamp = wTS.Next()
 					}
 				}

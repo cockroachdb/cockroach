@@ -110,7 +110,7 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 		if o.Key.Contains(key) {
 			return
 		} else if key.Contains(*o.Key) {
-			tm.keys.Del(o.Key)
+			tm.keys.DelEntry(o.Entry)
 		}
 	}
 

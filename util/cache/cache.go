@@ -100,14 +100,14 @@ func (e *Entry) Range() interval.Range {
 
 // cacheStore is an interface for the backing store used for the cache.
 type cacheStore interface {
+	// init initializes or clears all entries.
+	init()
 	// get returns the entry by key.
 	get(key interface{}) *Entry
 	// add stores an entry.
 	add(e *Entry)
 	// del removes an entry.
 	del(key interface{})
-	// clear clears all entries.
-	clear()
 	// len is number of items in store.
 	length() int
 }
@@ -131,21 +131,35 @@ func newBaseCache(config Config) baseCache {
 func (bc *baseCache) init(store cacheStore) {
 	bc.ll.Init()
 	bc.store = store
+	bc.store.init()
 }
 
 // Add adds a value to the cache.
 func (bc *baseCache) Add(key, value interface{}) {
-	bc.add(key, value, nil)
+	bc.add(key, value, nil, nil)
 }
 
 // AddEntry adds a value to the cache. It provides an alternative interface to
 // Add which the caller can use to reduce allocations by bundling the Entry
 // structure with the key and value to be stored.
 func (bc *baseCache) AddEntry(entry *Entry) {
-	bc.add(entry.Key, entry.Value, entry)
+	bc.add(entry.Key, entry.Value, entry, nil)
 }
 
-func (bc *baseCache) add(key, value interface{}, entry *Entry) {
+// AddEntryAfter adds a value to the cache, making sure that it is placed after
+// the second entry in the eviction queue. It provides an alternative interface to
+// Add which the caller can use to reduce allocations by bundling the Entry
+// structure with the key and value to be stored.
+func (bc *baseCache) AddEntryAfter(entry, after *Entry) {
+	bc.add(entry.Key, entry.Value, entry, after)
+}
+
+// MoveToEnd moves the entry to the end of the eviction queue.
+func (bc *baseCache) MoveToEnd(entry *Entry) {
+	bc.ll.MoveToFront(entry.le)
+}
+
+func (bc *baseCache) add(key, value interface{}, entry, after *Entry) {
 	if e := bc.store.get(key); e != nil {
 		bc.access(e)
 		e.Value = value
@@ -155,7 +169,9 @@ func (bc *baseCache) add(key, value interface{}, entry *Entry) {
 	if e == nil {
 		e = &Entry{Key: key, Value: value}
 	}
-	if bc.Policy != CacheNone {
+	if after != nil {
+		e.le = bc.ll.InsertBefore(e, after.le)
+	} else {
 		e.le = bc.ll.PushFront(e)
 	}
 	bc.store.add(e)
@@ -175,14 +191,27 @@ func (bc *baseCache) Get(key interface{}) (value interface{}, ok bool) {
 
 // Del removes the provided key from the cache.
 func (bc *baseCache) Del(key interface{}) {
-	if e := bc.store.get(key); e != nil {
-		bc.removeElement(e)
+	e := bc.store.get(key)
+	bc.DelEntry(e)
+}
+
+// DelEntry removes the provided entry from the cache.
+func (bc *baseCache) DelEntry(entry *Entry) {
+	if entry != nil {
+		bc.removeElement(entry)
 	}
 }
 
 // Clear clears all entries from the cache.
 func (bc *baseCache) Clear() {
-	bc.store.clear()
+	if bc.OnEvicted != nil {
+		for e := bc.ll.Back(); e != nil; e = e.Prev() {
+			entry := e.Value.(*Entry)
+			bc.OnEvicted(entry.Key, entry.Value)
+		}
+	}
+	bc.ll.Init()
+	bc.store.init()
 }
 
 // Len returns the number of items in the cache.
@@ -197,9 +226,7 @@ func (bc *baseCache) access(e *Entry) {
 }
 
 func (bc *baseCache) removeElement(e *Entry) {
-	if bc.Policy != CacheNone {
-		bc.ll.Remove(e.le)
-	}
+	bc.ll.Remove(e.le)
 	bc.store.del(e.Key)
 	if bc.OnEvicted != nil {
 		bc.OnEvicted(e.Key, e.Value)
@@ -243,13 +270,15 @@ type UnorderedCache struct {
 func NewUnorderedCache(config Config) *UnorderedCache {
 	mc := &UnorderedCache{
 		baseCache: newBaseCache(config),
-		hmap:      make(map[interface{}]interface{}),
 	}
 	mc.baseCache.init(mc)
 	return mc
 }
 
 // Implementation of cacheStore interface.
+func (mc *UnorderedCache) init() {
+	mc.hmap = make(map[interface{}]interface{})
+}
 func (mc *UnorderedCache) get(key interface{}) *Entry {
 	if e, ok := mc.hmap[key].(*Entry); ok {
 		return e
@@ -261,11 +290,6 @@ func (mc *UnorderedCache) add(e *Entry) {
 }
 func (mc *UnorderedCache) del(key interface{}) {
 	delete(mc.hmap, key)
-}
-func (mc *UnorderedCache) clear() {
-	for key := range mc.hmap {
-		mc.Del(key)
-	}
 }
 func (mc *UnorderedCache) length() int {
 	return len(mc.hmap)
@@ -295,6 +319,9 @@ func NewOrderedCache(config Config) *OrderedCache {
 }
 
 // Implementation of cacheStore interface.
+func (oc *OrderedCache) init() {
+	oc.llrb = llrb.Tree{}
+}
 func (oc *OrderedCache) get(key interface{}) *Entry {
 	if e, ok := oc.llrb.Get(&Entry{Key: key}).(*Entry); ok {
 		return e
@@ -306,12 +333,6 @@ func (oc *OrderedCache) add(e *Entry) {
 }
 func (oc *OrderedCache) del(key interface{}) {
 	oc.llrb.Delete(&Entry{Key: key})
-}
-func (oc *OrderedCache) clear() {
-	oc.llrb.Do(func(e llrb.Comparable) (done bool) {
-		oc.Del(e.(*Entry).Key)
-		return
-	})
 }
 func (oc *OrderedCache) length() int {
 	return oc.llrb.Len()
@@ -396,7 +417,6 @@ func (ik IntervalKey) Contains(lk IntervalKey) bool {
 func NewIntervalCache(config Config) *IntervalCache {
 	ic := &IntervalCache{
 		baseCache: newBaseCache(config),
-		tree:      interval.Tree{Overlapper: interval.Range.OverlapExclusive},
 	}
 	ic.baseCache.init(ic)
 	return ic
@@ -423,6 +443,10 @@ func (ic *IntervalCache) MakeKey(start, end []byte) IntervalKey {
 }
 
 // Implementation of cacheStore interface.
+func (ic *IntervalCache) init() {
+	ic.tree = interval.Tree{Overlapper: interval.Range.OverlapExclusive}
+}
+
 func (ic *IntervalCache) get(key interface{}) *Entry {
 	ik := key.(*IntervalKey)
 	ic.getID = ik.id
@@ -454,19 +478,13 @@ func (ic *IntervalCache) del(key interface{}) {
 	}
 }
 
-func (ic *IntervalCache) clear() {
-	ic.tree.Do(func(e interval.Interface) (done bool) {
-		ic.Del(e.(*Entry).Key.(*IntervalKey))
-		return
-	})
-}
-
 func (ic *IntervalCache) length() int {
 	return ic.tree.Len()
 }
 
 // Overlap contains the key/value pair for one overlap instance.
 type Overlap struct {
+	Entry *Entry
 	Key   *IntervalKey
 	Value interface{}
 }
@@ -488,6 +506,7 @@ func (ic *IntervalCache) doOverlaps(i interval.Interface) bool {
 	e := i.(*Entry)
 	ic.access(e) // maintain cache eviction ordering
 	ic.overlaps = append(ic.overlaps, Overlap{
+		Entry: e,
 		Key:   e.Key.(*IntervalKey),
 		Value: e.Value,
 	})
