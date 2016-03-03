@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -473,23 +472,22 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError.
 	targetKey := roachpb.Key("b")
 	var numGets int32
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
-		if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
-			if atomic.AddInt32(&numGets, 1) == 1 {
-				return &roachpb.ReadWithinUncertaintyIntervalError{
-					Timestamp:         h.Timestamp,
-					ExistingTimestamp: h.Timestamp,
+
+	ctx := server.NewTestContext()
+	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
+		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+			if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
+				if atomic.AddInt32(&numGets, 1) == 1 {
+					return &roachpb.ReadWithinUncertaintyIntervalError{
+						Timestamp:         h.Timestamp,
+						ExistingTimestamp: h.Timestamp,
+					}
+
 				}
-
 			}
+			return nil
 		}
-		return nil
-	}
-	defer func() {
-		storage.TestingCommandFilter = nil
-	}()
-
-	s := server.StartTestServer(t)
+	s := server.StartTestServerWithContext(t, ctx)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")
 

@@ -196,6 +196,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			AllowRebalance: true,
 			Mode:           s.ctx.BalanceMode,
 		},
+		TestingMocker: ctx.TestingMocker.StoreTestingMocker,
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)

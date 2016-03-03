@@ -156,7 +156,6 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { storage.TestingCommandFilter = nil }()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engineStopper := stop.NewStopper()
@@ -165,17 +164,18 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	numIncrements := 0
 
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-		if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
-			numIncrements++
-		}
-		return nil
-	}
-
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		store := createTestStoreWithEngine(t, eng, clock, true, nil, stopper)
+		sCtx := storage.TestStoreContext()
+		sCtx.TestingMocker.TestingCommandFilter =
+			func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
+					numIncrements++
+				}
+				return nil
+			}
+		store := createTestStoreWithEngine(t, eng, clock, true, &sCtx, stopper)
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(roachpb.Key("a"), []byte("asdf"))
@@ -362,22 +362,24 @@ func TestRestoreReplicas(t *testing.T) {
 
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { storage.TestingCommandFilter = nil }()
 
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-		if runFilter.Load().(bool) {
-			if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
-				return util.Errorf("boom")
+	ctx := storage.TestStoreContext()
+	mtc := &multiTestContext{}
+	mtc.storeContext = &ctx
+	mtc.storeContext.TestingMocker.TestingCommandFilter =
+		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+			if runFilter.Load().(bool) {
+				if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
+					return util.Errorf("boom")
+				}
+				return nil
 			}
 			return nil
 		}
-		return nil
-	}
-
-	mtc := startMultiTestContext(t, 2)
+	mtc.Start(t, 2)
 	defer mtc.Stop()
 
 	rng, err := mtc.stores[0].GetReplica(1)

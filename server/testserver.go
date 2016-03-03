@@ -50,9 +50,10 @@ const (
 	initialSplitsTimeout = 10 * time.Second
 )
 
-// StartTestServer starts a in-memory test server.
-func StartTestServer(t util.Tester) *TestServer {
-	s := &TestServer{}
+// StartTestServerWithContext starts an in-memory test server.
+// ctx can be nil, in which case a default context will be created.
+func StartTestServerWithContext(t util.Tester, ctx *Context) *TestServer {
+	s := &TestServer{Ctx: ctx}
 	if err := s.Start(); err != nil {
 		if t != nil {
 			t.Fatalf("Could not start server: %v", err)
@@ -61,6 +62,11 @@ func StartTestServer(t util.Tester) *TestServer {
 		}
 	}
 	return s
+}
+
+// StartTestServer starts an in-memory test server.
+func StartTestServer(t util.Tester) *TestServer {
+	return StartTestServerWithContext(t, nil)
 }
 
 // StartTestServerJoining starts an in-memory test server that attempts to join `other`.
