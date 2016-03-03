@@ -106,13 +106,13 @@ func (m *RangeKeyMismatchError) String() string { return proto.CompactTextString
 func (*RangeKeyMismatchError) ProtoMessage()    {}
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
-// encountered a versioned value at existing_timestamp within the uncertainty
-// interval of the reader.
-// The read should be retried at existing_timestamp+1.
+// encountered a future write within the uncertainty interval of the reader.
+// The read should be retried at a higher timestamp; the timestamps contained
+// within are purely informational, though typically existing_timestamp is a
+// lower bound for a new timestamp which is admissible.
 type ReadWithinUncertaintyIntervalError struct {
-	Timestamp         Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	ReadTimestamp     Timestamp `protobuf:"bytes,1,opt,name=read_timestamp" json:"read_timestamp"`
 	ExistingTimestamp Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp" json:"existing_timestamp"`
-	NodeID            NodeID    `protobuf:"varint,3,opt,name=node_id,casttype=NodeID" json:"node_id"`
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Reset()         { *m = ReadWithinUncertaintyIntervalError{} }
@@ -346,13 +346,15 @@ type Error struct {
 	// restarting the transaction (with or without a backoff).
 	TransactionRestart TransactionRestart `protobuf:"varint,3,opt,name=transaction_restart,enum=cockroach.roachpb.TransactionRestart" json:"transaction_restart"`
 	// Transaction where the error is generated.
-	UnexposedTxn *Transaction `protobuf:"bytes,4,opt,name=txn" json:"txn,omitempty"`
+	UnexposedTxn *Transaction `protobuf:"bytes,4,opt,name=unexposed_txn" json:"unexposed_txn,omitempty"`
+	// Node at which the error was generated (zero if does not apply).
+	OriginNode NodeID `protobuf:"varint,5,opt,name=origin_node,casttype=NodeID" json:"origin_node"`
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
-	Detail *ErrorDetail `protobuf:"bytes,5,opt,name=detail" json:"detail,omitempty"`
+	Detail *ErrorDetail `protobuf:"bytes,6,opt,name=detail" json:"detail,omitempty"`
 	// The index, if given, contains the index of the request (in the batch)
 	// whose execution caused the error.
-	Index *ErrPosition `protobuf:"bytes,6,opt,name=index" json:"index,omitempty"`
+	Index *ErrPosition `protobuf:"bytes,7,opt,name=index" json:"index,omitempty"`
 }
 
 func (m *Error) Reset()      { *m = Error{} }
@@ -522,8 +524,8 @@ func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error)
 	_ = l
 	data[i] = 0xa
 	i++
-	i = encodeVarintErrors(data, i, uint64(m.Timestamp.Size()))
-	n4, err := m.Timestamp.MarshalTo(data[i:])
+	i = encodeVarintErrors(data, i, uint64(m.ReadTimestamp.Size()))
+	n4, err := m.ReadTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -536,9 +538,6 @@ func (m *ReadWithinUncertaintyIntervalError) MarshalTo(data []byte) (int, error)
 		return 0, err
 	}
 	i += n5
-	data[i] = 0x18
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.NodeID))
 	return i, nil
 }
 
@@ -1233,8 +1232,11 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		}
 		i += n33
 	}
+	data[i] = 0x28
+	i++
+	i = encodeVarintErrors(data, i, uint64(m.OriginNode))
 	if m.Detail != nil {
-		data[i] = 0x2a
+		data[i] = 0x32
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Detail.Size()))
 		n34, err := m.Detail.MarshalTo(data[i:])
@@ -1244,7 +1246,7 @@ func (m *Error) MarshalTo(data []byte) (int, error) {
 		i += n34
 	}
 	if m.Index != nil {
-		data[i] = 0x32
+		data[i] = 0x3a
 		i++
 		i = encodeVarintErrors(data, i, uint64(m.Index.Size()))
 		n35, err := m.Index.MarshalTo(data[i:])
@@ -1332,11 +1334,10 @@ func (m *RangeKeyMismatchError) Size() (n int) {
 func (m *ReadWithinUncertaintyIntervalError) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Timestamp.Size()
+	l = m.ReadTimestamp.Size()
 	n += 1 + l + sovErrors(uint64(l))
 	l = m.ExistingTimestamp.Size()
 	n += 1 + l + sovErrors(uint64(l))
-	n += 1 + sovErrors(uint64(m.NodeID))
 	return n
 }
 
@@ -1575,6 +1576,7 @@ func (m *Error) Size() (n int) {
 		l = m.UnexposedTxn.Size()
 		n += 1 + l + sovErrors(uint64(l))
 	}
+	n += 1 + sovErrors(uint64(m.OriginNode))
 	if m.Detail != nil {
 		l = m.Detail.Size()
 		n += 1 + l + sovErrors(uint64(l))
@@ -2145,7 +2147,7 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ReadTimestamp", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2169,7 +2171,7 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.ReadTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2203,25 +2205,6 @@ func (m *ReadWithinUncertaintyIntervalError) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
-			}
-			m.NodeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.NodeID |= (NodeID(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(data[iNdEx:])
@@ -4376,6 +4359,25 @@ func (m *Error) Unmarshal(data []byte) error {
 			}
 			iNdEx = postIndex
 		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginNode", wireType)
+			}
+			m.OriginNode = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowErrors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.OriginNode |= (NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Detail", wireType)
 			}
@@ -4408,7 +4410,7 @@ func (m *Error) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
 			}

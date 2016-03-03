@@ -59,13 +59,13 @@ message RangeKeyMismatchError {
 }
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
-// encountered a versioned value at existing_timestamp within the uncertainty
-// interval of the reader.
-// The read should be retried at existing_timestamp+1.
+// encountered a future write within the uncertainty interval of the reader.
+// The read should be retried at a higher timestamp; the timestamps contained
+// within are purely informational, though typically existing_timestamp is a
+// lower bound for a new timestamp which is admissible.
 message ReadWithinUncertaintyIntervalError {
-  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  optional Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
-  optional int32 node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
 }
 
 // A TransactionAbortedError indicates that the transaction was
@@ -247,13 +247,16 @@ message Error {
   optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
 
   // Transaction where the error is generated.
-  optional Transaction txn = 4 [(gogoproto.customname) = "UnexposedTxn"];
+  optional Transaction unexposed_txn = 4;
+
+  // Node at which the error was generated (zero if does not apply).
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID" ];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 5;
+  optional ErrorDetail detail = 6;
 
   // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
-  optional ErrPosition index = 6;
+  optional ErrPosition index = 7;
 }
