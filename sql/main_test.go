@@ -92,7 +92,7 @@ func setupTestServer(t *testing.T) *testServer {
 func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
 	storage.GetTestingCommandFilters().AppendFilter(checkEndTransactionTrigger)
 	s := &testServer{TestServer: server.TestServer{Ctx: ctx}}
-	s.cleanupFns = append(s.cleanupFns, func() { storage.GetTestingCommandFilters().Reset() })
+	s.cleanupFns = append(s.cleanupFns, storage.GetTestingCommandFilters().Reset)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
