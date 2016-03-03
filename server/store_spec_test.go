@@ -81,7 +81,7 @@ func TestNewStoreSpec(t *testing.T) {
 		{"path=/mnt/hda1,size=.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}}},
 		{"path=/mnt/hda1,size=.009999", "store size (.009999) must be between 1% and 100%", StoreSpec{}},
 		// errors
-		{"path=/mnt/hda1,size=0", "store size (0) must be larger than 671088640", StoreSpec{}},
+		{"path=/mnt/hda1,size=0", "store size (0) must be larger than 640 MiB", StoreSpec{}},
 		{"path=/mnt/hda1,size=abc", "could not parse store size (abc) strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
 		{"path=/mnt/hda1,size=", "no value specified for size", StoreSpec{}},
 		{"size=20GiB,path=/mnt/hda1,size=20GiB", "size field was used twice in store definition", StoreSpec{}},
@@ -92,7 +92,7 @@ func TestNewStoreSpec(t *testing.T) {
 		{"size=20GiB,type=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}}},
 		{"size=20.5GiB,type=mem", "", StoreSpec{"", 22011707392, 0, true, roachpb.Attributes{}}},
 		{"size=20GiB,type=mem,attr=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}}},
-		{"type=mem,size=20", "store size (20) must be larger than 671088640", StoreSpec{}},
+		{"type=mem,size=20", "store size (20) must be larger than 640 MiB", StoreSpec{}},
 		{"type=mem,size=", "no value specified for size", StoreSpec{}},
 		{"type=mem,attr=ssd", "size must be specified for an in memory store", StoreSpec{}},
 		{"path=/mnt/hda1,type=mem", "path specified for in memory store", StoreSpec{}},
