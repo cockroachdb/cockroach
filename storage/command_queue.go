@@ -94,7 +94,11 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			end = start.Next()
 			start = end[:len(start)]
 		}
-		overlaps := cq.cache.GetOverlaps(start, end)
+		r := interval.Range{
+			Start: interval.Comparable(start),
+			End:   interval.Comparable(end),
+		}
+		overlaps := cq.cache.GetOverlaps(r.Start, r.End)
 		if readOnly {
 			// If both commands are read-only, there are no dependencies between them,
 			// so these can be filtered out of the overlapping commands.
@@ -157,24 +161,33 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		// cmd 5 [W]:   ====================     ====================
 		//
 		sort.Sort(overlapSorter(overlaps))
-		for i := len(overlaps) - 1; i >= 0; i-- {
+		for i, enclosed := len(overlaps)-1, false; i >= 0 && !enclosed; i-- {
 			keyRange, cmd := overlaps[i].Key.Range, overlaps[i].Value.(*cmd)
 			if cmd.readOnly {
 				// If the current overlap is a read (meaning we're a write because other reads will
 				// be filtered out if we're a read as well), we only need to wait if the write RangeGroup
 				// doesn't already enclose the read.
+				cq.rg.Add(keyRange)
 				if !cq.wRg.Overlaps(keyRange) {
-					cq.rg.Add(keyRange)
 					cmd.pending = append(cmd.pending, wg)
 					wg.Add(1)
+					if cq.wRg.Len() == 1 && cq.wRg.Encloses(r) {
+						enclosed = true
+					}
 				}
-			} else if cq.rg.Add(keyRange) {
-				// We only need to establish a write dependency when this key range is not covered
-				// by any other reads or writes. If so, add this key range to the write RangeGroup
-				// so that we can avoid previous read dependencies that are enforced by this write.
+			} else {
+				// If the current overlap is a write, we only need to establish a write dependency
+				// when this key range is not covered by any other reads or writes. If so, add this
+				// key range to the write RangeGroup so that we can avoid previous read dependencies
+				// that are enforced by this write.
 				cq.wRg.Add(keyRange)
-				cmd.pending = append(cmd.pending, wg)
-				wg.Add(1)
+				if cq.rg.Add(keyRange) {
+					cmd.pending = append(cmd.pending, wg)
+					wg.Add(1)
+					if cq.wRg.Len() == 1 && cq.wRg.Encloses(r) {
+						enclosed = true
+					}
+				}
 			}
 		}
 
