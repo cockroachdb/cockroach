@@ -32,7 +32,12 @@ import (
 
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.RunWithTestingCommandFilter(func(setFilter func(storage.TestingFilterFunc)) {
+		testIntentResolution(t, setFilter)
+	})
+}
 
+func testIntentResolution(t *testing.T, setFilter func(storage.TestingFilterFunc)) {
 	testCases := []struct {
 		keys   []string
 		ranges [][2]string
@@ -69,11 +74,10 @@ func TestIntentResolution(t *testing.T) {
 
 	splitKey := []byte("s")
 	results := map[string]struct{}{}
-	defer func() { storage.TestingCommandFilter = nil }()
 	for i, tc := range testCases {
 		var mu sync.Mutex
 		closer := make(chan struct{}, 2)
-		storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			mu.Lock()
 			defer mu.Unlock()
 			header := args.Header()
@@ -91,7 +95,7 @@ func TestIntentResolution(t *testing.T) {
 				closer <- struct{}{}
 			}
 			return nil
-		}
+		})
 		func() {
 			s := StartTestServer(t)
 			defer s.Stop()

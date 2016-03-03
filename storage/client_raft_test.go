@@ -152,11 +152,17 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	validate(store)
 }
 
-// TestStoreRecoverWithErrors verifies that even commands that fail are marked as
-// applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { storage.TestingCommandFilter = nil }()
+	storage.RunWithTestingCommandFilter(func(setFilter func(storage.TestingFilterFunc)) {
+		testStoreRecoverWithErrors(t, setFilter)
+	})
+}
+
+// TestStoreRecoverWithErrors verifies that even commands that fail are marked as
+// applied so they are not retried after recovery.
+func testStoreRecoverWithErrors(t *testing.T, setFilter func(storage.TestingFilterFunc)) {
+	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engineStopper := stop.NewStopper()
@@ -165,12 +171,12 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	numIncrements := 0
 
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
 			numIncrements++
 		}
 		return nil
-	}
+	})
 
 	func() {
 		stopper := stop.NewStopper()
@@ -359,15 +365,20 @@ func TestRestoreReplicas(t *testing.T) {
 		}
 	}
 }
-
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { storage.TestingCommandFilter = nil }()
+	storage.RunWithTestingCommandFilter(func(setFilter func(storage.TestingFilterFunc)) {
+		testFailedReplicaChange(t, setFilter)
+	})
+}
+
+func testFailedReplicaChange(t *testing.T, setFilter func(storage.TestingFilterFunc)) {
+	defer leaktest.AfterTest(t)()
 
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if runFilter.Load().(bool) {
 			if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
 				return util.Errorf("boom")
@@ -375,7 +386,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			return nil
 		}
 		return nil
-	}
+	})
 
 	mtc := startMultiTestContext(t, 2)
 	defer mtc.Stop()

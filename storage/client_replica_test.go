@@ -183,11 +183,14 @@ func TestRejectFutureCommand(t *testing.T) {
 //    again at a new epoch timestamp T+200, which will finally succeed.
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	storage.RunWithTestingCommandFilter(func(setFilter func(storage.TestingFilterFunc)) { testTxnPutOutOfOrder(t, setFilter) })
+}
 
+func testTxnPutOutOfOrder(t *testing.T, setFilter func(storage.TestingFilterFunc)) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 		if _, ok := args.(*roachpb.GetRequest); ok &&
 			args.Header().Key.Equal(roachpb.Key(key)) &&
 			h.Txn == nil {
@@ -200,10 +203,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 		}
 		return nil
-	}
-	defer func() {
-		storage.TestingCommandFilter = nil
-	}()
+	})
 
 	manualClock := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manualClock.UnixNano)
@@ -317,6 +317,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	close(waitSecondGet)
 	<-waitTxnComplete
+
 }
 
 // TestRangeLookupUseReverse tests whether the results and the results count

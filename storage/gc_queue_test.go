@@ -300,8 +300,14 @@ func TestGCQueueProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
 func TestGCQueueTransactionTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testGCQueueTransactionTable(t, setFilter)
+	})
+}
+
+func testGCQueueTransactionTable(t *testing.T, setFilter func(TestingFilterFunc)) {
 	defer leaktest.AfterTest(t)()
 
 	const now time.Duration = 3 * 24 * time.Hour
@@ -339,7 +345,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	resolved := map[string][]roachpb.Span{}
-	TestingCommandFilter = func(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
 		if resArgs, ok := req.(*roachpb.ResolveIntentRequest); ok {
 			id := string(resArgs.IntentTxn.Key)
 			resolved[id] = append(resolved[id], roachpb.Span{
@@ -353,8 +359,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			}
 		}
 		return nil
-	}
-	defer func() { TestingCommandFilter = nil }()
+	})
 
 	tc := testContext{}
 	tc.Start(t)

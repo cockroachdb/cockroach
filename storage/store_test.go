@@ -1328,20 +1328,24 @@ func TestStoreReadInconsistent(t *testing.T) {
 // them in one fell swoop using both consistent and inconsistent reads.
 func TestStoreScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { TestingCommandFilter = nil }()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testStoreScanIntents(t, setFilter)
+	})
+}
 
+func testStoreScanIntents(t *testing.T, setFilter func(TestingFilterFunc)) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
 	var count int32
 	countPtr := &count
 
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.ScanRequest); ok {
 			atomic.AddInt32(countPtr, 1)
 		}
 		return nil
-	}
+	})
 
 	testCases := []struct {
 		consistent bool
@@ -1443,20 +1447,25 @@ func TestStoreScanIntents(t *testing.T) {
 // inconsistent reads are triggering intent resolution.
 func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	RunWithTestingCommandFilter(func(setFilter func(TestingFilterFunc)) {
+		testStoreScanInconsistentResolvesIntents(t, setFilter)
+	})
+}
+
+func testStoreScanInconsistentResolvesIntents(t *testing.T, setFilter func(TestingFilterFunc)) {
 	// This test relies on having a committed Txn record and open intents on
 	// the same Range. This only works with auto-gc turned off; alternatively
 	// the test could move to splitting its underlying Range.
 	defer setTxnAutoGC(false)()
 	var intercept atomic.Value
 	intercept.Store(true)
-	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 		if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
 			return util.Errorf("error on purpose")
 		}
 		return nil
-	}
+	})
 	store, _, stopper := createTestStore(t)
-	defer func() { TestingCommandFilter = nil }()
 	defer stopper.Stop()
 
 	// Lay down 10 intents to scan over.

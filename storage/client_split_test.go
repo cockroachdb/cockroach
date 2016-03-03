@@ -876,15 +876,21 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
 }
 
-// TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
-// read requests and lets them complete while a split is happening; the reads
-// hit the second half of the split. If the split happens non-atomically with
-// respect to the reads (and in particular their update of the timestamp
-// cache), then some of them may not be reflected in the timestamp cache of the
-// new range, in which case this test would fail.
 func TestStoreSplitReadRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { storage.TestingCommandFilter = nil }()
+	storage.RunWithTestingCommandFilter(func(setFilter func(storage.TestingFilterFunc)) {
+		testStoreSplitReadRace(t, setFilter)
+	})
+}
+
+func testStoreSplitReadRace(t *testing.T, setFilter func(storage.TestingFilterFunc)) {
+	// TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
+	// read requests and lets them complete while a split is happening; the reads
+	// hit the second half of the split. If the split happens non-atomically with
+	// respect to the reads (and in particular their update of the timestamp
+	// cache), then some of them may not be reflected in the timestamp cache of the
+	// new range, in which case this test would fail.
+	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
 	splitKey := roachpb.Key("a")
 	key := func(i int) roachpb.Key {
@@ -893,7 +899,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 
 	getContinues := make(chan struct{})
 	var getStarted sync.WaitGroup
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+	setFilter(func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 		if et, ok := args.(*roachpb.EndTransactionRequest); ok {
 			st := et.InternalCommitTrigger.GetSplitTrigger()
 			if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {
@@ -906,7 +912,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 			<-getContinues
 		}
 		return nil
-	}
+	})
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
