@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/pq"
 )
@@ -51,16 +50,8 @@ func injectRetriableErrors(
 func TestTxnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Set up error injection that causes retries, to be used later in the test.
-	// This needs to be set up before the server is started.
-	restarts := make(map[string]int)
-	magicVals := []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"}
-	cleanupFilter := storage.GetTestingCommandFilters().AppendFilter(
-		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
-			return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
-		})
-
-	server, sqlDB, _ := setup(t)
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	// Make sure all the commands we send in this test are sent over the same connection.
@@ -73,16 +64,24 @@ func TestTxnRestart(t *testing.T) {
 	// do that.
 	sqlDB.SetMaxOpenConns(1)
 
-	if _, err := sqlDB.Exec(`
+	// Set up error injection that causes retries.
+	restarts := make(map[string]int)
+	magicVals := []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"}
+	cleanupFilter := cmdFilters.AppendFilter(
+		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+			return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
+		})
+	func() {
+		if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v TEXT);
 `); err != nil {
-		t.Fatal(err)
-	}
+			t.Fatal(err)
+		}
 
-	// Test that implicit txns - txns for which we see all the statements and prefixes
-	// of txns (statements batched together with the BEGIN stmt) - are retried.
-	if _, err := sqlDB.Exec(`
+		// Test that implicit txns - txns for which we see all the statements and prefixes
+		// of txns (statements batched together with the BEGIN stmt) - are retried.
+		if _, err := sqlDB.Exec(`
 INSERT INTO t.test (k, v) VALUES ('a', 'boulanger');
 BEGIN;
 INSERT INTO t.test (k, v) VALUES ('c', 'dromedary');
@@ -93,8 +92,9 @@ BEGIN;
 INSERT INTO t.test (k, v) VALUES ('i', 'josephine');
 INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 `); err != nil {
-		t.Fatal(err)
-	}
+			t.Fatal(err)
+		}
+	}()
 
 	cleanupFilter()
 
@@ -110,7 +110,7 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 
 	magicVals = []string{"hooly"}
 	restarts = make(map[string]int)
-	cleanupFilter = storage.GetTestingCommandFilters().AppendFilter(
+	cleanupFilter = cmdFilters.AppendFilter(
 		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
 			return injectRetriableErrors(sid, req, hdr, magicVals, restarts)
 		})

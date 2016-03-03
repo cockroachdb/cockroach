@@ -122,6 +122,15 @@ type Context struct {
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	TimeUntilStoreDead time.Duration
+
+	TestingMocker TestingMocker
+}
+
+// TestingMocker is a struct containing various facilities for mocking
+// various or otherwise controlling parts of the system.
+type TestingMocker struct {
+	// A callback to be called when executing every replica command.
+	TestingCommandFilter storage.CommandFilter
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
