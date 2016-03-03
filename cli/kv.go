@@ -99,6 +99,8 @@ var putCmd = &cobra.Command{
 	Long: `
 Sets the value for one or more keys. Keys and values must be provided
 in pairs on the command line.
+
+WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runPut),
@@ -134,6 +136,8 @@ var cPutCmd = &cobra.Command{
 Conditionally sets a value for a key if the existing value is equal
 to expValue. To conditionally set a value only if there is no existing entry
 pass nil for expValue. The expValue defaults to 1 if not specified.
+
+WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runCPut),
@@ -171,6 +175,8 @@ Increments the value for a key. The increment amount defaults to 1 if
 not specified. Displays the incremented value upon success.
 Negative values need to be prefixed with -- to not get interpreted as
 flags.
+
+WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runInc),
@@ -207,6 +213,8 @@ var delCmd = &cobra.Command{
 	Short: "deletes the values of one or more keys",
 	Long: `
 Deletes the values of one or more keys.
+
+WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runDel),
@@ -238,6 +246,8 @@ var delRangeCmd = &cobra.Command{
 	Short: "deletes the values for a range of keys",
 	Long: `
 Deletes the values for the range of keys [startKey, endKey).
+
+WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runDelRange),
@@ -367,7 +377,7 @@ var kvCmds = []*cobra.Command{
 
 var kvCmd = &cobra.Command{
 	Use:   "kv",
-	Short: "get, put, conditional put, increment, delete, scan, and reverse scan key/value pairs",
+	Short: "get, put, delete, and scan key/value pairs",
 	Long: `
 Special characters in keys or values should be specified according to
 the double-quoted Go string literal rules (see

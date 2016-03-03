@@ -190,57 +190,57 @@ func Example_basic() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("kv put a 1 b 2 c 3")
-	c.Run("kv scan")
-	c.Run("kv revscan")
-	c.Run("kv del a c")
-	c.Run("kv get a")
-	c.Run("kv get b")
-	c.Run("kv inc c 1")
-	c.Run("kv inc c 10")
-	c.Run("kv inc c 100")
-	c.Run("kv inc c -- -60")
-	c.Run("kv inc c -- -9")
-	c.Run("kv scan")
-	c.Run("kv revscan")
-	c.Run("kv inc c b")
+	c.Run("debug kv put a 1 b 2 c 3")
+	c.Run("debug kv scan")
+	c.Run("debug kv revscan")
+	c.Run("debug kv del a c")
+	c.Run("debug kv get a")
+	c.Run("debug kv get b")
+	c.Run("debug kv inc c 1")
+	c.Run("debug kv inc c 10")
+	c.Run("debug kv inc c 100")
+	c.Run("debug kv inc c -- -60")
+	c.Run("debug kv inc c -- -9")
+	c.Run("debug kv scan")
+	c.Run("debug kv revscan")
+	c.Run("debug kv inc c b")
 
 	// Output:
-	// kv put a 1 b 2 c 3
-	// kv scan
+	// debug kv put a 1 b 2 c 3
+	// debug kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// 3 result(s)
-	// kv revscan
+	// debug kv revscan
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
 	// 3 result(s)
-	// kv del a c
-	// kv get a
+	// debug kv del a c
+	// debug kv get a
 	// "a" not found
-	// kv get b
+	// debug kv get b
 	// "2"
-	// kv inc c 1
+	// debug kv inc c 1
 	// 1
-	// kv inc c 10
+	// debug kv inc c 10
 	// 11
-	// kv inc c 100
+	// debug kv inc c 100
 	// 111
-	// kv inc c -- -60
+	// debug kv inc c -- -60
 	// 51
-	// kv inc c -- -9
+	// debug kv inc c -- -9
 	// 42
-	// kv scan
+	// debug kv scan
 	// "b"	"2"
 	// "c"	42
 	// 2 result(s)
-	// kv revscan
+	// debug kv revscan
 	// "c"	42
 	// "b"	"2"
 	// 2 result(s)
-	// kv inc c b
+	// debug kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 }
 
@@ -248,33 +248,33 @@ func Example_quoted() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run(`kv put a\x00 日本語`)                                  // UTF-8 input text
-	c.Run(`kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
-	c.Run(`kv put a\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
-	c.Run(`kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
-	c.Run(`kv scan`)
-	c.Run(`kv get a\x00`)
-	c.Run(`kv del a\x00`)
-	c.Run(`kv inc 1\x01`)
-	c.Run(`kv get 1\x01`)
+	c.Run(`debug kv put a\x00 日本語`)                                  // UTF-8 input text
+	c.Run(`debug kv put a\x01 \u65e5\u672c\u8a9e`)                   // explicit Unicode code points
+	c.Run(`debug kv put a\x02 \U000065e5\U0000672c\U00008a9e`)       // explicit Unicode code points
+	c.Run(`debug kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e`) // explicit UTF-8 bytes
+	c.Run(`debug kv scan`)
+	c.Run(`debug kv get a\x00`)
+	c.Run(`debug kv del a\x00`)
+	c.Run(`debug kv inc 1\x01`)
+	c.Run(`debug kv get 1\x01`)
 
 	// Output:
-	// kv put a\x00 日本語
-	// kv put a\x01 \u65e5\u672c\u8a9e
-	// kv put a\x02 \U000065e5\U0000672c\U00008a9e
-	// kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
-	// kv scan
+	// debug kv put a\x00 日本語
+	// debug kv put a\x01 \u65e5\u672c\u8a9e
+	// debug kv put a\x02 \U000065e5\U0000672c\U00008a9e
+	// debug kv put a\x03 \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e
+	// debug kv scan
 	// "a\x00"	"日本語"
 	// "a\x01"	"日本語"
 	// "a\x02"	"日本語"
 	// "a\x03"	"日本語"
 	// 4 result(s)
-	// kv get a\x00
+	// debug kv get a\x00
 	// "日本語"
-	// kv del a\x00
-	// kv inc 1\x01
+	// debug kv del a\x00
+	// debug kv inc 1\x01
 	// 1
-	// kv get 1\x01
+	// debug kv get 1\x01
 	// 1
 }
 
@@ -288,12 +288,12 @@ func Example_insecure() {
 	}
 	defer c.stop()
 
-	c.Run("kv --insecure put a 1 b 2")
-	c.Run("kv --insecure scan")
+	c.Run("debug kv --insecure put a 1 b 2")
+	c.Run("debug kv --insecure scan")
 
 	// Output:
-	// kv --insecure put a 1 b 2
-	// kv --insecure scan
+	// debug kv --insecure put a 1 b 2
+	// debug kv --insecure scan
 	// "a"	"1"
 	// "b"	"2"
 	// 2 result(s)
@@ -303,36 +303,32 @@ func Example_ranges() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("kv put a 1 b 2 c 3 d 4")
-	c.Run("kv scan")
-	c.Run("kv revscan")
-	c.Run("range split c")
-	c.Run("range ls")
-	c.Run("kv scan")
-	c.Run("kv revscan")
-	c.Run("range merge b")
-	c.Run("range ls")
-	c.Run("kv scan")
-	c.Run("kv revscan")
-	c.Run("kv delrange a c")
-	c.Run("kv scan")
+	c.Run("debug kv put a 1 b 2 c 3 d 4")
+	c.Run("debug kv scan")
+	c.Run("debug kv revscan")
+	c.Run("debug range split c")
+	c.Run("debug range ls")
+	c.Run("debug kv scan")
+	c.Run("debug kv revscan")
+	c.Run("debug kv delrange a c")
+	c.Run("debug kv scan")
 
 	// Output:
-	// kv put a 1 b 2 c 3 d 4
-	// kv scan
+	// debug kv put a 1 b 2 c 3 d 4
+	// debug kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
 	// 4 result(s)
-	// kv revscan
+	// debug kv revscan
 	// "d"	"4"
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
 	// 4 result(s)
-	// range split c
-	// range ls
+	// debug range split c
+	// debug range ls
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
 	// "c"-/Table/11 [5]
@@ -344,43 +340,20 @@ func Example_ranges() {
 	// /Table/13-/Max [4]
 	// 	0: node-id=1 store-id=1
 	// 5 result(s)
-	// kv scan
+	// debug kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
 	// 4 result(s)
-	// kv revscan
+	// debug kv revscan
 	// "d"	"4"
 	// "c"	"3"
 	// "b"	"2"
 	// "a"	"1"
 	// 4 result(s)
-	// range merge b
-	// range ls
-	// /Min-/Table/11 [1]
-	// 	0: node-id=1 store-id=1
-	// /Table/11-/Table/12 [2]
-	// 	0: node-id=1 store-id=1
-	// /Table/12-/Table/13 [3]
-	// 	0: node-id=1 store-id=1
-	// /Table/13-/Max [4]
-	// 	0: node-id=1 store-id=1
-	// 4 result(s)
-	// kv scan
-	// "a"	"1"
-	// "b"	"2"
-	// "c"	"3"
-	// "d"	"4"
-	// 4 result(s)
-	// kv revscan
-	// "d"	"4"
-	// "c"	"3"
-	// "b"	"2"
-	// "a"	"1"
-	// 4 result(s)
-	// kv delrange a c
-	// kv scan
+	// debug kv delrange a c
+	// debug kv scan
 	// "c"	"3"
 	// "d"	"4"
 	// 2 result(s)
@@ -390,25 +363,25 @@ func Example_logging() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("kv --alsologtostderr=false scan")
-	c.Run("kv --log-backtrace-at=foo.go:1 scan")
-	c.Run("kv --log-dir='' scan")
-	c.Run("kv --logtostderr=true scan")
-	c.Run("kv --verbosity=0 scan")
-	c.Run("kv --vmodule=foo=1 scan")
+	c.Run("debug kv --alsologtostderr=false scan")
+	c.Run("debug kv --log-backtrace-at=foo.go:1 scan")
+	c.Run("debug kv --log-dir='' scan")
+	c.Run("debug kv --logtostderr=true scan")
+	c.Run("debug kv --verbosity=0 scan")
+	c.Run("debug kv --vmodule=foo=1 scan")
 
 	// Output:
-	// kv --alsologtostderr=false scan
+	// debug kv --alsologtostderr=false scan
 	// 0 result(s)
-	// kv --log-backtrace-at=foo.go:1 scan
+	// debug kv --log-backtrace-at=foo.go:1 scan
 	// 0 result(s)
-	// kv --log-dir='' scan
+	// debug kv --log-dir='' scan
 	// 0 result(s)
-	// kv --logtostderr=true scan
+	// debug kv --logtostderr=true scan
 	// 0 result(s)
-	// kv --verbosity=0 scan
+	// debug kv --verbosity=0 scan
 	// 0 result(s)
-	// kv --vmodule=foo=1 scan
+	// debug kv --vmodule=foo=1 scan
 	// 0 result(s)
 }
 
@@ -416,23 +389,23 @@ func Example_cput() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("kv put a 1 b 2 c 3 d 4")
-	c.Run("kv scan")
-	c.Run("kv cput e 5")
-	c.Run("kv cput b 3 2")
-	c.Run("kv scan")
+	c.Run("debug kv put a 1 b 2 c 3 d 4")
+	c.Run("debug kv scan")
+	c.Run("debug kv cput e 5")
+	c.Run("debug kv cput b 3 2")
+	c.Run("debug kv scan")
 
 	// Output:
-	// kv put a 1 b 2 c 3 d 4
-	// kv scan
+	// debug kv put a 1 b 2 c 3 d 4
+	// debug kv scan
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// "d"	"4"
 	// 4 result(s)
-	// kv cput e 5
-	// kv cput b 3 2
-	// kv scan
+	// debug kv cput e 5
+	// debug kv cput b 3 2
+	// debug kv scan
 	// "a"	"1"
 	// "b"	"3"
 	// "c"	"3"
@@ -445,27 +418,27 @@ func Example_max_results() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("kv put a 1 b 2 c 3 d 4")
-	c.Run("kv scan --max-results=3")
-	c.Run("kv revscan --max-results=2")
-	c.Run("range split c")
-	c.Run("range split d")
-	c.Run("range ls --max-results=2")
+	c.Run("debug kv put a 1 b 2 c 3 d 4")
+	c.Run("debug kv scan --max-results=3")
+	c.Run("debug kv revscan --max-results=2")
+	c.Run("debug range split c")
+	c.Run("debug range split d")
+	c.Run("debug range ls --max-results=2")
 
 	// Output:
-	// kv put a 1 b 2 c 3 d 4
-	// kv scan --max-results=3
+	// debug kv put a 1 b 2 c 3 d 4
+	// debug kv scan --max-results=3
 	// "a"	"1"
 	// "b"	"2"
 	// "c"	"3"
 	// 3 result(s)
-	// kv revscan --max-results=2
+	// debug kv revscan --max-results=2
 	// "d"	"4"
 	// "c"	"3"
 	// 2 result(s)
-	// range split c
-	// range split d
-	// range ls --max-results=2
+	// debug range split c
+	// debug range split d
+	// debug range ls --max-results=2
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
 	// "c"-"d" [5]
@@ -734,9 +707,7 @@ Available Commands:
   quit        drain and shutdown node
 
   sql         open a sql shell
-  kv          get, put, conditional put, increment, delete, scan, and reverse scan key/value pairs
   user        get, set, list and remove users
-  range       list, split and merge ranges
   zone        get, set, list and remove zones
   node        list nodes and show their status
 

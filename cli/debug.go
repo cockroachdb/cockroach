@@ -122,6 +122,8 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 var debugCmds = []*cobra.Command{
 	debugKeysCmd,
 	debugRangeDescriptorsCmd,
+	kvCmd,
+	rangeCmd,
 }
 
 var debugCmd = &cobra.Command{
