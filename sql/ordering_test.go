@@ -55,20 +55,22 @@ func TestComputeOrderingMatch(t *testing.T) {
 	desc := encoding.Descending
 	testSets := []computeOrderCase{
 		{
-			// No existing ordering
+			// No existing ordering.
 			existing: orderingInfo{
 				exactMatchCols: nil,
 				ordering:       nil,
+				unique:         false,
 			},
 			cases: []desiredCase{
 				defTestCase(0, 0, columnOrdering{{1, desc}, {5, asc}}),
 			},
 		},
 		{
-			// Ordering with no exact-match columns
+			// Ordering with no exact-match columns.
 			existing: orderingInfo{
 				exactMatchCols: nil,
 				ordering:       []columnOrderInfo{{1, desc}, {2, asc}},
+				unique:         false,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 0, columnOrdering{{1, desc}, {5, asc}}),
@@ -76,10 +78,27 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with only exact-match columns
+			// Ordering with no exact-match columns but with distinct.
+			existing: orderingInfo{
+				exactMatchCols: nil,
+				ordering:       []columnOrderInfo{{1, desc}, {2, asc}},
+				unique:         true,
+			},
+			cases: []desiredCase{
+				defTestCase(1, 0, columnOrdering{{1, desc}, {5, asc}}),
+				defTestCase(3, 0, columnOrdering{{1, desc}, {2, asc}, {5, asc}}),
+				defTestCase(4, 0, columnOrdering{{1, desc}, {2, asc}, {5, asc}, {6, desc}}),
+				defTestCase(0, 1, columnOrdering{{1, asc}, {5, asc}, {2, asc}}),
+				defTestCase(0, 3, columnOrdering{{1, asc}, {2, desc}, {5, asc}}),
+				defTestCase(0, 4, columnOrdering{{1, asc}, {2, desc}, {5, asc}, {6, asc}}),
+			},
+		},
+		{
+			// Ordering with only exact-match columns.
 			existing: orderingInfo{
 				exactMatchCols: map[int]struct{}{1: e, 2: e},
 				ordering:       nil,
+				unique:         false,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 1, columnOrdering{{2, desc}, {5, asc}, {1, asc}}),
@@ -87,15 +106,37 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
+			// Ordering with exact-match columns.
 			existing: orderingInfo{
 				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
 				ordering:       []columnOrderInfo{{1, desc}, {2, asc}},
+				unique:         false,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, columnOrdering{{1, desc}, {5, asc}}),
+				defTestCase(2, 1, columnOrdering{{5, asc}, {1, desc}}),
 				defTestCase(2, 2, columnOrdering{{0, desc}, {5, asc}}),
 				defTestCase(1, 0, columnOrdering{{1, desc}, {2, desc}}),
 				defTestCase(5, 2, columnOrdering{{0, asc}, {6, desc}, {1, desc}, {5, desc}, {2, asc}}),
+				defTestCase(2, 2, columnOrdering{{0, asc}, {6, desc}, {2, asc}, {5, desc}, {1, desc}}),
+			},
+		},
+		{
+			// Ordering with exact-match columns and distinct.
+			existing: orderingInfo{
+				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				ordering:       []columnOrderInfo{{1, desc}, {2, asc}},
+				unique:         true,
+			},
+			cases: []desiredCase{
+				defTestCase(2, 0, columnOrdering{{1, desc}, {5, asc}}),
+				defTestCase(2, 1, columnOrdering{{5, asc}, {1, desc}}),
+				defTestCase(4, 0, columnOrdering{{1, desc}, {5, asc}, {2, asc}, {7, desc}}),
+				defTestCase(4, 1, columnOrdering{{5, asc}, {1, desc}, {2, asc}, {7, desc}}),
+				defTestCase(2, 2, columnOrdering{{0, desc}, {5, asc}}),
+				defTestCase(2, 1, columnOrdering{{5, asc}, {1, desc}, {2, desc}}),
+				defTestCase(1, 0, columnOrdering{{1, desc}, {2, desc}}),
+				defTestCase(6, 2, columnOrdering{{0, asc}, {6, desc}, {1, desc}, {5, desc}, {2, asc}, {9, asc}}),
 				defTestCase(2, 2, columnOrdering{{0, asc}, {6, desc}, {2, asc}, {5, desc}, {1, desc}}),
 			},
 		},

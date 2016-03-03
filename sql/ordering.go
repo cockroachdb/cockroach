@@ -56,6 +56,9 @@ type orderingInfo struct {
 
 	// ordering of any other columns (the columns in exactMatchCols do not appear in this ordering).
 	ordering columnOrdering
+
+	// true if we know that all the value tuples for the columns in `ordering` are distinct.
+	unique bool
 }
 
 func (ord orderingInfo) isEmpty() bool {
@@ -73,7 +76,10 @@ func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
 	if dir != encoding.Ascending && dir != encoding.Descending {
 		panic(fmt.Sprintf("Invalid direction %d", dir))
 	}
-	ord.ordering = append(ord.ordering, columnOrderInfo{colIdx, dir})
+	// If unique is true, there are no "ties" to break with adding more columns.
+	if !ord.unique {
+		ord.ordering = append(ord.ordering, columnOrderInfo{colIdx, dir})
+	}
 }
 
 // Computes how long of a prefix of a desired columnOrdering is matched by an existing ordering. If
@@ -92,6 +98,11 @@ func computeOrderingMatch(desired columnOrdering, existing orderingInfo, reverse
 				pos++
 				continue
 			}
+		} else if existing.unique {
+			// Everything matched up to the last column and we know there are no duplicate
+			// combinations of values for these columns. Any other columns we may want to "refine"
+			// the ordering by don't make a difference.
+			return len(desired)
 		}
 		// If the column did not match, check if it is one of the exact match columns.
 		if _, ok := existing.exactMatchCols[col.colIdx]; !ok {
