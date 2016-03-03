@@ -19,7 +19,6 @@ package server
 import (
 	"bytes"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -36,15 +35,12 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/gogo/protobuf/proto"
 )
 
 var testContext = NewTestContext()
@@ -345,64 +341,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 					t.Errorf("%d: expected %d rows, but got %d", i, maxResults-1, len(rows))
 				}
 			}
-		}
-	}
-}
-
-func TestSQLServer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := StartTestServer(t)
-	defer s.Stop()
-
-	// sendURL sends a request to the server and returns a StatusCode
-	sendURL := func(t *testing.T, command string, body []byte) int {
-		url := fmt.Sprintf("%s://%s%s%s?certs=%s",
-			testContext.HTTPRequestScheme(),
-			s.ServingAddr(),
-			driver.Endpoint,
-			command,
-			testContext.Certs)
-		httpClient, err := testContext.GetHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
-		req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Add(util.ContentTypeHeader, util.ProtoContentType)
-		req.Header.Add(util.AcceptHeader, util.ProtoContentType)
-		req.Header.Add(util.AcceptEncodingHeader, util.SnappyEncoding)
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp.Body.Close()
-		return resp.StatusCode
-	}
-	// Use the sql administrator (root user). Note that the certificates
-	// used here will indicate the node user, but that's OK because node
-	// is allowed to act on behalf of all users.
-	body, err := proto.Marshal(&driver.Request{User: security.RootUser})
-	if err != nil {
-		t.Fatal(err)
-	}
-	testCases := []struct {
-		command       string
-		body          []byte
-		expStatusCode int
-	}{
-		// Bad command.
-		{"Execu", []byte(""), http.StatusNotFound},
-		// Request with garbage payload.
-		{"Execute", []byte("garbage"), http.StatusBadRequest},
-		// Valid request.
-		{"Execute", body, http.StatusOK},
-	}
-	for tcNum, test := range testCases {
-		statusCode := sendURL(t, test.command, test.body)
-		if statusCode != test.expStatusCode {
-			t.Fatalf("#%d: Expected status: %d, received status %d", tcNum, test.expStatusCode, statusCode)
 		}
 	}
 }

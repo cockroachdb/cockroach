@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
@@ -52,12 +51,6 @@ func doHTTPReq(t *testing.T, client *http.Client, method, url string, body proto
 	}
 
 	return client.Do(req)
-}
-
-func sqlForUser(context *base.Context) proto.Message {
-	ret := &driver.Request{}
-	ret.User = context.User
-	return ret
 }
 
 // Verify client certificate enforcement and user whitelisting.
@@ -123,18 +116,6 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", ts.URLPrefix, nil, testCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, insecureContext, false, -1},
-
-		// /sql/: sql.Server. These are proto reqs. The important field is header.User.
-		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(rootCertsContext),
-			rootCertsContext, true, http.StatusOK},
-		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(nodeCertsContext),
-			nodeCertsContext, true, http.StatusOK},
-		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(testCertsContext),
-			testCertsContext, true, http.StatusOK},
-		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(noCertsContext),
-			noCertsContext, true, http.StatusUnauthorized},
-		{"POST", driver.Endpoint + driver.Execute.String(), sqlForUser(insecureContext),
-			insecureContext, false, -1},
 	}
 
 	for tcNum, tc := range testCases {
