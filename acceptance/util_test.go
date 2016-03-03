@@ -258,8 +258,8 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 		Env: []string{
 			fmt.Sprintf("PGHOST=%s", addr.IP),
 			fmt.Sprintf("PGPORT=%d", addr.Port),
-			"PGSSLCERT=/certs/node.client.crt",
-			"PGSSLKEY=/certs/node.client.key",
+			"PGSSLCERT=/certs/node.crt",
+			"PGSSLKEY=/certs/node.key",
 		},
 		Cmd: cmd,
 	}

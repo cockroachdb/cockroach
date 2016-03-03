@@ -23,14 +23,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
-	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/util"
 )
 
+// EmbeddedCertsDir is the certs directory inside embedded assets.
+// Embedded*{Cert,Key} are the filenames for embedded certs.
 const (
-	// EmbeddedCertsDir is the certs directory inside embedded assets.
-	EmbeddedCertsDir = "test_certs"
+	EmbeddedCertsDir     = "test_certs"
+	EmbeddedCACert       = "ca.crt"
+	EmbeddedCAKey        = "ca.key"
+	EmbeddedNodeCert     = "node.crt"
+	EmbeddedNodeKey      = "node.key"
+	EmbeddedRootCert     = "root.crt"
+	EmbeddedRootKey      = "root.key"
+	EmbeddedTestUserCert = "testuser.crt"
+	EmbeddedTestUserKey  = "testuser.key"
 )
 
 // readFileFn is used to mock out file system access during tests.
@@ -48,24 +56,22 @@ func ResetReadFileFn() {
 	readFileFn = ioutil.ReadFile
 }
 
-// LoadServerTLSConfig creates a server TLSConfig by loading our keys and certs from the
-// specified directory. The directory must contain the following files:
-// - ca.crt   -- the certificate of the cluster CA
-// - node.server.crt -- the server certificate of this node; should be signed by the CA
-// - node.server.key -- the certificate key
+// LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
+// The following paths must be passed:
+// - sslCA: path to the CA certificate
+// - sslCert: path to the server certificate
+// - sslCertKey: path to the server key
 // If the path is prefixed with "embedded=", load the embedded certs.
-// We should never have username != NodeUser, but this is a good way to
-// catch tests that use the wrong users.
-func LoadServerTLSConfig(certDir, username string) (*tls.Config, error) {
-	certPEM, err := readFileFn(filepath.Join(certDir, username+".server.crt"))
+func LoadServerTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
+	certPEM, err := readFileFn(sslCert)
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(filepath.Join(certDir, username+".server.key"))
+	keyPEM, err := readFileFn(sslCertKey)
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := readFileFn(filepath.Join(certDir, "ca.crt"))
+	caPEM, err := readFileFn(sslCA)
 	if err != nil {
 		return nil, err
 	}
@@ -113,22 +119,22 @@ func LoadInsecureTLSConfig() *tls.Config {
 	return nil
 }
 
-// LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs
-// from the specified directory. The directory must contain the following files:
-// - ca.crt   -- the certificate of the cluster CA
-// - <username>.client.crt -- the client certificate of this client; should be signed by the CA
-// - <username>.client.key -- the certificate key
+// LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
+// The following paths must be passed:
+// - sslCA: path to the CA certificate
+// - sslCert: path to the client certificate
+// - sslCertKey: path to the client key
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadClientTLSConfig(certDir, username string) (*tls.Config, error) {
-	certPEM, err := readFileFn(ClientCertPath(certDir, username))
+func LoadClientTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
+	certPEM, err := readFileFn(sslCert)
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := readFileFn(ClientKeyPath(certDir, username))
+	keyPEM, err := readFileFn(sslCertKey)
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := readFileFn(filepath.Join(certDir, "ca.crt"))
+	caPEM, err := readFileFn(sslCA)
 	if err != nil {
 		return nil, err
 	}

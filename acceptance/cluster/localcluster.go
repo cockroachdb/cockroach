@@ -386,7 +386,10 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...strin
 }
 
 func (l *LocalCluster) createCACert() {
-	maybePanic(security.RunCreateCACert(l.CertsDir, keyLen))
+	maybePanic(security.RunCreateCACert(
+		filepath.Join(l.CertsDir, security.EmbeddedCACert),
+		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
+		keyLen))
 }
 
 func (l *LocalCluster) createNodeCerts() {
@@ -394,13 +397,20 @@ func (l *LocalCluster) createNodeCerts() {
 	for _, node := range l.Nodes {
 		nodes = append(nodes, node.nodeStr)
 	}
-	maybePanic(security.RunCreateNodeCert(l.CertsDir, keyLen, nodes))
+	maybePanic(security.RunCreateNodeCert(
+		filepath.Join(l.CertsDir, security.EmbeddedCACert),
+		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
+		filepath.Join(l.CertsDir, security.EmbeddedNodeCert),
+		filepath.Join(l.CertsDir, security.EmbeddedNodeKey),
+		keyLen, nodes))
 }
 
 func (l *LocalCluster) startNode(node *testNode) {
 	cmd := []string{
 		"start",
-		"--certs=/certs",
+		"--ca-cert=/certs/ca.crt",
+		"--cert=/certs/node.crt",
+		"--key=/certs/node.key",
 		"--host=" + node.nodeStr,
 		"--port=" + base.DefaultPort,
 		"--alsologtostderr=INFO",
@@ -517,7 +527,12 @@ func (l *LocalCluster) Start() {
 	log.Infof("creating certs (%dbit) in: %s", keyLen, l.CertsDir)
 	l.createCACert()
 	l.createNodeCerts()
-	maybePanic(security.RunCreateClientCert(l.CertsDir, 512, security.RootUser))
+	maybePanic(security.RunCreateClientCert(
+		filepath.Join(l.CertsDir, security.EmbeddedCACert),
+		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
+		filepath.Join(l.CertsDir, security.EmbeddedRootCert),
+		filepath.Join(l.CertsDir, security.EmbeddedRootKey),
+		512, security.RootUser))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
@@ -635,7 +650,9 @@ func (l *LocalCluster) stop() {
 func (l *LocalCluster) ConnString(i int) string {
 	return "rpcs://" + security.NodeUser + "@" +
 		l.Addr(i).String() +
-		"?certs=" + l.CertsDir
+		"?ca-cert=" + filepath.Join(l.CertsDir, security.EmbeddedCACert) +
+		"&cert=" + filepath.Join(l.CertsDir, security.EmbeddedNodeCert) +
+		"&key=" + filepath.Join(l.CertsDir, security.EmbeddedNodeKey)
 }
 
 // Addr returns the TCP address for the given node.
@@ -648,9 +665,9 @@ func (l *LocalCluster) PGUrl(i int) string {
 	certUser := security.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
-	options.Add("sslcert", security.ClientCertPath(l.CertsDir, certUser))
-	options.Add("sslkey", security.ClientKeyPath(l.CertsDir, certUser))
-	options.Add("sslrootcert", security.CACertPath(l.CertsDir))
+	options.Add("sslcert", filepath.Join(l.CertsDir, security.EmbeddedRootCert))
+	options.Add("sslkey", filepath.Join(l.CertsDir, security.EmbeddedRootKey))
+	options.Add("sslrootcert", filepath.Join(l.CertsDir, security.EmbeddedCACert))
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),

@@ -4,27 +4,25 @@ Contains the following files:
 
 * ca.crt: CA certificate
 * ca.key: CA private key
-* node.client.crt: node client certificate
-* node.client.key: node client private key
-* node.server.crt: node server certificate
-* node.server.key: node server private key
-* root.client.crt: admin client certificate
-* root.client.key: admin client private key
-* testuser.client.crt: testing user certificate
-* testuser.client.key: testing user private key
+* node.crt: node client/server certificate
+* node.key: node client/server private key
+* root.crt: admin client certificate
+* root.key: admin client private key
+* testuser.crt: testing user certificate
+* testuser.key: testing user private key
 *
 
 For a human-readable version of the certificate, run:
 ```bash
-openssl x509 -in node.server.crt -text
+openssl x509 -in node.crt -text
 ```
 
 To regenerate:
 ```bash
 rm -f resource/test_certs/*.{crt,key}
-cockroach cert --certs=resource/test_certs create-ca
-cockroach cert --certs=resource/test_certs create-node 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
-cockroach cert --certs=resource/test_certs create-client root
-cockroach cert --certs=resource/test_certs create-client testuser
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key create-ca
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key --cert=resource/test_certs/node.crt --key=resource/test_certs/node.key create-node 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key --cert=resource/test_certs/root.crt --key=resource/test_certs/root.key create-client root
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key --cert=resource/test_certs/testuser.crt --key=resource/test_certs/testuser.key create-client testuser
 go generate security/securitytest/securitytest.go
 ```

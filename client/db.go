@@ -234,8 +234,14 @@ func Open(stopper *stop.Stopper, addr string) (*DB, error) {
 	}
 
 	q := u.Query()
-	if dir := q["certs"]; len(dir) > 0 {
-		ctx.Certs = dir[0]
+	if fname := q["ca-cert"]; len(fname) > 0 {
+		ctx.SSLCA = fname[0]
+	}
+	if fname := q["cert"]; len(fname) > 0 {
+		ctx.SSLCert = fname[0]
+	}
+	if fname := q["key"]; len(fname) > 0 {
+		ctx.SSLCertKey = fname[0]
 	}
 
 	sender, err := newSender(u, ctx, stopper)

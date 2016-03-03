@@ -31,11 +31,10 @@ var keySize int
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
 var createCACertCmd = &cobra.Command{
-	Use:   "create-ca [options]",
+	Use:   "create-ca --ca-cert=<path-to-ca-cert> --ca-key=<path-to-ca-key>",
 	Short: "create CA cert and key",
 	Long: `
-Generates a new key pair and CA certificate, writing them to
-individual files in the directory specified by --certs (required).
+Generates CA certificate and key, writing them to --ca-cert and --ca-key.
 `,
 	SilenceUsage: true,
 	RunE:         runCreateCACert,
@@ -44,7 +43,11 @@ individual files in the directory specified by --certs (required).
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) error {
-	if err := security.RunCreateCACert(cliContext.Certs, keySize); err != nil {
+	if len(cliContext.SSLCA) == 0 || len(cliContext.SSLCAKey) == 0 {
+		mustUsage(cmd)
+		return errMissingParams
+	}
+	if err := security.RunCreateCACert(cliContext.SSLCA, cliContext.SSLCAKey, keySize); err != nil {
 		return fmt.Errorf("failed to generate CA certificate: %s", err)
 	}
 	return nil
@@ -53,13 +56,12 @@ func runCreateCACert(cmd *cobra.Command, args []string) error {
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
 var createNodeCertCmd = &cobra.Command{
-	Use:   "create-node [options] <host 1> <host 2> ... <host N>",
+	Use:   "create-node --ca-cert=<ca-cert> --ca-key=<ca-key> --cert=<node-cert> --key=<node-key> <host 1> <host 2> ... <host N>",
 	Short: "create node cert and key",
 	Long: `
-Generates server and client certificates and keys for a given node, writing them to
-individual files in the directory specified by --certs (required).
-The certs directory should contain a CA cert and key.
-At least one host should be passed in (either IP address of dns name).
+Generates node certificate and keys for a given node, writing them to
+--cert and --key. CA certificate and key must be passed in.
+At least one host should be passed in (either IP address or dns name).
 `,
 	SilenceUsage: true,
 	RunE:         runCreateNodeCert,
@@ -68,7 +70,13 @@ At least one host should be passed in (either IP address of dns name).
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
-	if err := security.RunCreateNodeCert(cliContext.Certs, keySize, args); err != nil {
+	if len(cliContext.SSLCA) == 0 || len(cliContext.SSLCAKey) == 0 ||
+		len(cliContext.SSLCert) == 0 || len(cliContext.SSLCertKey) == 0 {
+		mustUsage(cmd)
+		return errMissingParams
+	}
+	if err := security.RunCreateNodeCert(cliContext.SSLCA, cliContext.SSLCAKey,
+		cliContext.SSLCert, cliContext.SSLCertKey, keySize, args); err != nil {
 		return fmt.Errorf("failed to generate node certificate: %s", err)
 	}
 	return nil
@@ -77,11 +85,11 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 // A createClientCert command generates a client certificate and stores it
 // in the cert directory under <username>.crt and key under <username>.key.
 var createClientCertCmd = &cobra.Command{
-	Use:   "create-client [options] username",
+	Use:   "create-client --ca-cert=<ca-cert> --ca-key=<ca-key> --cert=<node-cert> --key=<node-key> username",
 	Short: "create client cert and key",
 	Long: `
-Generates a new key pair and client certificate, writing them to
-individual files in the directory specified by --certs (required).
+Generates a client certificate and key, writing them to --cert and --key.
+--cert and --key. CA certificate and key must be passed in.
 The certs directory should contain a CA cert and key.
 `,
 	SilenceUsage: true,
@@ -95,7 +103,14 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 		mustUsage(cmd)
 		return errMissingParams
 	}
-	if err := security.RunCreateClientCert(cliContext.Certs, keySize, args[0]); err != nil {
+	if len(cliContext.SSLCA) == 0 || len(cliContext.SSLCAKey) == 0 ||
+		len(cliContext.SSLCert) == 0 || len(cliContext.SSLCertKey) == 0 {
+		mustUsage(cmd)
+		return errMissingParams
+	}
+
+	if err := security.RunCreateClientCert(cliContext.SSLCA, cliContext.SSLCAKey,
+		cliContext.SSLCert, cliContext.SSLCertKey, keySize, args[0]); err != nil {
 		return fmt.Errorf("failed to generate clent certificate: %s", err)
 	}
 	return nil

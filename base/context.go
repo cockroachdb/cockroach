@@ -30,7 +30,6 @@ import (
 // Base context defaults.
 const (
 	defaultInsecure = false
-	defaultCertsDir = "certs"
 	defaultUser     = security.RootUser
 	rpcScheme       = "rpc"
 	rpcsScheme      = "rpcs"
@@ -52,9 +51,11 @@ type Context struct {
 	// This is really not recommended.
 	Insecure bool
 
-	// Certs specifies a directory containing RSA key and x509 certs.
-	// Required unless Insecure is true.
-	Certs string
+	// SSLCA and others contain the paths to the ssl certificates and keys.
+	SSLCA      string // CA certificate
+	SSLCAKey   string // CA key (to sign only)
+	SSLCert    string // Client/server certificate
+	SSLCertKey string // Client/server key
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
@@ -78,7 +79,6 @@ type Context struct {
 // InitDefaults sets up the default values for a context.
 func (ctx *Context) InitDefaults() {
 	ctx.Insecure = defaultInsecure
-	ctx.Certs = defaultCertsDir
 	ctx.User = defaultUser
 }
 
@@ -115,14 +115,15 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 		return ctx.clientTLSConfig, nil
 	}
 
-	if ctx.Certs != "" {
-		cfg, err := security.LoadClientTLSConfig(ctx.Certs, ctx.User)
+	// We use the presence of SSLCert to mean that we've specified at least one.
+	if ctx.SSLCert != "" {
+		cfg, err := security.LoadClientTLSConfig(ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)
 		}
 		ctx.clientTLSConfig = cfg
 	} else {
-		log.Println("no certificates directory specified: using insecure TLS")
+		log.Println("no certificates specified: using insecure TLS")
 		ctx.clientTLSConfig = security.LoadInsecureClientTLSConfig()
 	}
 
@@ -145,11 +146,12 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 		return ctx.serverTLSConfig, nil
 	}
 
-	if ctx.Certs == "" {
-		return nil, util.Errorf("--insecure=false, but --certs is empty. We need a certs directory")
+	// We use the presence of SSLCert to mean that we've specified at least one.
+	if ctx.SSLCert == "" {
+		return nil, util.Errorf("--insecure=false, but no certs specified")
 	}
 
-	cfg, err := security.LoadServerTLSConfig(ctx.Certs, ctx.User)
+	cfg, err := security.LoadServerTLSConfig(ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
 	if err != nil {
 		return nil, util.Errorf("error setting up server TLS config: %s", err)
 	}
