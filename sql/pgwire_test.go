@@ -74,7 +74,7 @@ func TestPGWire(t *testing.T) {
 	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 
 	for _, insecure := range [...]bool{true, false} {
-		ctx := server.NewTestContext()
+		ctx, _ := createTestServerContext()
 		ctx.Insecure = insecure
 		s := setupTestServerWithContext(t, ctx)
 
