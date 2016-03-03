@@ -174,7 +174,7 @@ check:
 	@echo "checking for forbidden imports"
 	@$(GO) list -f '{{ $$ip := .ImportPath }}{{ range .Imports}}{{ $$ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $$ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $$ip }}: {{ println . }}{{end}}' $(PKG) | \
 		grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path)$$' | \
-		grep -Ev 'cockroach/(base|security|sql/driver|util/(log|randutil|stop)): log$$' | \
+		grep -Ev 'cockroach/(base|security|util/(log|randutil|stop)): log$$' | \
 		grep -vF 'util/uuid: github.com/satori/go.uuid' | tee forbidden.log; \
 	   if grep -E ' path$$' forbidden.log >/dev/null; then \
 	        echo; echo "Consider using 'path/filepath' instead of 'path'."; echo; \

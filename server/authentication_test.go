@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
@@ -52,12 +51,6 @@ func doHTTPReq(t *testing.T, client *http.Client, method, url string, body proto
 	}
 
 	return client.Do(req)
-}
-
-func sqlForUser(context *base.Context) proto.Message {
-	ret := &driver.Request{}
-	ret.User = context.User
-	return ret
 }
 
 // Verify client certificate enforcement and user whitelisting.

@@ -19,12 +19,19 @@ package cockroach.sql;
 option go_package = "sql";
 
 import "cockroach/roachpb/data.proto";
-import "cockroach/sql/driver/wire.proto";
 import weak "gogoproto/gogo.proto";
 
 message Session {
   optional string database = 1 [(gogoproto.nullable) = false];
   optional int32 syntax = 2 [(gogoproto.nullable) = false];
+  // Timestamp represents an absolute timestamp devoid of time-zone.
+  message Timestamp {
+    // The time in seconds since, January 1, 1970 UTC (Unix time).
+    optional int64 sec = 1 [(gogoproto.nullable) = false];
+    // nsec specifies a non-negative nanosecond offset within sec.
+    // It must be in the range [0, 999999999].
+    optional uint32 nsec = 2 [(gogoproto.nullable) = false];
+  }
   message Transaction {
     // If missing, it means we're not inside a (KV) txn.
     optional roachpb.Transaction txn = 1;
@@ -35,7 +42,7 @@ message Session {
     // Timestamp to be used by SQL (transaction_timestamp()) in the above
     // transaction. Note: this is not the transaction timestamp in
     // roachpb.Transaction above, although it probably should be (#4393).
-    optional driver.Datum.Timestamp txn_timestamp = 3 [(gogoproto.nullable) = false];
+    optional Timestamp txn_timestamp = 3 [(gogoproto.nullable) = false];
     optional double user_priority = 4 [(gogoproto.nullable) = false,
         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.UserPriority"];
     // Indicates that the transaction is mutating keys in the
