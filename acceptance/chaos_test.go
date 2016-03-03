@@ -298,13 +298,11 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
 	t.Skipf("TODO(pmattis): #4517")
+	runTestOnConfigs(t, testClusterRecoveryInner)
 }
 
 func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	num := c.NumNodes()
-	if num <= 0 {
-		t.Fatalf("%d nodes in cluster", num)
-	}
 
 	// One client for each node.
 	initBank(t, c.PGUrl(0))
@@ -363,8 +361,8 @@ func TestNodeRestart(t *testing.T) {
 
 func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	num := c.NumNodes()
-	if num <= 0 {
-		t.Fatalf("%d nodes in cluster", num)
+	if num <= 3 {
+		t.Skip("not enough nodes for this test")
 	}
 
 	// One client for each node.
