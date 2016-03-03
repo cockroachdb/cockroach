@@ -43,29 +43,30 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// no GC will take place since the consistent RangeLookup hits the first
 	// Node. We use the TestingCommandFilter to make sure that the second Node
 	// waits for the first.
-	storage.TestingCommandFilter = func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-		et, ok := args.(*roachpb.EndTransactionRequest)
-		if !ok || id != 2 {
+	ctx := storage.TestStoreContext()
+	mtc.storeContext = &ctx
+	mtc.storeContext.TestingMocker.TestingCommandFilter =
+		func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+			et, ok := args.(*roachpb.EndTransactionRequest)
+			if !ok || id != 2 {
+				return nil
+			}
+			rct := et.InternalCommitTrigger.GetChangeReplicasTrigger()
+			if rct == nil || rct.ChangeType != roachpb.REMOVE_REPLICA {
+				return nil
+			}
+			util.SucceedsSoon(t, func() error {
+				r, err := mtc.stores[0].GetReplica(rangeID)
+				if err != nil {
+					return err
+				}
+				if i, _ := r.Desc().FindReplica(2); i >= 0 {
+					return errors.New("expected second node gone from first node's known replicas")
+				}
+				return nil
+			})
 			return nil
 		}
-		rct := et.InternalCommitTrigger.GetChangeReplicasTrigger()
-		if rct == nil || rct.ChangeType != roachpb.REMOVE_REPLICA {
-			return nil
-		}
-		util.SucceedsSoon(t, func() error {
-			r, err := mtc.stores[0].GetReplica(rangeID)
-			if err != nil {
-				return err
-			}
-			if i, _ := r.Desc().FindReplica(2); i >= 0 {
-				return errors.New("expected second node gone from first node's known replicas")
-			}
-			return nil
-		})
-		return nil
-	}
-
-	defer func() { storage.TestingCommandFilter = nil }()
 
 	mtc.Start(t, numStores)
 	defer mtc.Stop()

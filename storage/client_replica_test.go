@@ -187,33 +187,32 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
-		if _, ok := args.(*roachpb.GetRequest); ok &&
-			args.Header().Key.Equal(roachpb.Key(key)) &&
-			h.Txn == nil {
-			// The Reader executes two get operations, each of which triggers two get requests
-			// (the first request fails and triggers txn push, and then the second request
-			// succeeds). Returns an error for the fourth get request to avoid timestamp cache
-			// update after the third get operation pushes the txn timestamp.
-			if atomic.AddInt32(&numGets, 1) == 4 {
-				return util.Errorf("Test")
-			}
-		}
-		return nil
-	}
-	defer func() {
-		storage.TestingCommandFilter = nil
-	}()
 
 	manualClock := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manualClock.UnixNano)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
+	ctx := storage.TestStoreContext()
+	ctx.TestingMocker.TestingCommandFilter =
+		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+			if _, ok := args.(*roachpb.GetRequest); ok &&
+				args.Header().Key.Equal(roachpb.Key(key)) &&
+				h.Txn == nil {
+				// The Reader executes two get operations, each of which triggers two get requests
+				// (the first request fails and triggers txn push, and then the second request
+				// succeeds). Returns an error for the fourth get request to avoid timestamp cache
+				// update after the third get operation pushes the txn timestamp.
+				if atomic.AddInt32(&numGets, 1) == 4 {
+					return util.Errorf("Test")
+				}
+			}
+			return nil
+		}
 	store := createTestStoreWithEngine(t,
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		clock,
 		true,
-		nil,
+		&ctx,
 		stopper)
 
 	// Put an initial value.

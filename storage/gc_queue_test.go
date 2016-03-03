@@ -339,25 +339,26 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	resolved := map[string][]roachpb.Span{}
-	TestingCommandFilter = func(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
-		if resArgs, ok := req.(*roachpb.ResolveIntentRequest); ok {
-			id := string(resArgs.IntentTxn.Key)
-			resolved[id] = append(resolved[id], roachpb.Span{
-				Key:    resArgs.Key,
-				EndKey: resArgs.EndKey,
-			})
-			// We've special cased one test case. Note that the intent is still
-			// counted in `resolved`.
-			if testCases[id].failResolve {
-				return util.Errorf("boom")
-			}
-		}
-		return nil
-	}
-	defer func() { TestingCommandFilter = nil }()
 
 	tc := testContext{}
-	tc.Start(t)
+	tsc := TestStoreContext()
+	tsc.TestingMocker.TestingCommandFilter =
+		func(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
+			if resArgs, ok := req.(*roachpb.ResolveIntentRequest); ok {
+				id := string(resArgs.IntentTxn.Key)
+				resolved[id] = append(resolved[id], roachpb.Span{
+					Key:    resArgs.Key,
+					EndKey: resArgs.EndKey,
+				})
+				// We've special cased one test case. Note that the intent is still
+				// counted in `resolved`.
+				if testCases[id].failResolve {
+					return util.Errorf("boom")
+				}
+			}
+			return nil
+		}
+	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
 	tc.manualClock.Set(int64(now))
 

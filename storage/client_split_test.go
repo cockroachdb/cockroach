@@ -893,7 +893,6 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 // new range, in which case this test would fail.
 func TestStoreSplitReadRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer func() { storage.TestingCommandFilter = nil }()
 	defer config.TestingDisableTableSplits()()
 	splitKey := roachpb.Key("a")
 	key := func(i int) roachpb.Key {
@@ -902,21 +901,23 @@ func TestStoreSplitReadRace(t *testing.T) {
 
 	getContinues := make(chan struct{})
 	var getStarted sync.WaitGroup
-	storage.TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
-		if et, ok := args.(*roachpb.EndTransactionRequest); ok {
-			st := et.InternalCommitTrigger.GetSplitTrigger()
-			if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {
-				return nil
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingMocker.TestingCommandFilter =
+		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+			if et, ok := args.(*roachpb.EndTransactionRequest); ok {
+				st := et.InternalCommitTrigger.GetSplitTrigger()
+				if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {
+					return nil
+				}
+				close(getContinues)
+			} else if args.Method() == roachpb.Get &&
+				bytes.HasPrefix(args.Header().Key, splitKey.Next()) {
+				getStarted.Done()
+				<-getContinues
 			}
-			close(getContinues)
-		} else if args.Method() == roachpb.Get &&
-			bytes.HasPrefix(args.Header().Key, splitKey.Next()) {
-			getStarted.Done()
-			<-getContinues
+			return nil
 		}
-		return nil
-	}
-	store, stopper := createTestStore(t)
+	store, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
 
 	now := store.Clock().Now()
