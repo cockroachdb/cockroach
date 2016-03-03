@@ -417,7 +417,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--certs=/certs",
 		"--host=" + node.nodeStr,
 		"--port=" + base.DefaultPort,
-		"--log-threshold=INFO",
+		"--alsologtostderr=INFO",
 		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	for _, store := range node.stores {
@@ -437,7 +437,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 			cmd,
 			"--log-dir="+dockerlogDir,
 			"--logtostderr=false",
-			"--alsologtostderr=true")
+			"--alsologtostderr=INFO")
 	}
 	l.createRoach(node, l.dns, l.vols, cmd...)
 	maybePanic(node.Start())
