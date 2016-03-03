@@ -33,10 +33,22 @@ type SelectStatement interface {
 	selectStatement()
 }
 
-func (*ParenSelect) selectStatement() {}
-func (*Select) selectStatement()      {}
-func (*Union) selectStatement()       {}
-func (Values) selectStatement()       {}
+func (*SelectOrderLimit) selectStatement() {}
+func (*ParenSelect) selectStatement()      {}
+func (*Select) selectStatement()           {}
+func (*Union) selectStatement()            {}
+func (Values) selectStatement()            {}
+
+// SelectOrderLimit represents a SelectStatement with an ORDER and/or LIMIT.
+type SelectOrderLimit struct {
+	Select  SelectStatement
+	OrderBy OrderBy
+	Limit   *Limit
+}
+
+func (node *SelectOrderLimit) String() string {
+	return fmt.Sprintf("%s%s%s", node.Select, node.OrderBy, node.Limit)
+}
 
 // ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.
 type ParenSelect struct {
@@ -55,8 +67,6 @@ type Select struct {
 	Where       *Where
 	GroupBy     GroupBy
 	Having      *Where
-	OrderBy     OrderBy
-	Limit       *Limit
 	Lock        string
 	tableSelect bool
 }
@@ -69,11 +79,10 @@ func (node *Select) String() string {
 	if node.Distinct {
 		distinct = " DISTINCT"
 	}
-	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s%s%s",
+	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s",
 		distinct, node.Exprs,
 		node.From, node.Where,
-		node.GroupBy, node.Having, node.OrderBy,
-		node.Limit, node.Lock)
+		node.GroupBy, node.Having, node.Lock)
 }
 
 // SelectExprs represents SELECT expressions.

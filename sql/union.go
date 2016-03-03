@@ -87,10 +87,6 @@ func (p *planner) Union(n *parser.Union, autoCommit bool) (planNode, *roachpb.Er
 		scratch:   make([]byte, 0),
 	}
 
-	// TODO(dan): Support ORDER BY. It's currently blocked on
-	// https://github.com/cockroachdb/cockroach/issues/4734. Once that's done, it
-	// should be possible to read all the values from node, put them in a
-	// valuesNode, and sort it.
 	return node, nil
 }
 

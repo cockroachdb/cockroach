@@ -513,15 +513,6 @@ func (stmt *Select) CopyNode() *Select {
 		hCopy := *stmt.Having
 		stmtCopy.Having = &hCopy
 	}
-	stmtCopy.OrderBy = make([]*Order, len(stmt.OrderBy))
-	for i, o := range stmt.OrderBy {
-		oCopy := *o
-		stmtCopy.OrderBy[i] = &oCopy
-	}
-	if stmt.Limit != nil {
-		lCopy := *stmt.Limit
-		stmtCopy.Limit = &lCopy
-	}
 	return &stmtCopy
 }
 
@@ -568,7 +559,34 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 			ret.Having.Expr = e
 		}
 	}
+	return ret
+}
 
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *SelectOrderLimit) CopyNode() *SelectOrderLimit {
+	stmtCopy := *stmt
+	stmtCopy.OrderBy = make([]*Order, len(stmt.OrderBy))
+	for i, o := range stmt.OrderBy {
+		oCopy := *o
+		stmtCopy.OrderBy[i] = &oCopy
+	}
+	if stmt.Limit != nil {
+		lCopy := *stmt.Limit
+		stmtCopy.Limit = &lCopy
+	}
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *SelectOrderLimit) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	sel, changed := WalkStmt(v, stmt.Select)
+	if changed {
+		if ret == stmt {
+			ret = stmt.CopyNode()
+		}
+		ret.Select = sel.(SelectStatement)
+	}
 	for i, expr := range stmt.OrderBy {
 		e, changed := WalkExpr(v, expr.Expr)
 		if changed {
@@ -695,6 +713,7 @@ var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
 var _ WalkableStmt = &ParenSelect{}
 var _ WalkableStmt = &Select{}
+var _ WalkableStmt = &SelectOrderLimit{}
 var _ WalkableStmt = &Set{}
 var _ WalkableStmt = &Update{}
 var _ WalkableStmt = &Values{}
