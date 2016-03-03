@@ -875,7 +875,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, *roachpb.Error) {
+func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -897,10 +897,13 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// been run to successful completion.
 	sp.LogEvent("command queue")
 	cmdKeys := r.beginCmds(&ba)
+	defer func() {
+		// Guarantee we remove the commands from the command queue.
+		r.endCmds(cmdKeys, ba, pErr)
+	}()
 
 	// This replica must have leader lease to process a write.
-	if pErr := r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
-		r.endCmds(cmdKeys, ba, pErr)
+	if pErr = r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
 		return nil, pErr
 	}
 
@@ -954,8 +957,6 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 
 	signal()
 
-	var br *roachpb.BatchResponse
-	var pErr *roachpb.Error
 	if err == nil {
 		// If the command was accepted by raft, wait for the range to apply it.
 		select {
@@ -964,11 +965,9 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 		case <-ctx.Done():
 			return br, roachpb.NewError(ctx.Err())
 		}
-
 	} else {
 		pErr = roachpb.NewError(err)
 	}
-	r.endCmds(cmdKeys, ba, pErr)
 	return br, pErr
 }
 
