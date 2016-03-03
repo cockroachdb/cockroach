@@ -62,7 +62,7 @@ module Models {
       });
     }
 
-    export function runQuery(q: string, parse?: boolean): _mithril.MithrilPromise<any> {
+    export function runQuery<T>(q: string, parse?: boolean): _mithril.MithrilPromise<T> {
 
       let data: Request = {user: "root", sql: q};
 
