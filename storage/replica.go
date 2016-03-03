@@ -712,9 +712,9 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // the command queue and adds itself to queues based on keys affected by the
 // batched commands. This gates subsequent commands with overlapping keys or
 // key ranges. This method will block if there are any overlapping commands
-// already in the queue. Returns the command queue insertion keys, to be
-// supplied to a subsequent invocation of endCmds().
-func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
+// already in the queue. Returns a cleanup function to be called when the
+// commands are done and can be removed from the queue.
+func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.Error) {
 	var cmdKeys []interface{}
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -745,12 +745,14 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) []interface{} {
 		}
 	}
 
-	return cmdKeys
+	return func(pErr *roachpb.Error) {
+		r.endCmds(cmdKeys, ba, pErr)
+	}
 }
 
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
-func (r *Replica) endCmds(cmdKeys []interface{}, ba roachpb.BatchRequest, pErr *roachpb.Error) {
+func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, pErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Only update the timestamp cache if the command succeeded and we're not
@@ -824,29 +826,37 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	defer cleanupSp()
 
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
-	sp.LogEvent("command queue")
-	cmdKeys := r.beginCmds(&ba)
-
-	// If there are command keys (there might not be if reads are
-	// inconsistent), the read requires the leader lease.
-	if len(cmdKeys) > 0 {
-		if pErr := r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
-			r.endCmds(cmdKeys, ba, pErr)
+	// If the read is consistent, the read requires the leader lease.
+	if ba.ReadConsistency != roachpb.INCONSISTENT {
+		if pErr = r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
 			return nil, pErr
 		}
 	}
 
+	// Add the read to the command queue to gate subsequent
+	// overlapping commands until this command completes.
+	sp.LogEvent("command queue")
+	endCmdsFunc := r.beginCmds(&ba)
+
 	r.readOnlyCmdMu.RLock()
+	defer r.readOnlyCmdMu.RUnlock()
+
+	// Guarantee we remove the commands from the command queue. It is
+	// important that this is inside the readOnlyCmdMu lock so that the
+	// timestamp cache update is syncronized.
+	defer func() {
+		endCmdsFunc(pErr)
+	}()
+
 	// Execute read-only batch command. It checks for matching key range; note
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
-	br, intents, pErr := r.executeBatch(r.store.Engine(), nil, ba)
+	var intents []intentsWithArg
+	br, intents, pErr = r.executeBatch(r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
 		// Checking the sequence cache on reads makes sure that when our
@@ -855,16 +865,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		pErr = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
 	}
 	r.handleSkippedIntents(intents)
-
-	// Remove keys from command queue.
-	r.endCmds(cmdKeys, ba, pErr)
-	// Important to unlock only here to capture the timestamp cache update.
-	r.readOnlyCmdMu.RUnlock()
-
-	if pErr != nil {
-		return nil, pErr
-	}
-	return br, nil
+	return br, pErr
 }
 
 // addWriteCmd first adds the keys affected by this command as pending writes
@@ -875,7 +876,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (*roachpb.BatchResponse, *roachpb.Error) {
+func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()
@@ -896,11 +897,15 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
 	sp.LogEvent("command queue")
-	cmdKeys := r.beginCmds(&ba)
+	endCmdsFunc := r.beginCmds(&ba)
+
+	// Guarantee we remove the commands from the command queue.
+	defer func() {
+		endCmdsFunc(pErr)
+	}()
 
 	// This replica must have leader lease to process a write.
-	if pErr := r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
-		r.endCmds(cmdKeys, ba, pErr)
+	if pErr = r.redirectOnOrAcquireLeaderLease(sp); pErr != nil {
 		return nil, pErr
 	}
 
@@ -954,21 +959,17 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 
 	signal()
 
-	var br *roachpb.BatchResponse
-	var pErr *roachpb.Error
 	if err == nil {
 		// If the command was accepted by raft, wait for the range to apply it.
 		select {
 		case respWithErr := <-pendingCmd.done:
 			br, pErr = respWithErr.Reply, respWithErr.Err
 		case <-ctx.Done():
-			return br, roachpb.NewError(ctx.Err())
+			pErr = roachpb.NewError(ctx.Err())
 		}
-
 	} else {
 		pErr = roachpb.NewError(err)
 	}
-	r.endCmds(cmdKeys, ba, pErr)
 	return br, pErr
 }
 
