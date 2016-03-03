@@ -300,9 +300,30 @@ func TestIntervalCacheClear(t *testing.T) {
 	if _, ok := ic.Get(key2); ok {
 		t.Error("expected cache cleared")
 	}
+	if l := ic.Len(); l != 0 {
+		t.Errorf("expected cleared cache to have len 0, found %d", l)
+	}
 	ic.Add(key1, 1)
 	if _, ok := ic.Get(key1); !ok {
 		t.Error("expected reinsert to succeed")
+	}
+}
+
+func TestIntervalCacheClearWithAdjustedBounds(t *testing.T) {
+	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction})
+	entry1 := &Entry{Key: ic.NewKey([]byte("a"), []byte("bb")), Value: 1}
+	ic.AddEntry(entry1)
+	entry1.Key.(*IntervalKey).End = []byte("b")
+	entry2 := &Entry{Key: ic.NewKey([]byte("b"), []byte("e")), Value: 2}
+	ic.AddEntry(entry2)
+	entry2.Key.(*IntervalKey).End = []byte("c")
+	entry2Right := &Entry{Key: ic.NewKey([]byte("c\x00"), []byte("e")), Value: 3}
+	ic.AddEntry(entry2Right)
+	entry3 := &Entry{Key: ic.NewKey([]byte("c"), []byte("c\x00")), Value: 4}
+	ic.AddEntry(entry3)
+	ic.Clear()
+	if l := ic.Len(); l != 0 {
+		t.Errorf("expected cleared cache to have len 0, found %d", l)
 	}
 }
 

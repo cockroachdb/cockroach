@@ -199,7 +199,7 @@ func (bc *baseCache) Del(key interface{}) {
 // DelEntry removes the provided entry from the cache.
 func (bc *baseCache) DelEntry(entry *Entry) {
 	if entry != nil {
-		bc.removeElement(entry)
+		bc.removeElement(entry, true)
 	}
 }
 
@@ -219,11 +219,13 @@ func (bc *baseCache) access(e *Entry) {
 	}
 }
 
-func (bc *baseCache) removeElement(e *Entry) {
+func (bc *baseCache) removeElement(e *Entry, fromStore bool) {
 	if bc.Policy != CacheNone {
 		bc.ll.Remove(e.le)
 	}
-	bc.store.del(e.Key)
+	if fromStore {
+		bc.store.del(e.Key)
+	}
 	if bc.OnEvicted != nil {
 		bc.OnEvicted(e.Key, e.Value)
 	}
@@ -241,7 +243,7 @@ func (bc *baseCache) evict() bool {
 		ele := bc.ll.Back()
 		e := ele.Value.(*Entry)
 		if bc.ShouldEvict(l, e.Key, e.Value) {
-			bc.removeElement(e)
+			bc.removeElement(e, true)
 			return true
 		}
 	}
@@ -479,9 +481,10 @@ func (ic *IntervalCache) del(key interface{}) {
 
 func (ic *IntervalCache) clear() {
 	ic.tree.Do(func(e interval.Interface) (done bool) {
-		ic.Del(e.(*Entry).Key.(*IntervalKey))
+		ic.removeElement(e.(*Entry), false)
 		return
 	})
+	ic.tree = interval.Tree{Overlapper: interval.Range.OverlapExclusive}
 }
 
 func (ic *IntervalCache) length() int {
