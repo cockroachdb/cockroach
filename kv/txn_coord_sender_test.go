@@ -269,7 +269,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			ok, txn, pErr := getTxn(s.Sender, &initialTxn.Proto)
 			if !ok || pErr != nil {
-				return util.Errorf("got txn: %t: %s", ok, pErr)
+				t.Fatalf("got txn: %t: %s", ok, pErr)
 			}
 			// Advance clock by 1ns.
 			// Locking the TxnCoordSender to prevent a data race.
@@ -512,15 +512,19 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On uncertainty error, new epoch begins and node is seen.
 			// Timestamp moves ahead of the existing write.
-			pErr: roachpb.NewErrorWithTxn(&roachpb.ReadWithinUncertaintyIntervalError{
-				NodeID:            1,
-				ExistingTimestamp: origTS.Add(10, 10),
-			},
-				&roachpb.Transaction{}),
+			pErr: func() *roachpb.Error {
+				pErr := roachpb.NewErrorWithTxn(
+					roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp),
+					&roachpb.Transaction{})
+				const nodeID = 1
+				pErr.GetTxn().UpdateObservedTimestamp(nodeID, origTS.Add(10, 10))
+				pErr.OriginNode = nodeID
+				return pErr
+			}(),
 			expEpoch:  1,
 			expPri:    1,
-			expTS:     origTS.Add(10, 11),
-			expOrigTS: origTS.Add(10, 11),
+			expTS:     origTS.Add(10, 10),
+			expOrigTS: origTS.Add(10, 10),
 			nodeSeen:  true,
 		},
 		{

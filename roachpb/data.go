@@ -760,13 +760,8 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// Absorb the collected clock uncertainty information.
-	if len(o.ObservedTimestamps) > 0 {
-		if t.ObservedTimestamps == nil {
-			t.ObservedTimestamps = make(map[NodeID]Timestamp)
-		}
-		for k, v := range o.ObservedTimestamps {
-			t.ObservedTimestamps[k] = v
-		}
+	for k, v := range o.ObservedTimestamps {
+		t.UpdateObservedTimestamp(k, v)
 	}
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
@@ -809,12 +804,18 @@ func (t Transaction) Short() string {
 	return t.ID.String()[:8]
 }
 
+// ResetObservedTimestamps clears out all timestamps recorded from individual
+// nodes.
+func (t *Transaction) ResetObservedTimestamps() {
+	t.ObservedTimestamps = nil
+}
+
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails. Calls with timestamps above
-// t.ObservedTimestamp have no effect.
+// t.ObservedTimestamp have no effect, unless t.ObservedTimestamp is zero.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
-	if !maxTS.Less(t.ObservedTimestamp) {
+	if !t.ObservedTimestamp.Equal(ZeroTimestamp) && !maxTS.Less(t.ObservedTimestamp) {
 		return
 	}
 	if t.ObservedTimestamps == nil {

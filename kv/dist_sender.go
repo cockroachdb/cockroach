@@ -470,7 +470,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 			// something of size zero but with capacity, we don't re-use the
 			// existing space (which others may also use). This is just to
 			// satisfy paranoia/OCD and not expected to matter in practice.
-			txnShallow.ObservedTimestamps = nil
+			txnShallow.ResetObservedTimestamps()
 			// OrigTimestamp is the HLC timestamp at which the Txn started, so
 			// this effectively means no more uncertainty on this node.
 			txnShallow.UpdateObservedTimestamp(nDesc.NodeID, txnShallow.OrigTimestamp)
