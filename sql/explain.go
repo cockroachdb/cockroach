@@ -281,3 +281,5 @@ func (n *explainDebugNode) Values() parser.DTuple {
 func (*explainDebugNode) DebugValues() debugValues {
 	panic("debug mode not implemented in explainDebugNode")
 }
+
+func (*explainDebugNode) SetLimitHint(_ int64) {}

@@ -469,7 +469,7 @@ func BenchmarkDelete1000_Postgres(b *testing.B) {
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.
-func runBenchmarkScan(b *testing.B, db *sql.DB, count int) {
+func runBenchmarkScan(b *testing.B, db *sql.DB, count int, limit int) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.scan`); err != nil {
 		b.Fatal(err)
 	}
@@ -491,7 +491,11 @@ func runBenchmarkScan(b *testing.B, db *sql.DB, count int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rows, err := db.Query(`SELECT * FROM bench.scan`)
+		query := `SELECT * FROM bench.scan`
+		if limit != 0 {
+			query = fmt.Sprintf(`%s LIMIT %d`, query, limit)
+		}
+		rows, err := db.Query(query)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -503,8 +507,12 @@ func runBenchmarkScan(b *testing.B, db *sql.DB, count int) {
 		if err := rows.Err(); err != nil {
 			b.Fatal(err)
 		}
-		if count != n {
-			b.Fatalf("unexpected result count: %d != %d", count, n)
+		expected := count
+		if limit != 0 {
+			expected = limit
+		}
+		if n != expected {
+			b.Fatalf("unexpected result count: %d (expected %d)", n, expected)
 		}
 	}
 	b.StopTimer()
@@ -514,62 +522,66 @@ func runBenchmarkScan(b *testing.B, db *sql.DB, count int) {
 	}
 }
 
-func runBenchmarkScan1(b *testing.B, db *sql.DB) {
-	runBenchmarkScan(b, db, 1)
-}
-
-func runBenchmarkScan10(b *testing.B, db *sql.DB) {
-	runBenchmarkScan(b, db, 10)
-}
-
-func runBenchmarkScan100(b *testing.B, db *sql.DB) {
-	runBenchmarkScan(b, db, 100)
-}
-
-func runBenchmarkScan1000(b *testing.B, db *sql.DB) {
-	runBenchmarkScan(b, db, 1000)
-}
-
-func runBenchmarkScan10000(b *testing.B, db *sql.DB) {
-	runBenchmarkScan(b, db, 10000)
-}
-
 func BenchmarkScan1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkScan1)
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1, 0) })
 }
 
 func BenchmarkScan1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkScan1)
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1, 0) })
 }
 
 func BenchmarkScan10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkScan10)
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 10, 0) })
 }
 
 func BenchmarkScan10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkScan10)
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 10, 0) })
 }
 
 func BenchmarkScan100_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkScan100)
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 100, 0) })
 }
 
 func BenchmarkScan100_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkScan100)
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 100, 0) })
 }
 
 func BenchmarkScan1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkScan1000)
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 0) })
 }
 
 func BenchmarkScan1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkScan1000)
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 0) })
 }
 
 func BenchmarkScan10000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, runBenchmarkScan10000)
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 10000, 0) })
 }
 
 func BenchmarkScan10000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, runBenchmarkScan10000)
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 10000, 0) })
+}
+
+func BenchmarkScan1000Limit1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 1) })
+}
+
+func BenchmarkScan1000Limit1_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 1) })
+}
+
+func BenchmarkScan1000Limit10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 10) })
+}
+
+func BenchmarkScan1000Limit10_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 10) })
+}
+
+func BenchmarkScan1000Limit100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 100) })
+}
+
+func BenchmarkScan1000Limit100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 100) })
 }

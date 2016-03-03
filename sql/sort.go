@@ -182,6 +182,13 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 	return name, description, []planNode{n.plan}
 }
 
+func (n *sortNode) SetLimitHint(numRows int64) {
+	// The limit is only useful to the wrapped node if we don't need to sort.
+	if !n.needSort {
+		n.plan.SetLimitHint(numRows)
+	}
+}
+
 // wrap the supplied planNode with the sortNode if sorting is required.
 func (n *sortNode) wrap(plan planNode) planNode {
 	if n != nil {

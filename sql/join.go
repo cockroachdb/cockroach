@@ -202,3 +202,10 @@ func (n *indexJoinNode) PErr() *roachpb.Error {
 func (n *indexJoinNode) ExplainPlan() (name, description string, children []planNode) {
 	return "index-join", "", []planNode{n.index, n.table}
 }
+
+func (n *indexJoinNode) SetLimitHint(numRows int64) {
+	if numRows < joinBatchSize {
+		numRows = joinBatchSize
+	}
+	n.index.SetLimitHint(numRows)
+}

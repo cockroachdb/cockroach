@@ -145,6 +145,10 @@ func (s *selectNode) ExplainPlan() (name, description string, children []planNod
 	return s.table.node.ExplainPlan()
 }
 
+func (s *selectNode) SetLimitHint(numRows int64) {
+	s.table.node.SetLimitHint(numRows)
+}
+
 // Select selects rows from a single table. Select is the workhorse of the SQL
 // statements. In the slowest and most general case, select must perform full
 // table scans across multiple tables and sort and join the resulting rows on

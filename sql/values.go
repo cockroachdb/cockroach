@@ -167,3 +167,5 @@ func (n *valuesNode) ExplainPlan() (name, description string, children []planNod
 		len(n.rows), pluralize(len(n.rows)))
 	return name, description, nil
 }
+
+func (*valuesNode) SetLimitHint(_ int64) {}
