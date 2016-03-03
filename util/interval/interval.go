@@ -253,8 +253,14 @@ func (t *Tree) Len() int {
 
 // Get returns a slice of Interfaces that overlap r in the Tree.
 func (t *Tree) Get(r Range) (o []Interface) {
-	if t.Root != nil && t.Overlapper(r, t.Root.Range) {
-		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, r, t.Overlapper)
+	return t.GetWithOverlapper(r, t.Overlapper)
+}
+
+// GetWithOverlapper returns a slice of Interfaces that overlap r
+// in the Tree using the provided overlapper function.
+func (t *Tree) GetWithOverlapper(r Range, overlapper func(Range, Range) bool) (o []Interface) {
+	if t.Root != nil && overlapper(r, t.Root.Range) {
+		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, r, overlapper)
 	}
 	return
 }
