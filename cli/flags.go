@@ -67,6 +67,15 @@ storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
 Directory containing RSA key and x509 certs. This flag is required if
 --insecure=false.`),
 
+	"client_host": wrapText(`
+Database server host to connect to.`),
+
+	"client_port": wrapText(`
+Database server port to connect to.`),
+
+	"database": wrapText(`
+The name of the database to connect to.`),
+
 	"execute": wrapText(`
 Execute the SQL statement(s) on the command line, then exit. Each
 subsequent positional argument on the command line may contain
@@ -88,11 +97,9 @@ is one of:`) + `
              http(s)://<address>/_status/details/local
 `,
 
-	"host": wrapText(`
-Database server host. When running as a server, the node will
-advertise itself using this hostname; it must resolve from
-other nodes in the cluster. When running the sql command shell,
-this is a hostname of a node in the cluster.`),
+	"server_host": wrapText(`
+The address to listen on. The node will also advertise itself using this
+hostname; it must resolve from other nodes in the cluster.`),
 
 	"insecure": wrapText(`
 Run over plain HTTP. WARNING: this is strongly discouraged.`),
@@ -126,7 +133,7 @@ Adjust the frequency at which the server records its own internal metrics.`),
 The created user's password. If provided, disables prompting. Pass '-' to
 provide the password on standard input.`),
 
-	"port": wrapText(`
+	"server_port": wrapText(`
 The port to bind to.`),
 
 	"scan-interval": wrapText(`
@@ -274,8 +281,8 @@ func initFlags(ctx *Context) {
 		f := startCmd.Flags()
 
 		// Server flags.
-		f.StringVar(&connHost, "host", "", usage("host"))
-		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
+		f.StringVar(&connHost, "host", "", usage("server_host"))
+		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
@@ -340,7 +347,7 @@ func initFlags(ctx *Context) {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
-		f.StringVar(&connHost, "host", "", usage("host"))
+		f.StringVar(&connHost, "host", "", usage("client_host"))
 	}
 
 	{
@@ -352,7 +359,7 @@ func initFlags(ctx *Context) {
 	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
+		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
 	}
 
 	// Commands that establish a SQL connection.
@@ -361,9 +368,9 @@ func initFlags(ctx *Context) {
 		f := cmd.PersistentFlags()
 		f.StringVar(&connURL, "url", "", usage("url"))
 
-		f.StringVar(&connUser, "user", security.RootUser, usage("user"))
-		f.StringVar(&connPort, "port", base.DefaultPort, usage("port"))
-		f.StringVar(&connDBName, "database", "", "") // TODO(marc): usage("database"))
+		f.StringVarP(&connUser, "user", "u", security.RootUser, usage("user"))
+		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
+		f.StringVarP(&connDBName, "database", "d", "", usage("database"))
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
