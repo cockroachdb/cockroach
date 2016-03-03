@@ -277,6 +277,10 @@ func initFlags(ctx *Context) {
 		pf.AddFlag(pflag.PFlagFromGoFlag(f))
 	})
 
+	// The --log-dir default changes depending on the command. Avoid confusion by
+	// simply clearing it.
+	pf.Lookup("log-dir").DefValue = ""
+
 	{
 		f := startCmd.Flags()
 
