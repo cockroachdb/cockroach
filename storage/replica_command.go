@@ -50,9 +50,8 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		return &roachpb.NoopResponse{}, nil, nil
 	}
 
-	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
-		pErr.SetTxn(h.Txn)
-		return nil, nil, pErr
+	if err := r.checkCmdHeader(args.Header()); err != nil {
+		return nil, nil, roachpb.NewErrorWithTxn(err, h.Txn)
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
@@ -161,22 +160,6 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	// Propagate the request timestamp (which may have changed).
 	// TODO(tschottdorf): really? Think this should be done by executeBatch.
 	reply.Header().Timestamp = ts
-
-	// A ReadWithinUncertaintyIntervalError contains the timestamp of the value
-	// that provoked the conflict. However, we forward the timestamp to the
-	// node's time here. The reason is that the caller (which is always
-	// transactional when this error occurs) in our implementation wants to
-	// use this information to extract a timestamp after which reads from
-	// the nodes are causally consistent with the transaction. This allows
-	// the node to be classified as without further uncertain reads for the
-	// remainder of the transaction.
-	// See the comment on roachpb.Transaction.CertainNodes.
-	if tErr, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-		// Note that we can use this node's clock (which may be different from
-		// other replicas') because this error attaches the existing timestamp
-		// to the node itself when retrying.
-		tErr.ExistingTimestamp.Forward(r.store.Clock().Now())
-	}
 
 	// Create a roachpb.Error by initializing txn from the request/response header.
 	var pErr *roachpb.Error

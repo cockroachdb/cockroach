@@ -244,7 +244,7 @@ func (t *logicTest) setup() {
 	// MySQL or Postgres instance.
 	ctx := server.NewTestContext()
 	ctx.MaxOffset = logicMaxOffset
-	t.srv = setupTestServer(t.T)
+	t.srv = setupTestServerWithContext(t.T, ctx)
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
