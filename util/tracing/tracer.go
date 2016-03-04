@@ -69,7 +69,10 @@ func JoinOrNewSnowball(opName string, ws WireSpan, callback func(sp basictracer.
 
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
-	return wrapWithNetTrace(basictracer.New(CallbackRecorder(func(_ basictracer.RawSpan) {})))
+	opts := basictracer.DefaultOptions()
+	opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
+	opts.NewSpanEventListener = basictracer.NetTraceIntegrator
+	return basictracer.NewWithOptions(opts)
 }
 
 // NewTracer creates a Tracer which records to the net/trace
