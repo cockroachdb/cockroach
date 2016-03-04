@@ -17,7 +17,7 @@
 package storage
 
 import (
-	"sort"
+	"container/heap"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -160,9 +160,11 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		//                |      |    |            |           |
 		// cmd 5 [W]:   ====================     ====================
 		//
-		sort.Sort(overlapSorter(overlaps))
-		for i, enclosed := len(overlaps)-1, false; i >= 0 && !enclosed; i-- {
-			keyRange, cmd := overlaps[i].Key.Range, overlaps[i].Value.(*cmd)
+		overlapHeap := overlapHeap(overlaps)
+		heap.Init(&overlapHeap)
+		for enclosed := false; overlapHeap.Len() > 0 && !enclosed; {
+			o := heap.Pop(&overlapHeap).(cache.Overlap)
+			keyRange, cmd := o.Key.Range, o.Value.(*cmd)
 			if cmd.readOnly {
 				// If the current overlap is a read (meaning we're a write because other reads will
 				// be filtered out if we're a read as well), we only need to wait if the write RangeGroup
@@ -243,15 +245,26 @@ func filterReadWrite(cmds []cache.Overlap) []cache.Overlap {
 	return cmds[:rwIdx]
 }
 
-// overlapSorter attaches the methods of sort.Interface to []cache.Overlap, sorting
-// in increasing ID order.
-type overlapSorter []cache.Overlap
+// overlapHeap is a max-heap of cache.Overlaps, sorting the elements
+// in decreasing Value.(*cmd).ID order.
+type overlapHeap []cache.Overlap
 
-func (o overlapSorter) Len() int { return len(o) }
-func (o overlapSorter) Less(i, j int) bool {
-	return o[i].Value.(*cmd).ID < o[j].Value.(*cmd).ID
+func (o overlapHeap) Len() int { return len(o) }
+func (o overlapHeap) Less(i, j int) bool {
+	return o[i].Value.(*cmd).ID > o[j].Value.(*cmd).ID
 }
-func (o overlapSorter) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+func (o overlapHeap) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+func (o *overlapHeap) Push(x interface{}) {
+	*o = append(*o, x.(cache.Overlap))
+}
+
+func (o *overlapHeap) Pop() interface{} {
+	n := len(*o) - 1
+	x := (*o)[n]
+	*o = (*o)[0:n]
+	return x
+}
 
 // Add adds commands to the queue which affect the specified key ranges. Ranges
 // without an end key affect only the start key. The returned interface is the
