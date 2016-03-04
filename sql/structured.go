@@ -685,3 +685,27 @@ func (desc *DatabaseDescriptor) Validate() error {
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }
+
+// GetID returns the ID of the descriptor.
+func (desc *Descriptor) GetID() ID {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.ID
+	case *Descriptor_Database:
+		return t.Database.ID
+	default:
+		return 0
+	}
+}
+
+// GetName returns the Name of the descriptor.
+func (desc *Descriptor) GetName() string {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.Name
+	case *Descriptor_Database:
+		return t.Database.Name
+	default:
+		return ""
+	}
+}

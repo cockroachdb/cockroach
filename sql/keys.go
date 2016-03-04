@@ -54,6 +54,12 @@ var normalize = unicode.SpecialCase{
 	},
 }
 
+// NormalizeName normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func NormalizeName(name string) string {
+	return normalizeName(name)
+}
+
 // normalizeName normalizes to lowercase and Unicode Normalization Form C
 // (NFC).
 func normalizeName(name string) string {
