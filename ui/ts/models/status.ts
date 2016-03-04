@@ -66,11 +66,15 @@ module Models {
         {bytes: 0, count: 0});
     }
 
-    export function sumReducer(attr: string, rows: (Proto.Status)[]): number {
+    export function sumReducer(attr: string, rows: (Proto.Status)[], defaultVal?: number): number {
       return _.reduce(
         rows,
         function (memo: number, row: (Proto.Status)): number {
-          return memo + <number>_.get(row, attr);
+          let val = <number>_.get(row, attr);
+          if (!_.isNumber(val)) {
+            val = defaultVal;
+          }
+          return memo + val;
         },
         0);
     }

@@ -17,6 +17,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -470,6 +471,11 @@ func (n *Node) bootstrapStores(bootstraps []*storage.Store, stopper *stop.Stoppe
 		// until this store is used for range allocations.
 		s.GossipStore()
 	}
+	// write a new status summary after all stores have been bootstrapped; this
+	// helps the UI remain responsive when new nodes are added.
+	if err := n.writeSummaries(); err != nil {
+		log.Warningf("error writing node summary after store bootstrap: %s", err)
+	}
 }
 
 // connectGossip connects to gossip network and reads cluster ID. If
@@ -563,6 +569,65 @@ func (n *Node) computePeriodicMetrics() error {
 	return n.stores.VisitStores(func(store *storage.Store) error {
 		return store.ComputeMetrics()
 	})
+}
+
+// startWriteSummaries begins periodically persisting status summaries for the
+// node and its stores.
+func (n *Node) startWriteSummaries(frequency time.Duration) {
+	// Immediately record summaries once on server startup.
+	n.stopper.RunWorker(func() {
+		ticker := time.NewTicker(frequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := n.writeSummaries(); err != nil {
+					log.Warningf("error recording status summaries: %s", err)
+				}
+			case <-n.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+// writeSummaries retrieves status summaries from the supplied
+// NodeStatusRecorder and persists them to the cockroach data store.
+func (n *Node) writeSummaries() error {
+	var err error
+	n.stopper.RunTask(func() {
+		nodeStatus, storeStatuses := n.recorder.GetStatusSummaries()
+		if nodeStatus != nil {
+			key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
+			if pErr := n.ctx.DB.Put(key, nodeStatus); pErr != nil {
+				err = pErr.GoError()
+				return
+			}
+			if log.V(1) {
+				statusJSON, err := json.Marshal(nodeStatus)
+				if err != nil {
+					log.Errorf("error marshaling nodeStatus to json: %s", err)
+				}
+				log.Infof("node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+			}
+		}
+
+		for _, ss := range storeStatuses {
+			key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
+			if pErr := n.ctx.DB.Put(key, &ss); pErr != nil {
+				err = pErr.GoError()
+				return
+			}
+			if log.V(1) {
+				statusJSON, err := json.Marshal(&ss)
+				if err != nil {
+					log.Errorf("error marshaling storeStatus to json: %s", err)
+				}
+				log.Infof("store %d status: %s", ss.Desc.StoreID, statusJSON)
+			}
+		}
+	})
+	return err
 }
 
 // executeCmd interprets the given message as a *roachpb.BatchRequest and sends it

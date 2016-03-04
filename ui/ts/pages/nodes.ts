@@ -125,11 +125,11 @@ module AdminViews {
           },
           {
             title: "Stores",
-            view: (status: NodeStatus): MithrilElement => (<NodeStatus>status).store_ids.length,
+            view: (status: NodeStatus): MithrilElement => {let ids = (<NodeStatus>status).store_ids; return ids && ids.length || 0; },
             sortable: true,
-            sortValue: (status: NodeStatus): number => (<NodeStatus>status).store_ids.length,
+            sortValue: (status: NodeStatus): number => {let ids = (<NodeStatus>status).store_ids; return ids && ids.length || 0; },
             rollup: function(rows: NodeStatus[]): string {
-              return sumReducer("store_ids.length", <NodeStatus[]>rows).toString();
+              return sumReducer("store_ids.length", <NodeStatus[]>rows, 0).toString();
             },
           },
           {
