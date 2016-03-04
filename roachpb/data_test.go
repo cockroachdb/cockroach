@@ -403,12 +403,12 @@ func TestTransactionString(t *testing.T) {
 			Epoch:     2,
 			Timestamp: makeTS(20, 21),
 		},
-		Name:              "name",
-		Priority:          957356782,
-		Status:            COMMITTED,
-		LastHeartbeat:     &ts1,
-		OrigTimestamp:     makeTS(30, 31),
-		ObservedTimestamp: makeTS(40, 41),
+		Name:          "name",
+		Priority:      957356782,
+		Status:        COMMITTED,
+		LastHeartbeat: &ts1,
+		OrigTimestamp: makeTS(30, 31),
+		MaxTimestamp:  makeTS(40, 41),
 	}
 	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
 		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41`
@@ -424,17 +424,17 @@ func TestTransactionString(t *testing.T) {
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
 // advertised.
 func TestTransactionObservedTimestamp(t *testing.T) {
-	txn := Transaction{ObservedTimestamp: ZeroTimestamp.Add(12345678, 9)}
+	var txn Transaction
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
 	timestamps := make(map[NodeID]Timestamp, len(ids))
 	for i := 0; i < len(ids); i++ {
-		timestamps[NodeID(i)] = ZeroTimestamp.Add(rng.Int63n(txn.ObservedTimestamp.WallTime), 0)
+		timestamps[NodeID(i)] = ZeroTimestamp.Add(rng.Int63(), 0)
 	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
-		if ts := txn.GetObservedTimestamp(nodeID); ts != txn.ObservedTimestamp {
+		if ts, ok := txn.GetObservedTimestamp(nodeID); ok {
 			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
 		txn.UpdateObservedTimestamp(nodeID, timestamps[nodeID])
@@ -446,9 +446,16 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	for _, m := range ids {
 		checkID := NodeID(m)
 		exp := timestamps[checkID]
-		if act := txn.GetObservedTimestamp(checkID); !act.Equal(exp) {
+		if act, _ := txn.GetObservedTimestamp(checkID); !act.Equal(exp) {
 			t.Fatalf("%d: expected %s, got %s", checkID, exp, act)
 		}
+	}
+
+	var emptyTxn Transaction
+	ts := ZeroTimestamp.Add(1, 2)
+	emptyTxn.UpdateObservedTimestamp(NodeID(1), ts)
+	if actTS, _ := emptyTxn.GetObservedTimestamp(NodeID(1)); !actTS.Equal(ts) {
+		t.Fatalf("unexpected: %s (wanted %s)", actTS, ts)
 	}
 }
 
@@ -466,7 +473,7 @@ var nonZeroTxn = Transaction{
 	Status:             COMMITTED,
 	LastHeartbeat:      &Timestamp{1, 2},
 	OrigTimestamp:      makeTS(30, 31),
-	ObservedTimestamp:  makeTS(40, 41),
+	MaxTimestamp:       makeTS(40, 41),
 	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
 	Writing:            true,
 	Sequence:           123,
