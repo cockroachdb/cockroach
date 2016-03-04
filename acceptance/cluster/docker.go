@@ -28,6 +28,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
@@ -78,6 +79,7 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 	}
 	defer rc.Close()
 	dec := json.NewDecoder(rc)
+	start := time.Now()
 	for {
 		// Using `interface{}` to avoid dependency on github.com/docker/docker. See
 		// https://github.com/docker/engine-api/issues/89.
@@ -88,7 +90,9 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 			}
 			return err
 		}
-		if log.V(2) {
+		// The message is a status bar. Not great for printing all the time,
+		// but we do it once a minute.
+		if log.V(2) || time.Now().Sub(start) > time.Minute {
 			log.Infof("ImagePull response: %s", message)
 		}
 	}
