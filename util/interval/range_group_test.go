@@ -323,6 +323,12 @@ func testRangeGroupSubRanges(t *testing.T, rg RangeGroup) {
 		},
 		{
 			add: oneRange,
+			sub: Range{Start: []byte{0x05}, End: []byte{0x06}},
+			rem: false,
+			res: []Range{{Start: []byte{0x01}, End: []byte{0x05}}},
+		},
+		{
+			add: oneRange,
 			sub: Range{Start: []byte{0x01}, End: []byte{0x03}},
 			rem: true,
 			res: []Range{{Start: []byte{0x03}, End: []byte{0x05}}},
@@ -419,6 +425,66 @@ func testRangeGroupSubRanges(t *testing.T, rg RangeGroup) {
 	}
 }
 
+func TestRangeListOverlapsRange(t *testing.T) {
+	testRangeGroupOverlapsRange(t, NewRangeList())
+}
+
+func TestRangeTreeOverlapsRange(t *testing.T) {
+	testRangeGroupOverlapsRange(t, NewRangeTree())
+}
+
+func testRangeGroupOverlapsRange(t *testing.T, rg RangeGroup) {
+	rg.Clear()
+	for _, r := range []Range{
+		{Start: []byte{0x01}, End: []byte{0x05}},
+		{Start: []byte{0x07}, End: []byte{0x0f}},
+	} {
+		if added := rg.Add(r); !added {
+			t.Errorf("added new range %v to empty range group, wanted true added flag; got false", r)
+		}
+	}
+
+	tests := []struct {
+		r    Range
+		want bool
+	}{
+		{
+			r:    Range{Start: []byte{0x0a}, End: []byte{0x0b}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x01}, End: []byte{0x04}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x04}, End: []byte{0x07}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x05}, End: []byte{0x07}},
+			want: false,
+		},
+		{
+			r:    Range{Start: []byte{0x05}, End: []byte{0x08}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x01}, End: []byte{0x0f}},
+			want: true,
+		},
+		{
+			r:    Range{Start: []byte{0x10}, End: []byte{0x11}},
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		if enc := rg.Overlaps(test.r); enc != test.want {
+			t.Errorf("testing if range group %v overlaps range %v, wanted %t; got %t", rg, test.r, test.want, enc)
+		}
+	}
+}
+
 func TestRangeListEnclosesRange(t *testing.T) {
 	testRangeGroupEnclosesRange(t, NewRangeList())
 }
@@ -428,9 +494,14 @@ func TestRangeTreeEnclosesRange(t *testing.T) {
 }
 
 func testRangeGroupEnclosesRange(t *testing.T, rg RangeGroup) {
-	twoRanges := []Range{
+	rg.Clear()
+	for _, r := range []Range{
 		{Start: []byte{0x01}, End: []byte{0x05}},
 		{Start: []byte{0x07}, End: []byte{0x0f}},
+	} {
+		if added := rg.Add(r); !added {
+			t.Errorf("added new range %v to empty range group, wanted true added flag; got false", r)
+		}
 	}
 
 	tests := []struct {
@@ -460,14 +531,6 @@ func testRangeGroupEnclosesRange(t *testing.T, rg RangeGroup) {
 	}
 
 	for _, test := range tests {
-		rg.Clear()
-
-		for _, r := range twoRanges {
-			if added := rg.Add(r); !added {
-				t.Errorf("added new range %v to empty range group, wanted true added flag; got false", r)
-			}
-		}
-
 		if enc := rg.Encloses(test.r); enc != test.want {
 			t.Errorf("testing if range group %v encloses range %v, wanted %t; got %t", rg, test.r, test.want, enc)
 		}
@@ -521,8 +584,8 @@ func TestRangeListAndRangeGroupIdentical(t *testing.T) {
 		rl := NewRangeList()
 		rt := NewRangeTree()
 
-		const iters = 20
-		const nBytes = 3
+		const iters = 50
+		const nBytes = 2
 		for i := 0; i < iters; i++ {
 			lStr := rl.String()
 			tStr := rt.String()
@@ -542,6 +605,13 @@ func TestRangeListAndRangeGroupIdentical(t *testing.T) {
 			treeSubtracted := rt.Sub(sr)
 			if listSubtracted != treeSubtracted {
 				t.Errorf("expected subtracting %s from RangeList %v and RangeTree %v to produce the same result; got %t from RangeList and %t from RangeTree", sr, rl, rt, listSubtracted, treeSubtracted)
+			}
+
+			or := getRandomRange(t, nBytes)
+			listOverlaps := rl.Overlaps(or)
+			treeOverlaps := rt.Overlaps(or)
+			if listOverlaps != treeOverlaps {
+				t.Errorf("expected RangeList %v and RangeTree %v to return the same overlapping state for %v; got %t from RangeList and %t from RangeTree", rl, rt, or, listOverlaps, treeOverlaps)
 			}
 
 			er := getRandomRange(t, nBytes)

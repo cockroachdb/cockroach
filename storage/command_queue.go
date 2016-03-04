@@ -49,9 +49,9 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	cache   *cache.IntervalCache
-	idAlloc int64
-	rg      interval.RangeGroup // avoids allocating in GetWait.
+	cache     *cache.IntervalCache
+	idAlloc   int64
+	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait.
 }
 
 type cmd struct {
@@ -64,7 +64,8 @@ type cmd struct {
 func NewCommandQueue() *CommandQueue {
 	cq := &CommandQueue{
 		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-		rg:    interval.NewRangeTree(),
+		wRg:   interval.NewRangeTree(),
+		rwRg:  interval.NewRangeTree(),
 	}
 	cq.cache.OnEvicted = cq.onEvicted
 	return cq
@@ -93,7 +94,11 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			end = start.Next()
 			start = end[:len(start)]
 		}
-		overlaps := cq.cache.GetOverlaps(start, end)
+		newCmdRange := interval.Range{
+			Start: interval.Comparable(start),
+			End:   interval.Comparable(end),
+		}
+		overlaps := cq.cache.GetOverlaps(newCmdRange.Start, newCmdRange.End)
 		if readOnly {
 			// If both commands are read-only, there are no dependencies between them,
 			// so these can be filtered out of the overlapping commands.
@@ -110,18 +115,19 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		// dependencies to all gating commands for each new command, which could result
 		// in an exponential dependency explosion.
 		//
-		// For example, consider the following 5 commands, each with key ranges represented
-		// on the x axis and WaitGroup dependencies represented by vertical lines:
+		// For example, consider the following 5 write commands, each with key ranges
+		// represented on the x axis and WaitGroup dependencies represented by vertical
+		// lines:
 		//
-		// cmd 1:  --------------
-		//          |      |
-		// cmd 2:   |  -------------
-		//          |    |    |
-		// cmd 3:   -------   |
-		//               |    |
-		// cmd 4:        -------
-		//                  |
-		// cmd 5:        -------
+		// cmd 1:   --------------
+		//           |      |
+		// cmd 2:    |  -------------
+		//           |    |    |
+		// cmd 3:    -------   |
+		//                |    |
+		// cmd 4:         -------
+		//                   |
+		// cmd 5:         -------
 		//
 		// Instead of having each command establish explicit dependencies on all previous
 		// overlapping commands, each command only needs to establish explicit dependencies
@@ -129,28 +135,96 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		// the new commands overlapped range. Following this strategy, the other dependencies
 		// will be implicitly enforced, which reduces memory utilization and synchronization
 		// costs.
+		//
 		// The exception are existing reads: since reads don't wait for each other, an incoming
 		// write must wait for reads even when they are covered by a "later" read (since that
-		// "later" read won't wait for the earlier read to complete).
+		// "later" read won't wait for the earlier read to complete). However, if that read is
+		// covered by a "later" write, we don't need to wait because writes can't be reordered.
 		//
-		// TODO(nvanbeschoten): some (likely minimal) gains are possible: The writer does not
-		// have to blindly wait for all reads; only those which aren't already covered directly
-		// by writes are relevant.
+		// Two example of how this logic works are shown below. Notice in the first example how
+		// the overlapping reads do not establish dependencies on each other, and can therefore
+		// be reordered. Also notice in the second example that once read command 4 overlaps
+		// a "later" write, it no longer needs to be a dependency for the new write command 5.
+		// However, because read command 3 does not overlap a "later" write, it is still a
+		// dependency for the new write, but can be safely reordered before or after command 4.
+		//
+		// cmd 1 [R]:                -----               ----------
+		//                             |                        |
+		// cmd 2 [W]:              ========                 ========
+		//                          |   |                    |   |
+		// cmd 3 [R]:             --+------                --+------
+		//                          | |                      | |
+		// cmd 4 [R]:          -------+-----        -----------+-----
+		//                       |    |              |         |
+		// cmd 5 [W]:   =====    |    |          =======       |
+		//                |      |    |            |           |
+		// cmd 5 [W]:   ====================     ====================
+		//
 		sort.Sort(overlapSorter(overlaps))
-		for i := len(overlaps) - 1; i >= 0; i-- {
+		for i, enclosed := len(overlaps)-1, false; i >= 0 && !enclosed; i-- {
 			keyRange, cmd := overlaps[i].Key.Range, overlaps[i].Value.(*cmd)
-			// If we're a write and the current overlap is a read, we always wait
-			// as discussed above. There's some flexibility about adding to the
-			// RangeGroup in that case (currently we do).
-			if cq.rg.Add(keyRange) || (!readOnly && cmd.readOnly) {
-				cmd.pending = append(cmd.pending, wg)
-				wg.Add(1)
+			if cmd.readOnly {
+				// If the current overlap is a read (meaning we're a write because other reads will
+				// be filtered out if we're a read as well), we only need to wait if the write RangeGroup
+				// doesn't already overlap the read. Otherwise, we know that this current read is a dependent
+				// itself to a command already accounted for in out write RangeGroup. Either way, we need to add
+				// this current command to the combined RangeGroup.
+				cq.rwRg.Add(keyRange)
+				if !cq.wRg.Overlaps(keyRange) {
+					cmd.pending = append(cmd.pending, wg)
+					wg.Add(1)
+				}
+			} else {
+				// If the current overlap is a write, pick which RangeGroup will be used to determine necessary
+				// dependencies based on if we are a read or write.
+				overlapRg := cq.wRg
+				if !readOnly {
+					// We only use the combined read-write RangeGroup when we are a new write command, because
+					// otherwise all read commands would have been filtered out so we can avoid using a second
+					// RangeGroup. Here, the previous reads rely on a distinction between a write command RangeGroup
+					// and an all command RangeGroup. This is so that they can avoid establishing a dependency
+					// if they are already dependent on previous writes, but can remain independent from other
+					// reads.
+					overlapRg = cq.rwRg
+				}
+
+				// We only need to establish a dependency when this write command key range is not overlapping
+				// any other reads or writes in its future. If it is overlapping, we know there was already a
+				// dependency established with a dependent of the current overlap, meaning we already established
+				// an implicit transitive dependency to the current overlap.
+				if !overlapRg.Overlaps(keyRange) {
+					cmd.pending = append(cmd.pending, wg)
+					wg.Add(1)
+				}
+
+				// The current command is a write, so add it to the write RangeGroup and observe if the group grows.
+				if cq.wRg.Add(keyRange) {
+					// We can stop dependency creation early in the case that the write RangeGroup fully encloses
+					// our new range, which means that no new dependencies are needed. This looks only at the
+					// write RangeGroup because even if the combined range group encloses us, there can always be
+					// more reads that are necessary dependencies if they themselves don't overlap any writes. We
+					// only need to perform this check when the write RangeGroup grows.
+					//
+					// We check the write RangeGroup's length before checking if it encloses the new command's
+					// range because we know (based on the fact that these are all overlapping commands) that the
+					// RangeGroup can enclose us only if its length is 1 (meaning all ranges inserted have coalesced).
+					// This guarantees that this enclosure check will always be run in constant time.
+					if cq.wRg.Len() == 1 && cq.wRg.Encloses(newCmdRange) {
+						enclosed = true
+					}
+				}
+
+				// Make sure the current command's range gets added to the combined RangeGroup if we are using it.
+				if overlapRg == cq.rwRg {
+					cq.rwRg.Add(keyRange)
+				}
 			}
 		}
 
-		// Clear the RangeGroup so that it can be used again. This is an alternative
-		// to using a local variable that must be allocated in every iteration.
-		cq.rg.Clear()
+		// Clear the RangeGroups so that they can be used again. This is an alternative
+		// to using local variables that must be allocated in every iteration.
+		cq.wRg.Clear()
+		cq.rwRg.Clear()
 	}
 }
 

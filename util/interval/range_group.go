@@ -52,6 +52,9 @@ type RangeGroup interface {
 	// Clear clears all ranges from the RangeGroup, resetting it to be
 	// used again.
 	Clear()
+	// Overlaps returns whether the provided Range is partially contained
+	// within the group of Ranges in the RangeGroup.
+	Overlaps(Range) bool
 	// Encloses returns whether the provided Range is fully contained
 	// within the group of Ranges in the RangeGroup.
 	Encloses(Range) bool
@@ -123,6 +126,7 @@ func (rg *rangeList) Add(r Range) bool {
 			e.Value = newR
 			return true
 		case r.End.Compare(er.Start) < 0:
+			// Past where inclusive overlapping ranges would be.
 			rg.ll.InsertBefore(r, e)
 			return true
 		}
@@ -186,7 +190,7 @@ func (rg *rangeList) Sub(r Range) bool {
 				return dec
 			}
 		case r.End.Compare(er.Start) <= 0:
-			// Past where overlapping ranges would be.
+			// Past where exclusive overlapping ranges would be.
 			return dec
 		default:
 			e = e.Next()
@@ -201,6 +205,25 @@ func (rg *rangeList) Clear() {
 	rg.ll.Init()
 }
 
+// Overlaps implements RangeGroup. It returns whether the provided
+// Range is partially contained within the group of Ranges in the rangeList.
+func (rg *rangeList) Overlaps(r Range) bool {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	for e := rg.ll.Front(); e != nil; e = e.Next() {
+		er := e.Value.(Range)
+		switch {
+		case er.OverlapExclusive(r):
+			return true
+		case r.End.Compare(er.Start) <= 0:
+			// Past where exclusive overlapping ranges would be.
+			return false
+		}
+	}
+	return false
+}
+
 // Encloses implements RangeGroup. It returns whether the provided
 // Range is fully contained within the group of Ranges in the rangeList.
 func (rg *rangeList) Encloses(r Range) bool {
@@ -213,6 +236,7 @@ func (rg *rangeList) Encloses(r Range) bool {
 		case contains(er, r):
 			return true
 		case r.End.Compare(er.Start) <= 0:
+			// Past where exclusive overlapping ranges would be.
 			return false
 		}
 	}
@@ -344,7 +368,7 @@ func (rt *rangeTree) Sub(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	overlaps := rt.t.Get(r)
+	overlaps := rt.t.GetWithOverlapper(r, Range.OverlapExclusive)
 	if len(overlaps) == 0 {
 		return false
 	}
@@ -390,13 +414,23 @@ func (rt *rangeTree) Clear() {
 	rt.t = Tree{Overlapper: Range.OverlapInclusive}
 }
 
+// Overlaps implements RangeGroup. It returns whether the provided
+// Range is partially contained within the group of Ranges in the rangeTree.
+func (rt *rangeTree) Overlaps(r Range) bool {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	overlaps := rt.t.GetWithOverlapper(r, Range.OverlapExclusive)
+	return len(overlaps) > 0
+}
+
 // Encloses implements RangeGroup. It returns whether the provided
 // Range is fully contained within the group of Ranges in the rangeTree.
 func (rt *rangeTree) Encloses(r Range) bool {
 	if err := rangeError(r); err != nil {
 		panic(err)
 	}
-	overlaps := rt.t.Get(r)
+	overlaps := rt.t.GetWithOverlapper(r, Range.OverlapExclusive)
 	if len(overlaps) != 1 {
 		return false
 	}
