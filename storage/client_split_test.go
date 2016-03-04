@@ -599,7 +599,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	initialSystemValues := sql.MakeMetadataSchema().GetInitialValues()
+	schema := sql.MakeMetadataSchema()
+	initialSystemValues := schema.GetInitialValues()
 	var userTableMax int
 	// Write the initial sql values to the system DB as well
 	// as the equivalent of table descriptors for X user tables.
@@ -641,9 +642,17 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
 		expKeys := make([]roachpb.Key, 0, maxTableID+2)
-		expKeys = append(expKeys,
-			testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxSystemConfigDescID+1)),
-		)
+
+		// We can't simply set numReservedTables to schema.TableCount(), because
+		// some system tables are created at cluster bootstrap time. So, before the
+		// cluster bootstrap, TableCount() will return a value that's too low.
+		numReservedTables := schema.MaxTableID() - keys.MaxSystemConfigDescID
+		for i := 1; i <= int(numReservedTables); i++ {
+			expKeys = append(expKeys,
+				testutils.MakeKey(keys.Meta2Prefix,
+					keys.MakeTablePrefix(keys.MaxSystemConfigDescID+uint32(i))),
+			)
+		}
 		for i := 1; i <= maxTableID; i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),

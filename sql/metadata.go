@@ -82,6 +82,24 @@ func (ms MetadataSchema) DescriptorCount() int {
 	return count
 }
 
+// TableCount returns the number of non-system config tables in the system
+// database. This value is needed to automate certain tests.
+func (ms MetadataSchema) TableCount() int {
+	return len(ms.tables)
+}
+
+// MaxTableID returns the highest table ID of any system table. This value is
+// needed to automate certain tests.
+func (ms MetadataSchema) MaxTableID() ID {
+	var maxID ID
+	for _, tbl := range ms.tables {
+		if maxID < tbl.id {
+			maxID = tbl.id
+		}
+	}
+	return maxID
+}
+
 // GetInitialValues returns the set of initial K/V values which should be added to
 // a bootstrapping CockroachDB cluster in order to create the tables contained
 // in the schema.
