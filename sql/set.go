@@ -53,10 +53,10 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		switch normalizeName(string(s)) {
-		case normalizeName(parser.Modern.String()):
+		switch NormalizeName(string(s)) {
+		case NormalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
-		case normalizeName(parser.Traditional.String()):
+		case NormalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
 			return nil, roachpb.NewUErrorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)

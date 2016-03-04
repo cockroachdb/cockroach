@@ -30,6 +30,7 @@ import (
 
 type sqlConnI interface {
 	driver.Conn
+	driver.Execer
 	driver.Queryer
 	Next() (driver.Rows, error)
 }
@@ -48,6 +49,14 @@ func (c *sqlConn) ensureConn() error {
 		c.conn = conn.(sqlConnI)
 	}
 	return nil
+}
+
+func (c *sqlConn) Exec(query string, args []driver.Value) error {
+	if err := c.ensureConn(); err != nil {
+		return err
+	}
+	_, err := c.conn.Exec(query, args)
+	return err
 }
 
 func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
@@ -141,10 +150,6 @@ func makeSQLClient() *sqlConn {
 	return makeSQLConn(sqlURL)
 }
 
-// fmtMap is a mapping from column name to a function that takes the raw input,
-// and outputs the string to be displayed.
-type fmtMap map[string]func(driver.Value) string
-
 type queryFunc func(conn *sqlConn) (*sqlRows, error)
 
 func nextResult(conn *sqlConn) (*sqlRows, error) {
@@ -173,22 +178,13 @@ func makeQuery(query string, parameters ...driver.Value) queryFunc {
 // runQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
 func runQuery(conn *sqlConn, fn queryFunc) ([]string, [][]string, string, error) {
-	return runQueryWithFormat(conn, nil, fn)
-}
-
-// runQueryWithFormat takes a 'query' with optional 'parameters'.
-// It runs the sql query and returns a list of columns names and a list of rows.
-// If 'format' is not nil, the values with column name
-// found in the map are run through the corresponding callback.
-func runQueryWithFormat(conn *sqlConn, format fmtMap, fn queryFunc) (
-	[]string, [][]string, string, error) {
 	rows, err := fn(conn)
 	if err != nil {
 		return nil, nil, "", err
 	}
 
 	defer func() { _ = rows.Close() }()
-	return sqlRowsToStrings(rows, format)
+	return sqlRowsToStrings(rows)
 }
 
 // runPrettyQuery takes a 'query' with optional 'parameters'.
@@ -210,12 +206,10 @@ func runPrettyQuery(conn *sqlConn, w io.Writer, fn queryFunc) error {
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
 // is a  list of column values.
 // 'rows' should be closed by the caller.
-// If 'format' is not nil, the values with column name
-// found in the map are run through the corresponding callback.
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
-func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, string, error) {
+func sqlRowsToStrings(rows *sqlRows) ([]string, [][]string, string, error) {
 	cols := rows.Columns()
 
 	var allRows [][]string
@@ -234,11 +228,7 @@ func sqlRowsToStrings(rows *sqlRows, format fmtMap) ([]string, [][]string, strin
 		}
 		rowStrings := make([]string, len(cols))
 		for i, v := range vals {
-			if f, ok := format[cols[i]]; ok {
-				rowStrings[i] = f(v)
-			} else {
-				rowStrings[i] = formatVal(v)
-			}
+			rowStrings[i] = formatVal(v)
 		}
 		allRows = append(allRows, rowStrings)
 	}

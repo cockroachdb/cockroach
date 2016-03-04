@@ -250,7 +250,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			columnID = desc.NextColumnID
 			desc.NextColumnID++
 		}
-		columnNames[normalizeName(c.Name)] = columnID
+		columnNames[NormalizeName(c.Name)] = columnID
 		c.ID = columnID
 	}
 	for i := range desc.Columns {
@@ -298,7 +298,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				index.ColumnIDs = append(index.ColumnIDs, 0)
 			}
 			if index.ColumnIDs[j] == 0 {
-				index.ColumnIDs[j] = columnNames[normalizeName(colName)]
+				index.ColumnIDs[j] = columnNames[NormalizeName(colName)]
 			}
 		}
 		if index != &desc.PrimaryIndex {
@@ -378,10 +378,10 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID == 0 {
 			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
-		if _, ok := columnNames[normalizeName(column.Name)]; ok {
+		if _, ok := columnNames[NormalizeName(column.Name)]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
-		columnNames[normalizeName(column.Name)] = column.ID
+		columnNames[NormalizeName(column.Name)] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {
 			return fmt.Errorf("column \"%s\" duplicate ID of column \"%s\": %d",
@@ -429,10 +429,10 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		if _, ok := indexNames[normalizeName(index.Name)]; ok {
+		if _, ok := indexNames[NormalizeName(index.Name)]; ok {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
-		indexNames[normalizeName(index.Name)] = struct{}{}
+		indexNames[NormalizeName(index.Name)] = struct{}{}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
@@ -459,7 +459,7 @@ func (desc *TableDescriptor) Validate() error {
 		}
 
 		for i, name := range index.ColumnNames {
-			colID, ok := columnNames[normalizeName(name)]
+			colID, ok := columnNames[NormalizeName(name)]
 			if !ok {
 				return fmt.Errorf("index \"%s\" contains unknown column \"%s\"", index.Name, name)
 			}
@@ -684,4 +684,28 @@ func (desc *DatabaseDescriptor) Validate() error {
 	}
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
+}
+
+// GetID returns the ID of the descriptor.
+func (desc *Descriptor) GetID() ID {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.ID
+	case *Descriptor_Database:
+		return t.Database.ID
+	default:
+		return 0
+	}
+}
+
+// GetName returns the Name of the descriptor.
+func (desc *Descriptor) GetName() string {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.Name
+	case *Descriptor_Database:
+		return t.Database.Name
+	default:
+		return ""
+	}
 }

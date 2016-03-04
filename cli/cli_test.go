@@ -450,79 +450,69 @@ func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
 
-	zone100 := `replicas:
-- attrs: [us-east-1a,ssd]
-- attrs: [us-east-1b,ssd]
-- attrs: [us-west-1b,ssd]
-range_min_bytes: 8388608
-range_max_bytes: 67108864
-`
+	const zone1 = `replicas:
+- attrs: [us-east-1a,ssd]`
+	const zone2 = `range_max_bytes: 134217728`
+
 	c.Run("zone ls")
 	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
-	c.RunWithArgs([]string{"zone", "set", "100", zone100})
+	c.RunWithArgs([]string{"zone", "set", "system", zone1})
 	c.Run("zone ls")
-	c.Run("zone get 100")
-	c.Run("zone rm 100")
+	c.Run("zone get system.nonexistent")
+	c.Run("zone get system.lease")
+	c.RunWithArgs([]string{"zone", "set", "system", zone2})
+	c.Run("zone get system")
+	c.Run("zone rm system")
 	c.Run("zone ls")
+	c.Run("zone rm .default")
+	c.RunWithArgs([]string{"zone", "set", ".default", zone2})
+	c.Run("zone get system")
 
 	// Output:
 	// zone ls
-	// Object 0:
-	// replicas:
-	// - attrs: []
-	// range_min_bytes: 1048576
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 86400
-	//
-	// zone set 100 replicas:
+	// .default
+	// zone set system replicas:
 	// - attrs: [us-east-1a,ssd]
-	// - attrs: [us-east-1b,ssd]
-	// - attrs: [us-west-1b,ssd]
-	// range_min_bytes: 8388608
-	// range_max_bytes: 67108864
-	//
 	// INSERT 1
 	// zone ls
-	// Object 0:
+	// .default
+	// system
+	// zone get system.nonexistent
+	// system.nonexistent not found
+	// zone get system.lease
+	// system
 	// replicas:
-	// - attrs: []
+	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
-	//
-	// Object 100:
+	// zone set system range_max_bytes: 134217728
+	// UPDATE 1
+	// zone get system
+	// system
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
-	// - attrs: [us-east-1b, ssd]
-	// - attrs: [us-west-1b, ssd]
-	// range_min_bytes: 8388608
-	// range_max_bytes: 67108864
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 0
-	//
-	// zone get 100
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
-	// - attrs: [us-east-1b, ssd]
-	// - attrs: [us-west-1b, ssd]
-	// range_min_bytes: 8388608
-	// range_max_bytes: 67108864
-	// gc:
-	//   ttlseconds: 0
-	//
-	// zone rm 100
+	//   ttlseconds: 86400
+	// zone rm system
 	// DELETE 1
 	// zone ls
-	// Object 0:
+	// .default
+	// zone rm .default
+	// unable to remove .default
+	// zone set .default range_max_bytes: 134217728
+	// UPDATE 1
+	// zone get system
+	// .default
 	// replicas:
 	// - attrs: []
 	// range_min_bytes: 1048576
-	// range_max_bytes: 67108864
+	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
-	//
 }
 
 func Example_sql() {
