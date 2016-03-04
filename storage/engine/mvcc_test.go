@@ -567,19 +567,19 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 
 // TestMVCCGetUncertainty verifies that the appropriate error results when
 // a transaction reads a key at a timestamp that has versions newer than that
-// timestamp, but older than the transaction's ObservedTimestamp.
+// timestamp, but older than the transaction's MaxTimestamp.
 func TestMVCCGetUncertainty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: makeTS(5, 0)}, ObservedTimestamp: makeTS(10, 0)}
+	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: makeTS(5, 0)}, MaxTimestamp: makeTS(10, 0)}
 	// Put a value from the past.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Put a value that is ahead of ObservedTimestamp, it should not interfere.
+	// Put a value that is ahead of MaxTimestamp, it should not interfere.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(12, 0), value2, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +593,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	}
 
 	// Now using testKey2.
-	// Put a value that conflicts with ObservedTimestamp.
+	// Put a value that conflicts with MaxTimestamp.
 	if err := MVCCPut(engine, nil, testKey2, makeTS(9, 0), value2, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -606,8 +606,8 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	if _, _, err := MVCCScan(engine, testKey2, testKey2.PrefixEnd(), 10, makeTS(7, 0), true, txn); err == nil {
 		t.Fatal("wanted an error")
 	}
-	// Adjust ObservedTimestamp and retry.
-	txn.ObservedTimestamp = makeTS(7, 0)
+	// Adjust MaxTimestamp and retry.
+	txn.MaxTimestamp = makeTS(7, 0)
 	if _, _, err := MVCCGet(engine, testKey2, makeTS(7, 0), true, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -615,9 +615,9 @@ func TestMVCCGetUncertainty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn.ObservedTimestamp = makeTS(10, 0)
+	txn.MaxTimestamp = makeTS(10, 0)
 	// Now using testKey3.
-	// Put a value that conflicts with ObservedTimestamp and another write further
+	// Put a value that conflicts with MaxTimestamp and another write further
 	// ahead and not conflicting any longer. The first write should still ruin
 	// it.
 	if err := MVCCPut(engine, nil, testKey3, makeTS(9, 0), value2, nil); err != nil {

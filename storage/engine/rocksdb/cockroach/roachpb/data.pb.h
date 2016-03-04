@@ -1491,14 +1491,14 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* release_orig_timestamp();
   void set_allocated_orig_timestamp(::cockroach::roachpb::Timestamp* orig_timestamp);
 
-  // optional .cockroach.roachpb.Timestamp observed_timestamp = 7;
-  bool has_observed_timestamp() const;
-  void clear_observed_timestamp();
-  static const int kObservedTimestampFieldNumber = 7;
-  const ::cockroach::roachpb::Timestamp& observed_timestamp() const;
-  ::cockroach::roachpb::Timestamp* mutable_observed_timestamp();
-  ::cockroach::roachpb::Timestamp* release_observed_timestamp();
-  void set_allocated_observed_timestamp(::cockroach::roachpb::Timestamp* observed_timestamp);
+  // optional .cockroach.roachpb.Timestamp max_timestamp = 7;
+  bool has_max_timestamp() const;
+  void clear_max_timestamp();
+  static const int kMaxTimestampFieldNumber = 7;
+  const ::cockroach::roachpb::Timestamp& max_timestamp() const;
+  ::cockroach::roachpb::Timestamp* mutable_max_timestamp();
+  ::cockroach::roachpb::Timestamp* release_max_timestamp();
+  void set_allocated_max_timestamp(::cockroach::roachpb::Timestamp* max_timestamp);
 
   // map<int32, .cockroach.roachpb.Timestamp> observed_timestamps = 8;
   int observed_timestamps_size() const;
@@ -1549,8 +1549,8 @@ class Transaction : public ::google::protobuf::Message {
   inline void clear_has_last_heartbeat();
   inline void set_has_orig_timestamp();
   inline void clear_has_orig_timestamp();
-  inline void set_has_observed_timestamp();
-  inline void clear_has_observed_timestamp();
+  inline void set_has_max_timestamp();
+  inline void clear_has_max_timestamp();
   inline void set_has_writing();
   inline void clear_has_writing();
   inline void set_has_sequence();
@@ -1565,7 +1565,7 @@ class Transaction : public ::google::protobuf::Message {
   int status_;
   ::cockroach::roachpb::Timestamp* last_heartbeat_;
   ::cockroach::roachpb::Timestamp* orig_timestamp_;
-  ::cockroach::roachpb::Timestamp* observed_timestamp_;
+  ::cockroach::roachpb::Timestamp* max_timestamp_;
   typedef ::google::protobuf::internal::MapEntryLite<
       ::google::protobuf::int32, ::cockroach::roachpb::Timestamp,
       ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
@@ -3363,47 +3363,47 @@ inline void Transaction::set_allocated_orig_timestamp(::cockroach::roachpb::Time
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.orig_timestamp)
 }
 
-// optional .cockroach.roachpb.Timestamp observed_timestamp = 7;
-inline bool Transaction::has_observed_timestamp() const {
+// optional .cockroach.roachpb.Timestamp max_timestamp = 7;
+inline bool Transaction::has_max_timestamp() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
-inline void Transaction::set_has_observed_timestamp() {
+inline void Transaction::set_has_max_timestamp() {
   _has_bits_[0] |= 0x00000040u;
 }
-inline void Transaction::clear_has_observed_timestamp() {
+inline void Transaction::clear_has_max_timestamp() {
   _has_bits_[0] &= ~0x00000040u;
 }
-inline void Transaction::clear_observed_timestamp() {
-  if (observed_timestamp_ != NULL) observed_timestamp_->::cockroach::roachpb::Timestamp::Clear();
-  clear_has_observed_timestamp();
+inline void Transaction::clear_max_timestamp() {
+  if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_max_timestamp();
 }
-inline const ::cockroach::roachpb::Timestamp& Transaction::observed_timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.observed_timestamp)
-  return observed_timestamp_ != NULL ? *observed_timestamp_ : *default_instance_->observed_timestamp_;
+inline const ::cockroach::roachpb::Timestamp& Transaction::max_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.max_timestamp)
+  return max_timestamp_ != NULL ? *max_timestamp_ : *default_instance_->max_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* Transaction::mutable_observed_timestamp() {
-  set_has_observed_timestamp();
-  if (observed_timestamp_ == NULL) {
-    observed_timestamp_ = new ::cockroach::roachpb::Timestamp;
+inline ::cockroach::roachpb::Timestamp* Transaction::mutable_max_timestamp() {
+  set_has_max_timestamp();
+  if (max_timestamp_ == NULL) {
+    max_timestamp_ = new ::cockroach::roachpb::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.observed_timestamp)
-  return observed_timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.max_timestamp)
+  return max_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* Transaction::release_observed_timestamp() {
-  clear_has_observed_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = observed_timestamp_;
-  observed_timestamp_ = NULL;
+inline ::cockroach::roachpb::Timestamp* Transaction::release_max_timestamp() {
+  clear_has_max_timestamp();
+  ::cockroach::roachpb::Timestamp* temp = max_timestamp_;
+  max_timestamp_ = NULL;
   return temp;
 }
-inline void Transaction::set_allocated_observed_timestamp(::cockroach::roachpb::Timestamp* observed_timestamp) {
-  delete observed_timestamp_;
-  observed_timestamp_ = observed_timestamp;
-  if (observed_timestamp) {
-    set_has_observed_timestamp();
+inline void Transaction::set_allocated_max_timestamp(::cockroach::roachpb::Timestamp* max_timestamp) {
+  delete max_timestamp_;
+  max_timestamp_ = max_timestamp;
+  if (max_timestamp) {
+    set_has_max_timestamp();
   } else {
-    clear_has_observed_timestamp();
+    clear_has_max_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.observed_timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.max_timestamp)
 }
 
 // map<int32, .cockroach.roachpb.Timestamp> observed_timestamps = 8;
