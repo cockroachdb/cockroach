@@ -877,7 +877,7 @@ func (d *DInterval) IsMin() bool {
 // String implements the Datum interface.
 func (d *DInterval) String() string {
 	if d.Months != 0 || d.Days != 0 {
-		return d.String()
+		return d.Duration.String()
 	}
 	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
