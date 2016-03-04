@@ -136,7 +136,9 @@ func makeSQLConn(url string) *sqlConn {
 func makeSQLClient() *sqlConn {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		sqlURL = cliContext.PGURL(connUser)
+		u := cliContext.PGURL(connUser)
+		u.Path = connDBName
+		sqlURL = u.String()
 	}
 	return makeSQLConn(sqlURL)
 }
