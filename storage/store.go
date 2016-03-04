@@ -1445,9 +1445,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		// would lead to an uncertainty restart (at least in the absence of a
 		// prior observed timestamp from this node, in which case the following
 		// is a no-op).
-		if now.Less(ba.Txn.ObservedTimestamp) {
+		if now.Less(ba.Txn.MaxTimestamp) {
 			shallowTxn := *ba.Txn
-			shallowTxn.ObservedTimestamp.Backward(now)
+			shallowTxn.MaxTimestamp.Backward(now)
 			ba.Txn = &shallowTxn
 		}
 	}

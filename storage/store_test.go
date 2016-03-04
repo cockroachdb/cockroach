@@ -615,7 +615,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			store, mc, stopper := createTestStore(t)
 			defer stopper.Stop()
 			txn := newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
-			txn.ObservedTimestamp = roachpb.MaxTimestamp
+			txn.MaxTimestamp = roachpb.MaxTimestamp
 			pArgs := putArgs(test.key, []byte("value"))
 			h := roachpb.Header{
 				Txn:     txn,

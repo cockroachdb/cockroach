@@ -567,11 +567,11 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 			Isolation: isolation,
 			Timestamp: now,
 		},
-		Name:              name,
-		Priority:          priority,
-		OrigTimestamp:     now,
-		ObservedTimestamp: max,
-		Sequence:          1,
+		Name:          name,
+		Priority:      priority,
+		OrigTimestamp: now,
+		MaxTimestamp:  max,
+		Sequence:      1,
 	}
 }
 
@@ -751,7 +751,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	t.Timestamp.Forward(o.Timestamp)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
-	t.ObservedTimestamp.Forward(o.ObservedTimestamp)
+	t.MaxTimestamp.Forward(o.MaxTimestamp)
 	if o.LastHeartbeat != nil {
 		if t.LastHeartbeat == nil {
 			t.LastHeartbeat = &Timestamp{}
@@ -792,7 +792,7 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s",
-		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.ObservedTimestamp)
+		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 	return buf.String()
 }
 
@@ -812,12 +812,8 @@ func (t *Transaction) ResetObservedTimestamps() {
 
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
-// nodeID, the lowest timestamp prevails. Calls with timestamps above
-// t.ObservedTimestamp have no effect, unless t.ObservedTimestamp is zero.
+// nodeID, the lowest timestamp prevails.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
-	if !t.ObservedTimestamp.Equal(ZeroTimestamp) && !maxTS.Less(t.ObservedTimestamp) {
-		return
-	}
 	if t.ObservedTimestamps == nil {
 		t.ObservedTimestamps = make(map[NodeID]Timestamp)
 	}
@@ -828,13 +824,13 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 
 // GetObservedTimestamp returns the lowest HLC timestamp recorded from the given node's
 // clock during this transaction.
-// When reading from that node, ObservedTimestamp can be lowered to the timestamp
-// returned by this method. If no entry is found, t.ObservedTimestamp is returned.
+// When reading from that node, MaxTimestamp can be lowered to the timestamp
+// returned by this method. If no entry is found, MaxTimestamp is returned.
 func (t Transaction) GetObservedTimestamp(nodeID NodeID) Timestamp {
 	if ts, ok := t.ObservedTimestamps[nodeID]; ok {
 		return ts
 	}
-	return t.ObservedTimestamp
+	return MaxTimestamp
 }
 
 var _ fmt.Stringer = &Lease{}

@@ -590,12 +590,12 @@ func mvccGetUsingIter(iter Iterator, key roachpb.Key, timestamp roachpb.Timestam
 // The read is carried out without the chance of uncertainty restarts.
 func MVCCGetAsTxn(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txnMeta roachpb.TxnMeta) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
-		TxnMeta:           txnMeta,
-		Priority:          roachpb.MakePriority(roachpb.MinUserPriority),
-		Status:            roachpb.PENDING,
-		Writing:           true,
-		OrigTimestamp:     txnMeta.Timestamp,
-		ObservedTimestamp: txnMeta.Timestamp,
+		TxnMeta:       txnMeta,
+		Priority:      roachpb.MakePriority(roachpb.MinUserPriority),
+		Status:        roachpb.PENDING,
+		Writing:       true,
+		OrigTimestamp: txnMeta.Timestamp,
+		MaxTimestamp:  txnMeta.Timestamp,
 	}
 	return MVCCGet(engine, key, timestamp, consistent, txn)
 }
@@ -711,12 +711,12 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 			}
 			seekKey = seekKey.Next()
 		}
-	} else if txn != nil && timestamp.Less(txn.ObservedTimestamp) {
+	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
 		// In this branch, the latest timestamp is ahead, and so the read of an
-		// "old" value in a transactional context at time (timestamp, ObservedTimestamp]
+		// "old" value in a transactional context at time (timestamp, MaxTimestamp]
 		// occurs, leading to a clock uncertainty error if a version exists in
 		// that time interval.
-		if !txn.ObservedTimestamp.Less(meta.Timestamp) {
+		if !txn.MaxTimestamp.Less(meta.Timestamp) {
 			// Second case: Our read timestamp is behind the latest write, but the
 			// latest write could possibly have happened before our read in
 			// absolute time if the writer had a fast clock.
@@ -727,8 +727,8 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 		}
 
 		// We want to know if anything has been written ahead of timestamp, but
-		// before ObservedTimestamp.
-		seekKey.Timestamp = txn.ObservedTimestamp
+		// before MaxTimestamp.
+		seekKey.Timestamp = txn.MaxTimestamp
 		checkValueTimestamp = true
 	} else {
 		// Third case: We're reading a historic value either outside of a
@@ -768,7 +768,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 			return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
 				timestamp, unsafeKey.Timestamp)
 		}
-		// Fifth case: There's no value in our future up to ObservedTimestamp, and those
+		// Fifth case: There's no value in our future up to MaxTimestamp, and those
 		// are the only ones that we're not certain about. The correct key has
 		// already been read above, so there's nothing left to do.
 	}

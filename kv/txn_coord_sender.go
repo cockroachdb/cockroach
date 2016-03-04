@@ -734,8 +734,13 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// If the reader encountered a newer write within the uncertainty
 		// interval, we advance the txn's timestamp just past the last observed
 		// timestamp from the node.
-		newTxn.Timestamp.Forward(newTxn.GetObservedTimestamp(pErr.OriginNode))
-		newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
+		restartTS := newTxn.GetObservedTimestamp(pErr.OriginNode)
+		if restartTS.Equal(roachpb.MaxTimestamp) {
+			pErr = roachpb.NewError(util.Errorf("no observed timestamp for node %d found on uncertainty restart", pErr.OriginNode))
+		} else {
+			newTxn.Timestamp.Forward(restartTS)
+			newTxn.Restart(ba.UserPriority, newTxn.Priority, newTxn.Timestamp)
+		}
 	case *roachpb.TransactionAbortedError:
 		// Increase timestamp if applicable.
 		newTxn.Timestamp.Forward(pErr.GetTxn().Timestamp)
