@@ -62,12 +62,15 @@ type descriptorProto interface {
 }
 
 // checkPrivilege verifies that p.user has `privilege` on `descriptor`.
-func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
-	if descriptor.GetPrivileges().CheckPrivilege(p.user, privilege) {
+func (p *planner) checkPrivilege(descriptor descriptorProto, priv privilege.Kind) error {
+	if descriptor.GetPrivileges().CheckPrivilege(p.user, priv) {
 		return nil
 	}
+	if priv != privilege.SELECT && isSystemConfigID(descriptor.GetID()) {
+		return fmt.Errorf("system database is read-only")
+	}
 	return fmt.Errorf("user %s does not have %s privilege on %s %s",
-		p.user, privilege, descriptor.TypeName(), descriptor.GetName())
+		p.user, priv, descriptor.TypeName(), descriptor.GetName())
 }
 
 // createDescriptor takes a Table or Database descriptor and creates it if
