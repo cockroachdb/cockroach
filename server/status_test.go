@@ -277,7 +277,7 @@ func startServer(t *testing.T) TestServer {
 
 	ts.EventFeed().Flush()
 
-	if err := ts.writeSummaries(); err != nil {
+	if err := ts.WriteSummaries(); err != nil {
 		t.Fatalf("error writing summaries: %s", err)
 	}
 

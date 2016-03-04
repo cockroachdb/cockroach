@@ -530,7 +530,7 @@ func TestStatusSummaries(t *testing.T) {
 		// Ensure that the event feed has been fully flushed.
 		ts.EventFeed().Flush()
 
-		if err := ts.writeSummaries(); err != nil {
+		if err := ts.WriteSummaries(); err != nil {
 			t.Fatalf("error writing summaries: %s", err)
 		}
 	}
