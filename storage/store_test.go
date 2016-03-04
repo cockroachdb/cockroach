@@ -555,6 +555,84 @@ func TestStoreSend(t *testing.T) {
 	}
 }
 
+// TestStoreObservedTimestamp verifies that execution of a transactional
+// command on a Store always returns a timestamp observation, either per the
+// error's or the response's transaction, as well as an originating NodeID.
+func TestStoreObservedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	badKey := []byte("a")
+	goodKey := []byte("b")
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		if bytes.Equal(args.Header().Key, badKey) {
+			return fmt.Errorf("boom")
+		}
+		return nil
+	}
+	defer func() { TestingCommandFilter = nil }()
+	desc := roachpb.ReplicaDescriptor{
+		NodeID: 5,
+		// not relevant
+		StoreID:   1,
+		ReplicaID: 2,
+	}
+	const wallTime = 1000
+
+	testCases := []struct {
+		key   roachpb.Key
+		check func(roachpb.Response, *roachpb.Error)
+	}{
+		{badKey,
+			func(_ roachpb.Response, pErr *roachpb.Error) {
+				if pErr == nil {
+					t.Fatal("expected an error")
+				}
+				txn := pErr.GetTxn()
+				if txn == nil {
+					t.Fatalf("expected transaction in %s", pErr)
+				}
+				if ts, _ := txn.GetObservedTimestamp(desc.NodeID); ts.WallTime != wallTime {
+					t.Fatalf("unexpected observed timestamps, expected %d->%d but got map %+v",
+						desc.NodeID, wallTime, txn.ObservedTimestamps)
+				}
+				if pErr.OriginNode != desc.NodeID {
+					t.Fatalf("unexpected OriginNode %d, expected %d",
+						pErr.OriginNode, desc.NodeID)
+				}
+
+			}},
+		{goodKey,
+			func(pReply roachpb.Response, pErr *roachpb.Error) {
+				if pErr != nil {
+					t.Fatal(pErr)
+				}
+				txn := pReply.Header().Txn
+				if txn == nil {
+					t.Fatal("expected transactional response")
+				}
+				obs, _ := txn.GetObservedTimestamp(desc.NodeID)
+				if act, exp := obs.WallTime, int64(wallTime); exp != act {
+					t.Fatalf("unexpected observed wall time: %d, wanted %d", act, exp)
+				}
+			}},
+	}
+
+	for _, test := range testCases {
+		func() {
+			store, mc, stopper := createTestStore(t)
+			defer stopper.Stop()
+			txn := newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+			txn.MaxTimestamp = roachpb.MaxTimestamp
+			pArgs := putArgs(test.key, []byte("value"))
+			h := roachpb.Header{
+				Txn:     txn,
+				Replica: desc,
+			}
+			mc.Set(wallTime)
+			test.check(client.SendWrappedWith(store.testSender(), context.Background(), h, &pArgs))
+		}()
+	}
+}
+
 func TestStoreExecuteNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
@@ -567,7 +645,7 @@ func TestStoreExecuteNoop(t *testing.T) {
 
 	br, pErr := store.Send(context.Background(), ba)
 	if pErr != nil {
-		t.Error(pErr)
+		t.Fatal(pErr)
 	}
 	reply := br.Responses[1].GetInner()
 	if _, ok := reply.(*roachpb.NoopResponse); !ok {
@@ -869,7 +947,21 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 // TransactionPushError is returned.
 func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
+	var mc *hlc.ManualClock
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		pr, ok := args.(*roachpb.PushTxnRequest)
+		if !ok || pr.PusherTxn.Name != "test" {
+			return nil
+		}
+		if exp, act := mc.UnixNano(), pr.PushTo.WallTime; exp > act {
+			return fmt.Errorf("expected PushTo >= WallTime, but got %d < %d:\n%+v", act, exp, pr)
+		}
+		return nil
+	}
+	defer func() { TestingCommandFilter = nil }()
+	var store *Store
+	var stopper *stop.Stopper
+	store, mc, stopper = createTestStore(t)
 	defer stopper.Stop()
 
 	for i, resolvable := range []bool{true, false} {
@@ -892,12 +984,13 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		mc.Increment(100)
 		// Now, try a put using the pusher's txn.
 		h.Txn = pusher
 		_, pErr := client.SendWrappedWith(store.testSender(), nil, h, &pArgs)
 		if resolvable {
 			if pErr != nil {
-				t.Errorf("expected intent resolved; got unexpected error: %s", pErr)
+				t.Fatalf("expected intent resolved; got unexpected error: %s", pErr)
 			}
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
@@ -906,18 +999,18 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				t.Fatalf("not found or err: %s", err)
 			}
 			if txn.Status != roachpb.ABORTED {
-				t.Errorf("expected pushee to be aborted; got %s", txn.Status)
+				t.Fatalf("expected pushee to be aborted; got %s", txn.Status)
 			}
 		} else {
 			if rErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
-				t.Errorf("expected txn push error; got %s", pErr)
+				t.Fatalf("expected txn push error; got %s", pErr)
 			} else if !roachpb.TxnIDEqual(rErr.PusheeTxn.ID, pushee.ID) {
-				t.Errorf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
+				t.Fatalf("expected txn to match pushee %q; got %s", pushee.ID, rErr)
 			}
 			// Trying again should fail again.
 			h.Txn.Sequence++
 			if _, pErr := client.SendWrappedWith(store.testSender(), nil, h, &pArgs); pErr == nil {
-				t.Errorf("expected another error on latent write intent but succeeded")
+				t.Fatalf("expected another error on latent write intent but succeeded")
 			}
 		}
 	}
@@ -1024,16 +1117,16 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			pushee.Sequence++
 			reply, cErr := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
 
-			expTimestamp := pusher.Timestamp
-			expTimestamp.Logical++
+			minExpTS := pusher.Timestamp
+			minExpTS.Logical++
 			if test.pusheeIso == roachpb.SNAPSHOT {
 				if cErr != nil {
 					t.Errorf("unexpected error on commit: %s", cErr)
 				}
 				etReply := reply.(*roachpb.EndTransactionResponse)
-				if etReply.Txn.Status != roachpb.COMMITTED || !etReply.Txn.Timestamp.Equal(expTimestamp) {
+				if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Timestamp.Less(minExpTS) {
 					t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",
-						expTimestamp, etReply.Txn)
+						minExpTS, etReply.Txn)
 				}
 			} else {
 				if _, ok := cErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
@@ -1102,7 +1195,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Equal(replyBytes, []byte("value1")) {
-		t.Errorf("expected bytes to be %q, got %q", "value1", replyBytes)
+		t.Errorf("expected bytes to be %q, got %q", "value0", replyBytes)
 	}
 
 	// Finally, try to end the pushee's transaction; since it's got
@@ -1116,11 +1209,11 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	etReply := reply.(*roachpb.EndTransactionResponse)
-	expTimestamp := gTS
-	expTimestamp.Logical++
-	if etReply.Txn.Status != roachpb.COMMITTED || !etReply.Txn.Timestamp.Equal(expTimestamp) {
+	minExpTS := gTS
+	minExpTS.Logical++
+	if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Timestamp.Less(minExpTS) {
 		t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",
-			expTimestamp, etReply.Txn)
+			minExpTS, etReply.Txn)
 	}
 }
 
@@ -1179,10 +1272,10 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Verify that the pushee's timestamp was moved forward on
 	// former read, since we have it available in write intent error.
-	expTS := getTS
-	expTS.Logical++
-	if !txn.Timestamp.Equal(expTS) {
-		t.Errorf("expected pushee timestamp pushed to %s; got %s", expTS, txn.Timestamp)
+	minExpTS := getTS
+	minExpTS.Logical++
+	if txn.Timestamp.Less(minExpTS) {
+		t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.Timestamp)
 	}
 	// Similarly, verify that pushee's priority was moved from 0
 	// to math.MaxInt32-1 during push.

@@ -398,9 +398,9 @@ func TestOwnNodeCertain(t *testing.T) {
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
 	if _, err := client.SendWrappedWith(ds, nil, roachpb.Header{
-		// ObservedTimestamp is set very high so that all uncertainty updates have
+		// MaxTimestamp is set very high so that all uncertainty updates have
 		// effect.
-		Txn: &roachpb.Transaction{OrigTimestamp: expTS, ObservedTimestamp: roachpb.MaxTimestamp},
+		Txn: &roachpb.Transaction{OrigTimestamp: expTS, MaxTimestamp: roachpb.MaxTimestamp},
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}

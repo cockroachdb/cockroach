@@ -20,8 +20,6 @@ package kv
 import (
 	"bytes"
 	"fmt"
-	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,10 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // TestTxnDBBasics verifies that a simple transaction can be run and
@@ -148,192 +143,58 @@ func disableOwnNodeCertain(tc *LocalTestCluster) {
 	}
 }
 
-// verifyUncertainty writes values to a key in 5ns intervals and then launches
-// a transaction at each value's timestamp reading that value with
-// the maximumOffset given, verifying in the process that the correct values
-// are read (usually after one transaction restart).
-func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
+// TestUncertaintyRestart verifies that a transaction which finds a write in
+// its near future will restart exactly once, meaning that it's made a note of
+// that node's clock for its new timestamp.
+func TestUncertaintyRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
+	s.Clock.SetMaxOffset(250 * time.Millisecond)
 
-	key := []byte("key-test")
-	// wgStart waits for all transactions to line up, wgEnd has the main
-	// function wait for them to finish.
-	var wgStart, wgEnd sync.WaitGroup
-	wgStart.Add(concurrency + 1)
-	wgEnd.Add(concurrency)
+	var key = roachpb.Key("a")
 
-	// Initial high offset to allow for future writes.
-	s.Clock.SetMaxOffset(999 * time.Nanosecond)
-	s.Manual.Set(s.Clock.MaxOffset().Nanoseconds() + 1)
-	for i := 0; i < concurrency; i++ {
-		value := []byte(fmt.Sprintf("value-%d", i))
-		// Values will be written with 5ns spacing.
-		futureTS := s.Clock.Now().Add(5, 0)
-		s.Clock.Update(futureTS)
-		// Expected number of versions skipped.
-		skipCount := int(maxOffset) / 5
-		if i+skipCount >= concurrency {
-			skipCount = concurrency - i - 1
+	done := make(chan struct{})
+	start := make(chan struct{})
+	go func() {
+		defer close(done)
+		<-start
+		if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+			return txn.Put(key, "hi")
+		}); pErr != nil {
+			t.Fatal(pErr)
 		}
-		readValue := []byte(fmt.Sprintf("value-%d", i+skipCount))
-		if err := s.DB.Put(key, value); err != nil {
-			t.Errorf("%d: got write error: %s", i, err)
-		}
-		if gr, err := s.DB.Get(key); err != nil {
-			t.Fatalf("%d: expected success reading value: %s", i, err)
-		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
-			t.Fatalf("%d: expected success reading value: %v", i, gr.Value)
-		}
-
-		go func(i int) {
-			defer wgEnd.Done()
-			wgStart.Done()
-			// Wait until the other goroutines are running.
-			wgStart.Wait()
-
-			txnManual := hlc.NewManualClock(futureTS.WallTime)
-			txnClock := hlc.NewClock(txnManual.UnixNano)
-			// Make sure to incorporate the logical component if the wall time
-			// hasn't changed (i=0). The logical component will change
-			// internally in a way we can't track, but we want to be just
-			// ahead.
-			txnClock.Update(futureTS.Add(0, 999))
-			// The written values are spaced out in intervals of 5ns, so
-			// setting <5ns here should make do without any restarts while
-			// higher values require roughly offset/5 restarts.
-			txnClock.SetMaxOffset(maxOffset)
-
-			sender := NewTxnCoordSender(s.distSender, txnClock, false, tracing.NewTracer(), s.Stopper,
-				NewTxnMetrics(metric.NewRegistry()))
-			txnDB := client.NewDB(sender)
-
-			if pErr := txnDB.Txn(func(txn *client.Txn) *roachpb.Error {
-				// Read within the transaction.
-				gr, pErr := txn.Get(key)
-				if pErr != nil {
-					if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-						return pErr
-					}
-					return roachpb.NewErrorf("unexpected read error of type %s: %s", reflect.TypeOf(pErr.GetDetail()), pErr)
-				}
-				if !gr.Exists() {
-					return roachpb.NewErrorf("no value read")
-				}
-				if !bytes.Equal(gr.ValueBytes(), readValue) {
-					return roachpb.NewErrorf("%d: read wrong value %v at %s, wanted %q",
-						i, gr.Value, futureTS, readValue)
-				}
-				return nil
-			}); pErr != nil {
-				t.Error(pErr)
-			}
-		}(i)
-	}
-	// Kick the goroutines loose.
-	wgStart.Done()
-	// Wait for the goroutines to finish.
-	wgEnd.Wait()
-}
-
-// TestTxnDBUncertainty verifies that transactions restart correctly and
-// finally read the correct value when encountering writes in the near future.
-func TestTxnDBUncertainty(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Make sure that we notice immediately if any kind of backing off is
-	// happening. Restore the previous options after this test is done to avoid
-	// interfering with other tests.
-	defaultRetryOptions := client.DefaultTxnRetryOptions
-	defer func() {
-		client.DefaultTxnRetryOptions = defaultRetryOptions
 	}()
-	client.DefaultTxnRetryOptions.InitialBackoff = 100 * time.Second
-	client.DefaultTxnRetryOptions.MaxBackoff = 100 * time.Second
 
-	// < 5ns means no uncertainty & no restarts.
-	verifyUncertainty(1, 3*time.Nanosecond, t)
-	verifyUncertainty(8, 4*time.Nanosecond, t)
-	verifyUncertainty(80, 3*time.Nanosecond, t)
-
-	// Below we'll see restarts.
-
-	// Spencer's originally suggested test:
-	// Three transactions at t=0, t=5 and t=10 with a MaxOffset of 10ns.
-	// They all need to read the latest value for this test to pass, requiring
-	// a restart for the first two.
-	verifyUncertainty(3, 10*time.Nanosecond, t)
-	verifyUncertainty(4, 9*time.Nanosecond, t)
-
-	// Some more, just for kicks.
-	verifyUncertainty(7, 12*time.Nanosecond, t)
-	verifyUncertainty(100, 10*time.Nanosecond, t)
-}
-
-// TestUncertaintyRestarts verifies that transactional reads within the
-// uncertainty interval cause exactly one restart. The test runs a transaction
-// which attempts to read a single key, but just before that read, a future
-// version of that key is written directly through the MVCC layer.
-
-// Indirectly this tests that the transaction remembers the NodeID of the node
-// being read from correctly, at least in this simple case. Not remembering the
-// node would lead to thousands of transaction restarts and almost certainly a
-// test timeout.
-func TestUncertaintyRestarts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
-	disableOwnNodeCertain(s)
-	defer s.Stop()
-	// Set a large offset so that a busy restart-loop
-	// really shows. Also makes sure that the values
-	// we write in the future below don't actually
-	// wind up in the past.
-	offset := 4000 * time.Millisecond
-	s.Clock.SetMaxOffset(offset)
-	key := roachpb.Key("key")
-	value := roachpb.Value{}
-	// With the correct restart behaviour, we see only one restart
-	// and the value read is the very first one (as nothing else
-	// has been written)
-	wantedBytes := []byte("value-0")
-
-	i := -1
-	tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
-		i++
-		s.Manual.Increment(1)
-		futureTS := s.Clock.Now()
-		futureTS.WallTime++
-		value.SetBytes([]byte(fmt.Sprintf("value-%d", i)))
-		if err := engine.MVCCPut(s.Eng, nil, key, futureTS, value, nil); err != nil {
-			t.Fatal(err)
+	if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		if txn.Proto.Epoch > 2 {
+			t.Fatal("expected only one restart")
 		}
-		gr, pErr := txn.Get(key)
+		// Issue a read to pick a timestamp.
+		if _, pErr := txn.Get(key.Next()); pErr != nil {
+			t.Fatal(pErr)
+		}
+		if txn.Proto.Epoch == 0 {
+			close(start) // let someone write into our future
+			<-done       // when they're done, try to read
+		}
+		_, pErr := txn.Get(key.Next())
 		if pErr != nil {
-			return pErr
+			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+				t.Fatalf("unexpected error: %T: %s", pErr, pErr)
+			}
 		}
-		if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), wantedBytes) {
-			t.Fatalf("%d: read wrong value: %v, wanted %q", i, gr.Value, wantedBytes)
-		}
-		return nil
-	})
-	if i != 1 {
-		t.Errorf("txn restarted %d times, expected only one restart", i)
-	}
-	if tErr != nil {
-		t.Fatal(tErr)
+		return pErr
+	}); pErr != nil {
+		t.Fatal(pErr)
 	}
 }
 
-// TestUncertaintyObservedTimestampForwarding checks that we correctly read
-// from hosts for which we control the uncertainty by checking that
-// when a transaction restarts after an uncertain read, it will also
-// take into account the target node's clock at the time of the failed
-// read when forwarding the read timestamp.
-//
-// This is a prerequisite for being able to prevent further uncertainty
-// restarts for that node and transaction without sacrificing correctness.
-// See roachpb.Transaction.CertainNodes for details.
-func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
+// TestUncertaintyObservedTimestampForwarding checks that when receiving an
+// uncertainty restart on a node, the next attempt to read (at the increased
+// timestamp) is free from uncertainty. See roachpb.Transaction for details.
+func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
@@ -370,6 +231,11 @@ func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 		if _, pErr := txn.Scan("t", roachpb.Key("t").Next(), 0); pErr != nil {
 			t.Fatal(pErr)
 		}
+		// This is a bit of a hack for the sake of this test: By visiting the
+		// node above, we've made a note of its clock, which allows us to
+		// prevent the restart. But we want to catch the restart, so reset the
+		// observed timestamps.
+		txn.Proto.ResetObservedTimestamps()
 
 		// The server's clock suddenly jumps ahead of keyFast's timestamp.
 		s.Manual.Set(2*offsetNS + 1)
@@ -381,19 +247,19 @@ func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 		// There will be exactly one restart here.
 		if gr, pErr := txn.Get(keySlow); pErr != nil {
 			if i != 1 {
-				t.Errorf("unexpected transaction error: %s", pErr)
+				t.Fatalf("unexpected transaction error: %s", pErr)
 			}
 			return pErr
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valSlow) {
-			t.Errorf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
+			t.Fatalf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
 		}
 
 		// The node should already be certain, so we expect no restart here
 		// and to read the correct key.
 		if gr, pErr := txn.Get(keyFast); pErr != nil {
-			t.Errorf("second Get failed with %s", pErr)
+			t.Fatalf("second Get failed with %s", pErr)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
-			t.Errorf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
+			t.Fatalf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
 		}
 		return nil
 	}); tErr != nil {
