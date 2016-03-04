@@ -1375,7 +1375,7 @@ func (s *Store) ReplicaCount() int {
 // Send fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	ctx = s.Context(ctx)
 	sp, cleanupSp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
 	defer cleanupSp()
@@ -1412,7 +1412,45 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// logical ticks added here.
 		ba.Timestamp.Forward(s.Clock().Now().Add(0, int32(len(ba.Requests))-1))
 	}
-	s.ctx.Clock.Update(ba.Timestamp)
+	// We update the clock and hold on to the timestamp - we know that any
+	// write with a higher timestamp we run into later must have started
+	// after this point in (absolute) time.
+	now := s.ctx.Clock.Update(ba.Timestamp)
+
+	if ba.Txn != nil {
+		// We're in a Txn, so we can reduce uncertainty restarts by attaching
+		// the above timestamp to the returned response or error. The caller
+		// can use it to shorten its uncertainty interval when it comes back to
+		// this node.
+		defer func() {
+			if pErr != nil {
+				pErr.OriginNode = ba.Replica.NodeID
+				txn := pErr.GetTxn()
+				if txn == nil {
+					txn = &roachpb.Transaction{}
+				}
+				txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+				pErr.SetTxn(txn)
+			} else {
+				if br.Txn == nil {
+					br.Txn = &roachpb.Transaction{}
+				}
+				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+			}
+		}()
+
+		// We make our transaction aware that no other operation that causally
+		// precedes it could have started after `now`. This is important: If we
+		// wind up pushing a value, it will be in our immediate future, and not
+		// updating the top end of our uncertainty timestamp would lead to a
+		// restart (at least in the absence of a prior observed timestamp from
+		// this node, in which case the following is a no-op).
+		if now.Less(ba.Txn.MaxTimestamp) {
+			shallowTxn := *ba.Txn
+			shallowTxn.MaxTimestamp.Backward(now)
+			ba.Txn = &shallowTxn
+		}
+	}
 
 	if log.V(1) {
 		sp.LogEvent(fmt.Sprintf("executing %s", ba))
@@ -1431,7 +1469,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		return r.Next()
 	}
 	var rng *Replica
-	var pErr *roachpb.Error
 
 	// Add the command to the range for execution; exit retry loop on success.
 	s.mu.Lock()
@@ -1456,7 +1493,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it there.
-		if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+		if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok && pErr.Index != nil {
 			var pushType roachpb.PushTxnType
 			if ba.IsWrite() {
 				pushType = roachpb.PUSH_ABORT
@@ -1465,31 +1502,32 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 			}
 
 			index := pErr.Index
-			if index != nil {
-				args := ba.Requests[index.Index].GetInner()
-				// TODO(tschottdorf): implications of using the batch ts here?
-				var resolveIntents []roachpb.Intent
-				resolveIntents, pErr = s.resolveWriteIntentError(ctx, wiErr, rng, args, ba.Header, pushType)
-				if len(resolveIntents) > 0 {
-					if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
-						// When resolving asynchronously, errors should not
-						// usually be returned here, although there are some cases
-						// when they may be (especially when a test cluster is in
-						// the process of shutting down).
-						log.Warningf("asynchronous resolveIntents failed: %s", resErr)
-					}
-				}
-				// Make sure that if an index is carried in the error, it
-				// remains the one corresponding to the batch here.
-				if pErr.Index != nil {
-					pErr.SetErrorIndex(index.Index)
+			args := ba.Requests[index.Index].GetInner()
+			// Make a copy of the header for the upcoming push; we will update
+			// the timestamp.
+			h := ba.Header
+			// We must push at least to h.Timestamp, but in fact we want to
+			// go all the way up to a timestamp which was taken off the HLC
+			// after our operation started. This allows us to not have to
+			// restart for uncertainty as we come back and read.
+			h.Timestamp.Forward(now)
+			resolveIntents, pErrPush := s.resolveWriteIntentError(ctx, wiErr, rng, args, h, pushType)
+			if len(resolveIntents) > 0 {
+				if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
+					// When resolving asynchronously, errors should not
+					// usually be returned here, although there are some cases
+					// when they may be (especially when a test cluster is in
+					// the process of shutting down).
+					log.Warningf("asynchronous resolveIntents failed: %s", resErr)
 				}
 			}
+			// Preserve the error index.
+			oldIndex := pErr.Index
+			pErr = pErrPush
+			pErr.Index = oldIndex
 		}
 
 		switch t := pErr.GetDetail().(type) {
-		case *roachpb.ReadWithinUncertaintyIntervalError:
-			t.NodeID = ba.Replica.NodeID
 		case *roachpb.WriteTooOldError:
 			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// Update request timestamp and retry immediately.

@@ -269,7 +269,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			ok, txn, pErr := getTxn(s.Sender, &initialTxn.Proto)
 			if !ok || pErr != nil {
-				return util.Errorf("got txn: %t: %s", ok, pErr)
+				t.Fatalf("got txn: %t: %s", ok, pErr)
 			}
 			// Advance clock by 1ns.
 			// Locking the TxnCoordSender to prevent a data race.
@@ -512,15 +512,19 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On uncertainty error, new epoch begins and node is seen.
 			// Timestamp moves ahead of the existing write.
-			pErr: roachpb.NewErrorWithTxn(&roachpb.ReadWithinUncertaintyIntervalError{
-				NodeID:            1,
-				ExistingTimestamp: origTS.Add(10, 10),
-			},
-				&roachpb.Transaction{}),
+			pErr: func() *roachpb.Error {
+				pErr := roachpb.NewErrorWithTxn(
+					roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp),
+					&roachpb.Transaction{})
+				const nodeID = 1
+				pErr.GetTxn().UpdateObservedTimestamp(nodeID, origTS.Add(10, 10))
+				pErr.OriginNode = nodeID
+				return pErr
+			}(),
 			expEpoch:  1,
 			expPri:    1,
-			expTS:     origTS.Add(10, 11),
-			expOrigTS: origTS.Add(10, 11),
+			expTS:     origTS.Add(10, 10),
+			expOrigTS: origTS.Add(10, 10),
 			nodeSeen:  true,
 		},
 		{
@@ -704,21 +708,26 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
 
-	testPErrs := []*roachpb.Error{
-		roachpb.NewError(roachpb.NewTransactionRetryError()),
-		roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
+	testCases := []struct {
+		roachpb.Error
+		errMsg string
+	}{
+		{*roachpb.NewError(roachpb.NewTransactionRetryError()), "retry txn"},
+		{*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
 			TxnMeta: roachpb.TxnMeta{
 				ID: uuid.NewV4(),
-			}})),
-		roachpb.NewErrorf("testError"),
+			}})), "failed to push"},
+		{*roachpb.NewErrorf("testError"), "testError"},
 	}
-	for i, testPErr := range testPErrs {
+	for i, test := range testCases {
 		func() {
 			ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 				txn := ba.Txn.Clone()
 				txn.Writing = true
-				testPErr.SetTxn(&txn)
-				return nil, testPErr
+				pErr := &roachpb.Error{}
+				*pErr = test.Error
+				pErr.SetTxn(&txn)
+				return nil, pErr
 			}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
 
 			var ba roachpb.BatchRequest
@@ -727,8 +736,9 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
 			ba.Txn = &roachpb.Transaction{Name: "test"}
-			if _, pErr := ts.Send(context.Background(), ba); !testutils.IsPError(pErr, testPErr.Message) {
-				t.Errorf("%d: unexpected error: expected %v but got %v", i, testPErr, pErr)
+			_, pErr := ts.Send(context.Background(), ba)
+			if !testutils.IsPError(pErr, test.errMsg) {
+				t.Errorf("%d: error did not match %s: %v", i, test.errMsg, pErr)
 			}
 
 			defer teardownHeartbeats(ts)
