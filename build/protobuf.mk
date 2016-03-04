@@ -35,8 +35,16 @@ PLUGIN_SUFFIX   := gogoroach
 PROTOC_PLUGIN   := $(GOPATH_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGOPROTO_ROOT)/gogoproto/gogo.proto
 GOGOPROTO_PATH  := $(GOGOPROTO_ROOT):$(GOGOPROTO_ROOT)/protobuf
+CPROTOBUF_PATH := $(ORG_ROOT)/c-protobuf/internal/src
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
+
+GRPC_GATEWAY_PATH := $(GOPATH)/src/github.com/gengo/grpc-gateway
+GRPC_GATEWAY_GOOGLEAPIS := $(GRPC_GATEWAY_PATH)/third_party/googleapis
+GRPC_GATEWAY_MAPPING := Mgoogle/api/annotations.proto=github.com/gengo/grpc-gateway/third_party/googleapis/google/api
+
+ADMIN_PROTO := $(REPO_ROOT)/server/admin.proto
+ADMIN_GW_GO := $(ADMIN_PROTO:%.proto=%.pb.gw.go)
 
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
@@ -50,7 +58,7 @@ ENGINE_CPP_HEADERS := $(ENGINE_CPP_PROTOS:%.proto=%.pb.h)
 ENGINE_CPP_SOURCES := $(ENGINE_CPP_PROTOS:%.proto=%.pb.cc)
 
 .PHONY: protos
-protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES)
+protos: $(GO_SOURCES) $(CPP_HEADERS) $(CPP_SOURCES) $(ENGINE_CPP_HEADERS) $(ENGINE_CPP_SOURCES) $(ADMIN_GW_GO)
 
 REPO_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(REPO_NAME)/
@@ -58,13 +66,17 @@ IMPORT_PREFIX := github.com/$(REPO_NAME)/
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS):$(CPROTOBUF_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	  sed -i.bak -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $$dir/*.pb.go; \
 	  sed -i.bak -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $$dir/*.pb.go; \
 	  sed -i.bak -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $$dir/*.pb.go; \
 	  rm -f $$dir/*.bak; \
 	  gofmt -s -w $$dir/*.pb.go; \
 	done
+
+$(ADMIN_GW_GO) : $(ADMIN_PROTO) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(PROTOC)
+	$(PROTOC) -I.:$(GOGOPROTO_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS):$(CPROTOBUF_PATH) --grpc-gateway_out=logtostderr=true:. $(ADMIN_PROTO)
+	sed -i"" -E 's!golang/protobuf/proto!gogo/protobuf/proto!' $(ADMIN_GW_GO)
 
 $(CPP_HEADERS) $(CPP_SOURCES): $(PROTOC) $(CPP_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)

@@ -35,6 +35,7 @@ github.com/docker/go-connections 34b5052da6b11e27f5f2e357b38b571ddddd3928
 github.com/docker/go-units 5d2041e26a699eaca682e2ea41c8f891e1060444
 github.com/dustin/go-humanize 8929fe90cee4b2cb9deb468b51fb34eba64d1bf0
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
+github.com/gengo/grpc-gateway 820a8f4f5aa34584bfbd4805b7976681c59cee06
 github.com/go-sql-driver/mysql 1fca743146605a172a266e1654e01e5cd5669bee
 github.com/gogo/protobuf ff05bbbb0ff143cc11fc3f8b700fc3a2864b884d
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
@@ -53,7 +54,6 @@ github.com/mattn/go-isatty 56b76bdf51f7708750eac80fa38b952bb9f32639
 github.com/mattn/go-runewidth d037b52ae5c0338c2bb18da01fb7ddf0e8be9aa1
 github.com/mibk/dupl c450df04426c2f8c35d91fb588feb88fbe328915
 github.com/olekukonko/tablewriter cca8bbc0798408af109aaaa239cbd2634846b340
-github.com/opencontainers/runc b86570a4d4a15f9fa2da9334e164b5f260552b4c
 github.com/opennota/check 2647c7f78677e5af42e988a36343bc83194b7109
 github.com/opentracing/basictracer-go 064063c4898a802d741bcde12d9ea3004c15ebaf
 github.com/opentracing/opentracing-go 3def36d8411244a3f2ba3ddb926dcddcb3d96120

@@ -19,23 +19,34 @@
 package server
 
 import (
+	"bytes"
+	"errors"
 	// This is imported for its side-effect of registering expvar
 	// endpoints with the http.DefaultServeMux.
 	_ "expvar"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
+	"golang.org/x/net/context"
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
 	// This is imported for its side-effect of registering pprof
 	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
 
+	gwruntime "github.com/gengo/grpc-gateway/runtime"
+	"github.com/gogo/protobuf/proto"
 	"github.com/julienschmidt/httprouter"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -69,10 +80,18 @@ const (
 	healthPath = apiEndpoint + "health"
 	// quitPath is the quit endpoint.
 	quitPath = apiEndpoint + "quit"
-	// databasesPath is the endpoint for listing databases.
-	databasesPath = apiEndpoint + "databases"
-	// databasesPath is the endpoint for listing databases.
-	databaseDetailsPattern = databasesPath + "/:database"
+
+	// eventLimit is the maximum number of events returned by any endpoints
+	// returning events.
+	apiEventLimit = 1000
+)
+
+var (
+	errUIKeyNotFound = errors.New("key not found")
+
+	// apiServerMessage is the standard body for all HTTP 500 responses.
+	errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error has occurred. Please "+
+		"check your CockroachDB logs for more details.")
 )
 
 // An actionHandler is an interface which provides Get, Put & Delete
@@ -90,6 +109,13 @@ type adminServer struct {
 	stopper     *stop.Stopper // Used to shutdown the server
 	sqlExecutor *sql.Executor
 	router      *httprouter.Router
+	mux         *http.ServeMux
+
+	// gwMux is a mux provided by grpc-gateway to handle HTTP/gRPC proxying.
+	gwMux *gwruntime.ServeMux
+
+	// gwCancel cancels outstanding grpc-gateway operations.
+	gwCancel context.CancelFunc
 }
 
 // newAdminServer allocates and returns a new REST server for
@@ -100,30 +126,65 @@ func newAdminServer(db *client.DB, stopper *stop.Stopper, sqlExecutor *sql.Execu
 		stopper:     stopper,
 		sqlExecutor: sqlExecutor,
 		router:      httprouter.New(),
+		mux:         http.NewServeMux(),
 	}
 
-	server.router.GET(debugEndpoint+"*path", server.handleDebug)
-	server.router.GET(healthPath, server.handleHealth)
-	server.router.GET(quitPath, server.handleQuit)
-	server.router.GET(databasesPath, server.handleDatabases)
-	server.router.GET(databaseDetailsPattern, server.handleDatabaseDetails)
+	// Register HTTP handlers.
+	server.mux.HandleFunc(debugEndpoint, server.handleDebug)
+	// TODO(cdo): Move quit and health endpoints to gRPC.
+	server.mux.HandleFunc(quitPath, server.handleQuit)
+	server.mux.HandleFunc(healthPath, server.handleHealth)
+	// gRPC stuff happens in RegisterGRPCGateway().
 	return server
+}
+
+// RegisterGRPCGateway starts the gateway (i.e. reverse proxy) that proxies
+// HTTP requests to the appropriate gRPC endpoints.
+func (s *adminServer) RegisterGRPCGateway(serverCtx *Context) error {
+	s.gwMux = gwruntime.NewServeMux()
+	var gwCtx context.Context
+	gwCtx, s.gwCancel = context.WithCancel(context.Background())
+
+	// Setup HTTP<->gRPC handlers.
+	var opts []grpc.DialOption
+	if serverCtx.Insecure {
+		opts = append(opts, grpc.WithInsecure())
+	} else {
+		tlsConfig, err := serverCtx.GetClientTLSConfig()
+		if err != nil {
+			return err
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	}
+	err := RegisterAdminHandlerFromEndpoint(gwCtx, s.gwMux, serverCtx.Addr, opts)
+	if err != nil {
+		return err
+	}
+
+	// Pass all requests for gRPC-based API endpoints to the gateway mux.
+	s.mux.Handle(apiEndpoint, s.gwMux)
+	return nil
+}
+
+// Close cleans up resources used by the adminServer.
+func (s *adminServer) Close() {
+	s.gwCancel()
 }
 
 // ServeHTTP implements http.Handler.
 func (s *adminServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
+	s.mux.ServeHTTP(w, r)
 }
 
 // handleHealth responds to health requests from monitoring services.
-func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	fmt.Fprintln(w, "ok")
 }
 
 // handleQuit is the shutdown hook. The server is first placed into a
 // draining mode, followed by exit.
-func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	fmt.Fprintln(w, "ok")
 	go func() {
@@ -135,131 +196,650 @@ func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request, _ httpr
 // handleDebug passes requests with the debugPathPrefix onto the default
 // serve mux, which is preconfigured (by import of expvar and net/http/pprof)
 // to serve endpoints which access exported variables and pprof tools.
-func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler, _ := http.DefaultServeMux.Handler(r)
 	handler.ServeHTTP(w, r)
 }
 
-// getUser will return the username of the authenticated CockroachDB user. For now, this is
-// just a stub.
-// TODO(cdo): Implement this when we've implemented authentication.
-func (s *adminServer) getUser(_ *http.Request) string {
+// getUserProto will return the authenticated user. For now, this is just a stub until we
+// figure out our authentication mechanism.
+func (s *adminServer) getUser(req proto.Message) string {
 	return security.RootUser
 }
 
-func (s *adminServer) internalServerErrorf(w http.ResponseWriter, format string, args ...interface{}) {
-	err := util.ErrorfSkipFrames(1, format, args...)
-	log.Error(err)
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+// serverError logs the provided error and returns an error that should be returned by
+// the RPC endpoint method.
+func (s *adminServer) serverError(err error) error {
+	log.Error(util.ErrorfSkipFrames(1, "%s", err.Error()))
+	return errAdminAPIError
 }
 
-// handleDatabases is an endpoint that responds with a JSON object listing all databases.
-func (s *adminServer) handleDatabases(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	var session sql.Session
-	user := s.getUser(r)
-	resp := s.sqlExecutor.ExecuteStatements(user, &session, "SHOW DATABASES", nil)
-
-	if a, e := len(resp.ResultList), 1; a != e {
-		s.internalServerErrorf(w, "# of results %d != expected %d", a, e)
-		return
-	}
-
-	if resp.ResultList[0].PErr != nil {
-		s.internalServerErrorf(w, "%s", resp.ResultList[0].PErr)
-		return
-	}
-
-	if a, e := len(resp.ResultList[0].Columns), 1; a != e {
-		s.internalServerErrorf(w, "# of columns %d != expected %d", a, e)
-		return
-	}
-
-	// It would be natural to just return a slice as the JSON response object. However, when
-	// marshalling JSON, we always enclose top-level slices in an outer object to work around this
-	// vulnerability: http://haacked.com/archive/2009/06/25/json-hijacking.aspx/
-	//
-	// So, it seems cleaner to wrap the results in a more obvious way.
-	databases := firstColumnToSlice(resp.ResultList[0])
-	result := map[string]interface{}{
-		"Databases": databases,
-	}
-	respondAsJSON(w, r, result)
+// serverErrorf logs the provided error and returns an error that should be returned by
+// the RPC endpoint method.
+func (s *adminServer) serverErrorf(format string, args ...interface{}) error {
+	log.Error(util.ErrorfSkipFrames(1, format, args...))
+	return errAdminAPIError
 }
 
-// extractDatabase extracts the ":database" parameter from URLs.
-func (s *adminServer) extractDatabase(ps httprouter.Params) (string, error) {
-	databaseParam := ps.ByName("database")
-	if len(databaseParam) == 0 {
-		return "", util.Errorf("no database parameter provided")
-	}
-	return databaseParam, nil
+// serverErrors logs the provided errors and returns an error that should be returned by
+// the RPC endpoint method.
+func (s *adminServer) serverErrors(errors []error) error {
+	log.Error(util.ErrorfSkipFrames(1, "%v", errors))
+	return errAdminAPIError
 }
 
-// firstColumnToSlice returns a slice containing the value of the first column of each row in the
-// provided SQL result. This useful for results containing a single column.
-func firstColumnToSlice(result sql.Result) []interface{} {
-	var rows []interface{}
-	for _, r := range result.Rows {
-		rows = append(rows, r.Values[0])
+// checkQueryResults performs basic tests on the provided query results and returns
+// the first error that was found.
+func (s *adminServer) checkQueryResults(results []sql.Result, numResults int) error {
+	if a, e := len(results), numResults; a != e {
+		return util.Errorf("# of results %d != expected %d", a, e)
 	}
-	return rows
-}
 
-// sqlResultToMaps returns a list of maps of column name -> column value for all rows in the
-// given SQL query result.
-func sqlResultToMaps(result sql.Result) []map[string]interface{} {
-	var rows []map[string]interface{}
-	for _, r := range result.Rows {
-		row := make(map[string]interface{})
-		for i, col := range result.Columns {
-			row[col.Name] = r.Values[i]
+	for _, result := range results {
+		if result.PErr != nil {
+			return util.Errorf("%s", result.PErr.String())
 		}
-		rows = append(rows, row)
 	}
 
-	return rows
+	return nil
 }
 
-// handleDatabaseDetails is an endpoint that returns grants and a list of tables for the specified
-// database.
-func (s *adminServer) handleDatabaseDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	var session sql.Session
-	dbname, err := s.extractDatabase(ps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+// firstNotFoundError returns the first table/database not found error in the
+// provided results.
+func (s *adminServer) firstNotFoundError(results []sql.Result) *roachpb.Error {
+	for _, res := range results {
+		// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
+		// more structured errors.
+		if pErr := res.PErr; pErr != nil && strings.HasSuffix(pErr.String(), "does not exist") {
+			return pErr
+		}
 	}
 
-	// TODO(cdo): Use real placeholders for the database name when we've extended our SQL grammar
-	// to allow that.
-	escDBName := parser.Name(dbname).String()
-	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
-	resp := s.sqlExecutor.ExecuteStatements(security.RootUser, &session, query, nil)
+	return nil
+}
 
-	for _, res := range resp.ResultList {
-		if res.PErr != nil {
-			if strings.HasSuffix(res.PErr.String(), "does not exist") {
-				http.Error(w, res.PErr.String(), http.StatusNotFound)
-				return
+// Databases is an endpoint that returns a list of databases.
+func (s *adminServer) Databases(_ context.Context, req *DatabasesRequest) (*DatabasesResponse, error) {
+	var session sql.Session
+	user := s.getUser(req)
+	r := s.sqlExecutor.ExecuteStatements(user, &session, "SHOW DATABASES;", nil)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	var resp DatabasesResponse
+	for _, row := range r.ResultList[0].Rows {
+		dbname, ok := row.Values[0].(parser.DString)
+		if !ok {
+			return nil, s.serverErrorf("type assertion failed on db name: %T", row.Values[0])
+		}
+		resp.Databases = append(resp.Databases, string(dbname))
+	}
+
+	return &resp, nil
+}
+
+// DatabaseDetails is an endpoint that returns grants and a list of table names
+// for the specified database.
+func (s *adminServer) DatabaseDetails(_ context.Context, req *DatabaseDetailsRequest) (*DatabaseDetailsResponse, error) {
+	var session sql.Session
+	escDBName := parser.Name(req.Database).String()
+
+	user := s.getUser(req)
+	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
+	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
+	if pErr := s.firstNotFoundError(r.ResultList); pErr != nil {
+		return nil, grpc.Errorf(codes.NotFound, "%s", pErr.String())
+	}
+	if err := s.checkQueryResults(r.ResultList, 2); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Marshal grants.
+	var resp DatabaseDetailsResponse
+	{
+		const (
+			userCol       = "User"
+			privilegesCol = "Privileges"
+		)
+
+		scanner := newResultScanner(r.ResultList[0].Columns)
+		for _, row := range r.ResultList[0].Rows {
+			// Marshal grant, splitting comma-separated privileges into a proper slice.
+			var grant DatabaseDetailsResponse_Grant
+			var privileges string
+			if err := scanner.Scan(row, userCol, &grant.User); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, privilegesCol, &privileges); err != nil {
+				return nil, err
+			}
+			grant.Privileges = strings.Split(privileges, ",")
+			resp.Grants = append(resp.Grants, &grant)
+		}
+	}
+
+	// Marshal table names.
+	{
+		const tableCol = "Table"
+		scanner := newResultScanner(r.ResultList[1].Columns)
+		if a, e := len(r.ResultList[1].Columns), 1; a != e {
+			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
+		}
+		for _, row := range r.ResultList[1].Rows {
+			var tableName string
+			if err := scanner.Scan(row, tableCol, &tableName); err != nil {
+				return nil, err
+			}
+			resp.TableNames = append(resp.TableNames, tableName)
+		}
+	}
+
+	return &resp, nil
+}
+
+// TableDetails is an endpoint that returns columns, indices, and other
+// relevant details for the specified table.
+func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) (
+	*TableDetailsResponse, error) {
+	var session sql.Session
+	user := s.getUser(req)
+
+	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
+	// grammar to allow that.
+	escQualTable := fmt.Sprintf("%s.%s", parser.Name(req.Database).String(),
+		parser.Name(req.Table).String())
+	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s",
+		escQualTable, escQualTable, escQualTable)
+	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
+	if pErr := s.firstNotFoundError(r.ResultList); pErr != nil {
+		return nil, grpc.Errorf(codes.NotFound, "%s", pErr.String())
+	}
+	if err := s.checkQueryResults(r.ResultList, 3); err != nil {
+		return nil, err
+	}
+
+	var resp TableDetailsResponse
+
+	// Marshal SHOW COLUMNS result.
+	//
+	// TODO(cdo): protobuf v3's default behavior for fields with zero values (e.g. empty strings)
+	// is to suppress them. So, if protobuf field "foo" is an empty string, "foo" won't show
+	// up in the marshalled JSON. I feel that this is counterintuitive, and this should be fixed
+	// for our API.
+	{
+		const (
+			fieldCol   = "Field" // column name
+			typeCol    = "Type"
+			nullCol    = "Null"
+			defaultCol = "Default"
+		)
+		scanner := newResultScanner(r.ResultList[0].Columns)
+		for _, row := range r.ResultList[0].Rows {
+			var col TableDetailsResponse_Column
+			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, typeCol, &col.Type); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, nullCol, &col.Nullable); err != nil {
+				return nil, err
+			}
+			isDefaultNull, err := scanner.IsNull(row, defaultCol)
+			if err != nil {
+				return nil, err
+			}
+			if !isDefaultNull {
+				if err := scanner.Scan(row, defaultCol, &col.Default); err != nil {
+					return nil, err
+				}
+			}
+			resp.Columns = append(resp.Columns, &col)
+		}
+	}
+
+	// Marshal SHOW INDEX result.
+	{
+		const (
+			nameCol      = "Name"
+			uniqueCol    = "Unique"
+			seqCol       = "Seq"
+			columnCol    = "Column"
+			directionCol = "Direction"
+			storingCol   = "Storing"
+		)
+		scanner := newResultScanner(r.ResultList[1].Columns)
+		for _, row := range r.ResultList[1].Rows {
+			// Marshal grant, splitting comma-separated privileges into a proper slice.
+			var index TableDetailsResponse_Index
+			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, uniqueCol, &index.Unique); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, seqCol, &index.Seq); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, columnCol, &index.Column); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, directionCol, &index.Direction); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, storingCol, &index.Storing); err != nil {
+				return nil, err
+			}
+			resp.Indexes = append(resp.Indexes, &index)
+		}
+	}
+
+	// Marshal SHOW GRANTS result.
+	{
+		const (
+			userCol       = "User"
+			privilegesCol = "Privileges"
+		)
+		scanner := newResultScanner(r.ResultList[2].Columns)
+		for _, row := range r.ResultList[2].Rows {
+			// Marshal grant, splitting comma-separated privileges into a proper slice.
+			var grant TableDetailsResponse_Grant
+			var privileges string
+			if err := scanner.Scan(row, userCol, &grant.User); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, privilegesCol, &privileges); err != nil {
+				return nil, err
+			}
+			grant.Privileges = strings.Split(privileges, ",")
+			resp.Grants = append(resp.Grants, &grant)
+		}
+	}
+
+	return &resp, nil
+}
+
+// Users returns a list of users, stripped of any passwords.
+func (s *adminServer) Users(c context.Context, req *UsersRequest) (*UsersResponse, error) {
+	var session sql.Session
+	user := s.getUser(req)
+	query := "SELECT username FROM system.users"
+	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	var resp UsersResponse
+	for _, row := range r.ResultList[0].Rows {
+		resp.Users = append(resp.Users, &UsersResponse_User{string(row.Values[0].(parser.DString))})
+	}
+	return &resp, nil
+}
+
+// Events is an endpoint that returns the latest event log entries, with the following
+// optional URL parameters:
+//
+// type=STRING  returns events with this type (e.g. "create_table")
+// targetID=INT returns events for that have this targetID
+func (s *adminServer) Events(c context.Context, req *EventsRequest) (*EventsResponse, error) {
+	var session sql.Session
+	user := s.getUser(req)
+
+	// Execute the query.
+	q := &sqlQuery{}
+	q.Append("SELECT timestamp, eventType, targetID, reportingID, info, uniqueID ")
+	q.Append("FROM system.eventlog ")
+	q.Append("WHERE 1=1 ") // This avoids a SQL error if we don't have either eventType or targetID.
+	if len(req.Type) > 0 {
+		q.Append("AND eventType = $_ ", parser.DString(req.Type))
+	}
+	if req.TargetId > 0 {
+		q.Append("AND targetID = $_ ", parser.DInt(req.TargetId))
+	}
+	q.Append("ORDER BY timestamp DESC ")
+	q.Append("LIMIT $_", parser.DInt(apiEventLimit))
+	if len(q.Errors()) > 0 {
+		return nil, s.serverErrors(q.Errors())
+	}
+	r := s.sqlExecutor.ExecuteStatements(user, &session, q.String(), q.Params())
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, err
+	}
+
+	// Marshal response.
+	var resp EventsResponse
+	scanner := newResultScanner(r.ResultList[0].Columns)
+	for _, row := range r.ResultList[0].Rows {
+		var event EventsResponse_Event
+		var ts time.Time
+		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
+			return nil, err
+		}
+		nanos := ts.UnixNano()
+		event.Timestamp = &EventsResponse_Event_Timestamp{Sec: nanos / 1e9, Nsec: uint32(nanos % 1e9)}
+		if err := scanner.ScanIndex(row, 1, &event.EventType); err != nil {
+			return nil, err
+		}
+		if err := scanner.ScanIndex(row, 2, &event.TargetId); err != nil {
+			return nil, err
+		}
+		if err := scanner.ScanIndex(row, 3, &event.ReportingId); err != nil {
+			return nil, err
+		}
+		if err := scanner.ScanIndex(row, 4, &event.Info); err != nil {
+			return nil, err
+		}
+		if err := scanner.ScanIndex(row, 5, &event.UniqueId); err != nil {
+			return nil, err
+		}
+
+		resp.Events = append(resp.Events, &event)
+	}
+	return &resp, nil
+}
+
+// getUIData returns the value and timestamp for the given UI key. Returns
+// errUIKeyNotFound if the key was not found.
+func (s *adminServer) getUIData(session *sql.Session, user, key string) ([]byte, GetUIDataResponse_Timestamp, error) {
+	zeroTimestamp := GetUIDataResponse_Timestamp{}
+
+	// Query database.
+	query := "SELECT value, lastUpdated FROM system.ui WHERE key = $1"
+	params := []parser.Datum{parser.DString(key)}
+	r := s.sqlExecutor.ExecuteStatements(user, session, query, params)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, zeroTimestamp, s.serverError(err)
+	}
+	if len(r.ResultList[0].Rows) == 0 {
+		return nil, zeroTimestamp, errUIKeyNotFound
+	}
+
+	// Marshal results.
+	row := r.ResultList[0].Rows[0]
+	dBytes, ok := row.Values[0].(parser.DBytes)
+	if !ok {
+		return nil, zeroTimestamp, s.serverErrorf("unexpected type for UI value: %T", row.Values[0])
+	}
+	dTS, ok := row.Values[1].(parser.DTimestamp)
+	if !ok {
+		return nil, zeroTimestamp,
+			s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[1])
+	}
+	nanos := dTS.UnixNano()
+	ts := GetUIDataResponse_Timestamp{nanos / 1e9, uint32(nanos % 1e9)}
+	return []byte(dBytes), ts, nil
+}
+
+// SetUIData is an endpoint that sets the data associated with a key.
+func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetUIDataResponse, error) {
+	if len(req.Key) == 0 {
+		return nil, grpc.Errorf(codes.InvalidArgument, "key cannot be empty")
+	}
+
+	var session sql.Session
+	user := s.getUser(req)
+
+	// Do an upsert of the key.
+	br := s.sqlExecutor.ExecuteStatements(user, &session, "BEGIN;", nil)
+	if err := s.checkQueryResults(br.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// See if the key already exists.
+	alreadyExists := true
+	if _, _, err := s.getUIData(&session, user, req.Key); err != nil {
+		if err != errUIKeyNotFound {
+			return nil, s.serverError(err)
+		}
+		alreadyExists = false
+	}
+
+	// INSERT or UPDATE as appropriate.
+	ts := session.Txn.TxnTimestamp
+	if alreadyExists {
+		query := "UPDATE system.ui SET value = $1, lastUpdated = $2 WHERE key = $3; COMMIT;"
+		params := []parser.Datum{
+			parser.DString(req.Value),            // $1
+			parser.DTimestamp{Time: ts.GoTime()}, // $2
+			parser.DString(req.Key),              // $3
+		}
+		r := s.sqlExecutor.ExecuteStatements(user, &session, query, params)
+		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
+			return nil, s.serverError(err)
+		}
+		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
+			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
+		}
+	} else {
+		query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, $3); COMMIT;"
+		params := []parser.Datum{
+			parser.DString(req.Key),              // $1
+			parser.DBytes(req.Value),             // $2
+			parser.DTimestamp{Time: ts.GoTime()}, // $3
+		}
+		r := s.sqlExecutor.ExecuteStatements(user, &session, query, params)
+		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
+			return nil, s.serverError(err)
+		}
+		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
+			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
+		}
+	}
+
+	return &SetUIDataResponse{}, nil
+}
+
+// GetUIData returns data associated with the given key, which was stored
+// earlier through SetUIData.
+func (s *adminServer) GetUIData(_ context.Context, req *GetUIDataRequest) (*GetUIDataResponse, error) {
+	var session sql.Session
+	user := s.getUser(req)
+
+	if len(req.Key) == 0 {
+		return nil, grpc.Errorf(codes.InvalidArgument, "key cannot be empty")
+	}
+
+	val, ts, err := s.getUIData(&session, user, req.Key)
+	if err != nil {
+		if err == errUIKeyNotFound {
+			return nil, grpc.Errorf(codes.NotFound, "key %s not found", req.Key)
+		}
+		return nil, s.serverError(err)
+	}
+
+	return &GetUIDataResponse{Value: val, LastUpdated: &ts}, nil
+}
+
+// sqlQuery allows you to incrementally build a SQL query that uses
+// placeholders. Instead of specific placeholders like $1, you instead use the
+// temporary placeholder $_.
+type sqlQuery struct {
+	buf    bytes.Buffer
+	pidx   int
+	params []parser.Datum
+	errs   []error
+}
+
+// String returns the full query.
+func (q *sqlQuery) String() string {
+	if len(q.errs) > 0 {
+		return "couldn't generate query: please check Errors()"
+	}
+	return q.buf.String()
+}
+
+// Errors returns a slice containing all errors that have happened during the
+// construction of this query.
+func (q *sqlQuery) Errors() []error {
+	return q.errs
+}
+
+// Params returns a slice containing all parameters that have been passed into
+// this query through Append.
+func (q *sqlQuery) Params() []parser.Datum {
+	return q.params
+}
+
+// Append appends the provided string and any number of query parameters.
+// Instead of using normal placeholders (e.g. $1, $2), use meta-placeholder $_.
+// This method rewrites the query so that it uses proper placeholders.
+//
+// For example, suppose we have the following calls:
+//
+//   query.Append("SELECT * FROM foo WHERE a > $_ AND a < $_ ", arg1, arg2)
+//   query.Append("LIMIT $_", limit)
+//
+// The query is rewritten into:
+//
+//   SELECT * FROM foo WHERE a > $1 AND a < $2 LIMIT $3
+//   /* $1 = arg1, $2 = arg2, $3 = limit */
+//
+// Note that this method does NOT return any errors. Instead, we queue up
+// errors, which can later be accessed. Returning an error here would make
+// query construction code exceedingly tedious.
+func (q *sqlQuery) Append(s string, params ...parser.Datum) {
+	const (
+		stateNormal = iota
+		stateDollar
+	)
+
+	state := stateNormal
+	var placeholders int
+	for _, r := range s {
+		switch state {
+		case stateNormal:
+			q.buf.WriteRune(r)
+			if r == '$' {
+				state = stateDollar
 			}
 
-			s.internalServerErrorf(w, "%s", res.PErr.String())
-			return
+		case stateDollar:
+			switch {
+			case r == '$':
+				// We remain in stateDollar.
+				q.buf.WriteRune(r)
+
+			case r == '_':
+				// Eat the '_' and output the appropriate SQL placeholder.
+				q.pidx++
+				placeholders++
+				q.buf.WriteString(strconv.FormatInt(int64(q.pidx), 10)) // SQL placeholders are 1-based
+				state = stateNormal
+
+			case unicode.IsNumber(r):
+				q.errs = append(q.errs,
+					util.Errorf("concrete placeholder detected; use $_ instead"))
+				return
+
+			default:
+				q.buf.WriteRune(r)
+				state = stateNormal
+			}
 		}
 	}
 
-	// Put the results of the queries in JSON-friendly objects. For grants, we split the comma-
-	// separated lists of privileges into proper slices.
-	const privilegesKey = "Privileges"
-	grants := sqlResultToMaps(resp.ResultList[0])
-	for _, grant := range grants {
-		privileges := string(grant[privilegesKey].(parser.DString))
-		grant[privilegesKey] = strings.Split(privileges, ",")
+	if placeholders != len(params) {
+		q.errs = append(q.errs,
+			util.Errorf("# of placeholders %d != # of params %d", placeholders, len(params)))
 	}
-	tables := firstColumnToSlice(resp.ResultList[1])
-	result := map[string]interface{}{
-		"Grants": grants,
-		"Tables": tables,
+	q.params = append(q.params, params...)
+}
+
+// resultScanner scans columns from sql.ResultRow instances into variables,
+// performing the appropriate casting and error detection along the way.
+type resultScanner struct {
+	colNameToIdx map[string]int
+}
+
+func newResultScanner(cols []sql.ResultColumn) *resultScanner {
+	rs := resultScanner{
+		colNameToIdx: make(map[string]int),
 	}
-	respondAsJSON(w, r, result)
+	for i, col := range cols {
+		rs.colNameToIdx[col.Name] = i
+	}
+	return &rs
+}
+
+// IsNull returns whether the specified column of the given row contains
+// a SQL NULL value.
+func (rs *resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
+	idx, ok := rs.colNameToIdx[col]
+	if !ok {
+		return false, util.Errorf("result is missing column %s", col)
+	}
+	return row.Values[idx] == parser.DNull, nil
+}
+
+// ScanIndex scans the given column index of the given row into dst.
+func (rs *resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{}) error {
+	src := row.Values[index]
+
+	switch d := dst.(type) {
+	case *string:
+		if dst == nil {
+			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+		}
+		s, ok := src.(parser.DString)
+		if !ok {
+			return util.ErrorfSkipFrames(1, "source type assertion failed")
+		}
+		*d = string(s)
+
+	case *bool:
+		if dst == nil {
+			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+		}
+		s, ok := src.(parser.DBool)
+		if !ok {
+			return util.ErrorfSkipFrames(1, "source type assertion failed")
+		}
+		*d = bool(s)
+
+	case *int64:
+		if dst == nil {
+			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+		}
+		s, ok := src.(parser.DInt)
+		if !ok {
+			return util.ErrorfSkipFrames(1, "source type assertion failed")
+		}
+		*d = int64(s)
+
+	case *time.Time:
+		if dst == nil {
+			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+		}
+		s, ok := src.(parser.DTimestamp)
+		if !ok {
+			return util.ErrorfSkipFrames(1, "source type assertion failed")
+		}
+		*d = time.Time(s.Time)
+
+	case *[]byte:
+		if dst == nil {
+			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
+		}
+		s, ok := src.(parser.DBytes)
+		if !ok {
+			return util.ErrorfSkipFrames(1, "source type assertion failed")
+		}
+		// Yes, this copies, but this probably isn't in the critical path.
+		*d = []byte(s)
+
+	default:
+		return util.ErrorfSkipFrames(1, "unimplemented type for scanCol: %T", dst)
+	}
+
+	return nil
+}
+
+// Scan scans the column with the given name from the given row into dst.
+func (rs *resultScanner) Scan(row sql.ResultRow, colName string, dst interface{}) error {
+	idx, ok := rs.colNameToIdx[colName]
+	if !ok {
+		return util.Errorf("result is missing column %s", colName)
+	}
+	return rs.ScanIndex(row, idx, dst)
 }
