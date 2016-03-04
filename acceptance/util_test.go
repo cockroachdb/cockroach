@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -55,6 +56,8 @@ var flagLogDir = flag.String("l", "", "the directory to store log files, relativ
 var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
 	"cluster configurations for each test. This overrides the nodes, stores, stall and duration flags and will run "+
 	"the test against a collection of pre-specified cluster configurations.")
+
+var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
 var stopper = make(chan struct{})
 
@@ -141,9 +144,11 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	if !*flagRemote {
 		logDir := *flagLogDir
 		if logDir != "" {
-			if _, _, fun := caller.Lookup(1); fun != "" {
-				logDir = filepath.Join(logDir, fun)
+			_, _, fun := caller.Lookup(3)
+			if !testFuncRE.MatchString(fun) {
+				t.Fatalf("invalid caller %s; want TestX -> runTestOnConfigs -> func()", fun)
 			}
+			logDir = filepath.Join(logDir, fun)
 		}
 		l := cluster.CreateLocal(cfg, logDir, stopper)
 		l.Start()
