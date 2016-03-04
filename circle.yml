@@ -18,6 +18,7 @@ dependencies:
   override:
     - build/circle-deps.sh:
         parallel: true
+        timeout: 3600
   cache_directories:
     - ~/builder
     - ~/uicache
