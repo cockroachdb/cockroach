@@ -18,14 +18,12 @@ function fetch_docker() {
   if ! docker images | grep -q "${ref}"; then
     # If the image is cached, load it. A click on CircleCI's "Clear Cache" will
     # make sure we start with a clean slate.
-    imgcache="${builder_dir}/${user}.${repo}.${tag}.tar"
-    find "${builder_dir}" -not -path "${imgcache}" -type f -delete
-    if [[ ! -e "${imgcache}" ]]; then
-      time docker pull "${ref}"
-      time docker save "${ref}" > "${imgcache}"
-    else
+    imgcache="${builder_dir}/${user}.${repo}.tar"
+    if [[ -e "${imgcache}" ]]; then
       time docker load -i "${imgcache}"
     fi
+    time docker pull "${ref}"
+    time docker save -o "${imgcache}" "${ref}"
     docker tag -f "${ref}" "${name}:latest"
   fi
 }
