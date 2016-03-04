@@ -242,3 +242,89 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
 }
+
+// Cbrt calculates the cube root of x to the specified scale
+// and stores the result in z, which is also the return value.
+//
+// The cube root calculation is implemented using Newton-Raphson
+// method. We start with an initial estimate for cbrt(d), and
+// then iterate:
+//     x_{n+1} = 1/3 * ( 2 * x_n + (d / x_n / x_n) ).
+func Cbrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+	switch z {
+	case nil:
+		z = new(inf.Dec)
+	case x:
+		x = new(inf.Dec)
+		x.Set(z)
+	}
+
+	// Validate the sign of x.
+	switch x.Sign() {
+	case -1:
+		// Make sure args aren't mutated and return -Cbrt(-x).
+		x = new(inf.Dec).Neg(x)
+		z = Cbrt(z, x, s)
+		return z.Neg(z)
+	case 0:
+		return z.SetUnscaled(0).SetScale(0)
+	}
+
+	z.Set(x)
+	exp8 := 0
+
+	// Follow Ken Turkowski paper:
+	// https://people.freebsd.org/~lstewart/references/apple_tr_kt32_cuberoot.pdf
+	//
+	// Computing the cube root of any number is reduced to computing
+	// the cube root of a number between 0.125 and 1. After the next loops,
+	// x = z * 8^exp8 will hold.
+	for z.Cmp(decimalOneEighth) < 0 {
+		exp8--
+		z.Mul(z, decimalEight)
+	}
+
+	for z.Cmp(decimalOne) > 0 {
+		exp8++
+		z.Mul(z, decimalOneEighth)
+	}
+
+	// Use this polynomial to approximate the cube root between 0.125 and 1.
+	// z = (-0.46946116 * z + 1.072302) * z + 0.3812513
+	// It will serve as an initial estimate, hence the precision of this
+	// computation may only impact performance, not correctness.
+	z0 := new(inf.Dec).Set(z)
+	z.Mul(z, decimalCbrtC1)
+	z.Add(z, decimalCbrtC2)
+	z.Mul(z, z0)
+	z.Add(z, decimalCbrtC3)
+
+	for ; exp8 < 0; exp8++ {
+		z.Mul(z, decimalHalf)
+	}
+
+	for ; exp8 > 0; exp8-- {
+		z.Mul(z, decimalTwo)
+	}
+
+	z0.Set(z)
+
+	// Loop until convergence.
+	for loop := newLoop("cbrt", x, s, 1); ; {
+		// z = (2.0 * z0 +  x / (z0 * z0) ) / 3.0;
+		z.Set(z0)
+		z.Mul(z, z0)
+		z.QuoRound(x, z, s+2, inf.RoundHalfUp)
+		z.Add(z, z0)
+		z.Add(z, z0)
+		z.QuoRound(z, decimalThree, s+2, inf.RoundHalfUp)
+
+		if loop.done(z) {
+			break
+		}
+		z0.Set(z)
+	}
+
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
