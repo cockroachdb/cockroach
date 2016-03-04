@@ -230,6 +230,57 @@ func BenchmarkDecimalSqrt(b *testing.B) {
 	}
 }
 
+func TestDecimalCbrt(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{"-567", "-8.2767725291433620"},
+		{"-1", "-1.0"},
+		{"-0.001", "-0.1"},
+		{".00000001", "0.0021544346900319"},
+		{".001234567898217312", "0.1072765982021206"},
+		{".001", "0.1"},
+		{".123", "0.4973189833268590"},
+		{"0", "0"},
+		{"1", "1"},
+		{"2", "1.2599210498948732"},
+		{"1000", "10.0"},
+		{"1234567898765432112.2763812", "1072765.9821799668569064"},
+	}
+	testDecimalSingleArgFunc(t, Cbrt, 16, tests)
+}
+
+func TestDecimalCbrtDoubleScale(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{"-567", "-8.27677252914336200839737332507556"},
+		{"-1", "-1.0"},
+		{"-0.001", "-0.1"},
+		{".00000001", "0.00215443469003188372175929356652"},
+		{".001234567898217312", "0.10727659820212056117037629887220"},
+		{".001", "0.1"},
+		{".123", "0.49731898332685904156500833828550"},
+		{"0", "0"},
+		{"1", "1"},
+		{"2", "1.25992104989487316476721060727823"},
+		{"1000", "10.0"},
+		{"1234567898765432112.2763812", "1072765.98217996685690644770246374397146"},
+	}
+	testDecimalSingleArgFunc(t, Cbrt, 32, tests)
+}
+
+func BenchmarkDecimalCbrt(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]*inf.Dec, 10000)
+	for i := range vals {
+		vals[i] = NewDecFromFloat(rng.Float64())
+	}
+
+	z := new(inf.Dec)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Cbrt(z, vals[i%len(vals)], 16)
+	}
+}
+
 func TestDecimalLog(t *testing.T) {
 	tests := []decimalOneArgTestCase{
 		{".001234567898217312", "-6.6970342501104617"},
@@ -322,56 +373,5 @@ func BenchmarkDecimalLog(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		Log(z, vals[i%len(vals)], 16)
-	}
-}
-
-func TestDecimalCbrt(t *testing.T) {
-	tests := []decimalOneArgTestCase{
-		{"-567", "-8.2767725291433620"},
-		{"-1", "-1.0"},
-		{"-0.001", "-0.1"},
-		{".00000001", "0.0021544346900319"},
-		{".001234567898217312", "0.1072765982021206"},
-		{".001", "0.1"},
-		{".123", "0.4973189833268590"},
-		{"0", "0"},
-		{"1", "1"},
-		{"2", "1.2599210498948732"},
-		{"1000", "10.0"},
-		{"1234567898765432112.2763812", "1072765.9821799668569064"},
-	}
-	testDecimalSingleArgFunc(t, Cbrt, 16, tests)
-}
-
-func TestDecimalCbrtDoubleScale(t *testing.T) {
-	tests := []decimalOneArgTestCase{
-		{"-567", "-8.27677252914336200839737332507556"},
-		{"-1", "-1.0"},
-		{"-0.001", "-0.1"},
-		{".00000001", "0.00215443469003188372175929356652"},
-		{".001234567898217312", "0.10727659820212056117037629887220"},
-		{".001", "0.1"},
-		{".123", "0.49731898332685904156500833828550"},
-		{"0", "0"},
-		{"1", "1"},
-		{"2", "1.25992104989487316476721060727823"},
-		{"1000", "10.0"},
-		{"1234567898765432112.2763812", "1072765.98217996685690644770246374397146"},
-	}
-	testDecimalSingleArgFunc(t, Cbrt, 32, tests)
-}
-
-func BenchmarkDecimalCbrt(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-
-	vals := make([]*inf.Dec, 10000)
-	for i := range vals {
-		vals[i] = NewDecFromFloat(rng.Float64())
-	}
-
-	z := new(inf.Dec)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		Cbrt(z, vals[i%len(vals)], 16)
 	}
 }

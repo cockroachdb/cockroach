@@ -742,10 +742,16 @@ var builtins = map[string][]builtin{
 		}),
 	},
 
-	// TODO(nvanbenschoten) Add native support for decimal.
-	"cbrt": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return DFloat(math.Cbrt(x)), nil
-	}),
+	"cbrt": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return DFloat(math.Cbrt(x)), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			dd := &DDecimal{}
+			decimal.Cbrt(&dd.Dec, x, decimal.Precision)
+			return dd, nil
+		}),
+	},
 
 	"ceil":    ceilImpl,
 	"ceiling": ceilImpl,
