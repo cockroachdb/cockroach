@@ -419,16 +419,16 @@ type Transaction struct {
 	// transaction will retry.
 	OrigTimestamp Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
-	// timestamps between timestamp and observed_timestamp trigger a txn
-	// retry error, unless the node being read is listed in certain_nodes
+	// timestamps between timestamp and max_timestamp trigger a txn
+	// retry error, unless the node being read is listed in observed_timestamps
 	// (in which case no more read uncertainty can occur).
-	// The case observed_timestamp < timestamp is possible for transactions which have
-	// been pushed; in this case, observed_timestamp should be ignored.
-	ObservedTimestamp Timestamp `protobuf:"bytes,7,opt,name=observed_timestamp" json:"observed_timestamp"`
+	// The case max_timestamp < timestamp is possible for transactions which have
+	// been pushed; in this case, max_timestamp should be ignored.
+	MaxTimestamp Timestamp `protobuf:"bytes,7,opt,name=max_timestamp" json:"max_timestamp"`
 	// A map of NodeID to timestamps as observed from their local clock during
 	// this transaction. The purpose of this map is to avoid uncertainty related
 	// restarts which normally occur when reading a value in the near future as
-	// per the observed_timestamp field.
+	// per the max_timestamp field.
 	// When this map holds a corresponding entry for the node the current request
 	// is executing on, we can run the command with the map's timestamp as the
 	// top boundary of our uncertainty interval, limiting (and often avoiding)
@@ -959,8 +959,8 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 	i += n17
 	data[i] = 0x3a
 	i++
-	i = encodeVarintData(data, i, uint64(m.ObservedTimestamp.Size()))
-	n18, err := m.ObservedTimestamp.MarshalTo(data[i:])
+	i = encodeVarintData(data, i, uint64(m.MaxTimestamp.Size()))
+	n18, err := m.MaxTimestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1305,7 +1305,7 @@ func (m *Transaction) Size() (n int) {
 	}
 	l = m.OrigTimestamp.Size()
 	n += 1 + l + sovData(uint64(l))
-	l = m.ObservedTimestamp.Size()
+	l = m.MaxTimestamp.Size()
 	n += 1 + l + sovData(uint64(l))
 	if len(m.ObservedTimestamps) > 0 {
 		for k, v := range m.ObservedTimestamps {
@@ -2927,7 +2927,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ObservedTimestamp", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxTimestamp", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2951,7 +2951,7 @@ func (m *Transaction) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.ObservedTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
+			if err := m.MaxTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

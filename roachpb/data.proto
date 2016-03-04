@@ -251,16 +251,16 @@ message Transaction {
   // transaction will retry.
   optional Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
-  // timestamps between timestamp and observed_timestamp trigger a txn
-  // retry error, unless the node being read is listed in certain_nodes
+  // timestamps between timestamp and max_timestamp trigger a txn
+  // retry error, unless the node being read is listed in observed_timestamps
   // (in which case no more read uncertainty can occur).
-  // The case observed_timestamp < timestamp is possible for transactions which have
-  // been pushed; in this case, observed_timestamp should be ignored.
-  optional Timestamp observed_timestamp = 7 [(gogoproto.nullable) = false];
+  // The case max_timestamp < timestamp is possible for transactions which have
+  // been pushed; in this case, max_timestamp should be ignored.
+  optional Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
   // A map of NodeID to timestamps as observed from their local clock during
   // this transaction. The purpose of this map is to avoid uncertainty related
   // restarts which normally occur when reading a value in the near future as
-  // per the observed_timestamp field.
+  // per the max_timestamp field.
   // When this map holds a corresponding entry for the node the current request
   // is executing on, we can run the command with the map's timestamp as the
   // top boundary of our uncertainty interval, limiting (and often avoiding)

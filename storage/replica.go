@@ -678,9 +678,9 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 }
 
 // TODO(tschottdorf): almost obsolete.
-func (r *Replica) checkCmdHeader(header *roachpb.Span) *roachpb.Error {
+func (r *Replica) checkCmdHeader(header *roachpb.Span) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		return roachpb.NewError(roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc()))
+		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
 	return nil
 }
@@ -784,8 +784,8 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	}
 	args := ba.Requests[0].GetInner()
 
-	if pErr := r.checkCmdHeader(args.Header()); pErr != nil {
-		return nil, pErr
+	if err := r.checkCmdHeader(args.Header()); err != nil {
+		return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
 	}
 
 	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)

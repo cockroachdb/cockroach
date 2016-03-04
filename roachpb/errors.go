@@ -444,6 +444,16 @@ func (e *WriteTooOldError) message(pErr *Error) string {
 
 var _ ErrorDetailInterface = &WriteTooOldError{}
 
+// NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
+// The read and existing timestamps are purely informational and used for
+// formatting the error message.
+func NewReadWithinUncertaintyIntervalError(readTS, existingTS Timestamp) *ReadWithinUncertaintyIntervalError {
+	return &ReadWithinUncertaintyIntervalError{
+		ReadTimestamp:     readTS,
+		ExistingTimestamp: existingTS,
+	}
+}
+
 // Error formats error.
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
 	return e.message(nil)
@@ -451,7 +461,7 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 
 // message returns an error message.
 func (e *ReadWithinUncertaintyIntervalError) message(pErr *Error) string {
-	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
+	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.ReadTimestamp, e.ExistingTimestamp)
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}
