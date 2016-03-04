@@ -227,7 +227,7 @@ protobuf:
 .PHONY: .go-version
 .go-version:
 	@actual=$$($(GO) version); \
-	echo "$${actual}" | grep -q $(GOVERS) || \
+	echo "$${actual}" | grep -q '\b$(GOVERS)\b' || \
 	  (echo "$(GOVERS) required (see CONTRIBUTING.md): $${actual}" && false)
 
 include .go-version

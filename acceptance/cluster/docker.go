@@ -124,6 +124,7 @@ func (c *Container) Remove() error {
 	err := c.cluster.client.ContainerRemove(types.ContainerRemoveOptions{
 		ContainerID:   c.id,
 		RemoveVolumes: true,
+		Force:         true,
 	})
 
 	if os.Getenv("CIRCLECI") == "true" {
