@@ -173,7 +173,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sql.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 1, 0, ""},
+		{sql.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 4, 0, ""},
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{
@@ -237,7 +237,11 @@ func TestComputeSplits(t *testing.T) {
 	sort.Sort(roachpb.KeyValueByKey(allSql))
 
 	allUserSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
-	allReservedSplits := []uint32{reservedStart, reservedStart + 1, reservedStart + 2}
+	const numReservedTables = 4
+	var allReservedSplits []uint32
+	for i := 0; i < numReservedTables; i++ {
+		allReservedSplits = append(allReservedSplits, reservedStart+uint32(i))
+	}
 	allSplits := append(allReservedSplits, allUserSplits...)
 
 	testCases := []struct {
@@ -253,10 +257,10 @@ func TestComputeSplits(t *testing.T) {
 		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
 		// No user data.
-		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits[:1]},
+		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
 		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
 		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
-		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allReservedSplits[:1]},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allReservedSplits},
 
 		// User descriptors.
 		{userSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
@@ -289,11 +293,11 @@ func TestComputeSplits(t *testing.T) {
 		// Reserved/User mix.
 		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
 		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, allSplits[2:]},
-		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allSplits[4:]},
+		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
 		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
-		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:5]},
+		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:6]},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:8]},
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("foo")), allSplits[1:9]},
 	}
 
 	cfg := config.SystemConfig{}

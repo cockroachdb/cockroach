@@ -260,3 +260,23 @@ func GetJSON(httpClient *http.Client, scheme, hostport, path string, v interface
 	}
 	return json.Unmarshal(b, v)
 }
+
+// PostJSON uses the supplied client to perform a POST to the URL specified
+// by the parameters and unmarshals the result into the supplied interface.
+// This function assumes that the body is also JSON.
+func PostJSON(httpClient *http.Client, scheme, hostport, path, body string, v interface{}) error {
+	url := fmt.Sprintf("%s://%s%s", scheme, hostport, path)
+	resp, err := httpClient.Post(url, JSONContentType, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return Errorf("status: %s, error: %s", resp.Status, b)
+	}
+	return json.Unmarshal(b, v)
+}
