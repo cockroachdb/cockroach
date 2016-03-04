@@ -19,12 +19,12 @@ function fetch_docker() {
     imgcache="${builder_dir}/builder.${name}.tar"
     find "${builder_dir}" -not -path "${imgcache}" -type f -delete
     if [[ ! -e "${imgcache}" ]]; then
-      time docker pull "cockroachdb/${name}"
-      docker tag -f "cockroachdb/${name}" "cockroachdb/${image}:latest"
-      time docker save "cockroachdb/${name}" > "${imgcache}"
+      time docker pull "${name}"
+      docker tag -f "${name}" "${image}:latest"
+      time docker save "${name}" > "${imgcache}"
     else
       time docker load -i "${imgcache}"
-      docker tag -f "cockroachdb/${name}" "cockroachdb/${image}:latest"
+      docker tag -f "${name}" "${image}:latest"
     fi
   fi
 }
@@ -128,13 +128,13 @@ ls -lah "${builder_dir}"
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-fetch_docker "builder" "20160304-103033"
+fetch_docker "cockroachdb/builder" "20160304-103033"
 
-fetch_docker "docker-spy" "20160209-143235"
+fetch_docker "cockroachdb/docker-spy" "20160209-143235"
 
 if is_shard 0; then
   # Dockerfile at: https://github.com/cockroachdb/postgres-test
-  fetch_docker "postgres-test" "20160203-140220"
+  fetch_docker "cockroachdb/postgres-test" "20160203-140220"
 fi
 
 # Recursively invoke this script inside the builder docker container,
