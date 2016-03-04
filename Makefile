@@ -77,10 +77,9 @@ install:
 # eg: to statically build the sql tests, run:
 #   make testbuild PKG=./sql STATIC=1
 .PHONY: testbuild
-testbuild: TESTS := $(shell $(GO) list -tags '$(TAGS)' $(PKG))
 testbuild: GOFLAGS += -c
 testbuild:
-	for p in $(TESTS); do \
+	for p in $(shell $(GO) list -tags '$(TAGS)' $(PKG)); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
 	  DIR=$$($(GO) list -f {{.Dir}} -tags '$(TAGS)' $$p); \
@@ -90,13 +89,12 @@ testbuild:
 # Build all tests into DIR and strips each.
 # DIR is required.
 .PHONY: testbuildall
-testbuildall: TESTS := $(shell $(GO) list $(PKG))
 testbuildall: GOFLAGS += -c
 testbuildall:
 ifndef DIR
 	$(error DIR is undefined)
 endif
-	for p in $(TESTS); do \
+	for p in $(shell $(GO) list $(PKG)); do \
 	  NAME=$$(basename "$$p"); \
 	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
 		OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
