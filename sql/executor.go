@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -489,7 +488,7 @@ func (e *Executor) ExecuteStatements(
 		planMaker.releaseLeases(e.db)
 		session.Txn = Session_Transaction{
 			Txn:          &curTxnState.txn.Proto,
-			TxnTimestamp: driver.Timestamp(curTxnState.txnTimestamp),
+			TxnTimestamp: Timestamp(curTxnState.txnTimestamp),
 			UserPriority: curTxnState.txn.UserPriority,
 		}
 		session.Txn.MutatesSystemConfig = curTxnState.txn.SystemConfigTrigger()

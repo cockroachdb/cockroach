@@ -8,7 +8,6 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
-import cockroach_sql_driver "github.com/cockroachdb/cockroach/sql/driver"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
@@ -121,6 +120,19 @@ func _Session_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer
 	}
 }
 
+// Timestamp represents an absolute timestamp devoid of time-zone.
+type Session_Timestamp struct {
+	// The time in seconds since, January 1, 1970 UTC (Unix time).
+	Sec int64 `protobuf:"varint,1,opt,name=sec" json:"sec"`
+	// nsec specifies a non-negative nanosecond offset within sec.
+	// It must be in the range [0, 999999999].
+	Nsec uint32 `protobuf:"varint,2,opt,name=nsec" json:"nsec"`
+}
+
+func (m *Session_Timestamp) Reset()         { *m = Session_Timestamp{} }
+func (m *Session_Timestamp) String() string { return proto.CompactTextString(m) }
+func (*Session_Timestamp) ProtoMessage()    {}
+
 type Session_Transaction struct {
 	// If missing, it means we're not inside a (KV) txn.
 	Txn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
@@ -131,7 +143,7 @@ type Session_Transaction struct {
 	// Timestamp to be used by SQL (transaction_timestamp()) in the above
 	// transaction. Note: this is not the transaction timestamp in
 	// roachpb.Transaction above, although it probably should be (#4393).
-	TxnTimestamp cockroach_sql_driver.Datum_Timestamp                  `protobuf:"bytes,3,opt,name=txn_timestamp" json:"txn_timestamp"`
+	TxnTimestamp Session_Timestamp                                     `protobuf:"bytes,3,opt,name=txn_timestamp" json:"txn_timestamp"`
 	UserPriority github_com_cockroachdb_cockroach_roachpb.UserPriority `protobuf:"fixed64,4,opt,name=user_priority,casttype=github.com/cockroachdb/cockroach/roachpb.UserPriority" json:"user_priority"`
 	// Indicates that the transaction is mutating keys in the
 	// SystemConfig span.
@@ -144,6 +156,7 @@ func (*Session_Transaction) ProtoMessage()    {}
 
 func init() {
 	proto.RegisterType((*Session)(nil), "cockroach.sql.Session")
+	proto.RegisterType((*Session_Timestamp)(nil), "cockroach.sql.Session.Timestamp")
 	proto.RegisterType((*Session_Transaction)(nil), "cockroach.sql.Session.Transaction")
 }
 func (m *Session) Marshal() (data []byte, err error) {
@@ -204,6 +217,30 @@ func (m *Session_Offset) MarshalTo(data []byte) (int, error) {
 	i = encodeVarintSession(data, i, uint64(m.Offset))
 	return i, nil
 }
+func (m *Session_Timestamp) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Session_Timestamp) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Sec))
+	data[i] = 0x10
+	i++
+	i = encodeVarintSession(data, i, uint64(m.Nsec))
+	return i, nil
+}
+
 func (m *Session_Transaction) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -314,6 +351,14 @@ func (m *Session_Offset) Size() (n int) {
 	n += 1 + sovSession(uint64(m.Offset))
 	return n
 }
+func (m *Session_Timestamp) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovSession(uint64(m.Sec))
+	n += 1 + sovSession(uint64(m.Nsec))
+	return n
+}
+
 func (m *Session_Transaction) Size() (n int) {
 	var l int
 	_ = l
@@ -513,6 +558,94 @@ func (m *Session) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.DefaultIsolationLevel |= (cockroach_roachpb1.IsolationType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSession(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthSession
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Session_Timestamp) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSession
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Timestamp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Timestamp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sec", wireType)
+			}
+			m.Sec = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Sec |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nsec", wireType)
+			}
+			m.Nsec = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Nsec |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

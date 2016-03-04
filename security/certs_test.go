@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql/driver"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -149,20 +148,6 @@ func TestUseCerts(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected OK, got: %d", resp.StatusCode)
-	}
-
-	// Endpoint that enforces client auth (see: server/authentication_test.go)
-	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+driver.Endpoint, nil)
-	if err != nil {
-		t.Fatalf("could not create request: %v", err)
-	}
-	resp, err = httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("Expected status code %d, got: %d", http.StatusUnauthorized, resp.StatusCode)
 	}
 
 	// New client. With certs this time.

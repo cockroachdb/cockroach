@@ -35,3 +35,16 @@ func (s *Session) getLocation() (*time.Location, error) {
 		return nil, util.Errorf("unhandled timezone variant type %T", t)
 	}
 }
+
+// GoTime returns the receiver as a time.Time.
+func (t Session_Timestamp) GoTime() time.Time {
+	return time.Unix(t.Sec, int64(t.Nsec))
+}
+
+// Timestamp converts a time.Time to a timestamp.
+func Timestamp(t time.Time) Session_Timestamp {
+	return Session_Timestamp{
+		Sec:  t.Unix(),
+		Nsec: uint32(t.Nanosecond()),
+	}
+}
