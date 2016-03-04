@@ -10,23 +10,35 @@ function is_shard() {
 }
 
 function fetch_docker() {
-  local image=${1}
-  local tag=${2}
-  local name=${image}:${tag}
-  if ! docker images | grep -q "${name}"; then
-    # If there's a base image cached, load it. A click on CircleCI's "Clear
-    # Cache" will make sure we start with a clean slate.
-    imgcache="${builder_dir}/builder.${name}.tar"
-    find "${builder_dir}" -not -path "${imgcache}" -type f -delete
-    if [[ ! -e "${imgcache}" ]]; then
-      time docker pull "cockroachdb/${name}"
-      docker tag -f "cockroachdb/${name}" "cockroachdb/${image}:latest"
-      time docker save "cockroachdb/${name}" > "${imgcache}"
-    else
+  local user="$1"
+  local repo="${2}"
+  local tag="${3}"
+  local name="${user}/${repo}"
+  local ref="${name}:${tag}"
+  # TODO(tamird): uncomment when CircleCI supports `docker images --format`
+  #
+  # if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+    # If we have a saved image, load it.
+    imgcache="${builder_dir}/${user}.${repo}.tar"
+    if [[ -e "${imgcache}" ]]; then
       time docker load -i "${imgcache}"
-      docker tag -f "cockroachdb/${name}" "cockroachdb/${image}:latest"
     fi
-  fi
+
+    # TODO(tamird): uncomment when CircleCI supports `docker images --format`
+    #
+    # If we still don't have the tag we want: pull it and save it.
+    # if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+      time docker pull "${ref}"
+      time docker save -o "${imgcache}" "${ref}"
+    # fi
+  # fi
+
+
+  # TODO(tamird): uncomment when CircleCI supports `docker images --format`
+  #
+  # if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${name}:latest"; then
+    docker tag "${ref}" "${name}:latest"
+  # fi
 }
 
 # This is mildly tricky: This script runs itself recursively. The
@@ -125,16 +137,15 @@ mkdir -p "${builder_dir}"
 du -sh "${builder_dir}"
 ls -lah "${builder_dir}"
 
-# The tag for the cockroachdb/builder image. If the image is changed
-# (for example, adding "npm"), a new image should be pushed using
-# "build/builder.sh push" and the new tag value placed here.
-fetch_docker "builder" "20160218-125307"
+# If the images below are updated, the new images will not be picked up until
+# the tags listed here are updated.
+fetch_docker "cockroachdb" "builder" "20160218-125307"
 
-fetch_docker "docker-spy" "20160209-143235"
+fetch_docker "cockroachdb" "docker-spy" "20160209-143235"
 
 if is_shard 0; then
   # Dockerfile at: https://github.com/cockroachdb/postgres-test
-  fetch_docker "postgres-test" "20160203-140220"
+  fetch_docker "cockroachdb" "postgres-test" "20160203-140220"
 fi
 
 # Recursively invoke this script inside the builder docker container,
