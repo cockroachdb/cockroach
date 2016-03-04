@@ -196,13 +196,18 @@ check:
 	@returncheck $(PKG)
 	@echo "vet"
 	@! $(GO) tool vet . 2>&1 | \
-	  grep -vE '^vet: cannot process directory .git'
+	  grep -vE '^vet: cannot process directory .git' | \
+	  grep -vE '^server/admin\..*\go:.+: constant [0-9]+ not a string in call to Errorf' \
+	  # To return proper HTTP error codes (e.g. 404 Not Found), we need to use \
+	  # grpc.Errorf, which has an error code as its first parameter. 'go vet' \
+	  # doesn't like that the first parameter isn't a format string.
 	@echo "vet --shadow"
 	@! $(GO) tool vet --shadow . 2>&1 | \
-	  grep -vE '(declaration of (pE|e)rr shadows|^vet: cannot process directory \.git)'
+	  grep -vE '(declaration of (pE|e)rr shadows|^vet: cannot process directory \.git)' | \
+	  grep -vE '\.pb\.gw\.go'
 	@echo "golint"
 	@! golint $(PKG) | \
-	  grep -vE '(\.pb\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)' \
+	  grep -vE '(\.pb\.go|\.pb\.gw\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)' \
 	  # https://golang.org/pkg/database/sql/driver/#Result :(
 	@echo "varcheck"
 	@! varcheck -e $(PKG) | \

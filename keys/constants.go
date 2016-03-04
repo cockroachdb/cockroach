@@ -223,11 +223,12 @@ const (
 	DescriptorTableID = 3
 	UsersTableID      = 4
 	ZonesTableID      = 5
-	ReportingTableID  = 6
 
-	// Reserved IDs for other system tables.
+	// Reserved IDs for other system tables. If you're adding a new system table,
+	// it probably belongs here.
 	// NOTE: IDs must be <= MaxReservedDescID.
 	LeaseTableID      = 11
 	EventLogTableID   = 12
 	RangeEventTableID = 13
+	UITableID         = 14
 )

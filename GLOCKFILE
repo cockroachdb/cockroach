@@ -35,6 +35,7 @@ github.com/docker/go-units 5d2041e26a699eaca682e2ea41c8f891e1060444
 github.com/dustin/go-humanize 8929fe90cee4b2cb9deb468b51fb34eba64d1bf0
 github.com/elastic/gosigar 45c54cc6e2ef4c3edc0f887f6a43aae6efe90421
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
+github.com/gengo/grpc-gateway 6a84588ee708fe6dae875dda157230fd2071e526
 github.com/go-sql-driver/mysql 0f2db9e6c9cff80a97ca5c2c5096242cc1554e16
 github.com/gogo/protobuf f4cc07910fc38f5b6b8d6e75d7457cf504157b6c
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
