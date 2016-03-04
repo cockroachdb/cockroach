@@ -1029,11 +1029,27 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 	case *IntervalType:
 		switch d.(type) {
 		case DString:
-			// We use the Golang format for specifying duration.
-			// TODO(vivek): we might consider using the postgres format as well.
-			d, err := time.ParseDuration(string(d.(DString)))
-			return DInterval{Duration: d}, err
+			var (
+				dur time.Duration
+				err error
+				str string
+			)
 
+			str = string(d.(DString))
+
+			if str[0] == 'P' {
+				// If it has a leading P we're most likely working with an iso8601
+				// interval
+				// This only supports "format with designators"
+				dur, err = iso8601ToDuration(str)
+			} else if strings.ContainsRune(str, ' ') {
+				// If it has a space, then we're most likely a postgres string
+				dur, err = postgresToDuration(str)
+			} else {
+				// Fallback to golang durations
+				dur, err = time.ParseDuration(str)
+			}
+			return DInterval{Duration: dur}, err
 		case DInt:
 			// An integer duration represents a duration in nanoseconds.
 			return DInterval{Duration: time.Duration(d.(DInt))}, nil
