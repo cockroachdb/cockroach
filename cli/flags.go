@@ -391,5 +391,6 @@ func init() {
 
 	cobra.OnInitialize(func() {
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
+		cliContext.connectToDb = connDBName
 	})
 }

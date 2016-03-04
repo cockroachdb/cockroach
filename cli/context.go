@@ -27,6 +27,10 @@ type Context struct {
 	// statement(s) and terminate directly, without presenting a REPL to
 	// the user.
 	OneShotSQL bool
+
+	// connectToDb contains the name of the database to connect to if
+	// one is requested when starting a SQL connection.
+	connectToDb string
 }
 
 // NewContext returns a Context with default values.
