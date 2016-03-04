@@ -10,22 +10,22 @@ function is_shard() {
 }
 
 function fetch_docker() {
-  local image=${1}
-  local tag=${2}
-  local name=${image}:${tag}
-  if ! docker images | grep -q "${name}"; then
-    # If there's a base image cached, load it. A click on CircleCI's "Clear
-    # Cache" will make sure we start with a clean slate.
-    imgcache="${builder_dir}/builder.${name}.tar"
-    find "${builder_dir}" -not -path "${imgcache}" -type f -delete
+  local user="$1"
+  local repo="${2}"
+  local tag="${3}"
+  local name="${user}/${repo}"
+  local ref="${name}:${tag}"
+  if ! docker images | grep -q "${ref}"; then
+    # If the image is cached, load it. A click on CircleCI's "Clear Cache" will
+    # make sure we start with a clean slate.
+    imgcache="${builder_dir}/${user}.${repo}.${tag}.tar"
     if [[ ! -e "${imgcache}" ]]; then
-      time docker pull "${name}"
-      docker tag -f "${name}" "${image}:latest"
-      time docker save "${name}" > "${imgcache}"
+      time docker pull "${ref}"
+      time docker save "${ref}" > "${imgcache}"
     else
       time docker load -i "${imgcache}"
-      docker tag -f "${name}" "${image}:latest"
     fi
+    docker tag -f "${ref}" "${name}:latest"
   fi
 }
 
@@ -128,14 +128,16 @@ ls -lah "${builder_dir}"
 # The tag for the cockroachdb/builder image. If the image is changed
 # (for example, adding "npm"), a new image should be pushed using
 # "build/builder.sh push" and the new tag value placed here.
-fetch_docker "cockroachdb/builder" "20160304-103033"
+fetch_docker "cockroachdb" "builder" "20160304-103033"
 
-fetch_docker "cockroachdb/docker-spy" "20160209-143235"
+fetch_docker "cockroachdb" "docker-spy" "20160209-143235"
 
 if is_shard 0; then
   # Dockerfile at: https://github.com/cockroachdb/postgres-test
-  fetch_docker "cockroachdb/postgres-test" "20160203-140220"
+  fetch_docker "cockroachdb" "postgres-test" "20160203-140220"
 fi
+
+find -E "${builder_dir}" -not -regex '.*/cockroachdb\.(builder:20160304-103033|docker-spy:20160209-143235|postgres-test:20160203-140220).*' -type f -delete
 
 # Recursively invoke this script inside the builder docker container,
 # passing "docker" as the first argument.
