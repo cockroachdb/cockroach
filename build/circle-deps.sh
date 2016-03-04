@@ -15,23 +15,30 @@ function fetch_docker() {
   local tag="${3}"
   local name="${user}/${repo}"
   local ref="${name}:${tag}"
-  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+  # TODO(tamird): uncomment when CircleCI supports `docker images --format`
+  #
+  # if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
     # If we have a saved image, load it.
     imgcache="${builder_dir}/${user}.${repo}.tar"
     if [[ -e "${imgcache}" ]]; then
       time docker load -i "${imgcache}"
     fi
 
+    # TODO(tamird): uncomment when CircleCI supports `docker images --format`
+    #
     # If we still don't have the tag we want: pull it and save it.
-    if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+    # if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
       time docker pull "${ref}"
       time docker save -o "${imgcache}" "${ref}"
-    fi
-  fi
+    # fi
+  # fi
 
-  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${name}:latest"; then
+
+  # TODO(tamird): uncomment when CircleCI supports `docker images --format`
+  #
+  # if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${name}:latest"; then
     docker tag "${ref}" "${name}:latest"
-  fi
+  # fi
 }
 
 # This is mildly tricky: This script runs itself recursively. The
