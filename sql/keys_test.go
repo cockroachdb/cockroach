@@ -34,7 +34,7 @@ func TestNormalizeName(t *testing.T) {
 		{"no\u0308rmalization", "n\u00f6rmalization"}, // NFD -> NFC.
 	}
 	for _, test := range testCases {
-		s := normalizeName(test.in)
+		s := NormalizeName(test.in)
 		if test.expected != s {
 			t.Errorf("%s: expected %s, but found %s", test.in, test.expected, s)
 		}
