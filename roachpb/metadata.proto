@@ -88,9 +88,9 @@ message RangeTreeNode {
 
 // StoreCapacity contains capacity information for a storage device.
 message StoreCapacity {
-  optional int64 Capacity = 1 [(gogoproto.nullable) = false];
-  optional int64 Available = 2 [(gogoproto.nullable) = false];
-  optional int32 RangeCount = 3 [(gogoproto.nullable) = false];
+  optional int64 capacity = 1 [(gogoproto.nullable) = false];
+  optional int64 available = 2 [(gogoproto.nullable) = false];
+  optional int32 range_count = 3 [(gogoproto.nullable) = false];
 }
 
 // NodeDescriptor holds details on node physical/network topology.

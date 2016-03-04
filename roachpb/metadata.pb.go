@@ -92,9 +92,9 @@ func (*RangeTreeNode) ProtoMessage()    {}
 
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
-	Capacity   int64 `protobuf:"varint,1,opt,name=Capacity" json:"Capacity"`
-	Available  int64 `protobuf:"varint,2,opt,name=Available" json:"Available"`
-	RangeCount int32 `protobuf:"varint,3,opt,name=RangeCount" json:"RangeCount"`
+	Capacity   int64 `protobuf:"varint,1,opt,name=capacity" json:"capacity"`
+	Available  int64 `protobuf:"varint,2,opt,name=available" json:"available"`
+	RangeCount int32 `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
 }
 
 func (m *StoreCapacity) Reset()         { *m = StoreCapacity{} }
