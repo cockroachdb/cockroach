@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -141,9 +142,11 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	if !*flagRemote {
 		logDir := *flagLogDir
 		if logDir != "" {
-			if _, _, fun := caller.Lookup(1); fun != "" {
-				logDir = filepath.Join(logDir, fun)
+			_, _, fun := caller.Lookup(3)
+			if ok, _ := regexp.MatchString("^(Test|Benchmark)", fun); !ok {
+				t.Fatalf("invalid caller %s; want TestX -> runTestOnConfigs -> func()", fun)
 			}
+			logDir = filepath.Join(logDir, fun)
 		}
 		l := cluster.CreateLocal(cfg, logDir, stopper)
 		l.Start()
