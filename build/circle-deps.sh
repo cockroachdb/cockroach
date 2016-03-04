@@ -139,7 +139,7 @@ ls -lah "${builder_dir}"
 
 # If the images below are updated, the new images will not be picked up until
 # the tags listed here are updated.
-fetch_docker "cockroachdb" "builder" "20160218-125307"
+fetch_docker "cockroachdb" "builder" "20160304-103033"
 
 fetch_docker "cockroachdb" "docker-spy" "20160209-143235"
 
