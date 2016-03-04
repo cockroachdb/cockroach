@@ -15,18 +15,22 @@ function fetch_docker() {
   local tag="${3}"
   local name="${user}/${repo}"
   local ref="${name}:${tag}"
-  if ! docker images | grep -q "${ref}"; then
-    # If the image is cached, load it. A click on CircleCI's "Clear Cache" will
-    # make sure we start with a clean slate.
-    imgcache="${builder_dir}/${user}.${repo}.${tag}.tar"
-    find "${builder_dir}" -not -path "${imgcache}" -type f -delete
-    if [[ ! -e "${imgcache}" ]]; then
-      time docker pull "${ref}"
-      time docker save "${ref}" > "${imgcache}"
-    else
+  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+    # If we have a saved image, load it.
+    imgcache="${builder_dir}/${user}.${repo}.tar"
+    if [[ -e "${imgcache}" ]]; then
       time docker load -i "${imgcache}"
     fi
-    docker tag -f "${ref}" "${name}:latest"
+
+    # If we still don't have the tag we want: pull it and save it.
+    if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+      time docker pull "${ref}"
+      time docker save -o "${imgcache}" "${ref}"
+    fi
+  fi
+
+  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${name}:latest"; then
+    docker tag "${ref}" "${name}:latest"
   fi
 }
 
