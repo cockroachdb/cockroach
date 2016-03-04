@@ -18,8 +18,6 @@ package cli
 
 import (
 	"bytes"
-	"database/sql/driver"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -110,23 +108,6 @@ SET
 +----------+------------+----+
 `
 	if a, e := b.String(), expected[1:]; a != e {
-		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
-	}
-	b.Reset()
-
-	// Test custom formatting.
-	newFormat := func(val driver.Value) string {
-		return fmt.Sprintf("--> %s <--", val)
-	}
-
-	_, rows, _, err = runQueryWithFormat(conn, fmtMap{"name": newFormat},
-		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected = `[1 --> descriptor <-- 3]`
-	if a, e := fmt.Sprint(rows[0]), expected; a != e {
 		t.Fatalf("expected output:\n%s\ngot:\n%s", e, a)
 	}
 	b.Reset()
