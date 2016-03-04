@@ -251,7 +251,7 @@ func (ctx *Context) AdminURL() string {
 }
 
 // PGURL returns the URL for the postgres endpoint.
-func (ctx *Context) PGURL(user string) string {
+func (ctx *Context) PGURL(user string) *url.URL {
 	// Try to convert path to an absolute path. Failing to do so return path
 	// unchanged.
 	absPath := func(path string) string {
@@ -271,13 +271,12 @@ func (ctx *Context) PGURL(user string) string {
 		options.Add("sslkey", absPath(security.ClientKeyPath(ctx.Certs, user)))
 		options.Add("sslrootcert", absPath(security.CACertPath(ctx.Certs)))
 	}
-	pgURL := url.URL{
+	return &url.URL{
 		Scheme:   "postgresql",
 		User:     url.User(user),
 		Host:     ctx.Addr,
 		RawQuery: options.Encode(),
 	}
-	return pgURL.String()
 }
 
 // parseGossipBootstrapResolvers parses a comma-separated list of

@@ -153,7 +153,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.Vers)
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
-	fmt.Fprintf(tw, "sql:\t%s\n", cliContext.PGURL(connUser))
+	fmt.Fprintf(tw, "sql:\t%s\n", cliContext.PGURL(connUser).String())
 	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
 	for i, spec := range cliContext.Stores.Specs {
 		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
