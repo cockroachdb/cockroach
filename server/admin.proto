@@ -1,0 +1,282 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Cuong Do (cdo@cockroachlabs.com)
+
+syntax = "proto3";
+package cockroach.server;
+option go_package = "server";
+
+import "google/api/annotations.proto";
+
+// DatabasesRequest requests a list of databases.
+message DatabasesRequest {
+}
+
+// DatabasesResponse contains a list of databases.
+message DatabasesResponse {
+  repeated string databases = 1;
+}
+
+// DatabaseDetailsRequest requests detailed information about the specified
+// database
+message DatabaseDetailsRequest {
+  // database is the name of the database we are querying.
+  string database = 1;
+}
+
+// DatabaseDetailsResponse contains grant information and table names for a
+// database.
+message DatabaseDetailsResponse {
+  message Grant {
+    // user is the user that this grant applies to.
+    string user = 1;
+
+    // privileges are the abilities this grant gives to the user.
+    repeated string privileges = 2;
+  }
+
+  // grants are the results of SHOW GRANTS for this database.
+  repeated Grant grants = 1;
+
+  // table_names contains the names of all tables (SHOW TABLES) in this
+  // database.
+  repeated string table_names = 2;
+}
+
+// TableDetailsRequest is a request for detailed information about a table.
+message TableDetailsRequest {
+  // database is the database that contains the table we're interested in.
+  string database = 1;
+
+  // table is the name of the table that we're querying.
+  string table = 2;
+}
+
+// TableDetailsResponse contains grants, column names, and indexes for
+// a table.
+message TableDetailsResponse {
+  // Grant is an entry from SHOW GRANTS.
+  message Grant {
+    // user is the user that this grant applies to.
+    string user = 1;
+
+    // privileges are the abilities this grant gives to the user.
+    repeated string privileges = 2;
+  }
+
+  message Column {
+    // name is the name of the column.
+    string name = 1;
+
+    // type is the SQL type (INT, STRING, etc.) of this column.
+    string type = 2;
+
+    // nullable is whether this column can contain NULL.
+    bool nullable = 3;
+
+    // default is the default value of this column.
+    string default = 4;
+  }
+
+  message Index {
+    // name is the name of this index.
+    string name = 1;
+
+    // unique is whether this a unique index (i.e. CREATE UNIQUE INDEX).
+    bool unique = 2;
+
+    // seq is an internal variable that's passed along.
+    int64 seq = 3;
+
+    // column is the column that this index indexes.
+    string column = 4;
+
+    // direction is either "ASC" (ascending) or "DESC" (descending).
+    string direction = 5;
+
+    // storing is an internal variable that's passed along.
+    bool storing = 6;
+  }
+
+  repeated Grant grants = 1;
+  repeated Column columns = 2;
+  repeated Index indexes = 3;
+}
+
+// UsersRequest requests a list of users.
+message UsersRequest {
+}
+
+// UsersResponse returns a list of users.
+message UsersResponse {
+  // User is a CockroachDB user.
+  message User {
+    string username = 1;
+  }
+
+  // usernames is a list of users for the CockroachDB cluster.
+  repeated User users = 1;
+}
+
+// EventsRequest is a request for event log entries, optionally filtered
+// by the specified event type and/or target_id.
+message EventsRequest {
+  string type = 1;
+  int64 target_id = 2;
+}
+
+// EventsResponse contains a set of event log entries. This is always limited
+// to the latest N entries (N is enforced in the associated endpoint).
+message EventsResponse {
+  message Event {
+    // Timestamp is embedded in each place it's used, because proto3 defines a
+    // built-in Timestamp message that we can't use, because gogoprotobuf
+    // doesn't support all proto3 protobuf types yet. See gogoprotobuf issue
+    // #113.
+    message Timestamp {
+      // The time in seconds since, January 1, 1970 UTC (Unix time).
+      int64 sec = 1;
+      // nsec specifies a non-negative nanosecond offset within sec.
+      // It must be in the range [0, 999999999].
+      uint32 nsec = 2;
+    }
+
+    // timestamp is the time at which the event occurred.
+    Timestamp timestamp = 1;
+
+    // event_type is the type of the event (e.g. "create_table", "drop_table".
+    string event_type = 2;
+
+    // target_id is the target for this event.
+    int64 target_id = 3;
+
+    // reporting_id is the reporting ID for this event.
+    int64 reporting_id = 4;
+
+    // info has more detailed information for the event. The contents vary
+    // depending on the vent.
+    string info = 5;
+
+    // unique_id is a unique identifier for this event.
+    bytes unique_id = 6;
+  }
+
+  repeated Event events = 1;
+}
+
+// SetUIDataRequest stores a value in the system.ui table with the given key
+// and value.
+message SetUIDataRequest {
+  // key identifies the key to set.
+  string key = 1;
+
+  // value identifies the value to store with the key.
+  bytes value = 2;
+}
+
+// SetUIDataResponse is currently an empty response.
+message SetUIDataResponse {
+}
+
+// GETUIDataRequest requests the value of the given key from the system.ui
+// table.
+message GetUIDataRequest {
+  string key = 1;
+}
+
+// GetUIDataResponse contains the requested value and the time at which
+// the value was last updated.
+message GetUIDataResponse {
+  // Timestamp is embedded in each place it's used, because proto3 defines a
+  // built-in Timestamp message that we can't use, because gogoprotobuf doesn't
+  // support all proto3 protobuf types yet. See gogoprotobuf issue #113.
+  message Timestamp {
+    // The time in seconds since, January 1, 1970 UTC (Unix time).
+    int64 sec = 1;
+    // nsec specifies a non-negative nanosecond offset within sec.
+    // It must be in the range [0, 999999999].
+    uint32 nsec = 2;
+  }
+
+  // value is the value of the requested key.
+  bytes value = 1;
+
+  // last_updated is the time at which the value was last updated.
+  Timestamp last_updated = 2;
+}
+
+// Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
+// REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
+service Admin {
+  // URL: /_admin/v1/databases
+  rpc Users(UsersRequest) returns (UsersResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/users"
+    };
+  }
+
+  // URL: /_admin/v1/databases
+  rpc Databases(DatabasesRequest) returns (DatabasesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases"
+    };
+  }
+
+  // Example URL: /_admin/v1/databases/system
+  rpc DatabaseDetails(DatabaseDetailsRequest) returns (DatabaseDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases/{database}"
+    };
+  }
+
+  // Example URL: /_admin/v1/databases/system/tables/ui
+  rpc TableDetails(TableDetailsRequest) returns (TableDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databases/{database}/tables/{table}"
+    };
+  }
+
+  // Example URLs:
+  // - /_admin/v1/events?type=create_table
+  // - /_admin/v1/events?type=drop_table&target_id=4
+  // - /_admin/v1/events
+  rpc Events(EventsRequest) returns (EventsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/events"
+    };
+  }
+
+  // This requires a POST. Because of the libraries we're using, the POST body
+  // must be in the following format:
+  //
+  // {"key": "KEY GOES HERE", "value": "BASE64-ENCODED VALUE GOES HERE"}
+  //
+  // Note that "key" and "value" are both quoted strings. value must be base64-
+  // encoded, because it may be binary. All of these JSON style decisions
+  // have been forced by the underlying libraries.
+  rpc SetUIData(SetUIDataRequest) returns (SetUIDataResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/uidata"
+      body: "*"
+    };
+  }
+
+  // Example URL: /_admin/v1/uidata?key=MYKEY
+  rpc GetUIData(GetUIDataRequest) returns (GetUIDataResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/uidata"
+    };
+  }
+}

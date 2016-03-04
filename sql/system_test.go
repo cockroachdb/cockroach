@@ -29,7 +29,7 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nonSystemDesc = 1
+	const nonSystemDesc = 2
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 

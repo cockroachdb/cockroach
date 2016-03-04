@@ -641,9 +641,16 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
 		expKeys := make([]roachpb.Key, 0, maxTableID+2)
-		expKeys = append(expKeys,
-			testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxSystemConfigDescID+1)),
-		)
+		// It may take a while for all these keys to appear, because the event and
+		// range log tables (two of these keys) are created after cluster
+		// bootstrapping.
+		const numReservedTables = 4
+		for i := 1; i <= numReservedTables; i++ {
+			expKeys = append(expKeys,
+				testutils.MakeKey(keys.Meta2Prefix,
+					keys.MakeTablePrefix(keys.MaxSystemConfigDescID+uint32(i))),
+			)
+		}
 		for i := 1; i <= maxTableID; i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),
