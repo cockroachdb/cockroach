@@ -76,7 +76,7 @@ const strLog10 = "2.302585092994045684017991454684364207601101488628772976033327
 
 // Cbrt uses a quadratic polynomial that approximates the cube root
 // of x when 0.125 <= x <= 1. This approximation is the starting point
-// of the convergence loop. Coeficients are from:
+// of the convergence loop. Coefficients are from:
 // https://people.freebsd.org/~lstewart/references/apple_tr_kt32_cuberoot.pdf
 
 const strCbrtC1 = "-0.46946116"

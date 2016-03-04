@@ -271,38 +271,39 @@ func Cbrt(z, x *inf.Dec, s inf.Scale) *inf.Dec {
 	}
 
 	z.Set(x)
-	ex := 0
+	exp8 := 0
 
 	// Follow Ken Turkowski paper:
 	// https://people.freebsd.org/~lstewart/references/apple_tr_kt32_cuberoot.pdf
 	//
 	// Computing the cube root of any number is reduced to computing
-	// the cube root of a number between 0.125 and 1.
+	// the cube root of a number between 0.125 and 1. After the next loops,
+	// x = z * 8^exp8 will hold.
 	for z.Cmp(decimalOneEighth) < 0 {
-		ex--
+		exp8--
 		z.Mul(z, decimalEight)
 	}
 
 	for z.Cmp(decimalOne) > 0 {
-		ex++
+		exp8++
 		z.Mul(z, decimalOneEighth)
 	}
 
-	// Use this polynomial to approximates the cube root between 0.125 and 1.
+	// Use this polynomial to approximate the cube root between 0.125 and 1.
 	// z = (-0.46946116 * z + 1.072302) * z + 0.3812513
+	// It will serve as an initial estimate, hence the precision of this
+	// computation may only impact performance, not correctness.
 	z0 := new(inf.Dec).Set(z)
 	z.Mul(z, decimalCbrtC1)
 	z.Add(z, decimalCbrtC2)
 	z.Mul(z, z0)
 	z.Add(z, decimalCbrtC3)
 
-	for ex < 0 {
-		ex++
+	for ; exp8 < 0; exp8++ {
 		z.Mul(z, decimalHalf)
 	}
 
-	for ex > 0 {
-		ex--
+	for ; exp8 > 0; exp8-- {
 		z.Mul(z, decimalTwo)
 	}
 
