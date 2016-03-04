@@ -139,3 +139,11 @@ user testuser
 
 statement ok
 DROP DATABASE a
+
+user root
+
+statement ok
+SET DATABASE = system
+
+statement error system database is read-only
+create table test(a int, b string)
