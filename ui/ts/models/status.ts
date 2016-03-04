@@ -129,7 +129,17 @@ module Models {
       private _data: Utils.QueryCache<Proto.NodeStatus[]> = new Utils.QueryCache((): promise<Proto.NodeStatus[]> => {
         return Utils.Http.Get("/_status/nodes/")
           .then((results: NodeStatusResponseSet) => {
-            return results.d;
+            let statuses = results.d;
+            statuses.forEach((ns: Proto.NodeStatus) => {
+              // store_ids will be null if the associated node has no
+              // bootstrapped stores; this causes significant null-handling
+              // problems in code. Convert "null" or "undefined" to an empty
+              // array.
+              if (!_.isArray(ns.store_ids)) {
+                ns.store_ids = [];
+              }
+            });
+            return statuses;
           });
       });
 

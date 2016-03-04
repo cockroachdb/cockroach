@@ -20,7 +20,6 @@ package server
 import (
 	"compress/gzip"
 	"crypto/tls"
-	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -28,7 +27,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/net/http2"
 
@@ -40,7 +38,6 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	crpc "github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
@@ -313,7 +310,7 @@ func (s *Server) Start() error {
 	s.tsDB.PollSource(s.recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
 
 	// Begin recording status summaries.
-	s.startWriteSummaries()
+	s.node.startWriteSummaries(s.ctx.MetricsFrequency)
 
 	s.sqlServer.SetNodeID(s.node.Descriptor.NodeID)
 	// Create and start the schema change manager only after a NodeID
@@ -350,61 +347,6 @@ func (s *Server) initHTTP() {
 	// The SQL endpoints handles its own authentication, verifying user
 	// credentials against the requested user.
 	s.mux.Handle(driver.Endpoint, s.sqlServer)
-}
-
-// startWriteSummaries begins periodically persisting status summaries for the
-// node and its stores.
-func (s *Server) startWriteSummaries() {
-	s.stopper.RunWorker(func() {
-		ticker := time.NewTicker(s.ctx.MetricsFrequency)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				s.stopper.RunTask(func() {
-					if err := s.writeSummaries(); err != nil {
-						log.Error(err)
-					}
-				})
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		}
-	})
-}
-
-// writeSummaries retrieves status summaries from the supplied
-// NodeStatusRecorder and persists them to the cockroach data store.
-func (s *Server) writeSummaries() error {
-	nodeStatus, storeStatuses := s.recorder.GetStatusSummaries()
-	if nodeStatus != nil {
-		key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
-		if pErr := s.db.Put(key, nodeStatus); pErr != nil {
-			return pErr.GoError()
-		}
-		if log.V(1) {
-			statusJSON, err := json.Marshal(nodeStatus)
-			if err != nil {
-				log.Errorf("error marshaling nodeStatus to json: %s", err)
-			}
-			log.Infof("node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
-		}
-	}
-
-	for _, ss := range storeStatuses {
-		key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
-		if pErr := s.db.Put(key, &ss); pErr != nil {
-			return pErr.GoError()
-		}
-		if log.V(1) {
-			statusJSON, err := json.Marshal(&ss)
-			if err != nil {
-				log.Errorf("error marshaling storeStatus to json: %s", err)
-			}
-			log.Infof("store %d status: %s", ss.Desc.StoreID, statusJSON)
-		}
-	}
-	return nil
 }
 
 // Stop stops the server.

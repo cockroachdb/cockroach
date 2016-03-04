@@ -70,6 +70,8 @@ type poller struct {
 // time series data from the DataSource and store it.
 func (p *poller) start() {
 	p.stopper.RunWorker(func() {
+		// Poll once immediately.
+		p.poll()
 		ticker := time.NewTicker(p.frequency)
 		defer ticker.Stop()
 		for {

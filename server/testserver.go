@@ -321,7 +321,7 @@ func (ts *TestServer) SetRangeRetryOptions(ro retry.Options) {
 // WriteSummaries records summaries of time-series data, which is required for any tests
 // that query server stats.
 func (ts *TestServer) WriteSummaries() error {
-	return ts.Server.writeSummaries()
+	return ts.node.writeSummaries()
 }
 
 // MustGetSQLCounter returns the value of a counter metric from the server's SQL
