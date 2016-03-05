@@ -52,6 +52,7 @@ type CommandQueue struct {
 	cache     *cache.IntervalCache
 	idAlloc   int64
 	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait.
+	oHeap     overlapHeap         // avoid allocating in GetWait.
 }
 
 type cmd struct {
@@ -160,10 +161,11 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		//                |      |    |            |           |
 		// cmd 5 [W]:   ====================     ====================
 		//
-		overlapHeap := overlapHeap(overlaps)
-		heap.Init(&overlapHeap)
-		for enclosed := false; overlapHeap.Len() > 0 && !enclosed; {
-			o := heap.Pop(&overlapHeap).(cache.Overlap)
+		cq.oHeap.s = overlaps
+		heap.Init(&cq.oHeap)
+		for enclosed := false; cq.oHeap.Len() > 0 && !enclosed; {
+			heap.Pop(&cq.oHeap)
+			o := cq.oHeap.lastPopped
 			keyRange, cmd := o.Key.Range, o.Value.(*cmd)
 			if cmd.readOnly {
 				// If the current overlap is a read (meaning we're a write because other reads will
@@ -247,23 +249,27 @@ func filterReadWrite(cmds []cache.Overlap) []cache.Overlap {
 
 // overlapHeap is a max-heap of cache.Overlaps, sorting the elements
 // in decreasing Value.(*cmd).ID order.
-type overlapHeap []cache.Overlap
-
-func (o overlapHeap) Len() int { return len(o) }
-func (o overlapHeap) Less(i, j int) bool {
-	return o[i].Value.(*cmd).ID > o[j].Value.(*cmd).ID
+type overlapHeap struct {
+	s          []cache.Overlap
+	lastPopped cache.Overlap
 }
-func (o overlapHeap) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+func (o overlapHeap) Len() int { return len(o.s) }
+func (o overlapHeap) Less(i, j int) bool {
+	return o.s[i].Value.(*cmd).ID > o.s[j].Value.(*cmd).ID
+}
+func (o overlapHeap) Swap(i, j int) { o.s[i], o.s[j] = o.s[j], o.s[i] }
 
 func (o *overlapHeap) Push(x interface{}) {
-	*o = append(*o, x.(cache.Overlap))
+	o.s = append(o.s, x.(cache.Overlap))
 }
 
 func (o *overlapHeap) Pop() interface{} {
-	n := len(*o) - 1
-	x := (*o)[n]
-	*o = (*o)[0:n]
-	return x
+	n := len(o.s) - 1
+	x := (o.s)[n]
+	o.s = (o.s)[0:n]
+	o.lastPopped = x
+	return nil
 }
 
 // Add adds commands to the queue which affect the specified key ranges. Ranges
