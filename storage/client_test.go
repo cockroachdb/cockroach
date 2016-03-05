@@ -106,7 +106,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
 		sp := sCtx.Tracer.StartSpan("rpc send")
 		defer sp.Finish()
-		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
+		ctx := opentracing.ContextWithSpan(context.Background(), sp)
 		br, pErr := stores.Send(ctx, ba)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
