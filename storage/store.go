@@ -275,7 +275,7 @@ type Store struct {
 
 	// Locking notes: To avoid deadlocks, the following lock order
 	// must be obeyed: processRaftMu < Store.mu.Mutex <
-	// Replica.mu.Mutex.
+	// Replica.mu.Mutex < Store.pendingRaftGroups.Mutex.
 	//
 	// Methods of Store with a "Locked" suffix require that
 	// Store.mu.Mutex be held. Other locking requirements are indicated
@@ -291,10 +291,14 @@ type Store struct {
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 
 		replicaDescCache *cache.UnorderedCache
-		// pendingRaftGroups contains the ranges that should be checked for
-		// updates. After updating this map, write to wakeRaftLoop to
-		// trigger the check.
-		pendingRaftGroups map[roachpb.RangeID]struct{}
+	}
+
+	// pendingRaftGroups contains the ranges that should be checked for
+	// updates. After updating this map, write to wakeRaftLoop to
+	// trigger the check.
+	pendingRaftGroups struct {
+		sync.Mutex
+		value map[roachpb.RangeID]struct{}
 	}
 }
 
@@ -522,7 +526,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 			return size > maxReplicaDescCacheSize
 		},
 	})
-	s.mu.pendingRaftGroups = map[roachpb.RangeID]struct{}{}
+	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
 
 	s.mu.Unlock()
 
@@ -1758,20 +1762,14 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be
 // checked for raft updates when the processRaft goroutine is idle.
-// TODO(bdarnell): reconsider the goroutine relationships here.
 func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
-	// checkRaftGroup may be called with Replica.RWMutex held. We cannot
-	// simply acquire s.Mutex; this violates lock ordering and may
-	// deadlock.
-	go func() {
-		s.mu.Lock()
-		s.mu.pendingRaftGroups[rangeID] = struct{}{}
-		s.mu.Unlock()
-		select {
-		case s.wakeRaftLoop <- struct{}{}:
-		default:
-		}
-	}()
+	s.pendingRaftGroups.Lock()
+	s.pendingRaftGroups.value[rangeID] = struct{}{}
+	s.pendingRaftGroups.Unlock()
+	select {
+	case s.wakeRaftLoop <- struct{}{}:
+	default:
+	}
 }
 
 // processRaft processes write commands that have been committed
@@ -1787,14 +1785,16 @@ func (s *Store) processRaft() {
 			var replicas []*Replica
 			s.processRaftMu.Lock()
 			s.mu.Lock()
-			if len(s.mu.pendingRaftGroups) > 0 {
-				for rangeID := range s.mu.pendingRaftGroups {
+			s.pendingRaftGroups.Lock()
+			if len(s.pendingRaftGroups.value) > 0 {
+				for rangeID := range s.pendingRaftGroups.value {
 					if r, ok := s.mu.replicas[rangeID]; ok {
 						replicas = append(replicas, r)
 					}
 				}
-				s.mu.pendingRaftGroups = map[roachpb.RangeID]struct{}{}
+				s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
 			}
+			s.pendingRaftGroups.Unlock()
 			s.mu.Unlock()
 			for _, r := range replicas {
 				if err := r.handleRaftReady(); err != nil {
@@ -1817,12 +1817,20 @@ func (s *Store) processRaft() {
 				// TODO(bdarnell): rework raft ticker.
 				s.processRaftMu.Lock()
 				s.mu.Lock()
-				for rangeID, r := range s.mu.replicas {
+				for _, r := range s.mu.replicas {
 					if err := r.tick(); err != nil {
 						log.Error(err)
 					}
-					s.mu.pendingRaftGroups[rangeID] = struct{}{}
 				}
+				// Enqueue all ranges for readiness checks. Note that we
+				// could not hold the pendingRaftGroups lock during the
+				// previous loop because of lock ordering constraints with
+				// r.tick().
+				s.pendingRaftGroups.Lock()
+				for rangeID := range s.mu.replicas {
+					s.pendingRaftGroups.value[rangeID] = struct{}{}
+				}
+				s.pendingRaftGroups.Unlock()
 				s.mu.Unlock()
 				s.processRaftMu.Unlock()
 
