@@ -670,7 +670,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 			}
 		}
 		defer sp.Finish()
-		ctx, _ := opentracing.ContextWithSpan((*Node)(n).context(), sp)
+		ctx := opentracing.ContextWithSpan((*Node)(n).context(), sp)
 
 		tStart := time.Now()
 		var pErr *roachpb.Error

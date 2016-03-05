@@ -72,6 +72,7 @@ var newTracer = func() opentracing.Tracer {
 	opts := basictracer.DefaultOptions()
 	opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
 	opts.NewSpanEventListener = basictracer.NetTraceIntegrator
+	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
 	return basictracer.NewWithOptions(opts)
 }
 
