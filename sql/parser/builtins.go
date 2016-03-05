@@ -1583,7 +1583,7 @@ var uniqueIntState struct {
 	timestamp uint64
 }
 
-var uniqueIDEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 
 func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	// Unique ints are composed of the current time at a 10-microsecond
@@ -1602,7 +1602,12 @@ func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	const precision = uint64(10 * time.Microsecond)
 	const nodeIDBits = 15
 
-	id := uint64(time.Now().UnixNano()-uniqueIDEpoch) / precision
+	nowNanos := time.Now().UnixNano()
+	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
+	if nowNanos < uniqueIntEpoch {
+		nowNanos = uniqueIntEpoch
+	}
+	id := uint64(nowNanos-uniqueIntEpoch) / precision
 
 	uniqueIntState.Lock()
 	if id <= uniqueIntState.timestamp {
@@ -1611,6 +1616,8 @@ func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	uniqueIntState.timestamp = id
 	uniqueIntState.Unlock()
 
-	id = (id << nodeIDBits) | uint64(nodeID)
+	// We xor in the nodeID so that nodeIDs larger than 32K will flip bits in the
+	// timestamp portion of the final value instead of always setting them.
+	id = (id << nodeIDBits) ^ uint64(nodeID)
 	return DInt(id)
 }
