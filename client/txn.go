@@ -53,7 +53,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		ba.UserPriority = ts.UserPriority
 	}
 
-	ctx, _ = opentracing.ContextWithSpan(ctx, ts.Trace)
+	ctx = opentracing.ContextWithSpan(ctx, ts.Trace)
 
 	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)

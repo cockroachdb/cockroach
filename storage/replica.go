@@ -1875,7 +1875,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	defer cleanupSp()
 
-	ctx, _ = opentracing.ContextWithSpan(ctx, nil) // we're doing async stuff below; those need new traces
+	ctx = opentracing.ContextWithSpan(ctx, nil) // we're doing async stuff below; those need new traces
 	sp.LogEvent(fmt.Sprintf("resolving intents [wait=%t]", wait))
 
 	var reqsRemote []roachpb.Request
@@ -1920,7 +1920,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			// Trace this under the ID of the intent owner.
 			sp := r.store.Tracer().StartSpan("resolve intents")
 			defer sp.Finish()
-			ctx, _ = opentracing.ContextWithSpan(ctx, sp)
+			ctx = opentracing.ContextWithSpan(ctx, sp)
 			// Always operate with a timeout when resolving intents: this
 			// prevents rare shutdown timeouts in tests.
 			ctxWithTimeout, cancel := context.WithTimeout(ctx, rpc.DefaultRPCTimeout)

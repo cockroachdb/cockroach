@@ -53,6 +53,14 @@ static const int kEnumStringerFieldNumber = 62022;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::EnumOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
   enum_stringer;
+static const int kEnumCustomnameFieldNumber = 62023;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::EnumOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  enum_customname;
+static const int kEnumvalueCustomnameFieldNumber = 66001;
+extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::EnumValueOptions,
+    ::google::protobuf::internal::StringTypeTraits, 9, false >
+  enumvalue_customname;
 static const int kGoprotoGettersAllFieldNumber = 63001;
 extern ::google::protobuf::internal::ExtensionIdentifier< ::google::protobuf::FileOptions,
     ::google::protobuf::internal::PrimitiveTypeTraits< bool >, 8, false >
