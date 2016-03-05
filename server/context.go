@@ -26,9 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudfoundry/gosigar"
-	"github.com/dustin/go-humanize"
-
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -37,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
 )
 
 // Context defaults.
@@ -127,7 +126,7 @@ type Context struct {
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
 func GetTotalMemory() (uint64, error) {
-	mem := sigar.Mem{}
+	mem := gosigar.Mem{}
 	if err := mem.Get(); err != nil {
 		return 0, err
 	}
@@ -203,7 +202,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, spec.SizeInBytes, stopper))
 		} else {
 			if spec.SizePercent > 0 {
-				fileSystemUsage := sigar.FileSystemUsage{}
+				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
 					return err
 				}

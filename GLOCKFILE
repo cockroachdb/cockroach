@@ -19,7 +19,7 @@ github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 3b4c041f52c224ee4a44f5c8b150d003a40643a0
 github.com/chzyer/readline e9e6c35b06f2397adec3a6a5dfa89969d706b9fc
 github.com/client9/misspell c9127cb48d96739b0712cff253d86f05d1f431b1
-github.com/cloudfoundry/gosigar 3ed7c74352dae6dc00bdc8c74045375352e3ec05
+github.com/elastic/gosigar 45c54cc6e2ef4c3edc0f887f6a43aae6efe90421
 github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb c0124c907c74b579d9d3d48eb96471bef270bc25
