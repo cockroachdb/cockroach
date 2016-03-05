@@ -130,9 +130,10 @@ mkdir -p "${builder_dir}"
 du -sh "${builder_dir}"
 ls -lah "${builder_dir}"
 
-# If the images below are updated, the new images will not be picked up until
-# the tags listed here are updated.
-fetch_docker "cockroachdb" "builder" "20160304-103033"
+# If the images below are updated, the new images will not be picked
+# up until the tags listed here (or in builder.sh for the builder
+# image) are updated.
+fetch_docker "cockroachdb" "builder" $($(dirname $0)/builder.sh version)
 
 fetch_docker "cockroachdb" "docker-spy" "20160209-143235"
 
