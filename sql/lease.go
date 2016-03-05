@@ -152,14 +152,12 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		}
 		return nil
 	})
-	// TODO(kaneda): Call roachpb.NewError(pErr.GoError()) to pass
-	// an error from the inner txn to the outer txn?
-	return lease, pErr
+	return lease, roachpb.NewError(pErr.GoError())
 }
 
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
-	return s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
 		p.user = security.RootUser
@@ -174,7 +172,8 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 			return roachpb.NewErrorf("%s: expected 1 result, found %d", deleteLease, count)
 		}
 		return nil
-	}).GoError()
+	})
+	return pErr.GoError()
 }
 
 // waitForOneVersion returns once there are no unexpired leases on the

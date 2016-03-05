@@ -149,7 +149,7 @@ func (sc *SchemaChanger) findTableWithLease(txn *client.Txn, lease TableDescript
 // ReleaseLease the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) error {
-	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		tableDesc, pErr := sc.findTableWithLease(txn, lease)
 		if pErr != nil {
 			return pErr
@@ -157,7 +157,8 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) e
 		tableDesc.Lease = nil
 		txn.SetSystemConfigTrigger()
 		return txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
-	}).GoError()
+	})
+	return pErr.GoError()
 }
 
 // ExtendLease for the current leaser.
