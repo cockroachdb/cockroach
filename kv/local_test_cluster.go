@@ -87,7 +87,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		}
 		sp := tracer.StartSpan("node")
 		defer sp.Finish()
-		ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
+		ctx := opentracing.ContextWithSpan(context.Background(), sp)
 		sp.LogEvent(args.String())
 		br, pErr := ltc.stores.Send(ctx, args)
 		if br == nil {

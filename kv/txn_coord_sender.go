@@ -334,7 +334,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 	// This is the earliest point at which the request has an ID (if
 	// applicable). Begin a Trace which follows this request.
-	ctx, _ = opentracing.ContextWithSpan(ctx, sp)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
@@ -592,7 +592,7 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 		// goroutine gets a chance to start.
 		return
 	}
-	ctx, _ := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
