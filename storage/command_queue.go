@@ -52,6 +52,7 @@ type CommandQueue struct {
 	cache     *cache.IntervalCache
 	idAlloc   int64
 	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait.
+	oHeap     overlapHeap         // avoid allocating in GetWait.
 }
 
 type cmd struct {
@@ -160,10 +161,9 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		//                |      |    |            |           |
 		// cmd 5 [W]:   ====================     ====================
 		//
-		overlapHeap := overlapHeap(overlaps)
-		heap.Init(&overlapHeap)
-		for enclosed := false; overlapHeap.Len() > 0 && !enclosed; {
-			o := heap.Pop(&overlapHeap).(cache.Overlap)
+		cq.oHeap.Init(overlaps)
+		for enclosed := false; cq.oHeap.Len() > 0 && !enclosed; {
+			o := cq.oHeap.PopOverlap()
 			keyRange, cmd := o.Key.Range, o.Value.(*cmd)
 			if cmd.readOnly {
 				// If the current overlap is a read (meaning we're a write because other reads will
@@ -223,6 +223,9 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			}
 		}
 
+		// Clear heap to avoid leaking anything it is currently storing.
+		cq.oHeap.Clear()
+
 		// Clear the RangeGroups so that they can be used again. This is an alternative
 		// to using local variables that must be allocated in every iteration.
 		cq.wRg.Clear()
@@ -261,9 +264,23 @@ func (o *overlapHeap) Push(x interface{}) {
 
 func (o *overlapHeap) Pop() interface{} {
 	n := len(*o) - 1
-	x := (*o)[n]
+	x := &(*o)[n]
 	*o = (*o)[0:n]
 	return x
+}
+
+func (o *overlapHeap) Init(overlaps []cache.Overlap) {
+	*o = overlaps
+	heap.Init(o)
+}
+
+func (o *overlapHeap) Clear() {
+	*o = nil
+}
+
+func (o *overlapHeap) PopOverlap() cache.Overlap {
+	x := heap.Pop(o)
+	return *x.(*cache.Overlap)
 }
 
 // Add adds commands to the queue which affect the specified key ranges. Ranges
