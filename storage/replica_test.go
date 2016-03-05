@@ -4005,3 +4005,52 @@ func TestGCIncorrectRange(t *testing.T) {
 		t.Errorf("expected value at key %s to no longer exist after GC to correct range, found value %v", key, resVal)
 	}
 }
+
+// TestReplicaCancelRaft checks that it is possible to safely abandon Raft
+// commands via a canceable context.Context.
+func TestReplicaCancelRaft(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, cancelEarly := range []bool{true, false} {
+		func() {
+			// Pick a key unlikely to be used by background processes.
+			key := []byte("acdfg")
+			ctx, cancel := context.WithCancel(context.Background())
+			TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				if !args.Header().Key.Equal(key) {
+					return nil
+				}
+				if cancelEarly {
+					return errors.New("expected client to abandon this request")
+				}
+				cancel()
+				return nil
+			}
+			defer func() { TestingCommandFilter = nil }()
+			tc := testContext{}
+			tc.Start(t)
+			defer tc.Stop()
+			if cancelEarly {
+				cancel()
+			}
+			var ba roachpb.BatchRequest
+			ba.Add(&roachpb.GetRequest{
+				Span: roachpb.Span{Key: key},
+			})
+			br, pErr := tc.rng.addWriteCmd(ctx, ba, nil /* wg */)
+			if pErr == nil {
+				if !cancelEarly {
+					// We cancelled the context while the command was already
+					// being processed, so the client had to wait for successful
+					// execution.
+					return
+				}
+				t.Fatalf("expected an error, but got successful response %+v", br)
+			}
+			// If we cancelled the context early enough, we expect to receive a
+			// corresponding error and not wait for the command.
+			if !testutils.IsPError(pErr, context.Canceled.Error()) {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
+		}()
+	}
+}
