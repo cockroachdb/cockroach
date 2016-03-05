@@ -3,7 +3,7 @@
 set -eu
 
 image="cockroachdb/builder"
-version="20160304-103033"
+version="20160305-182433"
 
 function init() {
   docker build --tag="${image}" "$(dirname $0)"
