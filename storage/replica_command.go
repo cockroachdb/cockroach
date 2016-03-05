@@ -160,6 +160,11 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	case *roachpb.LeaderLeaseRequest:
 		var resp roachpb.LeaderLeaseResponse
 		resp, err = r.LeaderLease(batch, ms, h, *tArgs)
+		if err == nil {
+			r.store.metrics.leaseRequestSuccessRate.Add(1.0)
+		} else {
+			r.store.metrics.leaseRequestErrorRate.Add(1.0)
+		}
 		reply = &resp
 	case *roachpb.ComputeChecksumRequest:
 		var resp roachpb.ComputeChecksumResponse
