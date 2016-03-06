@@ -48,6 +48,7 @@ func injectRetriableErrors(
 // txns in case of retriable errors.
 func TestTxnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/4753")
 	defer func() { storage.TestingCommandFilter = nil }()
 	server, sqlDB, _ := setup(t)
 	defer cleanup(server, sqlDB)
