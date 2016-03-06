@@ -431,7 +431,7 @@ func (ic *IntervalCache) NewKey(start, end []byte) *IntervalKey {
 // MakeKey creates a new interval key defined by start and end values.
 func (ic *IntervalCache) MakeKey(start, end []byte) IntervalKey {
 	if bytes.Compare(start, end) >= 0 {
-		panic(fmt.Sprintf("start key greater than or equal to end key %s >= %s", start, end))
+		panic(fmt.Sprintf("start key greater than or equal to end key %q >= %q", start, end))
 	}
 	return IntervalKey{
 		Range: interval.Range{
