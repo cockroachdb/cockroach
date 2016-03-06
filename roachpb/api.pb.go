@@ -958,9 +958,8 @@ type Header struct {
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
 	ReadConsistency ReadConsistencyType `protobuf:"varint,6,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
-	// trace is the active span of an OpenTracing distributed trace. It is
-	// empty if tracing the request is not desired.
-	Trace cockroach_util_tracing.WireSpan `protobuf:"bytes,7,opt,name=trace" json:"trace"`
+	// trace, if set, is the active span of an OpenTracing distributed trace.
+	Trace *cockroach_util_tracing.Span `protobuf:"bytes,7,opt,name=trace" json:"trace,omitempty"`
 }
 
 func (m *Header) Reset()         { *m = Header{} }
@@ -970,11 +969,6 @@ func (*Header) ProtoMessage()    {}
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
-//
-// The Span should contain the Key of the first request
-// in the batch. It also contains the transaction itself; individual
-// calls must not have transactions specified. The same applies to
-// the User and UserPriority fields.
 type BatchRequest struct {
 	Header   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Requests []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
@@ -3135,14 +3129,16 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x30
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ReadConsistency))
-	data[i] = 0x3a
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Trace.Size()))
-	n110, err := m.Trace.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Trace != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintApi(data, i, uint64(m.Trace.Size()))
+		n110, err := m.Trace.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n110
 	}
-	i += n110
 	return i, nil
 }
 
@@ -3983,8 +3979,10 @@ func (m *Header) Size() (n int) {
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.ReadConsistency))
-	l = m.Trace.Size()
-	n += 1 + l + sovApi(uint64(l))
+	if m.Trace != nil {
+		l = m.Trace.Size()
+		n += 1 + l + sovApi(uint64(l))
+	}
 	return n
 }
 
@@ -10846,6 +10844,9 @@ func (m *Header) Unmarshal(data []byte) error {
 			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.Trace == nil {
+				m.Trace = &cockroach_util_tracing.Span{}
 			}
 			if err := m.Trace.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err

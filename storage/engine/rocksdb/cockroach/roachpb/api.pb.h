@@ -5625,14 +5625,14 @@ class Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::ReadConsistencyType read_consistency() const;
   void set_read_consistency(::cockroach::roachpb::ReadConsistencyType value);
 
-  // optional .cockroach.util.tracing.WireSpan trace = 7;
+  // optional .cockroach.util.tracing.Span trace = 7;
   bool has_trace() const;
   void clear_trace();
   static const int kTraceFieldNumber = 7;
-  const ::cockroach::util::tracing::WireSpan& trace() const;
-  ::cockroach::util::tracing::WireSpan* mutable_trace();
-  ::cockroach::util::tracing::WireSpan* release_trace();
-  void set_allocated_trace(::cockroach::util::tracing::WireSpan* trace);
+  const ::cockroach::util::tracing::Span& trace() const;
+  ::cockroach::util::tracing::Span* mutable_trace();
+  ::cockroach::util::tracing::Span* release_trace();
+  void set_allocated_trace(::cockroach::util::tracing::Span* trace);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
@@ -5659,7 +5659,7 @@ class Header : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id_;
   double user_priority_;
   ::cockroach::roachpb::Transaction* txn_;
-  ::cockroach::util::tracing::WireSpan* trace_;
+  ::cockroach::util::tracing::Span* trace_;
   int read_consistency_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -11769,7 +11769,7 @@ inline void Header::set_read_consistency(::cockroach::roachpb::ReadConsistencyTy
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.read_consistency)
 }
 
-// optional .cockroach.util.tracing.WireSpan trace = 7;
+// optional .cockroach.util.tracing.Span trace = 7;
 inline bool Header::has_trace() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -11780,28 +11780,28 @@ inline void Header::clear_has_trace() {
   _has_bits_[0] &= ~0x00000040u;
 }
 inline void Header::clear_trace() {
-  if (trace_ != NULL) trace_->::cockroach::util::tracing::WireSpan::Clear();
+  if (trace_ != NULL) trace_->::cockroach::util::tracing::Span::Clear();
   clear_has_trace();
 }
-inline const ::cockroach::util::tracing::WireSpan& Header::trace() const {
+inline const ::cockroach::util::tracing::Span& Header::trace() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.trace)
   return trace_ != NULL ? *trace_ : *default_instance_->trace_;
 }
-inline ::cockroach::util::tracing::WireSpan* Header::mutable_trace() {
+inline ::cockroach::util::tracing::Span* Header::mutable_trace() {
   set_has_trace();
   if (trace_ == NULL) {
-    trace_ = new ::cockroach::util::tracing::WireSpan;
+    trace_ = new ::cockroach::util::tracing::Span;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.trace)
   return trace_;
 }
-inline ::cockroach::util::tracing::WireSpan* Header::release_trace() {
+inline ::cockroach::util::tracing::Span* Header::release_trace() {
   clear_has_trace();
-  ::cockroach::util::tracing::WireSpan* temp = trace_;
+  ::cockroach::util::tracing::Span* temp = trace_;
   trace_ = NULL;
   return temp;
 }
-inline void Header::set_allocated_trace(::cockroach::util::tracing::WireSpan* trace) {
+inline void Header::set_allocated_trace(::cockroach::util::tracing::Span* trace) {
   delete trace_;
   trace_ = trace;
   if (trace) {

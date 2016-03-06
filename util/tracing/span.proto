@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Tobias Schottdorf
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 syntax = "proto3";
 package cockroach.util.tracing;
@@ -20,12 +20,12 @@ option go_package = "tracing";
 
 import weak "gogoproto/gogo.proto";
 
-// A WireSpan message holds the serialized meta information of a (potentially
-// ongoing) span of a distributed trace as per the OpenTracing specification.
-// See http://opentracing.io/spec/ for details.
-message WireSpan {
-  // context is the serialized span context.
-  bytes context = 1;
-  // baggage is the serialized trace baggage.
-  bytes baggage = 2;
+// A Span message holds metadata of a (potentially ongoing) span of a
+// distributed trace as per the OpenTracing specification. See
+// http://opentracing.io/spec/ for details.
+message Span {
+  int64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  int64 span_id = 2 [(gogoproto.customname) = "SpanID"];
+  bool sampled = 3;
+  map<string, string> baggage = 4;
 }

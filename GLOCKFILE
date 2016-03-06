@@ -19,7 +19,6 @@ github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/biogo/store 3b4c041f52c224ee4a44f5c8b150d003a40643a0
 github.com/chzyer/readline 14e9df7f3c68bca64f111bab38196975d4696e2f
 github.com/client9/misspell c9127cb48d96739b0712cff253d86f05d1f431b1
-github.com/elastic/gosigar 45c54cc6e2ef4c3edc0f887f6a43aae6efe90421
 github.com/cockroachdb/c-lz4 c40aaae2fc50293eb8750b34632bc3efe813e23f
 github.com/cockroachdb/c-protobuf 4feb192131ea08dfbd7253a00868ad69cbb61b81
 github.com/cockroachdb/c-rocksdb c0124c907c74b579d9d3d48eb96471bef270bc25
@@ -34,6 +33,7 @@ github.com/docker/engine-api 12b79efa41ad2771ffb9849d698a255e2bcc4c9e
 github.com/docker/go-connections f549a9393d05688dff0992ef3efd8bbe6c628aeb
 github.com/docker/go-units 5d2041e26a699eaca682e2ea41c8f891e1060444
 github.com/dustin/go-humanize 8929fe90cee4b2cb9deb468b51fb34eba64d1bf0
+github.com/elastic/gosigar 45c54cc6e2ef4c3edc0f887f6a43aae6efe90421
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/go-sql-driver/mysql 0f2db9e6c9cff80a97ca5c2c5096242cc1554e16
 github.com/gogo/protobuf f4cc07910fc38f5b6b8d6e75d7457cf504157b6c
@@ -55,7 +55,7 @@ github.com/mibk/dupl c450df04426c2f8c35d91fb588feb88fbe328915
 github.com/olekukonko/tablewriter cca8bbc0798408af109aaaa239cbd2634846b340
 github.com/opencontainers/runc b86570a4d4a15f9fa2da9334e164b5f260552b4c
 github.com/opennota/check 2647c7f78677e5af42e988a36343bc83194b7109
-github.com/opentracing/basictracer-go e3aa2fac6d027e7d06f4948e9353c3c617c26105
+github.com/opentracing/basictracer-go bf4d751363c9a41be19a5b8b68d1ed3f8b8f8f72
 github.com/opentracing/opentracing-go 653d6d2241a086f59ae088d2b0159d880723cdaf
 github.com/rcrowley/go-metrics eeba7bd0dd01ace6e690fa833b3f22aaec29af43
 github.com/robfig/glock cb3c3ec56de988289cab7bbd284eddc04dfee6c9

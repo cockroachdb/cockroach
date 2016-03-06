@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
@@ -309,21 +310,22 @@ func (tc *TxnCoordSender) startStats() {
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	// Start new or pick up active trace and embed its trace metadata into
+	// header for use by RPC recipients. From here on, there's always an active
+	// Trace, though its overhead is small unless it's sampled.
 	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
 	defer cleanupSp()
-	// TODO(tschottdorf): real tracing should still propagate here, but the
-	// serialization is currently pretty slow and that sucks for benchmarks.
-	if sp.BaggageItem(tracing.Snowball) != "" {
-		carrier := &opentracing.SplitBinaryCarrier{
-			TracerState: ba.Trace.Context,
-			Baggage:     ba.Trace.Baggage,
-		}
-		if err := tc.tracer.Inject(sp, opentracing.SplitBinary, carrier); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		// TODO(tschottdorf): this isn't pretty; should make it better.
-		ba.Trace.Context = carrier.TracerState
-		ba.Trace.Baggage = carrier.Baggage
+	// TODO(tschottdorf): To get rid of the spurious alloc below we need to
+	// implement the carrier interface on ba.Header or make Span non-nullable,
+	// both of which force all of ba on the Heap. It's already there, so may
+	// not be a big deal, but ba should live on the stack. Also not easy to use
+	// a buffer pool here since anything that goes into the RPC layer could be
+	// used by goroutines we didn't wait for.
+	if ba.Header.Trace == nil {
+		ba.Header.Trace = &tracing.Span{}
+	}
+	if err := tc.tracer.Inject(sp, basictracer.Delegator, ba.Trace); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	if err := tc.maybeBeginTxn(&ba); err != nil {

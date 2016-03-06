@@ -610,20 +610,14 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
-  // trace is the active span of an OpenTracing distributed trace. It is
-  // empty if tracing the request is not desired.
-  optional util.tracing.WireSpan trace = 7 [(gogoproto.nullable) = false];
+  // trace, if set, is the active span of an OpenTracing distributed trace.
+  optional util.tracing.Span trace = 7;
 }
 
 
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
-//
-// The Span should contain the Key of the first request
-// in the batch. It also contains the transaction itself; individual
-// calls must not have transactions specified. The same applies to
-// the User and UserPriority fields.
 message BatchRequest {
   option (gogoproto.goproto_stringer) = false;
 
