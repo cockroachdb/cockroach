@@ -336,6 +336,8 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	g.resolverIdx = len(resolvers) - 1
 	g.resolvers = resolvers
 	g.resolversTried = map[int]struct{}{}
+	// Start new bootstrapping immediately instead of waiting for next bootstrap interval.
+	g.maybeSignalStalledLocked()
 }
 
 // GetResolvers returns a copy of the resolvers slice.

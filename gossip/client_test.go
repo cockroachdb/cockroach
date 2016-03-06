@@ -19,6 +19,7 @@ package gossip
 import (
 	"errors"
 	"math"
+	"net"
 	"testing"
 	"time"
 
@@ -359,6 +360,57 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		defer g[0].mu.Unlock()
 		if a, e := len(g[0].nodeMap), 2; a != e {
 			return util.Errorf("expected %s to contain %d nodes, got %d", g[0].nodeMap, e, a)
+		}
+		return nil
+	})
+}
+
+type testResolver struct {
+	addr  string
+	tries int
+}
+
+func (tr *testResolver) Type() string { return "tcp" }
+
+func (tr *testResolver) Addr() string { return tr.addr }
+
+func (tr *testResolver) GetAddress() (net.Addr, error) {
+	// Fail 3 times...
+	tr.tries++
+	if tr.tries < 3 {
+		return nil, errors.New("bad address")
+	}
+	return util.NewUnresolvedAddr("tcp", tr.addr), nil
+}
+
+func (tr *testResolver) IsExhausted() bool { return tr.tries > 0 }
+
+// TestClientRetryBootstrap verifies that an initial failure to connect
+// to a bootstrap host doesn't stall the bootstrapping process in the
+// absence of any additional activity. This can happen during acceptance
+// tests if the DNS can't lookup hostnames when gossip is started.
+func TestClientRetryBootstrap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	local := startGossip(1, stopper, t)
+	remote := startGossip(2, stopper, t)
+	remote.mu.Lock()
+	rAddr := remote.is.NodeAddr
+	remote.mu.Unlock()
+
+	if err := local.AddInfo("local-key", []byte("hello"), 0*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	local.SetBootstrapInterval(10 * time.Millisecond)
+	local.SetResolvers([]resolver.Resolver{&testResolver{addr: rAddr.String()}})
+	local.bootstrap()
+	local.manage()
+
+	util.SucceedsSoon(t, func() error {
+		if _, err := remote.GetInfo("local-key"); err != nil {
+			return err
 		}
 		return nil
 	})
