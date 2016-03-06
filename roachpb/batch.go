@@ -192,13 +192,12 @@ func (ba *BatchRequest) Methods() []Method {
 	return res
 }
 
-// CreateReply implements the Request interface. It's slightly different from
-// the other implementations: It creates replies for each of the contained
-// requests, wrapped in a BatchResponse.
+// CreateReply creates replies for each of the contained requests, wrapped in a
+// BatchResponse.
 func (ba *BatchRequest) CreateReply() *BatchResponse {
 	br := &BatchResponse{}
 	for _, union := range ba.Requests {
-		br.Add(union.GetInner().CreateReply())
+		br.Add(union.GetInner().createReply())
 	}
 	return br
 }
