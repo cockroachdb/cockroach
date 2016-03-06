@@ -502,11 +502,14 @@ func TestRangeLeaderLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rng.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) error {
+
+	rng.mu.Lock()
+	rng.mu.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
 	}
+	rng.mu.Unlock()
 
 	{
 		sp := tc.rng.store.Tracer().StartSpan("test")
@@ -3550,7 +3553,11 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
-	rng.proposeRaftCommandFn = proposeRaftCommandFn
+
+	rng.mu.Lock()
+	rng.mu.proposeRaftCommandFn = proposeRaftCommandFn
+	rng.mu.Unlock()
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4015,22 +4022,27 @@ func TestReplicaCancelRaft(t *testing.T) {
 			// Pick a key unlikely to be used by background processes.
 			key := []byte("acdfg")
 			ctx, cancel := context.WithCancel(context.Background())
-			TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-				if !args.Header().Key.Equal(key) {
+			if !cancelEarly {
+				defer func() { TestingCommandFilter = nil }()
+				TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+					if !args.Header().Key.Equal(key) {
+						return nil
+					}
+					cancel()
 					return nil
 				}
-				if cancelEarly {
-					return errors.New("expected client to abandon this request")
-				}
-				cancel()
-				return nil
+
 			}
-			defer func() { TestingCommandFilter = nil }()
 			tc := testContext{}
 			tc.Start(t)
 			defer tc.Stop()
 			if cancelEarly {
 				cancel()
+				tc.rng.mu.Lock()
+				tc.rng.mu.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) error {
+					return nil
+				}
+				tc.rng.mu.Unlock()
 			}
 			var ba roachpb.BatchRequest
 			ba.Add(&roachpb.GetRequest{

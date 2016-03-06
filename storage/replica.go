@@ -156,9 +156,6 @@ type Replica struct {
 	llMu         sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
 	sequence     *SequenceCache // Provides txn replay protection
 
-	// proposeRaftCommandFn can be set to mock out the propose operation.
-	proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) error
-
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex
@@ -178,6 +175,8 @@ type Replica struct {
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
 		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
+		// proposeRaftCommandFn can be set to mock out the propose operation.
+		proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) error
 	}
 }
 
@@ -1048,8 +1047,8 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 // proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
 // The replica lock must be held.
 func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
-	if r.proposeRaftCommandFn != nil {
-		return r.proposeRaftCommandFn(idKey, p.raftCmd)
+	if r.mu.proposeRaftCommandFn != nil {
+		return r.mu.proposeRaftCommandFn(idKey, p.raftCmd)
 	}
 
 	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
