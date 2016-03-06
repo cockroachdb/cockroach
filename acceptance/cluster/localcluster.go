@@ -436,7 +436,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 		cmd = append(
 			cmd,
 			"--log-dir="+dockerlogDir,
-			"--logtostderr=false",
+			"--logtostderr=true",
 			"--alsologtostderr=INFO")
 	}
 	l.createRoach(node, l.dns, l.vols, cmd...)
