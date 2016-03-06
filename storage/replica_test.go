@@ -4011,6 +4011,7 @@ func TestGCIncorrectRange(t *testing.T) {
 func TestReplicaCancelRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, cancelEarly := range []bool{true, false} {
+		done := make(chan struct{})
 		func() {
 			// Pick a key unlikely to be used by background processes.
 			key := []byte("acdfg")
@@ -4020,9 +4021,14 @@ func TestReplicaCancelRaft(t *testing.T) {
 					return nil
 				}
 				if cancelEarly {
-					return errors.New("expected client to abandon this request")
+					// If we're cancelling early enough, block here until the
+					// addWriteCmd below has returned. The test is flaky
+					// without this since the context's channel and the result
+					// channel are selected randomly in addWriteCmd.
+					<-done
+				} else {
+					cancel()
 				}
-				cancel()
 				return nil
 			}
 			defer func() { TestingCommandFilter = nil }()
@@ -4037,6 +4043,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 				Span: roachpb.Span{Key: key},
 			})
 			br, pErr := tc.rng.addWriteCmd(ctx, ba, nil /* wg */)
+			close(done)
 			if pErr == nil {
 				if !cancelEarly {
 					// We cancelled the context while the command was already
