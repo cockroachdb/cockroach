@@ -23,9 +23,10 @@ namespace tracing {
 
 namespace {
 
-const ::google::protobuf::Descriptor* WireSpan_descriptor_ = NULL;
+const ::google::protobuf::Descriptor* Span_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
-  WireSpan_reflection_ = NULL;
+  Span_reflection_ = NULL;
+const ::google::protobuf::Descriptor* Span_BaggageEntry_descriptor_ = NULL;
 
 }  // namespace
 
@@ -36,22 +37,25 @@ void protobuf_AssignDesc_cockroach_2futil_2ftracing_2fspan_2eproto() {
     ::google::protobuf::DescriptorPool::generated_pool()->FindFileByName(
       "cockroach/util/tracing/span.proto");
   GOOGLE_CHECK(file != NULL);
-  WireSpan_descriptor_ = file->message_type(0);
-  static const int WireSpan_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WireSpan, context_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WireSpan, baggage_),
+  Span_descriptor_ = file->message_type(0);
+  static const int Span_offsets_[4] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Span, trace_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Span, span_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Span, sampled_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Span, baggage_),
   };
-  WireSpan_reflection_ =
+  Span_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
-      WireSpan_descriptor_,
-      WireSpan::default_instance_,
-      WireSpan_offsets_,
+      Span_descriptor_,
+      Span::default_instance_,
+      Span_offsets_,
       -1,
       -1,
       -1,
-      sizeof(WireSpan),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WireSpan, _internal_metadata_),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(WireSpan, _is_default_instance_));
+      sizeof(Span),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Span, _internal_metadata_),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Span, _is_default_instance_));
+  Span_BaggageEntry_descriptor_ = Span_descriptor_->nested_type(0);
 }
 
 namespace {
@@ -65,14 +69,23 @@ inline void protobuf_AssignDescriptorsOnce() {
 void protobuf_RegisterTypes(const ::std::string&) {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-      WireSpan_descriptor_, &WireSpan::default_instance());
+      Span_descriptor_, &Span::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+        Span_BaggageEntry_descriptor_,
+        ::google::protobuf::internal::MapEntry<
+            ::std::string,
+            ::std::string,
+            ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+            ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+            0>::CreateDefaultInstance(
+                Span_BaggageEntry_descriptor_));
 }
 
 }  // namespace
 
 void protobuf_ShutdownFile_cockroach_2futil_2ftracing_2fspan_2eproto() {
-  delete WireSpan::default_instance_;
-  delete WireSpan_reflection_;
+  delete Span::default_instance_;
+  delete Span_reflection_;
 }
 
 void protobuf_AddDesc_cockroach_2futil_2ftracing_2fspan_2eproto() {
@@ -85,12 +98,16 @@ void protobuf_AddDesc_cockroach_2futil_2ftracing_2fspan_2eproto() {
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n!cockroach/util/tracing/span.proto\022\026coc"
     "kroach.util.tracing\032\024gogoproto/gogo.prot"
-    "o\",\n\010WireSpan\022\017\n\007context\030\001 \001(\014\022\017\n\007baggag"
-    "e\030\002 \001(\014B\tZ\007tracingX\000b\006proto3", 148);
+    "o\"\277\001\n\004Span\022\035\n\010trace_id\030\001 \001(\003B\013\342\336\037\007TraceI"
+    "D\022\033\n\007span_id\030\002 \001(\003B\n\342\336\037\006SpanID\022\017\n\007sample"
+    "d\030\003 \001(\010\022:\n\007baggage\030\004 \003(\0132).cockroach.uti"
+    "l.tracing.Span.BaggageEntry\032.\n\014BaggageEn"
+    "try\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001B\tZ\007t"
+    "racingX\000b\006proto3", 296);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/util/tracing/span.proto", &protobuf_RegisterTypes);
-  WireSpan::default_instance_ = new WireSpan();
-  WireSpan::default_instance_->InitAsDefaultInstance();
+  Span::default_instance_ = new Span();
+  Span::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2futil_2ftracing_2fspan_2eproto);
 }
 
@@ -114,109 +131,173 @@ static void MergeFromFail(int line) {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int WireSpan::kContextFieldNumber;
-const int WireSpan::kBaggageFieldNumber;
+const int Span::kTraceIdFieldNumber;
+const int Span::kSpanIdFieldNumber;
+const int Span::kSampledFieldNumber;
+const int Span::kBaggageFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
-WireSpan::WireSpan()
+Span::Span()
   : ::google::protobuf::Message(), _internal_metadata_(NULL) {
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.util.tracing.WireSpan)
+  // @@protoc_insertion_point(constructor:cockroach.util.tracing.Span)
 }
 
-void WireSpan::InitAsDefaultInstance() {
+void Span::InitAsDefaultInstance() {
   _is_default_instance_ = true;
 }
 
-WireSpan::WireSpan(const WireSpan& from)
+Span::Span(const Span& from)
   : ::google::protobuf::Message(),
     _internal_metadata_(NULL) {
   SharedCtor();
   MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.WireSpan)
+  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.Span)
 }
 
-void WireSpan::SharedCtor() {
+void Span::SharedCtor() {
     _is_default_instance_ = false;
-  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
-  context_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  baggage_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  trace_id_ = GOOGLE_LONGLONG(0);
+  span_id_ = GOOGLE_LONGLONG(0);
+  sampled_ = false;
+  baggage_.SetAssignDescriptorCallback(
+      protobuf_AssignDescriptorsOnce);
+  baggage_.SetEntryDescriptor(
+      &::cockroach::util::tracing::Span_BaggageEntry_descriptor_);
 }
 
-WireSpan::~WireSpan() {
-  // @@protoc_insertion_point(destructor:cockroach.util.tracing.WireSpan)
+Span::~Span() {
+  // @@protoc_insertion_point(destructor:cockroach.util.tracing.Span)
   SharedDtor();
 }
 
-void WireSpan::SharedDtor() {
-  context_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  baggage_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+void Span::SharedDtor() {
   if (this != default_instance_) {
   }
 }
 
-void WireSpan::SetCachedSize(int size) const {
+void Span::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const ::google::protobuf::Descriptor* WireSpan::descriptor() {
+const ::google::protobuf::Descriptor* Span::descriptor() {
   protobuf_AssignDescriptorsOnce();
-  return WireSpan_descriptor_;
+  return Span_descriptor_;
 }
 
-const WireSpan& WireSpan::default_instance() {
+const Span& Span::default_instance() {
   if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2futil_2ftracing_2fspan_2eproto();
   return *default_instance_;
 }
 
-WireSpan* WireSpan::default_instance_ = NULL;
+Span* Span::default_instance_ = NULL;
 
-WireSpan* WireSpan::New(::google::protobuf::Arena* arena) const {
-  WireSpan* n = new WireSpan;
+Span* Span::New(::google::protobuf::Arena* arena) const {
+  Span* n = new Span;
   if (arena != NULL) {
     arena->Own(n);
   }
   return n;
 }
 
-void WireSpan::Clear() {
-  context_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  baggage_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+void Span::Clear() {
+#define ZR_HELPER_(f) reinterpret_cast<char*>(\
+  &reinterpret_cast<Span*>(16)->f)
+
+#define ZR_(first, last) do {\
+  ::memset(&first, 0,\
+           ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
+} while (0)
+
+  ZR_(trace_id_, span_id_);
+  sampled_ = false;
+
+#undef ZR_HELPER_
+#undef ZR_
+
+  baggage_.Clear();
 }
 
-bool WireSpan::MergePartialFromCodedStream(
+bool Span::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.WireSpan)
+  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.Span)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional bytes context = 1;
+      // optional int64 trace_id = 1;
       case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
-                input, this->mutable_context()));
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &trace_id_)));
+
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_baggage;
+        if (input->ExpectTag(16)) goto parse_span_id;
         break;
       }
 
-      // optional bytes baggage = 2;
+      // optional int64 span_id = 2;
       case 2: {
-        if (tag == 18) {
-         parse_baggage:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
-                input, this->mutable_baggage()));
+        if (tag == 16) {
+         parse_span_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &span_id_)));
+
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(24)) goto parse_sampled;
+        break;
+      }
+
+      // optional bool sampled = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_sampled:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &sampled_)));
+
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(34)) goto parse_baggage;
+        break;
+      }
+
+      // map<string, string> baggage = 4;
+      case 4: {
+        if (tag == 34) {
+         parse_baggage:
+          DO_(input->IncrementRecursionDepth());
+         parse_loop_baggage:
+          ::google::protobuf::scoped_ptr<Span_BaggageEntry> entry(baggage_.NewEntry());
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, entry.get()));
+          (*mutable_baggage())[entry->key()] = *entry->mutable_value();
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry->key().data(), entry->key().length(),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.Span.BaggageEntry.key"));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            entry->mutable_value()->data(),
+            entry->mutable_value()->length(),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.Span.BaggageEntry.value"));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(34)) goto parse_loop_baggage;
+        input->UnsafeDecrementRecursionDepth();
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -234,68 +315,131 @@ bool WireSpan::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.WireSpan)
+  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.Span)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.WireSpan)
+  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.Span)
   return false;
 #undef DO_
 }
 
-void WireSpan::SerializeWithCachedSizes(
+void Span::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.WireSpan)
-  // optional bytes context = 1;
-  if (this->context().size() > 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      1, this->context(), output);
+  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.Span)
+  // optional int64 trace_id = 1;
+  if (this->trace_id() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->trace_id(), output);
   }
 
-  // optional bytes baggage = 2;
-  if (this->baggage().size() > 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      2, this->baggage(), output);
+  // optional int64 span_id = 2;
+  if (this->span_id() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->span_id(), output);
   }
 
-  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.WireSpan)
+  // optional bool sampled = 3;
+  if (this->sampled() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->sampled(), output);
+  }
+
+  // map<string, string> baggage = 4;
+  {
+    ::google::protobuf::scoped_ptr<Span_BaggageEntry> entry;
+    for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
+        it = this->baggage().begin();
+        it != this->baggage().end(); ++it) {
+      entry.reset(baggage_.NewEntryWrapper(it->first, it->second));
+      ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+          4, *entry, output);
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        it->first.data(), it->first.length(),
+        ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+        "cockroach.util.tracing.Span.BaggageEntry.key");
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        it->second.data(), it->second.length(),
+        ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+        "cockroach.util.tracing.Span.BaggageEntry.value");
+    }
+  }
+
+  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.Span)
 }
 
-::google::protobuf::uint8* WireSpan::SerializeWithCachedSizesToArray(
+::google::protobuf::uint8* Span::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.util.tracing.WireSpan)
-  // optional bytes context = 1;
-  if (this->context().size() > 0) {
-    target =
-      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        1, this->context(), target);
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.util.tracing.Span)
+  // optional int64 trace_id = 1;
+  if (this->trace_id() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->trace_id(), target);
   }
 
-  // optional bytes baggage = 2;
-  if (this->baggage().size() > 0) {
-    target =
-      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        2, this->baggage(), target);
+  // optional int64 span_id = 2;
+  if (this->span_id() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->span_id(), target);
   }
 
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.util.tracing.WireSpan)
+  // optional bool sampled = 3;
+  if (this->sampled() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(3, this->sampled(), target);
+  }
+
+  // map<string, string> baggage = 4;
+  {
+    ::google::protobuf::scoped_ptr<Span_BaggageEntry> entry;
+    for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
+        it = this->baggage().begin();
+        it != this->baggage().end(); ++it) {
+      entry.reset(baggage_.NewEntryWrapper(it->first, it->second));
+      target = ::google::protobuf::internal::WireFormatLite::
+          WriteMessageNoVirtualToArray(
+              4, *entry, target);
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        it->first.data(), it->first.length(),
+        ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+        "cockroach.util.tracing.Span.BaggageEntry.key");
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+        it->second.data(), it->second.length(),
+        ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+        "cockroach.util.tracing.Span.BaggageEntry.value");
+    }
+  }
+
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.util.tracing.Span)
   return target;
 }
 
-int WireSpan::ByteSize() const {
+int Span::ByteSize() const {
   int total_size = 0;
 
-  // optional bytes context = 1;
-  if (this->context().size() > 0) {
+  // optional int64 trace_id = 1;
+  if (this->trace_id() != 0) {
     total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::BytesSize(
-        this->context());
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->trace_id());
   }
 
-  // optional bytes baggage = 2;
-  if (this->baggage().size() > 0) {
+  // optional int64 span_id = 2;
+  if (this->span_id() != 0) {
     total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::BytesSize(
-        this->baggage());
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->span_id());
+  }
+
+  // optional bool sampled = 3;
+  if (this->sampled() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // map<string, string> baggage = 4;
+  total_size += 1 * this->baggage_size();
+  {
+    ::google::protobuf::scoped_ptr<Span_BaggageEntry> entry;
+    for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
+        it = this->baggage().begin();
+        it != this->baggage().end(); ++it) {
+      entry.reset(baggage_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
+    }
   }
 
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
@@ -304,10 +448,10 @@ int WireSpan::ByteSize() const {
   return total_size;
 }
 
-void WireSpan::MergeFrom(const ::google::protobuf::Message& from) {
+void Span::MergeFrom(const ::google::protobuf::Message& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  const WireSpan* source = 
-      ::google::protobuf::internal::DynamicCastToGenerated<const WireSpan>(
+  const Span* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const Span>(
           &from);
   if (source == NULL) {
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
@@ -316,141 +460,119 @@ void WireSpan::MergeFrom(const ::google::protobuf::Message& from) {
   }
 }
 
-void WireSpan::MergeFrom(const WireSpan& from) {
+void Span::MergeFrom(const Span& from) {
   if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
-  if (from.context().size() > 0) {
-
-    context_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.context_);
+  baggage_.MergeFrom(from.baggage_);
+  if (from.trace_id() != 0) {
+    set_trace_id(from.trace_id());
   }
-  if (from.baggage().size() > 0) {
-
-    baggage_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.baggage_);
+  if (from.span_id() != 0) {
+    set_span_id(from.span_id());
+  }
+  if (from.sampled() != 0) {
+    set_sampled(from.sampled());
   }
 }
 
-void WireSpan::CopyFrom(const ::google::protobuf::Message& from) {
+void Span::CopyFrom(const ::google::protobuf::Message& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-void WireSpan::CopyFrom(const WireSpan& from) {
+void Span::CopyFrom(const Span& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool WireSpan::IsInitialized() const {
+bool Span::IsInitialized() const {
 
   return true;
 }
 
-void WireSpan::Swap(WireSpan* other) {
+void Span::Swap(Span* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void WireSpan::InternalSwap(WireSpan* other) {
-  context_.Swap(&other->context_);
+void Span::InternalSwap(Span* other) {
+  std::swap(trace_id_, other->trace_id_);
+  std::swap(span_id_, other->span_id_);
+  std::swap(sampled_, other->sampled_);
   baggage_.Swap(&other->baggage_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
 }
 
-::google::protobuf::Metadata WireSpan::GetMetadata() const {
+::google::protobuf::Metadata Span::GetMetadata() const {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::Metadata metadata;
-  metadata.descriptor = WireSpan_descriptor_;
-  metadata.reflection = WireSpan_reflection_;
+  metadata.descriptor = Span_descriptor_;
+  metadata.reflection = Span_reflection_;
   return metadata;
 }
 
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
-// WireSpan
+// Span
 
-// optional bytes context = 1;
-void WireSpan::clear_context() {
-  context_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// optional int64 trace_id = 1;
+void Span::clear_trace_id() {
+  trace_id_ = GOOGLE_LONGLONG(0);
 }
- const ::std::string& WireSpan::context() const {
-  // @@protoc_insertion_point(field_get:cockroach.util.tracing.WireSpan.context)
-  return context_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+ ::google::protobuf::int64 Span::trace_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.Span.trace_id)
+  return trace_id_;
 }
- void WireSpan::set_context(const ::std::string& value) {
+ void Span::set_trace_id(::google::protobuf::int64 value) {
   
-  context_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.util.tracing.WireSpan.context)
-}
- void WireSpan::set_context(const char* value) {
-  
-  context_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.WireSpan.context)
-}
- void WireSpan::set_context(const void* value, size_t size) {
-  
-  context_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.WireSpan.context)
-}
- ::std::string* WireSpan::mutable_context() {
-  
-  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.WireSpan.context)
-  return context_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
- ::std::string* WireSpan::release_context() {
-  
-  return context_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
- void WireSpan::set_allocated_context(::std::string* context) {
-  if (context != NULL) {
-    
-  } else {
-    
-  }
-  context_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), context);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.WireSpan.context)
+  trace_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.util.tracing.Span.trace_id)
 }
 
-// optional bytes baggage = 2;
-void WireSpan::clear_baggage() {
-  baggage_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// optional int64 span_id = 2;
+void Span::clear_span_id() {
+  span_id_ = GOOGLE_LONGLONG(0);
 }
- const ::std::string& WireSpan::baggage() const {
-  // @@protoc_insertion_point(field_get:cockroach.util.tracing.WireSpan.baggage)
-  return baggage_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+ ::google::protobuf::int64 Span::span_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.Span.span_id)
+  return span_id_;
 }
- void WireSpan::set_baggage(const ::std::string& value) {
+ void Span::set_span_id(::google::protobuf::int64 value) {
   
-  baggage_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.util.tracing.WireSpan.baggage)
+  span_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.util.tracing.Span.span_id)
 }
- void WireSpan::set_baggage(const char* value) {
+
+// optional bool sampled = 3;
+void Span::clear_sampled() {
+  sampled_ = false;
+}
+ bool Span::sampled() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.tracing.Span.sampled)
+  return sampled_;
+}
+ void Span::set_sampled(bool value) {
   
-  baggage_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.util.tracing.WireSpan.baggage)
+  sampled_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.util.tracing.Span.sampled)
 }
- void WireSpan::set_baggage(const void* value, size_t size) {
-  
-  baggage_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.util.tracing.WireSpan.baggage)
+
+// map<string, string> baggage = 4;
+int Span::baggage_size() const {
+  return baggage_.size();
 }
- ::std::string* WireSpan::mutable_baggage() {
-  
-  // @@protoc_insertion_point(field_mutable:cockroach.util.tracing.WireSpan.baggage)
-  return baggage_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+void Span::clear_baggage() {
+  baggage_.Clear();
 }
- ::std::string* WireSpan::release_baggage() {
-  
-  return baggage_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+ const ::google::protobuf::Map< ::std::string, ::std::string >&
+Span::baggage() const {
+  // @@protoc_insertion_point(field_map:cockroach.util.tracing.Span.baggage)
+  return baggage_.GetMap();
 }
- void WireSpan::set_allocated_baggage(::std::string* baggage) {
-  if (baggage != NULL) {
-    
-  } else {
-    
-  }
-  baggage_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), baggage);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.WireSpan.baggage)
+ ::google::protobuf::Map< ::std::string, ::std::string >*
+Span::mutable_baggage() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.util.tracing.Span.baggage)
+  return baggage_.MutableMap();
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

@@ -24,6 +24,7 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 )
 
 // Snowball is set as Baggage on traces which are used for snowball tracing.
@@ -37,12 +38,11 @@ func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
 	cr(sp)
 }
 
-// JoinOrNew creates a new Span joined to the (serialized) span context in
-// WireSpan or creates one from the given tracer.
-func JoinOrNew(tr opentracing.Tracer, ws WireSpan, opName string) (opentracing.Span, error) {
-	if len(ws.Context) > 0 { // reducing allocs
-		carrier := opentracing.SplitBinaryCarrier{TracerState: ws.Context, Baggage: ws.Baggage}
-		sp, err := tr.Join(opName, opentracing.SplitBinary, &carrier)
+// JoinOrNew creates a new Span joined to the provided DelegatingCarrier or
+// creates Span from the given tracer.
+func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing.Span, error) {
+	if carrier != nil {
+		sp, err := tr.Join(opName, basictracer.Delegator, carrier)
 		switch err {
 		case nil:
 			sp.LogEvent(opName)
@@ -56,13 +56,15 @@ func JoinOrNew(tr opentracing.Tracer, ws WireSpan, opName string) (opentracing.S
 }
 
 // JoinOrNewSnowball returns a Span which records directly via the specified
-// callback. If the given WireSpan is the zero value, a new trace is created;
+// callback. If the given DelegatingCarrier is nil, a new Span is created.
 // otherwise, the created Span is a child.
-func JoinOrNewSnowball(opName string, ws WireSpan, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
+func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
 	tr := basictracer.New(CallbackRecorder(callback))
-	sp, err := JoinOrNew(tr, ws, opName)
+	sp, err := JoinOrNew(tr, carrier, opName)
 	if err == nil {
 		sp.SetBaggageItem(Snowball, "1")
+		// We definitely want to sample a Snowball trace.
+		ext.SamplingPriority.Set(sp, 1)
 	}
 	return sp, err
 }
@@ -70,6 +72,7 @@ func JoinOrNewSnowball(opName string, ws WireSpan, callback func(sp basictracer.
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
 	opts := basictracer.DefaultOptions()
+	opts.TrimUnsampledSpans = true
 	opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
 	opts.NewSpanEventListener = basictracer.NetTraceIntegrator
 	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
