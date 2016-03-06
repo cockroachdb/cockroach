@@ -768,6 +768,10 @@ func (g *Gossip) bootstrap() {
 					// Try to get another bootstrap address from the resolvers.
 					if addr := g.getNextBootstrapAddress(); addr != nil {
 						g.startClient(addr, stopper)
+					} else {
+						// We couldn't start a client, signal that we're stalled so that
+						// we'll retry.
+						g.maybeSignalStalledLocked()
 					}
 				}
 			})
@@ -777,14 +781,14 @@ func (g *Gossip) bootstrap() {
 			select {
 			case <-bootstrapTimer.C:
 				bootstrapTimer.Read = true
-				// continue
+				// break
 			case <-stopper.ShouldStop():
 				return
 			}
 			// Block until we need bootstrapping again.
 			select {
 			case <-g.stalled:
-				// continue
+				// break
 			case <-stopper.ShouldStop():
 				return
 			}
