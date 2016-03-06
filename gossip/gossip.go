@@ -336,7 +336,6 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	g.resolverIdx = len(resolvers) - 1
 	g.resolvers = resolvers
 	g.resolversTried = map[int]struct{}{}
-	g.maybeSignalStalledLocked()
 }
 
 // GetResolvers returns a copy of the resolvers slice.
