@@ -603,8 +603,26 @@ func (l *LocalCluster) stop() {
 		l.monitorCtxCancelFunc = nil
 	}
 
+	outputLogDir := l.logDir
+	logContainer := func(name string, c *Container) string {
+		// TODO(bdarnell): make these filenames more consistent with
+		// structured logs?
+		file := filepath.Join(outputLogDir, name,
+			fmt.Sprintf("stderr.%s.log", strings.Replace(
+				time.Now().Format(time.RFC3339), ":", "_", -1)))
+		maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
+		w, err := os.Create(file)
+		maybePanic(err)
+		defer w.Close()
+		maybePanic(c.Logs(w))
+		return file
+	}
+
 	if l.dns != nil {
 		maybePanic(l.dns.Kill())
+		if outputLogDir != "" {
+			_ = logContainer("dns", l.dns)
+		}
 		maybePanic(l.dns.Remove())
 		l.dns = nil
 	}
@@ -617,7 +635,6 @@ func (l *LocalCluster) stop() {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}
-	outputLogDir := l.logDir
 	for i, n := range l.Nodes {
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
@@ -626,17 +643,7 @@ func (l *LocalCluster) stop() {
 			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
 		}
 		if crashed || l.logDir != "" {
-			// TODO(bdarnell): make these filenames more consistent with
-			// structured logs?
-			file := filepath.Join(outputLogDir, nodeStr(i),
-				fmt.Sprintf("stderr.%s.log", strings.Replace(
-					time.Now().Format(time.RFC3339), ":", "_", -1)))
-
-			maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
-			w, err := os.Create(file)
-			maybePanic(err)
-			defer w.Close()
-			maybePanic(n.Logs(w))
+			file := logContainer(nodeStr(i), n.Container)
 			if crashed {
 				log.Infof("node %d: stderr at %s", i, file)
 			}
