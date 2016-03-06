@@ -107,8 +107,7 @@ type Request interface {
 	Header() *Span
 	// Method returns the request method.
 	Method() Method
-	// CreateReply creates a new response object.
-	CreateReply() Response
+	createReply() Response
 	flags() int
 }
 
@@ -354,73 +353,28 @@ func (*TruncateLogRequest) Method() Method { return TruncateLog }
 // Method implements the Request interface.
 func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 
-// CreateReply implements the Request interface.
-func (*GetRequest) CreateReply() Response { return &GetResponse{} }
-
-// CreateReply implements the Request interface.
-func (*PutRequest) CreateReply() Response { return &PutResponse{} }
-
-// CreateReply implements the Request interface.
-func (*ConditionalPutRequest) CreateReply() Response { return &ConditionalPutResponse{} }
-
-// CreateReply implements the Request interface.
-func (*IncrementRequest) CreateReply() Response { return &IncrementResponse{} }
-
-// CreateReply implements the Request interface.
-func (*DeleteRequest) CreateReply() Response { return &DeleteResponse{} }
-
-// CreateReply implements the Request interface.
-func (*DeleteRangeRequest) CreateReply() Response { return &DeleteRangeResponse{} }
-
-// CreateReply implements the Request interface.
-func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
-
-// CreateReply implements the Request interface.
-func (*ReverseScanRequest) CreateReply() Response { return &ReverseScanResponse{} }
-
-// CreateReply implements the Request interface.
-func (*BeginTransactionRequest) CreateReply() Response { return &BeginTransactionResponse{} }
-
-// CreateReply implements the Request interface.
-func (*EndTransactionRequest) CreateReply() Response { return &EndTransactionResponse{} }
-
-// CreateReply implements the Request interface.
-func (*AdminSplitRequest) CreateReply() Response { return &AdminSplitResponse{} }
-
-// CreateReply implements the Request interface.
-func (*AdminMergeRequest) CreateReply() Response { return &AdminMergeResponse{} }
-
-// CreateReply implements the Request interface.
-func (*HeartbeatTxnRequest) CreateReply() Response { return &HeartbeatTxnResponse{} }
-
-// CreateReply implements the Request interface.
-func (*GCRequest) CreateReply() Response { return &GCResponse{} }
-
-// CreateReply implements the Request interface.
-func (*PushTxnRequest) CreateReply() Response { return &PushTxnResponse{} }
-
-// CreateReply implements the Request interface.
-func (*RangeLookupRequest) CreateReply() Response { return &RangeLookupResponse{} }
-
-// CreateReply implements the Request interface.
-func (*ResolveIntentRequest) CreateReply() Response { return &ResolveIntentResponse{} }
-
-// CreateReply implements the Request interface.
-func (*ResolveIntentRangeRequest) CreateReply() Response {
-	return &ResolveIntentRangeResponse{}
-}
-
-// CreateReply implements the Request interface.
-func (*NoopRequest) CreateReply() Response { return &NoopResponse{} }
-
-// CreateReply implements the Request interface.
-func (*MergeRequest) CreateReply() Response { return &MergeResponse{} }
-
-// CreateReply implements the Request interface.
-func (*TruncateLogRequest) CreateReply() Response { return &TruncateLogResponse{} }
-
-// CreateReply implements the Request interface.
-func (*LeaderLeaseRequest) CreateReply() Response { return &LeaderLeaseResponse{} }
+func (*GetRequest) createReply() Response                { return &GetResponse{} }
+func (*PutRequest) createReply() Response                { return &PutResponse{} }
+func (*ConditionalPutRequest) createReply() Response     { return &ConditionalPutResponse{} }
+func (*IncrementRequest) createReply() Response          { return &IncrementResponse{} }
+func (*DeleteRequest) createReply() Response             { return &DeleteResponse{} }
+func (*DeleteRangeRequest) createReply() Response        { return &DeleteRangeResponse{} }
+func (*ScanRequest) createReply() Response               { return &ScanResponse{} }
+func (*ReverseScanRequest) createReply() Response        { return &ReverseScanResponse{} }
+func (*BeginTransactionRequest) createReply() Response   { return &BeginTransactionResponse{} }
+func (*EndTransactionRequest) createReply() Response     { return &EndTransactionResponse{} }
+func (*AdminSplitRequest) createReply() Response         { return &AdminSplitResponse{} }
+func (*AdminMergeRequest) createReply() Response         { return &AdminMergeResponse{} }
+func (*HeartbeatTxnRequest) createReply() Response       { return &HeartbeatTxnResponse{} }
+func (*GCRequest) createReply() Response                 { return &GCResponse{} }
+func (*PushTxnRequest) createReply() Response            { return &PushTxnResponse{} }
+func (*RangeLookupRequest) createReply() Response        { return &RangeLookupResponse{} }
+func (*ResolveIntentRequest) createReply() Response      { return &ResolveIntentResponse{} }
+func (*ResolveIntentRangeRequest) createReply() Response { return &ResolveIntentRangeResponse{} }
+func (*NoopRequest) createReply() Response               { return &NoopResponse{} }
+func (*MergeRequest) createReply() Response              { return &MergeResponse{} }
+func (*TruncateLogRequest) createReply() Response        { return &TruncateLogResponse{} }
+func (*LeaderLeaseRequest) createReply() Response        { return &LeaderLeaseResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
