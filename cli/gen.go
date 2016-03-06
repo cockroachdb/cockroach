@@ -31,11 +31,11 @@ var manPath string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
-	Short: "Generate man pages and bash autocompletion for CockroachDB",
-	Long: `This command generates man pages and bash autocompletion files for CockroachDB.
+	Short: "generate man pages for CockroachDB",
+	Long: `This command generates man pages for CockroachDB.
 
 By default, this places man pages into the "man/man1" directory under the current directory.
-Use "--path=PATH" to override the output directory.  For example, to install man pages globally on
+Use "--path=PATH" to override the output directory. For example, to install man pages globally on
 many Unix-like systems, use "--path=/usr/local/share/man/man1".
 `,
 	RunE: runGenManCmd,
