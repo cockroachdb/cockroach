@@ -175,7 +175,9 @@ func runStart(_ *cobra.Command, _ []string) error {
 		go s.Stop()
 	}
 
-	log.Info("initiating graceful shutdown of server")
+	const msgDrain = "initiating graceful shutdown of server"
+	log.Info(msgDrain)
+	fmt.Fprintln(os.Stdout, msgDrain)
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -195,11 +197,13 @@ func runStart(_ *cobra.Command, _ []string) error {
 
 	select {
 	case <-signalCh:
-		log.Warningf("second signal received, initiating hard shutdown")
+		log.Errorf("second signal received, initiating hard shutdown")
 	case <-time.After(time.Minute):
-		log.Warningf("time limit reached, initiating hard shutdown")
+		log.Errorf("time limit reached, initiating hard shutdown")
 	case <-stopper.IsStopped():
-		log.Infof("server drained and shutdown completed")
+		msgDone := "server drained and shutdown completed"
+		log.Infof(msgDone)
+		fmt.Fprintln(os.Stdout, msgDone)
 	}
 	log.Flush()
 	return nil
