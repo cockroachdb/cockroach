@@ -1509,7 +1509,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     ".LeaderLeaseResponse\022<\n\014reverse_scan\030\025 \001"
     "(\0132&.cockroach.roachpb.ReverseScanRespon"
     "se\022-\n\004noop\030\026 \001(\0132\037.cockroach.roachpb.Noo"
-    "pResponse:\004\310\240\037\001\"\203\003\n\006Header\0225\n\ttimestamp\030"
+    "pResponse:\004\310\240\037\001\"\371\002\n\006Header\0225\n\ttimestamp\030"
     "\001 \001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037"
     "\000\022;\n\007replica\030\002 \001(\0132$.cockroach.roachpb.R"
     "eplicaDescriptorB\004\310\336\037\000\022,\n\010range_id\030\003 \001(\003"
@@ -1517,24 +1517,24 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "ority\030\004 \001(\001B\024\310\336\037\000\372\336\037\014UserPriority\022+\n\003txn"
     "\030\005 \001(\0132\036.cockroach.roachpb.Transaction\022F"
     "\n\020read_consistency\030\006 \001(\0162&.cockroach.roa"
-    "chpb.ReadConsistencyTypeB\004\310\336\037\000\0225\n\005trace\030"
-    "\007 \001(\0132 .cockroach.util.tracing.WireSpanB"
-    "\004\310\336\037\000\"\202\001\n\014BatchRequest\0223\n\006header\030\001 \001(\0132\031"
-    ".cockroach.roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010r"
-    "equests\030\002 \003(\0132\037.cockroach.roachpb.Reques"
-    "tUnionB\004\310\336\037\000:\004\230\240\037\000\"\304\002\n\rBatchResponse\022A\n\006"
-    "header\030\001 \001(\0132\'.cockroach.roachpb.BatchRe"
-    "sponse.HeaderB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003"
-    "(\0132 .cockroach.roachpb.ResponseUnionB\004\310\336"
-    "\037\000\032\256\001\n\006Header\022\'\n\005error\030\001 \001(\0132\030.cockroach"
-    ".roachpb.Error\0225\n\ttimestamp\030\002 \001(\0132\034.cock"
-    "roach.roachpb.TimestampB\004\310\336\037\000\022+\n\003txn\030\003 \001"
-    "(\0132\036.cockroach.roachpb.Transaction\022\027\n\017co"
-    "llected_spans\030\004 \003(\014:\004\230\240\037\000*L\n\023ReadConsist"
-    "encyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022"
-    "\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022"
-    "\n\016PUSH_TIMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPU"
-    "SH_TOUCH\020\002\032\004\210\243\036\000B\tZ\007roachpbX\004", 9109);
+    "chpb.ReadConsistencyTypeB\004\310\336\037\000\022+\n\005trace\030"
+    "\007 \001(\0132\034.cockroach.util.tracing.Span\"\202\001\n\014"
+    "BatchRequest\0223\n\006header\030\001 \001(\0132\031.cockroach"
+    ".roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 "
+    "\003(\0132\037.cockroach.roachpb.RequestUnionB\004\310\336"
+    "\037\000:\004\230\240\037\000\"\304\002\n\rBatchResponse\022A\n\006header\030\001 \001"
+    "(\0132\'.cockroach.roachpb.BatchResponse.Hea"
+    "derB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockr"
+    "oach.roachpb.ResponseUnionB\004\310\336\037\000\032\256\001\n\006Hea"
+    "der\022\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb.E"
+    "rror\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach.roac"
+    "hpb.TimestampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockr"
+    "oach.roachpb.Transaction\022\027\n\017collected_sp"
+    "ans\030\004 \003(\014:\004\230\240\037\000*L\n\023ReadConsistencyType\022\016"
+    "\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSI"
+    "STENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIM"
+    "ESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002"
+    "\032\004\210\243\036\000B\tZ\007roachpbX\004", 9099);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -22396,7 +22396,7 @@ void Header::InitAsDefaultInstance() {
   timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
   replica_ = const_cast< ::cockroach::roachpb::ReplicaDescriptor*>(&::cockroach::roachpb::ReplicaDescriptor::default_instance());
   txn_ = const_cast< ::cockroach::roachpb::Transaction*>(&::cockroach::roachpb::Transaction::default_instance());
-  trace_ = const_cast< ::cockroach::util::tracing::WireSpan*>(&::cockroach::util::tracing::WireSpan::default_instance());
+  trace_ = const_cast< ::cockroach::util::tracing::Span*>(&::cockroach::util::tracing::Span::default_instance());
 }
 
 Header::Header(const Header& from)
@@ -22480,7 +22480,7 @@ void Header::Clear() {
     }
     read_consistency_ = 0;
     if (has_trace()) {
-      if (trace_ != NULL) trace_->::cockroach::util::tracing::WireSpan::Clear();
+      if (trace_ != NULL) trace_->::cockroach::util::tracing::Span::Clear();
     }
   }
 
@@ -22591,7 +22591,7 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.util.tracing.WireSpan trace = 7;
+      // optional .cockroach.util.tracing.Span trace = 7;
       case 7: {
         if (tag == 58) {
          parse_trace:
@@ -22663,7 +22663,7 @@ void Header::SerializeWithCachedSizes(
       6, this->read_consistency(), output);
   }
 
-  // optional .cockroach.util.tracing.WireSpan trace = 7;
+  // optional .cockroach.util.tracing.Span trace = 7;
   if (has_trace()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       7, *this->trace_, output);
@@ -22716,7 +22716,7 @@ void Header::SerializeWithCachedSizes(
       6, this->read_consistency(), target);
   }
 
-  // optional .cockroach.util.tracing.WireSpan trace = 7;
+  // optional .cockroach.util.tracing.Span trace = 7;
   if (has_trace()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
@@ -22774,7 +22774,7 @@ int Header::ByteSize() const {
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->read_consistency());
     }
 
-    // optional .cockroach.util.tracing.WireSpan trace = 7;
+    // optional .cockroach.util.tracing.Span trace = 7;
     if (has_trace()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -22827,7 +22827,7 @@ void Header::MergeFrom(const Header& from) {
       set_read_consistency(from.read_consistency());
     }
     if (from.has_trace()) {
-      mutable_trace()->::cockroach::util::tracing::WireSpan::MergeFrom(from.trace());
+      mutable_trace()->::cockroach::util::tracing::Span::MergeFrom(from.trace());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -23082,7 +23082,7 @@ void Header::clear_read_consistency() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.read_consistency)
 }
 
-// optional .cockroach.util.tracing.WireSpan trace = 7;
+// optional .cockroach.util.tracing.Span trace = 7;
 bool Header::has_trace() const {
   return (_has_bits_[0] & 0x00000040u) != 0;
 }
@@ -23093,28 +23093,28 @@ void Header::clear_has_trace() {
   _has_bits_[0] &= ~0x00000040u;
 }
 void Header::clear_trace() {
-  if (trace_ != NULL) trace_->::cockroach::util::tracing::WireSpan::Clear();
+  if (trace_ != NULL) trace_->::cockroach::util::tracing::Span::Clear();
   clear_has_trace();
 }
-const ::cockroach::util::tracing::WireSpan& Header::trace() const {
+const ::cockroach::util::tracing::Span& Header::trace() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.trace)
   return trace_ != NULL ? *trace_ : *default_instance_->trace_;
 }
-::cockroach::util::tracing::WireSpan* Header::mutable_trace() {
+::cockroach::util::tracing::Span* Header::mutable_trace() {
   set_has_trace();
   if (trace_ == NULL) {
-    trace_ = new ::cockroach::util::tracing::WireSpan;
+    trace_ = new ::cockroach::util::tracing::Span;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Header.trace)
   return trace_;
 }
-::cockroach::util::tracing::WireSpan* Header::release_trace() {
+::cockroach::util::tracing::Span* Header::release_trace() {
   clear_has_trace();
-  ::cockroach::util::tracing::WireSpan* temp = trace_;
+  ::cockroach::util::tracing::Span* temp = trace_;
   trace_ = NULL;
   return temp;
 }
-void Header::set_allocated_trace(::cockroach::util::tracing::WireSpan* trace) {
+void Header::set_allocated_trace(::cockroach::util::tracing::Span* trace) {
   delete trace_;
   trace_ = trace;
   if (trace) {

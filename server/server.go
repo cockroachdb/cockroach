@@ -31,7 +31,7 @@ import (
 	"golang.org/x/net/http2"
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"

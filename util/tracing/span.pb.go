@@ -9,7 +9,7 @@
 		cockroach/util/tracing/span.proto
 
 	It has these top-level messages:
-		WireSpan
+		Span
 */
 package tracing
 
@@ -26,24 +26,24 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-// A WireSpan message holds the serialized meta information of a (potentially
-// ongoing) span of a distributed trace as per the OpenTracing specification.
-// See http://opentracing.io/spec/ for details.
-type WireSpan struct {
-	// context is the serialized span context.
-	Context []byte `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	// baggage is the serialized trace baggage.
-	Baggage []byte `protobuf:"bytes,2,opt,name=baggage,proto3" json:"baggage,omitempty"`
+// A Span message holds metadata of a (potentially ongoing) span of a
+// distributed trace as per the OpenTracing specification. See
+// http://opentracing.io/spec/ for details.
+type Span struct {
+	TraceID int64             `protobuf:"varint,1,opt,name=trace_id,proto3" json:"trace_id,omitempty"`
+	SpanID  int64             `protobuf:"varint,2,opt,name=span_id,proto3" json:"span_id,omitempty"`
+	Sampled bool              `protobuf:"varint,3,opt,name=sampled,proto3" json:"sampled,omitempty"`
+	Baggage map[string]string `protobuf:"bytes,4,rep,name=baggage" json:"baggage,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
-func (m *WireSpan) Reset()         { *m = WireSpan{} }
-func (m *WireSpan) String() string { return proto.CompactTextString(m) }
-func (*WireSpan) ProtoMessage()    {}
+func (m *Span) Reset()         { *m = Span{} }
+func (m *Span) String() string { return proto.CompactTextString(m) }
+func (*Span) ProtoMessage()    {}
 
 func init() {
-	proto.RegisterType((*WireSpan)(nil), "cockroach.util.tracing.WireSpan")
+	proto.RegisterType((*Span)(nil), "cockroach.util.tracing.Span")
 }
-func (m *WireSpan) Marshal() (data []byte, err error) {
+func (m *Span) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -53,25 +53,46 @@ func (m *WireSpan) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *WireSpan) MarshalTo(data []byte) (int, error) {
+func (m *Span) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if m.Context != nil {
-		if len(m.Context) > 0 {
+	if m.TraceID != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintSpan(data, i, uint64(m.TraceID))
+	}
+	if m.SpanID != 0 {
+		data[i] = 0x10
+		i++
+		i = encodeVarintSpan(data, i, uint64(m.SpanID))
+	}
+	if m.Sampled {
+		data[i] = 0x18
+		i++
+		if m.Sampled {
+			data[i] = 1
+		} else {
+			data[i] = 0
+		}
+		i++
+	}
+	if len(m.Baggage) > 0 {
+		for k := range m.Baggage {
+			data[i] = 0x22
+			i++
+			v := m.Baggage[k]
+			mapSize := 1 + len(k) + sovSpan(uint64(len(k))) + 1 + len(v) + sovSpan(uint64(len(v)))
+			i = encodeVarintSpan(data, i, uint64(mapSize))
 			data[i] = 0xa
 			i++
-			i = encodeVarintSpan(data, i, uint64(len(m.Context)))
-			i += copy(data[i:], m.Context)
-		}
-	}
-	if m.Baggage != nil {
-		if len(m.Baggage) > 0 {
+			i = encodeVarintSpan(data, i, uint64(len(k)))
+			i += copy(data[i:], k)
 			data[i] = 0x12
 			i++
-			i = encodeVarintSpan(data, i, uint64(len(m.Baggage)))
-			i += copy(data[i:], m.Baggage)
+			i = encodeVarintSpan(data, i, uint64(len(v)))
+			i += copy(data[i:], v)
 		}
 	}
 	return i, nil
@@ -104,19 +125,24 @@ func encodeVarintSpan(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *WireSpan) Size() (n int) {
+func (m *Span) Size() (n int) {
 	var l int
 	_ = l
-	if m.Context != nil {
-		l = len(m.Context)
-		if l > 0 {
-			n += 1 + l + sovSpan(uint64(l))
-		}
+	if m.TraceID != 0 {
+		n += 1 + sovSpan(uint64(m.TraceID))
 	}
-	if m.Baggage != nil {
-		l = len(m.Baggage)
-		if l > 0 {
-			n += 1 + l + sovSpan(uint64(l))
+	if m.SpanID != 0 {
+		n += 1 + sovSpan(uint64(m.SpanID))
+	}
+	if m.Sampled {
+		n += 2
+	}
+	if len(m.Baggage) > 0 {
+		for k, v := range m.Baggage {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovSpan(uint64(len(k))) + 1 + len(v) + sovSpan(uint64(len(v)))
+			n += mapEntrySize + 1 + sovSpan(uint64(mapEntrySize))
 		}
 	}
 	return n
@@ -135,7 +161,7 @@ func sovSpan(x uint64) (n int) {
 func sozSpan(x uint64) (n int) {
 	return sovSpan(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *WireSpan) Unmarshal(data []byte) error {
+func (m *Span) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -158,17 +184,17 @@ func (m *WireSpan) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WireSpan: wiretype end group for non-group")
+			return fmt.Errorf("proto: Span: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WireSpan: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Span: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Context", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TraceID", wireType)
 			}
-			var byteLen int
+			m.TraceID = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowSpan
@@ -178,28 +204,55 @@ func (m *WireSpan) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				m.TraceID |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
-				return ErrInvalidLengthSpan
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Context = append(m.Context[:0], data[iNdEx:postIndex]...)
-			if m.Context == nil {
-				m.Context = []byte{}
-			}
-			iNdEx = postIndex
 		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SpanID", wireType)
+			}
+			m.SpanID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpan
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.SpanID |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sampled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpan
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Sampled = bool(v != 0)
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Baggage", wireType)
 			}
-			var byteLen int
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowSpan
@@ -209,22 +262,102 @@ func (m *WireSpan) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthSpan
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Baggage = append(m.Baggage[:0], data[iNdEx:postIndex]...)
-			if m.Baggage == nil {
-				m.Baggage = []byte{}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpan
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
 			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpan
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthSpan
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpan
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapvalue uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpan
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapvalue |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapvalue := int(stringLenmapvalue)
+			if intStringLenmapvalue < 0 {
+				return ErrInvalidLengthSpan
+			}
+			postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+			if postStringIndexmapvalue > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := string(data[iNdEx:postStringIndexmapvalue])
+			iNdEx = postStringIndexmapvalue
+			if m.Baggage == nil {
+				m.Baggage = make(map[string]string)
+			}
+			m.Baggage[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

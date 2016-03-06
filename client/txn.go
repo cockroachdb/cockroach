@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/basictracer-go"
-	"github.com/opentracing/opentracing-go"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // DefaultTxnRetryOptions are the standard retry options used
