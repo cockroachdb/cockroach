@@ -360,6 +360,90 @@ var layeredIntervalTestCase2 = layeredIntervalTestCase{
 	},
 }
 
+// layeredIntervalTestCase3 tests a right partial overlap with a shared end
+// for adding intervals to the interval cache when tested in order, and
+// tests a left partial overlap with a shared end when tested in reverse.
+var layeredIntervalTestCase3 = layeredIntervalTestCase{
+	actions: []func(tc *TimestampCache, ts roachpb.Timestamp){
+		func(tc *TimestampCache, ts roachpb.Timestamp) {
+			// No overlap forwards.
+			// Right partial overlap backwards.
+			tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
+		},
+		func(tc *TimestampCache, ts roachpb.Timestamp) {
+			// Left partial overlap forwards.
+			// No overlap backwards.
+			tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
+		},
+	},
+	validator: func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp) {
+		acTS := tss[0]
+		bcTS := tss[1]
+
+		// Try different sub ranges.
+		if rTS := tc.GetMaxRead(roachpb.Key("a"), nil, nil); !rTS.Equal(acTS) {
+			t.Errorf("expected \"a\" to have acTS %v timestamp, found %v", acTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("b"), nil, nil); !rTS.Equal(bcTS) {
+			t.Errorf("expected \"b\" to have bcTS %v timestamp, found %v", bcTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("c"), nil, nil); !rTS.Equal(tc.lowWater) {
+			t.Errorf("expected \"c\" to have low water %v timestamp, found %v", tc.lowWater, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("c"), nil); !rTS.Equal(bcTS) {
+			t.Errorf("expected \"a\"-\"c\" to have bcTS %v timestamp, found %v", bcTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b"), nil); !rTS.Equal(acTS) {
+			t.Errorf("expected \"a\"-\"b\" to have acTS %v timestamp, found %v", acTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c"), nil); !rTS.Equal(bcTS) {
+			t.Errorf("expected \"b\"-\"c\" to have bcTS %v timestamp, found %v", bcTS, rTS)
+		}
+	},
+}
+
+// layeredIntervalTestCase4 tests a left partial overlap with a shared start
+// for adding intervals to the interval cache when tested in order, and
+// tests a right partial overlap with a shared start when tested in reverse.
+var layeredIntervalTestCase4 = layeredIntervalTestCase{
+	actions: []func(tc *TimestampCache, ts roachpb.Timestamp){
+		func(tc *TimestampCache, ts roachpb.Timestamp) {
+			// No overlap forwards.
+			// Left partial overlap backwards.
+			tc.Add(roachpb.Key("a"), roachpb.Key("c"), ts, nil, true)
+		},
+		func(tc *TimestampCache, ts roachpb.Timestamp) {
+			// Right partial overlap forwards.
+			// No overlap backwards.
+			tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts, nil, true)
+		},
+	},
+	validator: func(t *testing.T, tc *TimestampCache, tss []roachpb.Timestamp) {
+		acTS := tss[0]
+		abTS := tss[1]
+
+		// Try different sub ranges.
+		if rTS := tc.GetMaxRead(roachpb.Key("a"), nil, nil); !rTS.Equal(abTS) {
+			t.Errorf("expected \"a\" to have abTS %v timestamp, found %v", abTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("b"), nil, nil); !rTS.Equal(acTS) {
+			t.Errorf("expected \"b\" to have acTS %v timestamp, found %v", acTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("c"), nil, nil); !rTS.Equal(tc.lowWater) {
+			t.Errorf("expected \"c\" to have low water %v timestamp, found %v", tc.lowWater, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("c"), nil); !rTS.Equal(abTS) {
+			t.Errorf("expected \"a\"-\"c\" to have abTS %v timestamp, found %v", abTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b"), nil); !rTS.Equal(abTS) {
+			t.Errorf("expected \"a\"-\"b\" to have abTS %v timestamp, found %v", abTS, rTS)
+		}
+		if rTS := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c"), nil); !rTS.Equal(acTS) {
+			t.Errorf("expected \"b\"-\"c\" to have acTS %v timestamp, found %v", acTS, rTS)
+		}
+	},
+}
+
 // TestTimestampCacheLayeredIntervals verifies the maximum timestamp
 // is chosen if previous entries have ranges which are layered over
 // each other.
@@ -378,6 +462,8 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	for _, testCase := range []layeredIntervalTestCase{
 		layeredIntervalTestCase1,
 		layeredIntervalTestCase2,
+		layeredIntervalTestCase3,
+		layeredIntervalTestCase4,
 	} {
 		// Perform actions in order and validate.
 		tc.Clear(clock)

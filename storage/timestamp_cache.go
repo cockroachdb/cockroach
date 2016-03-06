@@ -158,8 +158,8 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 				case sCmp <= 0 && eCmp >= 0:
 					// New contains or is equal to old; delete old.
 					//
-					// New: ------------
-					// Old:   --------
+					// New: ------------      ------------      ------------
+					// Old:   --------    or    ----------  or  ----------
 					//
 					// Old:
 					cache.DelEntry(o.Entry)
@@ -179,18 +179,18 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
 					//
-					// New:     --------
-					// Old: --------
+					// New:     --------          --------
+					// Old: --------      or  ------------
 					//
-					// Old: ----
+					// Old: ----              ----
 					o.Key.End = r.Start
 				case sCmp <= 0:
 					// Right partial overlap; truncate old start.
 					//
-					// New: --------
-					// Old:     --------
+					// New: --------          --------
+					// Old:     --------  or  ------------
 					//
-					// Old:         ----
+					// Old:         ----              ----
 					o.Key.Start = r.End
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", o.Key.Range, r))
@@ -203,8 +203,8 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 				case sCmp >= 0 && eCmp <= 0:
 					// Old contains or is equal to new; no need to add.
 					//
-					// Old: ------------
-					// New:    ------
+					// Old: -----------      -----------      -----------      -----------
+					// New:    -----     or  -----------  or  --------     or     --------
 					//
 					// New:
 					return
@@ -221,21 +221,21 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					addRange(lr)
 
 					r.Start = o.Key.End
-				case eCmp >= 0:
+				case eCmp > 0:
 					// Left partial overlap; truncate new start.
 					//
-					// Old: --------
-					// New:     --------
+					// Old: --------          --------
+					// New:     --------  or  ------------
 					//
-					// New:         ----
+					// New:         ----              ----
 					r.Start = o.Key.End
-				case sCmp <= 0:
+				case sCmp < 0:
 					// Right partial overlap; truncate new end.
 					//
-					// Old:     --------
-					// New: --------
+					// Old:     --------          --------
+					// New: --------      or  ------------
 					//
-					// New: ----
+					// New: ----              ----
 					r.End = o.Key.Start
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", o.Key.Range, r))
