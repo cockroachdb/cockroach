@@ -62,7 +62,7 @@ type ShowIndex struct {
 }
 
 func (node *ShowIndex) String() string {
-	return fmt.Sprintf("SHOW INDEX FROM %s", node.Table)
+	return fmt.Sprintf("SHOW INDEXES FROM %s", node.Table)
 }
 
 // ShowTables represents a SHOW TABLES statement.

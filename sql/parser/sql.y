@@ -495,13 +495,13 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   HAVING HIGH HOUR
 
 %token <str>   IF IFNULL IN
-%token <str>   INDEX INITIALLY
+%token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
 %token <str>   JOIN
 
-%token <str>   KEY
+%token <str>   KEY KEYS
 
 %token <str>   LATERAL
 %token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
@@ -1185,6 +1185,14 @@ show_stmt:
     $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.strs()}
   }
 | SHOW INDEX FROM var_name
+  {
+    $$.val = &ShowIndex{Table: $4.qname()}
+  }
+| SHOW INDEXES FROM var_name
+  {
+    $$.val = &ShowIndex{Table: $4.qname()}
+  }
+| SHOW KEYS FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.qname()}
   }
@@ -3856,9 +3864,11 @@ unreserved_keyword:
 | GRANTS
 | HIGH
 | HOUR
+| INDEXES
 | INSERT
 | ISOLATION
 | KEY
+| KEYS
 | LEVEL
 | LOCAL
 | LOW
