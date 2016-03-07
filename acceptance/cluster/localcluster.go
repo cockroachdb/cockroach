@@ -39,16 +39,14 @@ import (
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
+	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 )
 
 const (
-	builderImage   = "cockroachdb/builder"
-	builderTag     = "20160218-125307"
-	dockerspyImage = "cockroachdb/docker-spy"
-	dockerspyTag   = "20160209-143235"
-	domain         = "local"
+	builderImage = "cockroachdb/builder"
+	builderTag   = "20160218-125307"
 
 	builderImageFull = builderImage + ":" + builderTag
 )
@@ -86,7 +84,7 @@ func exists(path string) bool {
 }
 
 func nodeStr(i int) string {
-	return fmt.Sprintf("roach%d.%s", i, domain)
+	return fmt.Sprintf("roach%d", i)
 }
 
 func dataStr(node, store int) string {
@@ -120,14 +118,12 @@ type testNode struct {
 }
 
 // LocalCluster manages a local cockroach cluster running on docker. The
-// cluster is composed of a "dns" container which automatically registers dns
-// entries for the cockroach nodes, a "volumes" container which manages the
+// cluster is composed of a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
 type LocalCluster struct {
 	client               *client.Client
 	stopper              chan struct{}
 	mu                   sync.Mutex // Protects the fields below
-	dns                  *Container
 	vols                 *Container
 	config               TestConfig
 	Nodes                []*testNode
@@ -138,6 +134,7 @@ type LocalCluster struct {
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
 	logDir               string
+	networkID            string
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
@@ -188,7 +185,7 @@ func (l *LocalCluster) OneShot(ipo types.ImagePullOptions, containerConfig conta
 	if err := pullImage(l, ipo); err != nil {
 		return err
 	}
-	container, err := createContainer(l, containerConfig, hostConfig, name)
+	container, err := createContainer(l, containerConfig, hostConfig, nil, name)
 	if err != nil {
 		return err
 	}
@@ -237,29 +234,15 @@ func (l *LocalCluster) panicOnStop() {
 	}
 }
 
-func (l *LocalCluster) runDockerSpy() {
+func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
-	maybePanic(pullImage(l, types.ImagePullOptions{ImageID: dockerspyImage, Tag: dockerspyTag}))
-	c, err := createContainer(
-		l,
-		container.Config{
-			Image: dockerspyImage + ":" + dockerspyTag,
-			Cmd:   []string{"--dns-domain=" + domain},
-		}, container.HostConfig{
-			Binds:           []string{"/var/run/docker.sock:/var/run/docker.sock"},
-			PublishAllPorts: true,
-		},
-		"docker-spy",
-	)
+	resp, err := l.client.NetworkCreate(types.NetworkCreate{
+		Name:   "cockroachdb_acceptance",
+		Driver: "bridge",
+	})
 	maybePanic(err)
-	maybePanic(c.Start())
-	l.dns = c
-	if ci, err := c.Inspect(); err != nil {
-		log.Error(err)
-	} else {
-		log.Infof("started %s: %s", c.Name(), ci.NetworkSettings.IPAddress)
-	}
+	l.networkID = resp.ID
 }
 
 // create the volumes container that keeps all of the volumes used by
@@ -341,7 +324,7 @@ func (l *LocalCluster) initCluster() {
 			Binds:           binds,
 			PublishAllPorts: true,
 		},
-		"volumes",
+		nil, "volumes",
 	)
 	maybePanic(err)
 	maybePanic(c.Start())
@@ -349,18 +332,14 @@ func (l *LocalCluster) initCluster() {
 	l.vols = c
 }
 
-func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...string) {
+func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...string) {
 	l.panicOnStop()
 
 	hostConfig := container.HostConfig{
 		PublishAllPorts: true,
+		NetworkMode:     container.NetworkMode(l.networkID),
 	}
 
-	if dns != nil {
-		ci, err := dns.Inspect()
-		maybePanic(err)
-		hostConfig.DNS = append(hostConfig.DNS, ci.NetworkSettings.IPAddress)
-	}
 	if vols != nil {
 		hostConfig.VolumesFrom = append(hostConfig.VolumesFrom, vols.id)
 	}
@@ -379,9 +358,8 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 	node.Container, err = createContainer(
 		l,
 		container.Config{
-			Hostname:   hostname,
-			Domainname: domain,
-			Image:      *cockroachImage,
+			Hostname: hostname,
+			Image:    *cockroachImage,
 			ExposedPorts: map[nat.Port]struct{}{
 				defaultTCP: {},
 			},
@@ -394,6 +372,13 @@ func (l *LocalCluster) createRoach(node *testNode, dns, vols *Container, cmd ...
 			},
 		},
 		hostConfig,
+		&network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				l.networkID: {
+					Aliases: []string{hostname},
+				},
+			},
+		},
 		node.nodeStr,
 	)
 	maybePanic(err)
@@ -439,7 +424,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 			"--logtostderr=false",
 			"--alsologtostderr=INFO")
 	}
-	l.createRoach(node, l.dns, l.vols, cmd...)
+	l.createRoach(node, l.vols, cmd...)
 	maybePanic(node.Start())
 	// Infof doesn't take positional parameters, hence the Sprintf.
 	log.Infof(fmt.Sprintf(`*** started %[1]s ***
@@ -527,7 +512,7 @@ func (l *LocalCluster) Start() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.runDockerSpy()
+	l.createNetwork()
 	l.initCluster()
 	log.Infof("creating certs (%dbit) in: %s", keyLen, l.CertsDir)
 	l.createCACert()
@@ -603,11 +588,6 @@ func (l *LocalCluster) stop() {
 		l.monitorCtxCancelFunc = nil
 	}
 
-	if l.dns != nil {
-		maybePanic(l.dns.Kill())
-		maybePanic(l.dns.Remove())
-		l.dns = nil
-	}
 	if l.vols != nil {
 		maybePanic(l.vols.Kill())
 		maybePanic(l.vols.Remove())
@@ -644,6 +624,11 @@ func (l *LocalCluster) stop() {
 		maybePanic(n.Remove())
 	}
 	l.Nodes = nil
+
+	if l.networkID != "" {
+		maybePanic(l.client.NetworkRemove(l.networkID))
+		l.networkID = ""
+	}
 }
 
 // ConnString creates a connections string.
