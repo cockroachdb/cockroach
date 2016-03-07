@@ -38,7 +38,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -163,11 +163,9 @@ type multiTestContext struct {
 	storeContext *storage.StoreContext
 	manualClock  *hlc.ManualClock
 	clock        *hlc.Clock
-	grpcServer   *grpc.Server
 	rpcContext   *rpc.Context
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
-	transport    *storage.RaftTransport
 	distSender   *kv.DistSender
 	db           *client.DB
 
@@ -176,12 +174,16 @@ type multiTestContext struct {
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
-	clocks  []*hlc.Clock
-	engines []engine.Engine
+	clocks      []*hlc.Clock
+	engines     []engine.Engine
+	grpcServers []*grpc.Server
+	transports  []*storage.RaftTransport
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
-	// for 'transport', and the 'stoppers' slice corresponds to the
+	// for 'transports', and the 'stoppers' slice corresponds to the
 	// 'stores'.
+	// TODO(bdarnell): now that there are multiple transports, do we
+	// need transportStopper?
 	clientStopper      *stop.Stopper
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
@@ -247,12 +249,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
-	}
-	if m.grpcServer == nil {
-		m.grpcServer = rpc.NewServer(m.rpcContext)
-	}
-	if m.transport == nil {
-		m.transport = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServer, m.rpcContext)
 	}
 	if m.storePool == nil {
 		if m.timeUntilStoreDead == 0 {
@@ -471,10 +467,10 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 		ctx = storage.TestStoreContext()
 	}
 	ctx.Clock = m.clocks[i]
+	ctx.Transport = m.transports[i]
 	ctx.DB = m.db
 	ctx.Gossip = m.gossip
 	ctx.StorePool = m.storePool
-	ctx.Transport = m.transport
 	return ctx
 }
 
@@ -500,6 +496,13 @@ func (m *multiTestContext) addStore() {
 		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
+	}
+	if len(m.grpcServers) <= idx {
+		m.grpcServers = append(m.grpcServers, rpc.NewServer(m.rpcContext))
+	}
+	if len(m.transports) <= idx {
+		m.transports = append(m.transports,
+			storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext))
 	}
 
 	stopper := stop.NewStopper()
@@ -531,7 +534,7 @@ func (m *multiTestContext) addStore() {
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	ln, err := util.ListenAndServe(m.transportStopper, m.grpcServer, util.CreateTestAddr("tcp"), tlsConfig)
+	ln, err := util.ListenAndServe(m.transportStopper, m.grpcServers[idx], util.CreateTestAddr("tcp"), tlsConfig)
 	if err != nil {
 		m.t.Fatal(err)
 	}

@@ -1056,7 +1056,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	if err := mtc.transport.Send(&storage.RaftMessageRequest{
+	if err := mtc.transports[2].Send(&storage.RaftMessageRequest{
 		GroupID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,
