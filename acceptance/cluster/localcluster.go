@@ -45,7 +45,7 @@ import (
 
 const (
 	builderImage   = "cockroachdb/builder"
-	builderTag     = "20160218-125307"
+	builderTag     = "20160305-182433"
 	dockerspyImage = "cockroachdb/docker-spy"
 	dockerspyTag   = "20160209-143235"
 	domain         = "local"

@@ -3,7 +3,12 @@
 set -eu
 
 image="cockroachdb/builder"
-version="20160305-182433"
+version=$(awk -F\" '/builderTag *=/ {print $2}' \
+            $(dirname $0)/../acceptance/cluster/localcluster.go)
+if [ -z "${version}" ]; then
+  echo "unable to determine builder tag"
+  exit 1
+fi
 
 function init() {
   docker build --tag="${image}" "$(dirname $0)"
