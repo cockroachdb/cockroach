@@ -58,7 +58,7 @@ func (ss StoreSpec) String() string {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
 	}
 	if len(ss.Attributes.Attrs) > 0 {
-		fmt.Fprint(&buffer, "attr=")
+		fmt.Fprint(&buffer, "attrs=")
 		for i, attr := range ss.Attributes.Attrs {
 			if i != 0 {
 				fmt.Fprint(&buffer, ":")
@@ -89,7 +89,7 @@ func (ss StoreSpec) String() string {
 //   - 0.02TiB         -> 21474836480 bytes
 //   - 20%             -> 20% of the available space
 //   - 0.2             -> 20% of the available space
-// - attr=xxx:yyy:zzz A colon separated list of optional attributes.
+// - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
 // Note that commas are forbidden within any field name or value.
 func newStoreSpec(value string) (StoreSpec, error) {
 	if len(value) == 0 {
@@ -169,7 +169,7 @@ func newStoreSpec(value string) (StoreSpec, error) {
 						humanize.IBytes(uint64(minimumStoreSize)))
 				}
 			}
-		case "attr":
+		case "attrs":
 			if len(value) == 0 {
 				return StoreSpec{}, fmt.Errorf("no attributes specified")
 			}

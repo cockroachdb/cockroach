@@ -88,7 +88,7 @@ flags are required. If the cluster already exists, and this node is
 uninitialized, specify the --join flag to point to any healthy node
 (or list of nodes) already part of the cluster.
 `,
-	Example:      `  cockroach start --certs=<dir> --store=attr=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
+	Example:      `  cockroach start --certs=<dir> --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
 	SilenceUsage: true,
 	RunE:         runStart,
 }
