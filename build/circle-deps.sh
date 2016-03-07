@@ -28,10 +28,6 @@ function fetch_docker() {
       time docker save -o "${imgcache}" "${ref}"
     fi
   fi
-
-  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${name}:latest"; then
-    docker tag "${ref}" "${name}:latest"
-  fi
 }
 
 # This is mildly tricky: This script runs itself recursively. The
