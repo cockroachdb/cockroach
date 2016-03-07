@@ -498,6 +498,9 @@ RetryLoop:
 		// Let the sql executor do it.
 		txn.Cleanup(pErr)
 	}
+	if pErr != nil {
+		pErr.StripErrorTransaction()
+	}
 	return pErr
 }
 

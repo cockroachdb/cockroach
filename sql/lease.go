@@ -152,7 +152,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		}
 		return nil
 	})
-	return lease, roachpb.NewError(pErr.GoError())
+	return lease, pErr
 }
 
 // Release a previously acquired table descriptor lease.

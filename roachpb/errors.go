@@ -203,6 +203,12 @@ func (e *Error) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
 }
 
+// StripErrorTransaction strips the txn information in the error.
+func (e *Error) StripErrorTransaction() {
+	// Do not call SetTxn() as we do not want to update e.Message with nil txn.
+	e.UnexposedTxn = nil
+}
+
 // Error formats error.
 func (e *NodeUnavailableError) Error() string {
 	return e.message(nil)
