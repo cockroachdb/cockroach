@@ -31,6 +31,7 @@ import (
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
+// TODO(guanqun): need to support CHECK in UPDATE
 func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.Error) {
 	tracing.AnnotateTrace()
 	tableDesc, pErr := p.getAliasedTableLease(n.Table)
