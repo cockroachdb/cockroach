@@ -750,7 +750,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(keys.SystemMax, roachpb.Key("m"))
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -782,7 +782,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	// failure and render the range unable to achieve quorum after
 	// restart (in the SnapshotWins branch).
 	incArgs = incrementArgs(rightKey, 3)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -816,7 +816,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 	// Perform a write on the left range and wait for it to propagate.
 	incArgs := incrementArgs(leftKey, 10)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
@@ -827,7 +827,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 	// Write to the right range.
 	incArgs = incrementArgs(rightKey, 20)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
@@ -849,7 +849,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 
 	// Perform a write on the right range.
 	incArgs := incrementArgs(rightKey, 20)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -873,13 +873,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	// it helps wake up dormant ranges that would otherwise have to wait
 	// for retry timeouts.
 	incArgs = incrementArgs(leftKey, 10)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
 
 	incArgs = incrementArgs(rightKey, 200)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
@@ -990,17 +990,17 @@ func TestLeaderAfterSplit(t *testing.T) {
 	rightKey := roachpb.Key("z")
 
 	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &splitArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := client.SendWrapped(mtc.distSender, nil, &incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
