@@ -120,10 +120,10 @@ module AdminViews {
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesin"))
+              Metrics.Select.AvgRate(_nodeMetric("sql.bytesin"))
                 .sources([])
                 .title("Bytes In"),
-              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesout"))
+              Metrics.Select.AvgRate(_nodeMetric("sql.bytesout"))
                 .sources([])
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("data")

@@ -183,8 +183,8 @@ type Executor struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, stopper *stop.Stopper) *Executor {
-	registry := metric.NewRegistry()
+func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, stopper *stop.Stopper,
+	registry *metric.Registry) *Executor {
 	exec := &Executor{
 		db:       db,
 		reCache:  parser.NewRegexpCache(512),
