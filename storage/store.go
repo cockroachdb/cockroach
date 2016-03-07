@@ -404,6 +404,19 @@ type storeMetrics struct {
 	sysBytes        *metric.Gauge
 	sysCount        *metric.Gauge
 
+	rdbBlockCacheHits           *metric.Gauge
+	rdbBlockCacheMisses         *metric.Gauge
+	rdbBlockCacheUsage          *metric.Gauge
+	rdbBlockCachePinnedUsage    *metric.Gauge
+	rdbBloomFilterPrefixChecked *metric.Gauge
+	rdbBloomFilterPrefixUseful  *metric.Gauge
+	rdbMemtableHits             *metric.Gauge
+	rdbMemtableMisses           *metric.Gauge
+	rdbMemtableTotalSize        *metric.Gauge
+	rdbFlushes                  *metric.Gauge
+	rdbCompactions              *metric.Gauge
+	rdbTableReadersMemEstimate  *metric.Gauge
+
 	// Stats for efficient merges.
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of StatusSummaries; it would be
@@ -436,6 +449,20 @@ func newStoreMetrics() *storeMetrics {
 		available:            storeRegistry.Gauge("capacity.available"),
 		sysBytes:             storeRegistry.Gauge("sysbytes"),
 		sysCount:             storeRegistry.Gauge("syscount"),
+
+		// RocksDB stats.
+		rdbBlockCacheHits:           storeRegistry.Gauge("rocksdb.block.cache.hits"),
+		rdbBlockCacheMisses:         storeRegistry.Gauge("rocksdb.block.cache.misses"),
+		rdbBlockCacheUsage:          storeRegistry.Gauge("rocksdb.block.cache.usage"),
+		rdbBlockCachePinnedUsage:    storeRegistry.Gauge("rocksdb.block.cache.pinned-usage"),
+		rdbBloomFilterPrefixChecked: storeRegistry.Gauge("rocksdb.bloom.filter.prefix.checked"),
+		rdbBloomFilterPrefixUseful:  storeRegistry.Gauge("rocksdb.bloom.filter.prefix.useful"),
+		rdbMemtableHits:             storeRegistry.Gauge("rocksdb.memtable.hits"),
+		rdbMemtableMisses:           storeRegistry.Gauge("rocksdb.memtable.misses"),
+		rdbMemtableTotalSize:        storeRegistry.Gauge("rocksdb.memtable.total-size"),
+		rdbFlushes:                  storeRegistry.Gauge("rocksdb.flushes"),
+		rdbCompactions:              storeRegistry.Gauge("rocksdb.compactions"),
+		rdbTableReadersMemEstimate:  storeRegistry.Gauge("rocksdb.table-readers-mem-estimate"),
 	}
 }
 
@@ -488,6 +515,24 @@ func (sm *storeMetrics) subtractMVCCStats(stats engine.MVCCStats) {
 	defer sm.mu.Unlock()
 	sm.stats.Subtract(stats)
 	sm.updateMVCCGaugesLocked()
+}
+
+func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
+	// We do not grab a lock here, because it's not possible to get a point-in-
+	// time snapshot of RocksDB stats. Retrieving RocksDB stats doesn't grab any
+	// locks, and there's no way to retrieve multiple stats in a single operation.
+	sm.rdbBlockCacheHits.Update(int64(stats.BlockCacheHits))
+	sm.rdbBlockCacheMisses.Update(int64(stats.BlockCacheMisses))
+	sm.rdbBlockCacheUsage.Update(int64(stats.BlockCacheUsage))
+	sm.rdbBlockCachePinnedUsage.Update(int64(stats.BlockCachePinnedUsage))
+	sm.rdbBloomFilterPrefixUseful.Update(int64(stats.BloomFilterPrefixUseful))
+	sm.rdbBloomFilterPrefixChecked.Update(int64(stats.BloomFilterPrefixChecked))
+	sm.rdbMemtableHits.Update(int64(stats.MemtableHits))
+	sm.rdbMemtableMisses.Update(int64(stats.MemtableMisses))
+	sm.rdbMemtableTotalSize.Update(int64(stats.MemtableTotalSize))
+	sm.rdbFlushes.Update(int64(stats.Flushes))
+	sm.rdbCompactions.Update(int64(stats.Compactions))
+	sm.rdbTableReadersMemEstimate.Update(int64(stats.TableReadersMemEstimate))
 }
 
 // Valid returns true if the StoreContext is populated correctly.
@@ -2131,6 +2176,14 @@ func (s *Store) ComputeMetrics() error {
 	leaderRangeCount, replicatedRangeCount, availableRangeCount :=
 		s.computeReplicationStatus(now)
 	s.metrics.updateReplicationGauges(leaderRangeCount, replicatedRangeCount, availableRangeCount)
+
+	// Get the latest RocksDB stats.
+	stats, err := s.engine.GetStats()
+	if err != nil {
+		return err
+	}
+	s.metrics.updateRocksDBStats(*stats)
+
 	return nil
 }
 

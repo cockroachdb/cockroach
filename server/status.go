@@ -91,7 +91,9 @@ const (
 	// statusStorePattern exposes status for a single store.
 	statusStorePattern = statusPrefix + "stores/:store_id"
 
-	// statusMetricsPattern exposes transient stats / metrics for a node.
+	// statusMetricsPrefix exposes transient stats.
+	statusMetricsPrefix = statusPrefix + "metrics/"
+	// statusMetricsPattern exposes transient stats for a node.
 	statusMetricsPattern = statusPrefix + "metrics/:node_id"
 
 	// healthEndpoint is a shortcut for local details, intended for use by
