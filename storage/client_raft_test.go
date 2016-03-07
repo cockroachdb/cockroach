@@ -1105,7 +1105,10 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 
-	sg := gossiputil.NewStoreGossiper(mtc.gossip)
+	var sgs []*gossiputil.StoreGossiper
+	for _, g := range mtc.gossips {
+		sgs = append(sgs, gossiputil.NewStoreGossiper(g))
+	}
 
 	// Replicate the range to all stores.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
@@ -1116,11 +1119,13 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	for _, s := range mtc.stores {
 		storeIDs = append(storeIDs, s.StoreID())
 	}
-	sg.GossipWithFunction(storeIDs, func() {
-		for _, s := range mtc.stores {
-			s.GossipStore()
-		}
-	})
+	for _, sg := range sgs {
+		sg.GossipWithFunction(storeIDs, func() {
+			for _, s := range mtc.stores {
+				s.GossipStore()
+			}
+		})
+	}
 
 	aliveStoreIDs := []roachpb.StoreID{
 		mtc.stores[0].StoreID(),
@@ -1150,10 +1155,12 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			mtc.manualClock.Increment(int64(tickerDur))
 
 			// Keep gossiping the alive stores.
-			sg.GossipWithFunction(aliveStoreIDs, func() {
-				mtc.stores[0].GossipStore()
-				mtc.stores[1].GossipStore()
-			})
+			for _, sg := range sgs {
+				sg.GossipWithFunction(aliveStoreIDs, func() {
+					mtc.stores[0].GossipStore()
+					mtc.stores[1].GossipStore()
+				})
+			}
 			// Force the repair queues on all alive stores to run.
 			mtc.stores[0].ForceReplicationScanAndProcess()
 			mtc.stores[1].ForceReplicationScanAndProcess()
@@ -1201,8 +1208,12 @@ func TestStoreRangeRebalance(t *testing.T) {
 		}
 		storeDescs = append(storeDescs, desc)
 	}
-	sg := gossiputil.NewStoreGossiper(mtc.gossip)
-	sg.GossipStores(storeDescs, t)
+	var sgs []*gossiputil.StoreGossiper
+	for _, g := range mtc.gossips {
+		sg := gossiputil.NewStoreGossiper(g)
+		sgs = append(sgs, sg)
+		sg.GossipStores(storeDescs, t)
+	}
 
 	// This can't use SucceedsSoon as using the exponential backoff mechanic
 	// won't work well with the forced replication scans.
