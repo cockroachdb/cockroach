@@ -62,7 +62,6 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 		}); err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		defer p.txn.Trace.Finish()
 	}
 
 	plan, err := p.makePlan(n.Statement, false)
