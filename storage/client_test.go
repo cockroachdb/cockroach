@@ -160,8 +160,6 @@ type multiTestContext struct {
 	rpcContext   *rpc.Context
 	gossip       *gossip.Gossip
 	storePool    *storage.StorePool
-	distSender   *kv.DistSender
-	db           *client.DB
 	feed         *util.Feed
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
@@ -173,6 +171,8 @@ type multiTestContext struct {
 	engines     []engine.Engine
 	grpcServers []*grpc.Server
 	transports  []*storage.RaftTransport
+	distSenders []*kv.DistSender
+	dbs         []*client.DB
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transports', and the 'stoppers' slice corresponds to the
@@ -250,20 +250,6 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
 		}
 		m.storePool = storage.NewStorePool(m.gossip, m.clock, m.timeUntilStoreDead, m.clientStopper)
-	}
-
-	if m.db == nil {
-		retryOpts := kv.GetDefaultDistSenderRetryOptions()
-		retryOpts.Closer = m.clientStopper.ShouldDrain()
-		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
-			Clock:             m.clock,
-			RangeDescriptorDB: m,
-			RPCSend:           m.rpcSend,
-			RPCRetryOptions:   &retryOpts,
-		}, m.gossip)
-		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(),
-			m.clientStopper, kv.NewTxnMetrics(metric.NewRegistry()))
-		m.db = client.NewDB(sender)
 	}
 
 	for i := 0; i < numStores; i++ {
@@ -451,7 +437,7 @@ func (m *multiTestContext) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDesc
 	// DistSender's RangeLookup function will work correctly, as long as
 	// multiTestContext's FirstRange() method returns the correct descriptor for the
 	// first range.
-	return m.distSender.RangeLookup(key, desc, considerIntents, useReverseScan)
+	return m.distSenders[0].RangeLookup(key, desc, considerIntents, useReverseScan)
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {
@@ -463,7 +449,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	}
 	ctx.Clock = m.clocks[i]
 	ctx.Transport = m.transports[i]
-	ctx.DB = m.db
+	ctx.DB = m.dbs[i]
 	ctx.Gossip = m.gossip
 	ctx.StorePool = m.storePool
 	ctx.EventFeed = m.feed
@@ -499,6 +485,20 @@ func (m *multiTestContext) addStore() {
 	if len(m.transports) <= idx {
 		m.transports = append(m.transports,
 			storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext))
+	}
+	if len(m.dbs) <= idx {
+		retryOpts := kv.GetDefaultDistSenderRetryOptions()
+		retryOpts.Closer = m.clientStopper.ShouldDrain()
+		m.distSenders = append(m.distSenders,
+			kv.NewDistSender(&kv.DistSenderContext{
+				Clock:             m.clock,
+				RangeDescriptorDB: m,
+				RPCSend:           m.rpcSend,
+				RPCRetryOptions:   &retryOpts,
+			}, m.gossip))
+		sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),
+			m.clientStopper, kv.NewTxnMetrics(metric.NewRegistry()))
+		m.dbs = append(m.dbs, client.NewDB(sender))
 	}
 
 	stopper := stop.NewStopper()
@@ -668,7 +668,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		// By the time ChangeReplicas returns the raft leader is
 		// guaranteed to have the updated version, but followers are not.
 		var desc roachpb.RangeDescriptor
-		if err := m.db.GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			m.t.Fatal(err)
 		}
 
@@ -708,7 +708,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	startKey := m.findStartKeyLocked(rangeID)
 
 	var desc roachpb.RangeDescriptor
-	if err := m.db.GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+	if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
 		m.t.Fatal(err)
 	}
 
