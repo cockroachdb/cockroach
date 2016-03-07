@@ -76,9 +76,13 @@ func makeReplicaKeyRanges(d *roachpb.RangeDescriptor, metaFunc func(roachpb.Rang
 	}
 }
 
-func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine) *replicaDataIterator {
+func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine, replicatedOnly bool) *replicaDataIterator {
+	rangeFunc := makeAllKeyRanges
+	if replicatedOnly {
+		rangeFunc = makeReplicatedKeyRanges
+	}
 	ri := &replicaDataIterator{
-		ranges:   makeAllKeyRanges(d),
+		ranges:   rangeFunc(d),
 		Iterator: e.NewIterator(nil),
 	}
 	ri.Seek(ri.ranges[ri.curIndex].start)

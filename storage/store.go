@@ -1266,7 +1266,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 // destroyReplicaData deletes all data associated with a replica, leaving a tombstone.
 // If a Replica object exists, use Replica.Destroy instead of this method.
 func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
-	iter := newReplicaDataIterator(desc, s.Engine())
+	iter := newReplicaDataIterator(desc, s.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	batch := s.Engine().NewBatch()
 	defer batch.Close()

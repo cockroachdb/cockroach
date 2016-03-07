@@ -150,7 +150,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
-	iter := newReplicaDataIterator(desc, snap)
+	iter := newReplicaDataIterator(desc, snap, false /* !replicatedOnly */)
 	defer iter.Close()
 	defer snap.Close()
 

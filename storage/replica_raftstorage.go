@@ -363,7 +363,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Iterate over all the data in the range, including local-only data like
 	// the sequence cache.
-	iter := newReplicaDataIterator(&desc, snap)
+	iter := newReplicaDataIterator(&desc, snap, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
@@ -484,24 +484,11 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 
 	rangeID := r.RangeID
 
-	// First, save the HardState. The HardState must not be changed
-	// because it may record a previous vote cast by this node. This is
-	// usually unnecessary because a snapshot is nearly always
-	// accompanied by a new HardState which incorporates both our former
-	// state and new information from the leader, but in the event that
-	// the HardState has not changed, we want to use our own previous
-	// HardState and not one that was transmitted via the snapshot.
-	hardStateKey := keys.RaftHardStateKey(rangeID)
-	hardState, _, err := engine.MVCCGet(batch, hardStateKey, roachpb.ZeroTimestamp, true /* consistent */, nil)
-	if err != nil {
-		return 0, err
-	}
-
 	// Extract the updated range descriptor.
 	desc := snapData.RangeDescriptor
 
 	// Delete everything in the range and recreate it from the snapshot.
-	iter := newReplicaDataIterator(&desc, batch)
+	iter := newReplicaDataIterator(&desc, batch, true /* replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
@@ -516,19 +503,6 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 			Timestamp: kv.Timestamp,
 		}
 		if err := batch.Put(mvccKey, kv.Value); err != nil {
-			return 0, err
-		}
-	}
-
-	// Restore the saved HardState.
-	if hardState == nil {
-		err := engine.MVCCDelete(batch, nil, hardStateKey, roachpb.ZeroTimestamp, nil)
-		if err != nil {
-			return 0, err
-		}
-	} else {
-		err := engine.MVCCPut(batch, nil, hardStateKey, roachpb.ZeroTimestamp, *hardState, nil)
-		if err != nil {
 			return 0, err
 		}
 	}
