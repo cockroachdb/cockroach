@@ -11,7 +11,7 @@ statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
 query TTBITTB colnames
-SHOW INDEX FROM users
+SHOW INDEXES FROM users
 ----
 Table Name    Unique Seq Column Direction Storing
 users primary true   1   id     ASC       false
@@ -35,7 +35,7 @@ statement ok
 ALTER INDEX users@foo RENAME TO ufo
 
 query TTBITTB colnames
-SHOW INDEX FROM users
+SHOW INDEXES FROM users
 ----
 Table Name    Unique Seq Column Direction Storing
 users primary true   1   id     ASC       false
@@ -59,7 +59,7 @@ statement ok
 ALTER INDEX users@bar RENAME TO rar
 
 query TTBITTB colnames
-SHOW INDEX FROM users
+SHOW INDEXES FROM users
 ----
 Table Name    Unique Seq Column Direction Storing
 users primary true   1   id     ASC       false

@@ -170,7 +170,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 
 // ShowIndex returns all the indexes for a table.
 // Privileges: None.
-//   Notes: postgres does not have a SHOW INDEX statement.
+//   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, *roachpb.Error) {
 	desc, pErr := p.getTableDesc(n.Table)

@@ -9,7 +9,7 @@ CREATE TABLE t (
 )
 
 query TTBITTB colnames
-SHOW INDEX FROM t
+SHOW INDEXES FROM t
 ----
 Table Name    Unique Seq Column Direction Storing
 t     primary true   1   a      ASC       false

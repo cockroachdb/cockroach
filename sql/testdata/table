@@ -52,7 +52,7 @@ CREATE TABLE c (
 )
 
 query TTBITTB colnames
-SHOW INDEX FROM c
+SHOW INDEXES FROM c
 ----
 Table Name           Unique Seq Column Direction  Storing
 c     primary        true   1   id     ASC        false
@@ -125,13 +125,13 @@ query error table "users" does not exist
 SHOW COLUMNS FROM test.users
 
 query error no database specified
-SHOW INDEX FROM users
+SHOW INDEXES FROM users
 
 query error database "foo" does not exist
-SHOW INDEX FROM foo.users
+SHOW INDEXES FROM foo.users
 
 query error table "users" does not exist
-SHOW INDEX FROM test.users
+SHOW INDEXES FROM test.users
 
 statement ok
 CREATE TABLE test.users (
@@ -151,7 +151,7 @@ name  STRING false NULL
 title STRING true  NULL
 
 query TTBITTB colnames
-SHOW INDEX FROM test.users
+SHOW INDEXES FROM test.users
 ----
 Table Name    Unique Seq Column Direction Storing
 users primary true   1   id     ASC       false

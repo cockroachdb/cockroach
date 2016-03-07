@@ -68,7 +68,7 @@ id username  species
 
 # Renaming a column updates the column names in an index.
 query TTBITTB colnames
-SHOW INDEX FROM users
+SHOW INDEXES FROM users
 ----
 Table  Name     Unique  Seq  Column   Direction  Storing
 users  primary  true    1    id       ASC        false
