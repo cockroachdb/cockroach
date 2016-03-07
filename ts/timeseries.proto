@@ -44,20 +44,35 @@ message TimeSeriesData {
   repeated TimeSeriesDatapoint datapoints = 3;
 }
 
-// TimeSeriesQueryAggregator describes a set of aggregation functions which are
-// applied to data points before returning them as part of a query.
+// TimeSeriesQueryAggregator describes a set of aggregation functions which can
+// be used to combine multiple datapoints into a single datapoint.
 //
-// Cockroach does not store data points at full fidelity, instead "downsampling"
-// data points into fixed-length sample periods. The value returned for each
-// sample period is equivalent to applying the supplied aggregator function to
-// the original data points that fell within the sample period.
+// Aggregators are used to "downsample" series by combining datapoints from the
+// same series at different times. They are also used to "aggregate" values from
+// different series, combining data points from different series at the same
+// time.
 enum TimeSeriesQueryAggregator {
-  // AVG returns the average value of points within the sample period.
+  // AVG returns the average value of datapoints.
   AVG = 1;
-  // AVG_RATE returns the rate of change of the average over the sample period's
-  // duration.  This is computed via linear regression with the previous sample
-  // period's average value.
-  AVG_RATE = 2;
+  // SUM returns the sum value of datapoints.
+  SUM = 2;
+  // MAX returns the maximum value of datapoints.
+  MAX = 3;
+  // MIN returns the minimum value of datapoints.
+  MIN = 4;
+}
+
+// TimeSeriesQueryDerivative describes a derivative function used to convert
+// returned datapoints into a rate-of-change.
+enum TimeSeriesQueryDerivative {
+  // NONE is the default value, and does not apply a derivative function.
+  NONE = 0;
+  // DERIVATIVE returns the first-order derivative of values in the time series.
+  DERIVATIVE = 1;
+  // NON_NEGATIVE_DERIVATIVE returns only non-negative values of the first-order
+  // derivative; negative values are returned as zero. This should be used for
+  // counters that monotonically increase, but might wrap or reset.
+  NON_NEGATIVE_DERIVATIVE = 2;
 }
 
 // TimeSeriesQueryRequest is the standard incoming time series query request
@@ -77,11 +92,18 @@ message TimeSeriesQueryRequest {
 
         // The name of the time series to query.
         optional string name = 1 [(gogoproto.nullable) = false];
-        // The aggregation function to apply to points in the result.
-        optional TimeSeriesQueryAggregator aggregator = 2 [default = AVG];
+        // A downsampling aggregation function to apply to datapoints within the
+        // same sample period.
+        optional TimeSeriesQueryAggregator downsampler = 2 [default = AVG];
+        // An aggregation function used to combine timelike datapoints from the
+        // different sources being queried.
+        optional TimeSeriesQueryAggregator source_aggregator = 3 [default = SUM];
+        // If set to a value other than 'NONE', query will return a derivative
+        // (rate of change) of the aggregated datapoints.
+        optional TimeSeriesQueryDerivative derivative = 4 [default = NONE];
         // An optional list of sources to restrict the time series query. If no
-        // sources are provided, all sources will be queried.
-        repeated string sources = 3;
+        // sources are provided, all available sources will be queried.
+        repeated string sources = 5;
     }
 
     // A set of Queries for this request. A request must have at least one
@@ -96,15 +118,21 @@ message TimeSeriesQueryResponse {
     message Result {
         option (gogoproto.goproto_getters) = true;
 
-        // A string which uniquely identifies the variable from which this data was
-        // measured.
+        // The name of the time series that was queried.
         optional string name = 1 [(gogoproto.nullable) = false];
-        // A list of sources from which the data was aggregated.
+        // A list of the different sources for which time series data was found
+        // and queried.
         repeated string sources = 2;
-        // The aggregation function applied to points in the result.
-        optional TimeSeriesQueryAggregator aggregator = 3 [default = AVG];
-        // Datapoints describing the queried data.
-        repeated TimeSeriesDatapoint datapoints = 4;
+        // The downsampling aggregation function applied to datapoints within the
+        // same sample period.
+        optional TimeSeriesQueryAggregator downsampler = 3 [default = AVG];
+        // The aggregation function applied to combine timelike datapoints from
+        // the different sources that were queried.
+        optional TimeSeriesQueryAggregator source_aggregator = 4 [default = SUM];
+        // The derivative function applied to the results of this query.
+        optional TimeSeriesQueryDerivative derivative = 5 [default= NONE];
+        // The result of the query expressed as a list of datapoints.
+        repeated TimeSeriesDatapoint datapoints = 6;
     }
 
     // A set of Results; there will be one result for each Query in the matching
