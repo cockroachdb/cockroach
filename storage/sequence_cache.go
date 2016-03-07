@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -109,7 +108,7 @@ func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, dest *roachpb.Se
 	if err != nil || len(kvs) == 0 || !bytes.HasPrefix(kvs[0].Key, prefix) {
 		return 0, 0, err
 	}
-	_, epoch, seq, err := decodeSequenceCacheKey(kvs[0].Key, sc.scratchBuf[:0])
+	_, epoch, seq, err := keys.DecodeSequenceCacheKey(kvs[0].Key, sc.scratchBuf[:0])
 	if err != nil {
 		return 0, 0, err
 	}
@@ -140,7 +139,7 @@ func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, *uuid.UUID, roa
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.SequenceCacheEntry
-			txnID, _, _, err := decodeSequenceCacheKey(kv.Key, nil)
+			txnID, _, _, err := keys.DecodeSequenceCacheKey(kv.Key, nil)
 			if err != nil {
 				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 			}
@@ -246,50 +245,9 @@ func (sc *SequenceCache) shouldCacheError(pErr *roachpb.Error) bool {
 	return true
 }
 
-func decodeSequenceCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, uint32, uint32, error) {
-	// TODO(tschottdorf): redundant check.
-	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
-		return nil, 0, 0, util.Errorf("key %s does not have %s prefix", key, keys.LocalRangeIDPrefix)
-	}
-	// Cut the prefix, the Range ID, and the infix specifier.
-	b := key[len(keys.LocalRangeIDPrefix):]
-	b, _, err := encoding.DecodeUvarintAscending(b)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	b = b[1:]
-	if !bytes.HasPrefix(b, keys.LocalSequenceCacheSuffix) {
-		return nil, 0, 0, util.Errorf("key %s does not contain the sequence cache suffix %s",
-			key, keys.LocalSequenceCacheSuffix)
-	}
-	// Cut the sequence cache suffix.
-	b = b[len(keys.LocalSequenceCacheSuffix):]
-	// Decode the id.
-	b, idBytes, err := encoding.DecodeBytesAscending(b, dest)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	// Decode the epoch.
-	b, epoch, err := encoding.DecodeUint32Descending(b)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	// Decode the sequence number.
-	b, seq, err := encoding.DecodeUint32Descending(b)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	if len(b) > 0 {
-		return nil, 0, 0, util.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key",
-			key, b)
-	}
-	txnID, err := uuid.FromBytes(idBytes)
-	return txnID, epoch, seq, err
-}
-
 func decodeSequenceCacheMVCCKey(encKey engine.MVCCKey, dest []byte) (*uuid.UUID, uint32, uint32, error) {
 	if encKey.IsValue() {
 		return nil, 0, 0, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}
-	return decodeSequenceCacheKey(encKey.Key, dest)
+	return keys.DecodeSequenceCacheKey(encKey.Key, dest)
 }

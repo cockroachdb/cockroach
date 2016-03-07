@@ -122,6 +122,49 @@ func SequenceCacheKey(rangeID roachpb.RangeID, txnID *uuid.UUID, epoch uint32, s
 	return key
 }
 
+// DecodeSequenceCacheKey decodes the provided sequence cache entry,
+// returning the transaction ID, the epoch, and the sequence number.
+func DecodeSequenceCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, uint32, uint32, error) {
+	// TODO(tschottdorf): redundant check.
+	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
+		return nil, 0, 0, util.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
+	}
+	// Cut the prefix, the Range ID, and the infix specifier.
+	b := key[len(LocalRangeIDPrefix):]
+	b, _, err := encoding.DecodeUvarintAscending(b)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	b = b[1:]
+	if !bytes.HasPrefix(b, LocalSequenceCacheSuffix) {
+		return nil, 0, 0, util.Errorf("key %s does not contain the sequence cache suffix %s",
+			key, LocalSequenceCacheSuffix)
+	}
+	// Cut the sequence cache suffix.
+	b = b[len(LocalSequenceCacheSuffix):]
+	// Decode the id.
+	b, idBytes, err := encoding.DecodeBytesAscending(b, dest)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	// Decode the epoch.
+	b, epoch, err := encoding.DecodeUint32Descending(b)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	// Decode the sequence number.
+	b, seq, err := encoding.DecodeUint32Descending(b)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	if len(b) > 0 {
+		return nil, 0, 0, util.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key",
+			key, b)
+	}
+	txnID, err := uuid.FromBytes(idBytes)
+	return txnID, epoch, seq, err
+}
+
 // RaftTombstoneKey returns a system-local key for a raft tombstone.
 func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, localRaftTombstoneSuffix, nil)

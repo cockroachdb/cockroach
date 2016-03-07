@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -56,26 +55,6 @@ func init() {
 // returns a sequence cache using the supplied Range ID.
 func createTestSequenceCache(t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper) (*SequenceCache, engine.Engine) {
 	return NewSequenceCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-}
-
-func TestSequenceCacheEncodeDecode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	const rangeID = 123
-	const expSeq = 987
-	key := keys.SequenceCacheKey(rangeID, testTxnID, testTxnEpoch, expSeq)
-	txnID, epoch, seq, err := decodeSequenceCacheKey(key, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !roachpb.TxnIDEqual(txnID, testTxnID) {
-		t.Fatalf("expected txnID %q, got %q", testTxnID, txnID)
-	}
-	if epoch != testTxnEpoch {
-		t.Fatalf("expected epoch %d, got %d", testTxnEpoch, epoch)
-	}
-	if seq != expSeq {
-		t.Fatalf("expected sequence %d, got %d", expSeq, seq)
-	}
 }
 
 // TestSequenceCachePutGetClearData tests basic get & put functionality as well as
