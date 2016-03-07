@@ -176,6 +176,11 @@ func (f *Farmer) PGUrl(i int) string {
 	panic("unimplemented")
 }
 
+// InternalAddr returns the TCP address used for inter-node communication.
+func (f *Farmer) InternalAddr(i int) *net.TCPAddr {
+	panic("unimplemented")
+}
+
 // Addr returns the TCP address for the given node.
 func (f *Farmer) Addr(i int) *net.TCPAddr {
 	panic("unimplemented")
@@ -239,6 +244,13 @@ func (f *Farmer) AssertAndStop(t *testing.T) {
 	if err := f.Destroy(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// ExecRoot executes the given command with super-user privileges.
+func (f *Farmer) ExecRoot(i int, cmd []string) error {
+	// We have `f.Exec(i, strings.Join(" ", cmd))`, so this should be
+	// easy to implement once we need it.
+	panic("unimplemented")
 }
 
 // Kill terminates the cockroach process running on the given node number.

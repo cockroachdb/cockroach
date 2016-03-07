@@ -85,7 +85,7 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 		var message interface{}
 		if err := dec.Decode(&message); err != nil {
 			if err == io.EOF {
-				return nil
+				break
 			}
 			return err
 		}
@@ -96,6 +96,8 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 			_, _ = fmt.Fprintf(os.Stderr, ".")
 		}
 	}
+	_, _ = fmt.Fprintln(os.Stderr)
+	return nil
 }
 
 // createContainer creates a new container using the specified options. Per the
