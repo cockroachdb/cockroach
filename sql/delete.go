@@ -163,7 +163,7 @@ func canDeleteWithoutScan(n *parser.Delete, rows planNode, indexCount int) bool 
 			}
 			return false
 		}
-		if n.Where != nil {
+		if scan := sel.table.node.(*scanNode); scan.filter != nil {
 			if log.V(2) {
 				log.Infof("delete forced to scan: values required for filter (%s)", sel.filter)
 			}
