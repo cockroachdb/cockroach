@@ -28,10 +28,6 @@ function fetch_docker() {
       time docker save -o "${imgcache}" "${ref}"
     fi
   fi
-
-  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${name}:latest"; then
-    docker tag "${ref}" "${name}:latest"
-  fi
 }
 
 # This is mildly tricky: This script runs itself recursively. The
@@ -130,9 +126,6 @@ mkdir -p "${builder_dir}"
 du -sh "${builder_dir}"
 ls -lah "${builder_dir}"
 
-# If the images below are updated, the new images will not be picked
-# up until the tags listed here (or in builder.sh for the builder
-# image) are updated.
 fetch_docker "cockroachdb" "builder" $($(dirname $0)/builder.sh version)
 
 if is_shard 0; then
