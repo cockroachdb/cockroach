@@ -175,6 +175,24 @@ typedef struct {
 
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
+// DBStatsResult contains various runtime stats for RocksDB.
+typedef struct {
+  uint64_t block_cache_hits;
+  uint64_t block_cache_misses;
+  size_t   block_cache_usage;
+  size_t   block_cache_pinned_usage;
+  uint64_t bloom_filter_prefix_checked;
+  uint64_t bloom_filter_prefix_useful;
+  uint64_t memtable_hits;
+  uint64_t memtable_misses;
+  uint64_t memtable_total_size;
+  uint64_t flushes;
+  uint64_t compactions;
+  uint64_t table_readers_mem_estimate;
+} DBStatsResult;
+
+DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
