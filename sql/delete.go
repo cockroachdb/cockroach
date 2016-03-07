@@ -49,6 +49,13 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, pErr
 	}
+	sel := rows.(*selectNode)
+	// Some decisions below use logic in the scanNode -- if a refactor changes
+	// rows to not be backed by a scanNode, this cast will fail quickly and
+	// visibly (by crashing), indicating those need to be revisited, rather
+	// than silently changing behavior.
+	scan := sel.table.node.(*scanNode)
+
 	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -86,8 +93,8 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
-	if canDeleteWithoutScan(n, rows, len(indexes)) {
-		return p.fastDelete(rows, rh.getResults(), autoCommit)
+	if canDeleteWithoutScan(n, scan, len(indexes)) {
+		return p.fastDelete(scan, rh.getResults(), autoCommit)
 	}
 
 	b := p.txn.NewBatch()
@@ -149,38 +156,33 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 // Determine if the deletion of `rows` can be done without actually scanning them,
 // i.e. if we do not need to know their values for filtering expressions or a
 // RETURNING clause or for updating secondary indexes.
-func canDeleteWithoutScan(n *parser.Delete, rows planNode, indexCount int) bool {
-	if sel, ok := rows.(*selectNode); ok {
-		if indexCount != 0 {
-			if log.V(2) {
-				log.Infof("delete forced to scan: values required to update %d secondary indexes", indexCount)
-			}
-			return false
+func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, indexCount int) bool {
+	if indexCount != 0 {
+		if log.V(2) {
+			log.Infof("delete forced to scan: values required to update %d secondary indexes", indexCount)
 		}
-		if n.Returning != nil {
-			if log.V(2) {
-				log.Infof("delete forced to scan: values required for RETURNING")
-			}
-			return false
-		}
-		if scan := sel.table.node.(*scanNode); scan.filter != nil {
-			if log.V(2) {
-				log.Infof("delete forced to scan: values required for filter (%s)", sel.filter)
-			}
-			return false
-		}
-		return true
+		return false
 	}
-	return false
+	if n.Returning != nil {
+		if log.V(2) {
+			log.Infof("delete forced to scan: values required for RETURNING")
+		}
+		return false
+	}
+	if scan.filter != nil {
+		if log.V(2) {
+			log.Infof("delete forced to scan: values required for filter (%s)", scan.filter)
+		}
+		return false
+	}
+	return true
 }
 
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
-func (p *planner) fastDelete(rows planNode, result *returningNode, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) fastDelete(scan *scanNode, result *returningNode, autoCommit bool) (planNode, *roachpb.Error) {
 	b := p.txn.NewBatch()
-	sel := rows.(*selectNode)
-	scan := sel.table.node.(*scanNode)
 
 	if !scan.initScan() {
 		return nil, scan.pErr
