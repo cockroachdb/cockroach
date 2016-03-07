@@ -331,6 +331,29 @@ func (r *RocksDB) Defer(func()) {
 	panic("only implemented for rocksDBBatch")
 }
 
+// GetStats retrieves stats from this Engine's RocksDB instance and
+// returns it in a new instance of Stats.
+func (r *RocksDB) GetStats() (*Stats, error) {
+	var s C.DBStatsResult
+	if err := statusToError(C.DBGetStats(r.rdb, &s)); err != nil {
+		return nil, err
+	}
+	return &Stats{
+		BlockCacheHits:           uint64(s.block_cache_hits),
+		BlockCacheMisses:         uint64(s.block_cache_misses),
+		BlockCacheUsage:          uint64(s.block_cache_usage),
+		BlockCachePinnedUsage:    uint64(s.block_cache_pinned_usage),
+		BloomFilterPrefixChecked: uint64(s.bloom_filter_prefix_checked),
+		BloomFilterPrefixUseful:  uint64(s.bloom_filter_prefix_useful),
+		MemtableHits:             uint64(s.memtable_hits),
+		MemtableMisses:           uint64(s.memtable_misses),
+		MemtableTotalSize:        uint64(s.memtable_total_size),
+		Flushes:                  uint64(s.flushes),
+		Compactions:              uint64(s.compactions),
+		TableReadersMemEstimate:  uint64(s.table_readers_mem_estimate),
+	}, nil
+}
+
 type rocksDBSnapshot struct {
 	parent *RocksDB
 	handle *C.DBEngine
@@ -424,6 +447,11 @@ func (r *rocksDBSnapshot) Commit() error {
 // Defer is not implemented for rocksDBSnapshot.
 func (r *rocksDBSnapshot) Defer(func()) {
 	panic("only implemented for rocksDBBatch")
+}
+
+// GetStats is not implemented for rocksDBSnapshot.
+func (r *rocksDBSnapshot) GetStats() (*Stats, error) {
+	return nil, util.Errorf("only implemented for RocksDB")
 }
 
 type rocksDBBatch struct {
@@ -524,6 +552,11 @@ func (r *rocksDBBatch) Commit() error {
 
 func (r *rocksDBBatch) Defer(fn func()) {
 	r.defers = append(r.defers, fn)
+}
+
+// GetStats is not implemented for rocksDBBatch.
+func (r *rocksDBBatch) GetStats() (*Stats, error) {
+	return nil, util.Errorf("only implemented for RocksDB")
 }
 
 type rocksDBIterator struct {

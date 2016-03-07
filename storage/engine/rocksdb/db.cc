@@ -16,6 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 #include <algorithm>
+#include <atomic>
 #include <limits>
 #include <stdarg.h>
 #include <google/protobuf/repeated_field.h>
@@ -37,6 +38,7 @@
 #include "cockroach/storage/engine/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
+#include "eventlistener.h"
 
 extern "C" {
 #include "_cgo_export.h"
@@ -55,20 +57,26 @@ struct DBEngine {
   virtual DBStatus WriteBatch() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(DBSlice prefix) = 0;
+  virtual DBStatus GetStats(DBStatsResult* stats) = 0;
 };
 
 struct DBImpl : public DBEngine {
   std::unique_ptr<rocksdb::Env> memenv;
   std::unique_ptr<rocksdb::DB> rep_deleter;
   rocksdb::ReadOptions const read_opts;
+  std::shared_ptr<rocksdb::Cache> block_cache;
+  std::shared_ptr<DBEventListener> event_listener;
 
   // Construct a new DBImpl from the specified DB and Env. Both the DB
   // and Env will be deleted when the DBImpl is deleted. It is ok to
   // pass NULL for the Env.
-  DBImpl(rocksdb::DB* r, rocksdb::Env* m)
+  DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
+    std::shared_ptr<DBEventListener> event_listener)
       : DBEngine(r),
         memenv(m),
-        rep_deleter(r) {
+        rep_deleter(r),
+        block_cache(bc),
+        event_listener(event_listener) {
   }
   virtual ~DBImpl() {
     const rocksdb::Options &opts = rep->GetOptions();
@@ -84,6 +92,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBSlice prefix);
+  virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
 struct DBBatch : public DBEngine {
@@ -101,6 +110,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBSlice prefix);
+  virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
 struct DBSnapshot : public DBEngine {
@@ -122,6 +132,7 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBSlice prefix);
+  virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
 struct DBIterator {
@@ -1257,6 +1268,10 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
         row_cache_size, num_cache_shard_bits);
   }
 
+  // Register listener for tracking RocksDB stats.
+  std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
+  options.listeners.emplace_back(event_listener);
+
   std::unique_ptr<rocksdb::Env> memenv;
   if (dir.len == 0) {
     memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
@@ -1268,7 +1283,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
-  *db = new DBImpl(db_ptr, memenv.release());
+  *db = new DBImpl(db_ptr, memenv.release(), table_options.block_cache, event_listener);
   return kSuccess;
 }
 
@@ -1458,6 +1473,41 @@ DBIterator* DBSnapshot::NewIter(DBSlice prefix) {
   return iter;
 }
 
+// GetStats retrieves a subset of RocksDB stats that are relevant to
+// CockroachDB.
+DBStatus DBImpl::GetStats(DBStatsResult* stats) {
+  const rocksdb::Options &opts = rep->GetOptions();
+  const std::shared_ptr<rocksdb::Statistics> &s = opts.statistics;
+
+  std::string memtable_total_size;
+  rep->GetProperty("rocksdb.cur-size-all-mem-tables", &memtable_total_size);
+
+  std::string table_readers_mem_estimate;
+  rep->GetProperty("rocksdb.estimate-table-readers-mem", &table_readers_mem_estimate);
+
+  stats->block_cache_hits = s->getTickerCount(rocksdb::BLOCK_CACHE_HIT);
+  stats->block_cache_misses = s->getTickerCount(rocksdb::BLOCK_CACHE_MISS);
+  stats->block_cache_usage = block_cache->GetUsage();
+  stats->block_cache_pinned_usage = block_cache->GetPinnedUsage();
+  stats->bloom_filter_prefix_checked = s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED);
+  stats->bloom_filter_prefix_useful = s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
+  stats->memtable_hits = s->getTickerCount(rocksdb::MEMTABLE_HIT);
+  stats->memtable_misses = s->getTickerCount(rocksdb::MEMTABLE_MISS);
+  stats->memtable_total_size = std::stoull(memtable_total_size);
+  stats->flushes = event_listener->GetFlushes();
+  stats->compactions = event_listener->GetCompactions();
+  stats->table_readers_mem_estimate = std::stoull(table_readers_mem_estimate);
+  return kSuccess;
+}
+
+DBStatus DBBatch::GetStats(DBStatsResult* stats) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBSnapshot::GetStats(DBStatsResult* stats) {
+  return FmtStatus("unsupported");
+}
+
 DBIterator::DBIterator(DBSlice prefix)
     : upper_bound_str(EncodePrefixNextKey(prefix)),
       upper_bound_slice(upper_bound_str) {
@@ -1642,4 +1692,10 @@ MVCCStatsResult MVCCComputeStats(
 
   stats.last_update_nanos = now_nanos;
   return stats;
+}
+
+// DBGetStats queries the given DBEngine for various operational stats and
+// write them to the provided DBStatsResult instance.
+DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
+  return db->GetStats(stats);
 }

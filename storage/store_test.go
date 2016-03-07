@@ -1717,3 +1717,27 @@ func TestMaybeRemove(t *testing.T) {
 		t.Errorf("Unexpected removed range %v", removedRng)
 	}
 }
+
+func TestStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := TestStoreContext()
+	store, _, stopper := createTestStoreWithoutStart(t, &ctx)
+	defer stopper.Stop()
+
+	// It's hard to get most of these stats to be non-zero without enough load
+	// to trigger a RocksDB flush (not appropriate for a unit test). So, we only
+	// perform basic tests here.
+	util.SucceedsSoon(t, func() error {
+		stats, err := store.Engine().GetStats()
+		if err != nil {
+			// This should never error.
+			t.Fatal(err)
+		}
+
+		// RocksDB starts with a small memtable, so we can verify that.
+		if stats.MemtableTotalSize == 0 {
+			return util.Errorf("memtable size should be non-zero")
+		}
+		return nil
+	})
+}

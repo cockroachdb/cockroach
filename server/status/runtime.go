@@ -106,6 +106,9 @@ func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	// Determine an appropriate way to compute total memory usage.
 	numCgoCall := runtime.NumCgoCall()
 	numGoroutine := runtime.NumGoroutine()
+
+	// It might be useful to call ReadMemStats() more often, but it stops the
+	// world while collecting stats so shouldn't be called too often.
 	ms := runtime.MemStats{}
 	runtime.ReadMemStats(&ms)
 
