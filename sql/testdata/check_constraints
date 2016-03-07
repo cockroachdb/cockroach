@@ -1,0 +1,34 @@
+#### column CHECK constraints
+
+statement ok
+CREATE TABLE t1 (a INT CHECK (a > 0), b INT CHECK (b < 0))
+
+statement ok
+INSERT INTO t1 VALUES (3, -1)
+
+statement ok
+INSERT INTO t1 (a, b) VALUES (4, -2)
+
+statement error pq: Failed to satisfy CHECK constraint
+INSERT INTO t1 VALUES (-3, -1)
+
+statement error pq: Failed to satisfy CHECK constraint
+INSERT INTO t1 VALUES (3, 1)
+
+statement ok
+INSERT INTO t1 (b, a) VALUES (-2, 4)
+
+statement ok
+INSERT INTO t1 (a) VALUES (10)
+
+statement ok
+INSERT INTO t1 (b) VALUES (-1)
+
+statement ok
+CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a > 0), b INT CHECK (b < 0))
+
+statement error pq: Failed to satisfy CHECK constraint
+INSERT INTO t2 (b) VALUES (-1)
+
+#### table CHECK constraints
+# TODO(guanqun):
