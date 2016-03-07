@@ -136,8 +136,15 @@ ls -lah "${builder_dir}"
 fetch_docker "cockroachdb" "builder" $($(dirname $0)/builder.sh version)
 
 if is_shard 0; then
+  # See the comment in build/builder.sh about this awk line.
+  postgresTestTag=$(awk -F\" '/postgresTestTag *=/ {print $2}' \
+                      $(dirname $0)/../acceptance/util_test.go)
+  if [ -z "${postgresTestTag}" ]; then
+    echo "unable to determine postgres-test tag"
+    exit 1
+  fi
   # Dockerfile at: https://github.com/cockroachdb/postgres-test
-  fetch_docker "cockroachdb" "postgres-test" "20160203-140220"
+  fetch_docker "cockroachdb" "postgres-test" "${postgresTestTag}"
 fi
 
 # Recursively invoke this script inside the builder docker container,
