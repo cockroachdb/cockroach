@@ -135,7 +135,8 @@ ls -lah "${builder_dir}"
 # image) are updated.
 fetch_docker "cockroachdb" "builder" $($(dirname $0)/builder.sh version)
 
-fetch_docker "cockroachdb" "docker-spy" "20160209-143235"
+# Keep the tag in sync with acceptance/cluster/localcluster.go
+fetch_docker "cockroachdb" "docker-spy" "20160306-214457"
 
 if is_shard 0; then
   # Dockerfile at: https://github.com/cockroachdb/postgres-test

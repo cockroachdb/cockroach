@@ -45,9 +45,9 @@ import (
 
 const (
 	builderImage   = "cockroachdb/builder"
-	builderTag     = "20160218-125307"
+	builderTag     = "20160305-182433" // keep in sync with build/builder.sh
 	dockerspyImage = "cockroachdb/docker-spy"
-	dockerspyTag   = "20160209-143235"
+	dockerspyTag   = "20160306-214457" // keep in sync with build/circle-deps.sh
 	domain         = "local"
 
 	builderImageFull = builderImage + ":" + builderTag
@@ -258,7 +258,7 @@ func (l *LocalCluster) runDockerSpy() {
 	if ci, err := c.Inspect(); err != nil {
 		log.Error(err)
 	} else {
-		log.Infof("started %s: %s", c.Name(), ci.NetworkSettings.IPAddress)
+		log.Infof("started %s: %s [%s]", c.Name(), ci.NetworkSettings.IPAddress, c.id)
 	}
 }
 
@@ -441,14 +441,13 @@ func (l *LocalCluster) startNode(node *testNode) {
 	}
 	l.createRoach(node, l.dns, l.vols, cmd...)
 	maybePanic(node.Start())
-	// Infof doesn't take positional parameters, hence the Sprintf.
-	log.Infof(fmt.Sprintf(`*** started %[1]s ***
+	log.Infof(`*** started %[1]s ***
   ui:        %[2]s
   trace:     %[2]s/debug/requests
   logs:      %[3]s/cockroach.INFO
   pprof:     docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'
   cockroach: %[6]s`,
-		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort, cmd))
+		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort, cmd)
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {
@@ -603,8 +602,26 @@ func (l *LocalCluster) stop() {
 		l.monitorCtxCancelFunc = nil
 	}
 
+	outputLogDir := l.logDir
+	logContainer := func(c *Container) string {
+		// TODO(bdarnell): make these filenames more consistent with
+		// structured logs?
+		file := filepath.Join(outputLogDir, c.Name(),
+			fmt.Sprintf("stderr.%s.log", strings.Replace(
+				time.Now().Format(time.RFC3339), ":", "_", -1)))
+		maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
+		w, err := os.Create(file)
+		maybePanic(err)
+		defer w.Close()
+		maybePanic(c.Logs(w))
+		return file
+	}
+
 	if l.dns != nil {
 		maybePanic(l.dns.Kill())
+		if outputLogDir != "" {
+			_ = logContainer(l.dns)
+		}
 		maybePanic(l.dns.Remove())
 		l.dns = nil
 	}
@@ -617,7 +634,6 @@ func (l *LocalCluster) stop() {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}
-	outputLogDir := l.logDir
 	for i, n := range l.Nodes {
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
@@ -626,17 +642,7 @@ func (l *LocalCluster) stop() {
 			outputLogDir = util.CreateTempDir(util.PanicTester, "crashed_nodes")
 		}
 		if crashed || l.logDir != "" {
-			// TODO(bdarnell): make these filenames more consistent with
-			// structured logs?
-			file := filepath.Join(outputLogDir, nodeStr(i),
-				fmt.Sprintf("stderr.%s.log", strings.Replace(
-					time.Now().Format(time.RFC3339), ":", "_", -1)))
-
-			maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
-			w, err := os.Create(file)
-			maybePanic(err)
-			defer w.Close()
-			maybePanic(n.Logs(w))
+			file := logContainer(n.Container)
 			if crashed {
 				log.Infof("node %d: stderr at %s", i, file)
 			}
