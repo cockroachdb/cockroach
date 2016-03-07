@@ -39,7 +39,6 @@ import (
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
-	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 )
@@ -184,7 +183,7 @@ func (l *LocalCluster) OneShot(ipo types.ImagePullOptions, containerConfig conta
 	if err := pullImage(l, ipo); err != nil {
 		return err
 	}
-	container, err := createContainer(l, containerConfig, hostConfig, nil, name)
+	container, err := createContainer(l, containerConfig, hostConfig, name)
 	if err != nil {
 		return err
 	}
@@ -323,7 +322,7 @@ func (l *LocalCluster) initCluster() {
 			Binds:           binds,
 			PublishAllPorts: true,
 		},
-		nil, "volumes",
+		"volumes",
 	)
 	maybePanic(err)
 	maybePanic(c.Start())
@@ -336,7 +335,6 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...strin
 
 	hostConfig := container.HostConfig{
 		PublishAllPorts: true,
-		NetworkMode:     container.NetworkMode(l.networkID),
 	}
 
 	if vols != nil {
@@ -363,9 +361,7 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...strin
 				defaultTCP: {},
 			},
 			Entrypoint: entrypoint,
-			// TODO(pmattis): Figure out why the Go DNS resolver is misbehaving.
-			Env: []string{"GODEBUG=netdns=cgo"},
-			Cmd: cmd,
+			Cmd:        cmd,
 			Labels: map[string]string{
 				// Allow for `docker ps --filter label=Hostname=roach0` or `--filter label=Roach`.
 				"Hostname": hostname,
@@ -373,13 +369,6 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...strin
 			},
 		},
 		hostConfig,
-		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{
-				l.networkID: {
-					Aliases: []string{hostname},
-				},
-			},
-		},
 		node.nodeStr,
 	)
 	maybePanic(err)
