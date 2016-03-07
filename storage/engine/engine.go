@@ -150,6 +150,35 @@ type Engine interface {
 	// with the defer statement, the last callback to be deferred is the
 	// first to be executed.
 	Defer(fn func())
+	// GetStats retrieves stats from the engine.
+	GetStats() (*Stats, error)
+}
+
+// Stats is a set of RocksDB stats. These are all described in RocksDB
+// documentation and source code.
+//
+// Currently, we collect stats from the following sources:
+//
+// 1. RocksDB's internal "tickers" (i.e. counters). They're defined in
+//    rocksdb/statistics.h
+// 2. DBEventListener, which implements RocksDB's EventListener interface.
+// 3. rocksdb::DB::GetProperty().
+//
+// This is a good resource describing RocksDB's memory-related stats:
+// https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
+type Stats struct {
+	BlockCacheHits           int64
+	BlockCacheMisses         int64
+	BlockCacheUsage          int64
+	BlockCachePinnedUsage    int64
+	BloomFilterPrefixChecked int64
+	BloomFilterPrefixUseful  int64
+	MemtableHits             int64
+	MemtableMisses           int64
+	MemtableTotalSize        int64
+	Flushes                  int64
+	Compactions              int64
+	TableReadersMemEstimate  int64
 }
 
 var bufferPool = sync.Pool{
