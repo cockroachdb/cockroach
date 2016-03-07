@@ -363,7 +363,9 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...strin
 				defaultTCP: {},
 			},
 			Entrypoint: entrypoint,
-			Cmd:        cmd,
+			// TODO(pmattis): Figure out why the Go DNS resolver is misbehaving.
+			Env: []string{"GODEBUG=netdns=cgo"},
+			Cmd: cmd,
 			Labels: map[string]string{
 				// Allow for `docker ps --filter label=Hostname=roach0` or `--filter label=Roach`.
 				"Hostname": hostname,
@@ -425,14 +427,13 @@ func (l *LocalCluster) startNode(node *testNode) {
 	}
 	l.createRoach(node, l.vols, cmd...)
 	maybePanic(node.Start())
-	// Infof doesn't take positional parameters, hence the Sprintf.
-	log.Infof(fmt.Sprintf(`*** started %[1]s ***
+	log.Infof(`*** started %[1]s ***
   ui:        %[2]s
   trace:     %[2]s/debug/requests
   logs:      %[3]s/cockroach.INFO
   pprof:     docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'
   cockroach: %[6]s`,
-		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort, cmd))
+		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort, cmd)
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {
