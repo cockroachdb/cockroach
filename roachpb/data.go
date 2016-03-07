@@ -112,11 +112,15 @@ func MakeKey(keys ...[]byte) []byte {
 // BytesNext returns the next possible byte by appending an \x00.
 func BytesNext(b []byte) []byte {
 	// TODO(spencer): Do we need to enforce KeyMaxLength here?
-	return append(append([]byte(nil), b...), 0)
+	bn := make([]byte, len(b)+1)
+	copy(bn, b)
+	bn[len(bn)-1] = 0
+	return bn
 }
 
 func bytesPrefixEnd(b []byte) []byte {
-	end := append([]byte(nil), b...)
+	end := make([]byte, len(b))
+	copy(end, b)
 	for i := len(end) - 1; i >= 0; i-- {
 		end[i] = end[i] + 1
 		if end[i] != 0 {
