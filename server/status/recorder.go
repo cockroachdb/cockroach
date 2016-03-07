@@ -165,10 +165,11 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	topLevel := map[string]interface{}{
 		fmt.Sprintf("node.%d", mr.mu.nodeID): mr.nodeRegistry,
 	}
-	// Add collection of stores to top level.
-	storeLevel := map[roachpb.StoreID]interface{}{}
+	// Add collection of stores to top level. JSON requires that keys be strings,
+	// so we must convert the store ID to a string.
+	storeLevel := make(map[string]interface{})
 	for id, reg := range mr.mu.storeRegistries {
-		storeLevel[id] = reg
+		storeLevel[strconv.Itoa(int(id))] = reg
 	}
 	topLevel["stores"] = storeLevel
 	return json.Marshal(topLevel)

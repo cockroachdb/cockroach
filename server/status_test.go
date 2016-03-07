@@ -571,3 +571,16 @@ func TestMetricsRecording(t *testing.T) {
 		return nil
 	})
 }
+
+// TestMetricsEndpoint retrieves the metrics endpoint, which is currently only
+// used for development purposes. The metrics within the response are verified
+// in other tests.
+func TestMetricsEndpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stop()
+
+	nodeID := s.Gossip().GetNodeID()
+	url := fmt.Sprintf("%s/%s", statusMetricsPrefix, nodeID)
+	getRequest(t, s, url)
+}

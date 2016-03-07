@@ -158,4 +158,13 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify all stats on store0 and store1 after range is removed.
 	verifyStats(t, store0)
 	verifyStats(t, store1)
+
+	// Force update to RocksDB stats. Unfortunately, without serious load,
+	// almost all stats remain 0. We verify what we can.
+	if err := store0.ComputeMetrics(); err != nil {
+		t.Fatal(err)
+	}
+	if a, min := getGauge(t, store0, "rocksdb.memtable.total-size"), int64(20000); a < min {
+		t.Fatalf("memtable total size must be at least %d", min)
+	}
 }
