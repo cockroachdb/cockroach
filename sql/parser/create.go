@@ -146,6 +146,7 @@ type ColumnTableDef struct {
 	PrimaryKey  bool
 	Unique      bool
 	DefaultExpr Expr
+	CheckExpr   Expr
 }
 
 func newColumnTableDef(name Name, typ ColumnType,
@@ -167,6 +168,8 @@ func newColumnTableDef(name Name, typ ColumnType,
 			d.PrimaryKey = true
 		case UniqueConstraint:
 			d.Unique = true
+		case *ColumnCheckConstraint:
+			d.CheckExpr = t.Expr
 		default:
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
@@ -203,11 +206,12 @@ type ColumnQualification interface {
 	columnQualification()
 }
 
-func (*ColumnDefault) columnQualification()       {}
-func (NotNullConstraint) columnQualification()    {}
-func (NullConstraint) columnQualification()       {}
-func (PrimaryKeyConstraint) columnQualification() {}
-func (UniqueConstraint) columnQualification()     {}
+func (*ColumnDefault) columnQualification()         {}
+func (NotNullConstraint) columnQualification()      {}
+func (NullConstraint) columnQualification()         {}
+func (PrimaryKeyConstraint) columnQualification()   {}
+func (UniqueConstraint) columnQualification()       {}
+func (*ColumnCheckConstraint) columnQualification() {}
 
 // ColumnDefault represents a DEFAULT clause for a column.
 type ColumnDefault struct {
@@ -225,6 +229,11 @@ type PrimaryKeyConstraint struct{}
 
 // UniqueConstraint represents UNIQUE on a column.
 type UniqueConstraint struct{}
+
+// ColumnCheckConstraint represents either a check on a column.
+type ColumnCheckConstraint struct {
+	Expr Expr
+}
 
 // NameListToIndexElems converts a NameList to an IndexElemList with all
 // members using the `DefaultDirection`.

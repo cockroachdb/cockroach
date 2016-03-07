@@ -73,6 +73,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT NULL PRIMARY KEY)`},
 		{`CREATE TABLE a (b INT DEFAULT 1)`},
 		{`CREATE TABLE a (b INT DEFAULT now())`},
+		{`CREATE TABLE a (a INT CHECK (a > 0))`},
+		{`CREATE TABLE a (a INT DEFAULT 1 CHECK (a > 0))`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
