@@ -36,6 +36,20 @@ Table Name    Unique Seq Column Direction Storing
 t     primary true   1   a      ASC       false
 t     foo     false  1   b      ASC       false
 
+query TTBITTB colnames
+SHOW INDEXES FROM t
+----
+Table Name    Unique Seq Column Direction Storing
+t     primary true   1   a      ASC       false
+t     foo     false  1   b      ASC       false
+
+query TTBITTB colnames
+SHOW KEYS FROM t
+----
+Table Name    Unique Seq Column Direction Storing
+t     primary true   1   a      ASC       false
+t     foo     false  1   b      ASC       false
+
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t@foo
 ----
