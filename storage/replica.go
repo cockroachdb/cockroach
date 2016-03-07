@@ -1952,7 +1952,7 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 			return r.store.DB().Run(b)
 		}
 		if wait || !r.store.Stopper().RunAsyncTask(func() {
-			if err := action; err != nil {
+			if err := action(); err != nil {
 				log.Warningf("unable to resolve external intents: %s", err)
 			}
 		}) {

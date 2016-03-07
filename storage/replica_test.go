@@ -2083,8 +2083,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 }
 
 func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey roachpb.RKey) (*Replica, *roachpb.Transaction) {
-	// Split the range and create an intent in each range.
-	// The keys of the two intents are next to each other.
+	// Split the range and create an intent at splitKey and key.
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
 	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
@@ -2260,6 +2259,40 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			}
 		}()
 	}
+}
+
+func TestReplicaResolveIntentNoWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func() { TestingCommandFilter = nil }()
+	var seen int32
+	key := roachpb.Key("zresolveme")
+	TestingCommandFilter = func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		if args.Method() == roachpb.ResolveIntent && args.Header().Key.Equal(key) {
+			atomic.StoreInt32(&seen, 1)
+		}
+		return nil
+	}
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	splitKey := roachpb.RKey("aa")
+	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey)
+	txn := newTransaction("name", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn.Status = roachpb.COMMITTED
+	if pErr := tc.rng.resolveIntents(context.Background(), []roachpb.Intent{{
+		Span:   roachpb.Span{Key: key},
+		Txn:    txn.TxnMeta,
+		Status: txn.Status,
+	}}, false /* !wait */, false /* !poison; irrelevant */); pErr != nil {
+		t.Fatal(pErr)
+	}
+	util.SucceedsSoon(t, func() error {
+		if atomic.LoadInt32(&seen) > 0 {
+			return nil
+		}
+		return fmt.Errorf("no intent resolution on %q so far", key)
+	})
 }
 
 // TestSequenceCachePoisonOnResolve verifies that when an intent is pushed into
