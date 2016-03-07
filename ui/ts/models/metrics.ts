@@ -26,7 +26,9 @@ module Models {
      */
     interface QueryInfo {
       name: string;
-      aggregator: Proto.QueryAggregator;
+      downsampler: Proto.QueryAggregator;
+      source_aggregator: Proto.QueryAggregator;
+      derivative: Proto.QueryDerivative;
     }
 
     /**
@@ -34,7 +36,7 @@ module Models {
      * server-side dataset referenced by the QueryInfo.
      */
     export function QueryInfoKey(qi: QueryInfo): string {
-      return Proto.QueryAggregator[qi.aggregator] + ":" + qi.name;
+      return Proto.QueryAggregator[qi.downsampler] + ":" + qi.name;
     }
 
     /**
@@ -133,7 +135,9 @@ module Models {
           return {
             name: this.seriesName,
             sources: this.sources(),
-            aggregator: Proto.QueryAggregator.AVG,
+            downsampler: Proto.QueryAggregator.AVG,
+            source_aggregator: Proto.QueryAggregator.SUM,
+            derivative: Proto.QueryDerivative.NONE,
           };
         };
       }
@@ -151,7 +155,9 @@ module Models {
           return {
             name: this.seriesName,
             sources: this.sources(),
-            aggregator: Proto.QueryAggregator.AVG_RATE,
+            downsampler: Proto.QueryAggregator.AVG,
+            source_aggregator: Proto.QueryAggregator.SUM,
+            derivative: Proto.QueryDerivative.DERIVATIVE,
           };
         };
       }
