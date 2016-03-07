@@ -342,9 +342,10 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	return c
 }
 
-// MustGetPGWireCounter returns the value of a counter metric from the server's
-// PGWire server. Runs in O(# of metrics) time, which is fine for test code.
-func (ts *TestServer) MustGetPGWireCounter(name string) int64 {
+// MustGetSQLNetworkCounter returns the value of a counter metric from the
+// server's SQL server. Runs in O(# of metrics) time, which is fine for test
+// code.
+func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var c int64
 	var found bool
 

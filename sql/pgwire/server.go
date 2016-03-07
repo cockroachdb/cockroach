@@ -58,10 +58,8 @@ type serverMetrics struct {
 	conns         *metric.Counter
 }
 
-// MakeServer creates a Server.
-func MakeServer(context *base.Context, executor *sql.Executor) Server {
-	// Create a registry to hold pgwire stats.
-	reg := metric.NewRegistry()
+// MakeServer creates a Server, adding network stats to the given Registry.
+func MakeServer(context *base.Context, executor *sql.Executor, reg *metric.Registry) Server {
 	return Server{
 		context:  context,
 		executor: executor,

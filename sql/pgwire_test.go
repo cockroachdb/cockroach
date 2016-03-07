@@ -777,15 +777,15 @@ func TestPGCommandTags(t *testing.T) {
 	}
 }
 
-// checkPGWireMetrics returns the server's pgwire bytesIn/bytesOut and an error if the
-// bytesIn/bytesOut don't satisfy the given minimums and maximums.
-func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
+// checkSQLNetworkMetrics returns the server's pgwire bytesIn/bytesOut and an
+// error if the bytesIn/bytesOut don't satisfy the given minimums and maximums.
+func checkSQLNetworkMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64) (int64, int64, error) {
 	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err
 	}
 
-	bytesIn := s.MustGetPGWireCounter("bytesin")
-	bytesOut := s.MustGetPGWireCounter("bytesout")
+	bytesIn := s.MustGetSQLNetworkCounter("bytesin")
+	bytesOut := s.MustGetSQLNetworkCounter("bytesout")
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, util.Errorf("bytesin %d < expected min %d", a, min)
 	}
@@ -801,20 +801,20 @@ func checkPGWireMetrics(s *server.TestServer, minBytesIn, minBytesOut, maxBytesI
 	return bytesIn, bytesOut, nil
 }
 
-func TestPGWireMetrics(t *testing.T) {
+func TestSQLNetworkMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
 	// Setup pgwire client.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGWireMetrics")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestSQLNetworkMetrics")
 	defer cleanupFn()
 
 	const minbytes = 20
 
 	// Make sure we're starting at 0.
-	if _, _, err := checkPGWireMetrics(s, 0, 0, 0, 0); err != nil {
+	if _, _, err := checkSQLNetworkMetrics(s, 0, 0, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -822,7 +822,7 @@ func TestPGWireMetrics(t *testing.T) {
 	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
 	}
-	bytesIn, bytesOut, err := checkPGWireMetrics(s, minbytes, minbytes, 300, 300)
+	bytesIn, bytesOut, err := checkSQLNetworkMetrics(s, minbytes, minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,7 +831,7 @@ func TestPGWireMetrics(t *testing.T) {
 	}
 
 	// A second query should give us more I/O.
-	_, _, err = checkPGWireMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 300, 300)
+	_, _, err = checkSQLNetworkMetrics(s, bytesIn+minbytes, bytesOut+minbytes, 300, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -839,7 +839,7 @@ func TestPGWireMetrics(t *testing.T) {
 	// Verify connection counter.
 	expectConns := func(n int) {
 		util.SucceedsSoon(t, func() error {
-			if conns := s.MustGetPGWireCounter("conns"); conns != int64(n) {
+			if conns := s.MustGetSQLNetworkCounter("conns"); conns != int64(n) {
 				return util.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil
