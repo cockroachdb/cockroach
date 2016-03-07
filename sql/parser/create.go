@@ -198,6 +198,9 @@ func (node *ColumnTableDef) String() string {
 	if node.DefaultExpr != nil {
 		fmt.Fprintf(&buf, " DEFAULT %s", node.DefaultExpr)
 	}
+	if node.CheckExpr != nil {
+		fmt.Fprintf(&buf, " CHECK (%s)", node.CheckExpr)
+	}
 	return buf.String()
 }
 

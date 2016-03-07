@@ -201,6 +201,12 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.DefaultExpr = &s
 	}
 
+	if d.CheckExpr != nil {
+		// TODO(guanqun): add more checks here.
+		s := d.CheckExpr.String()
+		col.CheckExpr = &s
+	}
+
 	var idx *IndexDescriptor
 	if d.PrimaryKey || d.Unique {
 		idx = &IndexDescriptor{
