@@ -242,16 +242,19 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 	}
 }
 
+const (
+	postgresTestTag = "20160203-140220"
+)
+
 func testDocker(t *testing.T, name string, cmd []string) error {
 	const image = "cockroachdb/postgres-test"
-	const tag = "20160203-140220"
 	SkipUnlessLocal(t)
 	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
 
 	defer l.AssertAndStop(t)
 	addr := l.Nodes[0].Addr()
 	containerConfig := container.Config{
-		Image: fmt.Sprintf(image + ":" + tag),
+		Image: fmt.Sprintf(image + ":" + postgresTestTag),
 		Env: []string{
 			fmt.Sprintf("PGHOST=%s", addr.IP),
 			fmt.Sprintf("PGPORT=%d", addr.Port),
@@ -266,7 +269,7 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 	}
 	ipo := types.ImagePullOptions{
 		ImageID: image,
-		Tag:     tag,
+		Tag:     postgresTestTag,
 	}
 	return l.OneShot(ipo, containerConfig, hostConfig, "docker-"+name)
 }
