@@ -233,6 +233,7 @@ type ColumnDescriptor struct {
 	// value is provided.
 	DefaultExpr *string `protobuf:"bytes,5,opt,name=default_expr" json:"default_expr,omitempty"`
 	Hidden      bool    `protobuf:"varint,6,opt,name=hidden" json:"hidden"`
+	CheckExpr   *string `protobuf:"bytes,7,opt,name=check_expr" json:"check_expr,omitempty"`
 }
 
 func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
@@ -816,6 +817,12 @@ func (m *ColumnDescriptor) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
+	if m.CheckExpr != nil {
+		data[i] = 0x3a
+		i++
+		i = encodeVarintStructured(data, i, uint64(len(*m.CheckExpr)))
+		i += copy(data[i:], *m.CheckExpr)
+	}
 	return i, nil
 }
 
@@ -1249,6 +1256,10 @@ func (m *ColumnDescriptor) Size() (n int) {
 		n += 1 + l + sovStructured(uint64(l))
 	}
 	n += 2
+	if m.CheckExpr != nil {
+		l = len(*m.CheckExpr)
+		n += 1 + l + sovStructured(uint64(l))
+	}
 	return n
 }
 
@@ -1710,6 +1721,36 @@ func (m *ColumnDescriptor) Unmarshal(data []byte) error {
 				}
 			}
 			m.Hidden = bool(v != 0)
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CheckExpr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthStructured
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(data[iNdEx:postIndex])
+			m.CheckExpr = &s
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStructured(data[iNdEx:])
