@@ -17,6 +17,8 @@
 package storage
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -81,6 +83,10 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // is insufficient.
 // Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	return r.entries(r.store.Engine(), lo, hi, maxBytes)
+}
+
+func (r *Replica) entries(e engine.Engine, lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
@@ -107,7 +113,7 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	}
 
 	rangeID := r.RangeID
-	_, err := engine.MVCCIterate(r.store.Engine(),
+	_, err := engine.MVCCIterate(e,
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
 		roachpb.ZeroTimestamp,
@@ -338,6 +344,11 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	defer snap.Close()
 	var snapData roachpb.RaftSnapshotData
 
+	firstIndex, err := r.FirstIndex()
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
+
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
 	appliedIndex, err := r.loadAppliedIndexLocked(snap)
@@ -363,7 +374,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 
 	// Iterate over all the data in the range, including local-only data like
 	// the sequence cache.
-	iter := newReplicaDataIterator(&desc, snap)
+	iter := newReplicaDataIterator(&desc, snap, true /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
@@ -374,6 +385,12 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 				Timestamp: key.Timestamp,
 			})
 	}
+
+	entries, err := r.entries(snap, firstIndex, appliedIndex+1, 0)
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
+	snapData.LogEntries = entries
 
 	data, err := proto.Marshal(&snapData)
 	if err != nil {
@@ -417,10 +434,10 @@ func (r *Replica) append(batch engine.Engine, prevLastIndex uint64, entries []ra
 	if len(entries) == 0 {
 		return prevLastIndex, nil
 	}
-	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, keys.RaftLogKey(r.RangeID, ent.Index),
-			roachpb.ZeroTimestamp, nil, &ent)
-		if err != nil {
+	for i := range entries {
+		ent := &entries[i]
+		key := keys.RaftLogKey(r.RangeID, ent.Index)
+		if err := engine.MVCCPutProto(batch, nil, key, roachpb.ZeroTimestamp, nil, ent); err != nil {
 			return 0, err
 		}
 	}
@@ -501,7 +518,9 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 	desc := snapData.RangeDescriptor
 
 	// Delete everything in the range and recreate it from the snapshot.
-	iter := newReplicaDataIterator(&desc, batch)
+	// We need to delete any old Raft log entries here because any log entries
+	// that predate the snapshot will be orphaned and never truncated or GC'd.
+	iter := newReplicaDataIterator(&desc, batch, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		if err := batch.Clear(iter.Key()); err != nil {
@@ -509,8 +528,15 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		}
 	}
 
+	// Determine the unreplicated key prefix so we can drop any
+	// unreplicated keys from the snapshot.
+	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(desc.RangeID)
+
 	// Write the snapshot into the range.
 	for _, kv := range snapData.KV {
+		if bytes.HasPrefix(kv.Key, unreplicatedPrefix) {
+			continue
+		}
 		mvccKey := engine.MVCCKey{
 			Key:       kv.Key,
 			Timestamp: kv.Timestamp,
@@ -518,6 +544,11 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		if err := batch.Put(mvccKey, kv.Value); err != nil {
 			return 0, err
 		}
+	}
+
+	// Write the snapshot's Raft log into the range.
+	if _, err := r.append(batch, 0, snapData.LogEntries); err != nil {
+		return 0, err
 	}
 
 	// Restore the saved HardState.

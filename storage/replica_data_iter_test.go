@@ -57,7 +57,7 @@ func fakePrevKey(k []byte) roachpb.Key {
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
 // data.
-func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
+func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
 	ts0 := roachpb.ZeroTimestamp
 	ts := roachpb.Timestamp{WallTime: 1}
 	desc := r.Desc()
@@ -116,7 +116,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Error("expected empty iteration")
@@ -125,9 +125,10 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 
 // TestReplicaDataIterator creates three ranges {"a"-"b" (pre), "b"-"c"
 // (main test range), "c"-"d" (post)} and fills each with data. It
-// first verifies the contents of the "b"-"c" range, then deletes it
-// and verifies it's empty. Finally, it verifies the pre and post
-// ranges still contain the expected data.
+// first verifies the contents of the "b"-"c" range. Next, it makes sure
+// a replicated-only iterator does not show any unreplicated keys from
+// the range. Then, it deletes the range and verifies it's empty. Finally,
+// it verifies the pre and post ranges still contain the expected data.
 func TestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{
@@ -154,11 +155,12 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 
 	// Create range data for all three ranges.
-	preKeys := createRangeData(preRng, t)
-	curKeys := createRangeData(tc.rng, t)
-	postKeys := createRangeData(postRng, t)
+	preKeys := createRangeData(t, preRng)
+	curKeys := createRangeData(t, tc.rng)
+	postKeys := createRangeData(t, postRng)
 
-	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
+	// Verify the contents of the "b"-"c" range.
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	i := 0
 	for ; iter.Valid(); iter.Next() {
@@ -179,11 +181,24 @@ func TestReplicaDataIterator(t *testing.T) {
 		t.Fatal("there are fewer keys in the iteration than expected")
 	}
 
+	// Verify that the replicated-only iterator ignores unreplicated keys.
+	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(tc.rng.RangeID)
+	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), true /* replicatedOnly */)
+	defer iter.Close()
+	for ; iter.Valid(); iter.Next() {
+		if err := iter.Error(); err != nil {
+			t.Fatal(err)
+		}
+		if bytes.HasPrefix(iter.Key().Key, unreplicatedPrefix) {
+
+		}
+	}
+
 	// Destroy range and verify that its data has been completely cleared.
 	if err := tc.rng.Destroy(*tc.rng.Desc()); err != nil {
 		t.Fatal(err)
 	}
-	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
+	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	if iter.Valid() {
 		// If the range is destroyed, only a tombstone key should be there.
@@ -207,7 +222,7 @@ func TestReplicaDataIterator(t *testing.T) {
 		{preRng, preKeys},
 		{postRng, postKeys},
 	} {
-		iter = newReplicaDataIterator(test.r.Desc(), test.r.store.Engine())
+		iter = newReplicaDataIterator(test.r.Desc(), test.r.store.Engine(), false /* !replicatedOnly */)
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {
