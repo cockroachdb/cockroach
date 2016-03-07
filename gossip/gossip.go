@@ -104,11 +104,6 @@ const (
 	defaultCullInterval = 60 * time.Second
 )
 
-var (
-	// TestBootstrap is the default gossip bootstrap used for running tests.
-	TestBootstrap = []resolver.Resolver{}
-)
-
 // Storage is an interface which allows the gossip instance
 // to read and write bootstrapping data to persistent storage
 // between instantiations.

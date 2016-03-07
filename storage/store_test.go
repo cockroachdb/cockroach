@@ -128,7 +128,7 @@ func createTestStoreWithoutStart(t *testing.T, ctx *StoreContext) (*Store, *hlc.
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(nil, nil, stopper)
-	ctx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
+	ctx.Gossip = gossip.New(rpcContext, nil, stopper)
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)

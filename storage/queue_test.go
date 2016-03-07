@@ -40,7 +40,7 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 	config.TestingSetupZoneConfigHook(stopper)
 
 	rpcContext := rpc.NewContext(nil, nil, stopper)
-	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
+	g := gossip.New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	// Put an empty system config into gossip.
