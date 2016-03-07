@@ -55,6 +55,7 @@ message ColumnDescriptor {
   // value is provided.
   optional string default_expr = 5;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
+  optional string check_expr = 7;
 }
 
 message IndexDescriptor {
