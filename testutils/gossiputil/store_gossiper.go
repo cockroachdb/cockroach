@@ -30,8 +30,8 @@ import (
 // gossip instance.
 type StoreGossiper struct {
 	g           *gossip.Gossip
-	wg          sync.WaitGroup
 	mu          sync.Mutex
+	cond        *sync.Cond
 	storeKeyMap map[string]struct{}
 }
 
@@ -42,12 +42,12 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 		g:           g,
 		storeKeyMap: make(map[string]struct{}),
 	}
+	sg.cond = sync.NewCond(&sg.mu)
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
 		sg.mu.Lock()
 		defer sg.mu.Unlock()
-		if _, ok := sg.storeKeyMap[key]; ok {
-			sg.wg.Done()
-		}
+		delete(sg.storeKeyMap, key)
+		sg.cond.Broadcast()
 	})
 	return sg
 }
@@ -56,8 +56,8 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 // is gossiped before returning.
 func (sg *StoreGossiper) GossipStores(stores []*roachpb.StoreDescriptor, t *testing.T) {
 	sg.mu.Lock()
+	defer sg.mu.Unlock()
 	sg.storeKeyMap = make(map[string]struct{})
-	sg.wg.Add(len(stores))
 	for _, s := range stores {
 		storeKey := gossip.MakeStoreKey(s.StoreID)
 		sg.storeKeyMap[storeKey] = struct{}{}
@@ -67,18 +67,19 @@ func (sg *StoreGossiper) GossipStores(stores []*roachpb.StoreDescriptor, t *test
 			t.Fatal(err)
 		}
 	}
-	sg.mu.Unlock()
 
 	// Wait for all gossip callbacks to be invoked.
-	sg.wg.Wait()
+	for len(sg.storeKeyMap) > 0 {
+		sg.cond.Wait()
+	}
 }
 
 // GossipWithFunction is similar to GossipStores but instead of gossiping the
 // store descriptors directly, call the passed in function to do so.
 func (sg *StoreGossiper) GossipWithFunction(stores []roachpb.StoreID, gossiper func()) {
 	sg.mu.Lock()
+	defer sg.mu.Unlock()
 	sg.storeKeyMap = make(map[string]struct{})
-	sg.wg.Add(len(stores))
 	for _, s := range stores {
 		storeKey := gossip.MakeStoreKey(s)
 		sg.storeKeyMap[storeKey] = struct{}{}
@@ -87,8 +88,8 @@ func (sg *StoreGossiper) GossipWithFunction(stores []roachpb.StoreID, gossiper f
 	// Gossip the stores via the passed in function.
 	gossiper()
 
-	sg.mu.Unlock()
-
 	// Wait for all gossip callbacks to be invoked.
-	sg.wg.Wait()
+	for len(sg.storeKeyMap) > 0 {
+		sg.cond.Wait()
+	}
 }
