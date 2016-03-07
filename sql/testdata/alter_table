@@ -42,7 +42,7 @@ statement error multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
 query TTBITTB colnames
-SHOW INDEX FROM t
+SHOW INDEXES FROM t
 ----
 Table  Name     Unique  Seq  Column  Direction  Storing
 t      primary  true    1    a       ASC        false
@@ -92,7 +92,7 @@ statement ok
 ALTER TABLE t DROP CONSTRAINT foo
 
 query TTBITTB colnames
-SHOW INDEX FROM t
+SHOW INDEXES FROM t
 ----
 Table  Name     Unique  Seq  Column  Direction  Storing
 t      primary  true    1    a       ASC        false
