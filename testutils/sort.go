@@ -91,7 +91,6 @@ func SortStructs(s interface{}, fieldName string) {
 	if structs.Kind() != reflect.Slice {
 		panic(fmt.Sprintf("expected slice, got %T", s))
 	}
-	var prevType reflect.Type
 	for i := 0; i < structs.Len(); i++ {
 		v := structs.Index(i)
 		if v.Kind() == reflect.Ptr && v.IsNil() {
@@ -100,11 +99,6 @@ func SortStructs(s interface{}, fieldName string) {
 		if reflect.Indirect(v).Kind() != reflect.Struct {
 			panic(fmt.Sprintf("element %d is not a struct or pointer to a struct", i))
 		}
-		if i > 0 && prevType != v.Type() {
-			panic(fmt.Sprintf("element %d (%s) has different type than %d (%s)",
-				i, v.Type(), i-1, prevType))
-		}
-		prevType = v.Type()
 	}
 
 	sort.Sort(structSorter{structs, fieldName})

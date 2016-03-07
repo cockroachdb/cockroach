@@ -207,21 +207,21 @@ func (s *adminServer) getUser(_ proto.Message) string {
 // serverError logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func (s *adminServer) serverError(err error) error {
-	log.Error(util.ErrorfSkipFrames(1, "%s", err))
+	log.ErrorfDepth(1, "%s", err)
 	return errAdminAPIError
 }
 
 // serverErrorf logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func (s *adminServer) serverErrorf(format string, args ...interface{}) error {
-	log.Error(util.ErrorfSkipFrames(1, format, args...))
+	log.ErrorfDepth(1, format, args...)
 	return errAdminAPIError
 }
 
 // serverErrors logs the provided errors and returns an error that should be returned by
 // the RPC endpoint method.
 func (s *adminServer) serverErrors(errors []error) error {
-	log.Error(util.ErrorfSkipFrames(1, "%v", errors))
+	log.ErrorfDepth(1, "%v", errors)
 	return errAdminAPIError
 }
 
@@ -491,7 +491,7 @@ func (s *adminServer) Events(c context.Context, req *EventsRequest) (*EventsResp
 	q := &sqlQuery{}
 	q.Append("SELECT timestamp, eventType, targetID, reportingID, info, uniqueID ")
 	q.Append("FROM system.eventlog ")
-	q.Append("WHERE 1=1 ") // This avoids a SQL error if we don't have either eventType or targetID.
+	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
 		q.Append("AND eventType = $ ", parser.DString(req.Type))
 	}
