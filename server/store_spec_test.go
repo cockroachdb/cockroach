@@ -46,15 +46,15 @@ func TestNewStoreSpec(t *testing.T) {
 		{"/mnt/hda1,path=/mnt/hda2", "path field was used twice in store definition", StoreSpec{}},
 
 		// attributes
-		{"path=/mnt/hda1,attr=ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"ssd"}}}},
-		{"path=/mnt/hda1,attr=ssd:hdd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"path=/mnt/hda1,attr=hdd:ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"attr=ssd:hdd,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"attr=hdd:ssd,path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"attr=hdd:ssd", "no path specified", StoreSpec{}},
-		{"path=/mnt/hda1,attr=", "no value specified for attr", StoreSpec{}},
-		{"path=/mnt/hda1,attr=hdd:hdd", "duplicate attribute given for store: hdd", StoreSpec{}},
-		{"path=/mnt/hda1,attr=hdd,attr=ssd", "attr field was used twice in store definition", StoreSpec{}},
+		{"path=/mnt/hda1,attrs=ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"ssd"}}}},
+		{"path=/mnt/hda1,attrs=ssd:hdd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"path=/mnt/hda1,attrs=hdd:ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"attrs=ssd:hdd,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"attrs=hdd:ssd,path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"attrs=hdd:ssd", "no path specified", StoreSpec{}},
+		{"path=/mnt/hda1,attrs=", "no value specified for attrs", StoreSpec{}},
+		{"path=/mnt/hda1,attrs=hdd:hdd", "duplicate attribute given for store: hdd", StoreSpec{}},
+		{"path=/mnt/hda1,attrs=hdd,attrs=ssd", "attrs field was used twice in store definition", StoreSpec{}},
 
 		// size
 		{"path=/mnt/hda1,size=671088640", "", StoreSpec{"/mnt/hda1", 671088640, 0, false, roachpb.Attributes{}}},
@@ -91,17 +91,17 @@ func TestNewStoreSpec(t *testing.T) {
 		{"type=mem,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}}},
 		{"size=20GiB,type=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}}},
 		{"size=20.5GiB,type=mem", "", StoreSpec{"", 22011707392, 0, true, roachpb.Attributes{}}},
-		{"size=20GiB,type=mem,attr=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}}},
+		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}}},
 		{"type=mem,size=20", "store size (20) must be larger than 640 MiB", StoreSpec{}},
 		{"type=mem,size=", "no value specified for size", StoreSpec{}},
-		{"type=mem,attr=ssd", "size must be specified for an in memory store", StoreSpec{}},
+		{"type=mem,attrs=ssd", "size must be specified for an in memory store", StoreSpec{}},
 		{"path=/mnt/hda1,type=mem", "path specified for in memory store", StoreSpec{}},
 		{"path=/mnt/hda1,type=other", "other is not a valid store type", StoreSpec{}},
 		{"path=/mnt/hda1,type=mem,size=20GiB", "path specified for in memory store", StoreSpec{}},
 
 		// all together
-		{"path=/mnt/hda1,attr=hdd:ssd,size=20GiB", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
-		{"type=mem,attr=hdd:ssd,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
+		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}}},
 
 		// other error cases
 		{"", "no value specified", StoreSpec{}},
