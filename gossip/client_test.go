@@ -50,7 +50,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := New(rpcContext, TestBootstrap, stopper)
+	g := New(rpcContext, nil, stopper)
 	g.SetNodeID(nodeID)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
@@ -115,7 +115,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, TestBootstrap, stopper)
+	local = New(lRPCContext, nil, stopper)
 	local.start(lserver, lln.Addr())
 
 	rclock := hlc.NewClock(hlc.UnixNano)

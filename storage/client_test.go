@@ -96,7 +96,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 		sCtx = &ctx
 	}
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
-	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
+	sCtx.Gossip = gossip.New(rpcContext, nil, stopper)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = 1 * time.Second
 	sCtx.Tracer = tracing.NewTracer()

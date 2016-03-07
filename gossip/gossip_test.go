@@ -41,7 +41,7 @@ func TestGossipInfoStore(t *testing.T) {
 	rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), nil)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	g := New(rpcContext, TestBootstrap, stopper)
+	g := New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
