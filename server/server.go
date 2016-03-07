@@ -164,9 +164,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.stopper)
+	sqlRegistry := metric.NewRegistry()
+	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.stopper, sqlRegistry)
 
-	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor)
+	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor, sqlRegistry)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -190,8 +191,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
-	s.recorder.AddNodeRegistry("pgwire.%s", s.pgServer.Registry())
-	s.recorder.AddNodeRegistry("sql.%s", s.sqlExecutor.Registry())
+	s.recorder.AddNodeRegistry("sql.%s", sqlRegistry)
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)

@@ -379,7 +379,7 @@ module AdminViews {
           this._addChart(
             this.networkAxes,
             Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("pgwire.conns"))
+              Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .sources([nodeId])
                 .title("Client Connections")
               )
@@ -387,7 +387,7 @@ module AdminViews {
           this._addChart(
             this.networkAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesin"))
+              Metrics.Select.AvgRate(_nodeMetric("sql.bytesin"))
                 .sources([nodeId])
                 .title("Client Bytes In")
               )
@@ -395,7 +395,7 @@ module AdminViews {
           this._addChart(
             this.networkAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("pgwire.bytesout"))
+              Metrics.Select.AvgRate(_nodeMetric("sql.bytesout"))
                 .sources([nodeId])
                 .title("Client Bytes Out")
               )
