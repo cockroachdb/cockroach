@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -49,6 +50,31 @@ func TestMakeKey(t *testing.T) {
 		!bytes.Equal(makeKey(roachpb.Key("A")), roachpb.Key("A")) ||
 		!bytes.Equal(makeKey(roachpb.Key("A"), roachpb.Key("B"), roachpb.Key("C")), roachpb.Key("ABC")) {
 		t.Fatalf("MakeKey is broken")
+	}
+}
+
+func TestSequenceCacheEncodeDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const rangeID = 123
+	const testTxnEpoch = 5
+	const expSeq = 987
+	testTxnID, err := uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
+	if err != nil {
+		panic(err)
+	}
+	key := SequenceCacheKey(rangeID, testTxnID, testTxnEpoch, expSeq)
+	txnID, epoch, seq, err := DecodeSequenceCacheKey(key, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !roachpb.TxnIDEqual(txnID, testTxnID) {
+		t.Fatalf("expected txnID %q, got %q", testTxnID, txnID)
+	}
+	if epoch != testTxnEpoch {
+		t.Fatalf("expected epoch %d, got %d", testTxnEpoch, epoch)
+	}
+	if seq != expSeq {
+		t.Fatalf("expected sequence %d, got %d", expSeq, seq)
 	}
 }
 
