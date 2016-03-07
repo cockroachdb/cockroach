@@ -87,10 +87,11 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 			return
 		}
 		response.Results = append(response.Results, &TimeSeriesQueryResponse_Result{
-			Name:       q.Name,
-			Sources:    sources,
-			Datapoints: datapoints,
-			Aggregator: q.Aggregator,
+			Name:             q.Name,
+			Sources:          sources,
+			SourceAggregator: q.SourceAggregator,
+			Downsampler:      q.Downsampler,
+			Datapoints:       datapoints,
 		})
 	}
 

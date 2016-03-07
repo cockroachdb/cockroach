@@ -22,7 +22,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 var (
@@ -56,11 +58,15 @@ var (
 					Offset: 1,
 					Count:  3,
 					Sum:    60,
+					Max:    proto.Float64(30),
+					Min:    proto.Float64(10),
 				},
 				{
 					Offset: 6,
 					Count:  2,
 					Sum:    80,
+					Max:    proto.Float64(50),
+					Min:    proto.Float64(30),
 				},
 			},
 		},
@@ -79,6 +85,8 @@ var (
 					Offset: 3,
 					Count:  5,
 					Sum:    50,
+					Max:    proto.Float64(10),
+					Min:    proto.Float64(1),
 				},
 				{
 					Offset: 4,
@@ -89,11 +97,15 @@ var (
 					Offset: 6,
 					Count:  3,
 					Sum:    60,
+					Max:    proto.Float64(30),
+					Min:    proto.Float64(10),
 				},
 				{
 					Offset: 15,
 					Count:  2,
 					Sum:    112,
+					Max:    proto.Float64(100),
+					Min:    proto.Float64(12),
 				},
 			},
 		},
@@ -101,7 +113,7 @@ var (
 )
 
 // TestInterpolation verifies the interpolated average values of a single interpolatingIterator.
-func TestAvgInterpolation(t *testing.T) {
+func TestInterpolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dataSpan := &dataSpan{
 		startNanos:  30,
@@ -113,22 +125,47 @@ func TestAvgInterpolation(t *testing.T) {
 		}
 	}
 
-	expected := []float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 24, 28, 32, 36, 40, 0}
-	actual := make([]float64, 0, len(expected))
-	iter := dataSpan.newIterator()
-	for i := 0; i < len(expected); i++ {
-		iter.advanceTo(int32(i))
-		actual = append(actual, iter.avg())
+	testCases := []struct {
+		expected     []float64
+		downsampleFn downsampleFn
+	}{
+		{
+			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 24, 28, 32, 36, 40, 0},
+			func(s *roachpb.InternalTimeSeriesSample) float64 {
+				return s.Average()
+			},
+		},
+		{
+			[]float64{3.4, 4.2, 5, 7.5, 10, 20, 30, 34, 38, 42, 46, 50, 0},
+			func(s *roachpb.InternalTimeSeriesSample) float64 {
+				return s.Maximum()
+			},
+		},
+		{
+			[]float64{3.4, 4.2, 5, 7.5, 10, 35, 60, 64, 68, 72, 76, 80, 0},
+			func(s *roachpb.InternalTimeSeriesSample) float64 {
+				return s.Sum
+			},
+		},
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("interpolated values: %v, expected values: %v", actual, expected)
+	for i, tc := range testCases {
+		actual := make([]float64, 0, len(tc.expected))
+		iter := dataSpan.newIterator(0, tc.downsampleFn)
+		for i := 0; i < len(tc.expected); i++ {
+			iter.advanceTo(int32(i))
+			actual = append(actual, iter.value())
+		}
+		if !reflect.DeepEqual(actual, tc.expected) {
+			t.Fatalf("test %d, interpolated values: %v, expected values: %v", i, actual, tc.expected)
+		}
 	}
+
 }
 
-// TestSumAvgInterpolation verifies the behavior of an iteratorSet, which
+// TestAggregation verifies the behavior of an iteratorSet, which
 // advances multiple interpolatingIterators together.
-func TestSumAvgInterpolation(t *testing.T) {
+func TestAggregation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dataSpan1 := &dataSpan{
 		startNanos:  30,
@@ -149,72 +186,68 @@ func TestSumAvgInterpolation(t *testing.T) {
 		}
 	}
 
-	expected := []float64{4.4, 12, 17.5, 35, 40, 80, 56}
-	actual := make([]float64, 0, len(expected))
-	offsets := make([]int32, 0, len(expected))
-	iters := unionIterator{
-		dataSpan1.newIterator(),
-		dataSpan2.newIterator(),
-	}
-	iters.init()
-	for iters.isValid() {
-		actual = append(actual, iters.avg())
-		offsets = append(offsets, iters[0].offset)
-		iters.advance()
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("summed values: %v, expected values: %v", actual, expected)
-	}
-}
-
-func TestSumRateInterpolation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	dataSpan1 := &dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
-	dataSpan2 := &dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
-	for _, data := range testSeries1 {
-		if err := dataSpan1.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, data := range testSeries2 {
-		if err := dataSpan2.addData(data); err != nil {
-			t.Fatal(err)
-		}
+	testCases := []struct {
+		expected []float64
+		aggFunc  func(ui unionIterator) float64
+	}{
+		{
+			[]float64{4.4, 12, 17.5, 35, 40, 80, 56},
+			func(ui unionIterator) float64 {
+				return ui.sum()
+			},
+		},
+		{
+			[]float64{3.4, 7, 10, 25, 20, 40, 56},
+			func(ui unionIterator) float64 {
+				return ui.max()
+			},
+		},
+		{
+			[]float64{1, 5, 7.5, 10, 20, 40, 0},
+			func(ui unionIterator) float64 {
+				return ui.min()
+			},
+		},
+		{
+			[]float64{2.2, 6, 8.75, 17.5, 20, 40, 28},
+			func(ui unionIterator) float64 {
+				return ui.avg()
+			},
+		},
 	}
 
-	expected := []float64{0.8, 3.8, 5.5, 17.5, 2.5, 8, 4}
-	actual := make([]float64, 0, len(expected))
-	offsets := make([]int32, 0, len(expected))
-	iters := unionIterator{
-		dataSpan1.newIterator(),
-		dataSpan2.newIterator(),
+	downsampleFn := func(s *roachpb.InternalTimeSeriesSample) float64 {
+		return s.Average()
 	}
-	iters.init()
-	for iters.isValid() {
-		actual = append(actual, iters.dAvg())
-		offsets = append(offsets, iters[0].offset)
-		iters.advance()
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("summed values: %v, expected values: %v", actual, expected)
+	for i, tc := range testCases {
+		actual := make([]float64, 0, len(tc.expected))
+		iters := unionIterator{
+			dataSpan1.newIterator(0, downsampleFn),
+			dataSpan2.newIterator(0, downsampleFn),
+		}
+		iters.init()
+		for iters.isValid() {
+			actual = append(actual, tc.aggFunc(iters))
+			iters.advance()
+		}
+		if !reflect.DeepEqual(actual, tc.expected) {
+			t.Errorf("test %d aggregated values: %v, expected values: %v", i, actual, tc.expected)
+		}
 	}
 }
 
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
-func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQueryAggregator,
+func (tm *testModel) assertQuery(name string, sources []string,
+	downsample, agg *TimeSeriesQueryAggregator, derivative *TimeSeriesQueryDerivative,
 	r Resolution, start, end int64, expectedDatapointCount int, expectedSourceCount int) {
 	// Query the actual server.
 	q := TimeSeriesQueryRequest_Query{
-		Name:       name,
-		Aggregator: agg,
-		Sources:    sources,
+		Name:             name,
+		Downsampler:      downsample,
+		SourceAggregator: agg,
+		Derivative:       derivative,
+		Sources:          sources,
 	}
 	actualDatapoints, actualSources, err := tm.DB.Query(q, r, start, end)
 	if err != nil {
@@ -222,10 +255,10 @@ func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQ
 	}
 	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
 		tm.t.Logf("actual datapoints: %v", actualDatapoints)
-		tm.t.Fatalf("query expected %d datapoints, got %d", e, a)
+		tm.t.Fatal(util.ErrorfSkipFrames(1, "query expected %d datapoints, got %d", e, a))
 	}
 	if a, e := len(actualSources), expectedSourceCount; a != e {
-		tm.t.Fatalf("query expected %d sources, got %d", e, a)
+		tm.t.Fatal(util.ErrorfSkipFrames(1, "query expected %d sources, got %d", e, a))
 	}
 
 	// Construct an expected result for comparison.
@@ -277,33 +310,76 @@ func (tm *testModel) assertQuery(name string, sources []string, agg *TimeSeriesQ
 	}
 
 	// Iterate over data in all dataSpans and construct expected datapoints.
+	var startOffset int32
+	isDerivative := q.GetDerivative() != TimeSeriesQueryDerivative_NONE
+	if isDerivative {
+		startOffset = -1
+	}
+	downsampleFn, err := getDownsampleFunction(q.GetDownsampler())
+	if err != nil {
+		tm.t.Fatal(err)
+	}
 	var iters unionIterator
 	for _, ds := range dataSpans {
-		iters = append(iters, ds.newIterator())
+		iters = append(iters, ds.newIterator(startOffset, downsampleFn))
 	}
+
 	iters.init()
-	for iters.isValid() {
+	currentVal := func() TimeSeriesDatapoint {
 		var value float64
-		switch q.GetAggregator() {
+		switch q.GetSourceAggregator() {
+		case TimeSeriesQueryAggregator_SUM:
+			value = iters.sum()
 		case TimeSeriesQueryAggregator_AVG:
 			value = iters.avg()
-		case TimeSeriesQueryAggregator_AVG_RATE:
-			value = iters.dAvg()
+		case TimeSeriesQueryAggregator_MAX:
+			value = iters.max()
+		case TimeSeriesQueryAggregator_MIN:
+			value = iters.min()
+		default:
+			tm.t.Fatalf("unknown query aggregator %s", q.GetSourceAggregator())
 		}
-		expectedDatapoints = append(expectedDatapoints, &TimeSeriesDatapoint{
+		return TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          value,
-		})
+		}
+	}
+
+	var last TimeSeriesDatapoint
+	if isDerivative {
+		last = currentVal()
+		if iters.offset() < 0 {
+			iters.advance()
+		}
+	}
+	for iters.isValid() {
+		current := currentVal()
+		result := &TimeSeriesDatapoint{}
+		*result = current
+		if isDerivative {
+			dTime := (current.TimestampNanos - last.TimestampNanos) / r.SampleDuration()
+			if dTime == 0 {
+				result.Value = 0
+			} else {
+				result.Value = (current.Value - last.Value) / float64(dTime)
+			}
+			if result.Value < 0 &&
+				q.GetDerivative() == TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE {
+				result.Value = 0
+			}
+		}
+		expectedDatapoints = append(expectedDatapoints, result)
+		last = current
 		iters.advance()
 	}
 
 	sort.Strings(expectedSources)
 	sort.Strings(actualSources)
 	if !reflect.DeepEqual(actualSources, expectedSources) {
-		tm.t.Errorf("actual source list: %v, expected: %v", actualSources, expectedSources)
+		tm.t.Error(util.ErrorfSkipFrames(1, "actual source list: %v, expected: %v", actualSources, expectedSources))
 	}
 	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
-		tm.t.Errorf("actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints)
+		tm.t.Error(util.ErrorfSkipFrames(1, "actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints))
 	}
 }
 
@@ -331,7 +407,7 @@ func TestQuery(t *testing.T) {
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.metric", nil, nil, resolution1ns, 0, 60, 7, 1)
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 0, 60, 7, 1)
 
 	// Verify across multiple sources
 	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
@@ -359,12 +435,23 @@ func TestQuery(t *testing.T) {
 
 	tm.assertKeyCount(11)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.multimetric", nil, nil, resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_AVG.Enum(),
+
+	// Test default query: avg downsampler, sum aggregator, no derivative.
+	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 0, 90, 8, 2)
+	// Test with aggregator specified.
+	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_MAX.Enum(), nil, nil,
 		resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_AVG_RATE.Enum(),
+	// Test with aggregator and downsampler.
+	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_MAX.Enum(), TimeSeriesQueryAggregator_AVG.Enum(), nil,
 		resolution1ns, 0, 90, 8, 2)
-	tm.assertQuery("nodata", nil, nil, resolution1ns, 0, 90, 0, 0)
+	// Test with derivative specified.
+	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_AVG.Enum(), nil,
+		TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
+	// Test with everything specified.
+	tm.assertQuery("test.multimetric", nil, TimeSeriesQueryAggregator_MIN.Enum(), TimeSeriesQueryAggregator_MAX.Enum(),
+		TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
+	// Test query that returns no data.
+	tm.assertQuery("nodata", nil, nil, nil, nil, resolution1ns, 0, 90, 0, 0)
 
 	// Verify querying specific sources, thus excluding other available sources
 	// in the same time period.
@@ -423,5 +510,5 @@ func TestQuery(t *testing.T) {
 
 	tm.assertKeyCount(31)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, resolution1ns, 0, 90, 7, 2)
+	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 0, 90, 7, 2)
 }

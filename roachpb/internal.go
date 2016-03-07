@@ -17,6 +17,11 @@
 
 package roachpb
 
+// Summation returns the sum value for this sample.
+func (samp *InternalTimeSeriesSample) Summation() float64 {
+	return samp.Sum
+}
+
 // Average returns the average value for this sample.
 func (samp *InternalTimeSeriesSample) Average() float64 {
 	if samp.Count == 0 {

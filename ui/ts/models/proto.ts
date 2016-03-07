@@ -198,7 +198,21 @@ module Models {
      */
     export enum QueryAggregator {
       AVG = 1,
-      AVG_RATE = 2,
+      SUM = 2,
+      MAX = 3,
+      MIN = 4,
+    }
+
+    /**
+     * QueryAggregator is an enumeration of the available derivative
+     * functions for time series queries.
+     *
+     * Source message = "TimeSeriesQueryDerivative"
+     */
+    export enum QueryDerivative {
+      NONE = 0,
+      DERIVATIVE = 1,
+      NON_NEGATIVE_DERIVATIVE = 2,
     }
 
     /**
@@ -218,8 +232,10 @@ module Models {
      */
     export interface QueryResult {
       name: string;
-      aggregator: QueryAggregator;
       datapoints: Datapoint[];
+      downsampler: QueryAggregator;
+      source_aggregator: QueryAggregator;
+      derivative: QueryDerivative;
     }
 
     /**
@@ -240,7 +256,9 @@ module Models {
     export interface QueryRequest {
       name: string;
       sources: string[];
-      aggregator: QueryAggregator;
+      downsampler: QueryAggregator;
+      source_aggregator: QueryAggregator;
+      derivative: QueryDerivative;
     }
 
     /**
