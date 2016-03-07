@@ -31,6 +31,7 @@ import (
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
+	"github.com/docker/engine-api/types/network"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -100,8 +101,8 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 // createContainer creates a new container using the specified options. Per the
 // docker API, the created container is not running and must be started
 // explicitly.
-func createContainer(l *LocalCluster, containerConfig container.Config, hostConfig container.HostConfig, containerName string) (*Container, error) {
-	resp, err := l.client.ContainerCreate(&containerConfig, &hostConfig, nil, containerName)
+func createContainer(l *LocalCluster, containerConfig container.Config, hostConfig container.HostConfig, networkConfig *network.NetworkingConfig, containerName string) (*Container, error) {
+	resp, err := l.client.ContainerCreate(&containerConfig, &hostConfig, networkConfig, containerName)
 	if err != nil {
 		return nil, err
 	}
