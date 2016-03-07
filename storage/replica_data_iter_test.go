@@ -116,7 +116,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Error("expected empty iteration")
@@ -158,7 +158,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	curKeys := createRangeData(tc.rng, t)
 	postKeys := createRangeData(postRng, t)
 
-	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
+	iter := newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	i := 0
 	for ; iter.Valid(); iter.Next() {
@@ -183,7 +183,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	if err := tc.rng.Destroy(*tc.rng.Desc()); err != nil {
 		t.Fatal(err)
 	}
-	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine())
+	iter = newReplicaDataIterator(tc.rng.Desc(), tc.rng.store.Engine(), false /* !replicatedOnly */)
 	defer iter.Close()
 	if iter.Valid() {
 		// If the range is destroyed, only a tombstone key should be there.
@@ -207,7 +207,7 @@ func TestReplicaDataIterator(t *testing.T) {
 		{preRng, preKeys},
 		{postRng, postKeys},
 	} {
-		iter = newReplicaDataIterator(test.r.Desc(), test.r.store.Engine())
+		iter = newReplicaDataIterator(test.r.Desc(), test.r.store.Engine(), false /* !replicatedOnly */)
 		defer iter.Close()
 		i = 0
 		for ; iter.Valid(); iter.Next() {
