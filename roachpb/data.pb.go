@@ -403,8 +403,6 @@ func (*TxnMeta) ProtoMessage()    {}
 //
 // If you add fields to Transaction you'll need to update
 // Transaction.Clone. Failure to do so will result in test failures.
-//
-// TODO(vivek): Remove parts of Transaction that expose internals.
 type Transaction struct {
 	// The transaction metadata. These are persisted with every intent.
 	TxnMeta `protobuf:"bytes,1,opt,name=meta,embedded=meta" json:"meta"`
