@@ -26,6 +26,7 @@ ORG_ROOT             := $(REPO_ROOT)/..
 GITHUB_ROOT          := $(ORG_ROOT)/..
 BOWER_COMPONENTS     := bower_components
 NODE_MODULES         := node_modules
+TYPINGS              := typings
 TS_ROOT              := ts
 STYL_ROOT            := styl
 TEST_ROOT            := ts/test
@@ -89,14 +90,18 @@ debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
+	rm -rf $(BOWER_COMPONENTS)/
 	bower install --config.interactive=false --allow-root
 	touch $@
 
 npm.installed: npm-shrinkwrap.json
+	# TODO(tamird): DRY this with `clean`?
+	rm -rf $(BOWER_COMPONENTS)/ $(NODE_MODULES)/ $(TYPINGS)/
 	npm install --progress=false
 	touch $@
 
 typings.installed: typings.json npm.installed
+	rm -rf $(TYPINGS)/
 	typings install
 	touch $@
 
@@ -139,4 +144,4 @@ watch: debug
 .PHONY: clean
 clean:
 	rm -f $(REMOTE_DEPS) $(INDEX)
-	rm -rf $(NODE_MODULES) $(BOWER_COMPONENTS) build generated typings
+	rm -rf $(BOWER_COMPONENTS) $(NODE_MODULES) $(TYPINGS) build generated
