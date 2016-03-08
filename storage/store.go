@@ -1170,7 +1170,6 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 		return err
 	}
 
-	s.metrics.rangeCount.Dec(1)
 	return nil
 }
 
@@ -1252,6 +1251,10 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	}
 	s.scanner.RemoveReplica(rep)
 
+	// Grab stats before calling Destroy. The stats aren't currently altered by
+	// Destroy, but that is not necessarily a guarantee.
+	stats := rep.GetMVCCStats()
+
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets
 	// recreated by an incoming raft message.
@@ -1260,6 +1263,10 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 			return err
 		}
 	}
+
+	// Subtract the removed replica's stats from the store-level stats.
+	s.metrics.subtractMVCCStats(stats)
+	s.metrics.rangeCount.Dec(1)
 	return nil
 }
 

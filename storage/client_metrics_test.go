@@ -54,7 +54,44 @@ func checkCounter(t *testing.T, s *storage.Store, key string, e int64) {
 	}
 }
 
-func TestStoreStatsSplit(t *testing.T) {
+func verifyStats(t *testing.T, s *storage.Store) {
+	// Compute real total MVCC statistics from store.
+	realStats, err := s.ComputeMVCCStatsTest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity regression check for bug #4624: ensure intent count is zero.
+	if a := realStats.IntentCount; a != 0 {
+		t.Fatalf("Expected intent count to be zero, was %d", a)
+	}
+
+	// Sanity check: LiveBytes is not zero (ensures we don't have
+	// zeroed out structures.)
+	if liveBytes := getGauge(t, s, "livebytes"); liveBytes == 0 {
+		t.Fatal("Expected livebytes to be non-nero, was zero")
+	}
+
+	// Ensure that real MVCC stats match computed stats.
+	checkGauge(t, s, "livebytes", realStats.LiveBytes)
+	checkGauge(t, s, "keybytes", realStats.KeyBytes)
+	checkGauge(t, s, "valbytes", realStats.ValBytes)
+	checkGauge(t, s, "intentbytes", realStats.IntentBytes)
+	checkGauge(t, s, "livecount", realStats.LiveCount)
+	checkGauge(t, s, "keycount", realStats.KeyCount)
+	checkGauge(t, s, "valcount", realStats.ValCount)
+	checkGauge(t, s, "intentcount", realStats.IntentCount)
+	// "Ages" will be different depending on how much time has passed. Even with
+	// a manual clock, this can be an issue in tests. Therefore, we do not
+	// verify them in this test.
+
+	if t.Failed() {
+		t.Log(util.ErrorfSkipFrames(1, "verifyStats failed, aborting test."))
+		t.FailNow()
+	}
+}
+
+func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
@@ -70,33 +107,35 @@ func TestStoreStatsSplit(t *testing.T) {
 	// Verify range count is as expected
 	checkCounter(t, store0, "ranges", 2)
 
-	// Compute real total MVCC statistics from store.
-	realStats, err := store0.ComputeMVCCStatsTest()
-	if err != nil {
+	// Verify all stats on store0 after split.
+	verifyStats(t, store0)
+
+	// Replicate the "right" range to the other stores.
+	replica := store0.LookupReplica(roachpb.RKey("z"), nil)
+	mtc.replicateRange(replica.RangeID, 1, 2)
+
+	// Add some data to the "right" range.
+	incArgs := incrementArgs([]byte("z"), 5)
+	if _, err := client.SendWrappedWith(store0, nil, roachpb.Header{
+		RangeID: replica.RangeID,
+	}, &incArgs); err != nil {
 		t.Fatal(err)
 	}
+	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
 
-	// Sanity regression check for bug #4624: ensure intent count is zero.
-	if a := realStats.IntentCount; a != 0 {
-		t.Fatalf("Expected intent count to be zero, was %d", a)
-	}
+	// Verify all stats on store0 after addition.
+	verifyStats(t, store0)
 
-	// Sanity check: LiveBytes is not zero (ensures we don't have
-	// zeroed out structures.)
-	if liveBytes := getGauge(t, store0, "livebytes"); liveBytes == 0 {
-		t.Fatal("Expected livebytes to be non-nero, was zero")
-	}
+	// Unreplicate range from the first store.
+	mtc.unreplicateRange(replica.RangeID, 0)
 
-	// Ensure that real MVCC stats match computed stats.
-	checkGauge(t, store0, "livebytes", realStats.LiveBytes)
-	checkGauge(t, store0, "keybytes", realStats.KeyBytes)
-	checkGauge(t, store0, "valbytes", realStats.ValBytes)
-	checkGauge(t, store0, "intentbytes", realStats.IntentBytes)
-	checkGauge(t, store0, "livecount", realStats.LiveCount)
-	checkGauge(t, store0, "keycount", realStats.KeyCount)
-	checkGauge(t, store0, "valcount", realStats.ValCount)
-	checkGauge(t, store0, "intentcount", realStats.IntentCount)
-	checkGauge(t, store0, "intentage", realStats.IntentAge)
-	checkGauge(t, store0, "gcbytesage", realStats.GCBytesAge)
-	checkGauge(t, store0, "lastupdatenanos", realStats.LastUpdateNanos)
+	// Force GC Scan on store 0 in order to fully remove range.
+	mtc.stores[1].ForceReplicaGCScanAndProcess()
+	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
+
+	// Verify range count is as expected.
+	checkCounter(t, store0, "ranges", 1)
+
+	// Verify all stats on store0 after range is removed.
+	verifyStats(t, store0)
 }
