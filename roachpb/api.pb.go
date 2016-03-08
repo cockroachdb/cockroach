@@ -997,14 +997,6 @@ func (*BatchResponse) ProtoMessage() {}
 type BatchResponse_Header struct {
 	// error is non-nil if an error occurred.
 	Error *Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
-	// timestamp specifies time at which read or write actually was
-	// performed. In the case of both reads and writes, if the timestamp
-	// supplied to the request was 0, the wall time of the node
-	// servicing the request will be set here. Additionally, in the case
-	// of writes, this value may be increased from the timestamp passed
-	// with the Span if the key being written was either read
-	// or written more recently.
-	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// txn is non-nil if the request specified a non-nil
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
@@ -3367,23 +3359,15 @@ func (m *BatchResponse_Header) MarshalTo(data []byte) (int, error) {
 		}
 		i += n113
 	}
-	data[i] = 0x12
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Timestamp.Size()))
-	n114, err := m.Timestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n114
 	if m.Txn != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Txn.Size()))
-		n115, err := m.Txn.MarshalTo(data[i:])
+		n114, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n115
+		i += n114
 	}
 	if len(m.CollectedSpans) > 0 {
 		for _, b := range m.CollectedSpans {
@@ -4145,8 +4129,6 @@ func (m *BatchResponse_Header) Size() (n int) {
 		l = m.Error.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
-	l = m.Timestamp.Size()
-	n += 1 + l + sovApi(uint64(l))
 	if m.Txn != nil {
 		l = m.Txn.Size()
 		n += 1 + l + sovApi(uint64(l))
@@ -11278,36 +11260,6 @@ func (m *BatchResponse_Header) Unmarshal(data []byte) error {
 				m.Error = &Error{}
 			}
 			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowApi
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthApi
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Timestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
