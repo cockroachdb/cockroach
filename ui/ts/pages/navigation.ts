@@ -45,7 +45,7 @@ module AdminViews {
           },
           {
             title: "Users",
-            route: "/sql?title=Users&q=" + encodeURIComponent("SELECT * FROM SYSTEM.USERS;"),
+            route: "/users",
             icon: SvgIcons.usersIcon,
           },
           {

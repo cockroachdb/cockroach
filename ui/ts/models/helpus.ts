@@ -1,6 +1,5 @@
 // source: pages/nodes.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../models/sqlquery.ts" />
 
 module Models {
   "use strict";
@@ -8,6 +7,8 @@ module Models {
   export module HelpUs {
     import MithrilPromise = _mithril.MithrilPromise;
     import MithrilAttributes = _mithril.MithrilAttributes;
+    import GetUIDataResponse = Models.Proto.GetUIDataResponse;
+    import MithrilDeferred = _mithril.MithrilDeferred;
 
     export const OPTIN: string = "optin";
     export const DISMISSED: string = "dismissed";
@@ -35,6 +36,23 @@ module Models {
       lastname: string = "";
       company: string = "";
       updates: boolean = null; // Did the user sign up for product/feature updates
+    }
+
+    function getHelpUsData(): MithrilPromise<OptInAttributes> {
+      let d: MithrilDeferred<OptInAttributes> = m.deferred();
+      Models.API.getUIData("helpus").then((response: GetUIDataResponse): void => {
+        try {
+          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.value));
+          d.resolve(attributes);
+        } catch (e) {
+          d.reject(e);
+        }
+      });
+      return d.promise;
+    }
+
+    function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
+      return Models.API.setUIData("helpus", btoa(JSON.stringify(attrs)));
     }
 
     export class UserOptIn {
@@ -67,38 +85,29 @@ module Models {
 
       save(): MithrilPromise<void> {
         // Make sure we loaded the data first
+        // TODO: check timestamp on the backend to prevent overwriting data without loading first
         if (this.loaded) {
-          return Models.SQLQuery.runQuery(
-            `BEGIN;
-            DELETE FROM SYSTEM.REPORTING;
-            INSERT INTO SYSTEM.REPORTING VALUES (
-              '${this.attributes.email}',
-              ${this.attributes.optin},
-              ${this.attributes.dismissed},
-              '${this.attributes.firstname}',
-              '${this.attributes.lastname}',
-              '${this.attributes.company}',
-              ${this.attributes.updates},
-              NOW()
-             );
-             COMMIT;`)
-            .then(() => {
-              this.savedAttributes = _.clone(this.attributes);
-            });
+          return setHelpUsData(this.attributes);
         }
       }
 
       load(): MithrilPromise<void> {
-        return Models.SQLQuery.runQuery(`SELECT * FROM SYSTEM.REPORTING ORDER BY ${LASTUPDATED} DESC LIMIT 1`, true)
-          .then((r: Object): void => {
-            if (r[0]) {
-              _.each(_.keys(this.attributes), (attr: string): void => {
-                this.attributes[attr] = r[0][attr];
-              });
-            }
+        let d: MithrilDeferred<any> = m.deferred();
+        getHelpUsData()
+          .then((attributes: OptInAttributes): void => {
+            this.attributes = attributes;
             this.loaded = true;
             this.savedAttributes = _.clone(this.attributes);
+            d.resolve();
+          })
+          // no helpus data found
+          .catch(() => {
+            this.loaded = true;
+            this.attributes = new OptInAttributes();
+            this.savedAttributes = _.clone(this.attributes);
+            d.resolve();
           });
+        return d.promise;
       }
 
       /**
