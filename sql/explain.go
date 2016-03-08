@@ -40,7 +40,7 @@ const (
 // info about a DELETE, INSERT, SELECT or UPDATE statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
+func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachpb.Error) {
 	mode := explainNone
 	if len(n.Options) == 1 {
 		if strings.EqualFold(n.Options[0], "DEBUG") {
@@ -64,7 +64,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 		}
 	}
 
-	plan, err := p.makePlan(n.Statement, false)
+	plan, err := p.makePlan(n.Statement, autoCommit)
 	if err != nil {
 		return nil, err
 	}
