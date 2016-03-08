@@ -55,17 +55,21 @@ module Components {
       return hc;
     }
 
+    // TODO: add back refreshing indicators and some indicator of last refresh, and last _successful_ refresh
+    // They are currently removed because the refresh interval for the health indicator runs at a different
+    // time/frequency from the chart refreshes, so when the "refreshing..." text flashes it's confusing.
+    // Once we coordinate refreshing globally across the UI (as mentioned in the controller) this can be re-added.
     export function view(ctrl: HealthController): _mithril.MithrilVirtualElement {
       if (ctrl.healthy) {
         return m("div", [
           m("span.health-icon.icon-check-circle" + (ctrl.refreshing ? ".refreshing" : "")),
-          m("span.refreshing-text", ctrl.refreshing ? " Refreshing..." : ""),
+          // m("span.refreshing-text", ctrl.refreshing ? " Refreshing..." : ""),
         ]);
       } else {
         return m("div", [
           m("span.health-icon.icon-x" + (ctrl.refreshing ? ".refreshing" : "")),
           m("span.unreachable-text", " Can't reach node. "),
-          m("span.refreshing-text", ctrl.refreshing ? " Refreshing..." : ""),
+          // m("span.refreshing-text", ctrl.refreshing ? " Refreshing..." : ""),
         ]);
       }
     }
