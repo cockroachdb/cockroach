@@ -185,7 +185,7 @@ func (ctx *Context) InitDefaults() {
 func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	// TODO(peter): The comments and docs say that CacheSize and MemtableBudget
 	// are split evenly if there are multiple stores, but we aren't doing that
-	// currently.
+	// currently. See #4979 and #4980.
 	for _, spec := range ctx.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
@@ -214,8 +214,8 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 					spec.SizePercent, spec.Path, humanize.IBytes(uint64(sizeInBytes)),
 					humanize.IBytes(uint64(minimumStoreSize)))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path, ctx.CacheSize,
-				ctx.MemtableBudget, sizeInBytes, stopper))
+			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path,
+				ctx.CacheSize/uint64(len(ctx.Stores.Specs)), ctx.MemtableBudget, sizeInBytes, stopper))
 		}
 	}
 	if len(ctx.Engines) == 1 {
