@@ -115,7 +115,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.DropTable:
 		return p.DropTable(n)
 	case *parser.Explain:
-		return p.Explain(n)
+		return p.Explain(n, autoCommit)
 	case *parser.Grant:
 		return p.Grant(n)
 	case *parser.Insert:
