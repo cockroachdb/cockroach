@@ -149,21 +149,79 @@ func (s *selectNode) SetLimitHint(numRows int64) {
 	s.table.node.SetLimitHint(numRows)
 }
 
+// Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
+func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.Error) {
+	wrapped := n.Select
+	limit := n.Limit
+	orderBy := n.OrderBy
+	for {
+		switch s := wrapped.(type) {
+		case *parser.ParenSelect:
+			wrapped = s.Select.Select
+			if s.Select.OrderBy != nil {
+				if orderBy != nil {
+					return nil, roachpb.NewUErrorf("multiple ORDER BY clauses not allowed")
+				}
+				orderBy = s.Select.OrderBy
+			}
+			if s.Select.Limit != nil {
+				if limit != nil {
+					return nil, roachpb.NewUErrorf("multiple LIMIT clauses not allowed")
+				}
+				limit = s.Select.Limit
+			}
+			continue
+		case *parser.SelectClause:
+			// Select can potentially optimize index selection if it's being ordered,
+			// so we allow it to do its own sorting.
+			node := &selectNode{planner: p}
+			return p.initSelect(node, s, n.OrderBy, n.Limit)
+		// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
+		// currently expects the ordering to be done externally, so we let it fall
+		// through. Instead of continuing this special casing, it may be worth
+		// investigating a general mechanism for passing some context down during
+		// plan node construction.
+		default:
+			plan, pberr := p.makePlan(s, autoCommit)
+			if pberr != nil {
+				return nil, pberr
+			}
+			sort, pberr := p.orderBy(orderBy, plan)
+			if pberr != nil {
+				return nil, pberr
+			}
+			var err error
+			plan, err = p.limit(limit, sort.wrap(plan))
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			return plan, nil
+		}
+	}
+}
+
 // SelectClause selects rows from a single table. Select is the workhorse of the
 // SQL statements. In the slowest and most general case, select must perform
 // full table scans across multiple tables and sort and join the resulting rows
 // on arbitrary columns. Full table scans can be avoided when indexes can be
 // used to satisfy the where-clause.
 //
+// NB: This is passed directly to planNode only when there is no ORDER BY,
+// LIMIT, or parenthesis in the parsed SELECT. See `sql/parser.Select` and
+// `sql/parser.SelectStatement`.
+//
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) SelectClause(parsed *parser.SelectClause) (planNode, *roachpb.Error) {
 	node := &selectNode{planner: p}
-	return p.initSelect(node, parsed)
+	return p.initSelect(node, parsed, nil, nil)
 }
 
-func (p *planner) initSelect(s *selectNode, parsed *parser.SelectClause) (planNode, *roachpb.Error) {
+func (p *planner) initSelect(
+	s *selectNode, parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit,
+) (planNode, *roachpb.Error) {
+
 	s.qvals = make(qvalMap)
 
 	if pErr := s.initFrom(p, parsed); pErr != nil {
@@ -179,7 +237,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.SelectClause) (planNo
 	}
 
 	// NB: both orderBy and groupBy are passed and can modify the selectNode but orderBy must do so first.
-	sort, pErr := p.orderBy(parsed, s)
+	sort, pErr := p.orderBy(orderBy, s)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -245,11 +303,11 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.SelectClause) (planNo
 	s.ordering = s.computeOrdering(s.table.node.Ordering())
 
 	// Wrap this node as necessary.
-	limit, err := p.limit(parsed, p.distinct(parsed, sort.wrap(group.wrap(s))))
+	limitNode, err := p.limit(limit, p.distinct(parsed, sort.wrap(group.wrap(s))))
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	return limit, nil
+	return limitNode, nil
 }
 
 // Initializes the table node, given the parsed select expression
@@ -384,28 +442,6 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 	}
 
 	return nil
-}
-
-// colIndex takes an expression that refers to a column using an integer, verifies it refers to a
-// valid render target and returns the corresponding column index. For example:
-//    SELECT a from T ORDER by 1
-// Here "1" refers to the first render target "a". The returned index is 0.
-func (s *selectNode) colIndex(expr parser.Expr) (int, error) {
-	switch i := expr.(type) {
-	case parser.DInt:
-		index := int(i)
-		if numCols := s.numOriginalCols; index < 1 || index > numCols {
-			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
-		}
-		return index - 1, nil
-
-	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
-
-	default:
-		// expr doesn't look like a col index (i.e. not a constant).
-		return -1, nil
-	}
 }
 
 // checkRenderStar checks if the SelectExpr is a QualifiedName with a StarIndirection suffix. If so,

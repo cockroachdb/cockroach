@@ -145,6 +145,17 @@ SELECT a FROM t ORDER BY (((a)))
 4
 5
 
+query I
+(((SELECT a FROM t))) ORDER BY a DESC LIMIT 4
+----
+5
+4
+3
+2
+
+query error multiple ORDER BY clauses not allowed
+((SELECT a FROM t ORDER BY a)) ORDER BY a
+
 query error incompatible value types bool, int
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 

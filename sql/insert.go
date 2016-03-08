@@ -315,9 +315,9 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
 	}
 
-	values, ok := n.Rows.(*parser.ValuesClause)
+	values, ok := n.Rows.Select.(*parser.ValuesClause)
 	if !ok {
-		return n.Rows
+		return n.Rows.Select
 	}
 
 	ret := values

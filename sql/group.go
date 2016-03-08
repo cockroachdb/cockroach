@@ -79,7 +79,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 		// NB: This is not a deep copy, and thus when extractAggregateFuncs runs
 		// on s.render, the GroupBy expressions can contain wrapped qvalues.
 		// aggregateFunc's Eval() method handles being called during grouping.
-		if col, err := s.colIndex(norm); err != nil {
+		if col, err := colIndex(s.numOriginalCols, norm); err != nil {
 			return nil, roachpb.NewError(err)
 		} else if col >= 0 {
 			groupBy[i] = s.render[col]

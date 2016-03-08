@@ -7,3 +7,13 @@ column1 column2 column3
 
 query error VALUES lists must all be the same length
 VALUES (1), (2, 3)
+
+query I
+VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
+----
+3
+2
+1
+
+query error column z does not exist
+VALUES (1), (1), (2), (3) ORDER BY z

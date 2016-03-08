@@ -31,7 +31,7 @@ import (
 type Insert struct {
 	Table     *QualifiedName
 	Columns   QualifiedNames
-	Rows      SelectStatement
+	Rows      *Select
 	Returning ReturningExprs
 }
 
@@ -52,5 +52,5 @@ func (node *Insert) String() string {
 
 // DefaultValues returns true iff only default values are being inserted.
 func (node *Insert) DefaultValues() bool {
-	return node.Rows == nil
+	return node.Rows.Select == nil
 }

@@ -27,20 +27,34 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// orderBy constructs a sortNode based on the ORDER BY clause. Construction of
-// the sortNode might adjust the number of render targets in the selectNode if
-// any ordering expressions are specified.
-func (p *planner) orderBy(n *parser.SelectClause, s *selectNode) (*sortNode, *roachpb.Error) {
-	if n.OrderBy == nil {
+// orderBy constructs a sortNode based on the ORDER BY clause.
+//
+// In the general case (SELECT/UNION/VALUES), we can sort by a column index or a
+// column name.
+//
+// However, for a SELECT, we can also sort by the pre-alias column name (SELECT
+// a AS b ORDER BY b) as well as expressions (SELECT a, b, ORDER BY a+b). In
+// this case, construction of the sortNode might adjust the number of render
+// targets in the selectNode if any ordering expressions are specified.
+//
+// TODO(dan): SQL also allows sorting a VALUES or UNION by an expression.
+// Support this. It will reduce some of the special casing below, but requires a
+// generalization of how to add derived columns to a SelectStatement.
+func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roachpb.Error) {
+	if orderBy == nil {
 		return nil, nil
 	}
 
 	// We grab a copy of columns here because we might add new render targets
 	// below. This is the set of columns requested by the query.
-	columns := s.Columns()
+	columns := n.Columns()
+	numOriginalCols := len(columns)
+	if s, ok := n.(*selectNode); ok {
+		numOriginalCols = s.numOriginalCols
+	}
 	var ordering columnOrdering
 
-	for _, o := range n.OrderBy {
+	for _, o := range orderBy {
 		index := -1
 
 		// Normalize the expression which has the side-effect of evaluating
@@ -65,7 +79,7 @@ func (p *planner) orderBy(n *parser.SelectClause, s *selectNode) (*sortNode, *ro
 				}
 			}
 
-			if index == -1 {
+			if s, ok := n.(*selectNode); ok && index == -1 {
 				// No output column matched the qualified name, so look for an existing
 				// render target that matches the column name. This handles cases like:
 				//
@@ -89,11 +103,14 @@ func (p *planner) orderBy(n *parser.SelectClause, s *selectNode) (*sortNode, *ro
 		if index == -1 {
 			// The order by expression matched neither an output column nor an
 			// existing render target.
-			if col, err := s.colIndex(expr); err != nil {
+			if col, err := colIndex(numOriginalCols, expr); err != nil {
 				return nil, roachpb.NewError(err)
 			} else if col >= 0 {
 				index = col
-			} else {
+			} else if s, ok := n.(*selectNode); ok {
+				// TODO(dan): Once we support VALUES (1), (2) ORDER BY 3*4, this type
+				// check goes away.
+
 				// Add a new render expression to use for ordering. This handles cases
 				// were the expression is either not a qualified name or is a qualified
 				// name that is otherwise not referenced by the query:
@@ -104,6 +121,8 @@ func (p *planner) orderBy(n *parser.SelectClause, s *selectNode) (*sortNode, *ro
 					return nil, err
 				}
 				index = len(s.columns) - 1
+			} else {
+				return nil, roachpb.NewErrorf("column %s does not exist", expr)
 			}
 		}
 		direction := encoding.Ascending
@@ -114,6 +133,28 @@ func (p *planner) orderBy(n *parser.SelectClause, s *selectNode) (*sortNode, *ro
 	}
 
 	return &sortNode{columns: columns, ordering: ordering}, nil
+}
+
+// colIndex takes an expression that refers to a column using an integer, verifies it refers to a
+// valid render target and returns the corresponding column index. For example:
+//    SELECT a from T ORDER by 1
+// Here "1" refers to the first render target "a". The returned index is 0.
+func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
+	switch i := expr.(type) {
+	case parser.DInt:
+		index := int(i)
+		if numCols := numOriginalCols; index < 1 || index > numCols {
+			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
+		}
+		return index - 1, nil
+
+	case parser.Datum:
+		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+
+	default:
+		// expr doesn't look like a col index (i.e. not a constant).
+		return -1, nil
+	}
 }
 
 type sortNode struct {

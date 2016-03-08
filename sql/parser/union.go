@@ -27,7 +27,7 @@ import "fmt"
 // UnionClause represents a UNION statement.
 type UnionClause struct {
 	Type        UnionType
-	Left, Right SelectStatement
+	Left, Right *Select
 	All         bool
 }
 

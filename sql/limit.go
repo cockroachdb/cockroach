@@ -26,8 +26,8 @@ import (
 )
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) limit(n *parser.SelectClause, plan planNode) (planNode, error) {
-	if n.Limit == nil {
+func (p *planner) limit(limit *parser.Limit, plan planNode) (planNode, error) {
+	if limit == nil {
 		return plan, nil
 	}
 
@@ -39,8 +39,8 @@ func (p *planner) limit(n *parser.SelectClause, plan planNode) (planNode, error)
 		dst        *int64
 		defaultVal int64
 	}{
-		{"LIMIT", n.Limit.Count, &count, math.MaxInt64},
-		{"OFFSET", n.Limit.Offset, &offset, 0},
+		{"LIMIT", limit.Count, &count, math.MaxInt64},
+		{"OFFSET", limit.Offset, &offset, 0},
 	}
 
 	for _, datum := range data {
