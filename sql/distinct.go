@@ -25,7 +25,7 @@ import (
 )
 
 // distinct constructs a distinctNode.
-func (*planner) distinct(n *parser.Select, p planNode) planNode {
+func (*planner) distinct(n *parser.SelectClause, p planNode) planNode {
 	if !n.Distinct {
 		return p
 	}

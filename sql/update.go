@@ -133,7 +133,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	tracing.AnnotateTrace()
 
 	// Query the rows that need updating.
-	rows, pErr := p.Select(&parser.Select{
+	rows, pErr := p.SelectClause(&parser.SelectClause{
 		Exprs: targets,
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,

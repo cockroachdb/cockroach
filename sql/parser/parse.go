@@ -135,7 +135,7 @@ func parseExpr(expr string, syntax Syntax) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	sel, ok := stmt.(*Select)
+	sel, ok := stmt.(*SelectClause)
 	if !ok {
 		return nil, util.Errorf("expected a SELECT statement, but found %T", stmt)
 	}

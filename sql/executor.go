@@ -952,7 +952,7 @@ func (e *Executor) updateStmtCounts(stmt parser.Statement) {
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		e.txnBeginCount.Inc(1)
-	case *parser.Select:
+	case *parser.SelectClause:
 		e.selectCount.Inc(1)
 	case *parser.Update:
 		e.updateCount.Inc(1)

@@ -5638,7 +5638,7 @@ sqldefault:
 		//line sql.y:1849
 		{
 			sqlVAL.union.val = sqlDollar[1].union.selectStmt()
-			if s, ok := sqlVAL.union.val.(*Select); ok {
+			if s, ok := sqlVAL.union.val.(*SelectClause); ok {
 				s.OrderBy = sqlDollar[2].union.orderBy()
 			}
 		}
@@ -5647,7 +5647,7 @@ sqldefault:
 		//line sql.y:1856
 		{
 			sqlVAL.union.val = sqlDollar[1].union.selectStmt()
-			if s, ok := sqlVAL.union.val.(*Select); ok {
+			if s, ok := sqlVAL.union.val.(*SelectClause); ok {
 				s.OrderBy = sqlDollar[2].union.orderBy()
 				s.Limit = sqlDollar[3].union.limit()
 			}
@@ -5663,7 +5663,7 @@ sqldefault:
 		//line sql.y:1868
 		{
 			sqlVAL.union.val = sqlDollar[2].union.selectStmt()
-			if s, ok := sqlVAL.union.val.(*Select); ok {
+			if s, ok := sqlVAL.union.val.(*SelectClause); ok {
 				s.OrderBy = sqlDollar[3].union.orderBy()
 			}
 		}
@@ -5672,7 +5672,7 @@ sqldefault:
 		//line sql.y:1875
 		{
 			sqlVAL.union.val = sqlDollar[2].union.selectStmt()
-			if s, ok := sqlVAL.union.val.(*Select); ok {
+			if s, ok := sqlVAL.union.val.(*SelectClause); ok {
 				s.OrderBy = sqlDollar[3].union.orderBy()
 				s.Limit = sqlDollar[4].union.limit()
 			}
@@ -5681,7 +5681,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
 		//line sql.y:1913
 		{
-			sqlVAL.union.val = &Select{
+			sqlVAL.union.val = &SelectClause{
 				Exprs:   sqlDollar[3].union.selExprs(),
 				From:    sqlDollar[4].union.tblExprs(),
 				Where:   newWhere(astWhere, sqlDollar[5].union.expr()),
@@ -5693,7 +5693,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
 		//line sql.y:1925
 		{
-			sqlVAL.union.val = &Select{
+			sqlVAL.union.val = &SelectClause{
 				Distinct: sqlDollar[2].union.bool(),
 				Exprs:    sqlDollar[3].union.selExprs(),
 				From:     sqlDollar[4].union.tblExprs(),
@@ -5706,7 +5706,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:1937
 		{
-			sqlVAL.union.val = &Select{
+			sqlVAL.union.val = &SelectClause{
 				Exprs:       SelectExprs{starSelectExpr()},
 				From:        TableExprs{&AliasedTableExpr{Expr: sqlDollar[2].union.qname()}},
 				tableSelect: true,
@@ -5716,7 +5716,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1945
 		{
-			sqlVAL.union.val = &Union{
+			sqlVAL.union.val = &UnionClause{
 				Type:  UnionOp,
 				Left:  sqlDollar[1].union.selectStmt(),
 				Right: sqlDollar[4].union.selectStmt(),
@@ -5727,7 +5727,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1954
 		{
-			sqlVAL.union.val = &Union{
+			sqlVAL.union.val = &UnionClause{
 				Type:  IntersectOp,
 				Left:  sqlDollar[1].union.selectStmt(),
 				Right: sqlDollar[4].union.selectStmt(),
@@ -5738,7 +5738,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1963
 		{
-			sqlVAL.union.val = &Union{
+			sqlVAL.union.val = &UnionClause{
 				Type:  ExceptOp,
 				Left:  sqlDollar[1].union.selectStmt(),
 				Right: sqlDollar[4].union.selectStmt(),
@@ -5964,13 +5964,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2177
 		{
-			sqlVAL.union.val = &Values{[]*Tuple{{sqlDollar[2].union.exprs()}}}
+			sqlVAL.union.val = &ValuesClause{[]*Tuple{{sqlDollar[2].union.exprs()}}}
 		}
 	case 339:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2181
 		{
-			valNode := sqlDollar[1].union.selectStmt().(*Values)
+			valNode := sqlDollar[1].union.selectStmt().(*ValuesClause)
 			valNode.Tuples = append(valNode.Tuples, &Tuple{sqlDollar[3].union.exprs()})
 			sqlVAL.union.val = valNode
 		}

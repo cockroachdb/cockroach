@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-// Values constructs a valuesNode from a VALUES expression.
-func (p *planner) Values(n *parser.Values) (planNode, *roachpb.Error) {
+// ValuesClause constructs a valuesNode from a VALUES expression.
+func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error) {
 	v := &valuesNode{
 		rows: make([]parser.DTuple, 0, len(n.Tuples)),
 	}
@@ -38,7 +38,7 @@ func (p *planner) Values(n *parser.Values) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
-		// We must not modify the Values node in-place (or the changes will leak if we retry this
+		// We must not modify the ValuesClause node in-place (or the changes will leak if we retry this
 		// transaction).
 		tuple := parser.Tuple{Exprs: parser.Exprs(append([]parser.Expr(nil), tupleOrig.Exprs...))}
 

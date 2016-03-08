@@ -43,7 +43,7 @@ var aggregates = map[string]func() aggregateImpl{
 
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the selectNode as necessary.
-func (p *planner) groupBy(n *parser.Select, s *selectNode) (*groupNode, *roachpb.Error) {
+func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *roachpb.Error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -533,7 +533,7 @@ func (p *planner) aggregateInExpr(expr parser.Expr) bool {
 	return false
 }
 
-func (p *planner) isAggregate(n *parser.Select) bool {
+func (p *planner) isAggregate(n *parser.SelectClause) bool {
 	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
