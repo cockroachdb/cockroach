@@ -93,7 +93,7 @@ func (p *planner) Explain(n *parser.Explain) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewUErrorf("%v: %s", err, n)
 		}
 		return (&sortNode{
-			ordering: []columnOrderInfo{{0, encoding.Ascending}, {1, encoding.Ascending}},
+			ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
 			columns:  traceColumns,
 		}).wrap(&explainTraceNode{plan: plan, txn: p.txn}), nil
 

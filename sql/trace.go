@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -39,9 +40,9 @@ type explainTraceNode struct {
 }
 
 var traceColumns = append([]ResultColumn{
-	{Name: "Timestamp", Typ: parser.DummyTimestamp},
+	{Name: "Cumulative Time", Typ: parser.DummyTimestamp},
 	{Name: "Duration", Typ: parser.DummyString},
-	{Name: "Pos", Typ: parser.DummyInt},
+	{Name: "Span Pos", Typ: parser.DummyInt},
 	{Name: "Operation", Typ: parser.DummyString},
 	{Name: "Event", Typ: parser.DummyString},
 }, debugColumns...)
@@ -79,20 +80,35 @@ func (n *explainTraceNode) Next() bool {
 			basePos = n.lastPos + 1
 		}
 
+		// Iterate through once to determine earliest timestamp.
+		var earliest time.Time
+		for _, sp := range n.txn.CollectedSpans {
+			for _, entry := range sp.Logs {
+				if entry.Timestamp.Before(earliest) || earliest.IsZero() {
+					earliest = entry.Timestamp
+					break
+				}
+			}
+		}
+
 		for _, sp := range n.txn.CollectedSpans {
 			for i, entry := range sp.Logs {
 				var timeVal string
 				if i > 0 {
-					timeVal = time.Duration(entry.Timestamp.Sub(n.lastTS)).String()
+					timeVal = fmt.Sprintf("%.3fms", time.Duration(entry.Timestamp.Sub(n.lastTS)).Seconds()*1000)
 				}
+				sinceStart := fmt.Sprintf("%.3fms", time.Duration(entry.Timestamp.Sub(earliest)).Seconds()*1000)
 
-				n.rows = append(n.rows, append(parser.DTuple{
-					parser.DTimestamp{Time: entry.Timestamp},
+				cols := append(parser.DTuple{
+					parser.DString(sinceStart),
 					parser.DString(timeVal),
 					parser.DInt(basePos + i),
 					parser.DString(sp.Operation),
 					parser.DString(entry.Event),
-				}, vals.AsRow()...))
+				}, vals.AsRow()...)
+
+				// Timestamp is added for sorting, but will be removed after sort.
+				n.rows = append(n.rows, append(cols, parser.DTimestamp{Time: entry.Timestamp}))
 				n.lastTS, n.lastPos = entry.Timestamp, i
 			}
 		}
