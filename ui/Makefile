@@ -30,7 +30,6 @@ TS_ROOT              := ts
 STYL_ROOT            := styl
 TEST_ROOT            := ts/test
 GENERATED_ROOT       := generated
-GENERATED_PROTO_ROOT := ts/generated/protos
 
 # Ensure we only have one entry in GOPATH
 GOPATH := $(GITHUB_ROOT)/../..
@@ -76,16 +75,8 @@ GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
 
-# Generated proto files
-# TODO: generate all automatically
-
-PROTO_FILE        := ../sql/driver/wire.proto
-GOGOPROTO_FOLDER  := $(GOPATH)/src/github.com/gogo/protobuf
-GOGOPROTO         := $(GOGOPROTO_FOLDER)/gogoproto/gogo.proto
-PROTO_JSON_TARGET := $(GENERATED_ROOT)/wireproto.json
-
 .PHONY: all
-all: lint $(GOBINDATA_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
+all: lint $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 .PHONY: lint
@@ -94,7 +85,7 @@ lint: npm.installed
 	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.ts')
 
 .PHONY: debug
-debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET) $(PROTO_JSON_TARGET)
+debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_TARGET)
 
 bower.installed: bower.json npm.installed
@@ -108,10 +99,6 @@ npm.installed: npm-shrinkwrap.json
 typings.installed: typings.json npm.installed
 	typings install
 	touch $@
-
-$(PROTO_JSON_TARGET): $(PROTO_FILE) $(GOGOPROTO)
-	mkdir -p $(GENERATED_ROOT)
-	pbjs $(PROTO_FILE) --path $(PROTO_DEPS_FOLDER) > $@
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TS_ROOT)
