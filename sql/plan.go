@@ -134,6 +134,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.Revoke(n)
 	case *parser.RollbackTransaction:
 		return p.RollbackTransaction(n)
+	case *parser.Select:
+		return p.Select(n, autoCommit)
 	case *parser.SelectClause:
 		return p.SelectClause(n)
 	case *parser.Set:
@@ -180,6 +182,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 		return p.Delete(n, false)
 	case *parser.Insert:
 		return p.Insert(n, false)
+	case *parser.Select:
+		return p.Select(n, false)
 	case *parser.SelectClause:
 		return p.SelectClause(n)
 	case *parser.Show:
