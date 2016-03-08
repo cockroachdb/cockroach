@@ -61,9 +61,19 @@ if [ "${1-}" = "docker" ]; then
       fi
     done
 
+    for i in npm.installed bower.installed typings.installed; do
+      if [ -f /uicache/$i ]; then
+        cp -a /uicache/$i ui/$i
+      fi
+    done
+
     time make -C ui npm.installed     || rm -rf ui/node_modules/{*,.bin} && make -C ui npm.installed
     time make -C ui bower.installed   || rm -rf ui/bower_components/*    && make -C ui bower.installed
     time make -C ui typings.installed || rm -rf ui/typings/*             && make -C ui typings.installed
+
+    for i in npm.installed bower.installed typings.installed; do
+      cp -a ui/$i /uicache/$i
+    done
 
     # Fix permissions on the ui/typings directory and subdirectories
     # (they lack the execute permission for group/other).
