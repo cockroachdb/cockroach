@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -134,18 +135,34 @@ func transferMoney(client *testClient, numAccounts, maxTransfer int) error {
 	return err
 }
 
+func retryableError(err error) bool {
+	return testutils.IsError(err, "connection refused") || testutils.IsError(err, "failed to send RPC")
+}
+
 // Verify accounts.
 func verifyAccounts(t *testing.T, client *testClient) {
-	// Hold the read lock on the client to prevent it being restarted by
-	// chaos monkey.
-	var sum int
-	client.RLock()
-	defer client.RUnlock()
-	if err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
-		t.Fatal(err)
+	options := retry.Options{
+		InitialBackoff: 20 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		Multiplier:     2,
 	}
-	if sum != 0 {
-		t.Fatalf("The bank is not in good order. Total value: %d", sum)
+	for loop := retry.Start(options); loop.Next(); {
+		// Hold the read lock on the client to prevent it being restarted by
+		// chaos monkey.
+		client.RLock()
+		defer client.RUnlock()
+		var sum int
+		if err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum); err != nil {
+			if !retryableError(err) {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if sum != 0 {
+			t.Fatalf("The bank is not in good order. Total value: %d", sum)
+		}
+		// Done.
+		break
 	}
 }
 
@@ -155,7 +172,7 @@ func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) 
 	for !state.done() {
 		if err := transferMoney(client, numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
-			if !testutils.IsError(err, "connection refused") && !testutils.IsError(err, "failed to send RPC") {
+			if !retryableError(err) {
 				// Report the err and terminate.
 				state.errChan <- err
 				break
@@ -297,7 +314,7 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 // being killed and restarted continuously. The test doesn't measure write
 // performance, but cluster recovery.
 func TestClusterRecovery(t *testing.T) {
-	t.Skipf("TODO(pmattis): #4517")
+	runTestOnConfigs(t, testClusterRecoveryInner)
 }
 
 func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
@@ -357,7 +374,6 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 // than the one the client is connected to is being restarted periodically.
 // The test measures read/write performance in the presence of restarts.
 func TestNodeRestart(t *testing.T) {
-	t.Skipf("TODO(pmattis): #4517")
 	runTestOnConfigs(t, testNodeRestartInner)
 }
 
