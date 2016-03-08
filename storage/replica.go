@@ -1558,7 +1558,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 	// TODO(tschottdorf): discuss self-overlap.
 	// TODO(tschottdorf): provisional feature to get back to passing tests.
 	// Have to discuss how we go about it.
-	fiddleWithTimestamps := ba.Txn == nil && ba.IsWrite()
+	fiddleWithTimestamps := !isTxn && ba.IsWrite()
 
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
@@ -1623,6 +1623,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		// mark the returned transaction as Writing. It's important that
 		// we do this only at the end, since updating at the first write
 		// could "poison" the transaction on restartable errors, see #2920.
+		// TODO(tschottdorf): #4442.
 		if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
 			br.Txn.Writing = true
 		}
