@@ -47,7 +47,6 @@ type SchemaChanger struct {
 }
 
 // applyMutations runs the backfill for the mutations.
-// TODO(vivek): Merge this with backfill by moving backfill into this file.
 func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
 	l, pErr := sc.ExtendLease(*lease)
 	if pErr != nil {
@@ -73,7 +72,8 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		}
 
 		b := client.Batch{}
-		if pErr := p.backfillBatch(&b, tableDesc, sc.mutationID); pErr != nil {
+		// Run backfill for the first mutation ID.
+		if pErr := p.backfillBatch(&b, tableDesc); pErr != nil {
 			return pErr
 		}
 		if pErr := p.txn.Run(&b); pErr != nil {
