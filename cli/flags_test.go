@@ -60,11 +60,11 @@ func TestNoLinkForbidden(t *testing.T) {
 	}
 }
 
-func TestByteFlagValue(t *testing.T) {
+func TestCacheFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	f := startCmd.Flags()
-	args := []string{"--cache-size", "100MB", "--memtable-budget", "42GiB"}
+	args := []string{"--cache", "100MB"}
 	if err := f.Parse(args); err != nil {
 		t.Fatal(err)
 	}
@@ -73,9 +73,5 @@ func TestByteFlagValue(t *testing.T) {
 	const expectedCacheSize = 100 * 1000 * 1000
 	if expectedCacheSize != ctx.CacheSize {
 		t.Errorf("expected %d, but got %d", expectedCacheSize, ctx.CacheSize)
-	}
-	const expectedMemtableBudget = 42 * 1024 * 1024 * 1024
-	if expectedMemtableBudget != ctx.MemtableBudget {
-		t.Errorf("expected %d, but got %d", expectedMemtableBudget, ctx.MemtableBudget)
 	}
 }
