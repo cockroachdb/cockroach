@@ -112,14 +112,12 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 				row.Key = []byte(req.Key)
 				if result.PErr == nil {
 					row.Value = &req.Value
-					row.setTimestamp(reply.(*roachpb.PutResponse).Timestamp)
 				}
 			case *roachpb.ConditionalPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.PErr == nil {
 					row.Value = &req.Value
-					row.setTimestamp(reply.(*roachpb.ConditionalPutResponse).Timestamp)
 				}
 			case *roachpb.IncrementRequest:
 				row := &result.Rows[k]
@@ -128,7 +126,6 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 					t := reply.(*roachpb.IncrementResponse)
 					row.Value = &roachpb.Value{}
 					row.Value.SetInt(t.NewValue)
-					row.setTimestamp(t.Timestamp)
 				}
 			case *roachpb.ScanRequest:
 				if result.PErr == nil {
