@@ -831,7 +831,6 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	}
 	br := &roachpb.BatchResponse{}
 	br.Add(resp)
-	br.Timestamp = ba.Timestamp
 	br.Txn = resp.Header().Txn
 	return br, nil
 }
@@ -1535,7 +1534,6 @@ type intentsWithArg struct {
 
 func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := &roachpb.BatchResponse{}
-	br.Timestamp = ba.Timestamp
 	var intents []intentsWithArg
 	// If transactional, we use ba.Txn for each individual command and
 	// accumulate updates to it.
@@ -1601,7 +1599,6 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 
 		// Add the response to the batch, updating the timestamp.
 		reply.Header().Timestamp.Forward(header.Timestamp)
-		br.Timestamp.Forward(header.Timestamp)
 		br.Add(reply)
 		if isTxn {
 			if txn := reply.Header().Txn; txn != nil {
@@ -1613,7 +1610,6 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			// will commit with its original timestamp). We should have a
 			// non-acceptance test verifying this as well.
 			// TODO(tschottdorf): wasn't there another place that did this?
-			ba.Txn.Timestamp.Forward(br.Timestamp)
 		}
 	}
 	// If transactional, send out the final transaction entry with the reply.

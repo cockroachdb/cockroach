@@ -1049,9 +1049,8 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse, _internal_metadata_),
       -1);
   BatchResponse_Header_descriptor_ = BatchResponse_descriptor_->nested_type(0);
-  static const int BatchResponse_Header_offsets_[4] = {
+  static const int BatchResponse_Header_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse_Header, error_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse_Header, timestamp_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse_Header, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse_Header, collected_spans_),
   };
@@ -1522,23 +1521,22 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "BatchRequest\0223\n\006header\030\001 \001(\0132\031.cockroach"
     ".roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 "
     "\003(\0132\037.cockroach.roachpb.RequestUnionB\004\310\336"
-    "\037\000:\004\230\240\037\000\"\304\002\n\rBatchResponse\022A\n\006header\030\001 \001"
+    "\037\000:\004\230\240\037\000\"\214\002\n\rBatchResponse\022A\n\006header\030\001 \001"
     "(\0132\'.cockroach.roachpb.BatchResponse.Hea"
     "derB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockr"
-    "oach.roachpb.ResponseUnionB\004\310\336\037\000\032\256\001\n\006Hea"
-    "der\022\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb.E"
-    "rror\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach.roac"
-    "hpb.TimestampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockr"
-    "oach.roachpb.Transaction\022\027\n\017collected_sp"
-    "ans\030\004 \003(\014:\004\230\240\037\000*L\n\023ReadConsistencyType\022\016"
-    "\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSI"
-    "STENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIM"
-    "ESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002"
-    "\032\004\210\243\036\0002X\n\010Internal\022L\n\005Batch\022\037.cockroach."
-    "roachpb.BatchRequest\032 .cockroach.roachpb"
-    ".BatchResponse\"\0002X\n\010External\022L\n\005Batch\022\037."
-    "cockroach.roachpb.BatchRequest\032 .cockroa"
-    "ch.roachpb.BatchResponse\"\000B\tZ\007roachpbX\004", 9279);
+    "oach.roachpb.ResponseUnionB\004\310\336\037\000\032w\n\006Head"
+    "er\022\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb.Er"
+    "ror\022+\n\003txn\030\003 \001(\0132\036.cockroach.roachpb.Tra"
+    "nsaction\022\027\n\017collected_spans\030\004 \003(\014:\004\230\240\037\000*"
+    "L\n\023ReadConsistencyType\022\016\n\nCONSISTENT\020\000\022\r"
+    "\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*G\n"
+    "\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\016\n\nPUSH"
+    "_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002\032\004\210\243\036\0002X\n\010Intern"
+    "al\022L\n\005Batch\022\037.cockroach.roachpb.BatchReq"
+    "uest\032 .cockroach.roachpb.BatchResponse\"\000"
+    "2X\n\010External\022L\n\005Batch\022\037.cockroach.roachp"
+    "b.BatchRequest\032 .cockroach.roachpb.Batch"
+    "Response\"\000B\tZ\007roachpbX\004", 9223);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -23490,7 +23488,6 @@ BatchRequest::requests() const {
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int BatchResponse_Header::kErrorFieldNumber;
-const int BatchResponse_Header::kTimestampFieldNumber;
 const int BatchResponse_Header::kTxnFieldNumber;
 const int BatchResponse_Header::kCollectedSpansFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -23503,7 +23500,6 @@ BatchResponse_Header::BatchResponse_Header()
 
 void BatchResponse_Header::InitAsDefaultInstance() {
   error_ = const_cast< ::cockroach::roachpb::Error*>(&::cockroach::roachpb::Error::default_instance());
-  timestamp_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
   txn_ = const_cast< ::cockroach::roachpb::Transaction*>(&::cockroach::roachpb::Transaction::default_instance());
 }
 
@@ -23519,7 +23515,6 @@ void BatchResponse_Header::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   error_ = NULL;
-  timestamp_ = NULL;
   txn_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -23532,7 +23527,6 @@ BatchResponse_Header::~BatchResponse_Header() {
 void BatchResponse_Header::SharedDtor() {
   if (this != default_instance_) {
     delete error_;
-    delete timestamp_;
     delete txn_;
   }
 }
@@ -23563,12 +23557,9 @@ BatchResponse_Header* BatchResponse_Header::New(::google::protobuf::Arena* arena
 }
 
 void BatchResponse_Header::Clear() {
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 3u) {
     if (has_error()) {
       if (error_ != NULL) error_->::cockroach::roachpb::Error::Clear();
-    }
-    if (has_timestamp()) {
-      if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
     }
     if (has_txn()) {
       if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
@@ -23596,19 +23587,6 @@ bool BatchResponse_Header::MergePartialFromCodedStream(
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_error()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_timestamp;
-        break;
-      }
-
-      // optional .cockroach.roachpb.Timestamp timestamp = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_timestamp:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -23674,12 +23652,6 @@ void BatchResponse_Header::SerializeWithCachedSizes(
       1, *this->error_, output);
   }
 
-  // optional .cockroach.roachpb.Timestamp timestamp = 2;
-  if (has_timestamp()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, *this->timestamp_, output);
-  }
-
   // optional .cockroach.roachpb.Transaction txn = 3;
   if (has_txn()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
@@ -23709,13 +23681,6 @@ void BatchResponse_Header::SerializeWithCachedSizes(
         1, *this->error_, target);
   }
 
-  // optional .cockroach.roachpb.Timestamp timestamp = 2;
-  if (has_timestamp()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        2, *this->timestamp_, target);
-  }
-
   // optional .cockroach.roachpb.Transaction txn = 3;
   if (has_txn()) {
     target = ::google::protobuf::internal::WireFormatLite::
@@ -23740,19 +23705,12 @@ void BatchResponse_Header::SerializeWithCachedSizes(
 int BatchResponse_Header::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 3u) {
     // optional .cockroach.roachpb.Error error = 1;
     if (has_error()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->error_);
-    }
-
-    // optional .cockroach.roachpb.Timestamp timestamp = 2;
-    if (has_timestamp()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->timestamp_);
     }
 
     // optional .cockroach.roachpb.Transaction txn = 3;
@@ -23800,9 +23758,6 @@ void BatchResponse_Header::MergeFrom(const BatchResponse_Header& from) {
     if (from.has_error()) {
       mutable_error()->::cockroach::roachpb::Error::MergeFrom(from.error());
     }
-    if (from.has_timestamp()) {
-      mutable_timestamp()->::cockroach::roachpb::Timestamp::MergeFrom(from.timestamp());
-    }
     if (from.has_txn()) {
       mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
     }
@@ -23835,7 +23790,6 @@ void BatchResponse_Header::Swap(BatchResponse_Header* other) {
 }
 void BatchResponse_Header::InternalSwap(BatchResponse_Header* other) {
   std::swap(error_, other->error_);
-  std::swap(timestamp_, other->timestamp_);
   std::swap(txn_, other->txn_);
   collected_spans_.UnsafeArenaSwap(&other->collected_spans_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
@@ -24175,58 +24129,15 @@ void BatchResponse_Header::set_allocated_error(::cockroach::roachpb::Error* erro
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.BatchResponse.Header.error)
 }
 
-// optional .cockroach.roachpb.Timestamp timestamp = 2;
-bool BatchResponse_Header::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-void BatchResponse_Header::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000002u;
-}
-void BatchResponse_Header::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-void BatchResponse_Header::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
-  clear_has_timestamp();
-}
-const ::cockroach::roachpb::Timestamp& BatchResponse_Header::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.timestamp)
-  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
-}
-::cockroach::roachpb::Timestamp* BatchResponse_Header::mutable_timestamp() {
-  set_has_timestamp();
-  if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::roachpb::Timestamp;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.timestamp)
-  return timestamp_;
-}
-::cockroach::roachpb::Timestamp* BatchResponse_Header::release_timestamp() {
-  clear_has_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = timestamp_;
-  timestamp_ = NULL;
-  return temp;
-}
-void BatchResponse_Header::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
-  delete timestamp_;
-  timestamp_ = timestamp;
-  if (timestamp) {
-    set_has_timestamp();
-  } else {
-    clear_has_timestamp();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.BatchResponse.Header.timestamp)
-}
-
 // optional .cockroach.roachpb.Transaction txn = 3;
 bool BatchResponse_Header::has_txn() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 void BatchResponse_Header::set_has_txn() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 void BatchResponse_Header::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 void BatchResponse_Header::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();

@@ -723,7 +723,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
 		// Looks like this isn't necessary any more, nor did it prevent a bug
 		// referenced in a TODO there.
-		newTxn.Timestamp.Forward(br.Timestamp)
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
