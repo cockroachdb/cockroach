@@ -33,10 +33,10 @@ type SelectStatement interface {
 	selectStatement()
 }
 
-func (*ParenSelect) selectStatement() {}
-func (*Select) selectStatement()      {}
-func (*Union) selectStatement()       {}
-func (Values) selectStatement()       {}
+func (*ParenSelect) selectStatement()  {}
+func (*SelectClause) selectStatement() {}
+func (*UnionClause) selectStatement()  {}
+func (ValuesClause) selectStatement()  {}
 
 // ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.
 type ParenSelect struct {
@@ -47,8 +47,8 @@ func (node *ParenSelect) String() string {
 	return fmt.Sprintf("(%s)", node.Select)
 }
 
-// Select represents a SELECT statement.
-type Select struct {
+// SelectClause represents a SELECT statement.
+type SelectClause struct {
 	Distinct    bool
 	Exprs       SelectExprs
 	From        TableExprs
@@ -61,7 +61,7 @@ type Select struct {
 	tableSelect bool
 }
 
-func (node *Select) String() string {
+func (node *SelectClause) String() string {
 	if node.tableSelect && len(node.From) == 1 {
 		return fmt.Sprintf("TABLE %s", node.From[0])
 	}

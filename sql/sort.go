@@ -30,7 +30,7 @@ import (
 // orderBy constructs a sortNode based on the ORDER BY clause. Construction of
 // the sortNode might adjust the number of render targets in the selectNode if
 // any ordering expressions are specified.
-func (p *planner) orderBy(n *parser.Select, s *selectNode) (*sortNode, *roachpb.Error) {
+func (p *planner) orderBy(n *parser.SelectClause, s *selectNode) (*sortNode, *roachpb.Error) {
 	if n.OrderBy == nil {
 		return nil, nil
 	}

@@ -184,10 +184,10 @@ func (*RollbackTransaction) StatementType() StatementType { return Ack }
 func (*RollbackTransaction) StatementTag() string { return "ROLLBACK" }
 
 // StatementType implements the Statement interface.
-func (*Select) StatementType() StatementType { return Rows }
+func (*SelectClause) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Select) StatementTag() string { return "SELECT" }
+func (*SelectClause) StatementTag() string { return "SELECT" }
 
 // StatementType implements the Statement interface.
 func (*Set) StatementType() StatementType { return Ack }
@@ -262,13 +262,13 @@ func (n *Update) StatementType() StatementType { return n.Returning.StatementTyp
 func (*Update) StatementTag() string { return "UPDATE" }
 
 // StatementType implements the Statement interface.
-func (*Union) StatementType() StatementType { return Rows }
+func (*UnionClause) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Union) StatementTag() string { return "UNION" }
+func (*UnionClause) StatementTag() string { return "UNION" }
 
 // StatementType implements the Statement interface.
-func (Values) StatementType() StatementType { return Rows }
+func (ValuesClause) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (Values) StatementTag() string { return "VALUES" }
+func (ValuesClause) StatementTag() string { return "VALUES" }

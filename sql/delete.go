@@ -41,7 +41,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 
 	// TODO(tamird,pmattis): avoid going through Select to avoid encoding
 	// and decoding keys.
-	rows, pErr := p.Select(&parser.Select{
+	rows, pErr := p.SelectClause(&parser.SelectClause{
 		Exprs: tableDesc.allColumnsSelector(),
 		From:  parser.TableExprs{n.Table},
 		Where: n.Where,

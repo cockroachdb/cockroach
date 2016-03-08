@@ -500,7 +500,7 @@ func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
 }
 
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
-func (stmt *Select) CopyNode() *Select {
+func (stmt *SelectClause) CopyNode() *SelectClause {
 	stmtCopy := *stmt
 	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
 	stmtCopy.From = TableExprs(append([]TableExpr(nil), stmt.From...))
@@ -526,7 +526,7 @@ func (stmt *Select) CopyNode() *Select {
 }
 
 // WalkStmt is part of the WalkableStmt interface.
-func (stmt *Select) WalkStmt(v Visitor) Statement {
+func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 	ret := stmt
 
 	for i, expr := range stmt.Exprs {
@@ -676,13 +676,13 @@ func (stmt *Update) WalkStmt(v Visitor) Statement {
 }
 
 // WalkStmt is part of the WalkableStmt interface.
-func (stmt *Values) WalkStmt(v Visitor) Statement {
+func (stmt *ValuesClause) WalkStmt(v Visitor) Statement {
 	ret := stmt
 	for i, tuple := range stmt.Tuples {
 		t, changed := WalkExpr(v, tuple)
 		if changed {
 			if ret == stmt {
-				ret = &Values{append([]*Tuple(nil), stmt.Tuples...)}
+				ret = &ValuesClause{append([]*Tuple(nil), stmt.Tuples...)}
 			}
 			ret.Tuples[i] = t.(*Tuple)
 		}
@@ -694,10 +694,10 @@ var _ WalkableStmt = &Delete{}
 var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
 var _ WalkableStmt = &ParenSelect{}
-var _ WalkableStmt = &Select{}
+var _ WalkableStmt = &SelectClause{}
 var _ WalkableStmt = &Set{}
 var _ WalkableStmt = &Update{}
-var _ WalkableStmt = &Values{}
+var _ WalkableStmt = &ValuesClause{}
 
 // WalkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned

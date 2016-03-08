@@ -24,12 +24,12 @@ package parser
 
 import "strings"
 
-// Values represents a VALUES clause.
-type Values struct {
+// ValuesClause represents a VALUES clause.
+type ValuesClause struct {
 	Tuples []*Tuple
 }
 
-func (node *Values) String() string {
+func (node *ValuesClause) String() string {
 	strs := make([]string, 0, len(node.Tuples))
 	for _, n := range node.Tuples {
 		strs = append(strs, n.String())

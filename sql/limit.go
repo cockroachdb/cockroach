@@ -26,7 +26,7 @@ import (
 )
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) limit(n *parser.Select, plan planNode) (planNode, error) {
+func (p *planner) limit(n *parser.SelectClause, plan planNode) (planNode, error) {
 	if n.Limit == nil {
 		return plan, nil
 	}

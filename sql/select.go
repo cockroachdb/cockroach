@@ -149,21 +149,21 @@ func (s *selectNode) SetLimitHint(numRows int64) {
 	s.table.node.SetLimitHint(numRows)
 }
 
-// Select selects rows from a single table. Select is the workhorse of the SQL
-// statements. In the slowest and most general case, select must perform full
-// table scans across multiple tables and sort and join the resulting rows on
-// arbitrary columns. Full table scans can be avoided when indexes can be used
-// to satisfy the where-clause.
+// SelectClause selects rows from a single table. Select is the workhorse of the
+// SQL statements. In the slowest and most general case, select must perform
+// full table scans across multiple tables and sort and join the resulting rows
+// on arbitrary columns. Full table scans can be avoided when indexes can be
+// used to satisfy the where-clause.
 //
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) Select(parsed *parser.Select) (planNode, *roachpb.Error) {
+func (p *planner) SelectClause(parsed *parser.SelectClause) (planNode, *roachpb.Error) {
 	node := &selectNode{planner: p}
 	return p.initSelect(node, parsed)
 }
 
-func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *roachpb.Error) {
+func (p *planner) initSelect(s *selectNode, parsed *parser.SelectClause) (planNode, *roachpb.Error) {
 	s.qvals = make(qvalMap)
 
 	if pErr := s.initFrom(p, parsed); pErr != nil {
@@ -253,7 +253,7 @@ func (p *planner) initSelect(s *selectNode, parsed *parser.Select) (planNode, *r
 }
 
 // Initializes the table node, given the parsed select expression
-func (s *selectNode) initFrom(p *planner, parsed *parser.Select) *roachpb.Error {
+func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.Error {
 	from := parsed.From
 	var colAlias parser.NameList
 	switch len(from) {

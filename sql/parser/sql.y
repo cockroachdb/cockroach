@@ -1848,14 +1848,14 @@ select_no_parens:
 | select_clause sort_clause
   {
     $$.val = $1.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
+    if s, ok := $$.val.(*SelectClause); ok {
       s.OrderBy = $2.orderBy()
     }
   }
 | select_clause opt_sort_clause select_limit
   {
     $$.val = $1.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
+    if s, ok := $$.val.(*SelectClause); ok {
       s.OrderBy = $2.orderBy()
       s.Limit = $3.limit()
     }
@@ -1867,14 +1867,14 @@ select_no_parens:
 | with_clause select_clause sort_clause
   {
     $$.val = $2.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
+    if s, ok := $$.val.(*SelectClause); ok {
       s.OrderBy = $3.orderBy()
     }
   }
 | with_clause select_clause opt_sort_clause select_limit
   {
     $$.val = $2.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
+    if s, ok := $$.val.(*SelectClause); ok {
       s.OrderBy = $3.orderBy()
       s.Limit = $4.limit()
     }
@@ -1911,7 +1911,7 @@ simple_select:
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    $$.val = &Select{
+    $$.val = &SelectClause{
       Exprs:   $3.selExprs(),
       From:    $4.tblExprs(),
       Where:   newWhere(astWhere, $5.expr()),
@@ -1923,7 +1923,7 @@ simple_select:
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    $$.val = &Select{
+    $$.val = &SelectClause{
       Distinct: $2.bool(),
       Exprs:    $3.selExprs(),
       From:     $4.tblExprs(),
@@ -1935,7 +1935,7 @@ simple_select:
 | values_clause
 | TABLE relation_expr
   {
-    $$.val = &Select{
+    $$.val = &SelectClause{
       Exprs:       SelectExprs{starSelectExpr()},
       From:        TableExprs{&AliasedTableExpr{Expr: $2.qname()}},
       tableSelect: true,
@@ -1943,7 +1943,7 @@ simple_select:
   }
 | select_clause UNION all_or_distinct select_clause
   {
-    $$.val = &Union{
+    $$.val = &UnionClause{
       Type:  UnionOp,
       Left:  $1.selectStmt(),
       Right: $4.selectStmt(),
@@ -1952,7 +1952,7 @@ simple_select:
   }
 | select_clause INTERSECT all_or_distinct select_clause
   {
-    $$.val = &Union{
+    $$.val = &UnionClause{
       Type:  IntersectOp,
       Left:  $1.selectStmt(),
       Right: $4.selectStmt(),
@@ -1961,7 +1961,7 @@ simple_select:
   }
 | select_clause EXCEPT all_or_distinct select_clause
   {
-    $$.val = &Union{
+    $$.val = &UnionClause{
       Type:  ExceptOp,
       Left:  $1.selectStmt(),
       Right: $4.selectStmt(),
@@ -2175,11 +2175,11 @@ having_clause:
 values_clause:
   VALUES ctext_row
   {
-    $$.val = &Values{[]*Tuple{{$2.exprs()}}}
+    $$.val = &ValuesClause{[]*Tuple{{$2.exprs()}}}
   }
 | values_clause ',' ctext_row
   {
-    valNode := $1.selectStmt().(*Values)
+    valNode := $1.selectStmt().(*ValuesClause)
     valNode.Tuples = append(valNode.Tuples, &Tuple{$3.exprs()})
     $$.val = valNode
   }

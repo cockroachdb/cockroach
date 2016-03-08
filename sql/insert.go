@@ -312,10 +312,10 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 			row = append(row, defaultExprs[i])
 		}
-		return &parser.Values{Tuples: []*parser.Tuple{{Exprs: row}}}
+		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
 	}
 
-	values, ok := n.Rows.(*parser.Values)
+	values, ok := n.Rows.(*parser.ValuesClause)
 	if !ok {
 		return n.Rows
 	}
@@ -328,7 +328,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			case parser.DefaultVal:
 				if !tupleCopied {
 					if ret == values {
-						ret = &parser.Values{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
+						ret = &parser.ValuesClause{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
 					}
 					ret.Tuples[tIdx] =
 						&parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
