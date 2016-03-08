@@ -296,7 +296,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// Verify that the last verification timestamp was updated as whole range was scanned.
-	if _, err := tc.rng.GetLastVerificationTimestamp(); err != nil {
+	if _, err := tc.rng.getLastVerificationTimestamp(); err != nil {
 		t.Fatal(err)
 	}
 }

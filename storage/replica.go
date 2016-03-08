@@ -603,9 +603,26 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 	return desc.ContainsKeyRange(keys.Addr(start), keys.Addr(end))
 }
 
-// GetLastVerificationTimestamp reads the timestamp at which the range's
+// getLastReplicaGCTimestamp reads the timestamp at which the replica was
+// last checked for garbage collection.
+func (r *Replica) getLastReplicaGCTimestamp() (roachpb.Timestamp, error) {
+	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
+	timestamp := roachpb.Timestamp{}
+	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	if err != nil {
+		return roachpb.ZeroTimestamp, err
+	}
+	return timestamp, nil
+}
+
+func (r *Replica) setLastReplicaGCTimestamp(timestamp roachpb.Timestamp) error {
+	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
+	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+}
+
+// getLastVerificationTimestamp reads the timestamp at which the replica's
 // data was last verified.
-func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
+func (r *Replica) getLastVerificationTimestamp() (roachpb.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
 	timestamp := roachpb.Timestamp{}
 	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
@@ -615,9 +632,7 @@ func (r *Replica) GetLastVerificationTimestamp() (roachpb.Timestamp, error) {
 	return timestamp, nil
 }
 
-// SetLastVerificationTimestamp writes the timestamp at which the range's
-// data was last verified.
-func (r *Replica) SetLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
+func (r *Replica) setLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
 	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }

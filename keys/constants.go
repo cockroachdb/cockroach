@@ -109,6 +109,9 @@ var (
 	localRaftLastIndexSuffix = []byte("rfti")
 	// localRaftLogSuffix is the suffix for the raft log.
 	localRaftLogSuffix = []byte("rftl")
+	// localRangeLastReplicaGCTimestampSuffix is the suffix for a range's
+	// last replica GC timestamp (for GC of old replicas).
+	localRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
 	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
 	localRangeLastVerificationTimestampSuffix = []byte("rlvt")

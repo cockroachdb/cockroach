@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -46,15 +45,13 @@ const (
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
 	baseQueue
-	db     *client.DB
-	locker sync.Locker
+	db *client.DB
 }
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
-func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip, locker sync.Locker) *replicaGCQueue {
+func newReplicaGCQueue(db *client.DB, gossip *gossip.Gossip) *replicaGCQueue {
 	q := &replicaGCQueue{
-		db:     db,
-		locker: locker,
+		db: db,
 	}
 	q.baseQueue = makeBaseQueue("replicaGC", q, gossip, replicaGCQueueMaxSize)
 	return q
@@ -68,16 +65,25 @@ func (*replicaGCQueue) acceptsUnsplitRanges() bool {
 	return true
 }
 
-// shouldQueue determines whether a replica should be queued for GC, and
-// if so at what priority. Replicas which have been inactive for longer
-// than ReplicaGCQueueInactivityThreshold are considered for possible GC
-// at equal priority.
-func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
-	_ *config.SystemConfig) (bool, float64) {
-
-	return rng.getLeaderLease().Expiration.Add(
-		ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0,
-	).Less(now), 0
+// shouldQueue determines whether a replica should be queued for GC,
+// and if so at what priority. To be considered for possible GC, a
+// replica's leader lease must not have been active for longer than
+// ReplicaGCQueueInactivityThreshold. Further, the last replica GC
+// check must have occurred more than ReplicaGCQueueInactivityThreshold
+// in the past.
+func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) (bool, float64) {
+	lastCheck, err := rng.getLastReplicaGCTimestamp()
+	if err != nil {
+		log.Errorf("could not read last replica GC timestamp: %s", err)
+		return false, 0
+	}
+	// Return false immediately if the previous check was less than the
+	// check interval in the past.
+	if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
+		return false, 0
+	}
+	// Return whether or not lease activity occurred within the inactivity threshold.
+	return rng.getLeaderLease().Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now), 0
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are
@@ -142,14 +148,10 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ *config.
 		// TODO(bdarnell): remove raft logs and other metadata (while leaving a
 		// tombstone). Add tests for GC of merged ranges.
 	} else {
-		// This range is a current member of the raft group. Acquire the lease
-		// to avoid processing this range again before the next inactivity threshold.
-		if pErr := rng.requestLeaderLease(now); pErr != nil {
-			if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); !ok {
-				if log.V(1) {
-					log.Infof("unable to acquire lease from valid range %s: %s", rng, pErr)
-				}
-			}
+		// This range is a current member of the raft group. Set the last replica
+		// GC check time to avoid re-processing for another check interval.
+		if err := rng.setLastReplicaGCTimestamp(now); err != nil {
+			return err
 		}
 	}
 

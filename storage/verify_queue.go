@@ -68,7 +68,7 @@ func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ *config.SystemConfig) (shouldQ bool, priority float64) {
 
 	// Get last verification timestamp.
-	lastVerify, err := rng.GetLastVerificationTimestamp()
+	lastVerify, err := rng.getLastVerificationTimestamp()
 	if err != nil {
 		log.Errorf("unable to fetch last verification timestamp: %s", err)
 		return
@@ -105,7 +105,7 @@ func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 	}
 
 	// Store current timestamp as last verification for this range.
-	return rng.SetLastVerificationTimestamp(now)
+	return rng.setLastVerificationTimestamp(now)
 }
 
 // timer returns the duration of intervals between successive range
