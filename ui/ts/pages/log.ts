@@ -5,6 +5,7 @@
 /// <reference path="../models/proto.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/format.ts" />
+/// <reference path="../util/convert.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -21,6 +22,7 @@ module AdminViews {
   export module Log {
     import Table = Components.Table;
     import LogEntry = Models.Proto.LogEntry;
+    import MithrilContext = _mithril.MithrilContext;
 
     let entries: Models.Log.Entries;
     /**
@@ -43,41 +45,12 @@ module AdminViews {
           },
           {
             title: "Message",
-            view: (entry: LogEntry): string => Utils.Format.LogEntryMessage(entry),
-          },
-          {
-            title: "Node",
-            view: (entry: LogEntry): string => entry.node_id ? entry.node_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.node_id,
-          },
-          {
-            title: "Store",
-            view: (entry: LogEntry): string => entry.store_id ? entry.store_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.store_id,
-          },
-          {
-            title: "Range",
-            view: (entry: LogEntry): string => entry.range_id ? entry.range_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.range_id,
-          },
-          {
-            title: "Key",
-            view: (entry: LogEntry): string => entry.key,
-            sortable: true,
+            view: (entry: LogEntry): string => entry.format,
           },
           {
             title: "File:Line",
             view: (entry: LogEntry): string => entry.file + ":" + entry.line,
             sortable: true,
-          },
-          {
-            title: "Method",
-            view: (entry: LogEntry): string => entry.method ? entry.method.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.method,
           },
         ];
 
@@ -95,21 +68,16 @@ module AdminViews {
         }
 
         constructor() {
+          // TODO: keep values on refresh, allow sharing via url
           entries = new Models.Log.Entries();
-          entries.node(m.route.param("node_id") || null);
-          entries.level(m.route.param("level") || Utils.Format.Severity(2));
-          entries.max(parseInt(m.route.param("max"), 10) || null);
-          entries.startTime(parseInt(m.route.param("startTime"), 10) || null);
-          entries.endTime(parseInt(m.route.param("endTime"), 10) || null);
-          entries.pattern(m.route.param("pattern") || null);
           this._Refresh();
           this._interval = window.setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
-      };
+      }
 
       export function controller(): Controller {
         return new Controller();
-      };
+      }
 
       const _severitySelectOptions: Components.Select.Item[] = [
         { value: Utils.Format.Severity(0), text: ">= " + Utils.Format.Severity(0) },
@@ -117,26 +85,6 @@ module AdminViews {
         { value: Utils.Format.Severity(2), text: ">= " + Utils.Format.Severity(2) },
         { value: Utils.Format.Severity(3), text: Utils.Format.Severity(3) },
       ];
-
-      function onChangeSeverity(val: string): void {
-        entries.level(val);
-        m.route(entries.getURL(), entries.getParams());
-      };
-
-      function onChangeMax(val: string): void {
-        let result: number = parseInt(val, 10);
-        if (result > 0) {
-          entries.max(result);
-        } else {
-          entries.max(null);
-        }
-        m.route(entries.getURL(), entries.getParams());
-      }
-
-      function onChangePattern(val: string): void {
-        entries.pattern(val);
-        m.route(entries.getURL(), entries.getParams());
-      }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         let comparisonData: Table.TableData<LogEntry> = {
@@ -151,23 +99,55 @@ module AdminViews {
         }
 
         return m("div", [
-          m("h2", "Node " + entries.nodeName() + " Log"),
-          m("form", [
-            m.trust("Severity: "),
-            m.component(Components.Select, {
-              items: _severitySelectOptions,
-              value: entries.level,
-              onChange: onChangeSeverity,
-            }),
-            m.trust("&nbsp;&nbsp;Max Results: "),
-            m("input", { onchange: m.withAttr("value", onChangeMax), value: entries.max() }),
-            m.trust("&nbsp;&nbsp;Regex Filter: "),
-            m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() }),
+          m.component(Components.Topbar, {
+            title: "Node " + entries.nodeName() + " Log",
+            updated: Utils.Convert.MilliToNano(Date.now()),
+          }),
+          m(".section.logs", [
+            m("form", [
+              "Severity: ",
+              m.component(Components.Select, {
+                items: _severitySelectOptions,
+                value: entries.level,
+                onChange: (val: string): void => {
+                  entries.level(val);
+                  entries.refresh();
+                },
+              }),
+              m("span.spacing", "Max Results: "),
+              // We listen on keyup instead of change so that the page updates as the user types
+              m("input",
+                {
+                  config: (el: Element, isInit: boolean, context: MithrilContext): any => {
+                    if (!isInit) {
+                      el.addEventListener("keyup", (e: Event): void => {
+                        let num: number = parseInt((<HTMLInputElement>e.srcElement).value, 10);
+                        entries.max(num > 0 ? num : null);
+                        entries.refresh();
+                      });
+                    }
+                  },
+                }),
+              m("span.spacing", "Regex Filter: "),
+              m("input",
+                {
+                  config: (el: Element, isInit: boolean, context: MithrilContext): any => {
+                    if (!isInit) {
+                      el.addEventListener("keyup", (e: Event): void => {
+                        entries.pattern((<HTMLInputElement>e.srcElement).value);
+                        entries.refresh();
+                      });
+                    }
+                  },
+                }),
+            ]),
           ]),
-          m("p", count + " log entries retrieved"),
-          m(".stats-table", Components.Table.create(comparisonData)),
+          m(".section.logs-table", [
+            m("p", count + " log entries retrieved"),
+            m(".logs-table", Components.Table.create(comparisonData)),
+          ]),
         ]);
-      };
+      }
     }
   }
 }
