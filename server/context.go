@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -227,7 +227,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, humanize.IBytes(uint64(sizeInBytes)), humanize.IBytes(uint64(minimumStoreSize)))
+					spec.SizePercent, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, uint64(sizeInBytes), stopper))
 		} else {
@@ -240,8 +240,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, spec.Path, humanize.IBytes(uint64(sizeInBytes)),
-					humanize.IBytes(uint64(minimumStoreSize)))
+					spec.SizePercent, spec.Path, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path,
 				ctx.CacheSize/uint64(len(ctx.Stores.Specs)), ctx.MemtableBudget, sizeInBytes, stopper))
