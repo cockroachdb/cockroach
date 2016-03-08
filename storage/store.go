@@ -1965,7 +1965,7 @@ func raftEntryFormatter(data []byte) string {
 	if len(data) == 0 {
 		return "[empty]"
 	}
-	_, encodedCmd := decodeRaftCommand(data)
+	_, encodedCmd := DecodeRaftCommand(data)
 	var cmd roachpb.RaftCommand
 	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
