@@ -5,6 +5,7 @@
 /// <reference path="../models/proto.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/format.ts" />
+/// <reference path="../util/convert.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -21,6 +22,8 @@ module AdminViews {
   export module Log {
     import Table = Components.Table;
     import LogEntry = Models.Proto.LogEntry;
+    import MithrilContext = _mithril.MithrilContext;
+    import MithrilAttributes = _mithril.MithrilAttributes;
 
     let entries: Models.Log.Entries;
     /**
@@ -43,41 +46,12 @@ module AdminViews {
           },
           {
             title: "Message",
-            view: (entry: LogEntry): string => Utils.Format.LogEntryMessage(entry),
-          },
-          {
-            title: "Node",
-            view: (entry: LogEntry): string => entry.node_id ? entry.node_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.node_id,
-          },
-          {
-            title: "Store",
-            view: (entry: LogEntry): string => entry.store_id ? entry.store_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.store_id,
-          },
-          {
-            title: "Range",
-            view: (entry: LogEntry): string => entry.range_id ? entry.range_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.range_id,
-          },
-          {
-            title: "Key",
-            view: (entry: LogEntry): string => entry.key,
-            sortable: true,
+            view: (entry: LogEntry): string => entry.format,
           },
           {
             title: "File:Line",
             view: (entry: LogEntry): string => entry.file + ":" + entry.line,
             sortable: true,
-          },
-          {
-            title: "Method",
-            view: (entry: LogEntry): string => entry.method ? entry.method.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.method,
           },
         ];
 
@@ -105,11 +79,11 @@ module AdminViews {
           this._Refresh();
           this._interval = window.setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
-      };
+      }
 
       export function controller(): Controller {
         return new Controller();
-      };
+      }
 
       const _severitySelectOptions: Components.Select.Item[] = [
         { value: Utils.Format.Severity(0), text: ">= " + Utils.Format.Severity(0) },
@@ -118,10 +92,14 @@ module AdminViews {
         { value: Utils.Format.Severity(3), text: Utils.Format.Severity(3) },
       ];
 
+      function reroute(): void {
+        m.route(entries.getURL(), entries.getParams(), true);
+      }
+
       function onChangeSeverity(val: string): void {
         entries.level(val);
-        m.route(entries.getURL(), entries.getParams());
-      };
+        reroute();
+      }
 
       function onChangeMax(val: string): void {
         let result: number = parseInt(val, 10);
@@ -130,12 +108,12 @@ module AdminViews {
         } else {
           entries.max(null);
         }
-        m.route(entries.getURL(), entries.getParams());
+        reroute();
       }
 
       function onChangePattern(val: string): void {
         entries.pattern(val);
-        m.route(entries.getURL(), entries.getParams());
+        reroute();
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
@@ -150,24 +128,57 @@ module AdminViews {
           count = 0;
         }
 
-        return m("div", [
-          m("h2", "Node " + entries.nodeName() + " Log"),
-          m("form", [
-            m.trust("Severity: "),
-            m.component(Components.Select, {
-              items: _severitySelectOptions,
-              value: entries.level,
-              onChange: onChangeSeverity,
-            }),
-            m.trust("&nbsp;&nbsp;Max Results: "),
-            m("input", { onchange: m.withAttr("value", onChangeMax), value: entries.max() }),
-            m.trust("&nbsp;&nbsp;Regex Filter: "),
-            m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() }),
+        // This allows us to persist the elements on the page through reroutes, which prevents the inputs losing focus.
+        // It needs to be added to every parent of the element of the input as well.
+        let persistent: MithrilAttributes = {
+          config: (el: Element, isInit: boolean, context: MithrilContext): void => { context.retain = true; },
+        };
+
+        return m("div", persistent, [
+          m.component(Components.Topbar, {
+            title: "Node " + entries.nodeName() + " Log",
+            updated: Utils.Convert.MilliToNano(Date.now()),
+          }),
+          m(".section.logs", persistent, [
+            m("form", persistent, [
+              "Severity: ",
+              m.component(Components.Select, {
+                items: _severitySelectOptions,
+                value: entries.level,
+                onChange: onChangeSeverity,
+              }),
+              m("span.spacing", "Max Results: "),
+              // We listen on keyup instead of change, because otherwise the value is reset when the health endpoint
+              // triggers a redraw.
+              m("input",
+                {
+                  config: (el: Element, isInit: boolean, context: MithrilContext): any => {
+                    context.retain = true;
+                    if (!isInit) {
+                      el.addEventListener("keyup", m.withAttr("value", onChangeMax));
+                    }
+                  },
+                  value: entries.max(),
+                }),
+              m("span.spacing", "Regex Filter: "),
+              m("input",
+                {
+                  config: (el: Element, isInit: boolean, context: MithrilContext): any => {
+                    context.retain = true;
+                    if (!isInit) {
+                      el.addEventListener("keyup", m.withAttr("value", onChangePattern));
+                    }
+                  },
+                  value: entries.pattern(),
+                }),
+            ]),
           ]),
-          m("p", count + " log entries retrieved"),
-          m(".stats-table", Components.Table.create(comparisonData)),
+          m(".section.logs-table", [
+            m("p", count + " log entries retrieved"),
+            m(".logs-table", Components.Table.create(comparisonData)),
+          ]),
         ]);
-      };
+      }
     }
   }
 }
