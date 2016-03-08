@@ -402,26 +402,32 @@ func TestCommonMethods(t *testing.T) {
 	}
 }
 
-// Verifies that a nested transaction returns an error if an inner txn
-// propagates an error to an outer txn.
+// Verifies that an inner transaction in a nested transaction strips the transaction
+// information in its error when propagating it to an other transaction.
 func TestNestedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup()
 	defer s.Stop()
 
-	txnProto := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, roachpb.Timestamp{}, 0)
 	pErr := db.Txn(func(txn1 *client.Txn) *roachpb.Error {
 		if pErr := txn1.Put("a", "1"); pErr != nil {
 			t.Fatalf("unexpected put error: %s", pErr)
 		}
-		return db.Txn(func(txn2 *client.Txn) *roachpb.Error {
-			return roachpb.NewErrorWithTxn(util.Errorf("err"), txnProto)
+		iPErr := db.Txn(func(txn2 *client.Txn) *roachpb.Error {
+			txnProto := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, roachpb.Timestamp{}, 0)
+			return roachpb.NewErrorWithTxn(util.Errorf("inner txn error"), txnProto)
 		})
+
+		if iPErr.GetTxn() != nil {
+			t.Errorf("error txn must be stripped: %s", iPErr)
+		}
+		return iPErr
+
 	})
 	if pErr == nil {
 		t.Fatal("unexpected success of txn")
 	}
-	if !testutils.IsPError(pErr, "mismatching transaction record in the error") {
+	if !testutils.IsPError(pErr, "inner txn error") {
 		t.Errorf("unexpected failure: %s", pErr)
 	}
 }
