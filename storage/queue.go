@@ -181,6 +181,7 @@ type baseQueue struct {
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 
+	// TODO(tamird): update all queues to use eventLog.
 	eventLog queueLog
 }
 

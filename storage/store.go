@@ -536,7 +536,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
-	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip, &s.mu.Mutex)
+	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
 	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
@@ -990,9 +990,10 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	if err := engine.MVCCPutProto(batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
-	// Verification timestamp.
-	// TODO(nvanbenschoten) update stats again here when #4710 is resolved
-	// and the LastVerificationTimestampKey is replicated again.
+	// Replica GC & Verification timestamps.
+	if err := engine.MVCCPutProto(batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
+		return err
+	}
 	if err := engine.MVCCPutProto(batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
