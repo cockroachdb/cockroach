@@ -292,6 +292,13 @@ func (s *Server) Start() error {
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
+	// Register admin service
+	if err := s.admin.RegisterGRPCGateway(s.ctx); err != nil {
+		return err
+	}
+	s.stopper.AddCloser(s.admin)
+	RegisterAdminServer(s.grpc, s.admin)
+
 	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}

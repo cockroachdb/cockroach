@@ -331,15 +331,17 @@ func Example_ranges() {
 	// debug range ls
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-/Table/11 [5]
+	// "c"-/Table/11 [6]
 	// 	0: node-id=1 store-id=1
 	// /Table/11-/Table/12 [2]
 	// 	0: node-id=1 store-id=1
 	// /Table/12-/Table/13 [3]
-	// 	0: node-id=1 store-id=1
-	// /Table/13-/Max [4]
-	// 	0: node-id=1 store-id=1
-	// 5 result(s)
+	//	0: node-id=1 store-id=1
+	// /Table/13-/Table/14 [4]
+	//	0: node-id=1 store-id=1
+	// /Table/14-/Max [5]
+	//	0: node-id=1 store-id=1
+	// 6 result(s)
 	// debug kv scan
 	// "a"	"1"
 	// "b"	"2"
@@ -441,7 +443,7 @@ func Example_max_results() {
 	// debug range ls --max-results=2
 	// /Min-"c" [1]
 	// 	0: node-id=1 store-id=1
-	// "c"-"d" [5]
+	// "c"-"d" [6]
 	// 	0: node-id=1 store-id=1
 	// 2 result(s)
 }
