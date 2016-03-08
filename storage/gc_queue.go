@@ -303,7 +303,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Store current timestamp as last verification for this replica, as
 	// we've just successfully scanned.
-	if err := repl.SetLastVerificationTimestamp(now); err != nil {
+	if err := repl.setLastVerificationTimestamp(now); err != nil {
 		log.Errorf("failed to set last verification timestamp for replica %s: %s", repl, err)
 	}
 
