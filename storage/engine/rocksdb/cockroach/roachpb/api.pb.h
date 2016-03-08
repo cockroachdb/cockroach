@@ -2963,15 +2963,27 @@ class HeartbeatTxnRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_header();
   void set_allocated_header(::cockroach::roachpb::Span* header);
 
+  // optional .cockroach.roachpb.Timestamp now = 2;
+  bool has_now() const;
+  void clear_now();
+  static const int kNowFieldNumber = 2;
+  const ::cockroach::roachpb::Timestamp& now() const;
+  ::cockroach::roachpb::Timestamp* mutable_now();
+  ::cockroach::roachpb::Timestamp* release_now();
+  void set_allocated_now(::cockroach::roachpb::Timestamp* now);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.HeartbeatTxnRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
+  inline void set_has_now();
+  inline void clear_has_now();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
+  ::cockroach::roachpb::Timestamp* now_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -8162,6 +8174,49 @@ inline void HeartbeatTxnRequest::set_allocated_header(::cockroach::roachpb::Span
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.HeartbeatTxnRequest.header)
+}
+
+// optional .cockroach.roachpb.Timestamp now = 2;
+inline bool HeartbeatTxnRequest::has_now() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void HeartbeatTxnRequest::set_has_now() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void HeartbeatTxnRequest::clear_has_now() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void HeartbeatTxnRequest::clear_now() {
+  if (now_ != NULL) now_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_now();
+}
+inline const ::cockroach::roachpb::Timestamp& HeartbeatTxnRequest::now() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.HeartbeatTxnRequest.now)
+  return now_ != NULL ? *now_ : *default_instance_->now_;
+}
+inline ::cockroach::roachpb::Timestamp* HeartbeatTxnRequest::mutable_now() {
+  set_has_now();
+  if (now_ == NULL) {
+    now_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.HeartbeatTxnRequest.now)
+  return now_;
+}
+inline ::cockroach::roachpb::Timestamp* HeartbeatTxnRequest::release_now() {
+  clear_has_now();
+  ::cockroach::roachpb::Timestamp* temp = now_;
+  now_ = NULL;
+  return temp;
+}
+inline void HeartbeatTxnRequest::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
+  delete now_;
+  now_ = now;
+  if (now) {
+    set_has_now();
+  } else {
+    clear_has_now();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.HeartbeatTxnRequest.now)
 }
 
 // -------------------------------------------------------------------

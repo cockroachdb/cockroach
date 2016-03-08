@@ -2343,9 +2343,8 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 		get := func(actor *roachpb.Transaction, k roachpb.Key) *roachpb.Error {
 			actor.Sequence++
 			_, pErr := client.SendWrappedWith(tc.store, nil, roachpb.Header{
-				Txn:       actor,
-				Timestamp: actor.Timestamp,
-				RangeID:   1,
+				Txn:     actor,
+				RangeID: 1,
 			}, &roachpb.GetRequest{Span: roachpb.Span{Key: k}})
 			return pErr
 		}

@@ -1103,10 +1103,11 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Now, try to read value using the pusher's txn.
-		ts := store.ctx.Clock.Now()
+		now := store.Clock().Now()
+		pusher.OrigTimestamp.Forward(now)
+		pusher.Timestamp.Forward(now)
 		gArgs := getArgs(key)
 		h.Txn = pusher
-		h.Timestamp = ts
 		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &gArgs)
 		if test.resolvable {
 			if pErr != nil {
@@ -1119,8 +1120,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 			// Finally, try to end the pushee's transaction; if we have
 			// SNAPSHOT isolation, the commit should work: verify the txn
-			// commit timestamp is equal to pusher's Timestamp + 1. Otherwise,
-			// verify commit fails with TransactionRetryError.
+			// commit timestamp is greater than pusher's Timestamp.
+			// Otherwise, verify commit fails with TransactionRetryError.
 			etArgs, h := endTxnArgs(pushee, true)
 			pushee.Sequence++
 			reply, cErr := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
@@ -1173,10 +1174,6 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	defer stopper.Stop()
 
 	key := roachpb.Key("a")
-	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
-	pushee := newTransaction("test", key, 1, roachpb.SNAPSHOT, store.ctx.Clock)
-	pushee.Priority = 2
-	pusher.Priority = 1 // Pusher would lose based on priority.
 
 	// First, write original value.
 	args := putArgs(key, []byte("value1"))
@@ -1186,8 +1183,9 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	}
 
 	// Lay down intent using the pushee's txn.
+	pushee := newTransaction("test", key, 1, roachpb.SNAPSHOT, store.ctx.Clock)
+	pushee.Priority = 2
 	h := roachpb.Header{Txn: pushee}
-	h.Timestamp = store.ctx.Clock.Now()
 	args.Value.SetBytes([]byte("value2"))
 	if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, h, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -1195,9 +1193,9 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 
 	// Now, try to read value using the pusher's txn.
 	gArgs := getArgs(key)
-	gTS := store.ctx.Clock.Now()
+	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+	pusher.Priority = 1 // Pusher would lose based on priority.
 	h.Txn = pusher
-	h.Timestamp = gTS
 	if reply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &gArgs); pErr != nil {
 		t.Errorf("expected read to succeed: %s", pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
@@ -1210,14 +1208,13 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	// SNAPSHOT isolation, the end should work, but verify the txn
 	// commit timestamp is equal to gArgs.Timestamp + 1.
 	etArgs, h := endTxnArgs(pushee, true)
-	h.Timestamp = pushee.Timestamp
 	h.Txn.Sequence++
 	reply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 	etReply := reply.(*roachpb.EndTransactionResponse)
-	minExpTS := gTS
+	minExpTS := pusher.Timestamp
 	minExpTS.Logical++
 	if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Timestamp.Less(minExpTS) {
 		t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",

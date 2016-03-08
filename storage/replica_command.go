@@ -790,7 +790,6 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 // coordinator. Returns the updated transaction.
 func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.HeartbeatTxnRequest) (roachpb.HeartbeatTxnResponse, error) {
 	var reply roachpb.HeartbeatTxnResponse
-	ts := h.Timestamp // all we're going to use from the header.
 
 	if err := verifyTransaction(h, &args); err != nil {
 		return reply, err
@@ -813,7 +812,7 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 		if txn.LastHeartbeat == nil {
 			txn.LastHeartbeat = &roachpb.Timestamp{}
 		}
-		txn.LastHeartbeat.Forward(ts)
+		txn.LastHeartbeat.Forward(args.Now)
 		if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err
 		}
