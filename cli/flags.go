@@ -22,13 +22,13 @@ import (
 	"net"
 	"strings"
 
-	"github.com/dustin/go-humanize"
 	"github.com/kr/text"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var maxResults int64
@@ -216,16 +216,16 @@ const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
 
 type bytesValue struct {
-	val   *uint64
+	val   *int64
 	isSet bool
 }
 
-func newBytesValue(val *uint64) *bytesValue {
+func newBytesValue(val *int64) *bytesValue {
 	return &bytesValue{val: val}
 }
 
 func (b *bytesValue) Set(s string) error {
-	v, err := humanize.ParseBytes(s)
+	v, err := util.ParseBytes(s)
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (b *bytesValue) String() string {
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return humanize.IBytes(*b.val)
+	return util.IBytes(*b.val)
 }
 
 func wrapText(s string) string {

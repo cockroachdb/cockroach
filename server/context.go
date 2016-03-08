@@ -85,11 +85,11 @@ type Context struct {
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
-	CacheSize uint64
+	CacheSize int64
 
 	// MemtableBudget is the amount of memory in bytes to use for the memory
-	// table. The value is split evenly between the stores if there are more than one.
-	MemtableBudget uint64
+	// table.
+	MemtableBudget int64
 
 	// BalanceMode determines how this node makes balancing decisions.
 	BalanceMode storage.BalanceMode
@@ -134,13 +134,16 @@ type TestingMocker struct {
 
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
-func GetTotalMemory() (uint64, error) {
+func GetTotalMemory() (int64, error) {
 	mem := gosigar.Mem{}
 	if err := mem.Get(); err != nil {
 		return 0, err
 	}
-	totalMem := mem.Total
-	var cgAvlMem uint64
+	totalMem := int64(mem.Total)
+	if totalMem < 0 {
+		return 0, fmt.Errorf("unsupported memory size %d", totalMem)
+	}
+	var cgAvlMem int64
 	if runtime.GOOS == "linux" {
 		var err error
 		var buf []byte
@@ -150,7 +153,7 @@ func GetTotalMemory() (uint64, error) {
 			}
 			return totalMem, nil
 		}
-		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
+		if cgAvlMem, err = strconv.ParseInt(strings.TrimSpace(string(buf)), 10, 64); err != nil {
 			if log.V(1) {
 				log.Infof("can't parse available memory from cgroups (%s)", err)
 			}
@@ -208,7 +211,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, uint64(sizeInBytes), stopper))
+			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
