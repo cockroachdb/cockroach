@@ -5,6 +5,7 @@
 /// <reference path="../models/proto.ts" />
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../util/format.ts" />
+/// <reference path="../util/convert.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -21,6 +22,8 @@ module AdminViews {
   export module Log {
     import Table = Components.Table;
     import LogEntry = Models.Proto.LogEntry;
+
+    const TYPING_DEBOUNCE_MS = 500;
 
     let entries: Models.Log.Entries;
     /**
@@ -43,41 +46,12 @@ module AdminViews {
           },
           {
             title: "Message",
-            view: (entry: LogEntry): string => Utils.Format.LogEntryMessage(entry),
-          },
-          {
-            title: "Node",
-            view: (entry: LogEntry): string => entry.node_id ? entry.node_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.node_id,
-          },
-          {
-            title: "Store",
-            view: (entry: LogEntry): string => entry.store_id ? entry.store_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.store_id,
-          },
-          {
-            title: "Range",
-            view: (entry: LogEntry): string => entry.range_id ? entry.range_id.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.range_id,
-          },
-          {
-            title: "Key",
-            view: (entry: LogEntry): string => entry.key,
-            sortable: true,
+            view: (entry: LogEntry): string => entry.format,
           },
           {
             title: "File:Line",
             view: (entry: LogEntry): string => entry.file + ":" + entry.line,
             sortable: true,
-          },
-          {
-            title: "Method",
-            view: (entry: LogEntry): string => entry.method ? entry.method.toString() : "",
-            sortable: true,
-            sortValue: (entry: LogEntry): number => entry.method,
           },
         ];
 
@@ -105,11 +79,11 @@ module AdminViews {
           this._Refresh();
           this._interval = window.setInterval(() => this._Refresh(), Controller._queryEveryMS);
         }
-      };
+      }
 
       export function controller(): Controller {
         return new Controller();
-      };
+      }
 
       const _severitySelectOptions: Components.Select.Item[] = [
         { value: Utils.Format.Severity(0), text: ">= " + Utils.Format.Severity(0) },
@@ -118,10 +92,19 @@ module AdminViews {
         { value: Utils.Format.Severity(3), text: Utils.Format.Severity(3) },
       ];
 
+      function reroute(): void {
+        // TODO: soft url change as described here:
+        // http://stackoverflow.com/questions/3338642/updating-address-bar-with-new-url-without-hash-or-reloading-the-page
+        m.route(entries.getURL(), entries.getParams(), true);
+      }
+
+      // We need to debounce the reroute, because it takes focus away from the inputs
+      let debouncedReroute: () => void = _.debounce(reroute, TYPING_DEBOUNCE_MS);
+
       function onChangeSeverity(val: string): void {
         entries.level(val);
-        m.route(entries.getURL(), entries.getParams());
-      };
+        debouncedReroute();
+      }
 
       function onChangeMax(val: string): void {
         let result: number = parseInt(val, 10);
@@ -130,12 +113,12 @@ module AdminViews {
         } else {
           entries.max(null);
         }
-        m.route(entries.getURL(), entries.getParams());
+        debouncedReroute();
       }
 
       function onChangePattern(val: string): void {
         entries.pattern(val);
-        m.route(entries.getURL(), entries.getParams());
+        debouncedReroute();
       }
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
@@ -151,23 +134,30 @@ module AdminViews {
         }
 
         return m("div", [
-          m("h2", "Node " + entries.nodeName() + " Log"),
-          m("form", [
-            m.trust("Severity: "),
-            m.component(Components.Select, {
-              items: _severitySelectOptions,
-              value: entries.level,
-              onChange: onChangeSeverity,
-            }),
-            m.trust("&nbsp;&nbsp;Max Results: "),
-            m("input", { onchange: m.withAttr("value", onChangeMax), value: entries.max() }),
-            m.trust("&nbsp;&nbsp;Regex Filter: "),
-            m("input", { onchange: m.withAttr("value", onChangePattern), value: entries.pattern() }),
+          m.component(Components.Topbar, {
+            title: "Node " + entries.nodeName() + " Log",
+            updated: Utils.Convert.MilliToNano(Date.now()),
+          }),
+          m(".section.logs", [
+            m("form", [
+              "Severity: ",
+              m.component(Components.Select, {
+                items: _severitySelectOptions,
+                value: entries.level,
+                onChange: onChangeSeverity,
+              }),
+              m("span.spacing", "Max Results: "),
+              m("input", {config: (el: Element): any => el.addEventListener("keyup", m.withAttr("value", onChangeMax)), value: entries.max()}),
+              m("span.spacing", "Regex Filter: "),
+              m("input", {config: (el: Element): any => el.addEventListener("keyup", m.withAttr("value", onChangePattern)), value: entries.pattern()}),
+            ]),
           ]),
-          m("p", count + " log entries retrieved"),
-          m(".stats-table", Components.Table.create(comparisonData)),
+          m(".section.logs-table", [
+            m("p", count + " log entries retrieved"),
+            m(".logs-table", Components.Table.create(comparisonData)),
+          ]),
         ]);
-      };
+      }
     }
   }
 }

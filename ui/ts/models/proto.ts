@@ -295,17 +295,9 @@ module Models {
     export interface LogEntry {
       severity: number;
       time: number;
-      thread_id: number;
       file: string;
       line: number;
       format: string;
-      args: Arg[];
-      node_id: number;
-      store_id: number;
-      range_id: number;
-      method: number;
-      key: string;
-      stacks: string;
     }
 
     /*****************************
