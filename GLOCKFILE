@@ -2,6 +2,7 @@ cmd github.com/client9/misspell/cmd/misspell
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/stress
+cmd github.com/gengo/grpc-gateway/protoc-gen-grpc-gateway
 cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
 cmd github.com/jteeuwen/go-bindata/go-bindata
@@ -38,6 +39,7 @@ github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/gengo/grpc-gateway 6a84588ee708fe6dae875dda157230fd2071e526
 github.com/go-sql-driver/mysql 0f2db9e6c9cff80a97ca5c2c5096242cc1554e16
 github.com/gogo/protobuf f4cc07910fc38f5b6b8d6e75d7457cf504157b6c
+github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
 github.com/golang/protobuf c75fbf01dc6cb73649c4cd4326182c3e44aa9dbb
 github.com/google/btree cc6329d4279e3f025a53a83c397d2339b5705c45
