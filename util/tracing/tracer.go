@@ -59,24 +59,29 @@ func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing
 // callback. If the given DelegatingCarrier is nil, a new Span is created.
 // otherwise, the created Span is a child.
 func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
-	tr := basictracer.New(CallbackRecorder(callback))
+	tr := basictracer.NewWithOptions(defaultOptions(callback))
 	sp, err := JoinOrNew(tr, carrier, opName)
 	if err == nil {
-		sp.SetBaggageItem(Snowball, "1")
 		// We definitely want to sample a Snowball trace.
+		// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
 		ext.SamplingPriority.Set(sp, 1)
+		sp.SetBaggageItem(Snowball, "1")
 	}
 	return sp, err
 }
 
-// newTracer implements NewTracer and allows that function to be mocked out via Disable().
-var newTracer = func() opentracing.Tracer {
+func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts := basictracer.DefaultOptions()
 	opts.TrimUnsampledSpans = true
-	opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
+	opts.Recorder = CallbackRecorder(recorder)
 	opts.NewSpanEventListener = basictracer.NetTraceIntegrator
 	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
-	return basictracer.NewWithOptions(opts)
+	return opts
+}
+
+// newTracer implements NewTracer and allows that function to be mocked out via Disable().
+var newTracer = func() opentracing.Tracer {
+	return basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
 }
 
 // NewTracer creates a Tracer which records to the net/trace

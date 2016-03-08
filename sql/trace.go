@@ -64,6 +64,7 @@ func (n *explainTraceNode) Next() bool {
 			}
 			n.txn.Trace.LogEvent("tracing completed")
 			n.txn.Trace.Finish()
+			n.txn.Trace = nil
 		} else {
 			vals = n.plan.DebugValues()
 		}
