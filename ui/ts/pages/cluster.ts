@@ -174,7 +174,7 @@ module AdminViews {
           this.axesSmall.push({
             title: "Nodes",
             visualizationArguments: {
-              format: ".0s",
+              format: "s",
               dataFn: function (allStats: Models.Proto.NodeStatus[], totalStats: Models.Proto.Status): { value: number; } { return {value: allStats && allStats.length || 0 }; },
             },
           });
