@@ -21,7 +21,6 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -218,22 +217,22 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// Write keys "a" and "b", the latter of which is the first key in the
 	// second range.
 	keys := [2]string{"a", "b"}
-	ts := [2]time.Time{}
+	ts := [2]roachpb.Timestamp{}
 	for i, key := range keys {
 		b := &client.Batch{}
 		b.Put(key, "value")
 		if pErr := db.Run(b); pErr != nil {
 			t.Fatal(pErr)
 		}
-		ts[i] = b.Results[0].Rows[0].Timestamp()
-		log.Infof("%d: %d.%d", i, ts[i].Unix(), ts[i].Nanosecond())
+		ts[i] = s.Clock().Now()
+		log.Infof("%d: %d", i, ts[i])
 		if i == 0 {
 			util.SucceedsSoon(t, func() error {
 				// Enforce that when we write the second key, it's written
 				// with a strictly higher timestamp. We're dropping logical
 				// ticks and the clock may just have been pushed into the
 				// future, so that's necessary. See #3122.
-				if !s.Clock().PhysicalTime().After(ts[0]) {
+				if !ts[0].Less(s.Clock().Now()) {
 					return errors.New("time stands still")
 				}
 				return nil
@@ -244,8 +243,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// Do an inconsistent Scan/ReverseScan from a new DistSender and verify
 	// it does the read at its local clock and doesn't receive an
 	// OpRequiresTxnError. We set the local clock to the timestamp of
-	// the first key to verify it's used to read only key "a".
-	manual := hlc.NewManualClock(ts[1].UnixNano() - 1)
+	// just above the first key to verify it's used to read only key "a".
+	manual := hlc.NewManualClock(ts[0].WallTime + 1)
 	clock := hlc.NewClock(manual.UnixNano)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock, RPCContext: s.RPCContext()}, s.Gossip())
 
