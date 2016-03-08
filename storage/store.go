@@ -1170,7 +1170,6 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 		return err
 	}
 
-	s.metrics.rangeCount.Dec(1)
 	return nil
 }
 
@@ -1260,6 +1259,12 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 			return err
 		}
 	}
+
+	// Update store-level metrics. This can be done after the call to Destroy(),
+	// because the replica object's MVCCStats are not altered from their last
+	// value.
+	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
+	s.metrics.rangeCount.Dec(1)
 	return nil
 }
 
