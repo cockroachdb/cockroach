@@ -122,10 +122,6 @@ contention.`),
 	"max-results": wrapText(`
 Define the maximum number of results that will be retrieved.`),
 
-	"memtable-budget": wrapText(`
-Total size in bytes for memtables, shared evenly if there are multiple
-storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
-
 	"metrics-frequency": wrapText(`
 Adjust the frequency at which the server records its own internal metrics.`),
 
@@ -308,7 +304,6 @@ func initFlags(ctx *Context) {
 		// Engine flags.
 		cacheSize = newBytesValue(&ctx.CacheSize)
 		f.Var(cacheSize, "cache-size", usage("cache-size"))
-		f.Var(newBytesValue(&ctx.MemtableBudget), "memtable-budget", usage("memtable-budget"))
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, usage("scan-interval"))
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))
