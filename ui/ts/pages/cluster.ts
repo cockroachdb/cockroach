@@ -78,7 +78,6 @@ module AdminViews {
             this._quantiles,
             (q: string): Selector => {
               return Metrics.Select.Avg(_nodeMetric("exec.latency-1m" + q))
-                .sources([])
                 .title("Latency" + q);
             });
           this._addChart(Metrics.NewAxis.apply(this, latencySelectors)
@@ -89,84 +88,80 @@ module AdminViews {
 
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("exec.error-count"))
+                .nonNegativeRate()
                 .title("Error Calls"),
-              Metrics.Select.AvgRate(_nodeMetric("exec.success-count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("exec.success-count"))
+                .nonNegativeRate()
                 .title("Success Calls")
               ).format(d3.format("d")).title("Successes vs Errors").range([0]));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("livebytes"))
-                .sources([])
                 .title("Live Bytes"),
               Metrics.Select.Avg(_storeMetric("capacity.available"))
-                .sources([])
                 .title("Available Capacity")
               ).format(Utils.Format.Bytes).title("Capacity").range([0]));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
-                .sources([])
                 .title("CPU User %"),
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
-                .sources([])
                 .title("CPU Sys %")
               ).format(d3.format(".2%")).title("CPU").range([0, 1]).stacked(true)
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.bytesin"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
+                .nonNegativeRate()
                 .title("Bytes In"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.bytesout"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
+                .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("data")
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.begin.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.txn.begin.count"))
+                .nonNegativeRate()
                 .title("BEGIN"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.commit.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
+                .nonNegativeRate()
                 .title("COMMIT"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.rollback.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
+                .nonNegativeRate()
                 .title("ROLLBACK"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.abort.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
+                .nonNegativeRate()
                 .title("ABORT")
             ).format(d3.format("d")).title("Transaction Info")
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.update.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
+                .nonNegativeRate()
                 .title("Updates"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.insert.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
+                .nonNegativeRate()
                 .title("Inserts"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.delete.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
+                .nonNegativeRate()
                 .title("Deletes"),
-              Metrics.Select.AvgRate(_nodeMetric("sql.ddl.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
+                .nonNegativeRate()
                 .title("DDL")
             ).format(d3.format("d")).title("SQL Writes")
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.select.count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("sql.select.count"))
+                .nonNegativeRate()
                 .title("Selects")
             ).format(d3.format("d")).title("SQL Reads")
           );

@@ -36,7 +36,12 @@ module Models {
      * server-side dataset referenced by the QueryInfo.
      */
     export function QueryInfoKey(qi: QueryInfo): string {
-      return Proto.QueryAggregator[qi.downsampler] + ":" + qi.name;
+      return [
+        Proto.QueryAggregator[qi.downsampler],
+        Proto.QueryAggregator[qi.source_aggregator],
+        Proto.QueryDerivative[qi.derivative],
+        qi.name,
+      ].join(":");
     }
 
     /**
@@ -100,81 +105,74 @@ module Models {
     export module Select {
 
       /**
-       * Selector is the common interface implemented by all Selector
-       * types. The is a read-only interface used by other components to
-       * extract relevant information from the selector.
+       * Selector is a class which describes a time series request. It describes
+       * the name of a series, along with a set of functions that will be used
+       * to process the data from the series: a downsampler, an aggregator and a
+       * derivative function.
        */
-      export interface Selector {
+      export class Selector {
         /**
-         * request returns a QueryRequest object based on this selector.
+         * Construct a new selector which requests data for the given time
+         * series, downsampling data using the provided aggregator.
          */
-        request(): Proto.QueryRequest;
-        /**
-         * series returns the series that is being queried.
-         */
-        series(): string;
+        constructor(private seriesName: string, private downsampler: Proto.QueryAggregator) {}
         /**
          * sources returns the data sources to which this query is restrained.
          */
-        sources(): string[];
+        sources: Utils.ChainProperty<string[], Selector> = Utils.ChainProp(this, []);
         /**
          * title returns a display-friendly title for this series.
          */
-        title(): string;
-      }
-
-      /**
-       * AvgSelector selects the average value of the supplied time series.
-       */
-      class AvgSelector implements Selector {
-        constructor(private seriesName: string) { }
-        title: Utils.ChainProperty<string, AvgSelector> = Utils.ChainProp(this, this.seriesName);
-        sources: Utils.ChainProperty<string[], AvgSelector> = Utils.ChainProp(this, []);
+        title: Utils.ChainProperty<string, Selector> = Utils.ChainProp(this, this.seriesName);
+        /**
+         * aggregator sets the source aggregator to be used for this query.
+         */
+        aggregator: Utils.ChainProperty<Proto.QueryAggregator, Selector> =
+          Utils.ChainProp( this, Proto.QueryAggregator.SUM);
+        /**
+         * derivative sets the derivative function to be applied to the results
+         * of this query.
+         */
+        derivative: Utils.ChainProperty<Proto.QueryDerivative, Selector> =
+          Utils.ChainProp( this, Proto.QueryDerivative.NONE);
+        /**
+         * series returns the series that is being queried.
+         */
         series: () => string = () => { return this.seriesName; };
+        /**
+         * rate is a convenience method to set the derivative function to
+         * 'Derivative'
+         */
+        rate: () => Selector = () => {
+          return this.derivative(Proto.QueryDerivative.DERIVATIVE);
+        };
+        /**
+         * nonNegativeRate is a convenience method to set the derivative function to
+         * 'Non_Negative_Derivative'
+         */
+        nonNegativeRate: () => Selector = () => {
+          return this.derivative(Proto.QueryDerivative.NON_NEGATIVE_DERIVATIVE);
+        };
+        /**
+         * request returns a QueryRequest object based on this selector.
+         */
         request: () => Proto.QueryRequest = (): Proto.QueryRequest => {
           return {
             name: this.seriesName,
             sources: this.sources(),
-            downsampler: Proto.QueryAggregator.AVG,
-            source_aggregator: Proto.QueryAggregator.SUM,
-            derivative: Proto.QueryDerivative.NONE,
+            downsampler: this.downsampler,
+            source_aggregator: this.aggregator(),
+            derivative: this.derivative(),
           };
         };
       }
 
       /**
-       * AvgRateSelector selects the rate of change of the average value
-       * of the supplied time series.
+       * Avg instantiates a new selector for the supplied time series which
+       * downsamples by averaging.
        */
-      class AvgRateSelector implements Selector {
-        constructor(private seriesName: string) {}
-        title: Utils.ChainProperty<string, AvgRateSelector> = Utils.ChainProp(this, this.seriesName);
-        sources: Utils.ChainProperty<string[], AvgRateSelector> = Utils.ChainProp(this, []);
-        series: () => string = () => { return this.seriesName; };
-        request: () => Proto.QueryRequest = (): Proto.QueryRequest => {
-          return {
-            name: this.seriesName,
-            sources: this.sources(),
-            downsampler: Proto.QueryAggregator.AVG,
-            source_aggregator: Proto.QueryAggregator.SUM,
-            derivative: Proto.QueryDerivative.DERIVATIVE,
-          };
-        };
-      }
-
-      /**
-       * Avg instantiates a new AvgSelector for the supplied time series.
-       */
-      export function Avg(series: string): AvgSelector {
-        return new AvgSelector(series);
-      }
-
-      /**
-       * AvgRate instantiates a new AvgRateSelector for the supplied time
-       * series.
-       */
-      export function AvgRate(series: string): AvgRateSelector {
-        return new AvgRateSelector(series);
+      export function Avg(series: string): Selector {
+        return new Selector(series, Proto.QueryAggregator.AVG);
       }
     }
 
