@@ -24,11 +24,11 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/dustin/go-humanize"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-
-	"github.com/dustin/go-humanize"
 )
 
 var minimumStoreSize = 10 * int64(config.DefaultZoneConfig().RangeMaxBytes)
