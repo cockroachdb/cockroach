@@ -211,13 +211,6 @@ message TableDescriptor {
   // the version, why do it later on? We increment the version
   // to ensure that all the nodes renew their leases with the new version
   // and get to see what the schema change command has done quickly.
-  //
-  // TODO(vivek): Implement the above invariants by ensuring that
-  // the Version is only incremented in LeaseManager.Publish().
-  // Move applyMutation() and applyUpVersion() out of the transaction for
-  // schema commands and into LeaseManager.Publish(), and remove
-  // Version++ from applyUpVersion().
-  //
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // See comment above.
   optional bool up_version = 6 [(gogoproto.nullable) = false];

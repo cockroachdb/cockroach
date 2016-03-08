@@ -233,8 +233,6 @@ message TxnMeta {
 //
 // If you add fields to Transaction you'll need to update
 // Transaction.Clone. Failure to do so will result in test failures.
-//
-// TODO(vivek): Remove parts of Transaction that expose internals.
 message Transaction {
   option (gogoproto.goproto_stringer) = false;
 

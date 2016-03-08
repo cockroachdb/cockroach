@@ -434,13 +434,6 @@ type TableDescriptor struct {
 	// the version, why do it later on? We increment the version
 	// to ensure that all the nodes renew their leases with the new version
 	// and get to see what the schema change command has done quickly.
-	//
-	// TODO(vivek): Implement the above invariants by ensuring that
-	// the Version is only incremented in LeaseManager.Publish().
-	// Move applyMutation() and applyUpVersion() out of the transaction for
-	// schema commands and into LeaseManager.Publish(), and remove
-	// Version++ from applyUpVersion().
-	//
 	Version DescriptorVersion `protobuf:"varint,5,opt,name=version,casttype=DescriptorVersion" json:"version"`
 	// See comment above.
 	UpVersion bool `protobuf:"varint,6,opt,name=up_version" json:"up_version"`
