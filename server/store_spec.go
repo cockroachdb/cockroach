@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
-
 	"github.com/dustin/go-humanize"
 )
 

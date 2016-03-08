@@ -22,6 +22,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"unsafe"
@@ -53,15 +54,15 @@ type RocksDB struct {
 	rdb            *C.DBEngine
 	attrs          roachpb.Attributes // Attributes for this engine
 	dir            string             // The data directory
-	cacheSize      uint64             // Memory to use to cache values.
-	memtableBudget uint64             // Memory to use for the memory table.
+	cacheSize      int64              // Memory to use to cache values.
+	memtableBudget int64              // Memory to use for the memory table.
 	maxSize        int64              // Used for calculating rebalancing and free space.
 	stopper        *stop.Stopper
 	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget uint64, maxSize int64,
+func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget, maxSize int64,
 	stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
 		panic(util.Errorf("dir must be non-empty"))
@@ -77,8 +78,7 @@ func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget 
 	}
 }
 
-func newMemRocksDB(attrs roachpb.Attributes, cacheSize, memtableBudget uint64,
-	stopper *stop.Stopper) *RocksDB {
+func newMemRocksDB(attrs roachpb.Attributes, cacheSize, memtableBudget int64, stopper *stop.Stopper) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		// dir: empty dir == "mem" RocksDB instance.
@@ -211,14 +211,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 		return roachpb.StoreCapacity{}, err
 	}
 
-	fsuTotal := int64(fileSystemUsage.Total)
-	if fsuTotal < 0 {
+	if fileSystemUsage.Total > math.MaxInt64 {
 		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size: %s", humanize.IBytes(fileSystemUsage.Total))
 	}
-	fsuAvail := int64(fileSystemUsage.Avail)
-	if fsuAvail < 0 {
+	if fileSystemUsage.Avail > math.MaxInt64 {
 		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size: %s", humanize.IBytes(fileSystemUsage.Avail))
 	}
+	fsuTotal := int64(fileSystemUsage.Total)
+	fsuAvail := int64(fileSystemUsage.Avail)
 
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual

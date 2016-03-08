@@ -19,6 +19,7 @@ package server
 import (
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -85,12 +86,12 @@ type Context struct {
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
-	CacheSize uint64
+	CacheSize int64
 
-	// MemtableBudget is the amount of memory in bytes to use for the memory
-	// table.
+	// MemtableBudget is the amount of memory, per store, in bytes to use for
+	// the memory table.
 	// This value is no longer settable by the end user.
-	MemtableBudget uint64
+	MemtableBudget int64
 
 	// Parsed values.
 
@@ -154,13 +155,15 @@ type TestingMocker struct {
 
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
-func GetTotalMemory() (uint64, error) {
+func GetTotalMemory() (int64, error) {
 	mem := gosigar.Mem{}
 	if err := mem.Get(); err != nil {
 		return 0, err
 	}
-	totalMem := mem.Total
-	var cgAvlMem uint64
+	totalMem := int64(mem.Total)
+	if totalMem < 0 {
+		return 0, fmt.Errorf("unsupported memory size %d, your OS may not be supported by gosigar", mem.Total)
+	}
 	if runtime.GOOS == "linux" {
 		var err error
 		var buf []byte
@@ -170,13 +173,20 @@ func GetTotalMemory() (uint64, error) {
 			}
 			return totalMem, nil
 		}
+		var cgAvlMem uint64
 		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
 			if log.V(1) {
 				log.Infof("can't parse available memory from cgroups (%s)", err)
 			}
 			return totalMem, nil
 		}
-		return cgAvlMem, nil
+		if cgAvlMem > math.MaxInt64 {
+			if log.V(1) {
+				log.Infof("available memory from cgroups is too large and unsupported (%d)", cgAvlMem)
+			}
+			return totalMem, nil
+		}
+		return int64(cgAvlMem), nil
 	}
 	return totalMem, nil
 }
@@ -229,7 +239,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, uint64(sizeInBytes), stopper))
+			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
@@ -243,7 +253,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 					spec.SizePercent, spec.Path, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path,
-				ctx.CacheSize/uint64(len(ctx.Stores.Specs)), ctx.MemtableBudget, sizeInBytes, stopper))
+				ctx.CacheSize/int64(len(ctx.Stores.Specs)), ctx.MemtableBudget, sizeInBytes, stopper))
 		}
 	}
 	if len(ctx.Engines) == 1 {
