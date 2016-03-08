@@ -77,13 +77,12 @@ const (
 	opReplica = "replica"
 )
 
-// TestingCommandFilter may be set in tests to intercept the handling
-// of commands and artificially generate errors. Return nil to continue
-// with regular processing or non-nil to terminate processing with the
-// returned error. Note that in a multi-replica test this filter will
-// be run once for each replica and must produce consistent results
-// each time.
-var TestingCommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
+// CommandFilter may be used in tests through the StorageTestingMocker to
+// intercept the handling of commands and artificially generate errors. Return
+// nil to continue with regular processing or non-nil to terminate processing
+// with the returned error. Note that in a multi-replica test this filter will
+// be run once for each replica and must produce consistent results each time.
+type CommandFilter func(roachpb.StoreID, roachpb.Request, roachpb.Header) error
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be

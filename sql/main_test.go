@@ -19,6 +19,8 @@ package sql_test
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -34,6 +36,66 @@ import (
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
+}
+
+// CommandFilters provides facilities for registering "TestingCommandFilters"
+// (i.e. functions to be run on every replica command).
+// CommandFilters is thread-safe.
+type CommandFilters struct {
+	sync.RWMutex
+	filters []struct {
+		id     int
+		filter storage.CommandFilter
+	}
+	nextID int
+}
+
+// runFilters executes the registered filters, stopping at the first one
+// that returns an error.
+func (c *CommandFilters) runFilters(
+	sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+
+	c.RLock()
+	defer c.RUnlock()
+	for _, f := range c.filters {
+		if err := f.filter(sid, req, hdr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AppendFilter registers a filter function to run after all the previously
+// registered filters.
+// Returns a closure that the client must run for doing cleanup when the
+// filter should be deregistered.
+func (c *CommandFilters) AppendFilter(filter storage.CommandFilter) func() {
+	c.Lock()
+	defer c.Unlock()
+	id := c.nextID
+	c.nextID++
+	c.filters = append(c.filters, struct {
+		id     int
+		filter storage.CommandFilter
+	}{id, filter})
+
+	return func() {
+		c.removeFilter(id)
+	}
+}
+
+// removeFilter removes a filter previously registered. Meant to be used as the
+// closure returned by AppendFilter.
+func (c *CommandFilters) removeFilter(id int) {
+	c.Lock()
+	defer c.Unlock()
+	for i, f := range c.filters {
+		if f.id == id {
+			c.filters = append(c.filters[:i], c.filters[i+1:]...)
+			return
+		}
+	}
+	panic(fmt.Sprintf("failed to find filter with id: %d.", id))
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
@@ -82,15 +144,24 @@ func checkEndTransactionTrigger(_ roachpb.StoreID, req roachpb.Request, _ roachp
 
 type testServer struct {
 	server.TestServer
-	cleanupFn func()
+	cleanupFns []func()
 }
 
 func setupTestServer(t *testing.T) *testServer {
-	return setupTestServerWithContext(t, server.NewTestContext())
+	ctx, _ := createTestServerContext()
+	return setupTestServerWithContext(t, ctx)
 }
 
+func createTestServerContext() (*server.Context, *CommandFilters) {
+	ctx := server.NewTestContext()
+	var cmdFilters CommandFilters
+	cmdFilters.AppendFilter(checkEndTransactionTrigger)
+	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter = cmdFilters.runFilters
+	return ctx, &cmdFilters
+}
+
+// The context used should probably come from createTestServerContext.
 func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
-	storage.TestingCommandFilter = checkEndTransactionTrigger
 	s := &testServer{TestServer: server.TestServer{Ctx: ctx}}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -103,7 +174,7 @@ func setup(t *testing.T) (*testServer, *sql.DB, *client.DB) {
 }
 
 func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *sql.DB, *client.DB) {
-	s := setupTestServer(t)
+	s := setupTestServerWithContext(t, ctx)
 
 	// SQL requests use security.RootUser which has ALL permissions on everything.
 	url, cleanupFn := sqlutils.PGUrl(t, &s.TestServer, security.RootUser, "setupWithContext")
@@ -111,17 +182,16 @@ func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *sql.DB, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.cleanupFn = cleanupFn
+	s.cleanupFns = append(s.cleanupFns, cleanupFn)
 
 	return s, sqlDB, s.DB()
 }
 
 func cleanupTestServer(s *testServer) {
 	s.Stop()
-	if s.cleanupFn != nil {
-		s.cleanupFn()
+	for _, fn := range s.cleanupFns {
+		fn()
 	}
-	storage.TestingCommandFilter = nil
 }
 
 func cleanup(s *testServer, db *sql.DB) {

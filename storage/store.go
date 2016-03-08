@@ -361,6 +361,14 @@ type StoreContext struct {
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
 	LogRangeEvents bool
+
+	TestingMocker StoreTestingMocker
+}
+
+// StoreTestingMocker is a part of the context used to control parts of the system.
+type StoreTestingMocker struct {
+	// A callback to be called when executing every replica command.
+	TestingCommandFilter CommandFilter
 }
 
 type storeMetrics struct {
