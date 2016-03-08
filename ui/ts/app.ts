@@ -5,11 +5,11 @@
 /// <reference path="pages/log.ts" />
 /// <reference path="pages/cluster.ts" />
 /// <reference path="pages/nodes.ts" />
-/// <reference path="pages/sql.ts" />
 /// <reference path="pages/helpus.ts" />
 /// <reference path="pages/helpusprompt.ts" />
 /// <reference path="pages/events.ts" />
 /// <reference path="pages/databases.ts" />
+/// <reference path="pages/users.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -26,10 +26,10 @@ m.route(document.getElementById("root"), "/cluster", {
   "/nodes/:node_id": AdminViews.Nodes.NodePage,
   "/node/:node_id/:detail": AdminViews.Nodes.NodePage,
   "/nodes/:node_id/:detail": AdminViews.Nodes.NodePage,
-  "/sql": AdminViews.SQL.Page,
   "/databases": AdminViews.Databases.DatabaseListPage,
   "/databases/:database": AdminViews.Databases.DatabasePage,
   "/databases/:database/tables/:table": AdminViews.Databases.TablePage,
+  "/users": AdminViews.Users.Page,
   "/help-us/:detail": AdminViews.HelpUs.Page,
   "/cluster": AdminViews.Cluster.Page,
 });

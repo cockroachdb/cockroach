@@ -1,7 +1,8 @@
 // source: models/events.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../models/sqlquery.ts" />
 /// <reference path="../../typings/browser.d.ts" />
+/// <reference path="../models/api.ts" />
+/// <reference path="../models/proto.ts" />
 
 module Models {
   "use strict";
@@ -9,6 +10,8 @@ module Models {
   export module Events {
     import MithrilVirtualElement = _mithril.MithrilVirtualElement;
     import Moment = moment.Moment;
+    import ClusterEvent = Models.API.ClusterEvent;
+    import ClusterEvents = Models.API.ClusterEvents;
 
     export enum FilterType {
       RANGE, CLUSTER, NODE, DB, TABLE, USER
@@ -30,88 +33,47 @@ module Models {
       content: MithrilVirtualElement;
     }
 
-    interface EventInfo {
-      DatabaseName?: string;
-      TableName?: string;
-      User?: string;
-      Statement?: string;
-      DroppedTables?: string[];
-    }
-
-    interface EventRow {
-      event: string;
-      timestamp: string;
-      eventType: string;
-      targetID: number;
-      reportingID: number;
-      info: EventInfo;
-    }
-
-    let eventTemplates: { [eventType: string]: (eventRow: EventRow) => NormalizedRow; } = {
-      "create_database": (eventRow: EventRow): NormalizedRow => {
+    let eventTemplates: { [eventType: string]: (eventRow: ClusterEvent) => NormalizedRow; } = {
+      "create_database": (eventRow: ClusterEvent): NormalizedRow => {
         return {
           icon: Icon.INFO,
           timestamp: moment.utc(eventRow.timestamp),
           content: m("span", [`User ${eventRow.info.User} `, m("strong", "created database "), eventRow.info.DatabaseName]),
         };
       },
-      "drop_database": (eventRow: EventRow): NormalizedRow => {
+      "drop_database": (eventRow: ClusterEvent): NormalizedRow => {
+        // TODO: truncate table list
+        let tableDropText: string = `${eventRow.info.DroppedTables.length} tables were dropped: ${eventRow.info.DroppedTables.join(", ")}`;
+
+        if (eventRow.info.DroppedTables.length === 0) {
+          tableDropText = "No tables were dropped.";
+        } else if (eventRow.info.DroppedTables.length === 1) {
+          tableDropText = `1 table was dropped: ${eventRow.info.DroppedTables[0]}`;
+        }
+
         return {
           icon: Icon.INFO,
           timestamp: moment.utc(eventRow.timestamp),
           content: m("span", [
             `User ${eventRow.info.User} `,
             m("strong", "dropped database "),
-            `${eventRow.info.DatabaseName}. The following tables were dropped: ${eventRow.info.DroppedTables.join(", ")}`,
-          ]), // TODO: truncate table list
+            `${eventRow.info.DatabaseName}. `,
+            tableDropText,
+          ]),
         };
       },
-      "create_table": (eventRow: EventRow): NormalizedRow => {
+      "create_table": (eventRow: ClusterEvent): NormalizedRow => {
         return {
           icon: Icon.INFO,
           timestamp: moment.utc(eventRow.timestamp),
           content: m("span", [`User ${eventRow.info.User} `, m("strong", "created table "), eventRow.info.TableName]),
         };
       },
-      "drop_table": (eventRow: EventRow): NormalizedRow => {
+      "drop_table": (eventRow: ClusterEvent): NormalizedRow => {
         return {
           icon: Icon.INFO,
           timestamp: moment.utc(eventRow.timestamp),
           content: m("span", [`User ${eventRow.info.User} `, m("strong", "dropped table "), eventRow.info.TableName]),
-        };
-      },
-    };
-
-    interface RangeRow {
-      range: string;
-      timestamp: string;
-      rangeID: number;
-      storeID: number;
-      eventType: string;
-      otherRangeID: number;
-      info: any;
-    }
-
-    let rangeTemplates: { [rangeType: string]: (rangeRow: RangeRow) => NormalizedRow; } = {
-      "split": (rangeRow: RangeRow): NormalizedRow => {
-        return {
-          icon: Icon.INFO,
-          timestamp: moment.utc(rangeRow.timestamp),
-          content: m("span", [`Range ${rangeRow.rangeID} was `, m("strong", "split"), ` to create range ${rangeRow.otherRangeID}`]),
-        };
-      },
-      "add": (rangeRow: RangeRow): NormalizedRow => {
-        return {
-          icon: Icon.INFO,
-          timestamp: moment.utc(rangeRow.timestamp),
-          content: m("span", [`Range ${rangeRow.rangeID} was `, m("strong", "added")]),
-        };
-      },
-      "remove": (rangeRow: RangeRow): NormalizedRow => {
-        return {
-          icon: Icon.INFO,
-          timestamp: moment.utc(rangeRow.timestamp),
-          content: m("span", [`Range ${rangeRow.rangeID} was `, m("strong", "removed")]),
         };
       },
     };
@@ -137,30 +99,17 @@ module Models {
       }
 
       refresh(): _mithril.MithrilPromise<any> {
-        return m.sync([
-          Models.SQLQuery.runQuery(`SELECT timestamp, rangeID , storeID , eventType , otherRangeID, info FROM SYSTEM.RANGELOG ORDER BY timestamp DESC LIMIT ${this.limit};`, true),
-          Models.SQLQuery.runQuery(`SELECT timestamp, eventType, targetID, reportingID, info FROM SYSTEM.EVENTLOG ORDER BY timestamp DESC LIMIT ${this.limit};`, true),
-        ]).then((promises: any[]): void => {
-          _.each(promises[0].concat(promises[1]), function(e: any): void {
-            e.info = JSON.parse(e.info);
-          });
-          this.normalizedRows = this.convertToNormalizedRows(<RangeRow[]>promises[0], <EventRow[]>promises[1]);
-          this.updated = moment();
-        }).catch((error) => {
-          this.normalizedRows = [];
+        return Models.API.events().then((response: ClusterEvents): void => {
+          this.normalizedRows = this.convertToNormalizedRows(response.events);
         });
       }
 
-      convertToNormalizedRows(rangeEvents: RangeRow[], events: EventRow[]): NormalizedRow[] {
-        let normalizedRangeEvents: NormalizedRow[] = _.map(rangeEvents, (e: RangeRow): NormalizedRow => {
-          return rangeTemplates[e.eventType](e) || {icon: Icon.WARNING, timestamp: moment.utc(e.timestamp), content: m("span", "Unknown range event type: " + e.eventType)};
+      convertToNormalizedRows(events: ClusterEvent[]): NormalizedRow[] {
+        let normalizedEvents: NormalizedRow[] = _.map(events, (e: ClusterEvent): NormalizedRow => {
+          return eventTemplates[e.event_type](e) || {icon: Icon.WARNING, timestamp: moment.utc(e.timestamp), content: m("span", "Unknown event type: " + e.event_type)};
         });
 
-        let normalizedEvents: NormalizedRow[] = _.map(events, (e: EventRow): NormalizedRow => {
-          return eventTemplates[e.eventType](e) || {icon: Icon.WARNING, timestamp: moment.utc(e.timestamp), content: m("span", "Unknown event type: " + e.eventType)};
-        });
-
-        return _.orderBy(normalizedEvents.concat(normalizedRangeEvents), ["timestamp"], ["desc"]);
+        return _.orderBy(normalizedEvents, ["timestamp"], ["desc"]);
       }
     }
 

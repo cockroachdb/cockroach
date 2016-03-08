@@ -1,6 +1,7 @@
 // source: pages/sql.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/browser.d.ts" />
+/// <reference path="../models/proto.ts" />
 /// <reference path="../models/api.ts" />
 /// <reference path="../util/property.ts" />
 
@@ -15,12 +16,12 @@ module AdminViews {
     import MithrilController = _mithril.MithrilController;
     import Property = Utils.Property;
     import Prop = Utils.Prop;
-    import DatabaseList = Models.API.DatabaseList;
-    import Database = Models.API.Database;
-    import Grant = Models.API.Grant;
-    import SQLColumn = Models.API.SQLColumn;
-    import SQLIndex = Models.API.SQLIndex;
-    import SQLTable = Models.API.SQLTable;
+    import DatabaseList = Models.Proto.DatabaseList;
+    import Database = Models.Proto.Database;
+    import Grant = Models.Proto.Grant;
+    import SQLColumn = Models.Proto.SQLColumn;
+    import SQLIndex = Models.Proto.SQLIndex;
+    import SQLTable = Models.Proto.SQLTable;
 
     // Page listing all the databases
     export module DatabaseListPage {
@@ -37,7 +38,7 @@ module AdminViews {
               },
             },
           ]),
-          rows: Utils.Computed(this.data, (data: DatabaseList): string[] => data.Databases),
+          rows: Utils.Computed(this.data, (data: DatabaseList): string[] => data.databases),
         });
 
         toggleDisplayJSON(): void {
@@ -92,21 +93,21 @@ module AdminViews {
                 m("a", {config: m.route, href: `/databases/${m.route.param("database")}/tables/${table}`}, table),
             },
           ]),
-          rows: Utils.Computed(this.data, (data: Database): string[] => data.Tables),
+          rows: Utils.Computed(this.data, (data: Database): string[] => data.table_names),
         });
 
         grantsTableData: Property<TableData<Grant>> = Prop({
           columns: Prop([
             {
               title: "User",
-              view: (grant: Grant): string => grant.User,
+              view: (grant: Grant): string => grant.user,
             },
             {
               title: "Grants",
-              view: (grant: Grant): string => grant.Privileges.join(", "),
+              view: (grant: Grant): string => grant.privileges.join(", "),
             },
           ]),
-          rows: Utils.Computed(this.data, (data: Database): Grant[] => data.Grants),
+          rows: Utils.Computed(this.data, (data: Database): Grant[] => data.grants),
         });
 
         toggleDisplayJSON(): void {
@@ -156,29 +157,43 @@ module AdminViews {
     // Page listing the columns/indices for a specific table
     export module TablePage {
       class TableController implements MithrilController {
-        indexColumns: string[] = ["Table", "Name", "Unique", "Seq", "Column", "Direction", "Storing"];
-        columnColumns: string[] = ["Field", "Type", "Null", "Default"];
+        indexColumns: string[] = ["name", "unique", "seq", "column", "direction", "storing"];
+        columnColumns: string[] = ["name", "type", "null", "default"];
         displayJSON: boolean = false;
         data: Property<SQLTable> = Prop(null);
         updated: Property<number> = Prop(Date.now());
         columnsTableData: Property<TableData<SQLColumn>> = Prop({
-          columns: Prop(_.map(this.columnColumns, (k: string): TableColumn<SQLColumn> => {
+          columns: Prop(_.map<string, TableColumn<SQLColumn>>(this.columnColumns, (k: string): TableColumn<SQLColumn> => {
             return {
               title: k,
               view: (column: SQLColumn): string => column[k],
             };
           })),
-          rows: Utils.Computed(this.data, (data: SQLTable): SQLColumn[] => data.Columns),
+          rows: Utils.Computed(this.data, (data: SQLTable): SQLColumn[] => data.columns),
         });
 
         indexTableData: Property<TableData<SQLIndex>> = Prop({
-          columns: Prop(_.map(this.indexColumns, (k: string): TableColumn<SQLIndex> => {
+          columns: Prop(_.map<string, TableColumn<SQLIndex>>(this.indexColumns, (k: string): TableColumn<SQLIndex> => {
             return {
               title: k,
               view: (column: SQLIndex): string => column[k],
             };
           })),
-          rows: Utils.Computed(this.data, (data: SQLTable): SQLIndex[] => data.Index),
+          rows: Utils.Computed(this.data, (data: SQLTable): SQLIndex[] => data.indexes),
+        });
+
+        grantsTableData: Property<TableData<Grant>> = Prop({
+          columns: Prop([
+            {
+              title: "User",
+              view: (grant: Grant): string => grant.user,
+            },
+            {
+              title: "Grants",
+              view: (grant: Grant): string => grant.privileges.join(", "),
+            },
+          ]),
+          rows: Utils.Computed(this.data, (data: SQLTable): Grant[] => data.grants),
         });
 
         toggleDisplayJSON(): void {
@@ -213,6 +228,8 @@ module AdminViews {
                 Components.Table.create(ctrl.columnsTableData()),
                 m("h1", "Indices"),
                 Components.Table.create(ctrl.indexTableData()),
+                m("h1", "Grants"),
+                Components.Table.create(ctrl.grantsTableData()),
                 m(
                   "a.toggle",
                   {onclick: function(): void { ctrl.toggleDisplayJSON(); } },

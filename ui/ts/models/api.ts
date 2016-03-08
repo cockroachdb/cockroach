@@ -8,42 +8,26 @@ module Models {
   // which provides access to certain SQL commands used by the UI
   export module API {
     import MithrilPromise = _mithril.MithrilPromise;
+    import Moment = moment.Moment;
+    import DatabaseList = Models.Proto.DatabaseList;
+    import Database = Models.Proto.Database;
+    import SQLTable = Models.Proto.SQLTable;
+    import Users = Models.Proto.Users;
+    import EventInfo = Models.Proto.EventInfo;
+    import UnparsedClusterEvents = Models.Proto.UnparsedClusterEvents;
+    import UnparsedClusterEvent = Models.Proto.UnparsedClusterEvent;
+    import GetUIDataResponse = Models.Proto.GetUIDataResponse;
 
-    export interface DatabaseList {
-      Databases: string[];
+    export interface ClusterEvent {
+      timestamp: Moment;
+      event_type: string;
+      target_id: number;
+      reporting_id: number;
+      info: EventInfo;
     }
 
-    export interface Grant {
-      Database: string;
-      Privileges: string[];
-      User: string;
-    }
-
-    export interface Database {
-      Grants: Grant[];
-      Tables: string[];
-    }
-
-    export interface SQLColumn {
-      Field: string;
-      Type: string;
-      Null: boolean;
-      Default: string;
-    }
-
-    export interface SQLIndex {
-      Table: string;
-      Name: string;
-      Unique: boolean;
-      Seq: number;
-      Column: string;
-      Direction: string;
-      Storing: boolean;
-    }
-
-    export interface SQLTable {
-      Columns: SQLColumn[];
-      Index: SQLIndex[];
+    export interface ClusterEvents {
+      events: ClusterEvent[];
     }
 
     // Timeout after 2s
@@ -70,15 +54,65 @@ module Models {
 
     // gets information about a specific table
     export function table(database: string, table: string): MithrilPromise<SQLTable> {
-      // TODO: replace with backend endpoint
-      return m.sync<any[]>([
-        Models.SQLQuery.runQuery<SQLColumn[]>(`SHOW COLUMNS FROM ${database}.${table}`, true),
-        Models.SQLQuery.runQuery<SQLIndex[]>(`SHOW INDEX FROM ${database}.${table}`, true),
-      ]).then(function (results: [SQLColumn[], SQLIndex[]]): SQLTable {
+      return m.request<SQLTable>({
+        url: `/_admin/v1/databases/${database}/tables/${table}`,
+        config: xhrConfig,
+      });
+    }
+
+    // gets a list of users
+    export function users(): MithrilPromise<Users> {
+      return m.request<Users>({
+        url: "/_admin/v1/users",
+        config: xhrConfig,
+      });
+    }
+
+    // TODO: parameters
+    // gets a list of range events
+    export function events(): MithrilPromise<ClusterEvents> {
+      return m.request<UnparsedClusterEvents>({
+        url: "/_admin/v1/events",
+        config: xhrConfig,
+      }).then((response: UnparsedClusterEvents): ClusterEvents => {
         return {
-          Columns: results[0],
-          Index: results[1],
+          events: _.map<UnparsedClusterEvent, ClusterEvent>(response.events, (event: UnparsedClusterEvent): ClusterEvent => {
+            let timestamp: Moment = Utils.Convert.TimestampToMoment(event.timestamp);
+            let info: EventInfo = null;
+            try {
+              info = JSON.parse(event.info);
+            } catch (e) {
+              info = null;
+            }
+
+            return {
+              timestamp: timestamp,
+              event_type: event.event_type,
+              target_id: event.target_id,
+              reporting_id: event.reporting_id,
+              info: info,
+            };
+          }),
         };
+      });
+    }
+
+    export function getUIData(key: string): MithrilPromise<GetUIDataResponse> {
+      return m.request<GetUIDataResponse>({
+        url: `/_admin/v1/uidata?key=${key}`,
+        config: xhrConfig,
+      });
+    }
+
+    export function setUIData(key: string, value: string): MithrilPromise<any> {
+      return m.request<UnparsedClusterEvents>({
+        url: `/_admin/v1/uidata`,
+        config: xhrConfig,
+        method: "POST",
+        data: {
+          key: key,
+          value: value,
+        },
       });
     }
   }
