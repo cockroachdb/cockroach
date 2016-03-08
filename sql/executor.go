@@ -39,20 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// TODO(radu): perhaps we should turn this on only for tests.
-const checkStmtStringChange = true
-
-var testingWaitForGossipUpdate bool
-
-// TestingWaitForGossipUpdate causes metadata-mutating operations to wait
-// for the new metadata to back-propagate through gossip.
-func TestingWaitForGossipUpdate() func() {
-	testingWaitForGossipUpdate = true
-	return func() {
-		testingWaitForGossipUpdate = false
-	}
-}
-
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
@@ -149,10 +135,9 @@ type ResultRow struct {
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
-	db       client.DB
-	nodeID   roachpb.NodeID
-	reCache  *parser.RegexpCache
-	leaseMgr *LeaseManager
+	nodeID  roachpb.NodeID
+	ctx     ExecutorContext
+	reCache *parser.RegexpCache
 
 	// Transient stats.
 	registry      *metric.Registry
@@ -181,14 +166,35 @@ type Executor struct {
 	systemConfigCond *sync.Cond
 }
 
+// An ExecutorContext encompasses the auxiliary objects and configuration
+// required to create an executor.
+// All fields holding a pointer or an interface are required to create
+// a Executor; the rest will have sane defaults set if omitted.
+type ExecutorContext struct {
+	DB           *client.DB
+	Gossip       *gossip.Gossip
+	LeaseManager *LeaseManager
+
+	TestingMocker ExecutorTestingMocker
+}
+
+// ExecutorTestingMocker is a part of the context used to control parts of the system.
+type ExecutorTestingMocker struct {
+	// WaitForGossipUpdate causes metadata-mutating operations to wait
+	// for the new metadata to back-propagate through gossip.
+	WaitForGossipUpdate bool
+
+	// CheckStmtStringChange causes Executor.execStmtsInCurrentTxn to verify
+	// that executed statements are not modified during execution.
+	CheckStmtStringChange bool
+}
+
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, stopper *stop.Stopper,
-	registry *metric.Registry) *Executor {
+func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Registry) *Executor {
 	exec := &Executor{
-		db:       db,
-		reCache:  parser.NewRegexpCache(512),
-		leaseMgr: leaseMgr,
+		ctx:     ctx,
+		reCache: parser.NewRegexpCache(512),
 
 		registry:         registry,
 		latency:          registry.Latency("latency"),
@@ -205,12 +211,12 @@ func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, st
 	}
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 
-	gossipUpdateC := gossip.RegisterSystemConfigChannel()
+	gossipUpdateC := ctx.Gossip.RegisterSystemConfigChannel()
 	stopper.RunWorker(func() {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg := gossip.GetSystemConfig()
+				cfg := ctx.Gossip.GetSystemConfig()
 				exec.updateSystemConfig(cfg)
 			case <-stopper.ShouldStop():
 				return
@@ -225,7 +231,7 @@ func NewExecutor(db client.DB, gossip *gossip.Gossip, leaseMgr *LeaseManager, st
 // before actually using the Executor.
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 	e.nodeID = nodeID
-	e.leaseMgr.nodeID = uint32(nodeID)
+	e.ctx.LeaseManager.nodeID = uint32(nodeID)
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
@@ -256,7 +262,7 @@ func (e *Executor) initializeTxn(txn *client.Txn, s *Session) {
 
 // newTxn creates a new Txn and initializes it using the session defaults.
 func (e *Executor) newTxn(s *Session) *client.Txn {
-	txn := client.NewTxn(e.db)
+	txn := client.NewTxn(*e.ctx.DB)
 	e.initializeTxn(txn, s)
 	return txn
 }
@@ -282,7 +288,7 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 			GetLocation: session.getLocation,
 			Args:        args,
 		},
-		leaseMgr:      e.leaseMgr,
+		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
 		databaseCache: cache,
 		session:       session,
@@ -360,7 +366,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	retryOpt := defaultRetryOpt
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
-		sc.db = e.db
+		sc.db = *e.ctx.DB
 		for r := retry.Start(retryOpt); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
 				log.Warning(err)
@@ -448,7 +454,7 @@ func (e *Executor) ExecuteStatements(
 			ReCache:     e.reCache,
 			GetLocation: session.getLocation,
 		},
-		leaseMgr:      e.leaseMgr,
+		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
 		databaseCache: cache,
 		session:       session,
@@ -552,7 +558,7 @@ func (e *Executor) execRequest(
 		return res
 	}
 
-	if testingWaitForGossipUpdate {
+	if e.ctx.TestingMocker.WaitForGossipUpdate {
 		// We might need to verify metadata. Lock the system config so that no
 		// gossip updates sneak in under us. The point is to be able to assert
 		// that the verify callback only succeeds after a gossip update.
@@ -653,7 +659,7 @@ func (e *Executor) execRequest(
 
 func (e *Executor) checkTestingWaitForGossipUpdateOrDie(
 	planMaker *planner, stmts parser.StatementList) {
-	if testingWaitForGossipUpdate {
+	if e.ctx.TestingMocker.WaitForGossipUpdate {
 		if verify := planMaker.testingVerifyMetadata; verify != nil {
 			// In the case of a multi-statement request, avoid reusing this
 			// callback.
@@ -770,7 +776,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			stmtTimestamp = parser.DTimestamp{Time: time.Now()}
 		}
 		var stmtStrBefore string
-		if checkStmtStringChange {
+		if e.ctx.TestingMocker.CheckStmtStringChange {
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -782,7 +788,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
 				stmtTimestamp, txnState)
 		}
-		if checkStmtStringChange {
+		if e.ctx.TestingMocker.CheckStmtStringChange {
 			after := stmt.String()
 			if after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",

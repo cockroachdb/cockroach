@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -129,7 +130,8 @@ type Context struct {
 // TestingMocker is a struct containing facilities for mocking
 // or otherwise controlling various parts of the system.
 type TestingMocker struct {
-	StoreTestingMocker storage.StoreTestingMocker
+	StoreTestingMocker    storage.StoreTestingMocker
+	ExecutorTestingMocker sql.ExecutorTestingMocker
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
