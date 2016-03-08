@@ -1,7 +1,6 @@
 // source: components/events.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/browser.d.ts" />
-/// <reference path="../models/sqlquery.ts" />
 /// <reference path="../models/proto.ts" />
 /// <reference path="../models/events.ts" />
 /// <reference path="../util/property.ts" />
