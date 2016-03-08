@@ -202,28 +202,25 @@ module AdminViews {
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("ranges.available"))
-                .sources([])
                 .title("Available Ranges")
               ).format(d3.format("d")));
 
           this._addChart(
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("exec.error-count"))
-                .sources([])
+              Metrics.Select.Avg(_nodeMetric("exec.error-count"))
+                .nonNegativeRate()
                 .title("Error Calls")
               ).format(d3.format("d")));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("livebytes"))
-                .sources([])
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes));
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
-                .sources([])
                 .title("CPU User %")
               ).format(d3.format(".2%")));
 
@@ -387,7 +384,8 @@ module AdminViews {
           this._addChart(
             this.networkAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.bytesin"))
+              Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("Client Bytes In")
               )
@@ -395,7 +393,8 @@ module AdminViews {
           this._addChart(
             this.networkAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.bytesout"))
+              Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("Client Bytes Out")
               )
@@ -405,7 +404,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.select.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.select.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("SELECTs")
               )
@@ -413,7 +413,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.update.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("UPDATEs")
               )
@@ -421,7 +422,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.insert.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("INSERTs")
               )
@@ -429,7 +431,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.delete.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("DELETEs")
               )
@@ -437,7 +440,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.begin.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.txn.begin.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("BEGINs")
               )
@@ -445,7 +449,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.commit.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("COMMITs")
               )
@@ -453,7 +458,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.rollback.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("ROLLBACKs")
               )
@@ -461,7 +467,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.txn.abort.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("Aborted Transactions")
               )
@@ -469,7 +476,8 @@ module AdminViews {
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
-              Metrics.Select.AvgRate(_nodeMetric("sql.ddl.count"))
+              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
+                .nonNegativeRate()
                 .sources([nodeId])
                 .title("DDL Statements")
               )
