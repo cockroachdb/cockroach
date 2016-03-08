@@ -40,7 +40,7 @@ type explainTraceNode struct {
 }
 
 var traceColumns = append([]ResultColumn{
-	{Name: "Cumulative Time", Typ: parser.DummyTimestamp},
+	{Name: "Cumulative Time", Typ: parser.DummyString},
 	{Name: "Duration", Typ: parser.DummyString},
 	{Name: "Span Pos", Typ: parser.DummyInt},
 	{Name: "Operation", Typ: parser.DummyString},
