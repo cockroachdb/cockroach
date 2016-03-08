@@ -93,6 +93,7 @@ bower.installed: bower.json npm.installed
 	touch $@
 
 npm.installed: npm-shrinkwrap.json
+	rm -f $(NODE_MODULES)
 	npm install --progress=false
 	touch $@
 
