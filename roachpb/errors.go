@@ -112,7 +112,7 @@ func (e *internalError) Error() string {
 }
 
 // message returns an error message.
-func (e *internalError) message(pErr *Error) string {
+func (e *internalError) message(_ *Error) string {
 	return (*Error)(e).String()
 }
 
@@ -131,7 +131,7 @@ var _ ErrorDetailInterface = &internalError{}
 // ErrorDetailInterface is an interface for each error detail.
 type ErrorDetailInterface interface {
 	// message returns an error message.
-	message(pErr *Error) string
+	message(*Error) string
 }
 
 // CanRetry implements the retry.Retryable interface.
@@ -215,7 +215,7 @@ func (e *NodeUnavailableError) Error() string {
 }
 
 // message returns an error message.
-func (*NodeUnavailableError) message(pErr *Error) string {
+func (*NodeUnavailableError) message(_ *Error) string {
 	return "node unavailable; try another peer"
 }
 
@@ -227,7 +227,7 @@ func (e *NotLeaderError) Error() string {
 }
 
 // message returns an error message.
-func (e *NotLeaderError) message(pErr *Error) string {
+func (e *NotLeaderError) message(_ *Error) string {
 	return fmt.Sprintf("range %d: replica %s not leader; leader is %s", e.RangeID, e.Replica, e.Leader)
 }
 
@@ -239,7 +239,7 @@ func (e *LeaseRejectedError) Error() string {
 }
 
 // message returns an error message.
-func (e *LeaseRejectedError) message(pErr *Error) string {
+func (e *LeaseRejectedError) message(_ *Error) string {
 	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
 }
 
@@ -264,7 +264,7 @@ func (s SendError) Error() string {
 }
 
 // message returns an error message.
-func (s *SendError) message(pErr *Error) string {
+func (s *SendError) message(_ *Error) string {
 	return "failed to send RPC: " + s.Message
 }
 
@@ -286,7 +286,7 @@ func (e *RangeNotFoundError) Error() string {
 }
 
 // message returns an error message.
-func (e *RangeNotFoundError) message(pErr *Error) string {
+func (e *RangeNotFoundError) message(_ *Error) string {
 	return fmt.Sprintf("range %d was not found", e.RangeID)
 }
 
@@ -312,7 +312,7 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 // message returns an error message.
-func (e *RangeKeyMismatchError) message(pErr *Error) string {
+func (e *RangeKeyMismatchError) message(_ *Error) string {
 	if e.Range != nil {
 		return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
 			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey)
@@ -428,7 +428,7 @@ func (e *WriteIntentError) Error() string {
 }
 
 // message returns an error message.
-func (e *WriteIntentError) message(pErr *Error) string {
+func (e *WriteIntentError) message(_ *Error) string {
 	var keys []Key
 	for _, intent := range e.Intents {
 		keys = append(keys, intent.Key)
@@ -444,7 +444,7 @@ func (e *WriteTooOldError) Error() string {
 }
 
 // message returns an error message.
-func (e *WriteTooOldError) message(pErr *Error) string {
+func (e *WriteTooOldError) message(_ *Error) string {
 	return fmt.Sprintf("write too old: timestamp %s <= %s", e.Timestamp, e.ExistingTimestamp)
 }
 
@@ -466,7 +466,7 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 }
 
 // message returns an error message.
-func (e *ReadWithinUncertaintyIntervalError) message(pErr *Error) string {
+func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
 	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.ReadTimestamp, e.ExistingTimestamp)
 }
 
@@ -484,7 +484,7 @@ func (e *OpRequiresTxnError) Error() string {
 }
 
 // message returns an error message.
-func (e *OpRequiresTxnError) message(pErr *Error) string {
+func (e *OpRequiresTxnError) message(_ *Error) string {
 	return "the operation requires transactional context"
 }
 
@@ -496,7 +496,7 @@ func (e *ConditionFailedError) Error() string {
 }
 
 // message returns an error message.
-func (e *ConditionFailedError) message(pErr *Error) string {
+func (e *ConditionFailedError) message(_ *Error) string {
 	return fmt.Sprintf("unexpected value: %s", e.ActualValue)
 }
 
@@ -508,7 +508,7 @@ func (e *RaftGroupDeletedError) Error() string {
 }
 
 // message returns an error message.
-func (*RaftGroupDeletedError) message(pErr *Error) string {
+func (*RaftGroupDeletedError) message(_ *Error) string {
 	return "raft group deleted"
 }
 
@@ -520,7 +520,7 @@ func (e *ReplicaCorruptionError) Error() string {
 }
 
 // message returns an error message.
-func (e *ReplicaCorruptionError) message(pErr *Error) string {
+func (e *ReplicaCorruptionError) message(_ *Error) string {
 	return fmt.Sprintf("replica corruption (processed=%t): %s", e.Processed, e.ErrorMsg)
 }
 
@@ -532,7 +532,7 @@ func (e *LeaseVersionChangedError) Error() string {
 }
 
 // message returns an error message.
-func (*LeaseVersionChangedError) message(pErr *Error) string {
+func (*LeaseVersionChangedError) message(_ *Error) string {
 	return "lease version changed"
 }
 
@@ -544,7 +544,7 @@ func (e *DidntUpdateDescriptorError) Error() string {
 }
 
 // message returns an error message.
-func (*DidntUpdateDescriptorError) message(pErr *Error) string {
+func (*DidntUpdateDescriptorError) message(_ *Error) string {
 	return "didn't update the table descriptor"
 }
 
@@ -556,7 +556,7 @@ func (e *SqlTransactionAbortedError) Error() string {
 }
 
 // message returns an error message.
-func (*SqlTransactionAbortedError) message(pErr *Error) string {
+func (*SqlTransactionAbortedError) message(_ *Error) string {
 	return "current transaction is aborted, commands ignored until end of transaction block"
 }
 
@@ -568,7 +568,7 @@ func (e *ExistingSchemaChangeLeaseError) Error() string {
 }
 
 // message returns an error message.
-func (*ExistingSchemaChangeLeaseError) message(pErr *Error) string {
+func (*ExistingSchemaChangeLeaseError) message(_ *Error) string {
 	return "an outstanding schema change lease exists"
 }
 
