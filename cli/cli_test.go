@@ -167,9 +167,9 @@ func (c cliTest) RunWithArgs(a []string) {
 	args = append(args, fmt.Sprintf("--port=%s", p))
 	// Always run in secure mode and use test certs.
 	args = append(args, "--insecure=false")
-	args = append(args, fmt.Sprintf("--ssl-ca=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
-	args = append(args, fmt.Sprintf("--ssl-cert=%s", filepath.Join(c.certsDir, security.EmbeddedRootCert)))
-	args = append(args, fmt.Sprintf("--ssl-cert-key=%s", filepath.Join(c.certsDir, security.EmbeddedRootKey)))
+	args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
+	args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedRootCert)))
+	args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedRootKey)))
 	args = append(args, a[1:]...)
 
 	fmt.Fprintf(os.Stderr, "%s\n", args)

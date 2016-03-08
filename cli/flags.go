@@ -141,17 +141,17 @@ duration.`),
 Adjusts the max idle time of the scanner. This speeds up the scanner on small
 clusters to be more responsive.`),
 
-	"ssl-ca": wrapText(`
-Path to the CA certificate. Needed by servers and clients in secure mode.`),
+	"ca-cert": wrapText(`
+Path to the CA certificate. Needed by clients and servers in secure mode.`),
 
-	"ssl-ca-key": wrapText(`
-Path to the CA key. Only needed when signing new certificates.`),
+	"ca-key": wrapText(`
+Path to the key protecting --ca-cert. Only needed when signing new certificates.`),
 
-	"ssl-cert": wrapText(`
+	"cert": wrapText(`
 Path to the client or server certificate. Needed in secure mode.`),
 
-	"ssl-cert-key": wrapText(`
-Path to the client or server key. Needed in secure mode.`),
+	"key": wrapText(`
+Path to the key protecting --cert. Needed in secure mode.`),
 
 	"store": wrapText(`
 The file path to a storage device. This flag must be specified separately for
@@ -306,9 +306,9 @@ func initFlags(ctx *Context) {
 		// Security flags.
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
 		// Certificates.
-		f.StringVar(&ctx.SSLCA, "ssl-ca", ctx.SSLCA, usage("ssl-ca"))
-		f.StringVar(&ctx.SSLCert, "ssl-cert", ctx.SSLCert, usage("ssl-cert"))
-		f.StringVar(&ctx.SSLCertKey, "ssl-cert-key", ctx.SSLCertKey, usage("ssl-cert-key"))
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
 
 		// Cluster joining flags.
 		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usage("join"))
@@ -344,10 +344,10 @@ func initFlags(ctx *Context) {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ssl-ca", ctx.SSLCA, usage("ssl-ca"))
-		f.StringVar(&ctx.SSLCAKey, "ssl-ca-key", ctx.SSLCAKey, usage("ssl-ca-key"))
-		f.StringVar(&ctx.SSLCert, "ssl-cert", ctx.SSLCert, usage("ssl-cert"))
-		f.StringVar(&ctx.SSLCertKey, "ssl-cert-key", ctx.SSLCertKey, usage("ssl-cert-key"))
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
+		f.StringVar(&ctx.SSLCAKey, "ca-key", ctx.SSLCAKey, usage("ca-key"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
 		f.IntVar(&keySize, "key-size", defaultKeySize, usage("key-size"))
 		if err := cmd.MarkFlagRequired("key-size"); err != nil {
 			panic(err)
@@ -367,9 +367,9 @@ func initFlags(ctx *Context) {
 		f.StringVar(&connHost, "host", "", usage("client_host"))
 
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ssl-ca", ctx.SSLCA, usage("ssl-ca"))
-		f.StringVar(&ctx.SSLCert, "ssl-cert", ctx.SSLCert, usage("ssl-cert"))
-		f.StringVar(&ctx.SSLCertKey, "ssl-cert-key", ctx.SSLCertKey, usage("ssl-cert-key"))
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
 	}
 
 	{

@@ -20,9 +20,9 @@ openssl x509 -in node.crt -text
 To regenerate:
 ```bash
 rm -f resource/test_certs/*.{crt,key}
-cockroach cert --ssl-ca=resource/test_certs/ca.crt --ssl-ca-key=resource/test_certs/ca.key create-ca
-cockroach cert --ssl-ca=resource/test_certs/ca.crt --ssl-ca-key=resource/test_certs/ca.key --ssl-cert=resource/test_certs/node.crt --ssl-cert-key=resource/test_certs/node.key create-node 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
-cockroach cert --ssl-ca=resource/test_certs/ca.crt --ssl-ca-key=resource/test_certs/ca.key --ssl-cert=resource/test_certs/root.crt --ssl-cert-key=resource/test_certs/root.key create-client root
-cockroach cert --ssl-ca=resource/test_certs/ca.crt --ssl-ca-key=resource/test_certs/ca.key --ssl-cert=resource/test_certs/testuser.crt --ssl-cert-key=resource/test_certs/testuser.key create-client testuser
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key create-ca
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key --cert=resource/test_certs/node.crt --key=resource/test_certs/node.key create-node 127.0.0.1 localhost $(seq -f "roach%g.local" 0 99)
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key --cert=resource/test_certs/root.crt --key=resource/test_certs/root.key create-client root
+cockroach cert --ca-cert=resource/test_certs/ca.crt --ca-key=resource/test_certs/ca.key --cert=resource/test_certs/testuser.crt --key=resource/test_certs/testuser.key create-client testuser
 go generate security/securitytest/securitytest.go
 ```

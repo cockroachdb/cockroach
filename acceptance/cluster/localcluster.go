@@ -406,9 +406,9 @@ func (l *LocalCluster) createNodeCerts() {
 func (l *LocalCluster) startNode(node *testNode) {
 	cmd := []string{
 		"start",
-		"--ssl-ca=/certs/ca.crt",
-		"--ssl-cert=/certs/node.crt",
-		"--ssl-cert-key=/certs/node.key",
+		"--ca-cert=/certs/ca.crt",
+		"--cert=/certs/node.crt",
+		"--key=/certs/node.key",
 		"--host=" + node.nodeStr,
 		"--port=" + base.DefaultPort,
 		"--alsologtostderr=INFO",

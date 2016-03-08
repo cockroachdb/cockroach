@@ -31,10 +31,10 @@ var keySize int
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
 var createCACertCmd = &cobra.Command{
-	Use:   "create-ca --ssl-ca=<path-to-ca-cert> --ssl-ca-key=<path-to-ca-key>",
+	Use:   "create-ca --ca-cert=<path-to-ca-cert> --ca-key=<path-to-ca-key>",
 	Short: "create CA cert and key",
 	Long: `
-Generates CA certificate and key, writing them to --ssl-ca and --ssl-ca-key.
+Generates CA certificate and key, writing them to --ca-cert and --ca-key.
 `,
 	SilenceUsage: true,
 	RunE:         runCreateCACert,
@@ -56,11 +56,11 @@ func runCreateCACert(cmd *cobra.Command, args []string) error {
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
 var createNodeCertCmd = &cobra.Command{
-	Use:   "create-node --ssl-ca=<ca-cert> --ssl-ca-key=<ca-key> --ssl-cert=<node-cert> --ssl-cert-key=<node-key> <host 1> <host 2> ... <host N>",
+	Use:   "create-node --ca-cert=<ca-cert> --ca-key=<ca-key> --cert=<node-cert> --key=<node-key> <host 1> <host 2> ... <host N>",
 	Short: "create node cert and key",
 	Long: `
 Generates node certificate and keys for a given node, writing them to
---ssl-cert and --ssl-cert-key. CA certificate and key must be passed in.
+--cert and --key. CA certificate and key must be passed in.
 At least one host should be passed in (either IP address or dns name).
 `,
 	SilenceUsage: true,
@@ -85,11 +85,11 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 // A createClientCert command generates a client certificate and stores it
 // in the cert directory under <username>.crt and key under <username>.key.
 var createClientCertCmd = &cobra.Command{
-	Use:   "create-client --ssl-ca=<ca-cert> --ssl-ca-key=<ca-key> --ssl-cert=<node-cert> --ssl-cert-key=<node-key> username",
+	Use:   "create-client --ca-cert=<ca-cert> --ca-key=<ca-key> --cert=<node-cert> --key=<node-key> username",
 	Short: "create client cert and key",
 	Long: `
-Generates a client certificate and key, writing them to --ssl-cert and --ssl-cert-key.
---ssl-cert and --ssl-cert-key. CA certificate and key must be passed in.
+Generates a client certificate and key, writing them to --cert and --key.
+--cert and --key. CA certificate and key must be passed in.
 The certs directory should contain a CA cert and key.
 `,
 	SilenceUsage: true,
