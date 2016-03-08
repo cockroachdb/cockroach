@@ -19,7 +19,6 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -35,7 +34,7 @@ import (
 // nil.
 type KeyValue struct {
 	Key   roachpb.Key
-	Value *roachpb.Value
+	Value *roachpb.Value // Timestamp will always be zero
 }
 
 func (kv *KeyValue) String() string {
@@ -79,20 +78,6 @@ func (kv *KeyValue) PrettyValue() string {
 		return fmt.Sprintf("%s", v)
 	}
 	return fmt.Sprintf("%q", kv.Value.RawBytes)
-}
-
-func (kv *KeyValue) setTimestamp(t roachpb.Timestamp) {
-	if kv.Value != nil {
-		kv.Value.Timestamp = t
-	}
-}
-
-// Timestamp returns the timestamp the value was written at.
-func (kv *KeyValue) Timestamp() time.Time {
-	if kv.Value == nil {
-		return time.Time{}
-	}
-	return kv.Value.Timestamp.GoTime()
 }
 
 // ValueBytes returns the value as a byte slice. This method will panic if the

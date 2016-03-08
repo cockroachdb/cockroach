@@ -151,7 +151,7 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	}
 	if r.Value != nil {
 		c.env[c.key] = r.ValueInt()
-		c.debug = fmt.Sprintf("[%d ts=%d]", r.ValueInt(), r.Timestamp())
+		c.debug = fmt.Sprintf("[%d]", r.ValueInt())
 	}
 	return nil
 }
@@ -199,8 +199,8 @@ func sumCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 			sum += v
 		}
 	}
-	r, pErr := txn.Inc(c.getKey(), sum)
-	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp())
+	_, pErr := txn.Inc(c.getKey(), sum)
+	c.debug = fmt.Sprintf("[%d]", sum)
 	return pErr
 }
 
