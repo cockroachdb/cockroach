@@ -156,7 +156,6 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 			br.Responses[i] = otherBatch.Responses[i]
 		}
 	}
-	br.Timestamp.Forward(otherBatch.Timestamp)
 	br.Txn.Update(otherBatch.Txn)
 	br.CollectedSpans = append(br.CollectedSpans, otherBatch.CollectedSpans...)
 	return nil
