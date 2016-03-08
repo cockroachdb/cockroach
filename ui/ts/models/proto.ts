@@ -309,67 +309,91 @@ module Models {
     }
 
     /*****************************
-     * sql/driver/wire.proto
+     * server/admin.proto
      ****************************/
 
-      export interface Payload  {
-        Payload?: Datum;
-      }
+    export interface Timestamp {
+      sec?: number;
+      nsec?: number;
+    }
 
-      export interface Datum {
-        BoolVal?: boolean;
-        IntVal?: number;
-        FloatVal?: number;
-        BytesVal?: ArrayBuffer;
-        StringVal?: string;
-        DateVal?: number;
-        TimeVal?: Timestamp;
-        IntervalVal?: number;
-      }
+    export interface DatabaseList {
+      databases: string[];
+    }
 
-      export interface Timestamp {
-        sec?: number;
-        nsec?: number;
-      }
+    export interface Grant {
+      database: string;
+      privileges: string[];
+      user: string;
+    }
 
-      export interface Request {
-        user?: string;
-        session?: ArrayBuffer;
-        sql?: string;
-        params?: Datum[];
-      }
+    export interface Database {
+      grants: Grant[];
+      table_names: string[];
+    }
 
-      export interface Response {
-        session?: ArrayBuffer;
-        results?: Result[];
-      }
+    export interface SQLColumn {
+      name: string;
+      type: string;
+      nullable: boolean;
+      default: string;
+    }
 
-      export interface Result {
-        Union?: Union;
-      }
+    export interface SQLIndex {
+      name: string;
+      unique: boolean;
+      seq: number;
+      column: string;
+      direction: string;
+      storing: boolean;
+    }
 
-      export interface Union {
-        error?: string;
-        ddl?: DDL;
-        rows_affected?: number;
-        Rows?: Rows;
-      }
+    export interface SQLTable {
+      grants: Grant[];
+      columns: SQLColumn[];
+      indexes: SQLIndex[];
+    }
 
-      export interface DDL {
-      }
+    export interface User {
+      username: string;
+    }
 
-      export interface Rows {
-        columns?: Column[];
-        rows?: Row[];
-      }
+    export interface Users {
+      users: User[];
+    }
 
-      export interface Row {
-        values?: Payload[];
-      }
+    export interface UnparsedClusterEvent {
+      timestamp: Timestamp;
+      event_type: string;
+      target_id: number;
+      reporting_id: number;
+      info: string;
+    }
 
-      export interface Column {
-        name?: string;
-        typ?: Payload;
-      }
+    export interface UnparsedClusterEvents {
+      events: UnparsedClusterEvent[];
+    }
+
+    export interface EventInfo {
+      DatabaseName?: string;
+      TableName?: string;
+      User?: string;
+      Statement?: string;
+      DroppedTables?: string[];
+    }
+
+    export interface SetUIDataRequest {
+      key: string;
+      value: string; // base64 encoded value
+    }
+
+    export interface GetUIDataRequest {
+      key: string;
+    }
+
+    export interface GetUIDataResponse {
+      value: string; // base64 encoded value
+      last_updated: Timestamp;
+    }
   }
 }

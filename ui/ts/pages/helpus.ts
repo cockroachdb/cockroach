@@ -3,7 +3,6 @@
 /// <reference path="../components/topbar.ts"/>
 /// <reference path="../components/navbar.ts"/>
 /// <reference path="../util/convert.ts"/>
-/// <reference path="../models/sqlquery.ts" />
 /// <reference path="../models/helpus.ts" />
 
 // Author: Max Lang (max@cockroachlabs.com)

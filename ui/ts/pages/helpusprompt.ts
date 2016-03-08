@@ -1,6 +1,5 @@
 // source: pages/nodes.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="../models/sqlquery.ts" />
 /// <reference path="../models/helpus.ts" />
 /// <reference path="../components/modal.ts" />
 
