@@ -59,7 +59,7 @@ nodes. For example:`) + `
 Determines the criteria used by nodes to make balanced allocation
 decisions. Valid options are "usage" (default) or "rangecount".`),
 
-	"cache-size": wrapText(`
+	"cache": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
 
@@ -303,14 +303,14 @@ func initFlags(ctx *Context) {
 
 		// Engine flags.
 		cacheSize = newBytesValue(&ctx.CacheSize)
-		f.Var(cacheSize, "cache-size", usage("cache-size"))
+		f.Var(cacheSize, "cache", usage("cache"))
 		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, usage("scan-interval"))
 		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
 		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))
 
-		// Clear the cache-size default value. This flag does have a default, but
+		// Clear the cache default value. This flag does have a default, but
 		// it is set only when the "start" command is run.
-		f.Lookup("cache-size").DefValue = ""
+		f.Lookup("cache").DefValue = ""
 
 		if err := startCmd.MarkFlagRequired("store"); err != nil {
 			panic(err)

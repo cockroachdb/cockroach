@@ -60,11 +60,11 @@ func TestNoLinkForbidden(t *testing.T) {
 	}
 }
 
-func TestCacheSizeFlagValue(t *testing.T) {
+func TestCacheFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	f := startCmd.Flags()
-	args := []string{"--cache-size", "100MB"}
+	args := []string{"--cache", "100MB"}
 	if err := f.Parse(args); err != nil {
 		t.Fatal(err)
 	}
