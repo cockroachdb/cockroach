@@ -49,6 +49,19 @@ VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1
 2 1
 3 4
 
+query I
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+query I
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
 statement ok
 CREATE TABLE uniontest (
   k INT,
@@ -108,6 +121,19 @@ SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k =
 2
 2
 
+query I
+(SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
+query I
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
+----
+3
+2
+
 query ITT rowsort
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
@@ -132,3 +158,6 @@ SELECT 1 INTERSECT SELECT '3'
 
 query error EXCEPT types int and string cannot be matched
 SELECT 1 EXCEPT SELECT '3'
+
+query error column z does not exist
+SELECT 1 UNION SELECT 3 ORDER BY z

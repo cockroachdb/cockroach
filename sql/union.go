@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-// Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) Union(n *parser.Union, autoCommit bool) (planNode, *roachpb.Error) {
+// UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
+func (p *planner) UnionClause(n *parser.UnionClause, autoCommit bool) (planNode, *roachpb.Error) {
 	var emitAll = false
 	var emit unionNodeEmit
 	switch n.Type {
@@ -86,11 +86,6 @@ func (p *planner) Union(n *parser.Union, autoCommit bool) (planNode, *roachpb.Er
 		emit:      emit,
 		scratch:   make([]byte, 0),
 	}
-
-	// TODO(dan): Support ORDER BY. It's currently blocked on
-	// https://github.com/cockroachdb/cockroach/issues/4734. Once that's done, it
-	// should be possible to read all the values from node, put them in a
-	// valuesNode, and sort it.
 	return node, nil
 }
 

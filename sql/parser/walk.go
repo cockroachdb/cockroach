@@ -475,7 +475,7 @@ func (stmt *Insert) WalkStmt(v Visitor) Statement {
 		rows, changed := WalkStmt(v, stmt.Rows)
 		if changed {
 			ret = stmt.CopyNode()
-			ret.Rows = rows.(SelectStatement)
+			ret.Rows = rows.(*Select)
 		}
 	}
 	for i, expr := range stmt.Returning {
@@ -494,7 +494,7 @@ func (stmt *Insert) WalkStmt(v Visitor) Statement {
 func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
 	sel, changed := WalkStmt(v, stmt.Select)
 	if changed {
-		return &ParenSelect{sel.(SelectStatement)}
+		return &ParenSelect{sel.(*Select)}
 	}
 	return stmt
 }
@@ -502,17 +502,6 @@ func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Select) CopyNode() *Select {
 	stmtCopy := *stmt
-	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
-	stmtCopy.From = TableExprs(append([]TableExpr(nil), stmt.From...))
-	if stmt.Where != nil {
-		wCopy := *stmt.Where
-		stmtCopy.Where = &wCopy
-	}
-	stmtCopy.GroupBy = GroupBy(append([]Expr(nil), stmt.GroupBy...))
-	if stmt.Having != nil {
-		hCopy := *stmt.Having
-		stmtCopy.Having = &hCopy
-	}
 	stmtCopy.OrderBy = make([]*Order, len(stmt.OrderBy))
 	for i, o := range stmt.OrderBy {
 		oCopy := *o
@@ -527,6 +516,63 @@ func (stmt *Select) CopyNode() *Select {
 
 // WalkStmt is part of the WalkableStmt interface.
 func (stmt *Select) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	sel, changed := WalkStmt(v, stmt.Select)
+	if changed {
+		ret = stmt.CopyNode()
+		ret.Select = sel.(SelectStatement)
+	}
+	for i, expr := range stmt.OrderBy {
+		e, changed := WalkExpr(v, expr.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.OrderBy[i].Expr = e
+		}
+	}
+	if stmt.Limit != nil {
+		if stmt.Limit.Offset != nil {
+			e, changed := WalkExpr(v, stmt.Limit.Offset)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Limit.Offset = e
+			}
+		}
+		if stmt.Limit.Count != nil {
+			e, changed := WalkExpr(v, stmt.Limit.Count)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Limit.Count = e
+			}
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Expr without recursing in any child Exprs.
+func (stmt *SelectClause) CopyNode() *SelectClause {
+	stmtCopy := *stmt
+	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
+	stmtCopy.From = TableExprs(append([]TableExpr(nil), stmt.From...))
+	if stmt.Where != nil {
+		wCopy := *stmt.Where
+		stmtCopy.Where = &wCopy
+	}
+	stmtCopy.GroupBy = GroupBy(append([]Expr(nil), stmt.GroupBy...))
+	if stmt.Having != nil {
+		hCopy := *stmt.Having
+		stmtCopy.Having = &hCopy
+	}
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 	ret := stmt
 
 	for i, expr := range stmt.Exprs {
@@ -566,36 +612,6 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 				ret = stmt.CopyNode()
 			}
 			ret.Having.Expr = e
-		}
-	}
-
-	for i, expr := range stmt.OrderBy {
-		e, changed := WalkExpr(v, expr.Expr)
-		if changed {
-			if ret == stmt {
-				ret = stmt.CopyNode()
-			}
-			ret.OrderBy[i].Expr = e
-		}
-	}
-	if stmt.Limit != nil {
-		if stmt.Limit.Offset != nil {
-			e, changed := WalkExpr(v, stmt.Limit.Offset)
-			if changed {
-				if ret == stmt {
-					ret = stmt.CopyNode()
-				}
-				ret.Limit.Offset = e
-			}
-		}
-		if stmt.Limit.Count != nil {
-			e, changed := WalkExpr(v, stmt.Limit.Count)
-			if changed {
-				if ret == stmt {
-					ret = stmt.CopyNode()
-				}
-				ret.Limit.Count = e
-			}
 		}
 	}
 	return ret
@@ -676,13 +692,13 @@ func (stmt *Update) WalkStmt(v Visitor) Statement {
 }
 
 // WalkStmt is part of the WalkableStmt interface.
-func (stmt *Values) WalkStmt(v Visitor) Statement {
+func (stmt *ValuesClause) WalkStmt(v Visitor) Statement {
 	ret := stmt
 	for i, tuple := range stmt.Tuples {
 		t, changed := WalkExpr(v, tuple)
 		if changed {
 			if ret == stmt {
-				ret = &Values{append([]*Tuple(nil), stmt.Tuples...)}
+				ret = &ValuesClause{append([]*Tuple(nil), stmt.Tuples...)}
 			}
 			ret.Tuples[i] = t.(*Tuple)
 		}
@@ -695,9 +711,10 @@ var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
 var _ WalkableStmt = &ParenSelect{}
 var _ WalkableStmt = &Select{}
+var _ WalkableStmt = &SelectClause{}
 var _ WalkableStmt = &Set{}
 var _ WalkableStmt = &Update{}
-var _ WalkableStmt = &Values{}
+var _ WalkableStmt = &ValuesClause{}
 
 // WalkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned

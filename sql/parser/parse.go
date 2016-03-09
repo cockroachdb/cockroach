@@ -139,10 +139,14 @@ func parseExpr(expr string, syntax Syntax) (Expr, error) {
 	if !ok {
 		return nil, util.Errorf("expected a SELECT statement, but found %T", stmt)
 	}
-	if n := len(sel.Exprs); n != 1 {
+	selClause, ok := sel.Select.(*SelectClause)
+	if !ok {
+		return nil, util.Errorf("expected a SELECT statement, but found %T", sel.Select)
+	}
+	if n := len(selClause.Exprs); n != 1 {
 		return nil, util.Errorf("expected 1 expression, but found %d", n)
 	}
-	return sel.Exprs[0].Expr, nil
+	return selClause.Exprs[0].Expr, nil
 }
 
 // ParseExprTraditional is a short-hand for parseExpr(sql, Traditional)

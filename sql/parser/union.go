@@ -24,10 +24,10 @@ package parser
 
 import "fmt"
 
-// Union represents a UNION statement.
-type Union struct {
+// UnionClause represents a UNION statement.
+type UnionClause struct {
 	Type        UnionType
-	Left, Right SelectStatement
+	Left, Right *Select
 	All         bool
 }
 
@@ -54,7 +54,7 @@ func (i UnionType) String() string {
 	return unionTypeName[i]
 }
 
-func (node *Union) String() string {
+func (node *UnionClause) String() string {
 	all := ""
 	if node.All {
 		all = " ALL"

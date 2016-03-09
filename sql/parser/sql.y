@@ -98,6 +98,12 @@ func (u *sqlSymUnion) stmt() Statement {
 func (u *sqlSymUnion) stmts() []Statement {
     return u.val.([]Statement)
 }
+func (u *sqlSymUnion) slct() *Select {
+    if selectStmt, ok := u.val.(*Select); ok {
+        return selectStmt
+    }
+    return nil
+}
 func (u *sqlSymUnion) selectStmt() SelectStatement {
     if selectStmt, ok := u.val.(SelectStatement); ok {
         return selectStmt
@@ -267,15 +273,15 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <Statement> preparable_stmt
 %type <Statement> rename_stmt
 %type <Statement> revoke_stmt
-%type <SelectStatement> select_stmt
+%type <*Select> select_stmt
 %type <Statement> set_stmt
 %type <Statement> show_stmt
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
 
-%type <SelectStatement> select_no_parens select_with_parens select_clause
-%type <SelectStatement> simple_select values_clause
+%type <*Select> select_no_parens
+%type <SelectStatement> select_clause select_with_parens simple_select values_clause
 
 %type <empty> alter_column_default alter_using
 %type <Direction> opt_asc_desc
@@ -652,7 +658,7 @@ stmt:
 | revoke_stmt
 | select_stmt
   {
-    $$.val = $1.selectStmt()
+    $$.val = $1.slct()
   }
 | set_stmt
 | show_stmt
@@ -845,7 +851,7 @@ explain_stmt:
 explainable_stmt:
   select_stmt
   {
-    $$.val = $1.selectStmt()
+    $$.val = $1.slct()
   }
 | insert_stmt
 | update_stmt
@@ -1707,15 +1713,15 @@ insert_target:
 insert_rest:
   select_stmt
   {
-    $$.val = &Insert{Rows: $1.selectStmt()}
+    $$.val = &Insert{Rows: $1.slct()}
   }
 | '(' qualified_name_list ')' select_stmt
   {
-    $$.val = &Insert{Columns: $2.qnames(), Rows: $4.selectStmt()}
+    $$.val = &Insert{Columns: $2.qnames(), Rows: $4.slct()}
   }
 | DEFAULT VALUES
   {
-    $$.val = &Insert{}
+    $$.val = &Insert{Rows: &Select{}}
   }
 
 // TODO(andrei): If this is ever supported, `opt_conf_expr` needs to use something different
@@ -1823,15 +1829,18 @@ multiple_set_clause:
 select_stmt:
   select_no_parens %prec UMINUS
 | select_with_parens %prec UMINUS
+  {
+    $$.val = &Select{Select: $1.selectStmt()}
+  }
 
 select_with_parens:
   '(' select_no_parens ')'
   {
-    $$.val = &ParenSelect{Select: $2.selectStmt()}
+    $$.val = &ParenSelect{Select: $2.slct()}
   }
 | '(' select_with_parens ')'
   {
-    $$.val = &ParenSelect{Select: $2.selectStmt()}
+    $$.val = &ParenSelect{Select: &Select{Select: $2.selectStmt()}}
   }
 
 // This rule parses the equivalent of the standard's <query expression>. The
@@ -1845,39 +1854,28 @@ select_with_parens:
 //      - 2002-08-28 bjm
 select_no_parens:
   simple_select
+  {
+    $$.val = &Select{Select: $1.selectStmt()}
+  }
 | select_clause sort_clause
   {
-    $$.val = $1.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $2.orderBy()
-    }
+    $$.val = &Select{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
   }
 | select_clause opt_sort_clause select_limit
   {
-    $$.val = $1.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $2.orderBy()
-      s.Limit = $3.limit()
-    }
+    $$.val = &Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit()}
   }
 | with_clause select_clause
   {
-    $$.val = $2.selectStmt()
+    $$.val = &Select{Select: $2.selectStmt()}
   }
 | with_clause select_clause sort_clause
   {
-    $$.val = $2.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $3.orderBy()
-    }
+    $$.val = &Select{Select: $2.selectStmt(), OrderBy: $3.orderBy()}
   }
 | with_clause select_clause opt_sort_clause select_limit
   {
-    $$.val = $2.selectStmt()
-    if s, ok := $$.val.(*Select); ok {
-      s.OrderBy = $3.orderBy()
-      s.Limit = $4.limit()
-    }
+    $$.val = &Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
   }
 
 select_clause:
@@ -1911,7 +1909,7 @@ simple_select:
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    $$.val = &Select{
+    $$.val = &SelectClause{
       Exprs:   $3.selExprs(),
       From:    $4.tblExprs(),
       Where:   newWhere(astWhere, $5.expr()),
@@ -1923,7 +1921,7 @@ simple_select:
     from_clause where_clause
     group_clause having_clause window_clause
   {
-    $$.val = &Select{
+    $$.val = &SelectClause{
       Distinct: $2.bool(),
       Exprs:    $3.selExprs(),
       From:     $4.tblExprs(),
@@ -1935,7 +1933,7 @@ simple_select:
 | values_clause
 | TABLE relation_expr
   {
-    $$.val = &Select{
+    $$.val = &SelectClause{
       Exprs:       SelectExprs{starSelectExpr()},
       From:        TableExprs{&AliasedTableExpr{Expr: $2.qname()}},
       tableSelect: true,
@@ -1943,28 +1941,28 @@ simple_select:
   }
 | select_clause UNION all_or_distinct select_clause
   {
-    $$.val = &Union{
+    $$.val = &UnionClause{
       Type:  UnionOp,
-      Left:  $1.selectStmt(),
-      Right: $4.selectStmt(),
+      Left:  &Select{Select: $1.selectStmt()},
+      Right: &Select{Select: $4.selectStmt()},
       All:   $3.bool(),
     }
   }
 | select_clause INTERSECT all_or_distinct select_clause
   {
-    $$.val = &Union{
+    $$.val = &UnionClause{
       Type:  IntersectOp,
-      Left:  $1.selectStmt(),
-      Right: $4.selectStmt(),
+      Left:  &Select{Select: $1.selectStmt()},
+      Right: &Select{Select: $4.selectStmt()},
       All:   $3.bool(),
     }
   }
 | select_clause EXCEPT all_or_distinct select_clause
   {
-    $$.val = &Union{
+    $$.val = &UnionClause{
       Type:  ExceptOp,
-      Left:  $1.selectStmt(),
-      Right: $4.selectStmt(),
+      Left:  &Select{Select: $1.selectStmt()},
+      Right: &Select{Select: $4.selectStmt()},
       All:   $3.bool(),
     }
   }
@@ -1992,7 +1990,7 @@ common_table_expr:
 preparable_stmt:
   select_stmt
   {
-    $$.val = $1.selectStmt()
+    $$.val = $1.slct()
   }
 | insert_stmt
 | update_stmt
@@ -2175,11 +2173,11 @@ having_clause:
 values_clause:
   VALUES ctext_row
   {
-    $$.val = &Values{[]*Tuple{{$2.exprs()}}}
+    $$.val = &ValuesClause{[]*Tuple{{$2.exprs()}}}
   }
 | values_clause ',' ctext_row
   {
-    valNode := $1.selectStmt().(*Values)
+    valNode := $1.selectStmt().(*ValuesClause)
     valNode.Tuples = append(valNode.Tuples, &Tuple{$3.exprs()})
     $$.val = valNode
   }

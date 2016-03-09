@@ -135,7 +135,9 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.RollbackTransaction:
 		return p.RollbackTransaction(n)
 	case *parser.Select:
-		return p.Select(n)
+		return p.Select(n, autoCommit)
+	case *parser.SelectClause:
+		return p.SelectClause(n)
 	case *parser.Set:
 		return p.Set(n)
 	case *parser.SetTimeZone:
@@ -162,12 +164,12 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.ShowTables(n)
 	case *parser.Truncate:
 		return p.Truncate(n)
-	case *parser.Union:
-		return p.Union(n, autoCommit)
+	case *parser.UnionClause:
+		return p.UnionClause(n, autoCommit)
 	case *parser.Update:
 		return p.Update(n, autoCommit)
-	case *parser.Values:
-		return p.Values(n)
+	case *parser.ValuesClause:
+		return p.ValuesClause(n)
 	default:
 		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
 	}
@@ -181,7 +183,9 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	case *parser.Insert:
 		return p.Insert(n, false)
 	case *parser.Select:
-		return p.Select(n)
+		return p.Select(n, false)
+	case *parser.SelectClause:
+		return p.SelectClause(n)
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)

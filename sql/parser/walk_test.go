@@ -85,7 +85,7 @@ func TestFillArgs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if s := q.(*Select).Exprs[0].Expr.String(); d.expected != s {
+		if s := q.(*Select).Select.(*SelectClause).Exprs[0].Expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}

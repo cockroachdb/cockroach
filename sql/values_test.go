@@ -48,15 +48,15 @@ func TestValues(t *testing.T) {
 		return []parser.DTuple{datums}
 	}
 
-	makeValues := func(tuples ...*parser.Tuple) *parser.Values {
-		return &parser.Values{Tuples: tuples}
+	makeValues := func(tuples ...*parser.Tuple) *parser.ValuesClause {
+		return &parser.ValuesClause{Tuples: tuples}
 	}
 	makeTuple := func(exprs ...parser.Expr) *parser.Tuple {
 		return &parser.Tuple{Exprs: exprs}
 	}
 
 	testCases := []struct {
-		stmt *parser.Values
+		stmt *parser.ValuesClause
 		rows []parser.DTuple
 		ok   bool
 	}{
@@ -104,7 +104,7 @@ func TestValues(t *testing.T) {
 					pErr = roachpb.NewErrorf("%v", r)
 				}
 			}()
-			return p.Values(tc.stmt)
+			return p.ValuesClause(tc.stmt)
 		}()
 		if pErr == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, pErr)
