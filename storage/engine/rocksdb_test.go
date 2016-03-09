@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/termie/go-shutil"
 
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -362,7 +362,7 @@ func runMVCCPut(valueSize int, b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
-		ts := makeTS(time.Now().UnixNano(), 0)
+		ts := makeTS(timeutil.Now().UnixNano(), 0)
 		if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
@@ -401,7 +401,7 @@ func runMVCCConditionalPut(valueSize int, createFirst bool, b *testing.B) {
 	if createFirst {
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
-			ts := makeTS(time.Now().UnixNano(), 0)
+			ts := makeTS(timeutil.Now().UnixNano(), 0)
 			if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)
 			}
@@ -413,7 +413,7 @@ func runMVCCConditionalPut(valueSize int, createFirst bool, b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
-		ts := makeTS(time.Now().UnixNano(), 0)
+		ts := makeTS(timeutil.Now().UnixNano(), 0)
 		if err := MVCCConditionalPut(rocksdb, nil, key, ts, value, expected, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
@@ -476,7 +476,7 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
-			ts := makeTS(time.Now().UnixNano(), 0)
+			ts := makeTS(timeutil.Now().UnixNano(), 0)
 			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)
 			}
@@ -659,7 +659,7 @@ func BenchmarkMVCCPutDelete(b *testing.B) {
 	rocksdb := NewInMem(roachpb.Attributes{}, cacheSize, stopper)
 	defer stopper.Stop()
 
-	r := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
+	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(r, 10))
 	zeroTS := roachpb.ZeroTimestamp
 	var blockNum int64

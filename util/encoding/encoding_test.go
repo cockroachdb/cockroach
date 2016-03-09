@@ -26,6 +26,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
@@ -733,8 +734,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeDecimalDescending(nil, inf.NewDec(0, 0)), Float},
 		{EncodeBytesAscending(nil, []byte("")), Bytes},
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
-		{EncodeTimeAscending(nil, time.Now()), Time},
-		{EncodeTimeDescending(nil, time.Now()), TimeDesc},
+		{EncodeTimeAscending(nil, timeutil.Now()), Time},
+		{EncodeTimeDescending(nil, timeutil.Now()), TimeDesc},
 	}
 	for i, c := range testCases {
 		typ := PeekType(c.enc)

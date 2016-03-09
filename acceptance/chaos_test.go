@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
@@ -61,7 +62,7 @@ type testState struct {
 }
 
 func (state *testState) done() bool {
-	return !time.Now().Before(state.deadline) || atomic.LoadInt32(&state.stalled) == 1
+	return !timeutil.Now().Before(state.deadline) || atomic.LoadInt32(&state.stalled) == 1
 }
 
 // initClient initializes the client talking to node "i".
@@ -254,7 +255,7 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 // Wait until all clients have stopped.
 func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 	prevRound := atomic.LoadUint64(&state.monkeyIteration)
-	stallTime := time.Now().Add(stallDuration)
+	stallTime := timeutil.Now().Add(stallDuration)
 	var prevOutput string
 	// Spin until all clients are shut.
 	for numShutClients := 0; numShutClients < num; {
@@ -271,16 +272,16 @@ func waitClientsStop(num int, state *testState, stallDuration time.Duration) {
 
 		case <-time.After(time.Second):
 			var newOutput string
-			if time.Now().Before(state.deadline) {
+			if timeutil.Now().Before(state.deadline) {
 				curRound := atomic.LoadUint64(&state.monkeyIteration)
 				if curRound == prevRound {
-					if time.Now().After(stallTime) {
+					if timeutil.Now().After(stallTime) {
 						atomic.StoreInt32(&state.stalled, 1)
 						state.t.Fatalf("Stall detected at round %d, no forward progress for %s", curRound, stallDuration)
 					}
 				} else {
 					prevRound = curRound
-					stallTime = time.Now().Add(stallDuration)
+					stallTime = timeutil.Now().Add(stallDuration)
 				}
 				// Periodically print out progress so that we know the test is
 				// still running and making progress.
@@ -319,7 +320,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 	// One client for each node.
 	initBank(t, c.PGUrl(0))
 
-	start := time.Now()
+	start := timeutil.Now()
 	state := testState{
 		t:        t,
 		errChan:  make(chan error, num),
@@ -379,7 +380,7 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	// One client for each node.
 	initBank(t, c.PGUrl(0))
 
-	start := time.Now()
+	start := timeutil.Now()
 	state := testState{
 		t:        t,
 		errChan:  make(chan error, 1),

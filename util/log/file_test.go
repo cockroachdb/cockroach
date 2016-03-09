@@ -21,6 +21,8 @@ package log
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // TestLogFilenameParsing ensures that logName and parseLogFilename work as
@@ -30,9 +32,9 @@ func TestLogFilenameParsing(t *testing.T) {
 		Severity Severity
 		Time     time.Time
 	}{
-		{InfoLog, time.Now()},
-		{WarningLog, time.Now().AddDate(-10, 0, 0)},
-		{ErrorLog, time.Now().AddDate(0, 0, -1)},
+		{InfoLog, timeutil.Now()},
+		{WarningLog, timeutil.Now().AddDate(-10, 0, 0)},
+		{ErrorLog, timeutil.Now().AddDate(0, 0, -1)},
 	}
 
 	for i, testCase := range testCases {

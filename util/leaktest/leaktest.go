@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // interestingGoroutines returns all goroutines we care about for the purpose
@@ -61,7 +63,7 @@ func AfterTest(t testing.TB) func() {
 	return func() {
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
-		deadline := time.Now().Add(5 * time.Second)
+		deadline := timeutil.Now().Add(5 * time.Second)
 		for {
 			var leaked []string
 			for _, g := range interestingGoroutines() {
@@ -72,7 +74,7 @@ func AfterTest(t testing.TB) func() {
 			if len(leaked) == 0 {
 				return
 			}
-			if time.Now().Before(deadline) {
+			if timeutil.Now().Before(deadline) {
 				time.Sleep(50 * time.Millisecond)
 				continue
 			}

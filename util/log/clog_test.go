@@ -32,6 +32,7 @@ import (
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Test that shortHostname works as advertised.
@@ -142,7 +143,7 @@ func TestEntryDecoder(t *testing.T) {
 		return buf.String()
 	}
 
-	t1 := time.Now().Round(time.Microsecond)
+	t1 := timeutil.Now().Round(time.Microsecond)
 	t2 := t1.Add(time.Microsecond)
 	t3 := t2.Add(time.Microsecond)
 	t4 := t3.Add(time.Microsecond)
@@ -586,7 +587,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := formatHeader(InfoLog, time.Now(), "file.go", 100, nil)
+		buf := formatHeader(InfoLog, timeutil.Now(), "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
 }

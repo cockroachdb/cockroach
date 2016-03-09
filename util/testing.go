@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Tester is a proxy for e.g. testing.T which does not introduce a dependency
@@ -176,9 +177,9 @@ func SucceedsSoonDepth(depth int, t Tester, fn func() error) {
 // immediately at first and then successively with an exponential backoff
 // starting at 1ns and ending at the specified duration.
 func RetryForDuration(duration time.Duration, fn func() error) error {
-	deadline := time.Now().Add(duration)
+	deadline := timeutil.Now().Add(duration)
 	var lastErr error
-	for wait := time.Duration(1); time.Now().Before(deadline); wait *= 2 {
+	for wait := time.Duration(1); timeutil.Now().Before(deadline); wait *= 2 {
 		lastErr = fn()
 		if lastErr == nil {
 			return nil

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func TestValues(t *testing.T) {
@@ -166,7 +167,7 @@ func TestGolangParams(t *testing.T) {
 
 		// Interval and timestamp.
 		{time.Duration(1), reflect.TypeOf(parser.DummyInterval)},
-		{time.Now(), reflect.TypeOf(parser.DummyTimestamp)},
+		{timeutil.Now(), reflect.TypeOf(parser.DummyTimestamp)},
 
 		// Primitive type aliases.
 		{roachpb.NodeID(1), reflect.TypeOf(parser.DummyInt)},

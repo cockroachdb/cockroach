@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // A replicaQueue is a prioritized queue of replicas for which work is
@@ -167,7 +168,7 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 // is signaled via the removed channel.
 func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *stop.Stopper,
 	repl *Replica) bool {
-	waitInterval := rs.paceInterval(start, time.Now())
+	waitInterval := rs.paceInterval(start, timeutil.Now())
 	nextTime := time.After(waitInterval)
 	if log.V(6) {
 		log.Infof("Wait time interval set to %s", waitInterval)
@@ -204,7 +205,7 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		start := time.Now()
+		start := timeutil.Now()
 
 		for {
 			var shouldStop bool
@@ -223,7 +224,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				// Increment iteration count.
 				rs.completedScan.L.Lock()
 				rs.count++
-				rs.total += time.Now().Sub(start)
+				rs.total += timeutil.Now().Sub(start)
 				rs.completedScan.Broadcast()
 				rs.completedScan.L.Unlock()
 				if log.V(6) {
@@ -231,7 +232,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				}
 
 				// Reset iteration and start time.
-				start = time.Now()
+				start = timeutil.Now()
 			})
 			if shouldStop {
 				return
