@@ -318,6 +318,7 @@ message RangeLookupResponse {
 // gossip protocol.
 message HeartbeatTxnRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 
 // A HeartbeatTxnResponse is the return value from the HeartbeatTxn()
