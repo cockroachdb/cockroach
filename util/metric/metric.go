@@ -25,6 +25,8 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/codahale/hdrhistogram"
 	"github.com/rcrowley/go-metrics"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const histWrapNum = 4 // number of histograms to keep in rolling window
@@ -76,7 +78,7 @@ type periodic interface {
 var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
-var now = time.Now
+var now = timeutil.Now
 
 func maybeTick(m periodic) {
 	for m.nextTick().Before(now()) {
