@@ -124,8 +124,6 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
 
-	feed := util.NewFeed(stopper)
-
 	// A custom RetryOptions is created which uses stopper.ShouldDrain() as
 	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
@@ -177,7 +175,6 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		Transport:       s.raftTransport,
 		ScanInterval:    s.ctx.ScanInterval,
 		ScanMaxIdleTime: s.ctx.ScanMaxIdleTime,
-		EventFeed:       feed,
 		Tracer:          s.Tracer,
 		StorePool:       s.storePool,
 		SQLExecutor: sql.InternalExecutor{

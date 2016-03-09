@@ -170,7 +170,6 @@ type multiTestContext struct {
 	transport    *storage.RaftTransport
 	distSender   *kv.DistSender
 	db           *client.DB
-	feed         *util.Feed
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
@@ -476,7 +475,6 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.Gossip = m.gossip
 	ctx.StorePool = m.storePool
 	ctx.Transport = m.transport
-	ctx.EventFeed = m.feed
 	return ctx
 }
 
