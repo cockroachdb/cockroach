@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var (
@@ -269,7 +270,7 @@ func (t *logicTest) processTestFile(path string) {
 	}
 	defer file.Close()
 
-	t.lastProgress = time.Now()
+	t.lastProgress = timeutil.Now()
 
 	repeat := 1
 	s := newLineScanner(file)
@@ -663,7 +664,7 @@ func (t *logicTest) execQuery(query logicQuery) {
 
 func (t *logicTest) success(file string) {
 	t.progress++
-	now := time.Now()
+	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
 		t.lastProgress = now
 		fmt.Printf("%s: %d\n", file, t.progress)

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Utility to generate x509 certificates, both CA and not.
@@ -85,7 +86,7 @@ func newTemplate(commonName string) (*x509.Certificate, error) {
 		return nil, err
 	}
 
-	notBefore := time.Now().Add(validFrom)
+	notBefore := timeutil.Now().Add(validFrom)
 	notAfter := notBefore.Add(validFor)
 
 	cert := &x509.Certificate{
