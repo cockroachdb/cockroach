@@ -58,7 +58,7 @@ message InternalTimeSeriesData {
   // The duration of each sample interval, expressed in nanoseconds.
   optional int64 sample_duration_nanos = 2 [(gogoproto.nullable) = false];
   // The actual data samples for this metric.
-  repeated InternalTimeSeriesSample samples = 3;
+  repeated InternalTimeSeriesSample samples = 3 [(gogoproto.nullable) = false];
 }
 
 // A InternalTimeSeriesSample represents data gathered from multiple
@@ -123,5 +123,6 @@ message RaftSnapshotData {
   }
   // The latest RangeDescriptor
   optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
-  repeated KeyValue KV = 2 [(gogoproto.customname) = "KV"];
+  repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "KV"];
 }

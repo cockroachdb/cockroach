@@ -553,7 +553,7 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 	ts := &roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: 0,
 		SampleDurationNanos: 1000,
-		Samples: []*roachpb.InternalTimeSeriesSample{
+		Samples: []roachpb.InternalTimeSeriesSample{
 			{Offset: 0, Count: 1, Sum: 5.0},
 		},
 	}
