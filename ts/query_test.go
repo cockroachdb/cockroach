@@ -32,7 +32,7 @@ var (
 		{
 			StartTimestampNanos: 0,
 			SampleDurationNanos: 10,
-			Samples: []*roachpb.InternalTimeSeriesSample{
+			Samples: []roachpb.InternalTimeSeriesSample{
 				{
 					Offset: 0,
 					Count:  1,
@@ -53,7 +53,7 @@ var (
 		{
 			StartTimestampNanos: 80,
 			SampleDurationNanos: 10,
-			Samples: []*roachpb.InternalTimeSeriesSample{
+			Samples: []roachpb.InternalTimeSeriesSample{
 				{
 					Offset: 1,
 					Count:  3,
@@ -75,7 +75,7 @@ var (
 		{
 			StartTimestampNanos: 30,
 			SampleDurationNanos: 10,
-			Samples: []*roachpb.InternalTimeSeriesSample{
+			Samples: []roachpb.InternalTimeSeriesSample{
 				{
 					Offset: 0,
 					Count:  1,
@@ -131,19 +131,19 @@ func TestInterpolation(t *testing.T) {
 	}{
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 24, 28, 32, 36, 40, 0},
-			func(s *roachpb.InternalTimeSeriesSample) float64 {
+			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
 			},
 		},
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 20, 30, 34, 38, 42, 46, 50, 0},
-			func(s *roachpb.InternalTimeSeriesSample) float64 {
+			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Maximum()
 			},
 		},
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 35, 60, 64, 68, 72, 76, 80, 0},
-			func(s *roachpb.InternalTimeSeriesSample) float64 {
+			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Sum
 			},
 		},
@@ -216,7 +216,7 @@ func TestAggregation(t *testing.T) {
 		},
 	}
 
-	downsampleFn := func(s *roachpb.InternalTimeSeriesSample) float64 {
+	downsampleFn := func(s roachpb.InternalTimeSeriesSample) float64 {
 		return s.Average()
 	}
 	for i, tc := range testCases {
