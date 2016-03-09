@@ -22,10 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func newInfo(val float64) Info {
-	now := time.Now()
+	now := timeutil.Now()
 
 	v := roachpb.Value{Timestamp: roachpb.Timestamp{WallTime: now.UnixNano()}}
 	v.SetFloat(val)

@@ -173,6 +173,8 @@ dupl:
 
 .PHONY: check
 check:
+	@echo "checking for util.Now() calls (use util.Now() instead)"
+	@! git grep -E 'time\.Now\(\)' | grep -vE '^util/timeutil/\w+\.go:'
 	@echo "checking for proto.Clone calls (use util.CloneProto instead)"
 	@! git grep -E '\.Clone\([^)]+\)' | grep -vE '^util/clone_proto(_test)?\.go:'
 	@echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"

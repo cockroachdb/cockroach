@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -127,7 +128,7 @@ func main() {
 
 	ctx := base.Context{Insecure: *insecure, Certs: *certs, User: *user}
 
-	startTime := time.Now()
+	startTime := timeutil.Now()
 	stopper := stop.NewStopper()
 	for _, addr := range parsedAddrs {
 		client, err := newStatusMonitor(&ctx, addr)

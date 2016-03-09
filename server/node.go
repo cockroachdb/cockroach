@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -682,7 +683,7 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		defer sp.Finish()
 		ctx := opentracing.ContextWithSpan((*Node)(n).context(), sp)
 
-		tStart := time.Now()
+		tStart := timeutil.Now()
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(ctx, *args)
 		if pErr != nil {
@@ -692,7 +693,7 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 		}
-		n.metrics.callComplete(time.Now().Sub(tStart), pErr)
+		n.metrics.callComplete(timeutil.Now().Sub(tStart), pErr)
 		br.Error = pErr
 	}
 

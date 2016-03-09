@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -294,7 +295,7 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 		session:       session,
 	}
 
-	timestamp := time.Now()
+	timestamp := timeutil.Now()
 	txn := e.newTxn(session)
 	planMaker.setTxn(txn, timestamp)
 	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
@@ -512,8 +513,8 @@ func (e *Executor) ExecuteStatements(
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) Execute(args Request) (Response, int, error) {
 	defer func(start time.Time) {
-		e.latency.RecordValue(time.Now().Sub(start).Nanoseconds())
-	}(time.Now())
+		e.latency.RecordValue(timeutil.Now().Sub(start).Nanoseconds())
+	}(timeutil.Now())
 	results := e.ExecuteStatements(
 		args.User, args.Session, args.SQL, args.Params)
 	return Response{Results: results, Session: args.Session}, 0, nil
@@ -598,7 +599,7 @@ func (e *Executor) execRequest(
 			}
 			txnState.txn = e.newTxn(planMaker.session)
 			execOpt.AutoRetry = true
-			txnState.txnTimestamp = time.Now()
+			txnState.txnTimestamp = timeutil.Now()
 			txnState.txn.SetDebugName(fmt.Sprintf("sql implicit: %t", execOpt.AutoCommit), 0)
 		}
 		if txnState.state() == noTransaction {
@@ -773,7 +774,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		// used as the statement_transaction() too.
 		stmtTimestamp := planMaker.evalCtx.TxnTimestamp
 		if !implicitTxn {
-			stmtTimestamp = parser.DTimestamp{Time: time.Now()}
+			stmtTimestamp = parser.DTimestamp{Time: timeutil.Now()}
 		}
 		var stmtStrBefore string
 		if e.ctx.TestingMocker.CheckStmtStringChange {
@@ -896,7 +897,7 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PErr: pErr}, pErr
 	}
 
-	result, pErr := e.execStmt(stmt, planMaker, time.Now(),
+	result, pErr := e.execStmt(stmt, planMaker, timeutil.Now(),
 		implicitTxn /* autoCommit */)
 	txnDone := planMaker.txn == nil
 	if pErr != nil {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // TestPut starts up an N node cluster and runs N workers that write
@@ -38,7 +39,7 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	defer dbStopper.Stop()
 
 	errs := make(chan error, c.NumNodes())
-	start := time.Now()
+	start := timeutil.Now()
 	deadline := start.Add(cfg.Duration)
 	var count int64
 	for i := 0; i < c.NumNodes(); i++ {
@@ -46,7 +47,7 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 			r, _ := randutil.NewPseudoRand()
 			value := randutil.RandBytes(r, 8192)
 
-			for time.Now().Before(deadline) {
+			for timeutil.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)
 				v := value[:r.Intn(len(value))]
 				if pErr := db.Put(fmt.Sprintf("%08d", k), v); pErr != nil {
