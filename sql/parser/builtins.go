@@ -534,7 +534,7 @@ var builtins = map[string][]builtin{
 			types:      argTypes{timestampType},
 			returnType: typeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: e.StmtTimestamp.Sub(args[0].(DTimestamp).Time)}, nil
+				return DInterval{Duration: e.TxnTimestamp.Sub(args[0].(DTimestamp).Time)}, nil
 			},
 		},
 		builtin{
@@ -551,13 +551,13 @@ var builtins = map[string][]builtin{
 			types:      argTypes{},
 			returnType: typeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.makeDDate(e.StmtTimestamp.Time)
+				return e.makeDDate(e.TxnTimestamp.Time)
 			},
 		},
 	},
 
-	"now":                   {stmtTSImpl},
-	"current_timestamp":     {stmtTSImpl},
+	"now":                   {txnTSImpl},
+	"current_timestamp":     {txnTSImpl},
 	"transaction_timestamp": {txnTSImpl},
 
 	"statement_timestamp": {stmtTSImpl},
