@@ -121,6 +121,7 @@ func NewTestContext() *Context {
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).
 	ctx.Addr = "127.0.0.1:0"
+	ctx.HTTPAddr = "127.0.0.1:0"
 	// Set standard user for intra-cluster traffic.
 	ctx.User = security.NodeUser
 
@@ -281,9 +282,14 @@ func (ts *TestServer) Stores() *storage.Stores {
 	return ts.node.stores
 }
 
-// ServingAddr returns the rpc server's address. Should be used by clients.
+// ServingAddr returns the server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
 	return ts.ctx.Addr
+}
+
+// HTTPAddr returns the server's HTTP address. Should be used by humans.
+func (ts *TestServer) HTTPAddr() string {
+	return ts.ctx.HTTPAddr
 }
 
 // ServingHost returns the host portion of the rpc server's address.

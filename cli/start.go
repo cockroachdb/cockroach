@@ -262,7 +262,7 @@ completed, the server exits.
 
 // runQuit accesses the quit shutdown path.
 func runQuit(_ *cobra.Command, _ []string) error {
-	admin, err := client.NewAdminClient(&cliContext.Context.Context, cliContext.Addr, client.Quit)
+	admin, err := client.NewAdminClient(&cliContext.Context.Context, cliContext.HTTPAddr, client.Quit)
 	if err != nil {
 		return err
 	}

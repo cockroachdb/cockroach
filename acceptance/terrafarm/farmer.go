@@ -252,7 +252,7 @@ func (f *Farmer) Restart(i int) error {
 
 // URL returns the HTTP(s) endpoint.
 func (f *Farmer) URL(i int) string {
-	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultPort)
+	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
 }
 
 func (f *Farmer) logf(format string, args ...interface{}) {

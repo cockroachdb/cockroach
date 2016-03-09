@@ -45,6 +45,7 @@ import (
 const (
 	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultAddr               = ":" + base.DefaultPort
+	defaultHTTPAddr           = ":" + base.DefaultHTTPPort
 	defaultMaxOffset          = 250 * time.Millisecond
 	defaultCacheSize          = 512 << 20 // 512 MB
 	defaultMemtableBudget     = 512 << 20 // 512 MB
@@ -61,8 +62,13 @@ type Context struct {
 	// Embed the base context.
 	base.Context
 
-	// Addr is the host:port to bind for HTTP/RPC traffic.
+	// Addr is the host:port to bind.
 	Addr string
+
+	// HTTPAddr is the host:port to bind for HTTP requests. This is temporary,
+	// and will be removed when grpc.(*Server).ServeHTTP performance problems are
+	// addressed upstream. See https://github.com/grpc/grpc-go/issues/586.
+	HTTPAddr string
 
 	// Stores is specified to enable durable key-value storage.
 	Stores StoreSpecList
@@ -188,6 +194,7 @@ func NewContext() *Context {
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
+	ctx.HTTPAddr = defaultHTTPAddr
 	ctx.MaxOffset = defaultMaxOffset
 	ctx.CacheSize = defaultCacheSize
 	ctx.MemtableBudget = defaultMemtableBudget

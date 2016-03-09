@@ -241,7 +241,7 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
 
 	defer l.AssertAndStop(t)
-	addr := l.Nodes[0].Addr()
+	addr := l.Nodes[0].Addr(cluster.DefaultTCP)
 	containerConfig := container.Config{
 		Image: fmt.Sprintf(image + ":" + postgresTestTag),
 		Env: []string{
