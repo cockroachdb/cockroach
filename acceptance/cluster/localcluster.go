@@ -553,7 +553,7 @@ func (l *LocalCluster) Assert(t *testing.T) {
 		if exp == nil {
 			break
 		}
-		act := filter(l.events, time.Second)
+		act := filter(l.events, 15*time.Second)
 		if act == nil || *exp != *act {
 			t.Fatalf("expected event %v, got %v (after %v)", exp, act, events)
 		}
