@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -407,4 +408,35 @@ func TestClientRetryBootstrap(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestClientForwardUnresolved verifies that a client does not resolve a forward
+// address prematurely.
+func TestClientForwardUnresolved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	const nodeID = 1
+	local := startGossip(nodeID, stopper, t)
+	local.mu.Lock()
+	addr := local.is.NodeAddr
+	local.mu.Unlock()
+
+	client := newClient(&addr) // never started
+	const newAddr = "localhost:2345"
+	reply := &Response{
+		NodeID:          nodeID,
+		Addr:            addr,
+		AlternateNodeID: nodeID + 1,
+		AlternateAddr: &util.UnresolvedAddr{
+			NetworkField: "tcp",
+			AddressField: newAddr,
+		},
+	}
+	if err := client.handleResponse(local, reply); !testutils.IsError(err, "received forward") {
+		t.Fatal(err)
+	}
+	if client.forwardAddr == nil || client.forwardAddr.String() != newAddr {
+		t.Fatal("unexpected forward address %v, expected %s", client.forwardAddr, newAddr)
+	}
 }
