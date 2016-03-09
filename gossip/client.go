@@ -158,11 +158,13 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 			return util.Errorf("received forward from node %d to %d (%s); already have active connection, skipping",
 				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 		}
-		forwardAddr, err := reply.AlternateAddr.Resolve()
-		if err != nil {
+		// We try to resolve the address, but don't actually use the result.
+		// The certificates (if any) may only be valid for the unresolved
+		// address.
+		if _, err := reply.AlternateAddr.Resolve(); err != nil {
 			return util.Errorf("unable to resolve alternate address %s for node %d: %s", reply.AlternateAddr, reply.AlternateNodeID, err)
 		}
-		c.forwardAddr = forwardAddr
+		c.forwardAddr = reply.AlternateAddr
 		return util.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
