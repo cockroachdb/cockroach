@@ -210,8 +210,8 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	return ds
 }
 
-// RangeLookup dispatches an RangeLookup request for the given
-// metadata key to the replicas of the given range. Note that we allow
+// RangeLookup dispatches a RangeLookup request for the given metadata
+// key to the replicas of the given range. Note that we allow
 // inconsistent reads when doing range lookups for efficiency. Getting
 // stale data is not a correctness problem but instead may
 // infrequently result in additional latency as additional range

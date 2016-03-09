@@ -21,6 +21,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -153,6 +154,9 @@ type Replica struct {
 	stats        *rangeStats    // Range statistics
 	systemDBHash []byte         // sha1 hash of the system config @ last gossip
 	llMu         sync.Mutex     // Synchronizes (throttles) readers' requests for leader lease
+	llCond       *sync.Cond     // Condition variable for ops waiting on leader lease acquisition
+	llCmd        *pendingCmd    // Pending leader lease request
+	llErr        *roachpb.Error // Error for leader lease request
 	sequence     *SequenceCache // Provides txn replay protection
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
@@ -175,11 +179,13 @@ type Replica struct {
 		truncatedState *roachpb.RaftTruncatedState
 		tsCache        *TimestampCache // Most recent timestamps for keys / key ranges
 		// proposeRaftCommandFn can be set to mock out the propose operation.
-		proposeRaftCommandFn func(cmdIDKey, roachpb.RaftCommand) error
+		proposeRaftCommandFn func(cmdIDKey, *pendingCmd) error
 	}
 }
 
 var _ client.Sender = &Replica{}
+
+var replicaGCdError = errors.New("this replica was GCd")
 
 // NewReplica initializes the replica using the given metadata. If the
 // replica is initialized (i.e. desc contains more than a RangeID),
@@ -191,6 +197,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 		sequence: NewSequenceCache(desc.RangeID),
 		RangeID:  desc.RangeID,
 	}
+	r.llCond = sync.NewCond(&r.llMu)
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
@@ -252,13 +259,27 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("range=%d [%s-%s)", desc.RangeID, desc.StartKey, desc.EndKey)
 }
 
-// Destroy cleans up all data associated with this range, leaving a tombstone.
+// Destroy clears pending command queue by sending each pending
+// command an error and cleans up all data associated with this range.
 func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 	desc := r.Desc()
 	if _, rd := desc.FindReplica(r.store.StoreID()); rd != nil && rd.ReplicaID >= origDesc.NextReplicaID {
 		return util.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
 			r, rd.ReplicaID, origDesc.NextReplicaID)
 	}
+
+	// Clear the pending command queue.
+	r.mu.Lock()
+	for _, p := range r.mu.pendingCmds {
+		p.done <- roachpb.ResponseWithError{
+			Reply: &roachpb.BatchResponse{},
+			Err:   roachpb.NewError(replicaGCdError),
+		}
+	}
+	// Clear the map.
+	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
+	r.mu.Unlock()
+
 	return r.store.destroyReplicaData(desc)
 }
 
@@ -379,10 +400,11 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 	return err
 }
 
-// requestLeaderLease sends a request to obtain or extend a leader lease for
-// this replica. Unless an error is returned, the obtained lease will be valid
-// for a time interval containing the requested timestamp.
-func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error {
+// requestLeaderLease sends a request to obtain or extend a leader
+// lease for this replica. Unless an error is returned, the obtained
+// lease will be valid for a time interval containing the requested
+// timestamp. Only a single lease request may be pending at a time.
+func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) (*pendingCmd, *roachpb.Error) {
 	// TODO(Tobias): get duration from configuration, either as a config flag
 	// or, later, dynamically adjusted.
 	duration := DefaultLeaderLeaseDuration
@@ -392,7 +414,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error
 	desc := r.Desc()
 	_, replica := desc.FindReplica(r.store.StoreID())
 	if replica == nil {
-		return roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+		return nil, roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	args := &roachpb.LeaderLeaseRequest{
 		Span: roachpb.Span{
@@ -409,32 +431,28 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) *roachpb.Error
 	ba.RangeID = r.RangeID
 	ba.Add(args)
 
-	// The raft command becomes moot after its expiration, so give it an expiring
-	// context.
-	//
-	// We use a timeout here instead of a deadline of expiration.GoTime() because
-	// database time uses a fake clock in many tests.
-	ctx, cancel := context.WithTimeout(r.context(), duration)
-	defer cancel()
-
 	// Send lease request directly to raft in order to skip unnecessary
 	// checks from normal request machinery, (e.g. the command queue).
 	// Note that the command itself isn't traced, but usually the caller
 	// waiting for the result has an active Trace.
-	pendingCmd, err := r.proposeRaftCommand(ctx, ba)
+	cmd, err := r.proposeRaftCommand(r.context(), ba)
+	log.Infof("%s: proposed lease with cmd %p (%s)", r.store, cmd, desc)
 	if err != nil {
-		return roachpb.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 
-	// Next if the command was committed, wait for the range to apply it.
-	select {
-	case c := <-pendingCmd.done:
-		return c.Err
-	case <-ctx.Done():
-		// If the context expired we don't know who got the lease but we
-		// know we didn't.
-		return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
-	}
+	go func() {
+		// If the command was committed, wait for the range to apply it.
+		c := <-cmd.done
+		log.Infof("%s: lease finished with cmd %p: %s", r.store, cmd, c.Err)
+		r.llMu.Lock()
+		r.llErr = c.Err
+		r.llCmd = nil
+		r.llCond.Broadcast()
+		r.llMu.Unlock()
+	}()
+
+	return cmd, nil
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
@@ -459,19 +477,38 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace opentracing.Span) *roachp
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 
-	timestamp := r.store.Clock().Now()
-
-	if lease := r.getLeaderLease(); lease.Covers(timestamp) {
-		if lease.OwnedBy(r.store.StoreID()) {
-			// Happy path: We have an active lease, nothing to do.
-			return nil
+	// Loop until the lease is held or the replica ascertains the actual
+	// lease holder.
+	var pErr *roachpb.Error
+	var timestamp roachpb.Timestamp
+	for attempt := 1; ; attempt++ {
+		timestamp = r.store.Clock().Now()
+		if lease := r.getLeaderLease(); lease.Covers(timestamp) {
+			if lease.OwnedBy(r.store.StoreID()) {
+				// Happy path: We have an active lease, nothing to do.
+				return nil
+			}
+			// If lease is currently held by another, redirect to holder.
+			return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 		}
-		// If lease is currently held by another, redirect to holder.
-		return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
+
+		// Otherwise, no active lease: Request renewal if a renewal is not already pending.
+		if r.llCmd == nil {
+			log.Infof("%s: requesting lease", r.store)
+			trace.LogEvent(fmt.Sprintf("request leader lease (attempt #%d)", attempt))
+			r.llCmd, pErr = r.requestLeaderLease(timestamp)
+			if pErr.GetDetail() != nil {
+				break
+			}
+		}
+		log.Infof("%s: waiting", r.store)
+		r.llCond.Wait()
+		log.Infof("%s: done waiting", r.store)
+		if r.llErr.GetDetail() != nil {
+			pErr = r.llErr
+			break
+		}
 	}
-	trace.LogEvent("request leader lease")
-	// Otherwise, no active lease: Request renewal.
-	pErr := r.requestLeaderLease(timestamp)
 
 	// Getting a LeaseRejectedError back means someone else got there first, or
 	// the lease request was somehow invalid due to a concurrent change.
@@ -486,8 +523,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace opentracing.Span) *roachp
 			// The lease was rejected even though it was not obtained by another
 			// replica.
 			if log.V(1) {
-				log.Warningf("Lease for range %s rejected at timestamp %v: %s",
-					r, timestamp, pErr)
+				log.Warningf("lease for range %s rejected at timestamp %v: %s", r, timestamp, pErr)
 			}
 			lease = nil
 		}
@@ -1062,7 +1098,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 // The replica lock must be held.
 func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
 	if r.mu.proposeRaftCommandFn != nil {
-		return r.mu.proposeRaftCommandFn(idKey, p.raftCmd)
+		return r.mu.proposeRaftCommandFn(idKey, p)
 	}
 
 	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
