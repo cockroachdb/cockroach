@@ -43,7 +43,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	// and decoding keys.
 	rows, pErr := p.SelectClause(&parser.SelectClause{
 		Exprs: tableDesc.allColumnsSelector(),
-		From:  parser.TableExprs{n.Table},
+		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
 	})
 	if pErr != nil {
