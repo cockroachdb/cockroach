@@ -194,16 +194,15 @@ func NewTxnMetrics(txnRegistry *metric.Registry) *TxnMetrics {
 // transaction. When the transaction is committed or aborted, it
 // clears accumulated write intents for the transaction.
 type TxnCoordSender struct {
-	wrapped           client.Sender
-	clock             *hlc.Clock
-	heartbeatInterval time.Duration
-	clientTimeout     time.Duration
-	sync.Mutex                                   // protects txns and txnStats
-	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
-	linearizable      bool                       // enables linearizable behaviour
-	tracer            opentracing.Tracer
-	stopper           *stop.Stopper
-	metrics           *TxnMetrics
+	wrapped       client.Sender
+	clock         *hlc.Clock
+	clientTimeout time.Duration
+	sync.Mutex                               // protects txns and txnStats
+	txns          map[uuid.UUID]*txnMetadata // txn key to metadata
+	linearizable  bool                       // enables linearizable behaviour
+	tracer        opentracing.Tracer
+	stopper       *stop.Stopper
+	metrics       *TxnMetrics
 }
 
 var _ client.Sender = &TxnCoordSender{}
@@ -215,15 +214,14 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		panic("nil tracer supplied")
 	}
 	tc := &TxnCoordSender{
-		wrapped:           wrapped,
-		clock:             clock,
-		heartbeatInterval: storage.DefaultHeartbeatInterval,
-		clientTimeout:     defaultClientTimeout,
-		txns:              map[uuid.UUID]*txnMetadata{},
-		linearizable:      linearizable,
-		tracer:            tracer,
-		stopper:           stopper,
-		metrics:           txnMetrics,
+		wrapped:       wrapped,
+		clock:         clock,
+		clientTimeout: defaultClientTimeout,
+		txns:          map[uuid.UUID]*txnMetadata{},
+		linearizable:  linearizable,
+		tracer:        tracer,
+		stopper:       stopper,
+		metrics:       txnMetrics,
 	}
 
 	tc.stopper.RunWorker(tc.startStats)
@@ -495,6 +493,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 			}
 			haveBeginTxn = true
 			ba.Txn.Key = bt.Key
+			ba.HeartbeatInterval = bt.HeartbeatInterval
 		}
 		if roachpb.IsTransactionWrite(args) && !haveBeginTxn && !ba.Txn.Writing {
 			return util.Errorf("transactional write before begin transaction")
@@ -548,10 +547,10 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (duration, restar
 // committed after attempting to resolve the intents. When the
 // heartbeat stops, the transaction is unregistered from the
 // coordinator,
-func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
+func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID, heartbeatInterval time.Duration) {
 	var tickChan <-chan time.Time
 	{
-		ticker := time.NewTicker(tc.heartbeatInterval)
+		ticker := time.NewTicker(heartbeatInterval)
 		tickChan = ticker.C
 		defer ticker.Stop()
 	}
@@ -809,8 +808,13 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				}
 				tc.txns[txnID] = txnMeta
 
+				heartbeatInterval := storage.DefaultHeartbeatInterval
+				if ba.HeartbeatInterval != nil && *ba.HeartbeatInterval > 0 {
+					heartbeatInterval = time.Duration(*ba.HeartbeatInterval)
+				}
+
 				if !tc.stopper.RunAsyncTask(func() {
-					tc.heartbeatLoop(txnID)
+					tc.heartbeatLoop(txnID, heartbeatInterval)
 				}) {
 					// The system is already draining and we can't start the
 					// heartbeat. We refuse new transactions for now because

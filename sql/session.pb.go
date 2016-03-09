@@ -30,6 +30,7 @@ type Session struct {
 	//	*Session_Offset
 	Timezone              isSession_Timezone               `protobuf_oneof:"timezone"`
 	DefaultIsolationLevel cockroach_roachpb1.IsolationType `protobuf:"varint,7,opt,name=default_isolation_level,enum=cockroach.roachpb.IsolationType" json:"default_isolation_level"`
+	TransactionTimeout    *int64                           `protobuf:"varint,8,opt,name=transaction_timeout" json:"transaction_timeout,omitempty"`
 }
 
 func (m *Session) Reset()         { *m = Session{} }
@@ -199,6 +200,11 @@ func (m *Session) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x38
 	i++
 	i = encodeVarintSession(data, i, uint64(m.DefaultIsolationLevel))
+	if m.TransactionTimeout != nil {
+		data[i] = 0x40
+		i++
+		i = encodeVarintSession(data, i, uint64(*m.TransactionTimeout))
+	}
 	return i, nil
 }
 
@@ -335,6 +341,9 @@ func (m *Session) Size() (n int) {
 		n += m.Timezone.Size()
 	}
 	n += 1 + sovSession(uint64(m.DefaultIsolationLevel))
+	if m.TransactionTimeout != nil {
+		n += 1 + sovSession(uint64(*m.TransactionTimeout))
+	}
 	return n
 }
 
@@ -562,6 +571,26 @@ func (m *Session) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TransactionTimeout", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSession
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.TransactionTimeout = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipSession(data[iNdEx:])

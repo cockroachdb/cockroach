@@ -242,6 +242,8 @@ message Transaction {
   optional string name = 2 [(gogoproto.nullable) = false];
   optional int32 priority = 3 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
+  // How often to heartbeat in ns.
+  optional int64 heartbeat_interval = 12;
   // The last heartbeat timestamp.
   optional Timestamp last_heartbeat = 5;
   // The original timestamp at which the transaction started. For serializable

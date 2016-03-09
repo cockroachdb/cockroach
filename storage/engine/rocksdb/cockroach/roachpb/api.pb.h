@@ -2109,15 +2109,25 @@ class BeginTransactionRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_header();
   void set_allocated_header(::cockroach::roachpb::Span* header);
 
+  // optional int64 heartbeat_interval = 2;
+  bool has_heartbeat_interval() const;
+  void clear_heartbeat_interval();
+  static const int kHeartbeatIntervalFieldNumber = 2;
+  ::google::protobuf::int64 heartbeat_interval() const;
+  void set_heartbeat_interval(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.BeginTransactionRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
+  inline void set_has_heartbeat_interval();
+  inline void clear_has_heartbeat_interval();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
+  ::google::protobuf::int64 heartbeat_interval_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6319,6 +6329,13 @@ class Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::Transaction* release_txn();
   void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
 
+  // optional int64 heartbeat_interval = 9;
+  bool has_heartbeat_interval() const;
+  void clear_heartbeat_interval();
+  static const int kHeartbeatIntervalFieldNumber = 9;
+  ::google::protobuf::int64 heartbeat_interval() const;
+  void set_heartbeat_interval(::google::protobuf::int64 value);
+
   // optional .cockroach.roachpb.ReadConsistencyType read_consistency = 6;
   bool has_read_consistency() const;
   void clear_read_consistency();
@@ -6354,6 +6371,8 @@ class Header : public ::google::protobuf::Message {
   inline void clear_has_user_priority();
   inline void set_has_txn();
   inline void clear_has_txn();
+  inline void set_has_heartbeat_interval();
+  inline void clear_has_heartbeat_interval();
   inline void set_has_read_consistency();
   inline void clear_has_read_consistency();
   inline void set_has_trace();
@@ -6369,6 +6388,7 @@ class Header : public ::google::protobuf::Message {
   ::google::protobuf::int64 range_id_;
   double user_priority_;
   ::cockroach::roachpb::Transaction* txn_;
+  ::google::protobuf::int64 heartbeat_interval_;
   ::cockroach::util::tracing::Span* trace_;
   ::google::protobuf::int64 max_scan_results_;
   int read_consistency_;
@@ -8124,6 +8144,30 @@ inline void BeginTransactionRequest::set_allocated_header(::cockroach::roachpb::
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.BeginTransactionRequest.header)
+}
+
+// optional int64 heartbeat_interval = 2;
+inline bool BeginTransactionRequest::has_heartbeat_interval() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void BeginTransactionRequest::set_has_heartbeat_interval() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void BeginTransactionRequest::clear_has_heartbeat_interval() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void BeginTransactionRequest::clear_heartbeat_interval() {
+  heartbeat_interval_ = GOOGLE_LONGLONG(0);
+  clear_has_heartbeat_interval();
+}
+inline ::google::protobuf::int64 BeginTransactionRequest::heartbeat_interval() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.BeginTransactionRequest.heartbeat_interval)
+  return heartbeat_interval_;
+}
+inline void BeginTransactionRequest::set_heartbeat_interval(::google::protobuf::int64 value) {
+  set_has_heartbeat_interval();
+  heartbeat_interval_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.BeginTransactionRequest.heartbeat_interval)
 }
 
 // -------------------------------------------------------------------
@@ -13233,15 +13277,39 @@ inline void Header::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Header.txn)
 }
 
-// optional .cockroach.roachpb.ReadConsistencyType read_consistency = 6;
-inline bool Header::has_read_consistency() const {
+// optional int64 heartbeat_interval = 9;
+inline bool Header::has_heartbeat_interval() const {
   return (_has_bits_[0] & 0x00000020u) != 0;
 }
-inline void Header::set_has_read_consistency() {
+inline void Header::set_has_heartbeat_interval() {
   _has_bits_[0] |= 0x00000020u;
 }
-inline void Header::clear_has_read_consistency() {
+inline void Header::clear_has_heartbeat_interval() {
   _has_bits_[0] &= ~0x00000020u;
+}
+inline void Header::clear_heartbeat_interval() {
+  heartbeat_interval_ = GOOGLE_LONGLONG(0);
+  clear_has_heartbeat_interval();
+}
+inline ::google::protobuf::int64 Header::heartbeat_interval() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.heartbeat_interval)
+  return heartbeat_interval_;
+}
+inline void Header::set_heartbeat_interval(::google::protobuf::int64 value) {
+  set_has_heartbeat_interval();
+  heartbeat_interval_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.heartbeat_interval)
+}
+
+// optional .cockroach.roachpb.ReadConsistencyType read_consistency = 6;
+inline bool Header::has_read_consistency() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void Header::set_has_read_consistency() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void Header::clear_has_read_consistency() {
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void Header::clear_read_consistency() {
   read_consistency_ = 0;
@@ -13260,13 +13328,13 @@ inline void Header::set_read_consistency(::cockroach::roachpb::ReadConsistencyTy
 
 // optional .cockroach.util.tracing.Span trace = 7;
 inline bool Header::has_trace() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void Header::set_has_trace() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void Header::clear_has_trace() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void Header::clear_trace() {
   if (trace_ != NULL) trace_->::cockroach::util::tracing::Span::Clear();
@@ -13303,13 +13371,13 @@ inline void Header::set_allocated_trace(::cockroach::util::tracing::Span* trace)
 
 // optional int64 max_scan_results = 8;
 inline bool Header::has_max_scan_results() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void Header::set_has_max_scan_results() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void Header::clear_has_max_scan_results() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void Header::clear_max_scan_results() {
   max_scan_results_ = GOOGLE_LONGLONG(0);

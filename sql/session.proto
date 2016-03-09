@@ -58,4 +58,5 @@ message Session {
     int64 offset = 6;
   }
   optional roachpb.IsolationType default_isolation_level = 7 [(gogoproto.nullable) = false];
+  optional int64 transaction_timeout = 8;
 }

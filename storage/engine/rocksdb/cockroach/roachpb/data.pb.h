@@ -1473,6 +1473,13 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
+  // optional int64 heartbeat_interval = 12;
+  bool has_heartbeat_interval() const;
+  void clear_heartbeat_interval();
+  static const int kHeartbeatIntervalFieldNumber = 12;
+  ::google::protobuf::int64 heartbeat_interval() const;
+  void set_heartbeat_interval(::google::protobuf::int64 value);
+
   // optional .cockroach.roachpb.Timestamp last_heartbeat = 5;
   bool has_last_heartbeat() const;
   void clear_last_heartbeat();
@@ -1545,6 +1552,8 @@ class Transaction : public ::google::protobuf::Message {
   inline void clear_has_priority();
   inline void set_has_status();
   inline void clear_has_status();
+  inline void set_has_heartbeat_interval();
+  inline void clear_has_heartbeat_interval();
   inline void set_has_last_heartbeat();
   inline void clear_has_last_heartbeat();
   inline void set_has_orig_timestamp();
@@ -1563,6 +1572,7 @@ class Transaction : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr name_;
   ::google::protobuf::int32 priority_;
   int status_;
+  ::google::protobuf::int64 heartbeat_interval_;
   ::cockroach::roachpb::Timestamp* last_heartbeat_;
   ::cockroach::roachpb::Timestamp* orig_timestamp_;
   ::cockroach::roachpb::Timestamp* max_timestamp_;
@@ -3277,15 +3287,39 @@ inline void Transaction::set_status(::cockroach::roachpb::TransactionStatus valu
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.status)
 }
 
-// optional .cockroach.roachpb.Timestamp last_heartbeat = 5;
-inline bool Transaction::has_last_heartbeat() const {
+// optional int64 heartbeat_interval = 12;
+inline bool Transaction::has_heartbeat_interval() const {
   return (_has_bits_[0] & 0x00000010u) != 0;
 }
-inline void Transaction::set_has_last_heartbeat() {
+inline void Transaction::set_has_heartbeat_interval() {
   _has_bits_[0] |= 0x00000010u;
 }
-inline void Transaction::clear_has_last_heartbeat() {
+inline void Transaction::clear_has_heartbeat_interval() {
   _has_bits_[0] &= ~0x00000010u;
+}
+inline void Transaction::clear_heartbeat_interval() {
+  heartbeat_interval_ = GOOGLE_LONGLONG(0);
+  clear_has_heartbeat_interval();
+}
+inline ::google::protobuf::int64 Transaction::heartbeat_interval() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.heartbeat_interval)
+  return heartbeat_interval_;
+}
+inline void Transaction::set_heartbeat_interval(::google::protobuf::int64 value) {
+  set_has_heartbeat_interval();
+  heartbeat_interval_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.heartbeat_interval)
+}
+
+// optional .cockroach.roachpb.Timestamp last_heartbeat = 5;
+inline bool Transaction::has_last_heartbeat() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void Transaction::set_has_last_heartbeat() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void Transaction::clear_has_last_heartbeat() {
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void Transaction::clear_last_heartbeat() {
   if (last_heartbeat_ != NULL) last_heartbeat_->::cockroach::roachpb::Timestamp::Clear();
@@ -3322,13 +3356,13 @@ inline void Transaction::set_allocated_last_heartbeat(::cockroach::roachpb::Time
 
 // optional .cockroach.roachpb.Timestamp orig_timestamp = 6;
 inline bool Transaction::has_orig_timestamp() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void Transaction::set_has_orig_timestamp() {
-  _has_bits_[0] |= 0x00000020u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void Transaction::clear_has_orig_timestamp() {
-  _has_bits_[0] &= ~0x00000020u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void Transaction::clear_orig_timestamp() {
   if (orig_timestamp_ != NULL) orig_timestamp_->::cockroach::roachpb::Timestamp::Clear();
@@ -3365,13 +3399,13 @@ inline void Transaction::set_allocated_orig_timestamp(::cockroach::roachpb::Time
 
 // optional .cockroach.roachpb.Timestamp max_timestamp = 7;
 inline bool Transaction::has_max_timestamp() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
+  return (_has_bits_[0] & 0x00000080u) != 0;
 }
 inline void Transaction::set_has_max_timestamp() {
-  _has_bits_[0] |= 0x00000040u;
+  _has_bits_[0] |= 0x00000080u;
 }
 inline void Transaction::clear_has_max_timestamp() {
-  _has_bits_[0] &= ~0x00000040u;
+  _has_bits_[0] &= ~0x00000080u;
 }
 inline void Transaction::clear_max_timestamp() {
   if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
@@ -3426,13 +3460,13 @@ Transaction::mutable_observed_timestamps() {
 
 // optional bool Writing = 9;
 inline bool Transaction::has_writing() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void Transaction::set_has_writing() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void Transaction::clear_has_writing() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void Transaction::clear_writing() {
   writing_ = false;
@@ -3450,13 +3484,13 @@ inline void Transaction::set_writing(bool value) {
 
 // optional uint32 Sequence = 10;
 inline bool Transaction::has_sequence() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void Transaction::set_has_sequence() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void Transaction::clear_has_sequence() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void Transaction::clear_sequence() {
   sequence_ = 0u;

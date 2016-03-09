@@ -555,6 +555,7 @@ func (txn *Txn) send(maxScanResults int64, reqs ...roachpb.Request) (
 			Span: roachpb.Span{
 				Key: firstWriteKey,
 			},
+			HeartbeatInterval: txn.Proto.HeartbeatInterval,
 		}
 		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
 	}

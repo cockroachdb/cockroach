@@ -780,6 +780,9 @@ func (t *Transaction) Update(o *Transaction) {
 		}
 		t.LastHeartbeat.Forward(*o.LastHeartbeat)
 	}
+	if o.HeartbeatInterval != nil {
+		t.HeartbeatInterval = o.HeartbeatInterval
+	}
 
 	// Absorb the collected clock uncertainty information.
 	for k, v := range o.ObservedTimestamps {
