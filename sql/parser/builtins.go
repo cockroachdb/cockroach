@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -568,7 +569,7 @@ var builtins = map[string][]builtin{
 			returnType: typeTimestamp,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DTimestamp{Time: time.Now()}, nil
+				return DTimestamp{Time: timeutil.Now()}, nil
 			},
 		},
 	},
@@ -1554,14 +1555,14 @@ var uniqueBytesState struct {
 func generateUniqueBytes(nodeID roachpb.NodeID) DBytes {
 	// Unique bytes are composed of the current time in nanoseconds and the
 	// node-id. If the nanosecond value is the same on two consecutive calls to
-	// time.Now() the nanoseconds value is incremented. The node-id is varint
+	// timeutil.Now() the nanoseconds value is incremented. The node-id is varint
 	// encoded. Since node-ids are allocated consecutively starting at 1, the
 	// node-id field will consume 1 or 2 bytes for any reasonably sized cluster.
 	//
 	// TODO(pmattis): Do we have to worry about persisting the milliseconds value
 	// periodically to avoid the clock ever going backwards (e.g. due to NTP
 	// adjustment)?
-	nanos := uint64(time.Now().UnixNano())
+	nanos := uint64(timeutil.Now().UnixNano())
 	uniqueBytesState.Lock()
 	if nanos <= uniqueBytesState.nanos {
 		nanos = uniqueBytesState.nanos + 1
@@ -1602,7 +1603,7 @@ func generateUniqueInt(nodeID roachpb.NodeID) DInt {
 	const precision = uint64(10 * time.Microsecond)
 	const nodeIDBits = 15
 
-	nowNanos := time.Now().UnixNano()
+	nowNanos := timeutil.Now().UnixNano()
 	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
 	if nowNanos < uniqueIntEpoch {
 		nowNanos = uniqueIntEpoch

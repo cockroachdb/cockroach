@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 type cliTest struct {
@@ -759,7 +760,7 @@ func Example_node() {
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	start := time.Now()
+	start := timeutil.Now()
 	c := newCLITest()
 	defer c.stop()
 

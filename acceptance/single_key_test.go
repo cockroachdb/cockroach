@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // TestSingleKey stresses the transaction retry machinery by starting
@@ -51,7 +52,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	}
 
 	resultCh := make(chan result, num)
-	deadline := time.Now().Add(cfg.Duration)
+	deadline := timeutil.Now().Add(cfg.Duration)
 	var expected int64
 
 	// Start up num workers each reading and writing the same
@@ -62,8 +63,8 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 		defer dbStopper.Stop()
 		go func() {
 			var r result
-			for time.Now().Before(deadline) {
-				start := time.Now()
+			for timeutil.Now().Before(deadline) {
+				start := timeutil.Now()
 				pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 					minExp := atomic.LoadInt64(&expected)
 					r, pErr := txn.Get(key)

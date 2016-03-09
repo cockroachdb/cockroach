@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -621,7 +622,7 @@ func (l *LocalCluster) stop() {
 			// structured logs?
 			file := filepath.Join(outputLogDir, nodeStr(i),
 				fmt.Sprintf("stderr.%s.log", strings.Replace(
-					time.Now().Format(time.RFC3339), ":", "_", -1)))
+					timeutil.Now().Format(time.RFC3339), ":", "_", -1)))
 
 			maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
 			w, err := os.Create(file)
