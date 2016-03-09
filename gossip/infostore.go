@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 type stringMatcher interface {
@@ -88,7 +89,7 @@ func monotonicUnixNano() int64 {
 	monoTime.Lock()
 	defer monoTime.Unlock()
 
-	now := time.Now().UnixNano()
+	now := timeutil.Now().UnixNano()
 	if now <= monoTime.last {
 		now = monoTime.last + 1
 	}
@@ -152,7 +153,7 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 func (is *infoStore) getInfo(key string) *Info {
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and discard if too old.
-		if info.expired(time.Now().UnixNano()) {
+		if info.expired(timeutil.Now().UnixNano()) {
 			delete(is.Infos, key)
 		} else {
 			return info
@@ -289,7 +290,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 // function against each info in turn. Be sure to skip over any expired
 // infos.
 func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
-	now := time.Now().UnixNano()
+	now := timeutil.Now().UnixNano()
 
 	if visitInfo != nil {
 		for k, i := range is.Infos {

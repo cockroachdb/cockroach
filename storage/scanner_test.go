@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Test implementation of a range set backed by btree.BTree.
@@ -281,7 +282,7 @@ func TestScannerPaceInterval(t *testing.T) {
 		}
 	}
 	for _, duration := range durations {
-		startTime := time.Now()
+		startTime := timeutil.Now()
 		ranges := newTestRangeSet(count, t)
 		s := newReplicaScanner(duration, 0, ranges)
 		interval := s.paceInterval(startTime, startTime)

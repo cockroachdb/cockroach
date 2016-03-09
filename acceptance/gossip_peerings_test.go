@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const longWaitTime = 2 * time.Minute
@@ -110,14 +111,14 @@ func TestGossipPeerings(t *testing.T) {
 func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(cfg.Duration)
+	deadline := timeutil.Now().Add(cfg.Duration)
 
 	waitTime := longWaitTime
 	if cfg.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 
-	for time.Now().Before(deadline) {
+	for timeutil.Now().Before(deadline) {
 		checkGossip(t, c, waitTime, hasPeers(num))
 
 		// Restart the first node.
@@ -158,14 +159,14 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 	// lease can be acquired.
 	num := c.NumNodes()
 
-	deadline := time.Now().Add(cfg.Duration)
+	deadline := timeutil.Now().Add(cfg.Duration)
 
 	waitTime := longWaitTime
 	if cfg.Duration < waitTime {
 		waitTime = shortWaitTime
 	}
 
-	for time.Now().Before(deadline) {
+	for timeutil.Now().Before(deadline) {
 		log.Infof("waiting for initial gossip connections")
 		checkGossip(t, c, waitTime, hasPeers(num))
 		checkGossip(t, c, waitTime, hasClusterID)

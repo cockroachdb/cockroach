@@ -35,6 +35,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -716,7 +718,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	l.mu.Lock()
 
 	// Set additional details in log entry.
-	now := time.Now()
+	now := timeutil.Now()
 	entry := Entry{
 		Severity: int(s),
 		Time:     now.UnixNano(),
@@ -913,7 +915,7 @@ func (sb *syncBuffer) Sync() error {
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	if sb.nbytes+uint64(len(p)) >= MaxSize {
-		if err := sb.rotateFile(time.Now()); err != nil {
+		if err := sb.rotateFile(timeutil.Now()); err != nil {
 			sb.logger.exit(err)
 		}
 	}
@@ -986,7 +988,7 @@ func (l *loggingT) removeFilesLocked() error {
 // createFiles creates all the log files for severity from sev down to InfoLog.
 // l.mu is held.
 func (l *loggingT) createFiles(sev Severity) error {
-	now := time.Now()
+	now := timeutil.Now()
 	// Files are created in decreasing severity order, so as soon as we find one
 	// has already been created, we can stop.
 	for s := sev; s >= InfoLog && l.file[s] == nil; s-- {

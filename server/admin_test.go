@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // getText fetches the HTTP response body as text in the form of a
@@ -483,7 +484,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	start := time.Now()
+	start := timeutil.Now()
 
 	mustSetUIData := func(key string, val []byte) {
 		var resp struct{}
@@ -505,7 +506,7 @@ func TestAdminAPIUIData(t *testing.T) {
 		}
 
 		// Sanity check LastUpdated.
-		now := time.Now()
+		now := timeutil.Now()
 		lastUpdated := time.Unix(resp.LastUpdated.Sec, int64(resp.LastUpdated.Nsec))
 		if lastUpdated.Before(start) {
 			t.Fatalf("lastUpdated %s < start %s", lastUpdated, start)

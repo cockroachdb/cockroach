@@ -25,6 +25,8 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/codahale/hdrhistogram"
 	"github.com/rcrowley/go-metrics"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const histWrapNum = 4 // number of histograms to keep in rolling window
@@ -76,10 +78,8 @@ type periodic interface {
 var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
-var now = time.Now
-
 func maybeTick(m periodic) {
-	for m.nextTick().Before(now()) {
+	for m.nextTick().Before(timeutil.Now()) {
 		m.tick()
 	}
 }
@@ -100,7 +100,7 @@ type Histogram struct {
 func NewHistogram(duration time.Duration, maxVal int64, sigFigs int) *Histogram {
 	h := &Histogram{}
 	h.maxVal = int64(maxVal)
-	h.nextT = now()
+	h.nextT = timeutil.Now()
 	h.duration = duration
 
 	h.windowed = hdrhistogram.NewWindowed(histWrapNum, 0, h.maxVal, sigFigs)
@@ -226,7 +226,7 @@ func NewRate(timescale time.Duration) *Rate {
 
 	return &Rate{
 		interval: tickInterval,
-		nextT:    now(),
+		nextT:    timeutil.Now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
 }

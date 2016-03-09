@@ -20,6 +20,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // verifyAddr starts a server listener at the specified addr and
@@ -65,7 +67,7 @@ func TestSucceedsSoon(t *testing.T) {
 	SucceedsSoon(t, func() error { return nil })
 
 	// Try a method which succeeds after a known duration.
-	start := time.Now()
+	start := timeutil.Now()
 	duration := time.Millisecond * 10
 	SucceedsSoon(t, func() error {
 		elapsed := time.Since(start)
