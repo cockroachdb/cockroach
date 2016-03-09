@@ -99,8 +99,6 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.BeginTransaction:
 		pNode, err := p.BeginTransaction(n)
 		return pNode, roachpb.NewError(err)
-	case *parser.CommitTransaction:
-		return p.CommitTransaction(n)
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *parser.CreateIndex:
@@ -133,8 +131,6 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 		return p.RenameTable(n)
 	case *parser.Revoke:
 		return p.Revoke(n)
-	case *parser.RollbackTransaction:
-		return p.RollbackTransaction(n)
 	case *parser.Select:
 		return p.Select(n, autoCommit)
 	case *parser.SelectClause:

@@ -338,18 +338,19 @@ func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
 	return txn.sendEndTxnReq(true /* commit */, deadline)
 }
 
-// Cleanup cleans up the transaction as appropriate based on err.
-func (txn *Txn) Cleanup(pErr *roachpb.Error) {
-	if pErr != nil {
-		if replyErr := txn.Rollback(); replyErr != nil {
-			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, pErr)
-		}
+// CleanupOnError cleans up the transaction as a result of an error.
+func (txn *Txn) CleanupOnError(pErr *roachpb.Error) {
+	if pErr == nil {
+		panic("CleanupOnError called without an error")
+	}
+	if replyErr := txn.Rollback(); replyErr != nil {
+		log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, pErr)
 	}
 }
 
 // CommitNoCleanup is the same as Commit but will not attempt to clean
-// up on failure. It is exposed only for use in txn_correctness_test.go
-// because those tests manipulate transaction state at a low level.
+// up on failure. This can be used when the caller is prepared to do proper
+// cleanup.
 func (txn *Txn) CommitNoCleanup() *roachpb.Error {
 	return txn.commit(nil)
 }
@@ -378,7 +379,9 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() *roachpb.Error {
 	pErr := txn.commit(nil)
-	txn.Cleanup(pErr)
+	if pErr != nil {
+		txn.CleanupOnError(pErr)
+	}
 	return pErr
 }
 
@@ -386,7 +389,9 @@ func (txn *Txn) Commit() *roachpb.Error {
 // Deadline=deadline.
 func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
 	pErr := txn.commit(&deadline)
-	txn.Cleanup(pErr)
+	if pErr != nil {
+		txn.CleanupOnError(pErr)
+	}
 	return pErr
 }
 
@@ -505,10 +510,10 @@ RetryLoop:
 		}
 	}
 
-	if txn != nil {
-		// TODO(andrei): don't do Cleanup() on retryable errors here.
+	if txn != nil && pErr != nil {
+		// TODO(andrei): don't do Cleanup() on retriable errors here.
 		// Let the sql executor do it.
-		txn.Cleanup(pErr)
+		txn.CleanupOnError(pErr)
 	}
 
 	if pErr != nil {
