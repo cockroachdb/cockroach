@@ -536,7 +536,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	// Local addressing has already been resolved.
 	// TODO(tschottdorf): consider rudimentary validation of the batch here
 	// (for example, non-range requests with EndKey, or empty key ranges).
-	rs := keys.Range(ba)
+	rs, err := keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err), false
+	}
 	var br *roachpb.BatchResponse
 	// Send the request to one range per iteration.
 	for {
@@ -552,7 +555,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// refresh (likely from the cache) on every retry.
 			sp.LogEvent("meta descriptor lookup")
 			var evictDesc func()
-			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
+			desc, needAnother, evictDesc, pErr = ds.getDescriptors(*rs, considerIntents, isReverse)
 
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
