@@ -10,6 +10,7 @@
 		cockroach/roachpb/data.proto
 		cockroach/roachpb/errors.proto
 		cockroach/roachpb/internal.proto
+		cockroach/roachpb/internal_raft.proto
 		cockroach/roachpb/metadata.proto
 
 	It has these top-level messages:
@@ -102,9 +103,9 @@
 		ErrorDetail
 		ErrPosition
 		Error
-		RaftCommand
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
+		RaftCommand
 		RaftTruncatedState
 		RaftTombstone
 		RaftSnapshotData

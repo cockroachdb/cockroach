@@ -150,7 +150,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
-	iter := newReplicaDataIterator(desc, snap)
+	iter := newReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 	defer snap.Close()
 
@@ -299,12 +299,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	ba.Add(gcArgs)
 	if _, pErr := repl.Send(repl.context(), ba); pErr != nil {
 		return pErr.GoError()
-	}
-
-	// Store current timestamp as last verification for this replica, as
-	// we've just successfully scanned.
-	if err := repl.setLastVerificationTimestamp(now); err != nil {
-		log.Errorf("failed to set last verification timestamp for replica %s: %s", repl, err)
 	}
 
 	return nil
