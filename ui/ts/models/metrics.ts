@@ -311,17 +311,20 @@ module Models {
 
       private static dispatch_query(q: Proto.QueryRequestSet): promise<QueryResultSet> {
           return Utils.Http.Post("/ts/query", q)
-              .then((d: Proto.QueryResultSet) => {
+              .then((d: Proto.Results) => {
                   // Populate missing collection fields with empty arrays.
                   if (!d.results) {
                       d.results = [];
                   }
                   let result: QueryInfoSet<Proto.QueryResult> = new QueryInfoSet<Proto.QueryResult>();
-                  d.results.forEach((r: Proto.QueryResult) => {
-                      if (!r.datapoints) {
-                          r.datapoints = [];
-                      }
-                      result.add(r);
+                  d.results.forEach((r: Proto.Result) => {
+                      result.add({
+                        name: r.query.name,
+                        downsampler: r.query.downsampler,
+                        source_aggregator: r.query.source_aggregator,
+                        derivative: r.query.derivative,
+                        datapoints: r.query.datapoints || [],
+                      });
                   });
                   return result;
               });

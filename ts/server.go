@@ -86,14 +86,19 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		response.Results = append(response.Results, &TimeSeriesQueryResponse_Result{
-			Name:             q.Name,
-			Sources:          sources,
-			SourceAggregator: q.GetSourceAggregator().Enum(),
-			Downsampler:      q.GetDownsampler().Enum(),
-			Derivative:       q.GetDerivative().Enum(),
-			Datapoints:       datapoints,
-		})
+		result := &TimeSeriesQueryResponse_Result{
+			Query:      q,
+			Datapoints: datapoints,
+		}
+		// TODO(tamird): Remove this (and all other) explicit setting of defaults.
+		// It is currently required because the client side doesn't know about
+		// proto defaults.
+		result.SourceAggregator = q.GetSourceAggregator().Enum()
+		result.Downsampler = q.GetDownsampler().Enum()
+		result.Derivative = q.GetDerivative().Enum()
+
+		result.Sources = sources
+		response.Results = append(response.Results, result)
 	}
 
 	// Marshal and return response.

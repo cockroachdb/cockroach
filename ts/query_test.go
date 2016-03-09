@@ -242,7 +242,7 @@ func (tm *testModel) assertQuery(name string, sources []string,
 	downsample, agg *TimeSeriesQueryAggregator, derivative *TimeSeriesQueryDerivative,
 	r Resolution, start, end int64, expectedDatapointCount int, expectedSourceCount int) {
 	// Query the actual server.
-	q := TimeSeriesQueryRequest_Query{
+	q := Query{
 		Name:             name,
 		Downsampler:      downsample,
 		SourceAggregator: agg,

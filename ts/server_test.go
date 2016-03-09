@@ -102,11 +102,13 @@ func TestHttpQuery(t *testing.T) {
 	expectedResult := &ts.TimeSeriesQueryResponse{
 		Results: []*ts.TimeSeriesQueryResponse_Result{
 			{
-				Name:             "test.metric",
-				Sources:          []string{"source1", "source2"},
-				Downsampler:      ts.TimeSeriesQueryAggregator_AVG.Enum(),
-				SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
-				Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
+				Query: ts.Query{
+					Name:             "test.metric",
+					Sources:          []string{"source1", "source2"},
+					Downsampler:      ts.TimeSeriesQueryAggregator_AVG.Enum(),
+					SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
+					Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
+				},
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -123,11 +125,13 @@ func TestHttpQuery(t *testing.T) {
 				},
 			},
 			{
-				Name:             "other.metric",
-				Sources:          []string{""},
-				Downsampler:      ts.TimeSeriesQueryAggregator_AVG.Enum(),
-				SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
-				Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
+				Query: ts.Query{
+					Name:             "other.metric",
+					Sources:          []string{""},
+					Downsampler:      ts.TimeSeriesQueryAggregator_AVG.Enum(),
+					SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
+					Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
+				},
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -140,11 +144,13 @@ func TestHttpQuery(t *testing.T) {
 				},
 			},
 			{
-				Name:             "test.metric",
-				Sources:          []string{"source1", "source2"},
-				Downsampler:      ts.TimeSeriesQueryAggregator_MAX.Enum(),
-				SourceAggregator: ts.TimeSeriesQueryAggregator_MAX.Enum(),
-				Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
+				Query: ts.Query{
+					Name:             "test.metric",
+					Sources:          []string{"source1", "source2"},
+					Downsampler:      ts.TimeSeriesQueryAggregator_MAX.Enum(),
+					SourceAggregator: ts.TimeSeriesQueryAggregator_MAX.Enum(),
+					Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
+				},
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -168,7 +174,7 @@ func TestHttpQuery(t *testing.T) {
 	session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
-		Queries: []ts.TimeSeriesQueryRequest_Query{
+		Queries: []ts.Query{
 			{
 				Name: "test.metric",
 			},
