@@ -243,8 +243,13 @@ func (l *LocalCluster) createNetwork() {
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
 		Name:   "cockroachdb_acceptance",
 		Driver: "bridge",
+		// Docker gets very confused if two networks have the same name.
+		CheckDuplicate: true,
 	})
 	maybePanic(err)
+	if resp.Warning != "" {
+		log.Warningf("creating network: %s", resp.Warning)
+	}
 	l.networkID = resp.ID
 }
 
