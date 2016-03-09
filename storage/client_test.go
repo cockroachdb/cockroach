@@ -305,13 +305,21 @@ func (m *multiTestContext) Stop() {
 	}
 }
 
-// rpcSend implements the client.rpcSender interface. This implementation of "rpcSend" is
-// used to multiplex calls between many local senders in a simple way; It sends
-// the request to multiTestContext's localSenders specified in addrs. The request is
-// sent in order until no error is returned.
+// rpcSend implements the client.rpcSender interface. This
+// implementation of "rpcSend" is used to multiplex calls between many
+// local senders in a simple way; It sends the request to
+// multiTestContext's localSenders specified in addrs. The request is
+// sent in round-robin order (except if there's a not-leader error)
+// until no error is returned.
+//
 // TODO(bdarnell): This is mostly obsolete now that we have a real network
-// stack available. However, it's still needed to handle the interaction
-// with our manual clock in the event of retries.
+//   stack available. However, it's still needed to handle the interaction
+//   with our manual clock in the event of retries.
+// TODO(spencer): this rpc sender is limited in that it won't try other
+//   replicas after timeouts (like the one in kv/ does). That means that
+//   if a batch is sent to a node which will never be able to make forward
+//   progress in a test, it will get stuck there forever. We should implement
+//   timeouts here if other tests run into problems.
 func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 	ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 	m.mu.RLock()
@@ -323,7 +331,7 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 	}
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
-	for _, replica := range replicas {
+	for replicaIndex := 0; replicaIndex < len(replicas); {
 		if txn := ba.Txn; txn != nil {
 			txnClone := ba.Txn.Clone()
 			ba.Txn = &txnClone
@@ -346,6 +354,7 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 		}) {
 			pErr = roachpb.NewError(roachpb.NewSendError("store is stopped", true))
 			m.expireLeaderLeases()
+			replicaIndex++
 			continue
 		}
 		if pErr == nil {
@@ -363,6 +372,19 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 			} else if m.stores[tErr.Leader.NodeID-1] == nil {
 				// The leader is known but down, so expire its lease.
 				m.expireLeaderLeases()
+			} else {
+				// Find replica for redirect.
+				found := false
+				for i, r := range replicas {
+					if r.NodeDesc.NodeID == tErr.Leader.NodeID {
+						replicaIndex = i
+						found = true
+						break
+					}
+				}
+				if found {
+					continue
+				}
 			}
 		default:
 			if testutils.IsPError(pErr, `store \d+ not found`) {
@@ -373,6 +395,7 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 			// the command failed.
 			return fail(pErr)
 		}
+		replicaIndex++
 	}
 	if pErr == nil {
 		panic("err must not be nil here")
