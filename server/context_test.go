@@ -17,8 +17,10 @@
 package server
 
 import (
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -70,5 +72,69 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	expected := []resolver.Resolver{r1, r2}
 	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
 		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
+	}
+}
+
+// TestReadEnvironmentVariables verifies that all environment variables are
+// correctly parsed.
+func TestReadEnvironmentVariables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	resetEnvVar := func() {
+		// Reset all environment variables in case any were already set.
+		os.Unsetenv("cockroach-linearizable")
+		os.Unsetenv("cockroach-max-offset")
+		os.Unsetenv("cockroach-metrics-frequency")
+		os.Unsetenv("cockroach-scan-interval")
+		os.Unsetenv("cockroach-scan-max-idle-time")
+		os.Unsetenv("cockroach-time-until-store-dead")
+	}
+	defer resetEnvVar()
+
+	// Makes sure no values are set when no environment variables are set.
+	ctx := NewContext()
+	ctxExpected := NewContext()
+
+	resetEnvVar()
+	ctx.readEnvironmentVariables()
+	if !reflect.DeepEqual(ctx, ctxExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	}
+
+	// Set all the environment variables to valid values and ensure they are set
+	// correctly.
+	os.Setenv("cockroach-linearizable", "true")
+	ctxExpected.Linearizable = true
+	os.Setenv("cockroach-max-offset", "1s")
+	ctxExpected.MaxOffset = time.Second
+	os.Setenv("cockroach-metrics-frequency", "1h10m")
+	ctxExpected.MetricsFrequency = time.Hour + time.Minute*10
+	os.Setenv("cockroach-scan-interval", "48h")
+	ctxExpected.ScanInterval = time.Hour * 48
+	os.Setenv("cockroach-scan-max-idle-time", "100ns")
+	ctxExpected.ScanMaxIdleTime = time.Nanosecond * 100
+	os.Setenv("cockroach-time-until-store-dead", "10ms")
+	ctxExpected.TimeUntilStoreDead = time.Millisecond * 10
+
+	ctx.readEnvironmentVariables()
+	if !reflect.DeepEqual(ctx, ctxExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	}
+
+	// Set all the environment variables to invalid values and test that the
+	// defaults are still set.
+	ctx = NewContext()
+	ctxExpected = NewContext()
+
+	os.Setenv("cockroach-linearizable", "abcd")
+	os.Setenv("cockroach-max-offset", "abcd")
+	os.Setenv("cockroach-metrics-frequency", "abcd")
+	os.Setenv("cockroach-scan-interval", "abcd")
+	os.Setenv("cockroach-scan-max-idle-time", "abcd")
+	os.Setenv("cockroach-time-until-store-dead", "abcd")
+
+	ctx.readEnvironmentVariables()
+	if !reflect.DeepEqual(ctx, ctxExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
 	}
 }
