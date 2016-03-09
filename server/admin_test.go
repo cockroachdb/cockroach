@@ -73,7 +73,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	jI, err := getJSON(s.Ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "vars")
+	jI, err := getJSON(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + "vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestAdminDebugPprof(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + debugEndpoint + "pprof/block")
+	body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestAdminNetTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + debugEndpoint + c.segment)
+		body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + c.segment)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func apiGet(s *TestServer, path string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return util.GetJSON(client, s.Ctx.HTTPRequestScheme(), s.ServingAddr(), apiPath, v)
+	return util.GetJSON(client, s.Ctx.HTTPRequestScheme(), s.HTTPAddr(), apiPath, v)
 }
 
 // apiPost issues a POST to the provided server using the given API path and
@@ -146,7 +146,7 @@ func apiPost(s *TestServer, path, body string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return util.PostJSON(client, s.Ctx.HTTPRequestScheme(), s.ServingAddr(), apiPath, body, v)
+	return util.PostJSON(client, s.Ctx.HTTPRequestScheme(), s.HTTPAddr(), apiPath, body, v)
 }
 
 func TestAdminAPIDatabases(t *testing.T) {

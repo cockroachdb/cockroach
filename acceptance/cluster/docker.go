@@ -32,6 +32,7 @@ import (
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/network"
+	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -243,21 +244,21 @@ func (c *Container) Inspect() (types.ContainerJSON, error) {
 }
 
 // Addr returns the TCP address to connect to.
-func (c *Container) Addr() *net.TCPAddr {
+func (c *Container) Addr(port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect()
 	if err != nil {
 		return nil
 	}
-	bindings, ok := containerInfo.NetworkSettings.Ports[defaultTCP]
+	bindings, ok := containerInfo.NetworkSettings.Ports[port]
 	if !ok || len(bindings) == 0 {
 		return nil
 	}
-	port, err := strconv.Atoi(bindings[0].HostPort)
+	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
 		return nil
 	}
 	return &net.TCPAddr{
 		IP:   dockerIP(),
-		Port: port,
+		Port: portNum,
 	}
 }
