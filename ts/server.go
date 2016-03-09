@@ -89,8 +89,9 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 		response.Results = append(response.Results, &TimeSeriesQueryResponse_Result{
 			Name:             q.Name,
 			Sources:          sources,
-			SourceAggregator: q.SourceAggregator,
-			Downsampler:      q.Downsampler,
+			SourceAggregator: q.GetSourceAggregator().Enum(),
+			Downsampler:      q.GetDownsampler().Enum(),
+			Derivative:       q.GetDerivative().Enum(),
 			Datapoints:       datapoints,
 		})
 	}
