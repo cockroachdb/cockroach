@@ -186,7 +186,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		LogRangeEvents: true,
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
-			Mode:           s.ctx.BalanceMode,
+			Mode:           storage.BalanceModeUsage,
 		},
 		TestingMocker: ctx.TestingMocker.StoreTestingMocker,
 	}

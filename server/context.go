@@ -50,7 +50,6 @@ const (
 	defaultScanMaxIdleTime    = 5 * time.Second
 	defaultMetricsFrequency   = 10 * time.Second
 	defaultTimeUntilStoreDead = 5 * time.Minute
-	defaultBalanceMode        = storage.BalanceModeUsage
 )
 
 // Context holds parameters needed to setup a server.
@@ -90,9 +89,6 @@ type Context struct {
 	// MemtableBudget is the amount of memory in bytes to use for the memory
 	// table. The value is split evenly between the stores if there are more than one.
 	MemtableBudget uint64
-
-	// BalanceMode determines how this node makes balancing decisions.
-	BalanceMode storage.BalanceMode
 
 	// Parsed values.
 
@@ -185,7 +181,6 @@ func (ctx *Context) InitDefaults() {
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
-	ctx.BalanceMode = defaultBalanceMode
 	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})
 }
 

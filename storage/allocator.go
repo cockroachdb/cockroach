@@ -21,14 +21,12 @@ package storage
 import (
 	"fmt"
 	"math/rand"
-	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/spf13/pflag"
 )
 
 const (
@@ -85,43 +83,6 @@ const (
 	// count of each node.
 	BalanceModeRangeCount
 )
-
-// balanceModeLookup is used to map BalanceMode values to strings, used for
-// accepting command line options.
-var balanceModeLookup = [...]string{
-	BalanceModeUsage:      "usage",
-	BalanceModeRangeCount: "rangecount",
-}
-
-// String is needed to implement the pflag.Value interface, allowing this to be
-// set from the command line.
-func (r *BalanceMode) String() string {
-	idx := int(*r)
-	if idx < 0 || idx >= len(balanceModeLookup) {
-		return strconv.Itoa(idx)
-	}
-	return balanceModeLookup[idx]
-}
-
-// Set configures the given BalanceMode from a string provided from the
-// command line. It returns an error if the provided string value is not
-// recognized. Needed to implement pflag.Value.
-func (r *BalanceMode) Set(value string) error {
-	for i, s := range balanceModeLookup {
-		if value == s {
-			*r = BalanceMode(i)
-			return nil
-		}
-	}
-	return fmt.Errorf("%s is not a valid balance mode", value)
-}
-
-// Type is needed by the pflag.Value interface.
-func (r *BalanceMode) Type() string {
-	return "string"
-}
-
-var _ pflag.Value = new(BalanceMode)
 
 // allocatorError indicates a retryable error condition which sends replicas
 // being processed through the replicate_queue into purgatory so that they
@@ -225,7 +186,7 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	case BalanceModeRangeCount:
 		a.balancer = rangeCountBalancer{a.randGen}
 	default:
-		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %s", options.Mode.String()))
+		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %d", options.Mode))
 	}
 
 	return a
