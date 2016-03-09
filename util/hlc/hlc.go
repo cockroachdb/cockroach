@@ -206,11 +206,11 @@ func (c *Clock) Update(rt roachpb.Timestamp) roachpb.Timestamp {
 	// as it is behind the local and remote wall times. Instead,
 	// the logical clock comes into play.
 	if rt.WallTime > c.state.WallTime {
-		if c.maxOffset.Nanoseconds() > 0 &&
-			rt.WallTime-physicalClock > c.maxOffset.Nanoseconds() {
+
+		offset := time.Duration(rt.WallTime-physicalClock) * time.Nanosecond
+		if c.maxOffset > 0 && offset > c.maxOffset {
 			// The remote wall time is too far ahead to be trustworthy.
-			log.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
-				rt.WallTime, rt.WallTime-physicalClock)
+			log.Errorf("Remote wall time offsets from local physical clock: %s (%s ahead)", rt.GoTime(), offset)
 		}
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.
