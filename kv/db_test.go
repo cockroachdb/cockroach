@@ -243,7 +243,6 @@ func TestKVDBTransaction(t *testing.T) {
 // TestAuthentication tests authentication for the KV endpoint.
 func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(tamird): grpc is listening on a cmux listener, not a tls.Listener. See https://github.com/golang/go/issues/14221")
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
