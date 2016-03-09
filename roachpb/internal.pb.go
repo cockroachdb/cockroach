@@ -55,7 +55,7 @@ type InternalTimeSeriesData struct {
 	// The duration of each sample interval, expressed in nanoseconds.
 	SampleDurationNanos int64 `protobuf:"varint,2,opt,name=sample_duration_nanos" json:"sample_duration_nanos"`
 	// The actual data samples for this metric.
-	Samples []*InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples,omitempty"`
+	Samples []InternalTimeSeriesSample `protobuf:"bytes,3,rep,name=samples" json:"samples"`
 }
 
 func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{} }
@@ -128,8 +128,8 @@ func (*RaftTombstone) ProtoMessage()    {}
 // all of the range's data and metadata, including the raft log, sequence cache, etc.
 type RaftSnapshotData struct {
 	// The latest RangeDescriptor
-	RangeDescriptor RangeDescriptor              `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
-	KV              []*RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep,name=KV" json:"KV,omitempty"`
+	RangeDescriptor RangeDescriptor             `protobuf:"bytes,1,opt,name=range_descriptor" json:"range_descriptor"`
+	KV              []RaftSnapshotData_KeyValue `protobuf:"bytes,2,rep,name=KV" json:"KV"`
 }
 
 func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
@@ -733,7 +733,7 @@ func (m *InternalTimeSeriesData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Samples = append(m.Samples, &InternalTimeSeriesSample{})
+			m.Samples = append(m.Samples, InternalTimeSeriesSample{})
 			if err := m.Samples[len(m.Samples)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1145,7 +1145,7 @@ func (m *RaftSnapshotData) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.KV = append(m.KV, &RaftSnapshotData_KeyValue{})
+			m.KV = append(m.KV, RaftSnapshotData_KeyValue{})
 			if err := m.KV[len(m.KV)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

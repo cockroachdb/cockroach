@@ -99,7 +99,7 @@ func (ds *dataSpan) addData(data *roachpb.InternalTimeSeriesData) error {
 
 // downsampleFn is a function which extracts a float64 value from a time series
 // sample.
-type downsampleFn func(*roachpb.InternalTimeSeriesSample) float64
+type downsampleFn func(roachpb.InternalTimeSeriesSample) float64
 
 // dataSpanIterator is used to iterate through the samples in a dataSpan.
 // Samples are spread across multiple InternalTimeSeriesData objects; this
@@ -584,13 +584,13 @@ func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSp
 func getDownsampleFunction(agg TimeSeriesQueryAggregator) (downsampleFn, error) {
 	switch agg {
 	case TimeSeriesQueryAggregator_AVG:
-		return (*roachpb.InternalTimeSeriesSample).Average, nil
+		return (roachpb.InternalTimeSeriesSample).Average, nil
 	case TimeSeriesQueryAggregator_SUM:
-		return (*roachpb.InternalTimeSeriesSample).Summation, nil
+		return (roachpb.InternalTimeSeriesSample).Summation, nil
 	case TimeSeriesQueryAggregator_MAX:
-		return (*roachpb.InternalTimeSeriesSample).Maximum, nil
+		return (roachpb.InternalTimeSeriesSample).Maximum, nil
 	case TimeSeriesQueryAggregator_MIN:
-		return (*roachpb.InternalTimeSeriesSample).Minimum, nil
+		return (roachpb.InternalTimeSeriesSample).Minimum, nil
 	}
 	return nil, util.Errorf("query specified unknown time series aggregator %s", agg.String())
 }

@@ -84,7 +84,7 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 		// Create a new sample for this datapoint and place it into the
 		// InternalTimeSeriesData.
 		sampleOffset := int32((dp.TimestampNanos - keyTime) / sampleDuration)
-		sample := &roachpb.InternalTimeSeriesSample{
+		sample := roachpb.InternalTimeSeriesSample{
 			Offset: sampleOffset,
 			Count:  1,
 			Sum:    dp.Value,
