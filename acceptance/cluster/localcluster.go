@@ -54,7 +54,9 @@ const (
 	builderImageFull = builderImage + ":" + builderTag
 )
 
-const defaultTCP nat.Port = base.DefaultPort + "/tcp"
+// DefaultTCP is the default SQL/RPC port specification.
+const DefaultTCP nat.Port = base.DefaultPort + "/tcp"
+const defaultHTTP nat.Port = base.DefaultHTTPPort + "/tcp"
 
 var cockroachImage = flag.String("i", builderImageFull, "the docker image to run")
 var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
@@ -369,7 +371,8 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 			Hostname: hostname,
 			Image:    *cockroachImage,
 			ExposedPorts: map[nat.Port]struct{}{
-				defaultTCP: {},
+				DefaultTCP:  {},
+				defaultHTTP: {},
 			},
 			Entrypoint: entrypoint,
 			Env:        env,
@@ -441,7 +444,7 @@ func (l *LocalCluster) startNode(node *testNode) {
   logs:      %[3]s/cockroach.INFO
   pprof:     docker exec -it %[4]s /bin/bash -c 'go tool pprof /cockroach <(wget --no-check-certificate -qO- https://$(hostname):%[5]s/debug/pprof/heap)'
   cockroach: %[6]s`,
-		node.Name(), "https://"+node.Addr().String(), locallogDir, node.Container.id[:5], base.DefaultPort, cmd)
+		node.Name(), "https://"+node.Addr(DefaultTCP).String(), locallogDir, node.Container.id[:5], base.DefaultHTTPPort, cmd)
 }
 
 func (l *LocalCluster) processEvent(event events.Message) bool {
@@ -646,7 +649,7 @@ func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.St
 		User:  security.NodeUser,
 		Certs: l.CertsDir,
 	}, nil, stopper)
-	sender, err := roachClient.NewSender(rpcContext, l.Nodes[i].Addr().String())
+	sender, err := roachClient.NewSender(rpcContext, l.Nodes[i].Addr(DefaultTCP).String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -664,7 +667,7 @@ func (l *LocalCluster) PGUrl(i int) string {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),
-		Host:     l.Nodes[i].Addr().String(),
+		Host:     l.Nodes[i].Addr(DefaultTCP).String(),
 		RawQuery: options.Encode(),
 	}
 	return pgURL.String()
@@ -687,5 +690,5 @@ func (l *LocalCluster) Restart(i int) error {
 
 // URL returns the base url.
 func (l *LocalCluster) URL(i int) string {
-	return "https://" + l.Nodes[i].Addr().String()
+	return "https://" + l.Nodes[i].Addr(defaultHTTP).String()
 }

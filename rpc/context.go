@@ -33,7 +33,16 @@ const (
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
-	s := grpc.NewServer()
+	var s *grpc.Server
+	if ctx.Insecure {
+		s = grpc.NewServer()
+	} else {
+		tlsConfig, err := ctx.GetServerTLSConfig()
+		if err != nil {
+			panic(err)
+		}
+		s = grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	}
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.localClock,
 		remoteClockMonitor: ctx.RemoteClocks,
