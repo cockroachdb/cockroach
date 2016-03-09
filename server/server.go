@@ -221,17 +221,21 @@ func (s *Server) Start() error {
 	// (pg, http, h2) via the following construction:
 	//
 	// non-TLS case:
-	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	// net.Listen -> cmux.New
 	//               |
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
 	//               -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
 	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
 	//               -  -> cmux.Any -> http.(*Server).Serve
 	//
 	// TLS case:
-	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	// net.Listen -> cmux.New
 	//               |
-	//               -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
-	//               -  -> cmux.Any -> tls.NewListener -> http.(*Server).Serve
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.Any -> tls.NewListener -> cmux.New
+	//                                                    |
+	//                                                    -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
+	//                                                    -  -> cmux.Any -> http.(*Server).Serve
 	//
 	// Note that the difference between the TLS and non-TLS cases exists due to
 	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
