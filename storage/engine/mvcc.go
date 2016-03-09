@@ -1371,27 +1371,29 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, intent roachpb.Intent) error {
+	buf := putBufferPool.Get().(*putBuffer)
+	iter := engine.NewIterator(intent.Key)
+	err := mvccResolveWriteIntent(engine, iter, ms, intent, buf)
+	// Using defer would be more convenient, but it is measurably slower.
+	putBufferPool.Put(buf)
+	iter.Close()
+	return err
+}
+
+// MVCCResolveWriteIntentUsingIter is a variant of MVCCResolveWriteIntent that
+// uses iterator and buffer passed as parameters (e.g. when used in a loop).
+func MVCCResolveWriteIntentUsingIter(engine Engine, iterAndBuf IterAndBuf, ms *MVCCStats, intent roachpb.Intent) error {
+	return mvccResolveWriteIntent(engine, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+}
+
+func mvccResolveWriteIntent(engine Engine, iter Iterator, ms *MVCCStats,
+	intent roachpb.Intent, buf *putBuffer) error {
 	if len(intent.Key) == 0 {
 		return emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
 		return util.Errorf("can't resolve range intent as point intent")
 	}
-
-	buf := putBufferPool.Get().(*putBuffer)
-
-	iter := engine.NewIterator(intent.Key)
-	defer iter.Close()
-
-	err := mvccResolveWriteIntent(engine, iter, ms, intent, buf)
-
-	// Using defer would be more convenient, but it is measurably slower.
-	putBufferPool.Put(buf)
-	return err
-}
-
-func mvccResolveWriteIntent(engine Engine, iter Iterator, ms *MVCCStats,
-	intent roachpb.Intent, buf *putBuffer) error {
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, meta)
@@ -1560,42 +1562,71 @@ func mvccResolveWriteIntent(engine Engine, iter Iterator, ms *MVCCStats,
 	return nil
 }
 
+// IterAndBuf used to pass iterators and buffers between MVCC* calls, allowing
+// reuse without the callers needing to know the particulars.
+type IterAndBuf struct {
+	buf  *putBuffer
+	iter Iterator
+}
+
+// GetIterAndBuf returns a IterAndBuf for passing into various MVCC* methods.
+func GetIterAndBuf(engine Engine) IterAndBuf {
+	return IterAndBuf{
+		buf:  putBufferPool.Get().(*putBuffer),
+		iter: engine.NewIterator(nil),
+	}
+}
+
+// Cleanup must be called to release the resources when done.
+func (b IterAndBuf) Cleanup() {
+	putBufferPool.Put(b.buf)
+	b.iter.Close()
+}
+
 // MVCCResolveWriteIntentRange commits or aborts (rolls back) the
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
 func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64) (int64, error) {
-	encKey := MakeMVCCMetadataKey(intent.Key)
-	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
-	nextKey := encKey
-
 	buf := putBufferPool.Get().(*putBuffer)
 	defer putBufferPool.Put(buf)
 
 	iter := engine.NewIterator(nil)
 	defer iter.Close()
 
+	return MVCCResolveWriteIntentRangeUsingIter(engine, IterAndBuf{buf, iter}, ms, intent, max)
+}
+
+// MVCCResolveWriteIntentRange commits or aborts (rolls back) the
+// range of write intents specified by start and end keys for a given
+// txn. ResolveWriteIntentRange will skip write intents of other
+// txns. Specify max=0 for unbounded resolves.
+func MVCCResolveWriteIntentRangeUsingIter(engine Engine, iterAndBuf IterAndBuf, ms *MVCCStats, intent roachpb.Intent, max int64) (int64, error) {
+	encKey := MakeMVCCMetadataKey(intent.Key)
+	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
+	nextKey := encKey
+
 	var keyBuf []byte
 	num := int64(0)
 	intent.EndKey = nil
 
 	for {
-		iter.Seek(nextKey)
-		if !iter.Valid() || !iter.unsafeKey().Less(encEndKey) {
+		iterAndBuf.iter.Seek(nextKey)
+		if !iterAndBuf.iter.Valid() || !iterAndBuf.iter.unsafeKey().Less(encEndKey) {
 			// No more keys exists in the given range.
 			break
 		}
 
 		// Manually copy the underlying bytes of the unsafe key. This construction
 		// reuses keyBuf across iterations.
-		key := iter.unsafeKey()
+		key := iterAndBuf.iter.unsafeKey()
 		keyBuf = append(keyBuf[:0], key.Key...)
 		key.Key = keyBuf
 
 		var err error
 		if !key.IsValue() {
 			intent.Key = key.Key
-			err = mvccResolveWriteIntent(engine, iter, ms, intent, buf)
+			err = mvccResolveWriteIntent(engine, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 		}
 		if err != nil {
 			log.Warningf("failed to resolve intent for key %q: %v", key.Key, err)
