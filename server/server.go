@@ -164,8 +164,15 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+	eCtx := sql.ExecutorContext{
+		DB:            s.db,
+		Gossip:        s.gossip,
+		LeaseManager:  s.leaseMgr,
+		TestingMocker: ctx.TestingMocker.ExecutorTestingMocker,
+	}
+
 	sqlRegistry := metric.NewRegistry()
-	s.sqlExecutor = sql.NewExecutor(*s.db, s.gossip, s.leaseMgr, s.stopper, sqlRegistry)
+	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, sqlRegistry)
 
 	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor, sqlRegistry)
 

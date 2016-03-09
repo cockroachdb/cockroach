@@ -101,17 +101,14 @@ func (t *parallelTest) processTestFile(path string, db *sql.DB, ch chan bool) {
 }
 
 func (t *parallelTest) run(dir string) {
-	fmt.Printf("Running test %s\n", dir)
-	// Set up database
 	defer t.close()
-	ctx := server.NewTestContext()
-	ctx.MaxOffset = logicMaxOffset
-	t.srv = setupTestServer(t.T)
+	t.setup()
 
 	// Add the main client and set up the database.
 	t.addClient(true)
 
 	// Open the main faile.
+	fmt.Printf("Running test %s\n", dir)
 	mainFile := filepath.Join(dir, "main")
 	file, err := os.Open(mainFile)
 	if err != nil {
@@ -150,6 +147,14 @@ func (t *parallelTest) run(dir string) {
 			t.Fatalf("%s:%d: unknown command: %s", mainFile, s.line, cmd)
 		}
 	}
+}
+
+func (t *parallelTest) setup() {
+	ctx := server.NewTestContext()
+	ctx.MaxOffset = logicMaxOffset
+	ctx.TestingMocker.ExecutorTestingMocker.WaitForGossipUpdate = true
+	ctx.TestingMocker.ExecutorTestingMocker.CheckStmtStringChange = true
+	t.srv = setupTestServerWithContext(t.T, ctx)
 }
 
 func TestParallel(t *testing.T) {
