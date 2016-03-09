@@ -93,6 +93,7 @@ var (
 		{name: "RaftLog", suffix: localRaftLogSuffix, ppFunc: raftLogKeyPrint},
 		{name: "RaftTruncatedState", suffix: localRaftTruncatedStateSuffix},
 		{name: "RaftLastIndex", suffix: localRaftLastIndexSuffix},
+		{name: "RangeLastReplicaGCTimestamp", suffix: localRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: localRangeLastVerificationTimestampSuffix},
 		{name: "RangeLeaderLease", suffix: localRangeLeaderLeaseSuffix},
 		{name: "RangeStats", suffix: localRangeStatsSuffix},
@@ -287,6 +288,7 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 //			/[rangeid]/RaftLog/logIndex:[logIndex]    "\x01s"+[rangeid]+"rftl"+[logIndex]
 //			/[rangeid]/RaftTruncatedState             "\x01s"+[rangeid]+"rftt"
 //			/[rangeid]/RaftLastIndex                  "\x01s"+[rangeid]+"rfti"
+//			/[rangeid]/RangeLastReplicaGCTimestamp    "\x01s"+[rangeid]+"rlrt"
 //			/[rangeid]/RangeLastVerificationTimestamp "\x01s"+[rangeid]+"rlvt"
 //			/[rangeid]/RangeStats                     "\x01s"+[rangeid]+"stat"
 //		/Range/...                                  "\x01k"+...

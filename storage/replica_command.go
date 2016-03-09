@@ -1427,14 +1427,21 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
 
-	// Copy the last verification timestamp.
-	verifyTS, err := r.GetLastVerificationTimestamp()
+	// Copy the last replica GC and verification timestamps. These
+	// values are unreplicated, which is why the MVCC stats are set to
+	// nil on calls to MVCCPutProto.
+	replicaGCTS, err := r.getLastReplicaGCTimestamp()
+	if err != nil {
+		return util.Errorf("unable to fetch last replica GC timestamp: %s", err)
+	}
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastReplicaGCTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &replicaGCTS); err != nil {
+		return util.Errorf("unable to copy last replica GC timestamp: %s", err)
+	}
+	verifyTS, err := r.getLastVerificationTimestamp()
 	if err != nil {
 		return util.Errorf("unable to fetch last verification timestamp: %s", err)
 	}
-	// TODO(nvanbenschoten) update stats again here when #4710 is resolved
-	// and the LastVerificationTimestampKey is replicated again.
-	if err := engine.MVCCPutProto(batch, nil /* &deltaMs */, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &verifyTS); err != nil {
+	if err := engine.MVCCPutProto(batch, nil, keys.RangeLastVerificationTimestampKey(split.NewDesc.RangeID), roachpb.ZeroTimestamp, nil, &verifyTS); err != nil {
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 

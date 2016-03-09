@@ -71,6 +71,7 @@ func createRangeData(r *Replica, t *testing.T) []engine.MVCCKey {
 		{keys.RaftHardStateKey(r.RangeID), ts0},
 		{keys.RaftLogKey(r.RangeID, 1), ts0},
 		{keys.RaftLogKey(r.RangeID, 2), ts0},
+		{keys.RangeLastReplicaGCTimestampKey(r.RangeID), ts0},
 		{keys.RangeLastVerificationTimestampKey(r.RangeID), ts0},
 		{keys.RangeDescriptorKey(desc.StartKey), ts},
 		{keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.NewV4()), ts0},
