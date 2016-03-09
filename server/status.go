@@ -24,7 +24,8 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
-	"time"
+
+	"github.com/julienschmidt/httprouter"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -35,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/julienschmidt/httprouter"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -400,7 +401,7 @@ func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _
 
 	startTimestamp, err := parseInt64WithDefault(
 		r.URL.Query().Get("starttime"),
-		time.Now().AddDate(0, 0, -1).UnixNano())
+		timeutil.Now().AddDate(0, 0, -1).UnixNano())
 	if err != nil {
 		http.Error(w,
 			fmt.Sprintf("starttime could not be parsed: %s", err),
@@ -410,7 +411,7 @@ func (s *statusServer) handleLogsLocal(w http.ResponseWriter, r *http.Request, _
 
 	endTimestamp, err := parseInt64WithDefault(
 		r.URL.Query().Get("endtime"),
-		time.Now().UnixNano())
+		timeutil.Now().UnixNano())
 	if err != nil {
 		http.Error(w,
 			fmt.Sprintf("endtime could not be parsed: %s", err),

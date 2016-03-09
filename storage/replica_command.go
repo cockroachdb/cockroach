@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
@@ -1309,7 +1310,7 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 	id := uuid.MakeV4()
 	r.setChecksumNotify(id, notifyChan)
 	// Send a ComputeChecksum to all the replicas of the range.
-	start := time.Now()
+	start := timeutil.Now()
 	{
 		var ba roachpb.BatchRequest
 		ba.RangeID = r.Desc().RangeID
@@ -1388,7 +1389,7 @@ func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte) {
 	if c, ok := r.mu.checksums[id]; ok {
 		c.ok = true
 		c.checksum = sha
-		c.gcTimestamp = time.Now().Add(replicaChecksumGCInterval)
+		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
 		r.mu.checksums[id] = c
 	} else {
 		panic("checksum has been GCed")
@@ -1410,7 +1411,7 @@ func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h r
 	}
 	stopper := r.store.Stopper()
 	id := args.ChecksumID
-	now := time.Now()
+	now := timeutil.Now()
 	r.mu.Lock()
 	if _, ok := r.mu.checksums[id]; ok {
 		// A previous attempt was made to compute the checksum.
@@ -1514,7 +1515,7 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 	id := args.ChecksumID
 	notify := r.maybeSetChecksumNotify(id)
 	if notify != nil {
-		now := time.Now()
+		now := timeutil.Now()
 		<-notify
 		if log.V(1) {
 			log.Info("waited for compute checksum for %s", time.Since(now))

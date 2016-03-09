@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -421,7 +422,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	}
 
 	bq.eventLog.Infof(log.V(3), "%s: processing", repl)
-	start := time.Now()
+	start := timeutil.Now()
 	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
 		return err
 	}

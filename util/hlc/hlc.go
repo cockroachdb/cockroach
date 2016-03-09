@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // TODO(Tobias): Figure out if it would make sense to save some
@@ -89,7 +90,7 @@ func (m *ManualClock) Set(nanos int64) {
 // unix epoch timestamp as a convenience to create a HLC via
 // c := hlc.NewClock(hlc.UnixNano).
 func UnixNano() int64 {
-	return time.Now().UnixNano()
+	return timeutil.Now().UnixNano()
 }
 
 // NewClock creates a new hybrid logical clock associated

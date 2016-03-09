@@ -173,10 +173,12 @@ dupl:
 
 .PHONY: check
 check:
+	@echo "checking for time.Now calls (use timeutil.Now() instead)"
+	@! git grep -E 'time\.Now' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go:'
 	@echo "checking for proto.Clone calls (use util.CloneProto instead)"
-	@! git grep -E '\.Clone\([^)]+\)' | grep -vE '^util/clone_proto(_test)?\.go:'
+	@! git grep -E '\.Clone\([^)]+\)' -- '*.go' | grep -vE '^util/clone_proto(_test)?\.go:'
 	@echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"
-	@! git grep -E 'grpc\.NewServer\(\)' | grep -vE '^rpc/context(_test)?\.go:'
+	@! git grep -E 'grpc\.NewServer\(\)' -- '*.go' | grep -vE '^rpc/context(_test)?\.go:'
 	@echo "checking for missing defer leaktest.AfterTest"
 	@util/leaktest/check-leaktest.sh
 	@echo "misspell"

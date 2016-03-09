@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func TestSchemaChangeLease(t *testing.T) {
@@ -107,7 +108,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 }
 
 func validExpirationTime(expirationTime int64) bool {
-	now := time.Now()
+	now := timeutil.Now()
 	return expirationTime > now.Add(csql.LeaseDuration/2).UnixNano() && expirationTime < now.Add(csql.LeaseDuration*3/2).UnixNano()
 }
 

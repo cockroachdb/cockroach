@@ -3,7 +3,7 @@
 set -eu
 
 source $(dirname $0)/../build/init-docker.sh
-$(dirname $0)/../build/builder.sh make install
+$(dirname $0)/../build/builder.sh make install GOFLAGS='-tags clockoffset'
 
 set -x
 go test -tags acceptance ./acceptance ${GOFLAGS-} -run "${TESTS-.}" -timeout ${TESTTIMEOUT-5m} ${TESTFLAGS--v -nodes 3}

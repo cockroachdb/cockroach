@@ -19,6 +19,8 @@ package retry
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
@@ -34,7 +36,7 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	fudgeFactor := opts.Multiplier / 100
 
 	attempts := 0
-	start := time.Now()
+	start := timeutil.Now()
 	for r := Start(opts); r.Next(); attempts++ {
 	}
 

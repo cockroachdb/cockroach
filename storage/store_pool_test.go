@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var uniqueStore = []*roachpb.StoreDescriptor{
@@ -91,9 +92,9 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 
 // waitUntilDead will block until the specified store is marked as dead.
 func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roachpb.StoreID) {
-	lastTime := time.Now()
+	lastTime := timeutil.Now()
 	util.SucceedsSoon(t, func() error {
-		curTime := time.Now()
+		curTime := timeutil.Now()
 		mc.Increment(curTime.UnixNano() - lastTime.UnixNano())
 		lastTime = curTime
 
