@@ -547,7 +547,7 @@ func (e *Executor) execRequest(
 		// statements or only one, so just pretend there was one.
 		if txnState.txn != nil {
 			// Rollback the txn.
-			txnState.txn.Cleanup(pErr)
+			txnState.txn.CleanupOnError(pErr)
 			txnState.aborted = true
 			txnState.txn = nil
 		}
@@ -600,7 +600,11 @@ func (e *Executor) execRequest(
 			txnState.txn = e.newTxn(planMaker.session)
 			execOpt.AutoRetry = true
 			txnState.txnTimestamp = timeutil.Now()
-			txnState.txn.SetDebugName(fmt.Sprintf("sql implicit: %t", execOpt.AutoCommit), 0)
+			txnName := "sql txn"
+			if execOpt.AutoCommit {
+				txnName += " implicit"
+			}
+			txnState.txn.SetDebugName(txnName, 0)
 		}
 		if txnState.state() == noTransaction {
 			panic("we failed to initialize a txn")
@@ -620,7 +624,7 @@ func (e *Executor) execRequest(
 		// Now make sense of the state we got into and update txnState.
 		if pErr != nil {
 			// If we got an error, the txn has been aborted (or it might be already
-			// done if the error was encountered when executing the COMMIT/ROLLBACK.
+			// done if the error was encountered when executing the COMMIT/ROLLBACK).
 			// There's nothing we can use it for any more.
 			// TODO(andrei): once txn.Exec() doesn't abort retriable txns any more,
 			// we need to be more nuanced here.
@@ -703,7 +707,8 @@ func runTxnAttempt(
 	results *[]Result, remainingStmts *parser.StatementList) *roachpb.Error {
 
 	if txnState.txn != txn {
-		panic("runTxnAttempt wasn't called in the txn we set up for it")
+		panic(fmt.Sprintf("runTxnAttempt wasn't called in the txn we set up for it:\n"+
+			"txnState.txn: %+v\ntxn: %+v", txnState.txn, txn))
 	}
 	// Ignore the abort status that might have been set by a previous try
 	// of this closure.
@@ -881,7 +886,25 @@ func (e *Executor) execStmtInOpenTxn(
 			pErr := roachpb.NewError(errTransactionInProgress)
 			return Result{PErr: pErr}, pErr
 		}
-	case *parser.CommitTransaction, *parser.RollbackTransaction, *parser.SetTransaction:
+	case *parser.CommitTransaction:
+		// CommitTransaction is executed fully here; there's no planNode for it
+		// and the planner is not involved at all.
+		if implicitTxn {
+			txnState.aborted = true
+			pErr := roachpb.NewError(errNoTransactionInProgress)
+			return Result{PErr: pErr}, pErr
+		}
+		return e.commitSqlTransaction(txnState, planMaker)
+	case *parser.RollbackTransaction:
+		// RollbackTransaction is executed fully here; there's no planNode for it
+		// and the planner is not involved at all.
+		if implicitTxn {
+			txnState.aborted = true
+			pErr := roachpb.NewError(errNoTransactionInProgress)
+			return Result{PErr: pErr}, pErr
+		}
+		return e.rollbackSqlTransaction(txnState, planMaker), nil
+	case *parser.SetTransaction:
 		if implicitTxn {
 			txnState.aborted = true
 			pErr := roachpb.NewError(errNoTransactionInProgress)
@@ -899,15 +922,54 @@ func (e *Executor) execStmtInOpenTxn(
 
 	result, pErr := e.execStmt(stmt, planMaker, timeutil.Now(),
 		implicitTxn /* autoCommit */)
-	txnDone := planMaker.txn == nil
 	if pErr != nil {
 		result = Result{PErr: pErr}
 		txnState.aborted = true
 	}
-	if txnDone {
-		txnState.aborted = false
+	return result, pErr
+}
+
+// rollbackSqlTransaction rolls back a transaction. All errors are swallowed.
+func (e *Executor) rollbackSqlTransaction(txnState *txnState, p *planner) Result {
+	if p.txn != txnState.txn {
+		panic("rollbackSqlTransaction called on a different txn than the planner's?!?")
+	}
+	if txnState.state() != openTransaction {
+		panic(fmt.Sprintf("rollbackSqlTransaction called on non-open txn: %+v", txnState.txn))
+	}
+	pErr := p.txn.Rollback()
+	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
+	if pErr != nil {
+		log.Warningf("txn rollback failed. The error was swallowed: %s", pErr)
+		result.PErr = pErr
+	}
+	// We're done with this txn.
+	txnState.txn = nil
+	// Reset transaction to prevent running further commands on this planner.
+	p.resetTxn()
+	return result
+}
+
+// commitSqlTransaction commits a transaction.
+func (e *Executor) commitSqlTransaction(txnState *txnState, p *planner) (
+	Result, *roachpb.Error) {
+	if p.txn != txnState.txn {
+		panic("commitSQLTransaction called on a different txn than the planner's ?!?")
+	}
+	if txnState.state() != openTransaction {
+		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.txn))
+	}
+	pErr := txnState.txn.CommitNoCleanup()
+	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
+	if pErr != nil {
+		txnState.aborted = true
+		result.PErr = pErr
+	} else {
+		// We're done with this txn.
 		txnState.txn = nil
 	}
+	// Reset the transaction to prevent the planner from running more statements.
+	p.resetTxn()
 	return result, pErr
 }
 
