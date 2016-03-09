@@ -21,6 +21,11 @@ import math "math"
 
 // skipping weak import gogoproto "github.com/cockroachdb/gogoproto"
 
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
+)
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -55,8 +60,6 @@ type PingRequest struct {
 	Ping string `protobuf:"bytes,1,opt,name=ping" json:"ping"`
 	// The last offset the client measured with the server.
 	Offset RemoteOffset `protobuf:"bytes,2,opt,name=offset" json:"offset"`
-	// The address of the client.
-	Addr string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
 }
 
 func (m *PingRequest) Reset()         { *m = PingRequest{} }
@@ -79,6 +82,68 @@ func init() {
 	proto.RegisterType((*PingRequest)(nil), "cockroach.rpc.PingRequest")
 	proto.RegisterType((*PingResponse)(nil), "cockroach.rpc.PingResponse")
 }
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// Client API for Heartbeat service
+
+type HeartbeatClient interface {
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
+}
+
+type heartbeatClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewHeartbeatClient(cc *grpc.ClientConn) HeartbeatClient {
+	return &heartbeatClient{cc}
+}
+
+func (c *heartbeatClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	out := new(PingResponse)
+	err := grpc.Invoke(ctx, "/cockroach.rpc.Heartbeat/Ping", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Heartbeat service
+
+type HeartbeatServer interface {
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
+}
+
+func RegisterHeartbeatServer(s *grpc.Server, srv HeartbeatServer) {
+	s.RegisterService(&_Heartbeat_serviceDesc, srv)
+}
+
+func _Heartbeat_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(PingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(HeartbeatServer).Ping(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+var _Heartbeat_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.rpc.Heartbeat",
+	HandlerType: (*HeartbeatServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Ping",
+			Handler:    _Heartbeat_Ping_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{},
+}
+
 func (m *RemoteOffset) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -133,10 +198,6 @@ func (m *PingRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n1
-	data[i] = 0x1a
-	i++
-	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
-	i += copy(data[i:], m.Addr)
 	return i, nil
 }
 
@@ -207,8 +268,6 @@ func (m *PingRequest) Size() (n int) {
 	l = len(m.Ping)
 	n += 1 + l + sovHeartbeat(uint64(l))
 	l = m.Offset.Size()
-	n += 1 + l + sovHeartbeat(uint64(l))
-	l = len(m.Addr)
 	n += 1 + l + sovHeartbeat(uint64(l))
 	return n
 }
@@ -429,35 +488,6 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if err := m.Offset.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Addr", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowHeartbeat
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHeartbeat
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Addr = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

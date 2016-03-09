@@ -24,7 +24,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
@@ -35,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
@@ -284,7 +286,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
+func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attributes) error {
 	n.initDescriptor(addr, attrs)
 
 	// Initialize stores, including bootstrapping new ones.
@@ -320,13 +322,6 @@ func (n *Node) start(rpcServer *rpc.Server, addr net.Addr, engines []engine.Engi
 
 	n.startComputePeriodicMetrics(n.stopper)
 	n.startGossip(n.stopper)
-
-	// Register the RPC methods we support last as doing so allows RPCs to be
-	// received which may access state initialized above without locks.
-	const method = "Node.Batch"
-	if err := rpcServer.Register(method, n.executeCmd, &roachpb.BatchRequest{}); err != nil {
-		log.Fatalf("unable to register node service with RPC server: %s", err)
-	}
 
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
@@ -635,10 +630,25 @@ func (n *Node) writeSummaries() error {
 	return err
 }
 
-// executeCmd interprets the given message as a *roachpb.BatchRequest and sends it
-// via the local sender.
-func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
-	ba := argsI.(*roachpb.BatchRequest)
+// Batch implements the roachpb.KVServer interface.
+func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	// TODO(marc): this code is duplicated in kv/db.go, which should be fixed.
+	// Also, grpc's authentication model (which gives credential access in the
+	// request handler) doesn't really fit with the current design of the
+	// security package (which assumes that TLS state is only given at connection
+	// time) - that should be fixed.
+	if peer, ok := peer.FromContext(ctx); ok {
+		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
+			certUser, err := security.GetCertificateUser(&tlsInfo.State)
+			if err != nil {
+				return nil, err
+			}
+			if certUser != security.NodeUser {
+				return nil, util.Errorf("user %s is not allowed", certUser)
+			}
+		}
+	}
+
 	var br *roachpb.BatchResponse
 	opName := "node " + strconv.Itoa(int(n.Descriptor.NodeID)) // could save allocs here
 
@@ -648,7 +658,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 	}
 
 	f := func() {
-		sp, err := tracing.JoinOrNew(n.ctx.Tracer, ba.Trace, opName)
+		sp, err := tracing.JoinOrNew(n.ctx.Tracer, args.Trace, opName)
 		if err != nil {
 			fail(err)
 			return
@@ -658,7 +668,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 		// back with the response. This is more expensive, but then again,
 		// those are individual requests traced by users, so they can be.
 		if sp.BaggageItem(tracing.Snowball) != "" {
-			if sp, err = tracing.JoinOrNewSnowball(opName, ba.Trace, func(rawSpan basictracer.RawSpan) {
+			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
 					log.Warning(err)
@@ -674,7 +684,7 @@ func (n *Node) executeCmd(argsI proto.Message) (proto.Message, error) {
 
 		tStart := time.Now()
 		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *ba)
+		br, pErr = n.stores.Send(ctx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
 			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))

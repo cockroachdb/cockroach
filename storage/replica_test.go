@@ -33,7 +33,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -115,7 +114,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(&base.Context{}, hlc.NewClock(hlc.UnixNano), tc.stopper)
+		rpcContext := rpc.NewContext(nil, nil, tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestBootstrap, tc.stopper)
 		tc.gossip.SetNodeID(1)
 	}

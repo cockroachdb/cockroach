@@ -23,15 +23,13 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/rpc"
 	"os"
 	"strings"
 	"sync"
 
-	"golang.org/x/net/http2"
-
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	opentracing "github.com/opentracing/opentracing-go"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
@@ -39,7 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
-	crpc "github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
@@ -47,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -68,8 +66,7 @@ type Server struct {
 	ctx                 *Context
 	mux                 *http.ServeMux
 	clock               *hlc.Clock
-	rpcContext          *crpc.Context
-	rpc                 *crpc.Server
+	rpcContext          *rpc.Context
 	grpc                *grpc.Server
 	gossip              *gossip.Gossip
 	storePool           *storage.StorePool
@@ -119,12 +116,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	s.rpcContext = crpc.NewContext(&ctx.Context, s.clock, stopper)
+	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
 	stopper.RunWorker(func() {
 		s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
 	})
-
-	s.rpc = crpc.NewServer(s.rpcContext)
 
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
@@ -154,13 +149,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.Tracer, s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
-	s.grpc = grpc.NewServer()
+	s.grpc = rpc.NewServer(s.rpcContext)
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
-	if err := s.kvDB.RegisterRPC(s.rpc); err != nil {
-		return nil, err
-	}
+	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -203,6 +196,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
+	roachpb.RegisterInternalServer(s.grpc, s.node)
+
 	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
@@ -226,15 +221,21 @@ func (s *Server) Start() error {
 	// (pg, http, h2) via the following construction:
 	//
 	// non-TLS case:
-	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	// net.Listen -> cmux.New
 	//               |
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
 	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
 	//               -  -> cmux.Any -> http.(*Server).Serve
 	//
 	// TLS case:
-	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	// net.Listen -> cmux.New
 	//               |
-	//               -  -> cmux.Any -> tls.NewListener -> http.(*Server).Serve
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.Any -> tls.NewListener -> cmux.New
+	//                                                    |
+	//                                                    -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
+	//                                                    -  -> cmux.Any -> http.(*Server).Serve
 	//
 	// Note that the difference between the TLS and non-TLS cases exists due to
 	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
@@ -250,6 +251,7 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.ctx.Addr = unresolvedAddr.String()
+	s.rpcContext.SetLocalInternalServer(s.node, s.ctx.Addr)
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldDrain()
@@ -261,11 +263,26 @@ func (s *Server) Start() error {
 	m := cmux.New(ln)
 	pgL := m.Match(pgwire.Match)
 
+	// GRPC connections get special handling because using GRPC's ServeHTTP is
+	// prohibitively slow. See https://github.com/grpc/grpc-go/issues/586
+	var grpcL net.Listener
+	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
+
 	var serveConn func(net.Listener, func(net.Conn)) error
 	if tlsConfig != nil {
 		anyL := m.Match(cmux.Any())
-		serveConn = util.ServeHandler(s.stopper, s, tls.NewListener(anyL, tlsConfig), tlsConfig)
+
+		tlsM := cmux.New(tls.NewListener(anyL, tlsConfig))
+		grpcL = tlsM.Match(grpcMatcher)
+
+		serveConn = util.ServeHandler(s.stopper, s, tlsM.Match(cmux.Any()), tlsConfig)
+
+		go func() {
+			util.FatalIfUnexpected(tlsM.Serve())
+		}()
 	} else {
+		grpcL = m.Match(grpcMatcher)
+
 		h2L := m.Match(cmux.HTTP2())
 		anyL := m.Match(cmux.Any())
 
@@ -279,24 +296,26 @@ func (s *Server) Start() error {
 
 		serveConn = util.ServeHandler(s.stopper, s, anyL, tlsConfig)
 
-		s.stopper.RunWorker(func() {
+		go func() {
 			util.FatalIfUnexpected(serveConn(h2L, serveH2))
-		})
+		}()
 	}
 
-	s.stopper.RunWorker(func() {
+	go func() {
+		util.FatalIfUnexpected(s.grpc.Serve(grpcL))
+	}()
+
+	go func() {
 		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
 				log.Error(err)
 			}
 		}))
-	})
+	}()
 
-	s.stopper.RunWorker(func() {
+	go func() {
 		util.FatalIfUnexpected(m.Serve())
-	})
-
-	s.rpcContext.SetLocalServer(s.rpc, s.ctx.Addr)
+	}()
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
@@ -307,7 +326,7 @@ func (s *Server) Start() error {
 	s.stopper.AddCloser(s.admin)
 	RegisterAdminServer(s.grpc, s.admin)
 
-	if err := s.node.start(s.rpc, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -334,15 +353,13 @@ func (s *Server) Start() error {
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle(rpc.DefaultRPCPath, s.rpc)
-
-	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
+	s.mux.Handle("/", http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,
 			AssetDir:  ui.AssetDir,
 			AssetInfo: ui.AssetInfo,
 		},
-	)))
+	))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,

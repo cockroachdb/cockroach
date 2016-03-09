@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
@@ -97,7 +96,7 @@ func createTestStoreWithContext(t testing.TB, sCtx *storage.StoreContext) (
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool, sCtx *storage.StoreContext, stopper *stop.Stopper) *storage.Store {
-	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
+	rpcContext := rpc.NewContext(nil, clock, stopper)
 	if sCtx == nil {
 		// make a copy
 		ctx := storage.TestStoreContext()
@@ -110,7 +109,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 	sCtx.Tracer = tracing.NewTracer()
 	stores := storage.NewStores(clock)
 	rpcSend := func(_ kv.SendOptions, _ kv.ReplicaSlice,
-		ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		sp := sCtx.Tracer.StartSpan("rpc send")
 		defer sp.Finish()
 		ctx := opentracing.ContextWithSpan(context.Background(), sp)
@@ -251,7 +250,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clientStopper = stop.NewStopper()
 	}
 	if m.grpcServer == nil {
-		m.grpcServer = grpc.NewServer()
+		m.grpcServer = rpc.NewServer(m.rpcContext)
 	}
 	if m.transport == nil {
 		m.transport = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServer, m.rpcContext)
@@ -338,10 +337,10 @@ func (m *multiTestContext) Stop() {
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
 func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
-	ba roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+	ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	fail := func(pErr *roachpb.Error) (proto.Message, error) {
+	fail := func(pErr *roachpb.Error) (*roachpb.BatchResponse, error) {
 		br := &roachpb.BatchResponse{}
 		br.Error = pErr
 		return br, nil

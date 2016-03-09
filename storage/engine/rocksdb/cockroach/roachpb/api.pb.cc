@@ -1534,7 +1534,11 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSI"
     "STENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIM"
     "ESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002"
-    "\032\004\210\243\036\000B\tZ\007roachpbX\004", 9099);
+    "\032\004\210\243\036\0002X\n\010Internal\022L\n\005Batch\022\037.cockroach."
+    "roachpb.BatchRequest\032 .cockroach.roachpb"
+    ".BatchResponse\"\0002X\n\010External\022L\n\005Batch\022\037."
+    "cockroach.roachpb.BatchRequest\032 .cockroa"
+    "ch.roachpb.BatchResponse\"\000B\tZ\007roachpbX\004", 9279);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();

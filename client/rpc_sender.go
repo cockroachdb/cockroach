@@ -17,82 +17,56 @@
 package client
 
 import (
-	"net"
-	"net/url"
 	"time"
 
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func init() {
-	f := func(u *url.URL, ctx *base.Context, stopper *stop.Stopper) (Sender, error) {
-		ctx.Insecure = (u.Scheme != "rpcs")
-		return newRPCSender(u.Host, ctx, stopper)
-	}
-	RegisterSender("rpc", f)
-	RegisterSender("rpcs", f)
+const healthyTimeout = 2 * time.Second
+
+type sender struct {
+	conn   *grpc.ClientConn
+	client roachpb.ExternalClient
 }
 
-const method = "Server.Batch"
-
-// rpcSender is an implementation of Sender which exposes the
-// Key-Value database provided by a Cockroach cluster by connecting
-// via RPC to a Cockroach node. Overly-busy nodes will redirect this
-// client to other nodes.
-type rpcSender struct {
-	client *rpc.Client
-}
-
-// newRPCSender returns a new instance of rpcSender.
-func newRPCSender(server string, context *base.Context, stopper *stop.Stopper) (*rpcSender, error) {
-	addr, err := net.ResolveTCPAddr("tcp", server)
+// NewSender returns an implementation of Sender which exposes the Key-Value
+// database provided by a Cockroach cluster by connecting via RPC to a
+// Cockroach node.
+func NewSender(ctx *rpc.Context, target string) (Sender, error) {
+	conn, err := ctx.GRPCDial(target)
 	if err != nil {
 		return nil, err
 	}
-
-	if context.Insecure {
-		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
-	} else {
-		if _, err := context.GetClientTLSConfig(); err != nil {
-			return nil, err
-		}
-	}
-
-	ctx := rpc.NewContext(context, hlc.NewClock(hlc.UnixNano), stopper)
-	client := rpc.NewClient(addr, ctx)
-
-	return &rpcSender{
-		client: client,
+	return &sender{
+		conn:   conn,
+		client: roachpb.NewExternalClient(conn),
 	}, nil
 }
 
-// HealthyTimeout is the timeout waiting for RPC client to become healthy.
-var HealthyTimeout = 2 * time.Second
+// Send implements the Sender interface.
+func (s *sender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, healthyTimeout)
+	defer cancel()
 
-// Send sends a request to Cockroach via RPC.
-func (s *rpcSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	var pErr *roachpb.Error
-	br := &roachpb.BatchResponse{}
-
-	// Wait for client to become healthy with a maximum timeout.
-	select {
-	case <-s.client.Healthy():
-	case <-time.After(HealthyTimeout):
-		return br, roachpb.NewErrorf("failed to send RPC request %s: client is unhealthy", method)
+	c := s.conn
+	for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctxWithTimeout, state) {
+		if err != nil {
+			return nil, roachpb.NewErrorf("roachpb.Batch RPC failed: %s", err)
+		}
+		if state == grpc.Shutdown {
+			return nil, roachpb.NewErrorf("roachpb.Batch RPC failed as client connection was closed")
+		}
 	}
 
-	if err := s.client.Call(method, &ba, br); err != nil {
-		log.Errorf("failed to send RPC request %s: %s", method, err)
-		return nil, roachpb.NewError(err)
+	br, err := s.client.Batch(ctx, &ba)
+	if err != nil {
+		return nil, roachpb.NewErrorf("roachpb.Batch RPC failed: %s", err)
 	}
-	pErr = br.Error
+	pErr := br.Error
 	br.Error = nil
 	return br, pErr
 }

@@ -46,12 +46,12 @@ func GRPCHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 // Its logic is a partial recreation of gRPC's internal checks, see
 // https://github.com/grpc/grpc-go/blob/01de3de/transport/handler_server.go#L61:L69
 func IsGRPCRequest(r *http.Request) bool {
-	return r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc")
+	return r.ProtoMajor == 2 && strings.Contains(r.Header.Get(util.ContentTypeHeader), "application/grpc")
 }
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
 func IsClosedConnection(err error) bool {
-	if err == context.Canceled || err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
+	if err == context.Canceled || grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() || err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
 		return true
 	}
 	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {

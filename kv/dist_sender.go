@@ -23,8 +23,10 @@ import (
 	"time"
 	"unsafe"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -34,8 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/gogo/protobuf/proto"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Default constants for timeouts.
@@ -130,7 +130,7 @@ var _ client.Sender = &DistSender{}
 
 // rpcSendFn is the function type used to dispatch RPC calls.
 type rpcSendFn func(SendOptions, ReplicaSlice,
-	roachpb.BatchRequest, *rpc.Context) (proto.Message, error)
+	roachpb.BatchRequest, *rpc.Context) (*roachpb.BatchResponse, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
@@ -336,7 +336,7 @@ func (ds *DistSender) sendRPC(sp opentracing.Span, rangeID roachpb.RangeID, repl
 	rpcOpts := SendOptions{
 		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
-		Timeout:         rpc.DefaultRPCTimeout,
+		Timeout:         base.NetworkTimeout,
 		Trace:           sp,
 	}
 	tracing.AnnotateTrace()
@@ -346,7 +346,7 @@ func (ds *DistSender) sendRPC(sp opentracing.Span, rangeID roachpb.RangeID, repl
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	return reply.(*roachpb.BatchResponse), nil
+	return reply, nil
 }
 
 // getDescriptors looks up the range descriptor to use for a query over the

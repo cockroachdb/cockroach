@@ -23,7 +23,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -165,7 +164,7 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{}, clock, stopper)
+	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, gossip.TestBootstrap, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))

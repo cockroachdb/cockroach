@@ -19,6 +19,7 @@ package kv
 import (
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -33,8 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/gogo/protobuf/proto"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -81,7 +80,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ltc.stores = storage.NewStores(ltc.Clock)
 	tracer := tracing.NewTracer()
 	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
-		args roachpb.BatchRequest, _ *rpc.Context) (proto.Message, error) {
+		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)
 		}
