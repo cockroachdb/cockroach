@@ -453,7 +453,6 @@ func TestRangeLeaderLease(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	tc.clock.SetMaxOffset(maxClockOffset)
 
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
@@ -475,14 +474,10 @@ func TestRangeLeaderLease(t *testing.T) {
 	setLeaderLease(t, tc.rng, &roachpb.Lease{
 		Start:      now.Add(10, 0),
 		Expiration: now.Add(20, 0),
-		Replica: roachpb.ReplicaDescriptor{
-			ReplicaID: 2,
-			NodeID:    2,
-			StoreID:   2,
-		},
+		Replica:    secondReplica,
 	})
 	if held, expired := hasLease(tc.rng, tc.clock.Now().Add(15, 0)); held || expired {
-		t.Errorf("expected another replica to have leader lease")
+		t.Errorf("expected second replica to have leader lease")
 	}
 
 	{
@@ -495,7 +490,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 	// Advance clock past expiration and verify that another has
 	// leader lease will not be true.
-	tc.manualClock.Increment(21) // 21ns pass
+	tc.manualClock.Increment(21) // 21ns have passed
 	if held, expired := hasLease(tc.rng, tc.clock.Now()); held || !expired {
 		t.Errorf("expected another replica to have expired lease")
 	}
@@ -505,9 +500,8 @@ func TestRangeLeaderLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) error {
+	rng.mu.proposeRaftCommandFn = func(cmdIDKey, *pendingCmd) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -515,14 +509,16 @@ func TestRangeLeaderLease(t *testing.T) {
 	rng.mu.Unlock()
 
 	{
-		sp := tc.rng.store.Tracer().StartSpan("test")
+		sp := tc.store.Tracer().StartSpan("test")
 		defer sp.Finish()
-		if _, ok := rng.redirectOnOrAcquireLeaderLease(sp).GetDetail().(*roachpb.NotLeaderError); !ok {
-			t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
+		err := rng.redirectOnOrAcquireLeaderLease(sp).GetDetail()
+		if _, ok := err.(*roachpb.NotLeaderError); !ok {
+			t.Fatalf("expected %T, got %T", &roachpb.NotLeaderError{}, err)
 		}
 	}
 }
 
+// TestRangeNotLeaderError verifies NotLeaderError when lease is rejected.
 func TestRangeNotLeaderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -3531,7 +3527,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock proposeRaftCommand to return an roachpb.RaftGroupDeletedError.
-	proposeRaftCommandFn := func(cmdIDKey, roachpb.RaftCommand) error {
+	proposeRaftCommandFn := func(cmdIDKey, *pendingCmd) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
@@ -4022,7 +4018,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if cancelEarly {
 				cancel()
 				tc.rng.mu.Lock()
-				tc.rng.mu.proposeRaftCommandFn = func(id cmdIDKey, cmd roachpb.RaftCommand) error {
+				tc.rng.mu.proposeRaftCommandFn = func(cmdIDKey, *pendingCmd) error {
 					return nil
 				}
 				tc.rng.mu.Unlock()

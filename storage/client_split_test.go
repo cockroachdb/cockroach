@@ -703,8 +703,13 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 // can arrange for both possible outcomes of the race.
 //
 // Range 1 is the system keyspace, located on node 0.
-// The range containing leftKey is the left side of the split, located on nodes 1, 2, and 3.
-// The range containing rightKey is the right side of the split, located on nodes 3, 4, and 5.
+//
+// The range containing leftKey is the left side of the split, located
+// on nodes 1, 2, and 3.
+//
+// The range containing rightKey is the right side of the split,
+// located on nodes 3, 4, and 5.
+//
 // Nodes 1-5 are stopped; only node 0 is running.
 //
 // See https://github.com/cockroachdb/cockroach/issues/1644.
@@ -777,7 +782,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	// unreplicateRange call above. It has four members which means it
 	// can only tolerate one failure without losing quorum. That failure
 	// is store 3 which we stopped earlier. Stopping store 1 too soon
-	// (before it has committed the final config change *and* propagate
+	// (before it has committed the final config change *and* propagated
 	// that commit to the followers 4 and 5) would constitute a second
 	// failure and render the range unable to achieve quorum after
 	// restart (in the SnapshotWins branch).
@@ -833,7 +838,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
 }
 
-// TestSplitSnapshotRace_SplitWins exercises one outcome of the
+// TestSplitSnapshotRace_SnapshotWins exercises one outcome of the
 // split/snapshot race: The right side of the split replicates first,
 // so target node sees a raft snapshot before it has processed the split,
 // so it still has a conflicting range.
