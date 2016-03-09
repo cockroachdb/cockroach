@@ -18,12 +18,12 @@
 package roachpb
 
 // Summation returns the sum value for this sample.
-func (samp *InternalTimeSeriesSample) Summation() float64 {
+func (samp InternalTimeSeriesSample) Summation() float64 {
 	return samp.Sum
 }
 
 // Average returns the average value for this sample.
-func (samp *InternalTimeSeriesSample) Average() float64 {
+func (samp InternalTimeSeriesSample) Average() float64 {
 	if samp.Count == 0 {
 		return 0
 	}
@@ -31,7 +31,7 @@ func (samp *InternalTimeSeriesSample) Average() float64 {
 }
 
 // Maximum returns the maximum value encountered by this sample.
-func (samp *InternalTimeSeriesSample) Maximum() float64 {
+func (samp InternalTimeSeriesSample) Maximum() float64 {
 	if samp.Count < 2 {
 		return samp.Sum
 	}
@@ -42,7 +42,7 @@ func (samp *InternalTimeSeriesSample) Maximum() float64 {
 }
 
 // Minimum returns the minimum value encountered by this sample.
-func (samp *InternalTimeSeriesSample) Minimum() float64 {
+func (samp InternalTimeSeriesSample) Minimum() float64 {
 	if samp.Count < 2 {
 		return samp.Sum
 	}

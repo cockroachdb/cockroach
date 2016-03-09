@@ -68,7 +68,7 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 		SampleDurationNanos: duration,
 	}
 	for _, sample := range samples {
-		newSample := &roachpb.InternalTimeSeriesSample{
+		newSample := roachpb.InternalTimeSeriesSample{
 			Offset: sample.offset,
 			Count:  sample.count,
 			Sum:    sample.sum,

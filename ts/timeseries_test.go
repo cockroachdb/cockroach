@@ -80,7 +80,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: 0,
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*roachpb.InternalTimeSeriesSample{
+					Samples: []roachpb.InternalTimeSeriesSample{
 						{
 							Offset: 15,
 							Count:  1,
@@ -101,7 +101,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: int64(time.Hour * 24),
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*roachpb.InternalTimeSeriesSample{
+					Samples: []roachpb.InternalTimeSeriesSample{
 						{
 							Offset: 1,
 							Count:  1,
@@ -112,7 +112,7 @@ func TestToInternal(t *testing.T) {
 				{
 					StartTimestampNanos: int64(time.Hour * 48),
 					SampleDurationNanos: int64(time.Minute * 20),
-					Samples: []*roachpb.InternalTimeSeriesSample{
+					Samples: []roachpb.InternalTimeSeriesSample{
 						{
 							Offset: 0,
 							Count:  1,

@@ -368,7 +368,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
 		snapData.KV = append(snapData.KV,
-			&roachpb.RaftSnapshotData_KeyValue{
+			roachpb.RaftSnapshotData_KeyValue{
 				Key:       key.Key,
 				Value:     iter.Value(),
 				Timestamp: key.Timestamp,
