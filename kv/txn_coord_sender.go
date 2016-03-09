@@ -353,15 +353,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			}
 		}
 
-		// Set the timestamp to the original timestamp for read-only
-		// commands and to the transaction timestamp for read/write
-		// commands.
-		if ba.IsReadOnly() {
-			ba.Timestamp = ba.Txn.OrigTimestamp
-		} else {
-			ba.Timestamp = ba.Txn.Timestamp
-		}
-
 		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			et := rArgs.(*roachpb.EndTransactionRequest)
 			if len(et.Key) != 0 {
@@ -640,7 +631,6 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 	tc.Unlock()
 
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
 	ba.Txn = &txn
 
 	if !proceed {
@@ -668,7 +658,9 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 		return false
 	}
 
-	hb := &roachpb.HeartbeatTxnRequest{}
+	hb := &roachpb.HeartbeatTxnRequest{
+		Now: tc.clock.Now(),
+	}
 	hb.Key = txn.Key
 	ba.Add(hb)
 

@@ -1604,17 +1604,12 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			if txn := reply.Header().Txn; txn != nil {
 				ba.Txn.Update(txn)
 			}
-			// The transaction timestamp can't lag behind the actual timestamps
-			// we're operating at.
-			// TODO(tschottdorf): without this, TestSingleKey fails (since the Txn
-			// will commit with its original timestamp). We should have a
-			// non-acceptance test verifying this as well.
-			// TODO(tschottdorf): wasn't there another place that did this?
 		}
 	}
 	// If transactional, send out the final transaction entry with the reply.
 	if isTxn {
 		br.Txn = ba.Txn
+		br.Txn.Timestamp.Forward(ba.Timestamp)
 		// If this is the beginning of the write portion of a transaction,
 		// mark the returned transaction as Writing. It's important that
 		// we do this only at the end, since updating at the first write
