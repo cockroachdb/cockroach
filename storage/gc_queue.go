@@ -150,13 +150,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
-	// The GC Queue doesn't do anything with unreplicated keys. However, only scanning
-	// over replicated data would mean that this processing was no longer a strict superset
-	// of the verification queue's processing, meaning that we could no longer set the
-	// verification timestamp at the end of the GC queue's run.
-	// TODO(nvanbenschoten) Is the extra overhead here scanning over unreplicated keys
-	// worth the decreased verification queue frequency?
-	iter := newReplicaDataIterator(desc, snap, false /* !replicatedOnly */)
+	iter := newReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 	defer snap.Close()
 
@@ -305,12 +299,6 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	ba.Add(gcArgs)
 	if _, pErr := repl.Send(repl.context(), ba); pErr != nil {
 		return pErr.GoError()
-	}
-
-	// Store current timestamp as last verification for this replica, as
-	// we've just successfully scanned.
-	if err := repl.setLastVerificationTimestamp(now); err != nil {
-		log.Errorf("failed to set last verification timestamp for replica %s: %s", repl, err)
 	}
 
 	return nil
