@@ -391,6 +391,8 @@ type storeMetrics struct {
 	lastUpdateNanos *metric.Gauge
 	capacity        *metric.Gauge
 	available       *metric.Gauge
+	sysBytes        *metric.Gauge
+	sysCount        *metric.Gauge
 
 	// Stats for efficient merges.
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
@@ -422,6 +424,8 @@ func newStoreMetrics() *storeMetrics {
 		lastUpdateNanos:      storeRegistry.Gauge("lastupdatenanos"),
 		capacity:             storeRegistry.Gauge("capacity"),
 		available:            storeRegistry.Gauge("capacity.available"),
+		sysBytes:             storeRegistry.Gauge("sysbytes"),
+		sysCount:             storeRegistry.Gauge("syscount"),
 	}
 }
 
@@ -443,6 +447,8 @@ func (sm *storeMetrics) updateMVCCGaugesLocked() {
 	sm.intentAge.Update(sm.stats.IntentAge)
 	sm.gcBytesAge.Update(sm.stats.GCBytesAge)
 	sm.lastUpdateNanos.Update(sm.stats.LastUpdateNanos)
+	sm.sysBytes.Update(sm.stats.SysBytes)
+	sm.sysCount.Update(sm.stats.SysCount)
 }
 
 func (sm *storeMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
@@ -1257,9 +1263,11 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	}
 	s.scanner.RemoveReplica(rep)
 
-	// Grab stats before calling Destroy. The stats aren't currently altered by
-	// Destroy, but that is not necessarily a guarantee.
-	stats := rep.GetMVCCStats()
+	// Adjust stats before calling Destroy. This can be called before or after
+	// Destroy, but this configuration helps avoid races in stat verification
+	// tests.
+	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
+	s.metrics.rangeCount.Dec(1)
 
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets
@@ -1270,9 +1278,6 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		}
 	}
 
-	// Subtract the removed replica's stats from the store-level stats.
-	s.metrics.subtractMVCCStats(stats)
-	s.metrics.rangeCount.Dec(1)
 	return nil
 }
 
