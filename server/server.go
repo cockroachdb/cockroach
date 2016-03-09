@@ -145,7 +145,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	txnRegistry := metric.NewRegistry()
 	txnMetrics := kv.NewTxnMetrics(txnRegistry)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.Tracer, s.stopper, txnMetrics)
-	s.db = client.NewDB(sender)
+	s.db = client.NewDB(sender, s.clock)
 
 	s.grpc = rpc.NewServer(s.rpcContext)
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)

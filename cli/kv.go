@@ -45,7 +45,7 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)
 	}
-	return client.NewDB(sender), stopper
+	return client.NewDB(sender, nil), stopper
 }
 
 // unquoteArg unquotes the provided argument using Go double-quoted

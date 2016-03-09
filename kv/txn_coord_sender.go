@@ -488,8 +488,15 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if ba.Txn.ID == nil {
 		// Create transaction without a key. The key is set when a begin
 		// transaction request is received.
+
+		// The initial timestamp may be communicated by a higher layer.
+		// If so, use that. Otherwise make up a new one.
+		timestamp := ba.Txn.OrigTimestamp
+		if timestamp == roachpb.ZeroTimestamp {
+			timestamp = tc.clock.Now()
+		}
 		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,
-			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
+			ba.Txn.Isolation, timestamp, tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
 		if newTxn.Priority < ba.Txn.Priority {
@@ -864,7 +871,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	if log.V(1) {
 		log.Infof("%s: auto-wrapping in txn and re-executing: ", ba)
 	}
-	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
+	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority, tc.clock)
 	var br *roachpb.BatchResponse
 	pErr := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName("auto-wrap", 0)

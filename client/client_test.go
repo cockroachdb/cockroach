@@ -84,7 +84,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewDB(sender)
+	return client.NewDB(sender, rpcContext.localClock)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP

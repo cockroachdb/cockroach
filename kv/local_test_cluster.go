@@ -116,7 +116,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer,
 		ltc.Stopper, NewTxnMetrics(metric.NewRegistry()))
-	ltc.DB = client.NewDB(ltc.Sender)
+	ltc.DB = client.NewDB(ltc.Sender, ltc.Clock)
 	transport := storage.NewDummyRaftTransport()
 	ctx := storage.TestStoreContext()
 	ctx.Clock = ltc.Clock

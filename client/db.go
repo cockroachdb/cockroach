@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -171,6 +172,7 @@ type DB struct {
 	// value is ignored.
 	userPriority    roachpb.UserPriority
 	txnRetryOptions retry.Options
+	clock           *hlc.Clock
 }
 
 // GetSender returns the underlying Sender. Only exported for tests.
@@ -178,18 +180,28 @@ func (db *DB) GetSender() Sender {
 	return db.sender
 }
 
+// Now returns the current underlying coordinator's clock
+// timestamp, or ZeroTimestamp if there's no clock there.
+func (db *DB) Now() roachpb.Timestamp {
+	if db.clock == nil {
+		return roachpb.ZeroTimestamp
+	}
+	return db.clock.Now()
+}
+
 // NewDB returns a new DB.
-func NewDB(sender Sender) *DB {
+func NewDB(sender Sender, clock *hlc.Clock) *DB {
 	return &DB{
 		sender:          sender,
 		userPriority:    roachpb.NormalUserPriority,
 		txnRetryOptions: DefaultTxnRetryOptions,
+		clock:           clock,
 	}
 }
 
 // NewDBWithPriority returns a new DB.
-func NewDBWithPriority(sender Sender, userPriority roachpb.UserPriority) *DB {
-	db := NewDB(sender)
+func NewDBWithPriority(sender Sender, userPriority roachpb.UserPriority, clock *hlc.Clock) *DB {
+	db := NewDB(sender, clock)
 	db.userPriority = userPriority
 	return db
 }
@@ -394,7 +406,7 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error)
 func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 	txn := NewTxn(*db)
 	txn.SetDebugName("", 1)
-	return txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
+	return txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true, InitialTimestamp: db.Now()},
 		func(txn *Txn, _ *TxnExecOptions) *roachpb.Error {
 			return retryable(txn)
 		})

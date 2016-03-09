@@ -429,6 +429,14 @@ type TxnExecOptions struct {
 	// encountered. If not set, committing or leaving open the txn is the
 	// responsibility of the client.
 	AutoCommit bool
+	// Initial timestamp, decided by layers above.
+	InitialTimestamp roachpb.Timestamp
+}
+
+// Now returns the current underlying dbs timestamp, assuming
+// the db has a clock associated, otherwize ZeroTimestamp.
+func (txn *Txn) Now() roachpb.Timestamp {
+	return txn.db.Now()
 }
 
 // Exec executes fn in the context of a distributed transaction.
@@ -451,9 +459,17 @@ func (txn *Txn) Exec(
 	// error condition this loop isn't capable of handling.
 	var pErr *roachpb.Error
 	var retryOptions retry.Options
-	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
-		panic("asked to retry  or commit a txn that is already aborted")
+	if txn == nil {
+		panic("calling Exec on a missing txn")
 	}
+
+	// If we're looking at a brand new transaction, then communicate
+	// what should be used as initial timestamp for the KV txn created
+	// by TxnCoordSender.
+	if txn.Proto.OrigTimestamp == roachpb.ZeroTimestamp {
+		txn.Proto.OrigTimestamp = opt.InitialTimestamp
+	}
+
 	if opt.AutoRetry {
 		retryOptions = txn.db.txnRetryOptions
 	}
@@ -493,11 +509,11 @@ RetryLoop:
 				txn.DebugName(), pErr)
 		}
 	}
-	if txn != nil {
-		// TODO(andrei): don't do Cleanup() on retriable errors here.
-		// Let the sql executor do it.
-		txn.Cleanup(pErr)
-	}
+
+	// TODO(andrei): don't do Cleanup() on retriable errors here.
+	// Let the sql executor do it.
+	txn.Cleanup(pErr)
+
 	if pErr != nil {
 		pErr.StripErrorTransaction()
 	}

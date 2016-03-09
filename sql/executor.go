@@ -591,12 +591,13 @@ func (e *Executor) execRequest(
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
+			txnState.txn = e.newTxn(planMaker.session)
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
+				execOpt.InitialTimestamp = txnState.txn.Now()
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[0:1]
 			}
-			txnState.txn = e.newTxn(planMaker.session)
 			execOpt.AutoRetry = true
 			txnState.txnTimestamp = time.Now()
 			txnState.txn.SetDebugName(fmt.Sprintf("sql implicit: %t", execOpt.AutoCommit), 0)
