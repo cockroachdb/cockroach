@@ -584,3 +584,29 @@ func TestCommitInBatchWithResponse(t *testing.T) {
 		t.Error("this batch should not be committed")
 	}
 }
+
+// TestTimestampSelectionInOptions verifies that a client can set the
+// Txn timestamp using client.TxnExecOptions.
+func TestTimestampSelectionInOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := newDB(newTestSender(nil, nil))
+	txn := NewTxn(*db)
+
+	var execOpt TxnExecOptions
+	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
+	execOpt.MinInitialTimestamp = refTimestamp
+
+	txnClosure := func(txn *Txn, opt *TxnExecOptions) *roachpb.Error {
+		// Ensure the KV transaction is created.
+		return txn.Put("a", "b")
+	}
+
+	if pErr := txn.Exec(execOpt, txnClosure); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Check the timestamp was preserved.
+	if txn.Proto.OrigTimestamp != refTimestamp {
+		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	}
+}

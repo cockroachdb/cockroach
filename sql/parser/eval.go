@@ -738,12 +738,35 @@ func init() {
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
-	NodeID        roachpb.NodeID
+	NodeID roachpb.NodeID
+	// The statement timestamp. May be different for every statement.
+	// Used for statement_timestamp().
 	StmtTimestamp DTimestamp
-	TxnTimestamp  DTimestamp
-	ReCache       *RegexpCache
-	GetLocation   func() (*time.Location, error)
-	Args          MapArgs
+	// The transaction timestamp. Needs to stay table throughout the
+	// transaction. Used for now(), current_timestamp(),
+	// transaction_timestamp() and the like.
+	TxnTimestamp roachpb.Timestamp
+	ReCache      *RegexpCache
+	GetLocation  func() (*time.Location, error)
+	Args         MapArgs
+}
+
+// GetStmtTimestamp retrieves the current statement timestamp as per
+// the evaluation context. The timestamp is guaranteed to be nonzero.
+func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
+	if ctx.StmtTimestamp.Time.IsZero() {
+		panic("invalid statement timestamp in EvalContext")
+	}
+	return ctx.StmtTimestamp
+}
+
+// GetTxnTimestamp retrieves the current transaction timestamp as per
+// the evaluation context. The timestamp is guaranteed to be nonzero.
+func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
+	if ctx.TxnTimestamp == roachpb.ZeroTimestamp {
+		panic("invalid transaction timestamp in EvalContext")
+	}
+	return ctx.TxnTimestamp
 }
 
 var defaultContext = EvalContext{

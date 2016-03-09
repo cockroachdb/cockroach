@@ -139,15 +139,11 @@ type Session_Transaction struct {
 	// txnAborted is set once executing a statement returned an error from KV.
 	// While in this state, every subsequent statement must be rejected until
 	// a COMMIT/ROLLBACK is seen.
-	TxnAborted bool `protobuf:"varint,2,opt,name=txnAborted" json:"txnAborted"`
-	// Timestamp to be used by SQL (transaction_timestamp()) in the above
-	// transaction. Note: this is not the transaction timestamp in
-	// roachpb.Transaction above, although it probably should be (#4393).
-	TxnTimestamp Session_Timestamp                                     `protobuf:"bytes,3,opt,name=txn_timestamp" json:"txn_timestamp"`
-	UserPriority github_com_cockroachdb_cockroach_roachpb.UserPriority `protobuf:"fixed64,4,opt,name=user_priority,casttype=github.com/cockroachdb/cockroach/roachpb.UserPriority" json:"user_priority"`
+	TxnAborted   bool                                                  `protobuf:"varint,2,opt,name=txnAborted" json:"txnAborted"`
+	UserPriority github_com_cockroachdb_cockroach_roachpb.UserPriority `protobuf:"fixed64,3,opt,name=user_priority,casttype=github.com/cockroachdb/cockroach/roachpb.UserPriority" json:"user_priority"`
 	// Indicates that the transaction is mutating keys in the
 	// SystemConfig span.
-	MutatesSystemConfig bool `protobuf:"varint,5,opt,name=mutates_system_config" json:"mutates_system_config"`
+	MutatesSystemConfig bool `protobuf:"varint,4,opt,name=mutates_system_config" json:"mutates_system_config"`
 }
 
 func (m *Session_Transaction) Reset()         { *m = Session_Transaction{} }
@@ -274,18 +270,10 @@ func (m *Session_Transaction) MarshalTo(data []byte) (int, error) {
 		data[i] = 0
 	}
 	i++
-	data[i] = 0x1a
-	i++
-	i = encodeVarintSession(data, i, uint64(m.TxnTimestamp.Size()))
-	n4, err := m.TxnTimestamp.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	data[i] = 0x21
+	data[i] = 0x19
 	i++
 	i = encodeFixed64Session(data, i, uint64(math.Float64bits(float64(m.UserPriority))))
-	data[i] = 0x28
+	data[i] = 0x20
 	i++
 	if m.MutatesSystemConfig {
 		data[i] = 1
@@ -367,8 +355,6 @@ func (m *Session_Transaction) Size() (n int) {
 		n += 1 + l + sovSession(uint64(l))
 	}
 	n += 2
-	l = m.TxnTimestamp.Size()
-	n += 1 + l + sovSession(uint64(l))
 	n += 9
 	n += 2
 	return n
@@ -754,36 +740,6 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 			}
 			m.TxnAborted = bool(v != 0)
 		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TxnTimestamp", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowSession
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthSession
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.TxnTimestamp.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
 			if wireType != 1 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UserPriority", wireType)
 			}
@@ -801,7 +757,7 @@ func (m *Session_Transaction) Unmarshal(data []byte) error {
 			v |= uint64(data[iNdEx-2]) << 48
 			v |= uint64(data[iNdEx-1]) << 56
 			m.UserPriority = github_com_cockroachdb_cockroach_roachpb.UserPriority(math.Float64frombits(v))
-		case 5:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MutatesSystemConfig", wireType)
 			}

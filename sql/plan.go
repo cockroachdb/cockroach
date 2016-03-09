@@ -63,13 +63,18 @@ func makePlanner() *planner {
 	return &planner{session: &Session{}}
 }
 
-func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
+func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
-	p.evalCtx.TxnTimestamp = parser.DTimestamp{Time: timestamp}
+	if txn != nil {
+		p.evalCtx.TxnTimestamp = txn.Proto.OrigTimestamp
+	} else {
+		p.evalCtx.TxnTimestamp = roachpb.ZeroTimestamp
+		p.evalCtx.StmtTimestamp.Time = time.Time{}
+	}
 }
 
 func (p *planner) resetTxn() {
-	p.setTxn(nil, time.Time{})
+	p.setTxn(nil)
 }
 
 // makePlan creates the query plan for a single SQL statement. The returned
