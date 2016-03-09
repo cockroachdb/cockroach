@@ -75,68 +75,53 @@ enum TimeSeriesQueryDerivative {
   NON_NEGATIVE_DERIVATIVE = 2;
 }
 
+// Each Query defines a specific metric to query over the time span of
+// this request.
+message Query {
+  option (gogoproto.goproto_getters) = true;
+
+  // The name of the time series to query.
+  optional string name = 1 [(gogoproto.nullable) = false];
+  // A downsampling aggregation function to apply to datapoints within the
+  // same sample period.
+  optional TimeSeriesQueryAggregator downsampler = 2 [default = AVG];
+  // An aggregation function used to combine timelike datapoints from the
+  // different sources being queried.
+  optional TimeSeriesQueryAggregator source_aggregator = 3 [default = SUM];
+  // If set to a value other than 'NONE', query will return a derivative
+  // (rate of change) of the aggregated datapoints.
+  optional TimeSeriesQueryDerivative derivative = 4 [default = NONE];
+  // An optional list of sources to restrict the time series query. If no
+  // sources are provided, all available sources will be queried.
+  repeated string sources = 5;
+}
+
 // TimeSeriesQueryRequest is the standard incoming time series query request
 // accepted from cockroach clients.
 message TimeSeriesQueryRequest {
-    // A timestamp in nanoseconds which defines the early bound of the time span
-    // for this query.
-    optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
-    // A timestamp in nanoseconds which defines the late bound of the time span
-    // for this query. Must be greater than start_nanos.
-    optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
+  // A timestamp in nanoseconds which defines the early bound of the time span
+  // for this query.
+  optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
+  // A timestamp in nanoseconds which defines the late bound of the time span
+  // for this query. Must be greater than start_nanos.
+  optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
 
-    // Each Query defines a specific metric to query over the time span of
-    // this request.
-    message Query {
-        option (gogoproto.goproto_getters) = true;
-
-        // The name of the time series to query.
-        optional string name = 1 [(gogoproto.nullable) = false];
-        // A downsampling aggregation function to apply to datapoints within the
-        // same sample period.
-        optional TimeSeriesQueryAggregator downsampler = 2 [default = AVG];
-        // An aggregation function used to combine timelike datapoints from the
-        // different sources being queried.
-        optional TimeSeriesQueryAggregator source_aggregator = 3 [default = SUM];
-        // If set to a value other than 'NONE', query will return a derivative
-        // (rate of change) of the aggregated datapoints.
-        optional TimeSeriesQueryDerivative derivative = 4 [default = NONE];
-        // An optional list of sources to restrict the time series query. If no
-        // sources are provided, all available sources will be queried.
-        repeated string sources = 5;
-    }
-
-    // A set of Queries for this request. A request must have at least one
-    // Query.
-    repeated Query queries = 3 [(gogoproto.nullable) = false];
+  // A set of Queries for this request. A request must have at least one
+  // Query.
+  repeated Query queries = 3 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesQueryResponse is the standard response for time series queries
 // returned to cockroach clients.
 message TimeSeriesQueryResponse {
-    // Result is the data returned from a single metric query over a time span.
-    message Result {
-        option (gogoproto.goproto_getters) = true;
+  // Result is the data returned from a single metric query over a time span.
+  message Result {
+    optional Query query = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    repeated TimeSeriesDatapoint datapoints = 2;
+  }
 
-        // The name of the time series that was queried.
-        optional string name = 1 [(gogoproto.nullable) = false];
-        // A list of the different sources for which time series data was found
-        // and queried.
-        repeated string sources = 2;
-        // The downsampling aggregation function applied to datapoints within the
-        // same sample period.
-        optional TimeSeriesQueryAggregator downsampler = 3 [default = AVG];
-        // The aggregation function applied to combine timelike datapoints from
-        // the different sources that were queried.
-        optional TimeSeriesQueryAggregator source_aggregator = 4 [default = SUM];
-        // The derivative function applied to the results of this query.
-        optional TimeSeriesQueryDerivative derivative = 5 [default = NONE];
-        // The result of the query expressed as a list of datapoints.
-        repeated TimeSeriesDatapoint datapoints = 6;
-    }
-
-    // A set of Results; there will be one result for each Query in the matching
-    // TimeSeriesQueryRequest, in the same order. A Result will be present for
-    // each Query even if there are zero datapoints to return.
-    repeated Result results = 1;
+  // A set of Results; there will be one result for each Query in the matching
+  // TimeSeriesQueryRequest, in the same order. A Result will be present for
+  // each Query even if there are zero datapoints to return.
+  repeated Result results = 1;
 }
