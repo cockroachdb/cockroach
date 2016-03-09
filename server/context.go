@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -71,24 +72,17 @@ type Context struct {
 	// in zone configs.
 	Attrs string
 
-	// Maximum clock offset for the cluster.
-	MaxOffset time.Duration
-
 	// JoinUsing is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
 	JoinUsing string
-
-	// Enables linearizable behaviour of operations on this node by making sure
-	// that no commit timestamp is reported back to the client until all other
-	// node clocks have necessarily passed it.
-	Linearizable bool
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize uint64
 
 	// MemtableBudget is the amount of memory in bytes to use for the memory
-	// table. The value is split evenly between the stores if there are more than one.
+	// table.
+	// This value is no longer settable by the end user.
 	MemtableBudget uint64
 
 	// Parsed values.
@@ -103,23 +97,41 @@ type Context struct {
 	// to find bootstrap nodes for connecting to the gossip network.
 	GossipBootstrapResolvers []resolver.Resolver
 
+	// The following values can only be set via environment variables and are
+	// for testing only. They are not meant to be set by the end user.
+
+	// Enables linearizable behaviour of operations on this node by making sure
+	// that no commit timestamp is reported back to the client until all other
+	// node clocks have necessarily passed it.
+	// Environment Variable: COCKROACH-LINEARIZABLE
+	Linearizable bool
+
+	// Maximum clock offset for the cluster.
+	// Environment Variable: COCKROACH_MAX_OFFSET
+	MaxOffset time.Duration
+
+	// MetricsFrequency determines the frequency at which the server should
+	// record internal metrics.
+	// Environment Variable: COCKROACH_METRICS_FREQUENCY
+	MetricsFrequency time.Duration
+
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
+	// Environment Variable: COCKROACH_SCAN_INTERVAL
 	ScanInterval time.Duration
 
 	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
+	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
-
-	// MetricsFrequency determines the frequency at which the server should
-	// record internal metrics.
-	MetricsFrequency time.Duration
 
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
+	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
 	TimeUntilStoreDead time.Duration
 
+	// TestingMocker is used for internal test mocking only.
 	TestingMocker TestingMocker
 }
 
@@ -234,6 +246,8 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 // InitNode parses node attributes and initializes the gossip bootstrap
 // resolvers.
 func (ctx *Context) InitNode() error {
+	ctx.readEnvironmentVariables()
+
 	// Initialize attributes.
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 
@@ -247,6 +261,42 @@ func (ctx *Context) InitNode() error {
 	}
 
 	return nil
+}
+
+// parseDurationEnv parses a time.Duration from an environment variable. This
+// function assumes that the default value is already present in duration.
+func parseDurationEnv(env, internalName string, duration *time.Duration) {
+	if valueString := os.Getenv(env); len(valueString) != 0 {
+		if value, err := time.ParseDuration(valueString); err != nil {
+			log.Errorf("could not parse environment variable %s=%s, setting to default of %s, error: %s",
+				env, valueString, duration, err)
+		} else {
+			*duration = value
+			log.Infof("\"%s\" set to %s based on %s environment variable", internalName, *duration, env)
+		}
+	}
+}
+
+// readEnvironmentVariables populates all context values that are environment
+// variable based. Note that this only happens when initializing a node and not
+// when NewContext is called.
+func (ctx *Context) readEnvironmentVariables() {
+	// cockroach-linearizable
+	if linearizableString := os.Getenv("COCKROACH-LINEARIZABLE"); len(linearizableString) != 0 {
+		if linearizable, err := strconv.ParseBool(linearizableString); err != nil {
+			log.Errorf("could not parse environment variable COCKROACH-LINEARIZABLE=%s, setting to default of %t, error: %s",
+				linearizableString, ctx.Linearizable, err)
+		} else {
+			ctx.Linearizable = linearizable
+			log.Infof("\"linearizable\" set to %t based on COCKROACH-LINEARIZABLE environment variable", ctx.Linearizable)
+		}
+	}
+
+	parseDurationEnv("COCKROACH_MAX_OFFSET", "max offset", &ctx.MaxOffset)
+	parseDurationEnv("COCKROACH_METRICS_FREQUENCY", "metrics frequency", &ctx.MetricsFrequency)
+	parseDurationEnv("COCKROACH_SCAN_INTERVAL", "scan interval", &ctx.ScanInterval)
+	parseDurationEnv("COCKROACH_SCAN_MAX_IDLE_TIME", "scan max idle time", &ctx.ScanMaxIdleTime)
+	parseDurationEnv("COCKROACH_TIME_UNTIL_STORE_DEAD", "time until store dead", &ctx.TimeUntilStoreDead)
 }
 
 // AdminURL returns the URL for the admin UI.
