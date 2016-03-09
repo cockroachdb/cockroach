@@ -597,13 +597,11 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 	}
 
 	// INSERT or UPDATE as appropriate.
-	ts := session.Txn.TxnTimestamp
 	if alreadyExists {
-		query := "UPDATE system.ui SET value = $1, lastUpdated = $2 WHERE key = $3; COMMIT;"
+		query := "UPDATE system.ui SET value = $1, lastUpdated = NOW() WHERE key = $2; COMMIT;"
 		params := []parser.Datum{
-			parser.DString(req.Value),            // $1
-			parser.DTimestamp{Time: ts.GoTime()}, // $2
-			parser.DString(req.Key),              // $3
+			parser.DString(req.Value), // $1
+			parser.DString(req.Key),   // $2
 		}
 		r := s.sqlExecutor.ExecuteStatements(user, &session, query, params)
 		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
@@ -613,11 +611,10 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
 		}
 	} else {
-		query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, $3); COMMIT;"
+		query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW()); COMMIT;"
 		params := []parser.Datum{
-			parser.DString(req.Key),              // $1
-			parser.DBytes(req.Value),             // $2
-			parser.DTimestamp{Time: ts.GoTime()}, // $3
+			parser.DString(req.Key),  // $1
+			parser.DBytes(req.Value), // $2
 		}
 		r := s.sqlExecutor.ExecuteStatements(user, &session, query, params)
 		if err := s.checkQueryResults(r.ResultList, 2); err != nil {

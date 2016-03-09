@@ -535,7 +535,7 @@ var builtins = map[string][]builtin{
 			types:      argTypes{timestampType},
 			returnType: typeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: e.StmtTimestamp.Sub(args[0].(DTimestamp).Time)}, nil
+				return DInterval{Duration: e.GetTxnTimestamp().GoTime().Sub(args[0].(DTimestamp).Time)}, nil
 			},
 		},
 		builtin{
@@ -552,14 +552,24 @@ var builtins = map[string][]builtin{
 			types:      argTypes{},
 			returnType: typeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.makeDDate(e.StmtTimestamp.Time)
+				return e.makeDDate(e.GetTxnTimestamp().GoTime())
 			},
 		},
 	},
 
-	"now":                   {stmtTSImpl},
-	"current_timestamp":     {stmtTSImpl},
+	"now":                   {txnTSImpl},
+	"current_timestamp":     {txnTSImpl},
 	"transaction_timestamp": {txnTSImpl},
+	"transaction_timestamp_unique": {
+		builtin{
+			types:      argTypes{},
+			returnType: typeInt,
+			impure:     true,
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return DInt(e.GetTxnTimestamp().Logical), nil
+			},
+		},
+	},
 
 	"statement_timestamp": {stmtTSImpl},
 
@@ -1074,15 +1084,16 @@ var stmtTSImpl = builtin{
 	types:      argTypes{},
 	returnType: typeTimestamp,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return e.StmtTimestamp, nil
+		return e.GetStmtTimestamp(), nil
 	},
 }
 
 var txnTSImpl = builtin{
 	types:      argTypes{},
 	returnType: typeTimestamp,
+	impure:     true,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return e.TxnTimestamp, nil
+		return DTimestamp{Time: e.GetTxnTimestamp().GoTime()}, nil
 	},
 }
 

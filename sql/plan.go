@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -63,13 +61,22 @@ func makePlanner() *planner {
 	return &planner{session: &Session{}}
 }
 
-func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
+func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
-	p.evalCtx.TxnTimestamp = parser.DTimestamp{Time: timestamp}
+	// Only initialize the EvalContext's timestamp if there is a Txn
+	// ongoing. If there is no Txn, this means we are either in Prepare
+	// or evaluating SQL in the context of an aborted transaction, in
+	// which case the timestmap will never be read. In this case the
+	// default value ZeroTimestamp available in the freshly created
+	// planner is already appropriate and no further initialization is
+	// needed.
+	if txn != nil {
+		p.evalCtx.TxnTimestamp = txn.Proto.OrigTimestamp
+	}
 }
 
 func (p *planner) resetTxn() {
-	p.setTxn(nil, time.Time{})
+	p.setTxn(nil)
 }
 
 // makePlan creates the query plan for a single SQL statement. The returned

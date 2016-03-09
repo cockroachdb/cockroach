@@ -60,7 +60,7 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		p.user = security.RootUser
 		p.systemConfig = sc.cfg
 		p.leaseMgr = sc.leaseMgr
-		p.setTxn(txn, timeutil.Now())
+		p.setTxn(txn)
 
 		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
 		if pErr != nil {

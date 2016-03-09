@@ -155,6 +155,36 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	}
 }
 
+// TestTxnInitialTimestamp verifies that the timestamp requested
+// before the Txn is created is honored.
+func TestTxnInitialTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDB(t)
+	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
+
+	txn := client.NewTxn(*s.DB)
+
+	// Request a specific timestamp.
+	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
+	txn.Proto.OrigTimestamp = refTimestamp
+
+	// Put request will create a new transaction.
+	key := roachpb.Key("key")
+	txn.InternalSetPriority(10)
+	txn.Proto.Isolation = roachpb.SNAPSHOT
+	txn.Proto.Name = "test txn"
+	if err := txn.Put(key, []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	if txn.Proto.OrigTimestamp != refTimestamp {
+		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	}
+	if txn.Proto.Timestamp != refTimestamp {
+		t.Errorf("expected txn ts to be %s; got %s", refTimestamp, txn.Proto.Timestamp)
+	}
+}
+
 // TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {

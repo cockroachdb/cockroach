@@ -39,15 +39,11 @@ message Session {
     // While in this state, every subsequent statement must be rejected until
     // a COMMIT/ROLLBACK is seen.
     optional bool txnAborted = 2 [(gogoproto.nullable) = false];
-    // Timestamp to be used by SQL (transaction_timestamp()) in the above
-    // transaction. Note: this is not the transaction timestamp in
-    // roachpb.Transaction above, although it probably should be (#4393).
-    optional Timestamp txn_timestamp = 3 [(gogoproto.nullable) = false];
-    optional double user_priority = 4 [(gogoproto.nullable) = false,
+    optional double user_priority = 3 [(gogoproto.nullable) = false,
         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.UserPriority"];
     // Indicates that the transaction is mutating keys in the
     // SystemConfig span.
-    optional bool mutates_system_config = 5 [(gogoproto.nullable) = false];
+    optional bool mutates_system_config = 4 [(gogoproto.nullable) = false];
   }
   // Info about the open transaction (if any).
   optional Transaction txn = 3 [(gogoproto.nullable) = false];

@@ -91,7 +91,7 @@ SELECT age(timestamp '2001-04-10 22:06:45', timestamp '1957-06-13')
 384190h6m45s
 
 query B
-SELECT age(timestamp '1957-06-13') - age(now(), timestamp '1957-06-13') < interval '10s'
+SELECT age(timestamp '1957-06-13') - age(now(), timestamp '1957-06-13') = interval '0s'
 ----
 true
 
@@ -121,7 +121,7 @@ SELECT now() - current_timestamp = interval '0s'
 true
 
 query B
-SELECT now() - statement_timestamp() = interval '0s'
+SELECT now() - statement_timestamp() < interval '10s'
 ----
 true
 
@@ -130,8 +130,6 @@ SELECT clock_timestamp() - statement_timestamp() < interval '10s'
 ----
 true
 
-# Test that implicit transactions use the transaction_timestamp() as
-# the statement_timestamp.
 query B
 SELECT now() - transaction_timestamp() = interval '0s'
 ----
@@ -162,7 +160,8 @@ a
 statement ok
 COMMIT TRANSACTION
 
-# Test that the transaction_timestamp can differ from the current_timestamp.
+# Check that the current_timestamp, now and transaction_timestamp are the same.
+# Test that the transaction_timestamp can differ from the statement_timestamp.
 # Check that the transaction_timestamp changes with each transaction.
 # We use, SELECT * FROM kv, to insert delays of more than a nonsecond.
 statement ok
@@ -172,11 +171,19 @@ SELECT * FROM kv;
 INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
 SELECT * FROM kv;
 INSERT INTO kv (k,v) VALUES ('d', current_timestamp());
-SELECT * FROM KV;
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('e', current_timestamp());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('f', now());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('g', now());
+SELECT * FROM kv;
+INSERT INTO kv (k,v) VALUES ('h', statement_timestamp());
+SELECT * FROM kv;
 COMMIT;
 BEGIN;
 SELECT * FROM KV;
-INSERT INTO kv (k,v) VALUES ('e', transaction_timestamp());
+INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
 COMMIT;
 
 query I
