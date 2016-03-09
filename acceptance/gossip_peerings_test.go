@@ -144,7 +144,6 @@ func testGossipPeeringsInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCo
 // re-bootstrapped after a time when all nodes were down
 // simultaneously.
 func TestGossipRestart(t *testing.T) {
-	t.Skipf("TODO(pmattis): #4445")
 	// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
 	// agents should be required.
 	runTestOnConfigs(t, testGossipRestartInner)

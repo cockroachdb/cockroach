@@ -70,4 +70,6 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 		}
 		return fmt.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
 	})
+
+	log.Infof("found %d replicas", wantedReplicas)
 }
