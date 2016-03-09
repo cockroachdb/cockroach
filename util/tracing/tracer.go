@@ -72,6 +72,7 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 
 func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts := basictracer.DefaultOptions()
+	opts.ShouldSample = func(traceID int64) bool { return false }
 	opts.TrimUnsampledSpans = true
 	opts.Recorder = CallbackRecorder(recorder)
 	opts.NewSpanEventListener = basictracer.NetTraceIntegrator
