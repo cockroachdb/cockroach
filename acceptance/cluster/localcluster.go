@@ -410,7 +410,6 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"start",
 		"--certs=/certs",
 		"--host=" + node.nodeStr,
-		"--port=" + base.DefaultPort,
 		"--alsologtostderr=INFO",
 	}
 	for _, store := range node.stores {
@@ -647,16 +646,11 @@ func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.St
 		User:  security.NodeUser,
 		Certs: l.CertsDir,
 	}, nil, stopper)
-	sender, err := roachClient.NewSender(rpcContext, l.Addr(i).String())
+	sender, err := roachClient.NewSender(rpcContext, l.Nodes[i].Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return roachClient.NewDB(sender), stopper
-}
-
-// Addr returns the TCP address for the given node.
-func (l *LocalCluster) Addr(i int) *net.TCPAddr {
-	return l.Nodes[i].Addr()
 }
 
 // PGUrl returns a URL string for the given node postgres server.
@@ -670,7 +664,7 @@ func (l *LocalCluster) PGUrl(i int) string {
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),
-		Host:     l.Addr(i).String(),
+		Host:     l.Nodes[i].Addr().String(),
 		RawQuery: options.Encode(),
 	}
 	return pgURL.String()
@@ -693,5 +687,5 @@ func (l *LocalCluster) Restart(i int) error {
 
 // URL returns the base url.
 func (l *LocalCluster) URL(i int) string {
-	return "https://" + l.Addr(i).String()
+	return "https://" + l.Nodes[i].Addr().String()
 }
