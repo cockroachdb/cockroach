@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/interval"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -72,7 +72,7 @@ type txnMetadata struct {
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
-	keys *cache.IntervalCache
+	keys interval.RangeGroup
 
 	// lastUpdateNanos is the latest wall time in nanos the client sent
 	// transaction operations to this coordinator. Accessed and updated
@@ -93,37 +93,24 @@ type txnMetadata struct {
 	txnEnd chan struct{}
 }
 
-// addKeyRange adds the specified key range to the interval cache,
+// addKeyRange adds the specified key range to the range group,
 // taking care not to add this range if existing entries already
 // completely cover the range.
 func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 	// This gives us a memory-efficient end key if end is empty.
 	// The most common case for keys in the intents interval map
-	// is for single keys. However, the interval cache requires
+	// is for single keys. However, the range group requires
 	// a non-empty interval, so we create two key slices which
 	// share the same underlying byte array.
 	if len(end) == 0 {
 		end = start.Next()
 		start = end[:len(start)]
 	}
-	key := tm.keys.MakeKey(start, end)
-	for _, o := range tm.keys.GetOverlaps(key.Start, key.End) {
-		if o.Key.Contains(key) {
-			return
-		} else if key.Contains(*o.Key) {
-			tm.keys.DelEntry(o.Entry)
-		}
+	keyR := interval.Range{
+		Start: interval.Comparable(start),
+		End:   interval.Comparable(end),
 	}
-
-	// Since no existing key range fully covered this range, add it now. The
-	// strange assignment to pkey makes sure we delay the heap allocation until
-	// we know it is necessary.
-	alloc := struct {
-		key   cache.IntervalKey
-		entry cache.Entry
-	}{key: key}
-	alloc.entry.Key = &alloc.key
-	tm.keys.AddEntry(&alloc.entry)
+	tm.keys.Add(keyR)
 }
 
 // setLastUpdate updates the wall time (in nanoseconds) since the most
@@ -151,14 +138,14 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 // returned data.
 func (tm *txnMetadata) intentSpans() []roachpb.Span {
 	intents := make([]roachpb.Span, 0, tm.keys.Len())
-	for _, o := range tm.keys.GetOverlaps(roachpb.KeyMin, roachpb.KeyMax) {
-		intent := roachpb.Span{
-			Key: roachpb.Key(o.Key.Start),
-		}
-		if endKey := roachpb.Key(o.Key.End); !intent.Key.IsPrev(endKey) {
-			intent.EndKey = endKey
-		}
-		intents = append(intents, intent)
+	if err := tm.keys.ForEach(func(r interval.Range) error {
+		intents = append(intents, roachpb.Span{
+			Key:    roachpb.Key(r.Start),
+			EndKey: roachpb.Key(r.End),
+		})
+		return nil
+	}); err != nil {
+		panic(err)
 	}
 	return intents
 }
@@ -800,7 +787,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 				sp.LogEvent("coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
-					keys:             cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
+					keys:             interval.NewRangeTree(),
 					firstUpdateNanos: tc.clock.PhysicalNow(),
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,

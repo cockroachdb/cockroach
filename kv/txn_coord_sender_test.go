@@ -214,13 +214,13 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	txnID := *txn.Proto.ID
 
 	// Verify that the transaction metadata contains only two entries
-	// in its "keys" interval cache. "a" and range "aa"-"c".
+	// in its "keys" range group. "a" and range "aa"-"c".
 	txnMeta, ok := s.Sender.txns[txnID]
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
 	if txnMeta.keys.Len() != 2 {
-		t.Errorf("expected 2 entries in keys interval cache; got %v", txnMeta.keys)
+		t.Errorf("expected 2 entries in keys range group; got %v", txnMeta.keys)
 	}
 }
 
