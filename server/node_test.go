@@ -96,7 +96,6 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		kv.NewTxnMetrics(metric.NewRegistry()))
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
-	ctx.EventFeed = util.NewFeed(stopper)
 	ctx.Tracer = tracer
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper, kv.NewTxnMetrics(metric.NewRegistry()))
 	return rpcServer, ln.Addr(), ctx.Clock, node, stopper
@@ -526,9 +525,6 @@ func TestStatusSummaries(t *testing.T) {
 		if err := ts.node.computePeriodicMetrics(); err != nil {
 			t.Fatalf("error publishing store statuses: %s", err)
 		}
-
-		// Ensure that the event feed has been fully flushed.
-		ts.EventFeed().Flush()
 
 		if err := ts.WriteSummaries(); err != nil {
 			t.Fatalf("error writing summaries: %s", err)

@@ -352,9 +352,6 @@ type StoreContext struct {
 	// replicas to other stores.
 	AllocatorOptions AllocatorOptions
 
-	// EventFeed is a feed to which this store will publish events.
-	EventFeed *util.Feed
-
 	// Tracer is a request tracer.
 	Tracer opentracing.Tracer
 

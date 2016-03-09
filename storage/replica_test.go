@@ -96,7 +96,6 @@ type testContext struct {
 	clock         *hlc.Clock
 	stopper       *stop.Stopper
 	bootstrapMode bootstrapMode
-	feed          *util.Feed
 }
 
 // Start initializes the test context with a single range covering the
@@ -136,7 +135,6 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 		ctx.Clock = tc.clock
 		ctx.Gossip = tc.gossip
 		ctx.Transport = tc.transport
-		ctx.EventFeed = tc.feed
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
@@ -3521,68 +3519,6 @@ func TestRangeLookup(t *testing.T) {
 			}
 		}
 	}
-}
-
-// benchmarkEvents is designed to determine the impact of sending events on the
-// performance of write commands. This benchmark can be run with or without
-// events, and with or without a consumer reading the events.
-func benchmarkEvents(b *testing.B, sendEvents, consumeEvents bool) {
-	defer leaktest.AfterTest(b)
-	tc := testContext{}
-
-	stopper := stop.NewStopper()
-	if sendEvents {
-		tc.feed = util.NewFeed(stopper)
-	}
-	eventC := 0
-	if consumeEvents {
-		tc.feed.Subscribe(func(_ interface{}) {
-			eventC++
-		})
-	}
-
-	tc.Start(b)
-	defer tc.Stop()
-
-	args := incrementArgs([]byte("a"), 1)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
-
-		if pErr != nil {
-			b.Fatal(pErr)
-		}
-	}
-	b.StopTimer()
-
-	stopper.Stop()
-
-	if consumeEvents {
-		// The test expects exactly b.N update events to be sent on the feed.
-		// The '+5' is a constant number of non-update events sent when the
-		// store is first started.
-		if a, e := eventC, b.N+5; a != e {
-			b.Errorf("Unexpected number of events received %d, expected %d", a, e)
-		}
-	}
-}
-
-// BenchmarkWriteCmdNoEvents benchmarks write commands on a store that does not
-// publish events.
-func BenchmarkWriteCmdNoEvents(b *testing.B) {
-	benchmarkEvents(b, false, false)
-}
-
-// BenchmarkWriteCmdNoEvents benchmarks write commands on a store that publishes
-// events. There are no subscribers to the events, but they are still produced.
-func BenchmarkWriteCmdWithEvents(b *testing.B) {
-	benchmarkEvents(b, true, false)
-}
-
-// BenchmarkWriteConsumeEvents benchmarks write commands on a store that publishes
-// events. There is a single subscriber reading the events.
-func BenchmarkWriteCmdWithEventsAndConsumer(b *testing.B) {
-	benchmarkEvents(b, true, true)
 }
 
 // TestRequestLeaderEncounterGroupDeleteError verifies that a request leader proposal which fails with

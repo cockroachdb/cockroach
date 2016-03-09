@@ -275,8 +275,6 @@ func startServer(t *testing.T) TestServer {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
-	ts.EventFeed().Flush()
-
 	if err := ts.WriteSummaries(); err != nil {
 		t.Fatalf("error writing summaries: %s", err)
 	}
