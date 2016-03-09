@@ -55,10 +55,6 @@ nodes. For example:`) + `
   --attrs=us-west-1b:gpu
 `,
 
-	"balance-mode": wrapText(`
-Determines the criteria used by nodes to make balanced allocation
-decisions. Valid options are "usage" (default) or "rangecount".`),
-
 	"cache": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
@@ -289,7 +285,6 @@ func initFlags(ctx *Context) {
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
 		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
 		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, usage("metrics-frequency"))
-		f.Var(&ctx.BalanceMode, "balance-mode", usage("balance-mode"))
 
 		// Security flags.
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
