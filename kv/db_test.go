@@ -243,13 +243,12 @@ func TestKVDBTransaction(t *testing.T) {
 // TestAuthentication tests authentication for the KV endpoint.
 func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(tamird): grpc is listening on a cmux listener, not a tls.Listener. See https://github.com/golang/go/issues/14221")
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	arg := &roachpb.PutRequest{}
-	arg.Header().Key = roachpb.Key("a")
 	b := &client.Batch{}
-	b.InternalAddRequest(arg)
+	b.Put("a", "b")
 
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
@@ -258,10 +257,13 @@ func TestAuthentication(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	*b = client.Batch{}
+	b.Put("c", "d")
+
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if pErr := db2.Run(b); pErr == nil {
-		t.Fatal("Expected error!")
+	if pErr := db2.Run(b); !testutils.IsPError(pErr, "is not allowed") {
+		t.Fatal(pErr)
 	}
 }
