@@ -1154,7 +1154,7 @@ func (r *Replica) handleRaftReady() error {
 				shouldReproposeCmds = true
 				continue
 			}
-			commandID, encodedCommand := decodeRaftCommand(e.Data)
+			commandID, encodedCommand := DecodeRaftCommand(e.Data)
 			var command roachpb.RaftCommand
 			if err := command.Unmarshal(encodedCommand); err != nil {
 				return err
