@@ -352,7 +352,7 @@ func (tm *testModel) assertQuery(name string, sources []string,
 			iters.advance()
 		}
 	}
-	for iters.isValid() {
+	for iters.isValid() && iters.timestamp() <= end {
 		current := currentVal()
 		result := &TimeSeriesDatapoint{}
 		*result = current
@@ -510,5 +510,12 @@ func TestQuery(t *testing.T) {
 
 	tm.assertKeyCount(31)
 	tm.assertModelCorrect()
+
+	// Assert querying data from subset of sources. Includes source with no
+	// data.
 	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 0, 90, 7, 2)
+
+	// Assert querying data over limited range for single source. Regression
+	// test for #4987.
+	tm.assertQuery("test.specificmetric", []string{"source4", "source5"}, nil, nil, nil, resolution1ns, 5, 24, 4, 2)
 }

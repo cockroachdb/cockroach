@@ -102,8 +102,11 @@ func TestHttpQuery(t *testing.T) {
 	expectedResult := &ts.TimeSeriesQueryResponse{
 		Results: []*ts.TimeSeriesQueryResponse_Result{
 			{
-				Name:    "test.metric",
-				Sources: []string{"source1", "source2"},
+				Name:             "test.metric",
+				Sources:          []string{"source1", "source2"},
+				Downsampler:      ts.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -120,8 +123,11 @@ func TestHttpQuery(t *testing.T) {
 				},
 			},
 			{
-				Name:    "other.metric",
-				Sources: []string{""},
+				Name:             "other.metric",
+				Sources:          []string{""},
+				Downsampler:      ts.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -130,6 +136,27 @@ func TestHttpQuery(t *testing.T) {
 					{
 						TimestampNanos: 515 * 1e9,
 						Value:          250.0,
+					},
+				},
+			},
+			{
+				Name:             "test.metric",
+				Sources:          []string{"source1", "source2"},
+				Downsampler:      ts.TimeSeriesQueryAggregator_MAX.Enum(),
+				SourceAggregator: ts.TimeSeriesQueryAggregator_MAX.Enum(),
+				Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
+				Datapoints: []*ts.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 505 * 1e9,
+						Value:          10.0,
+					},
+					{
+						TimestampNanos: 515 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 525 * 1e9,
+						Value:          50.0,
 					},
 				},
 			},
@@ -148,13 +175,19 @@ func TestHttpQuery(t *testing.T) {
 			{
 				Name: "other.metric",
 			},
+			{
+				Name:             "test.metric",
+				Downsampler:      ts.TimeSeriesQueryAggregator_MAX.Enum(),
+				SourceAggregator: ts.TimeSeriesQueryAggregator_MAX.Enum(),
+				Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
+			},
 		},
 	}, response)
 	for _, r := range response.Results {
 		sort.Strings(r.Sources)
 	}
 	if !reflect.DeepEqual(response, expectedResult) {
-		t.Fatalf("actual response %v did not match expected response %v",
+		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}
 }
