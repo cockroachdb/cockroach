@@ -243,8 +243,13 @@ func (l *LocalCluster) createNetwork() {
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
 		Name:   "cockroachdb_acceptance",
 		Driver: "bridge",
+		// Docker gets very confused if two networks have the same name.
+		CheckDuplicate: true,
 	})
 	maybePanic(err)
+	if resp.Warning != "" {
+		log.Warningf("creating network: %s", resp.Warning)
+	}
 	l.networkID = resp.ID
 }
 
@@ -552,7 +557,7 @@ func (l *LocalCluster) Assert(t *testing.T) {
 		if exp == nil {
 			break
 		}
-		act := filter(l.events, time.Second)
+		act := filter(l.events, 15*time.Second)
 		if act == nil || *exp != *act {
 			t.Fatalf("expected event %v, got %v (after %v)", exp, act, events)
 		}
