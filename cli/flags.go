@@ -103,23 +103,8 @@ Run over plain HTTP. WARNING: this is strongly discouraged.`),
 	"key-size": wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
 
-	"linearizable": wrapText(`
-Enables linearizable behaviour of operations on this node by making
-sure that no commit timestamp is reported back to the client until all
-other node clocks have necessarily passed it.`),
-
-	"max-offset": wrapText(`
-The maximum clock offset for the cluster. Clock offset is measured on
-all node-to-node links and if any node notices it has clock offset in
-excess of --max-offset, it will commit suicide. Setting this value too
-high may decrease transaction performance in the presence of
-contention.`),
-
 	"max-results": wrapText(`
 Define the maximum number of results that will be retrieved.`),
-
-	"metrics-frequency": wrapText(`
-Adjust the frequency at which the server records its own internal metrics.`),
 
 	"password": wrapText(`
 The created user's password. If provided, disables prompting. Pass '-' to
@@ -127,15 +112,6 @@ provide the password on standard input.`),
 
 	"server_port": wrapText(`
 The port to bind to.`),
-
-	"scan-interval": wrapText(`
-Adjusts the target for the duration of a single scan through a store's
-ranges. The scan is slowed as necessary to approximately achieve this
-duration.`),
-
-	"scan-max-idle-time": wrapText(`
-Adjusts the max idle time of the scanner. This speeds up the scanner on small
-clusters to be more responsive.`),
 
 	"store": wrapText(`
 The file path to a storage device. This flag must be specified separately for
@@ -283,8 +259,6 @@ func initFlags(ctx *Context) {
 		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
-		f.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, usage("max-offset"))
-		f.DurationVar(&ctx.MetricsFrequency, "metrics-frequency", ctx.MetricsFrequency, usage("metrics-frequency"))
 
 		// Security flags.
 		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
@@ -293,15 +267,9 @@ func initFlags(ctx *Context) {
 		// Cluster joining flags.
 		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usage("join"))
 
-		// KV flags.
-		f.BoolVar(&ctx.Linearizable, "linearizable", ctx.Linearizable, usage("linearizable"))
-
 		// Engine flags.
 		cacheSize = newBytesValue(&ctx.CacheSize)
 		f.Var(cacheSize, "cache", usage("cache"))
-		f.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, usage("scan-interval"))
-		f.DurationVar(&ctx.ScanMaxIdleTime, "scan-max-idle-time", ctx.ScanMaxIdleTime, usage("scan-max-idle-time"))
-		f.DurationVar(&ctx.TimeUntilStoreDead, "time-until-store-dead", ctx.TimeUntilStoreDead, usage("time-until-store-dead"))
 
 		// Clear the cache default value. This flag does have a default, but
 		// it is set only when the "start" command is run.

@@ -340,7 +340,7 @@ func (l *LocalCluster) initCluster() {
 	l.vols = c
 }
 
-func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...string) {
+func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string, cmd ...string) {
 	l.panicOnStop()
 
 	hostConfig := container.HostConfig{
@@ -372,9 +372,8 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, cmd ...strin
 				defaultTCP: {},
 			},
 			Entrypoint: entrypoint,
-			// TODO(pmattis): Figure out why the Go DNS resolver is misbehaving.
-			Env: []string{"GODEBUG=netdns=cgo"},
-			Cmd: cmd,
+			Env:        env,
+			Cmd:        cmd,
 			Labels: map[string]string{
 				// Allow for `docker ps --filter label=Hostname=roach0` or `--filter label=Roach`.
 				"Hostname": hostname,
@@ -413,7 +412,6 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--host=" + node.nodeStr,
 		"--port=" + base.DefaultPort,
 		"--alsologtostderr=INFO",
-		"--scan-max-idle-time=200ms", // set low to speed up tests
 	}
 	for _, store := range node.stores {
 		cmd = append(cmd, fmt.Sprintf("--store=%s", store.dataStr))
@@ -434,7 +432,9 @@ func (l *LocalCluster) startNode(node *testNode) {
 			"--logtostderr=false",
 			"--alsologtostderr=INFO")
 	}
-	l.createRoach(node, l.vols, cmd...)
+	// TODO(pmattis): Figure out why the Go DNS resolver is misbehaving.
+	env := []string{"GODEBUG=netdns=cgo", "COCKROACH_SCAN_MAX_IDLE_TIME=200ms"}
+	l.createRoach(node, l.vols, env, cmd...)
 	maybePanic(node.Start())
 	log.Infof(`*** started %[1]s ***
   ui:        %[2]s
