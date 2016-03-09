@@ -710,11 +710,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	}
 
 	switch t := pErr.GetDetail().(type) {
-	case nil:
-		// Move txn timestamp forward to response timestamp if applicable.
-		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
-		// Looks like this isn't necessary any more, nor did it prevent a bug
-		// referenced in a TODO there.
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
@@ -746,6 +741,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 	case *roachpb.TransactionRetryError:
 		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
+	case nil:
+		// Nothing to here, avoid the default case.
 	default:
 		if pErr.GetTxn() != nil {
 			if pErr.CanRetry() {
