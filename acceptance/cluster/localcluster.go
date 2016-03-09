@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
@@ -241,7 +242,10 @@ func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
-		Name:   "cockroachdb_acceptance",
+		// Use a randomized ID since left-overs from a previous run confuse
+		// Docker. There appears to be a bug where it's using the name for the
+		// lookup, not the ID.
+		Name:   fmt.Sprintf("cockroachdb_acceptance_%d", rand.Int()),
 		Driver: "bridge",
 	})
 	maybePanic(err)
