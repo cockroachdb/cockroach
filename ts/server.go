@@ -86,13 +86,12 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request, _ httproute
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		response.Results = append(response.Results, &TimeSeriesQueryResponse_Result{
-			Name:             q.Name,
-			Sources:          sources,
-			SourceAggregator: q.SourceAggregator,
-			Downsampler:      q.Downsampler,
-			Datapoints:       datapoints,
-		})
+		result := &TimeSeriesQueryResponse_Result{
+			Query:      q,
+			Datapoints: datapoints,
+		}
+		result.Sources = sources
+		response.Results = append(response.Results, result)
 	}
 
 	// Marshal and return response.

@@ -102,8 +102,10 @@ func TestHttpQuery(t *testing.T) {
 	expectedResult := &ts.TimeSeriesQueryResponse{
 		Results: []*ts.TimeSeriesQueryResponse_Result{
 			{
-				Name:    "test.metric",
-				Sources: []string{"source1", "source2"},
+				Query: ts.Query{
+					Name:    "test.metric",
+					Sources: []string{"source1", "source2"},
+				},
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -120,8 +122,10 @@ func TestHttpQuery(t *testing.T) {
 				},
 			},
 			{
-				Name:    "other.metric",
-				Sources: []string{""},
+				Query: ts.Query{
+					Name:    "other.metric",
+					Sources: []string{""},
+				},
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
@@ -141,7 +145,7 @@ func TestHttpQuery(t *testing.T) {
 	session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
-		Queries: []ts.TimeSeriesQueryRequest_Query{
+		Queries: []ts.Query{
 			{
 				Name: "test.metric",
 			},
