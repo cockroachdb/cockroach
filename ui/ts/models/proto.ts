@@ -231,11 +231,8 @@ module Models {
      * Source message = "TimeSeriesQueryResponse.Result"
      */
     export interface QueryResult {
-      name: string;
+      query: QueryRequest;
       datapoints: Datapoint[];
-      downsampler: QueryAggregator;
-      source_aggregator: QueryAggregator;
-      derivative: QueryDerivative;
     }
 
     /**
