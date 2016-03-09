@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -175,6 +176,7 @@ type ExecutorContext struct {
 	DB           *client.DB
 	Gossip       *gossip.Gossip
 	LeaseManager *LeaseManager
+	Clock        *hlc.Clock
 
 	TestingMocker ExecutorTestingMocker
 }
@@ -295,10 +297,9 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 		session:       session,
 	}
 
-	timestamp := timeutil.Now()
 	txn := e.newTxn(session)
-	planMaker.setTxn(txn, timestamp)
-	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timestamp}
+	planMaker.setTxn(txn)
+	planMaker.evalCtx.StmtTimestamp = parser.DTimestamp{Time: timeutil.Now()}
 	plan, pErr := planMaker.prepare(stmt)
 	if pErr != nil {
 		return nil, pErr
@@ -413,9 +414,6 @@ type txnState struct {
 	// true if we were inside a txn at some point and that txn was aborted. We
 	// need to reject every subsequent statement.
 	aborted bool
-	// Timestamp to be used by SQL (transaction_timestamp()) in the above
-	// transaction.
-	txnTimestamp time.Time
 	// The schema change closures to run when this txn is done.
 	schemaChangers schemaChangerCollection
 }
@@ -461,25 +459,21 @@ func (e *Executor) ExecuteStatements(
 		session:       session,
 	}
 
-	// Move the transaction state from the session to curTxnState, a struct
-	// that only lives for the duration of this request.
-	// If a pending transaction is present, it will be resumed.
 	curTxnState := txnState{
-		txn:          nil,
-		aborted:      false,
-		txnTimestamp: time.Time{},
+		txn:     nil,
+		aborted: session.Txn.TxnAborted,
 	}
-	txnProto := session.Txn.Txn
-	curTxnState.aborted = session.Txn.TxnAborted
-	if txnProto != nil {
-		curTxnState.txn = e.newTxn(session)
+	if txnProto := session.Txn.Txn; txnProto != nil {
+		// A pending transaction is already present, resume it.
+		curTxnState.txn = client.NewTxn(*e.ctx.DB)
 		curTxnState.txn.Proto = *txnProto
 		curTxnState.txn.UserPriority = session.Txn.UserPriority
 		if session.Txn.MutatesSystemConfig {
 			curTxnState.txn.SetSystemConfigTrigger()
 		}
-		curTxnState.txnTimestamp = session.Txn.TxnTimestamp.GoTime()
+		planMaker.setTxn(curTxnState.txn)
 	}
+
 	session.Txn = Session_Transaction{}
 
 	// Send the Request for SQL execution and set the application-level error
@@ -489,20 +483,16 @@ func (e *Executor) ExecuteStatements(
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
+	session.Txn.TxnAborted = curTxnState.aborted
 	if curTxnState.txn != nil {
 		// TODO(pmattis): Need to associate the leases used by a transaction with
 		// the session state.
 		planMaker.releaseLeases()
-		session.Txn = Session_Transaction{
-			Txn:          &curTxnState.txn.Proto,
-			TxnTimestamp: Timestamp(curTxnState.txnTimestamp),
-			UserPriority: curTxnState.txn.UserPriority,
-		}
+		session.Txn.Txn = &curTxnState.txn.Proto
+		session.Txn.UserPriority = curTxnState.txn.UserPriority
 		session.Txn.MutatesSystemConfig = curTxnState.txn.SystemConfigTrigger()
-		session.Txn.TxnAborted = curTxnState.aborted
 	} else {
 		session.Txn.Txn = nil
-		session.Txn.TxnAborted = curTxnState.aborted
 		session.Txn.MutatesSystemConfig = false
 	}
 
@@ -599,7 +589,7 @@ func (e *Executor) execRequest(
 			}
 			txnState.txn = e.newTxn(planMaker.session)
 			execOpt.AutoRetry = true
-			txnState.txnTimestamp = timeutil.Now()
+			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
 			txnState.txn.SetDebugName(fmt.Sprintf("sql implicit: %t", execOpt.AutoCommit), 0)
 		}
 		if txnState.state() == noTransaction {
@@ -715,7 +705,7 @@ func runTxnAttempt(
 	txnState.schemaChangers = schemaChangerCollection{}
 	planMaker.schemaChangeCallback = txnState.schemaChangers.queueSchemaChanger
 
-	planMaker.setTxn(txn, txnState.txnTimestamp)
+	planMaker.setTxn(txn)
 	var pErr *roachpb.Error
 	*results, *remainingStmts, pErr = e.execStmtsInCurrentTxn(
 		stmts, planMaker, txnState,
@@ -770,12 +760,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 			log.Infof("about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
-		// For implicit transactions, the transaction timestamp is also
-		// used as the statement_transaction() too.
-		stmtTimestamp := planMaker.evalCtx.TxnTimestamp
-		if !implicitTxn {
-			stmtTimestamp = parser.DTimestamp{Time: timeutil.Now()}
-		}
+
+		stmtTimestamp := parser.DTimestamp{Time: timeutil.Now()}
+
 		var stmtStrBefore string
 		if e.ctx.TestingMocker.CheckStmtStringChange {
 			stmtStrBefore = stmt.String()

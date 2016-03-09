@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -740,10 +741,28 @@ func init() {
 type EvalContext struct {
 	NodeID        roachpb.NodeID
 	StmtTimestamp DTimestamp
-	TxnTimestamp  DTimestamp
+	TxnTimestamp  roachpb.Timestamp
 	ReCache       *RegexpCache
 	GetLocation   func() (*time.Location, error)
 	Args          MapArgs
+}
+
+// GetStmtTimestamp retrieves the current statement timestamp as per
+// the evaluation context. The timestamp is guaranteed to be valid.
+func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
+	if ctx.StmtTimestamp.Time.IsZero() {
+		log.Fatal("invalid statement timestamp in EvalContext")
+	}
+	return ctx.StmtTimestamp
+}
+
+// GetTxnTimestamp retrieves the current transaction timestamp as per
+// the evaluation context. The timestamp is guaranteed to be valid.
+func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
+	if ctx.TxnTimestamp == roachpb.ZeroTimestamp {
+		log.Fatal("invalid transaction timestamp in EvalContext")
+	}
+	return ctx.TxnTimestamp
 }
 
 var defaultContext = EvalContext{
