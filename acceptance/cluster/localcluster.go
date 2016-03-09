@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
@@ -241,7 +242,7 @@ func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
-		Name:   "cockroachdb_acceptance",
+		Name:   "cockroachdb_acceptance_" + fmt.Sprintf("%d", rand.Int()),
 		Driver: "bridge",
 	})
 	maybePanic(err)
