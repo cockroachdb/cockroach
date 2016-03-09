@@ -17,8 +17,10 @@
 package server
 
 import (
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -70,5 +72,105 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	expected := []resolver.Resolver{r1, r2}
 	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
 		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
+	}
+}
+
+// TestReadEnvironmentVariables verifies that all environment variables are
+// correctly parsed.
+func TestReadEnvironmentVariables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	resetEnvVar := func() {
+		// Reset all environment variables in case any were already set.
+		if err := os.Unsetenv("COCKROACH_LINEARIZABLE"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Unsetenv("COCKROACH_MAX_OFFSET"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Unsetenv("COCKROACH_METRICS_FREQUENCY"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Unsetenv("COCKROACH_SCAN_MAX_IDLE_TIME"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Unsetenv("COCKROACH_TIME_UNTIL_STORE_DEAD"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer resetEnvVar()
+
+	// Makes sure no values are set when no environment variables are set.
+	ctx := NewContext()
+	ctxExpected := NewContext()
+
+	resetEnvVar()
+	ctx.readEnvironmentVariables()
+	if !reflect.DeepEqual(ctx, ctxExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	}
+
+	// Set all the environment variables to valid values and ensure they are set
+	// correctly.
+	if err := os.Setenv("COCKROACH_LINEARIZABLE", "true"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.Linearizable = true
+	if err := os.Setenv("COCKROACH_MAX_OFFSET", "1s"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.MaxOffset = time.Second
+	if err := os.Setenv("COCKROACH_METRICS_FREQUENCY", "1h10m"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.MetricsFrequency = time.Hour + time.Minute*10
+	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ScanInterval = time.Hour * 48
+	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "100ns"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ScanMaxIdleTime = time.Nanosecond * 100
+	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "10ms"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.TimeUntilStoreDead = time.Millisecond * 10
+
+	ctx.readEnvironmentVariables()
+	if !reflect.DeepEqual(ctx, ctxExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	}
+
+	// Set all the environment variables to invalid values and test that the
+	// defaults are still set.
+	ctx = NewContext()
+	ctxExpected = NewContext()
+
+	if err := os.Setenv("COCKROACH_LINEARIZABLE", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_MAX_OFFSET", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_METRICS_FREQUENCY", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx.readEnvironmentVariables()
+	if !reflect.DeepEqual(ctx, ctxExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
 	}
 }
