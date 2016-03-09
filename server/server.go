@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -220,14 +221,12 @@ func (s *Server) Start() error {
 	// non-TLS case:
 	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
 	//               |
-	//               -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
 	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
 	//               -  -> cmux.Any -> http.(*Server).Serve
 	//
 	// TLS case:
 	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
 	//               |
-	//               -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
 	//               -  -> cmux.Any -> tls.NewListener -> http.(*Server).Serve
 	//
 	// Note that the difference between the TLS and non-TLS cases exists due to
@@ -256,26 +255,11 @@ func (s *Server) Start() error {
 	m := cmux.New(ln)
 	pgL := m.Match(pgwire.Match)
 
-	// GRPC connections get special handling because using GRPC's ServeHTTP is
-	// prohibitively slow. See https://github.com/grpc/grpc-go/issues/586
-	var grpcL net.Listener
-	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
-
 	var serveConn func(net.Listener, func(net.Conn)) error
 	if tlsConfig != nil {
 		anyL := m.Match(cmux.Any())
-
-		tlsM := cmux.New(tls.NewListener(anyL, tlsConfig))
-		grpcL = tlsM.Match(grpcMatcher)
-
-		serveConn = util.ServeHandler(s.stopper, s, tlsM.Match(cmux.Any()), tlsConfig)
-
-		go func() {
-			util.FatalIfUnexpected(tlsM.Serve())
-		}()
+		serveConn = util.ServeHandler(s.stopper, s, tls.NewListener(anyL, tlsConfig), tlsConfig)
 	} else {
-		grpcL = m.Match(grpcMatcher)
-
 		h2L := m.Match(cmux.HTTP2())
 		anyL := m.Match(cmux.Any())
 
@@ -289,26 +273,22 @@ func (s *Server) Start() error {
 
 		serveConn = util.ServeHandler(s.stopper, s, anyL, tlsConfig)
 
-		go func() {
+		s.stopper.RunWorker(func() {
 			util.FatalIfUnexpected(serveConn(h2L, serveH2))
-		}()
+		})
 	}
 
-	go func() {
-		util.FatalIfUnexpected(s.grpc.Serve(grpcL))
-	}()
-
-	go func() {
+	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
 				log.Error(err)
 			}
 		}))
-	}()
+	})
 
-	go func() {
+	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(m.Serve())
-	}()
+	})
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
@@ -346,13 +326,13 @@ func (s *Server) Start() error {
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle("/", http.FileServer(
+	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,
 			AssetDir:  ui.AssetDir,
 			AssetInfo: ui.AssetInfo,
 		},
-	))
+	)))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,

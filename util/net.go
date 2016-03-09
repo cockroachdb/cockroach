@@ -118,7 +118,7 @@ func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, 
 		log.Fatal(err)
 	}
 
-	go func() {
+	stopper.RunWorker(func() {
 		FatalIfUnexpected(httpServer.Serve(ln))
 
 		<-stopper.ShouldStop()
@@ -127,7 +127,7 @@ func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, 
 			conn.Close()
 		}
 		mu.Unlock()
-	}()
+	})
 
 	logFn := logger.Printf
 	return func(l net.Listener, serveConn func(net.Conn)) error {
