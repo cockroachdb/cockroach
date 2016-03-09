@@ -440,7 +440,10 @@ func (db *DB) Query(query TimeSeriesQueryRequest_Query, r Resolution,
 		b := db.db.NewBatch()
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
-		for currentTimestamp := startNanos; currentTimestamp <= endNanos; currentTimestamp += r.KeyDuration() {
+		kd := r.KeyDuration()
+		startKeyNanos := startNanos - (startNanos % kd)
+		endKeyNanos := endNanos - (endNanos % kd)
+		for currentTimestamp := startKeyNanos; currentTimestamp <= endKeyNanos; currentTimestamp += kd {
 			for _, source := range query.Sources {
 				key := MakeDataKey(query.Name, source, r, currentTimestamp)
 				b.Get(key)
