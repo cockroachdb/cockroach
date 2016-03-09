@@ -159,6 +159,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		DB:            s.db,
 		Gossip:        s.gossip,
 		LeaseManager:  s.leaseMgr,
+		Clock:         s.clock,
 		TestingMocker: ctx.TestingMocker.ExecutorTestingMocker,
 	}
 
