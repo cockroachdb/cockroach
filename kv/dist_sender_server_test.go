@@ -550,16 +550,23 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	waitForWriteIntent := make(chan struct{})
 	waitForTxnRestart := make(chan struct{})
 	waitForTxnCommit := make(chan struct{})
+	lowPriority := int32(1)
+	highriority := int32(10)
+	key := "a"
 	// Create a goroutine that creates a write intent and waits until
 	// another txn created in this test is restarted.
 	go func() {
 		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
-			if pErr := txn.Put("b", "val"); pErr != nil {
+			// Set high priority so that the intent will not be pushed.
+			txn.InternalSetPriority(highriority)
+			log.Infof("Creating a write intent with high priority")
+			if pErr := txn.Put(key, "val"); pErr != nil {
 				return pErr
 			}
 			close(waitForWriteIntent)
 			// Wait until another txn in this test is
 			// restarted by a push txn error.
+			log.Infof("Waiting for the txn restart")
 			<-waitForTxnRestart
 			return txn.CommitInBatch(txn.NewBatch())
 		}); pErr != nil {
@@ -569,39 +576,34 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	}()
 
 	// Wait until a write intent is created by the above goroutine.
+	log.Infof("Waiting for the write intent creation")
 	<-waitForWriteIntent
 
-	// The transaction below is restarted multiple times.
-	// - The first retry is caused by the write intent created on key "b" by the above goroutine.
-	// - The subsequent retries are caused by the write conflict on key "a". Since the txn
-	//   ID is not propagated, a txn of a new epoch always has a new txn ID different
-	//   from the previous txn's. So, the write intent made by the txn of the previous epoch
-	//   is treated as a write made by some different txn.
+	// The transaction below is restarted exactly once. The restart is
+	// caused by the write intent created on key "a" by the above goroutine.
+	// When the txn is retried, the error propagates the txn ID to the next
+	// iteration.
 	epoch := 0
 	var txnID *uuid.UUID
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
-		// Set low priority so that the intent will not be pushed.
-		txn.InternalSetPriority(1)
+		// Set low priority so that a write from this txn will not push others.
+		txn.InternalSetPriority(lowPriority)
 
 		epoch++
 
 		if epoch == 2 {
 			close(waitForTxnRestart)
 			// Wait until the txn created by the goroutine is committed.
+			log.Infof("Waiting for the txn commit")
 			<-waitForTxnCommit
 			if !roachpb.TxnIDEqual(txn.Proto.ID, txnID) {
 				t.Errorf("txn ID is not propagated; got %s", txn.Proto.ID)
 			}
 		}
 
-		b := txn.NewBatch()
-		b.Put("a", "val")
-		b.Put("b", "val")
-		// The commit returns an error, but it will not be
-		// passed to the next iteration. txnSender.Send() does
-		// not update the txn data since
-		// TransactionPushError.Transaction() returns nil.
-		pErr := txn.CommitInBatch(b)
+		// The commit returns an error, and it will pass
+		// the txn data to the next iteration.
+		pErr := txn.Put(key, "val")
 		if epoch == 1 {
 			if tErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); ok {
 				if pErr.GetTxn().ID == nil {
@@ -619,5 +621,11 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 
 	if e := 2; epoch != e {
 		t.Errorf("unexpected epoch; the txn must be attempted %d times, but got %d attempts", e, epoch)
+		if epoch == 1 {
+			// Wait for the completion of the goroutine to see if it successfully commits the txn.
+			close(waitForTxnRestart)
+			log.Infof("Waiting for the txn commit")
+			<-waitForTxnCommit
+		}
 	}
 }
