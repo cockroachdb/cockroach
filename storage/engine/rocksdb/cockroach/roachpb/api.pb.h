@@ -2963,15 +2963,27 @@ class HeartbeatTxnRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* release_header();
   void set_allocated_header(::cockroach::roachpb::Span* header);
 
+  // optional .cockroach.roachpb.Timestamp now = 2;
+  bool has_now() const;
+  void clear_now();
+  static const int kNowFieldNumber = 2;
+  const ::cockroach::roachpb::Timestamp& now() const;
+  ::cockroach::roachpb::Timestamp* mutable_now();
+  ::cockroach::roachpb::Timestamp* release_now();
+  void set_allocated_now(::cockroach::roachpb::Timestamp* now);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.HeartbeatTxnRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
+  inline void set_has_now();
+  inline void clear_has_now();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
+  ::cockroach::roachpb::Timestamp* now_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -5847,15 +5859,6 @@ class BatchResponse_Header : public ::google::protobuf::Message {
   ::cockroach::roachpb::Error* release_error();
   void set_allocated_error(::cockroach::roachpb::Error* error);
 
-  // optional .cockroach.roachpb.Timestamp timestamp = 2;
-  bool has_timestamp() const;
-  void clear_timestamp();
-  static const int kTimestampFieldNumber = 2;
-  const ::cockroach::roachpb::Timestamp& timestamp() const;
-  ::cockroach::roachpb::Timestamp* mutable_timestamp();
-  ::cockroach::roachpb::Timestamp* release_timestamp();
-  void set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp);
-
   // optional .cockroach.roachpb.Transaction txn = 3;
   bool has_txn() const;
   void clear_txn();
@@ -5885,8 +5888,6 @@ class BatchResponse_Header : public ::google::protobuf::Message {
  private:
   inline void set_has_error();
   inline void clear_has_error();
-  inline void set_has_timestamp();
-  inline void clear_has_timestamp();
   inline void set_has_txn();
   inline void clear_has_txn();
 
@@ -5894,7 +5895,6 @@ class BatchResponse_Header : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Error* error_;
-  ::cockroach::roachpb::Timestamp* timestamp_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::RepeatedPtrField< ::std::string> collected_spans_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -8174,6 +8174,49 @@ inline void HeartbeatTxnRequest::set_allocated_header(::cockroach::roachpb::Span
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.HeartbeatTxnRequest.header)
+}
+
+// optional .cockroach.roachpb.Timestamp now = 2;
+inline bool HeartbeatTxnRequest::has_now() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void HeartbeatTxnRequest::set_has_now() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void HeartbeatTxnRequest::clear_has_now() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void HeartbeatTxnRequest::clear_now() {
+  if (now_ != NULL) now_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_now();
+}
+inline const ::cockroach::roachpb::Timestamp& HeartbeatTxnRequest::now() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.HeartbeatTxnRequest.now)
+  return now_ != NULL ? *now_ : *default_instance_->now_;
+}
+inline ::cockroach::roachpb::Timestamp* HeartbeatTxnRequest::mutable_now() {
+  set_has_now();
+  if (now_ == NULL) {
+    now_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.HeartbeatTxnRequest.now)
+  return now_;
+}
+inline ::cockroach::roachpb::Timestamp* HeartbeatTxnRequest::release_now() {
+  clear_has_now();
+  ::cockroach::roachpb::Timestamp* temp = now_;
+  now_ = NULL;
+  return temp;
+}
+inline void HeartbeatTxnRequest::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
+  delete now_;
+  now_ = now;
+  if (now) {
+    set_has_now();
+  } else {
+    clear_has_now();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.HeartbeatTxnRequest.now)
 }
 
 // -------------------------------------------------------------------
@@ -11936,58 +11979,15 @@ inline void BatchResponse_Header::set_allocated_error(::cockroach::roachpb::Erro
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.BatchResponse.Header.error)
 }
 
-// optional .cockroach.roachpb.Timestamp timestamp = 2;
-inline bool BatchResponse_Header::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void BatchResponse_Header::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void BatchResponse_Header::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void BatchResponse_Header::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
-  clear_has_timestamp();
-}
-inline const ::cockroach::roachpb::Timestamp& BatchResponse_Header::timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.BatchResponse.Header.timestamp)
-  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
-}
-inline ::cockroach::roachpb::Timestamp* BatchResponse_Header::mutable_timestamp() {
-  set_has_timestamp();
-  if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::roachpb::Timestamp;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.BatchResponse.Header.timestamp)
-  return timestamp_;
-}
-inline ::cockroach::roachpb::Timestamp* BatchResponse_Header::release_timestamp() {
-  clear_has_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = timestamp_;
-  timestamp_ = NULL;
-  return temp;
-}
-inline void BatchResponse_Header::set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp) {
-  delete timestamp_;
-  timestamp_ = timestamp;
-  if (timestamp) {
-    set_has_timestamp();
-  } else {
-    clear_has_timestamp();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.BatchResponse.Header.timestamp)
-}
-
 // optional .cockroach.roachpb.Transaction txn = 3;
 inline bool BatchResponse_Header::has_txn() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void BatchResponse_Header::set_has_txn() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void BatchResponse_Header::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void BatchResponse_Header::clear_txn() {
   if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();

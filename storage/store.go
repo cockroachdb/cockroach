@@ -1389,9 +1389,17 @@ func (s *Store) ReplicaCount() int {
 	return len(s.mu.replicas)
 }
 
-// Send fetches a range based on the header's replica, assembles
-// method, args & reply into a Raft Cmd struct and executes the
-// command using the fetched range.
+// Send fetches a range based on the header's replica, assembles method, args &
+// reply into a Raft Cmd struct and executes the command using the fetched
+// range.
+// An incoming request may be transactional or not. If it is not transactional,
+// the timestamp at which it executes may be higher than that optionally
+// specified through the incoming BatchRequest, and it is not guaranteed that
+// all operations are written at the same timestamp. If it is transactional, a
+// timestamp must not be set - it is deduced automatically from the
+// transaction. Should a transactional operation be forced to a higher
+// timestamp (for instance due to the timestamp cache), the response will have
+// a transaction set which should be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	ctx = s.Context(ctx)
 	sp, cleanupSp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
@@ -1404,34 +1412,50 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			return nil, roachpb.NewError(err)
 		}
 	}
-	if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
-		if s.Clock().MaxOffset() > 0 {
-			// Once a command is submitted to raft, all replicas' logical
-			// clocks will be ratcheted forward to match. If the command
-			// appears to come from a node with a bad clock, reject it now
-			// before we reach that point.
-			offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
-			if offset > s.Clock().MaxOffset() {
-				return nil, roachpb.NewErrorf("Rejecting command with timestamp in the future: %d (%s ahead)",
-					ba.Timestamp.WallTime, offset)
-			}
+
+	if ba.Txn == nil {
+		// When not transactional, allow empty timestamp and simply use local
+		// clock.
+		if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+			ba.Timestamp.Forward(s.Clock().Now())
 		}
-		// Update our clock with the incoming request timestamp. This
-		// advances the local node's clock to a high water mark from
-		// amongst all nodes with which it has interacted.
-		// TODO(tschottdorf): see executeBatch for an explanation of the weird
-		// logical ticks added here.
-		ba.Timestamp.Add(0, int32(len(ba.Requests))-1)
-	} else if ba.Txn == nil {
-		// TODO(tschottdorf): possibly consolidate this with other locations
-		// doing the same (but it's definitely required here).
-		// TODO(tschottdorf): see executeBatch for an explanation of the weird
-		// logical ticks added here.
-		ba.Timestamp.Forward(s.Clock().Now().Add(0, int32(len(ba.Requests))-1))
+
+		if ba.IsWrite() {
+			// If a batch is non-transactional, self-overlapping writes at the
+			// same timestamp would run into a WriteTooOldError. Pretend that
+			// some more logical clock ticks happened; when executing, we'll
+			// spread out the requests over those ticks.
+			// We're not using non-transactional requests for much, so this is
+			// an acceptable solution for the time being.
+			ba.Timestamp.Forward(ba.Timestamp.Add(0, int32(len(ba.Requests))-1))
+		}
+	} else if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+		return nil, roachpb.NewErrorf("transactional request must not set batch timestamp")
+	} else if ba.IsReadOnly() {
+		// OrigTimestamp is the read timestamp of the transaction throughout
+		// its lifetime.
+		ba.Timestamp = ba.Txn.OrigTimestamp
+	} else {
+		// Writes happen at the provisional commit timestamp.
+		ba.Timestamp = ba.Txn.Timestamp
 	}
-	// We update the clock and hold on to the timestamp - we know that any
-	// write with a higher timestamp we run into later must have started
-	// after this point in (absolute) time.
+
+	if s.Clock().MaxOffset() > 0 {
+		// Once a command is submitted to raft, all replicas' logical
+		// clocks will be ratcheted forward to match. If the command
+		// appears to come from a node with a bad clock, reject it now
+		// before we reach that point.
+		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
+		if offset > s.Clock().MaxOffset() {
+			return nil, roachpb.NewErrorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+				ba.Timestamp.WallTime, offset)
+		}
+	}
+	// Update our clock with the incoming request timestamp. This advances the
+	// local node's clock to a high water mark from all nodes with which it has
+	// interacted. We hold on to the resulting timestamp - we know that any
+	// write with a higher timestamp we run into later must have started after
+	// this point in (absolute) time.
 	now := s.ctx.Clock.Update(ba.Timestamp)
 
 	if ba.Txn != nil {

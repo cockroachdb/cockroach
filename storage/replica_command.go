@@ -42,8 +42,6 @@ import (
 // and a slice of intents that were skipped during execution.
 // If an error is returned, any returned intents should still be resolved.
 func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
-	// Verify key is contained within range here to catch any range split
-	// or merge activity.
 	ts := h.Timestamp
 
 	if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -157,10 +155,6 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	if log.V(2) {
 		log.Infof("executed %s command %+v: %+v, err=%s", args.Method(), args, reply, err)
 	}
-
-	// Propagate the request timestamp (which may have changed).
-	// TODO(tschottdorf): really? Think this should be done by executeBatch.
-	reply.Header().Timestamp = ts
 
 	// Create a roachpb.Error by initializing txn from the request/response header.
 	var pErr *roachpb.Error
@@ -796,7 +790,6 @@ func (r *Replica) RangeLookup(batch engine.Engine, h roachpb.Header, args roachp
 // coordinator. Returns the updated transaction.
 func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.HeartbeatTxnRequest) (roachpb.HeartbeatTxnResponse, error) {
 	var reply roachpb.HeartbeatTxnResponse
-	ts := h.Timestamp // all we're going to use from the header.
 
 	if err := verifyTransaction(h, &args); err != nil {
 		return reply, err
@@ -819,7 +812,7 @@ func (r *Replica) HeartbeatTxn(batch engine.Engine, ms *engine.MVCCStats, h roac
 		if txn.LastHeartbeat == nil {
 			txn.LastHeartbeat = &roachpb.Timestamp{}
 		}
-		txn.LastHeartbeat.Forward(ts)
+		txn.LastHeartbeat.Forward(args.Now)
 		if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err
 		}

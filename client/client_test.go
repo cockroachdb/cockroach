@@ -339,9 +339,6 @@ func TestClientGetAndPut(t *testing.T) {
 	if pErr != nil {
 		t.Fatalf("unable to get value: %v", pErr)
 	}
-	if gr.Timestamp().IsZero() {
-		t.Error("expected non-zero timestamp")
-	}
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}

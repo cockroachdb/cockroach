@@ -353,15 +353,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			}
 		}
 
-		// Set the timestamp to the original timestamp for read-only
-		// commands and to the transaction timestamp for read/write
-		// commands.
-		if ba.IsReadOnly() {
-			ba.Timestamp = ba.Txn.OrigTimestamp
-		} else {
-			ba.Timestamp = ba.Txn.Timestamp
-		}
-
 		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			et := rArgs.(*roachpb.EndTransactionRequest)
 			if len(et.Key) != 0 {
@@ -640,7 +631,6 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 	tc.Unlock()
 
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = tc.clock.Now()
 	ba.Txn = &txn
 
 	if !proceed {
@@ -668,7 +658,9 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 		return false
 	}
 
-	hb := &roachpb.HeartbeatTxnRequest{}
+	hb := &roachpb.HeartbeatTxnRequest{
+		Now: tc.clock.Now(),
+	}
 	hb.Key = txn.Key
 	ba.Add(hb)
 
@@ -718,12 +710,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	}
 
 	switch t := pErr.GetDetail().(type) {
-	case nil:
-		// Move txn timestamp forward to response timestamp if applicable.
-		// TODO(tschottdorf): see (*Replica).executeBatch and comments within.
-		// Looks like this isn't necessary any more, nor did it prevent a bug
-		// referenced in a TODO there.
-		newTxn.Timestamp.Forward(br.Timestamp)
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
@@ -755,6 +741,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 	case *roachpb.TransactionRetryError:
 		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
+	case nil:
+		// Nothing to do here, avoid the default case.
 	default:
 		if pErr.GetTxn() != nil {
 			if pErr.CanRetry() {
