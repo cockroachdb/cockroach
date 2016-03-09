@@ -633,7 +633,7 @@ func TestClientPermissions(t *testing.T) {
 	testCases := []struct {
 		path    string
 		client  *client.DB
-		success bool
+		allowed bool
 	}{
 		{"foo", rootClient, false},
 		{"foo", nodeClient, true},
@@ -652,14 +652,15 @@ func TestClientPermissions(t *testing.T) {
 	}
 
 	value := []byte("value")
+	const matchErr = "is not allowed"
 	for tcNum, tc := range testCases {
 		pErr := tc.client.Put(tc.path, value)
-		if pErr == nil != tc.success {
-			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, pErr)
+		if (pErr == nil) != tc.allowed || (!tc.allowed && !testutils.IsPError(pErr, matchErr)) {
+			t.Errorf("#%d: expected allowed=%t, got err=%s", tcNum, tc.allowed, pErr)
 		}
 		_, pErr = tc.client.Get(tc.path)
-		if pErr == nil != tc.success {
-			t.Errorf("#%d: expected success=%t, got err=%s", tcNum, tc.success, pErr)
+		if (pErr == nil) != tc.allowed || (!tc.allowed && !testutils.IsPError(pErr, matchErr)) {
+			t.Errorf("#%d: expected allowed=%t, got err=%s", tcNum, tc.allowed, pErr)
 		}
 	}
 }

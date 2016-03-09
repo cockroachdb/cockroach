@@ -247,23 +247,23 @@ func TestAuthentication(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	b := &client.Batch{}
-	b.Put("a", "b")
+	var b1 client.Batch
+	b1.Put("a", "b")
 
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	if pErr := db1.Run(b); pErr != nil {
+	if pErr := db1.Run(&b1); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	*b = client.Batch{}
-	b.Put("c", "d")
+	var b2 client.Batch
+	b2.Put("c", "d")
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if pErr := db2.Run(b); !testutils.IsPError(pErr, "is not allowed") {
+	if pErr := db2.Run(&b2); !testutils.IsPError(pErr, "is not allowed") {
 		t.Fatal(pErr)
 	}
 }
