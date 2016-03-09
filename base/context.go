@@ -41,6 +41,9 @@ const (
 	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
 	DefaultPort = "26257"
 
+	// The default port for HTTP-for-humans.
+	DefaultHTTPPort = "8080"
+
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
 )

@@ -34,7 +34,7 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connPort, connDBName string
+var connUser, connHost, connPort, httpPort, connDBName string
 
 // cliContext is the CLI Context used for the command-line client.
 var cliContext = NewContext()
@@ -112,6 +112,9 @@ provide the password on standard input.`),
 
 	"server_port": wrapText(`
 The port to bind to.`),
+
+	"http_port": wrapText(`
+The host:port to bind for HTTP requests.`),
 
 	"store": wrapText(`
 The file path to a storage device. This flag must be specified separately for
@@ -257,6 +260,7 @@ func initFlags(ctx *Context) {
 		// Server flags.
 		f.StringVar(&connHost, "host", "", usage("server_host"))
 		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
+		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("http_port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
 
@@ -320,10 +324,15 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{kvCmd, nodeCmd, rangeCmd, exterminateCmd, quitCmd}
+	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd}
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
 		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
+	}
+
+	for _, cmd := range []*cobra.Command{nodeCmd, quitCmd} {
+		f := cmd.PersistentFlags()
+		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("http_port"))
 	}
 
 	// Commands that establish a SQL connection.
@@ -349,5 +358,6 @@ func init() {
 
 	cobra.OnInitialize(func() {
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
+		cliContext.HTTPAddr = net.JoinHostPort(connHost, httpPort)
 	})
 }

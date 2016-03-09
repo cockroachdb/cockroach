@@ -29,7 +29,6 @@ import (
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
@@ -46,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -219,15 +217,16 @@ func (s *Server) Start() error {
 	// (pg, http, h2) via the following construction:
 	//
 	// non-TLS case:
-	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	// net.Listen -> cmux.New
 	//               |
-	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
-	//               -  -> cmux.Any -> http.(*Server).Serve
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.Any -> grpc.(*Server).Serve
 	//
 	// TLS case:
-	// net.Listen -> cmux.New -> pgwire.Match -> pgwire.Server.ServeConn
+	// net.Listen -> cmux.New
 	//               |
-	//               -  -> cmux.Any -> tls.NewListener -> http.(*Server).Serve
+	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
+	//               -  -> cmux.Any -> grpc.(*Server).Serve
 	//
 	// Note that the difference between the TLS and non-TLS cases exists due to
 	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
@@ -254,29 +253,34 @@ func (s *Server) Start() error {
 
 	m := cmux.New(ln)
 	pgL := m.Match(pgwire.Match)
+	anyL := m.Match(cmux.Any())
 
-	var serveConn func(net.Listener, func(net.Conn)) error
-	if tlsConfig != nil {
-		anyL := m.Match(cmux.Any())
-		serveConn = util.ServeHandler(s.stopper, s, tls.NewListener(anyL, tlsConfig), tlsConfig)
-	} else {
-		h2L := m.Match(cmux.HTTP2())
-		anyL := m.Match(cmux.Any())
-
-		var h2 http2.Server
-		serveConnOpts := &http2.ServeConnOpts{
-			Handler: s,
-		}
-		serveH2 := func(conn net.Conn) {
-			h2.ServeConn(conn, serveConnOpts)
-		}
-
-		serveConn = util.ServeHandler(s.stopper, s, anyL, tlsConfig)
-
-		s.stopper.RunWorker(func() {
-			util.FatalIfUnexpected(serveConn(h2L, serveH2))
-		})
+	httpLn, err := net.Listen("tcp", s.ctx.HTTPAddr)
+	if err != nil {
+		return err
 	}
+	unresolvedHTTPAddr, err := officialAddr(s.ctx.HTTPAddr, httpLn.Addr())
+	if err != nil {
+		return err
+	}
+	s.ctx.HTTPAddr = unresolvedHTTPAddr.String()
+
+	s.stopper.RunWorker(func() {
+		<-s.stopper.ShouldDrain()
+		if err := httpLn.Close(); err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	if tlsConfig != nil {
+		httpLn = tls.NewListener(httpLn, tlsConfig)
+	}
+
+	serveConn := util.ServeHandler(s.stopper, s, httpLn, tlsConfig)
+
+	s.stopper.RunWorker(func() {
+		util.FatalIfUnexpected(s.grpc.Serve(anyL))
+	})
 
 	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
@@ -319,20 +323,21 @@ func (s *Server) Start() error {
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
-	log.Infof("starting %s/postgres server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
+	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
+	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)
 
 	return nil
 }
 
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle("/", grpcutil.GRPCHandlerFunc(s.grpc, http.FileServer(
+	s.mux.Handle("/", http.FileServer(
 		&assetfs.AssetFS{
 			Asset:     ui.Asset,
 			AssetDir:  ui.AssetDir,
 			AssetInfo: ui.AssetInfo,
 		},
-	)))
+	))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,

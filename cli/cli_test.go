@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -163,7 +164,15 @@ func (c cliTest) RunWithArgs(a []string) {
 		fmt.Println(err)
 	}
 	args = append(args, fmt.Sprintf("--host=%s", h))
-	args = append(args, fmt.Sprintf("--port=%s", p))
+	if a[0] == "node" || a[0] == "quit" {
+		_, httpPort, err := net.SplitHostPort(c.HTTPAddr())
+		if err != nil {
+			fmt.Println(err)
+		}
+		args = append(args, fmt.Sprintf("--http-port=%s", httpPort))
+	} else {
+		args = append(args, fmt.Sprintf("--port=%s", p))
+	}
 	// Always load test certs.
 	args = append(args, fmt.Sprintf("--certs=%s", c.certsDir))
 	args = append(args, a[1:]...)
