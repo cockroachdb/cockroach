@@ -176,6 +176,7 @@ func verifyProperty5(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testN
 // tree and first node. SetupRangeTree is called via store.BootstrapRange.
 func TestSetupRangeTree(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(bram): #4968")
 	store, stopper := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()
