@@ -17,6 +17,7 @@
 package rpc
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -53,14 +54,10 @@ func (i ClusterOffsetInterval) String() string {
 	return fmt.Sprintf("{%s, %s}", time.Duration(i.Lowerbound), time.Duration(i.Upperbound))
 }
 
-// MajorityIntervalNotFoundError indicates that we could not find a majority
+// errMajorityIntervalNotFound indicates that we could not find a majority
 // overlap in our estimate of remote clocks.
-type MajorityIntervalNotFoundError struct{}
-
-func (MajorityIntervalNotFoundError) Error() string {
-	return "a majority of connected remote clocks have " +
-		"failed to encompass the true time for the cluster"
-}
+var errMajorityIntervalNotFound = errors.New("a majority of connected remote clocks have " +
+	"failed to encompass the true time for the cluster")
 
 // endpoint represents an endpoint in the interval estimation of a single
 // remote clock. It could be either the lowpoint or the highpoint of the
@@ -254,7 +251,7 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 	if best <= numClocks/2 {
 		return ClusterOffsetInterval{
 			Lowerbound: math.MaxInt64,
-			Upperbound: math.MaxInt64}, MajorityIntervalNotFoundError{}
+			Upperbound: math.MaxInt64}, errMajorityIntervalNotFound
 	}
 
 	// A majority of offset intervals overlap at this interval, which should
