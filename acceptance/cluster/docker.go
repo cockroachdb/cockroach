@@ -52,7 +52,7 @@ func dockerIP() net.IP {
 		return net.ParseIP(h)
 	}
 	if runtime.GOOS == "linux" {
-		return net.IPv4zero
+		return net.IPv4(127, 0, 0, 1)
 	}
 	panic("unable to determine docker ip address")
 }
