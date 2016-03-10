@@ -122,7 +122,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
-	if _, pErr := mtc.db.Inc(dataKey, 5); pErr != nil {
+	if _, pErr := mtc.dbs[0].Inc(dataKey, 5); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
@@ -133,7 +133,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
-	if pErr := mtc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := mtc.dbs[0].Txn(func(txn *client.Txn) *roachpb.Error {
 		b := &client.Batch{}
 		b.CPut(dataKey, 7, 6)
 		return txn.Run(b)
