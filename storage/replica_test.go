@@ -2166,6 +2166,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 // sequence cache records are purged on the local range (and only there).
 func TestEndTransactionDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(tschottdorf): #5088")
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()

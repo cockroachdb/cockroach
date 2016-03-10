@@ -1805,7 +1805,7 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pErr)
 				return
 			}
-			if pErr := r.resolveIntents(ctxWithTimeout, resolveIntents, true /* wait */, true /* poison */); pErr != nil {
+			if pErr := r.resolveIntents(ctxWithTimeout, resolveIntents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
 				log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
 				return
 			}
