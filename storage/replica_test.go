@@ -114,7 +114,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(nil, nil, tc.stopper)
-		tc.gossip = gossip.New(rpcContext, gossip.TestBootstrap, tc.stopper)
+		tc.gossip = gossip.New(rpcContext, nil, tc.stopper)
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {

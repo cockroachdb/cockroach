@@ -26,19 +26,17 @@ package storage_test
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"net"
 	"reflect"
 	"sort"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -46,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -103,7 +102,7 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 		sCtx = &ctx
 	}
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
-	sCtx.Gossip = gossip.New(rpcContext, gossip.TestBootstrap, stopper)
+	sCtx.Gossip = gossip.New(rpcContext, nil, stopper)
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = 1 * time.Second
 	sCtx.Tracer = tracing.NewTracer()
@@ -121,9 +120,10 @@ func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock
 		return br, nil
 	}
 
-	if err := gossipNodeDesc(sCtx.Gossip, nodeDesc.NodeID); err != nil {
+	if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
 	}
+
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
@@ -163,25 +163,27 @@ type multiTestContext struct {
 	storeContext *storage.StoreContext
 	manualClock  *hlc.ManualClock
 	clock        *hlc.Clock
-	grpcServer   *grpc.Server
 	rpcContext   *rpc.Context
-	gossip       *gossip.Gossip
-	storePool    *storage.StorePool
-	transport    *storage.RaftTransport
-	distSender   *kv.DistSender
-	db           *client.DB
 
 	nodeIDtoAddr map[roachpb.NodeID]net.Addr
 
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
-	clocks  []*hlc.Clock
-	engines []engine.Engine
+	clocks      []*hlc.Clock
+	engines     []engine.Engine
+	grpcServers []*grpc.Server
+	transports  []*storage.RaftTransport
+	distSenders []*kv.DistSender
+	dbs         []*client.DB
+	gossips     []*gossip.Gossip
+	storePools  []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
-	// for 'transport', and the 'stoppers' slice corresponds to the
+	// for 'transports', and the 'stoppers' slice corresponds to the
 	// 'stores'.
+	// TODO(bdarnell): now that there are multiple transports, do we
+	// need transportStopper?
 	clientStopper      *stop.Stopper
 	transportStopper   *stop.Stopper
 	engineStoppers     []*stop.Stopper
@@ -241,38 +243,8 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
 	}
-	if m.gossip == nil {
-		m.gossip = gossip.New(m.rpcContext, gossip.TestBootstrap, m.transportStopper)
-		m.gossip.SetNodeID(math.MaxInt32)
-	}
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
-	}
-	if m.grpcServer == nil {
-		m.grpcServer = rpc.NewServer(m.rpcContext)
-	}
-	if m.transport == nil {
-		m.transport = storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServer, m.rpcContext)
-	}
-	if m.storePool == nil {
-		if m.timeUntilStoreDead == 0 {
-			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
-		}
-		m.storePool = storage.NewStorePool(m.gossip, m.clock, m.timeUntilStoreDead, m.clientStopper)
-	}
-
-	if m.db == nil {
-		retryOpts := kv.GetDefaultDistSenderRetryOptions()
-		retryOpts.Closer = m.clientStopper.ShouldDrain()
-		m.distSender = kv.NewDistSender(&kv.DistSenderContext{
-			Clock:             m.clock,
-			RangeDescriptorDB: m,
-			RPCSend:           m.rpcSend,
-			RPCRetryOptions:   &retryOpts,
-		}, m.gossip)
-		sender := kv.NewTxnCoordSender(m.distSender, m.clock, false, tracing.NewTracer(),
-			m.clientStopper, kv.NewTxnMetrics(metric.NewRegistry()))
-		m.db = client.NewDB(sender)
 	}
 
 	for i := 0; i < numStores; i++ {
@@ -281,8 +253,10 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 
 	// Wait for gossip to startup.
 	util.SucceedsSoon(t, func() error {
-		if m.gossip.GetSystemConfig() == nil {
-			return util.Errorf("system config not available")
+		for i, g := range m.gossips {
+			if g.GetSystemConfig() == nil {
+				return util.Errorf("system config not available at index %d", i)
+			}
 		}
 		return nil
 	})
@@ -335,6 +309,9 @@ func (m *multiTestContext) Stop() {
 // used to multiplex calls between many local senders in a simple way; It sends
 // the request to multiTestContext's localSenders specified in addrs. The request is
 // sent in order until no error is returned.
+// TODO(bdarnell): This is mostly obsolete now that we have a real network
+// stack available. However, it's still needed to handle the interaction
+// with our manual clock in the event of retries.
 func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 	ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 	m.mu.RLock()
@@ -351,12 +328,14 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 			txnClone := ba.Txn.Clone()
 			ba.Txn = &txnClone
 		}
-		// Node ID is encoded in the address.
-		nodeID, stErr := strconv.Atoi(replica.NodeDesc.Address.String())
-		if stErr != nil {
-			m.t.Fatal(stErr)
+		// Reverse-map the address to its index.
+		var nodeIndex int
+		for i, addr := range m.nodeIDtoAddr {
+			if addr.String() == replica.NodeDesc.Address.String() {
+				nodeIndex = int(i) - 1
+				break
+			}
 		}
-		nodeIndex := nodeID - 1
 		// The rpcSend method crosses store boundaries: it is possible that the
 		// destination store is stopped while the source is still running.
 		// Run the send in a Task on the destination store to simulate what
@@ -460,7 +439,7 @@ func (m *multiTestContext) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDesc
 	// DistSender's RangeLookup function will work correctly, as long as
 	// multiTestContext's FirstRange() method returns the correct descriptor for the
 	// first range.
-	return m.distSender.RangeLookup(key, desc, considerIntents, useReverseScan)
+	return m.distSenders[0].RangeLookup(key, desc, considerIntents, useReverseScan)
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {
@@ -471,10 +450,10 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 		ctx = storage.TestStoreContext()
 	}
 	ctx.Clock = m.clocks[i]
-	ctx.DB = m.db
-	ctx.Gossip = m.gossip
-	ctx.StorePool = m.storePool
-	ctx.Transport = m.transport
+	ctx.Transport = m.transports[i]
+	ctx.DB = m.dbs[i]
+	ctx.Gossip = m.gossips[i]
+	ctx.StorePool = m.storePools[i]
 	return ctx
 }
 
@@ -500,6 +479,48 @@ func (m *multiTestContext) addStore() {
 		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
+	}
+	if len(m.grpcServers) <= idx {
+		m.grpcServers = append(m.grpcServers, rpc.NewServer(m.rpcContext))
+	}
+	if len(m.transports) <= idx {
+		m.transports = append(m.transports,
+			storage.NewRaftTransport(m.getNodeIDAddress, m.grpcServers[idx], m.rpcContext))
+	}
+	if len(m.gossips) <= idx {
+		// Give this store all previous stores as gossip bootstraps.
+		var resolvers []resolver.Resolver
+		m.mu.Lock()
+		for _, addr := range m.nodeIDtoAddr {
+			r, err := resolver.NewResolverFromAddress(addr)
+			if err != nil {
+				m.t.Fatal(err)
+			}
+			resolvers = append(resolvers, r)
+		}
+		m.mu.Unlock()
+		m.gossips = append(m.gossips, gossip.New(m.rpcContext, resolvers, m.transportStopper))
+		m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
+	}
+	if len(m.storePools) <= idx {
+		if m.timeUntilStoreDead == 0 {
+			m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
+		}
+		m.storePools = append(m.storePools, storage.NewStorePool(m.gossips[idx], m.clock, m.timeUntilStoreDead, m.clientStopper))
+	}
+	if len(m.dbs) <= idx {
+		retryOpts := kv.GetDefaultDistSenderRetryOptions()
+		retryOpts.Closer = m.clientStopper.ShouldDrain()
+		m.distSenders = append(m.distSenders,
+			kv.NewDistSender(&kv.DistSenderContext{
+				Clock:             m.clock,
+				RangeDescriptorDB: m,
+				RPCSend:           m.rpcSend,
+				RPCRetryOptions:   &retryOpts,
+			}, m.gossips[idx]))
+		sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),
+			m.clientStopper, kv.NewTxnMetrics(metric.NewRegistry()))
+		m.dbs = append(m.dbs, client.NewDB(sender))
 	}
 
 	stopper := stop.NewStopper()
@@ -531,7 +552,7 @@ func (m *multiTestContext) addStore() {
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	ln, err := util.ListenAndServe(m.transportStopper, m.grpcServer, util.CreateTestAddr("tcp"), tlsConfig)
+	ln, err := util.ListenAndServe(m.transportStopper, m.grpcServers[idx], util.CreateTestAddr("tcp"), tlsConfig)
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -544,6 +565,7 @@ func (m *multiTestContext) addStore() {
 	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
+	m.gossips[idx].Start(m.grpcServers[idx], ln.Addr())
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
 	// FirstRange() can find the sender)
@@ -557,14 +579,10 @@ func (m *multiTestContext) addStore() {
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
 	m.mu.Unlock()
-	// Because we use a single gossip instance, make sure we always
-	// reset the node ID before setting the node descriptor and calling
-	// start.
-	m.gossip.ResetNodeID(0)
 	if err := store.Start(stopper); err != nil {
 		m.t.Fatal(err)
 	}
-	if err := gossipNodeDesc(m.gossip, nodeID); err != nil {
+	if err := m.gossipNodeDesc(m.gossips[idx], nodeID); err != nil {
 		m.t.Fatal(err)
 	}
 	store.WaitForInit()
@@ -572,12 +590,11 @@ func (m *multiTestContext) addStore() {
 
 // gossipNodeDesc adds the node descriptor to the gossip network.
 // Mostly makes sure that we don't see a warning per request.
-func gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
+func (m *multiTestContext) gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeID) error {
+	addr := m.nodeIDtoAddr[nodeID]
 	nodeDesc := &roachpb.NodeDescriptor{
-		NodeID: nodeID,
-		// Encode the node ID in the address so that rpcSend
-		// can figure out where requests must be sent.
-		Address: util.MakeUnresolvedAddr("localhost", fmt.Sprintf("%d", nodeID)),
+		NodeID:  nodeID,
+		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 	}
 	if err := g.SetNodeDescriptor(nodeDesc); err != nil {
 		return err
@@ -604,8 +621,6 @@ func (m *multiTestContext) restartStore(i int) {
 
 	ctx := m.makeContext(i)
 	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
-	// Because we use a single gossip instance, reset node ID before calling Start().
-	m.gossip.ResetNodeID(0)
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
@@ -669,7 +684,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		// By the time ChangeReplicas returns the raft leader is
 		// guaranteed to have the updated version, but followers are not.
 		var desc roachpb.RangeDescriptor
-		if err := m.db.GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			m.t.Fatal(err)
 		}
 
@@ -709,7 +724,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	startKey := m.findStartKeyLocked(rangeID)
 
 	var desc roachpb.RangeDescriptor
-	if err := m.db.GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+	if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
 		m.t.Fatal(err)
 	}
 
