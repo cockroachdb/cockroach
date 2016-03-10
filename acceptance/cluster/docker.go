@@ -86,6 +86,7 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 		var message interface{}
 		if err := dec.Decode(&message); err != nil {
 			if err == io.EOF {
+				_, _ = fmt.Fprintln(os.Stderr)
 				return nil
 			}
 			return err
@@ -247,6 +248,7 @@ func (c *Container) Inspect() (types.ContainerJSON, error) {
 func (c *Container) Addr(port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect()
 	if err != nil {
+		log.Error(err)
 		return nil
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
@@ -255,6 +257,7 @@ func (c *Container) Addr(port nat.Port) *net.TCPAddr {
 	}
 	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
+		log.Error(err)
 		return nil
 	}
 	return &net.TCPAddr{

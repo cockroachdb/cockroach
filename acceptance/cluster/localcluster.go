@@ -52,6 +52,7 @@ const (
 	builderImage     = "cockroachdb/builder"
 	builderTag       = "20160305-182433"
 	builderImageFull = builderImage + ":" + builderTag
+	networkName      = "cockroachdb_acceptance"
 )
 
 // DefaultTCP is the default SQL/RPC port specification.
@@ -247,7 +248,7 @@ func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
-		Name:   "cockroachdb_acceptance",
+		Name:   networkName,
 		Driver: "bridge",
 		// Docker gets very confused if two networks have the same name.
 		CheckDuplicate: true,
@@ -435,8 +436,8 @@ func (l *LocalCluster) startNode(node *testNode) {
 		cmd = append(
 			cmd,
 			"--log-dir="+dockerlogDir,
-			"--logtostderr=false",
-			"--alsologtostderr=INFO")
+			"--logtostderr=false")
+
 	}
 	// TODO(pmattis): Figure out why the Go DNS resolver is misbehaving.
 	env := []string{"GODEBUG=netdns=cgo", "COCKROACH_SCAN_MAX_IDLE_TIME=200ms"}
