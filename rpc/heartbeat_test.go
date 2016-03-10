@@ -34,7 +34,7 @@ func TestRemoteOffsetString(t *testing.T) {
 		Uncertainty: 351698,
 		MeasuredAt:  1430348776127420269,
 	}
-	expStr := "off=-0.501584461s, err=0.000351698s, at=2015-04-29 23:06:16 +0000 UTC"
+	expStr := "off=-501.584461ms, err=351.698µs, at=2015-04-29 23:06:16.127420269 +0000 UTC"
 	if str := ro.String(); str != expStr {
 		t.Errorf("expected %s; got %s", expStr, str)
 	}
