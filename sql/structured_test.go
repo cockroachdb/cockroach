@@ -57,7 +57,8 @@ func TestAllocateIDs(t *testing.T) {
 			makeIndexDescriptor("d", []string{"b", "a"}),
 			makeIndexDescriptor("e", []string{"b"}),
 		},
-		Privileges: sql.NewDefaultPrivilegeDescriptor(),
+		Privileges:           sql.NewDefaultPrivilegeDescriptor(),
+		KeyAddressingVersion: sql.KeyAddressingVersion1,
 	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
@@ -86,10 +87,11 @@ func TestAllocateIDs(t *testing.T) {
 				ColumnDirections:  []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
 				ImplicitColumnIDs: []sql.ColumnID{1}},
 		},
-		Privileges:     sql.NewDefaultPrivilegeDescriptor(),
-		NextColumnID:   4,
-		NextIndexID:    4,
-		NextMutationID: 1,
+		Privileges:           sql.NewDefaultPrivilegeDescriptor(),
+		NextColumnID:         4,
+		NextIndexID:          4,
+		NextMutationID:       1,
+		KeyAddressingVersion: sql.KeyAddressingVersion1,
 	}
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
@@ -330,6 +332,22 @@ func TestValidateTableDesc(t *testing.T) {
 				PrimaryIndex: sql.IndexDescriptor{ID: 1, Name: "bar", ColumnIDs: []sql.ColumnID{1},
 					ColumnNames: []string{"blah"},
 				},
+				NextColumnID: 2,
+				NextIndexID:  2,
+			}},
+		{`table "foo" is encoded using using a version that is unsupported by this client`,
+			sql.TableDescriptor{
+				ID:       2,
+				ParentID: 1,
+				Name:     "foo",
+				Columns: []sql.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				PrimaryIndex: sql.IndexDescriptor{
+					ID: 1, Name: "primary", ColumnIDs: []sql.ColumnID{1}, ColumnNames: []string{"bar"},
+					ColumnDirections: []sql.IndexDescriptor_Direction{sql.IndexDescriptor_ASC},
+				},
+
 				NextColumnID: 2,
 				NextIndexID:  2,
 			}},

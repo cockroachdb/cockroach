@@ -43,6 +43,19 @@ type IndexID uint32
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
 
+// KeyAddressingVersion is a custom type for TableDescriptor key addressing
+// versions.
+type KeyAddressingVersion uint32
+
+const (
+	// KeyAddressingVersionInvalid may be used as a sential value to indicate a table
+	// encoding that is never valid.
+	KeyAddressingVersionInvalid KeyAddressingVersion = 0
+	// KeyAddressingVersion1 corresponds to the encoding described in
+	// https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
+	KeyAddressingVersion1 KeyAddressingVersion = 1
+)
+
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
@@ -469,6 +482,11 @@ func (desc *TableDescriptor) Validate() error {
 			}
 		}
 	}
+
+	if desc.GetKeyAddressingVersion() != KeyAddressingVersion1 {
+		return fmt.Errorf("table %q is encoded using using a version that is unsupported by this client", desc.Name)
+	}
+
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }

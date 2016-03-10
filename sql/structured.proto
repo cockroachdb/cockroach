@@ -245,6 +245,11 @@ message TableDescriptor {
   // An id for the next group of mutations to be applied together.
   optional uint32 next_mutation_id = 16 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"];
+
+  // key_addressing_version declares which sql to key:value mapping is being
+  // used to represent the data in this table.
+  optional uint32 key_addressing_version = 17 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "KeyAddressingVersion"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
