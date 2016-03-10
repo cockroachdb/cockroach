@@ -34,7 +34,7 @@ module AdminViews {
             liClass: "cockroach",
           },
           {
-            title: "Overview",
+            title: "Cluster",
             route: "/cluster",
             icon: SvgIcons.clusterIcon,
           },
@@ -42,11 +42,6 @@ module AdminViews {
             title: "Nodes",
             route: "/nodes",
             icon: SvgIcons.nodesIcon,
-          },
-          {
-            title: "Users",
-            route: "/users",
-            icon: SvgIcons.usersIcon,
           },
           {
             title: "Databases",
