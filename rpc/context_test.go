@@ -59,7 +59,7 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
-		remoteClockMonitor: newRemoteClockMonitor(serverClock),
+		remoteClockMonitor: ctx.RemoteClocks,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -102,7 +102,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
-		remoteClockMonitor: newRemoteClockMonitor(serverClock),
+		remoteClockMonitor: ctx.RemoteClocks,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -143,7 +143,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 
 	heartbeat := &ManualHeartbeatService{
 		clock:              serverClock,
-		remoteClockMonitor: newRemoteClockMonitor(serverClock),
+		remoteClockMonitor: ctx.RemoteClocks,
 		ready:              make(chan struct{}),
 		stopper:            stopper,
 	}
