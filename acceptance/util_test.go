@@ -241,12 +241,11 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
 
 	defer l.AssertAndStop(t)
-	addr := l.Nodes[0].Addr(cluster.DefaultTCP)
 	containerConfig := container.Config{
 		Image: fmt.Sprintf(image + ":" + postgresTestTag),
 		Env: []string{
-			fmt.Sprintf("PGHOST=%s", addr.IP),
-			fmt.Sprintf("PGPORT=%d", addr.Port),
+			"PGHOST=roach0",
+			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/node.client.crt",
 			"PGSSLKEY=/certs/node.client.key",
 		},

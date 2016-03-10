@@ -35,7 +35,6 @@ import (
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/events"
-	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 
@@ -190,7 +189,7 @@ func (l *LocalCluster) OneShot(ipo types.ImagePullOptions, containerConfig conta
 	if err := pullImage(l, ipo); err != nil {
 		return err
 	}
-	container, err := createContainer(l, containerConfig, hostConfig, nil, name)
+	container, err := createContainer(l, containerConfig, hostConfig, name)
 	if err != nil {
 		return err
 	}
@@ -334,7 +333,7 @@ func (l *LocalCluster) initCluster() {
 			Binds:           binds,
 			PublishAllPorts: true,
 		},
-		nil, "volumes",
+		"volumes",
 	)
 	maybePanic(err)
 	maybePanic(c.Start())
@@ -347,7 +346,6 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 
 	hostConfig := container.HostConfig{
 		PublishAllPorts: true,
-		NetworkMode:     container.NetworkMode(l.networkID),
 	}
 
 	if vols != nil {
@@ -384,13 +382,6 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 			},
 		},
 		hostConfig,
-		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{
-				l.networkID: {
-					Aliases: []string{hostname},
-				},
-			},
-		},
 		node.nodeStr,
 	)
 	maybePanic(err)
@@ -434,8 +425,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 			"--logtostderr=false",
 			"--alsologtostderr=INFO")
 	}
-	// TODO(pmattis): Figure out why the Go DNS resolver is misbehaving.
-	env := []string{"GODEBUG=netdns=cgo", "COCKROACH_SCAN_MAX_IDLE_TIME=200ms"}
+	env := []string{"COCKROACH_SCAN_MAX_IDLE_TIME=200ms"}
 	l.createRoach(node, l.vols, env, cmd...)
 	maybePanic(node.Start())
 	log.Infof(`*** started %[1]s ***
