@@ -57,11 +57,10 @@ func TestOffsetMeasurement(t *testing.T) {
 	s, ln := newTestServer(t, ctx, true)
 	remoteAddr := ln.Addr().String()
 
-	heartbeat := &HeartbeatService{
+	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: ctx.RemoteClocks,
-	}
-	RegisterHeartbeatServer(s, heartbeat)
+	})
 
 	// Create a client that is 10 nanoseconds behind the server.
 	// Use the server context (heartbeat is node-to-node).
@@ -100,11 +99,10 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 	s, ln := newTestServer(t, ctx, true)
 	remoteAddr := ln.Addr().String()
 
-	heartbeat := &HeartbeatService{
+	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: ctx.RemoteClocks,
-	}
-	RegisterHeartbeatServer(s, heartbeat)
+	})
 
 	// Create a client that receives a heartbeat right after the
 	// maximumClockReadingDelay.
