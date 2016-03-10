@@ -1119,18 +1119,33 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	for _, s := range mtc.stores {
 		storeIDs = append(storeIDs, s.StoreID())
 	}
-	for _, sg := range sgs {
-		sg.GossipWithFunction(storeIDs, func() {
-			for _, s := range mtc.stores {
-				s.GossipStore()
-			}
-		})
-	}
 
-	aliveStoreIDs := []roachpb.StoreID{
-		mtc.stores[0].StoreID(),
-		mtc.stores[1].StoreID(),
+	// Gossip all stores and wait for callbacks to be run. This is
+	// tricky since we have multiple gossip objects communicating
+	// asynchronously. We use StoreGossiper to track callbacks but we
+	// need to set up all the callback tracking before any stores are
+	// gossiped.
+	var readyWG sync.WaitGroup
+	var doneWG sync.WaitGroup
+	readyWG.Add(len(sgs))
+	doneWG.Add(len(sgs))
+	for _, sg := range sgs {
+		go func(sg *gossiputil.StoreGossiper) {
+			ready := false
+			sg.GossipWithFunction(storeIDs, func() {
+				if !ready {
+					readyWG.Done()
+					ready = true
+				}
+			})
+			doneWG.Done()
+		}(sg)
 	}
+	readyWG.Wait()
+	for _, s := range mtc.stores {
+		s.GossipStore()
+	}
+	doneWG.Wait()
 
 	rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
 	if e, a := 3, len(rangeDesc.Replicas); e != a {
@@ -1155,12 +1170,9 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 			mtc.manualClock.Increment(int64(tickerDur))
 
 			// Keep gossiping the alive stores.
-			for _, sg := range sgs {
-				sg.GossipWithFunction(aliveStoreIDs, func() {
-					mtc.stores[0].GossipStore()
-					mtc.stores[1].GossipStore()
-				})
-			}
+			mtc.stores[0].GossipStore()
+			mtc.stores[1].GossipStore()
+
 			// Force the repair queues on all alive stores to run.
 			mtc.stores[0].ForceReplicationScanAndProcess()
 			mtc.stores[1].ForceReplicationScanAndProcess()
