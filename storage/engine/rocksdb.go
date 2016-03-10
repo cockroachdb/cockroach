@@ -44,6 +44,8 @@ import (
 // #include "rocksdb/db.h"
 import "C"
 
+const minMemtableBudget = 1 << 20 // 1 MB
+
 func init() {
 	rocksdb.Logger = log.Infof
 }
@@ -64,7 +66,7 @@ type RocksDB struct {
 func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget uint64, maxSize int64,
 	stopper *stop.Stopper) *RocksDB {
 	if dir == "" {
-		panic(util.Errorf("dir must be non-empty"))
+		panic("dir must be non-empty")
 	}
 	return &RocksDB{
 		attrs:          attrs,
@@ -104,6 +106,11 @@ func (r *RocksDB) String() string {
 func (r *RocksDB) Open() error {
 	if r.rdb != nil {
 		return nil
+	}
+
+	if r.memtableBudget < minMemtableBudget {
+		return util.Errorf("memtable budget must be at least %s: %s",
+			humanize.Bytes(minMemtableBudget), humanize.Bytes(r.memtableBudget))
 	}
 
 	if len(r.dir) != 0 {
