@@ -22,9 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
 )
 
 // TestUpdateOffset tests the three cases that UpdateOffset should or should
@@ -41,7 +42,7 @@ func TestUpdateOffset(t *testing.T) {
 	}
 
 	// Case 2: The old offset for addr was measured before lastMonitoredAt.
-	monitor.lastMonitoredAt = 5
+	monitor.lastMonitoredAt = time.Unix(0, 5)
 	offset2 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 20,
@@ -169,7 +170,7 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	remoteClocks := &RemoteClockMonitor{
 		offsets:         offsets,
 		lClock:          clock,
-		lastMonitoredAt: 10, // offsets measured before this will be removed.
+		lastMonitoredAt: time.Unix(0, 10), // offsets measured before this will be removed.
 	}
 
 	remoteClocks.buildEndpointList()
