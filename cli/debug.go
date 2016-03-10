@@ -42,7 +42,8 @@ Pretty-prints all keys in a store.
 }
 
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (engine.Engine, error) {
-	db := engine.NewRocksDB(roachpb.Attributes{}, dir, 0, 0, 0, stopper)
+	db := engine.NewRocksDB(roachpb.Attributes{}, dir,
+		cliContext.CacheSize, cliContext.MemtableBudget, 0, stopper)
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
@@ -56,6 +57,8 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 }
 
 func runDebugKeys(cmd *cobra.Command, args []string) error {
+	initCacheSize()
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
