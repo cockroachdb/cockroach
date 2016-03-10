@@ -176,8 +176,7 @@ func (c *Clock) PhysicalNow() int64 {
 
 // PhysicalTime returns a time.Time struct using the local wall time.
 func (c *Clock) PhysicalTime() time.Time {
-	physNow := c.PhysicalNow()
-	return time.Unix(physNow/1E9, physNow%1E9)
+	return time.Unix(0, c.PhysicalNow())
 }
 
 // Update takes a hybrid timestamp, usually originating from

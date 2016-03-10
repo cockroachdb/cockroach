@@ -55,7 +55,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	if !validExpirationTime(lease.ExpirationTime) {
-		t.Fatalf("invalid expiration time: %s", time.Unix(lease.ExpirationTime, 0))
+		t.Fatalf("invalid expiration time: %s", time.Unix(0, lease.ExpirationTime))
 	}
 
 	// Acquiring another lease will fail.
@@ -72,7 +72,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	if !validExpirationTime(newLease.ExpirationTime) {
-		t.Fatalf("invalid expiration time: %s", time.Unix(newLease.ExpirationTime, 0))
+		t.Fatalf("invalid expiration time: %s", time.Unix(0, newLease.ExpirationTime))
 	}
 
 	// Extending an old lease fails.

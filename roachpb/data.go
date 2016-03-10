@@ -840,8 +840,9 @@ func (t Transaction) GetObservedTimestamp(nodeID NodeID) (Timestamp, bool) {
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
-	t := time.Unix(l.Start.WallTime/1E9, 0).UTC()
-	return fmt.Sprintf("replica %s %s +%.3fs", l.Replica, t, float64(l.Expiration.WallTime-l.Start.WallTime)/1E9)
+	start := time.Unix(0, l.Start.WallTime).UTC()
+	expiration := time.Unix(0, l.Expiration.WallTime).UTC()
+	return fmt.Sprintf("replica %s %s %s", l.Replica, start, expiration.Sub(start))
 }
 
 // Covers returns true if the given timestamp is strictly less than the
