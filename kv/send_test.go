@@ -19,7 +19,6 @@ package kv
 import (
 	"errors"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -272,18 +271,16 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0
 	c := make(chan error)
 	go func() {
-		if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); err == nil {
-			c <- util.Errorf("expected error when client is closed")
-		} else if !strings.Contains(err.Error(), "failed as client connection was closed") {
-			c <- err
+		if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); !testutils.IsError(err, "(failed as client connection was closed|transport is closing)") {
+			c <- util.Errorf("unexpected error when client was closed: %v", err)
 		}
 		close(c)
 	}()
 
 	select {
-	case <-c:
-		t.Fatalf("Unexpected end of rpc call")
-	case <-time.After(1 * time.Millisecond):
+	case err := <-c:
+		t.Fatalf("Unexpected end of rpc call: %v", err)
+	case <-time.After(10 * time.Millisecond):
 	}
 
 	// Grab the client for our invalid address and close it. This will cause the
