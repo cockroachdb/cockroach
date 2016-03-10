@@ -309,58 +309,105 @@ func (m *multiTestContext) Stop() {
 // implementation of "rpcSend" is used to multiplex calls between many
 // local senders in a simple way; It sends the request to
 // multiTestContext's localSenders specified in addrs. The request is
-// sent in round-robin order (except if there's a not-leader error)
-// until no error is returned.
+// sent in slice order, and there's a timeout on sending to a replica
+// before moving to the next.
 //
 // TODO(bdarnell): This is mostly obsolete now that we have a real network
 //   stack available. However, it's still needed to handle the interaction
 //   with our manual clock in the event of retries.
-// TODO(spencer): this rpc sender is limited in that it won't try other
-//   replicas after timeouts (like the one in kv/ does). That means that
-//   if a batch is sent to a node which will never be able to make forward
-//   progress in a test, it will get stuck there forever. We should implement
-//   timeouts here if other tests run into problems.
 func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 	ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	// This wait group ensures that we don't leave any tasks open before
+	// existing and unlocking the mutex.
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+	}()
+
+	type result struct {
+		br   *roachpb.BatchResponse
+		pErr *roachpb.Error
+	}
+
+	// Cancellable context.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Sending loop.
+	sendChan := make(chan result, len(replicas))
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for replicaIndex := range replicas {
+			// Reverse-map the address to its index.
+			var nodeID roachpb.NodeID
+			for i, addr := range m.nodeIDtoAddr {
+				if addr.String() == replicas[replicaIndex].NodeDesc.Address.String() {
+					nodeID = i
+					break
+				}
+			}
+			// Node IDs are assigned in the order the nodes are created by
+			// the multi test context, so we can derive the index for stoppers
+			// and senders by subtracting 1 from the node ID.
+			nodeIndex := int(nodeID) - 1
+
+			// The rpcSend method crosses store boundaries: it is possible that the
+			// destination store is stopped while the source is still running.
+			// Run the send in a Task on the destination store to simulate what
+			// would happen with real RPCs.
+			done := make(chan bool, 1)
+			wg.Add(1)
+			if s := m.stoppers[nodeIndex]; s == nil || !s.RunAsyncTask(func() {
+				defer wg.Done()
+				sender := m.senders[nodeIndex]
+				// Make a copy and clone txn of batch args for sending.
+				baCopy := ba
+				if txn := ba.Txn; txn != nil {
+					txnClone := ba.Txn.Clone()
+					baCopy.Txn = &txnClone
+				}
+				br, pErr := sender.Send(ctx, baCopy)
+				sendChan <- result{br, pErr}
+				done <- pErr == nil
+			}) {
+				wg.Done()
+				sendChan <- result{nil, roachpb.NewError(roachpb.NewSendError("store is stopped", true))}
+				m.expireLeaderLeases()
+				continue
+			}
+
+			select {
+			case <-time.After(100 * time.Millisecond):
+				log.Infof("timeout in client_test rpcSender to replica %s; trying next replica", m.stores[nodeIndex])
+			case success := <-done:
+				if success {
+					return
+				}
+			}
+		}
+	}()
+
 	fail := func(pErr *roachpb.Error) (*roachpb.BatchResponse, error) {
 		br := &roachpb.BatchResponse{}
 		br.Error = pErr
 		return br, nil
 	}
-	var br *roachpb.BatchResponse
+
+	// Loop waiting for responses from replicas.
 	var pErr *roachpb.Error
-	for replicaIndex := 0; replicaIndex < len(replicas); {
-		if txn := ba.Txn; txn != nil {
-			txnClone := ba.Txn.Clone()
-			ba.Txn = &txnClone
+	for _ = range replicas {
+		// Wait for next response.
+		res := <-sendChan
+		if res.pErr == nil {
+			return res.br, nil
 		}
-		// Reverse-map the address to its index.
-		var nodeIndex int
-		for i, addr := range m.nodeIDtoAddr {
-			if addr.String() == replica.NodeDesc.Address.String() {
-				nodeIndex = int(i) - 1
-				break
-			}
-		}
-		// The rpcSend method crosses store boundaries: it is possible that the
-		// destination store is stopped while the source is still running.
-		// Run the send in a Task on the destination store to simulate what
-		// would happen with real RPCs.
-		if s := m.stoppers[nodeIndex]; s == nil || !s.RunTask(func() {
-			sender := m.senders[nodeIndex]
-			br, pErr = sender.Send(context.Background(), ba)
-		}) {
-			pErr = roachpb.NewError(roachpb.NewSendError("store is stopped", true))
-			m.expireLeaderLeases()
-			replicaIndex++
-			continue
-		}
-		if pErr == nil {
-			return br, nil
-		}
+		pErr = res.pErr
 		switch tErr := pErr.GetDetail().(type) {
+		case *roachpb.SendError:
 		case *roachpb.RangeKeyMismatchError:
 		case *roachpb.NotLeaderError:
 			if tErr.Leader == nil {
@@ -372,30 +419,16 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 			} else if m.stores[tErr.Leader.NodeID-1] == nil {
 				// The leader is known but down, so expire its lease.
 				m.expireLeaderLeases()
-			} else {
-				// Find replica for redirect.
-				found := false
-				for i, r := range replicas {
-					if r.NodeDesc.NodeID == tErr.Leader.NodeID {
-						replicaIndex = i
-						found = true
-						break
-					}
-				}
-				if found {
-					continue
-				}
 			}
 		default:
-			if testutils.IsPError(pErr, `store \d+ not found`) {
+			if testutils.IsPError(res.pErr, `store \d+ not found`) {
 				break
 			}
 			// If any store fails with an error that doesn't indicate we simply
 			// sent to the wrong store, it must have been the correct one and
 			// the command failed.
-			return fail(pErr)
+			return fail(res.pErr)
 		}
-		replicaIndex++
 	}
 	if pErr == nil {
 		panic("err must not be nil here")
