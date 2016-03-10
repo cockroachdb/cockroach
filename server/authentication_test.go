@@ -67,7 +67,7 @@ func TestSSLEnforcement(t *testing.T) {
 	testCertsContext := testutils.NewTestBaseContext(TestUser)
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := testutils.NewTestBaseContext(TestUser)
-	noCertsContext.Certs = ""
+	noCertsContext.SSLCert = ""
 	// Plain http.
 	insecureContext := testutils.NewTestBaseContext(TestUser)
 	insecureContext.Insecure = true

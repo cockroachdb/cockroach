@@ -148,7 +148,7 @@ func GenerateServerCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySi
 	}
 
 	// Only server authentication is allowed.
-	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
 	if hosts != nil {
 		for _, h := range hosts {
 			if ip := net.ParseIP(h); ip != nil {

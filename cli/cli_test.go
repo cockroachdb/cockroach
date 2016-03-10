@@ -77,11 +77,12 @@ func newCLITest() cliTest {
 	security.ResetReadFileFn()
 
 	assets := []string{
-		security.CACertPath(security.EmbeddedCertsDir),
-		security.ClientCertPath(security.EmbeddedCertsDir, security.RootUser),
-		security.ClientKeyPath(security.EmbeddedCertsDir, security.RootUser),
-		security.ClientCertPath(security.EmbeddedCertsDir, security.NodeUser),
-		security.ClientKeyPath(security.EmbeddedCertsDir, security.NodeUser),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
 	}
 
 	for _, a := range assets {
@@ -173,8 +174,11 @@ func (c cliTest) RunWithArgs(a []string) {
 	} else {
 		args = append(args, fmt.Sprintf("--port=%s", p))
 	}
-	// Always load test certs.
-	args = append(args, fmt.Sprintf("--certs=%s", c.certsDir))
+	// Always run in secure mode and use test certs.
+	args = append(args, "--insecure=false")
+	args = append(args, fmt.Sprintf("--ca-cert=%s", filepath.Join(c.certsDir, security.EmbeddedCACert)))
+	args = append(args, fmt.Sprintf("--cert=%s", filepath.Join(c.certsDir, security.EmbeddedNodeCert)))
+	args = append(args, fmt.Sprintf("--key=%s", filepath.Join(c.certsDir, security.EmbeddedNodeKey)))
 	args = append(args, a[1:]...)
 
 	fmt.Fprintf(os.Stderr, "%s\n", args)

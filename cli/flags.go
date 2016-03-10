@@ -59,10 +59,6 @@ nodes. For example:`) + `
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
 
-	"certs": wrapText(`
-Directory containing RSA key and x509 certs. This flag is required if
---insecure=false.`),
-
 	"client_host": wrapText(`
 Database server host to connect to.`),
 
@@ -115,6 +111,18 @@ The port to bind to.`),
 
 	"http_port": wrapText(`
 The host:port to bind for HTTP requests.`),
+
+	"ca-cert": wrapText(`
+Path to the CA certificate. Needed by clients and servers in secure mode.`),
+
+	"ca-key": wrapText(`
+Path to the key protecting --ca-cert. Only needed when signing new certificates.`),
+
+	"cert": wrapText(`
+Path to the client or server certificate. Needed in secure mode.`),
+
+	"key": wrapText(`
+Path to the key protecting --cert. Needed in secure mode.`),
 
 	"store": wrapText(`
 The file path to a storage device. This flag must be specified separately for
@@ -265,8 +273,11 @@ func initFlags(ctx *Context) {
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
 
 		// Security flags.
-		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
+		// Certificates.
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
 
 		// Cluster joining flags.
 		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usage("join"))
@@ -294,11 +305,12 @@ func initFlags(ctx *Context) {
 
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
-		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
+		// Certificate flags.
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
+		f.StringVar(&ctx.SSLCAKey, "ca-key", ctx.SSLCAKey, usage("ca-key"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
 		f.IntVar(&keySize, "key-size", defaultKeySize, usage("key-size"))
-		if err := cmd.MarkFlagRequired("certs"); err != nil {
-			panic(err)
-		}
 		if err := cmd.MarkFlagRequired("key-size"); err != nil {
 			panic(err)
 		}
@@ -314,8 +326,12 @@ func initFlags(ctx *Context) {
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
-		f.StringVar(&ctx.Certs, "certs", ctx.Certs, usage("certs"))
 		f.StringVar(&connHost, "host", "", usage("client_host"))
+
+		// Certificate flags.
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
 	}
 
 	{

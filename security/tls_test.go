@@ -18,6 +18,7 @@ package security_test
 
 import (
 	"crypto/x509"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
@@ -26,7 +27,10 @@ import (
 
 func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	config, err := security.LoadServerTLSConfig(security.EmbeddedCertsDir, security.NodeUser)
+	config, err := security.LoadServerTLSConfig(
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey))
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)
 	}
