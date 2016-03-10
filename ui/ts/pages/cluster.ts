@@ -329,16 +329,16 @@ module AdminViews {
         if (detail === "events") {
           primaryContent = m(".section.table", m.component(Components.Events, 10));
         } else  {
-          primaryContent = [
+          primaryContent = m(".section.charts", [
             ctrl.RenderGraphs(),
             ctrl.RenderGraphsSmall(),
-          ];
+          ]);
         }
 
         return m(".page", [
           m.component(Components.Topbar, {titleImage: m("img", {src: "assets/CockroachDB.png"}), updated: mostRecentlyUpdated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-          m(".section", primaryContent),
+          primaryContent,
         ]);
       }
     }
