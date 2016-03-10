@@ -397,7 +397,7 @@ func (txn *Txn) Rollback() *roachpb.Error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) *roachpb.Error {
-	_, pErr := txn.send(endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	_, pErr := txn.send(0, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
 	return pErr
 }
 
@@ -510,7 +510,8 @@ RetryLoop:
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
+func (txn *Txn) send(maxScanResults int64, reqs ...roachpb.Request) (
+	*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING {
 		return nil, roachpb.NewErrorf("attempting to use %s transaction", txn.Proto.Status)
@@ -562,7 +563,7 @@ func (txn *Txn) send(reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.
 		reqs = reqs[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(reqs...)
+	br, pErr := txn.db.send(maxScanResults, reqs...)
 	if elideEndTxn && pErr == nil {
 		// This normally happens on the server and sent back in response
 		// headers, but this transaction was optimized away. The caller may

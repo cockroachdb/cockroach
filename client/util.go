@@ -18,12 +18,15 @@ package client
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"time"
 
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -114,4 +117,57 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 	}
 
 	return r, fmt.Errorf("unable to marshal value: %v", v)
+}
+
+func errInfo() string {
+	_, file1, line1, _ := runtime.Caller(3)
+	_, file2, line2, _ := runtime.Caller(2)
+	return fmt.Sprintf("%s:%d %s:%d", filepath.Base(file1), line1, filepath.Base(file2), line2)
+}
+
+// CheckKVs verifies that a KeyValue slice contains the expected keys and values.  The values can be
+// either integers or strings; the expected results are passed as alternating keys and values, e.g:
+//    checkScanResult(t, result, key1, val1, key2, val2)
+func CheckKVs(t util.Tester, kvs []KeyValue, expected ...interface{}) {
+	expLen := len(expected) / 2
+	if expLen != len(kvs) {
+		t.Errorf("%s: expected %d scan results, got %d", errInfo(), expLen, len(kvs))
+		return
+	}
+	for i := 0; i < expLen; i++ {
+		expKey := expected[2*i].(roachpb.Key)
+		if key := kvs[i].Key; !key.Equal(expKey) {
+			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
+		}
+		switch expValue := expected[2*i+1].(type) {
+		case int:
+			if value, err := kvs[i].Value.GetInt(); err != nil {
+				t.Errorf("%s: non-integer scan value %d: %q", errInfo(), i, kvs[i].Value)
+			} else if value != int64(expValue) {
+				t.Errorf("%s: expected scan value %d to be %d; got %d",
+					errInfo(), i, expValue, value)
+			}
+		case string:
+			if value := kvs[i].Value.String(); value != expValue {
+				t.Errorf("%s: expected scan value %d to be %s; got %s",
+					errInfo(), i, expValue, value)
+			}
+		default:
+			panic(fmt.Sprintf("unsupported type %T", expValue))
+		}
+	}
+}
+
+// CheckKeysInKVs verifies that a KeyValue slice contains the given keys.
+func CheckKeysInKVs(t util.Tester, kvs []KeyValue, keys ...string) {
+	if len(keys) != len(kvs) {
+		t.Errorf("%s: expected %d scan results, got %d", errInfo(), len(keys), len(kvs))
+		return
+	}
+	for i, kv := range kvs {
+		expKey := keys[i]
+		if key := string(kv.Key); key != keys[i] {
+			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
+		}
+	}
 }
