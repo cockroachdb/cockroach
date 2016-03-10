@@ -323,7 +323,7 @@ module Models {
                         downsampler: r.query.downsampler,
                         source_aggregator: r.query.source_aggregator,
                         derivative: r.query.derivative,
-                        datapoints: r.query.datapoints || [],
+                        datapoints: r.datapoints || [],
                       });
                   });
                   return result;
