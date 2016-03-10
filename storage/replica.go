@@ -22,6 +22,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -1577,6 +1578,11 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 	// Have to discuss how we go about it.
 	fiddleWithTimestamps := !isTxn && ba.IsWrite()
 
+	remScanResults := int64(math.MaxInt64)
+	if ba.Header.MaxScanResults != 0 {
+		remScanResults = ba.Header.MaxScanResults
+	}
+
 	// TODO(tschottdorf): provisionals ahead. This loop needs to execute each
 	// command and propagate txn and timestamp to the next (and, eventually,
 	// to the batch response header). We're currently in an intermediate stage
@@ -1602,7 +1608,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			header.Timestamp = ba.Timestamp.Add(0, int32(index))
 		}
 
-		reply, curIntents, pErr := r.executeCmd(batch, ms, header, args)
+		reply, curIntents, pErr := r.executeCmd(batch, ms, header, &remScanResults, args)
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
