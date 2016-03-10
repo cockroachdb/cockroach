@@ -43,16 +43,17 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath      = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultAddr               = ":" + base.DefaultPort
-	defaultHTTPAddr           = ":" + base.DefaultHTTPPort
-	defaultMaxOffset          = 250 * time.Millisecond
-	defaultCacheSize          = 512 << 20 // 512 MB
-	defaultMemtableBudget     = 512 << 20 // 512 MB
-	defaultScanInterval       = 10 * time.Minute
-	defaultScanMaxIdleTime    = 5 * time.Second
-	defaultMetricsFrequency   = 10 * time.Second
-	defaultTimeUntilStoreDead = 5 * time.Minute
+	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultAddr                     = ":" + base.DefaultPort
+	defaultHTTPAddr                 = ":" + base.DefaultHTTPPort
+	defaultMaxOffset                = 250 * time.Millisecond
+	defaultCacheSize                = 512 << 20 // 512 MB
+	defaultMemtableBudget           = 512 << 20 // 512 MB
+	defaultScanInterval             = 10 * time.Minute
+	defaultConsistencyCheckInterval = 24 * time.Hour
+	defaultScanMaxIdleTime          = 5 * time.Second
+	defaultMetricsFrequency         = 10 * time.Second
+	defaultTimeUntilStoreDead       = 5 * time.Minute
 )
 
 // Context holds parameters needed to setup a server.
@@ -132,6 +133,9 @@ type Context struct {
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
+	// ConsistencyCheckInterval
+	ConsistencyCheckInterval time.Duration
+
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
@@ -200,6 +204,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
+	ctx.ConsistencyCheckInterval = defaultConsistencyCheckInterval
 	ctx.MetricsFrequency = defaultMetricsFrequency
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})

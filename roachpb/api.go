@@ -189,6 +189,17 @@ func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 	return nil
 }
 
+// Combine implements the combinable interface.
+func (cc *CheckConsistencyResponse) combine(c combinable) error {
+	if cc != nil {
+		otherCC := c.(*CheckConsistencyResponse)
+		if err := cc.Header().combine(otherCC.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Header implements the Request interface for RequestHeader.
 func (rh *Span) Header() *Span {
 	return rh
@@ -312,6 +323,9 @@ func (*ScanRequest) Method() Method { return Scan }
 func (*ReverseScanRequest) Method() Method { return ReverseScan }
 
 // Method implements the Request interface.
+func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
+
+// Method implements the Request interface.
 func (*BeginTransactionRequest) Method() Method { return BeginTransaction }
 
 // Method implements the Request interface.
@@ -353,6 +367,12 @@ func (*TruncateLogRequest) Method() Method { return TruncateLog }
 // Method implements the Request interface.
 func (*LeaderLeaseRequest) Method() Method { return LeaderLease }
 
+// Method implements the Request interface.
+func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
+
+// Method implements the Request interface.
+func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
+
 func (*GetRequest) createReply() Response                { return &GetResponse{} }
 func (*PutRequest) createReply() Response                { return &PutResponse{} }
 func (*ConditionalPutRequest) createReply() Response     { return &ConditionalPutResponse{} }
@@ -361,6 +381,7 @@ func (*DeleteRequest) createReply() Response             { return &DeleteRespons
 func (*DeleteRangeRequest) createReply() Response        { return &DeleteRangeResponse{} }
 func (*ScanRequest) createReply() Response               { return &ScanResponse{} }
 func (*ReverseScanRequest) createReply() Response        { return &ReverseScanResponse{} }
+func (*CheckConsistencyRequest) createReply() Response   { return &CheckConsistencyResponse{} }
 func (*BeginTransactionRequest) createReply() Response   { return &BeginTransactionResponse{} }
 func (*EndTransactionRequest) createReply() Response     { return &EndTransactionResponse{} }
 func (*AdminSplitRequest) createReply() Response         { return &AdminSplitResponse{} }
@@ -375,6 +396,8 @@ func (*NoopRequest) createReply() Response               { return &NoopResponse{
 func (*MergeRequest) createReply() Response              { return &MergeResponse{} }
 func (*TruncateLogRequest) createReply() Response        { return &TruncateLogResponse{} }
 func (*LeaderLeaseRequest) createReply() Response        { return &LeaderLeaseResponse{} }
+func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
+func (*VerifyChecksumRequest) createReply() Response     { return &VerifyChecksumResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
@@ -458,6 +481,16 @@ func NewScan(key, endKey Key, maxResults int64) Request {
 	}
 }
 
+// NewCheckConsistency returns a Request initialized to scan from start to end keys.
+func NewCheckConsistency(key, endKey Key) Request {
+	return &CheckConsistencyRequest{
+		Span: Span{
+			Key:    key,
+			EndKey: endKey,
+		},
+	}
+}
+
 // NewReverseScan returns a Request initialized to reverse scan from end to
 // start keys with max results.
 func NewReverseScan(key, endKey Key, maxResults int64) Request {
@@ -492,3 +525,6 @@ func (*NoopRequest) flags() int               { return isRead } // slightly spec
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*LeaderLeaseRequest) flags() int        { return isWrite }
+func (*ComputeChecksumRequest) flags() int    { return isWrite }
+func (*VerifyChecksumRequest) flags() int     { return isWrite }
+func (*CheckConsistencyRequest) flags() int   { return isAdmin | isRange }

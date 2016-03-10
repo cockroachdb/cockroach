@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -414,4 +415,9 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	elapsed := time.Since(start)
 	count := atomic.LoadUint64(&client.count)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	kvClient, kvStopper := c.NewClient(t, num-1)
+	defer kvStopper.Stop()
+	if pErr := kvClient.CheckConsistency(keys.TableDataMin, keys.TableDataMax); pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
 }

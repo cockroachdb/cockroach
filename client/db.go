@@ -322,6 +322,15 @@ func (db *DB) AdminSplit(splitKey interface{}) *roachpb.Error {
 	return pErr
 }
 
+// CheckConsistency runs a consistency check on all the ranges containing
+// the key span.
+func (db *DB) CheckConsistency(begin, end interface{}) *roachpb.Error {
+	b := db.NewBatch()
+	b.CheckConsistency(begin, end)
+	_, pErr := runOneResult(db, b)
+	return pErr
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

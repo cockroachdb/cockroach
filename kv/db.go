@@ -42,6 +42,7 @@ var allExternalMethods = [...]roachpb.Request{
 	roachpb.EndTransaction:   &roachpb.EndTransactionRequest{},
 	roachpb.AdminSplit:       &roachpb.AdminSplitRequest{},
 	roachpb.AdminMerge:       &roachpb.AdminMergeRequest{},
+	roachpb.CheckConsistency: &roachpb.CheckConsistencyRequest{},
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.
