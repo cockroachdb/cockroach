@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -71,6 +72,7 @@ type storeStats struct {
 type replicaScanner struct {
 	targetInterval time.Duration  // Target duration interval for scan loop
 	maxIdleTime    time.Duration  // Max idle time for scan loop
+	waitTimer      util.Timer     // Shared timer to avoid allocations.
 	replicas       replicaSet     // Replicas to be scanned
 	queues         []replicaQueue // Replica queues managed by this scanner
 	removed        chan *Replica  // Replicas to remove from queues
@@ -100,7 +102,7 @@ func (rs *replicaScanner) AddQueues(queues ...replicaQueue) {
 	rs.queues = append(rs.queues, queues...)
 }
 
-// Start spins up the scanning loop. Call Stop() to exit the loop.
+// Start spins up the scanning loop.
 func (rs *replicaScanner) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	for _, queue := range rs.queues {
 		queue.Start(clock, stopper)
@@ -168,13 +170,14 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *stop.Stopper,
 	repl *Replica) bool {
 	waitInterval := rs.paceInterval(start, time.Now())
-	nextTime := time.After(waitInterval)
+	rs.waitTimer.Reset(waitInterval)
 	if log.V(6) {
 		log.Infof("Wait time interval set to %s", waitInterval)
 	}
 	for {
 		select {
-		case <-nextTime:
+		case <-rs.waitTimer.C:
+			rs.waitTimer.Read = true
 			if repl == nil {
 				return false
 			}
@@ -205,6 +208,9 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		start := time.Now()
+
+		// waitTimer is reset in each call to waitAndProcess.
+		defer rs.waitTimer.Stop()
 
 		for {
 			var shouldStop bool
