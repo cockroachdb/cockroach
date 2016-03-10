@@ -82,11 +82,11 @@ module AdminViews {
         private static defaultTargets: NavigationBar.Target[] = [
           {
             view: "Overview",
-            route: "",
+            route: "overview",
           },
           {
-            view: "Events",
-            route: "events",
+            view: "Graphs",
+            route: "graphs",
           },
         ];
 
@@ -194,7 +194,7 @@ module AdminViews {
         private _query: Metrics.Query;
 
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
-            return ((m.route.param("detail") || "") === t.route);
+          return _.startsWith(m.route(), "/nodes" + (t.route ? "/" + t.route : "" ));
         };
 
         public constructor(nodeId?: string) {
@@ -312,26 +312,38 @@ module AdminViews {
       }
 
       export function controller(): Controller {
+        // reroute to overview if no detail page is
+        if (_.startsWith("/nodes/", m.route())) {
+          m.route("/nodes/overview");
+        }
+
         return new Controller();
       }
 
       export function view(ctrl: Controller): MithrilElement {
 
-        let comparisonData: Table.TableData<NodeStatus> = {
-          columns: ctrl.columns,
-          rows: nodeStatuses.allStatuses,
-        };
+        let isOverview: boolean = _.startsWith(m.route(), "/nodes/overview");
 
-        let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at ));
-        return m(".page", [
-          m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated}),
-          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-          m(".section", [
-            m(".subtitle", m("h1", "Node Overview")),
-            ctrl.RenderGraphs(),
-          ]),
-          m(".section.table", m(".stats-table", Components.Table.create(comparisonData))),
-        ]);
+        if (isOverview) {
+          let comparisonData: Table.TableData<NodeStatus> = {
+            columns: ctrl.columns,
+            rows: nodeStatuses.allStatuses,
+          };
+
+          let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at));
+          return m(".page", [
+            m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated}),
+            m.component(NavigationBar, {ts: ctrl.TargetSet()}),
+            m(".section.table", m(".stats-table", Components.Table.create(comparisonData))),
+          ]);
+        } else {
+          return m(".page", [
+            // TODO: add real updated time
+            m.component(Components.Topbar, {title: "Nodes", updated: Utils.Convert.MilliToNano(Date.now()) }),
+            m.component(NavigationBar, {ts: ctrl.TargetSet()}),
+          ]);
+
+        }
       }
     }
 
