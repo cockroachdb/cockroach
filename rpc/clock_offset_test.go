@@ -363,12 +363,9 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 }
 
 func assertMajorityIntervalError(clocks *RemoteClockMonitor, t *testing.T) {
-	interval, err := clocks.findOffsetInterval()
-	expectedErr := MajorityIntervalNotFoundError{}
-	if err == nil {
-		t.Errorf("expected MajorityIntervalNotFoundError, instead %v", interval)
-	} else if err != expectedErr {
-		t.Errorf("expected MajorityIntervalNotFoundError, instead: %s", err)
+	_, err := clocks.findOffsetInterval()
+	if _, ok := err.(*majorityIntervalNotFoundError); !ok {
+		t.Errorf("expected a %T, got: %+v", &majorityIntervalNotFoundError{}, err)
 	}
 }
 

@@ -53,13 +53,14 @@ func (i ClusterOffsetInterval) String() string {
 	return fmt.Sprintf("{%s, %s}", time.Duration(i.Lowerbound), time.Duration(i.Upperbound))
 }
 
-// MajorityIntervalNotFoundError indicates that we could not find a majority
+// majorityIntervalNotFoundError indicates that we could not find a majority
 // overlap in our estimate of remote clocks.
-type MajorityIntervalNotFoundError struct{}
+type majorityIntervalNotFoundError struct {
+	endpoints endpointList
+}
 
-func (MajorityIntervalNotFoundError) Error() string {
-	return "a majority of connected remote clocks have " +
-		"failed to encompass the true time for the cluster"
+func (m *majorityIntervalNotFoundError) Error() string {
+	return fmt.Sprintf("unable to determine the true cluster time from remote clock endpoints %v", m.endpoints)
 }
 
 // endpoint represents an endpoint in the interval estimation of a single
@@ -253,8 +254,11 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 	// encompass the central offset from the cluster, an error condition.
 	if best <= numClocks/2 {
 		return ClusterOffsetInterval{
-			Lowerbound: math.MaxInt64,
-			Upperbound: math.MaxInt64}, MajorityIntervalNotFoundError{}
+				Lowerbound: math.MaxInt64,
+				Upperbound: math.MaxInt64,
+			}, &majorityIntervalNotFoundError{
+				endpoints: endpoints,
+			}
 	}
 
 	// A majority of offset intervals overlap at this interval, which should
