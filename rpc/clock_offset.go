@@ -47,7 +47,7 @@ type clusterOffsetInterval struct {
 }
 
 func (i clusterOffsetInterval) String() string {
-	return fmt.Sprintf("{%s, %s}", time.Duration(i.lowerbound), time.Duration(i.upperbound))
+	return fmt.Sprintf("[%s, %s]", time.Duration(i.lowerbound), time.Duration(i.upperbound))
 }
 
 // majorityIntervalNotFoundError indicates that we could not find a majority
