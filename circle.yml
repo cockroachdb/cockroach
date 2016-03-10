@@ -48,12 +48,5 @@ deployment:
           -i cockroachdb/cockroach -nodes 3
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
+      - build/build-osx.sh
       - build/push-aws.sh
-      - |
-          if [ -n "${BUILD_OSX-}" ]; then
-            set -eux
-            build/build-osx.sh
-            aws configure set region us-east-1
-            source build/build-common.sh
-            build/push-one-binary.sh $(git rev-parse HEAD) cockroach-darwin-10.9-amd64 cockroach-darwin-10.9-amd64
-          fi
