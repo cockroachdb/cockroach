@@ -202,7 +202,7 @@ func TestFindOffsetInterval(t *testing.T) {
 		offsets: offsets,
 		lClock:  clock,
 	}
-	expectedInterval := ClusterOffsetInterval{Lowerbound: 60, Upperbound: 78}
+	expectedInterval := clusterOffsetInterval{lowerbound: 60, upperbound: 78}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
@@ -241,7 +241,7 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 		offsets: offsets,
 		lClock:  clock,
 	}
-	expectedInterval := ClusterOffsetInterval{Lowerbound: 0, Upperbound: 0}
+	expectedInterval := clusterOffsetInterval{lowerbound: 0, upperbound: 0}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
@@ -262,7 +262,7 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 		offsets: offsets,
 		lClock:  clock,
 	}
-	expectedInterval := ClusterOffsetInterval{Lowerbound: -20, Upperbound: 20}
+	expectedInterval := clusterOffsetInterval{lowerbound: -20, upperbound: 20}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
@@ -282,7 +282,7 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	// Two intervals overlap.
 	offsets["0"] = RemoteOffset{Offset: 0, Uncertainty: 10}
 	offsets["1"] = RemoteOffset{Offset: 20, Uncertainty: 10}
-	expectedInterval := ClusterOffsetInterval{Lowerbound: 10, Upperbound: 10}
+	expectedInterval := clusterOffsetInterval{lowerbound: 10, upperbound: 10}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 
 	// Two intervals don't overlap.
@@ -316,7 +316,7 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedInterval := ClusterOffsetInterval{Lowerbound: -270, Upperbound: 510}
+	expectedInterval := clusterOffsetInterval{lowerbound: -270, upperbound: 510}
 	if interval != expectedInterval {
 		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
 	}
@@ -325,39 +325,39 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 }
 
 // TestIsHealthyOffsetInterval tests if we correctly determine if
-// a ClusterOffsetInterval is healthy or not i.e. if it indicates that the
+// a clusterOffsetInterval is healthy or not i.e. if it indicates that the
 // local clock has too great an offset or not.
 func TestIsHealthyOffsetInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	maxOffset := 10 * time.Nanosecond
 
-	interval := ClusterOffsetInterval{
-		Lowerbound: 0,
-		Upperbound: 0,
+	interval := clusterOffsetInterval{
+		lowerbound: 0,
+		upperbound: 0,
 	}
 	assertIntervalHealth(true, interval, maxOffset, t)
 
-	interval = ClusterOffsetInterval{
-		Lowerbound: -11,
-		Upperbound: 11,
+	interval = clusterOffsetInterval{
+		lowerbound: -11,
+		upperbound: 11,
 	}
 	assertIntervalHealth(true, interval, maxOffset, t)
 
-	interval = ClusterOffsetInterval{
-		Lowerbound: -20,
-		Upperbound: -11,
+	interval = clusterOffsetInterval{
+		lowerbound: -20,
+		upperbound: -11,
 	}
 	assertIntervalHealth(false, interval, maxOffset, t)
 
-	interval = ClusterOffsetInterval{
-		Lowerbound: 11,
-		Upperbound: 20,
+	interval = clusterOffsetInterval{
+		lowerbound: 11,
+		upperbound: 20,
 	}
 	assertIntervalHealth(false, interval, maxOffset, t)
 
-	interval = ClusterOffsetInterval{
-		Lowerbound: math.MaxInt64,
-		Upperbound: math.MaxInt64,
+	interval = clusterOffsetInterval{
+		lowerbound: math.MaxInt64,
+		upperbound: math.MaxInt64,
 	}
 	assertIntervalHealth(false, interval, maxOffset, t)
 }
@@ -369,8 +369,7 @@ func assertMajorityIntervalError(clocks *RemoteClockMonitor, t *testing.T) {
 	}
 }
 
-func assertClusterOffset(clocks *RemoteClockMonitor,
-	expected ClusterOffsetInterval, t *testing.T) {
+func assertClusterOffset(clocks *RemoteClockMonitor, expected clusterOffsetInterval, t *testing.T) {
 	interval, err := clocks.findOffsetInterval()
 	if err != nil {
 		t.Errorf("expected interval %v, instead err: %s",
@@ -380,8 +379,7 @@ func assertClusterOffset(clocks *RemoteClockMonitor,
 	}
 }
 
-func assertIntervalHealth(expectedHealthy bool, i ClusterOffsetInterval,
-	maxOffset time.Duration, t *testing.T) {
+func assertIntervalHealth(expectedHealthy bool, i clusterOffsetInterval, maxOffset time.Duration, t *testing.T) {
 	if expectedHealthy {
 		if !isHealthyOffsetInterval(i, maxOffset) {
 			t.Errorf("expected interval %v for offset %d nanoseconds to be healthy",
