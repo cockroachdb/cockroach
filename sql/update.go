@@ -142,7 +142,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, cols)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -311,7 +311,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := rh.append(newVals); err != nil {
+		// rowVals[0:len(tableDesc.Columns] have been updated with the new values above.
+		if err := rh.append(rowVals[0:len(tableDesc.Columns)]); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
