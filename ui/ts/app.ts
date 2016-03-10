@@ -9,9 +9,6 @@
 /// <reference path="pages/helpusprompt.ts" />
 /// <reference path="pages/events.ts" />
 /// <reference path="pages/databases.ts" />
-/// <reference path="pages/users.ts" />
-
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 m.mount(document.getElementById("header"), AdminViews.SubModules.TitleBar);
 
@@ -29,9 +26,9 @@ m.route(document.getElementById("root"), "/cluster", {
   "/databases": AdminViews.Databases.DatabaseListPage,
   "/databases/:database": AdminViews.Databases.DatabasePage,
   "/databases/:database/tables/:table": AdminViews.Databases.TablePage,
-  "/users": AdminViews.Users.Page,
   "/help-us/:detail": AdminViews.HelpUs.Page,
   "/cluster": AdminViews.Cluster.Page,
+  "/cluster/:detail": AdminViews.Cluster.Page,
 });
 
 m.mount(document.getElementById("helpus"), AdminViews.SubModules.HelpUsPrompt);
