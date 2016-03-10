@@ -226,16 +226,6 @@ module Models {
     }
 
     /**
-     * Result is a single query result.
-     *
-     * Source message = "TimeSeriesQueryResponse.Result"
-     */
-    export interface Result {
-      name: string;
-      query: QueryResult;
-    }
-
-    /**
      * QueryResult is a single query result.
      *
      * No direct source message. Historical relic.
@@ -246,6 +236,16 @@ module Models {
       source_aggregator: QueryAggregator;
       derivative: QueryDerivative;
       datapoints: Datapoint[];
+    }
+
+    /**
+     * Result is a single query result.
+     *
+     * Source message = "TimeSeriesQueryResponse.Result"
+     */
+    export interface Result {
+      datapoints: Datapoint[];
+      query: QueryRequest;
     }
 
     /**
