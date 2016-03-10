@@ -43,6 +43,18 @@ type IndexID uint32
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
 
+// FormatVersion is a custom type for TableDescriptor versions of the sql to
+// key:value mapping.
+//go:generate stringer -type=FormatVersion
+type FormatVersion uint32
+
+const (
+	_ FormatVersion = iota
+	// BaseFormatVersion corresponds to the encoding described in
+	// https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
+	BaseFormatVersion
+)
+
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
@@ -365,6 +377,12 @@ func (desc *TableDescriptor) Validate() error {
 		return fmt.Errorf("invalid parent ID %d", desc.ParentID)
 	}
 
+	if desc.GetFormatVersion() != BaseFormatVersion {
+		return fmt.Errorf(
+			"table %q is encoded using using version %d, but this client only supports version %d",
+			desc.Name, desc.GetFormatVersion(), BaseFormatVersion)
+	}
+
 	if len(desc.Columns) == 0 {
 		return errMissingColumns
 	}
@@ -469,6 +487,7 @@ func (desc *TableDescriptor) Validate() error {
 			}
 		}
 	}
+
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }

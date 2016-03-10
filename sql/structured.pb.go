@@ -453,6 +453,9 @@ type TableDescriptor struct {
 	Lease     *TableDescriptor_SchemaChangeLease `protobuf:"bytes,15,opt,name=lease" json:"lease,omitempty"`
 	// An id for the next group of mutations to be applied together.
 	NextMutationID MutationID `protobuf:"varint,16,opt,name=next_mutation_id,casttype=MutationID" json:"next_mutation_id"`
+	// format_version declares which sql to key:value mapping is being used to
+	// represent the data in this table.
+	FormatVersion FormatVersion `protobuf:"varint,17,opt,name=format_version,casttype=FormatVersion" json:"format_version"`
 }
 
 func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
@@ -560,6 +563,13 @@ func (m *TableDescriptor) GetLease() *TableDescriptor_SchemaChangeLease {
 func (m *TableDescriptor) GetNextMutationID() MutationID {
 	if m != nil {
 		return m.NextMutationID
+	}
+	return 0
+}
+
+func (m *TableDescriptor) GetFormatVersion() FormatVersion {
+	if m != nil {
+		return m.FormatVersion
 	}
 	return 0
 }
@@ -1077,6 +1087,11 @@ func (m *TableDescriptor) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x1
 	i++
 	i = encodeVarintStructured(data, i, uint64(m.NextMutationID))
+	data[i] = 0x88
+	i++
+	data[i] = 0x1
+	i++
+	i = encodeVarintStructured(data, i, uint64(m.FormatVersion))
 	return i, nil
 }
 
@@ -1354,6 +1369,7 @@ func (m *TableDescriptor) Size() (n int) {
 		n += 1 + l + sovStructured(uint64(l))
 	}
 	n += 2 + sovStructured(uint64(m.NextMutationID))
+	n += 2 + sovStructured(uint64(m.FormatVersion))
 	return n
 }
 
@@ -2538,6 +2554,25 @@ func (m *TableDescriptor) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.NextMutationID |= (MutationID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 17:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FormatVersion", wireType)
+			}
+			m.FormatVersion = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStructured
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.FormatVersion |= (FormatVersion(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
