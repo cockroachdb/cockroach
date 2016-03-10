@@ -853,10 +853,12 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	}
 
 	// Perform a write on the right range.
+	log.Infof("incrementing right key")
 	incArgs := incrementArgs(rightKey, 20)
 	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
+	log.Infof("*** INCREMENTED right key")
 
 	// It immediately propagates between nodes 4 and 5, but node 3
 	// remains at its old value. It can't accept the right-hand range
