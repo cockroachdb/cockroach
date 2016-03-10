@@ -159,13 +159,12 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 		"stagnant1": {Offset: 3, Uncertainty: 10, MeasuredAt: 9},
 	}
 
-	// The stagnant offsets older than 10ns ago will be removed.
-	monitorInterval = 10 * time.Nanosecond
-
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
 	remoteClocks := newRemoteClockMonitor(clock)
+	// The stagnant offsets older than this will be removed.
+	remoteClocks.monitorInterval = 10 * time.Nanosecond
 	remoteClocks.mu.offsets = offsets
 	remoteClocks.mu.lastMonitoredAt = time.Unix(0, 10) // offsets measured before this will be removed.
 

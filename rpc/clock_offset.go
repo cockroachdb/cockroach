@@ -28,13 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// How often the cluster offset is measured.
-var monitorInterval = defaultHeartbeatInterval * 10
-
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
-	clock *hlc.Clock
+	clock           *hlc.Clock
+	monitorInterval time.Duration
 
 	mu struct {
 		sync.Mutex
@@ -93,7 +91,7 @@ func (l endpointList) Less(i, j int) bool {
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
-	r := RemoteClockMonitor{clock: clock}
+	r := RemoteClockMonitor{clock: clock, monitorInterval: defaultHeartbeatInterval * 10}
 	r.mu.offsets = make(map[string]RemoteOffset)
 	return &r
 }
@@ -110,9 +108,9 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 // the remote addr during the next findOffsetInterval() invocation. We may
 // measure the remote clock several times before we next calculate the cluster
 // offset. When we do the measurement, we want to use the reading with the
-// smallest error. Because monitorInterval > heartbeatInterval, this gives us
+// smallest error. Because r.monitorInterval > heartbeatInterval, this gives us
 // several chances to accurately read the remote clock. Note that we don't want
-// monitorInterval to be too large, else we might end up relying on old
+// r.monitorInterval to be too large, else we might end up relying on old
 // information.
 func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	r.mu.Lock()
@@ -139,12 +137,12 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 // suicide.
 func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 	if log.V(1) {
-		log.Infof("monitoring cluster offset")
+		log.Infof("monitoring cluster offset every %s", r.monitorInterval)
 	}
 	var monitorTimer util.Timer
 	defer monitorTimer.Stop()
 	for {
-		monitorTimer.Reset(monitorInterval)
+		monitorTimer.Reset(r.monitorInterval)
 		select {
 		case <-stopper.ShouldStop():
 			return
@@ -209,8 +207,8 @@ func (r *RemoteClockMonitor) findOffsetInterval() (clusterOffsetInterval, error)
 	endpoints := r.buildEndpointList()
 	numClocks := len(endpoints) / 2
 	if log.V(1) {
-		log.Infof("finding offset interval for monitorInterval: %s, numOffsets %d",
-			monitorInterval, numClocks)
+		log.Infof("finding offset interval for monitor interval: %s, numOffsets %d",
+			r.monitorInterval, numClocks)
 	}
 	if numClocks == 0 {
 		return clusterOffsetInterval{}, nil
