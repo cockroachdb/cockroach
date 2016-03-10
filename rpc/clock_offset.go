@@ -140,7 +140,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 // clock from the true cluster time is within MaxOffset. If the offset exceeds
 // MaxOffset, then this method will trigger a fatal error, causing the node to
 // suicide.
-func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
+func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) error {
 	if log.V(1) {
 		log.Infof("monitoring cluster offset every %s", r.monitorInterval)
 	}
@@ -150,7 +150,7 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 		monitorTimer.Reset(r.monitorInterval)
 		select {
 		case <-stopper.ShouldStop():
-			return
+			return nil
 		case <-monitorTimer.C:
 			monitorTimer.Read = true
 			offsetInterval, err := r.findOffsetInterval()
@@ -161,16 +161,14 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 			// data about the db, propagate the offset status to that.
 			if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
 				if err != nil {
-					log.Fatalf("clock offset from the cluster time "+
-						"for remote clocks %v could not be determined: %s",
-						r.mu.offsets, err)
+					return util.Errorf("clock offset could not be determined: %s", err)
 				}
 
 				if !isHealthyOffsetInterval(offsetInterval, maxOffset) {
-					log.Fatalf("clock offset from the cluster time "+
-						"for remote clocks: %v is in interval: %s, which "+
-						"indicates that the true offset is greater than %s",
-						r.mu.offsets, offsetInterval, maxOffset)
+					return util.Errorf(
+						"clock offset is in interval: %s, which indicates that the true offset is greater than the max offset: %s",
+						offsetInterval, maxOffset,
+					)
 				}
 				if log.V(1) {
 					log.Infof("healthy cluster offset: %s", offsetInterval)
