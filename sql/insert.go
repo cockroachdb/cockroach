@@ -128,10 +128,36 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	marshalled := make([]interface{}, len(cols))
 
 	b := p.txn.NewBatch()
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, cols)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
+
+	// Prepare structures for building values to pass to rh.
+	var retVals parser.DTuple
+	var rowIdxToRetIdx []int
+	if rh.exprs != nil {
+		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
+		// columns. We need to pass values for all table columns to rh, in the correct order; we
+		// will use retVals for this. We also need a table that maps row indices to retVals indices
+		// to fill in the row values; any absent values will be NULLs.
+
+		retVals = make(parser.DTuple, len(tableDesc.Columns))
+		for i := range retVals {
+			retVals[i] = parser.DNull
+		}
+
+		colIDToRetIndex := map[ColumnID]int{}
+		for i, col := range tableDesc.Columns {
+			colIDToRetIndex[col.ID] = i
+		}
+
+		rowIdxToRetIdx = make([]int, len(cols))
+		for i, col := range cols {
+			rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+		}
+	}
+
 	for rows.Next() {
 		rowVals := rows.Values()
 
@@ -216,6 +242,10 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		// Write the row columns.
 		for i, val := range rowVals {
 			col := cols[i]
+			if retVals != nil {
+				retVals[rowIdxToRetIdx[i]] = val
+			}
+
 			if _, ok := primaryKeyCols[col.ID]; ok {
 				// Skip primary key columns as their values are encoded in the row
 				// sentinel key which is guaranteed to exist for as long as the row
@@ -237,7 +267,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := rh.append(rowVals); err != nil {
+		if err := rh.append(retVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

@@ -104,6 +104,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// expressions for tuple assignments just as we flattened the column names
 	// above. So "UPDATE t SET (a, b) = (1, 2)" translates into select targets of
 	// "*, 1, 2", not "*, (1, 2)".
+	// TODO(radu): we only need to select columns necessary to generate primary and
+	// secondary indexes keys, and columns needed by returningHelper.
 	targets := tableDesc.allColumnsSelector()
 	i := 0
 	// Remember the index where the targets for exprs start.
@@ -142,7 +144,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, cols)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -311,7 +313,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := rh.append(newVals); err != nil {
+		// rowVals[:len(tableDesc.Columns)] have been updated with the new values above.
+		if err := rh.append(rowVals[:len(tableDesc.Columns)]); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

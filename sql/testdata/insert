@@ -335,9 +335,16 @@ INSERT INTO return VALUES (default) RETURNING return.a
 statement ok
 INSERT INTO return VALUES (default) RETURNING rowid != unique_rowid()
 
-# Cannot return non-default columns when columns specified.
-statement error pq: qualified name "b" not found
+query I colnames
 INSERT INTO return (a) VALUES (default) RETURNING b
+----
+b
+NULL
+
+query III
+INSERT INTO return (b) VALUES (1) RETURNING *, a+1
+----
+3 1 4
 
 query II colnames
 INSERT INTO return VALUES (default) RETURNING *
@@ -366,6 +373,11 @@ INSERT INTO return VALUES (1) RETURNING *
 a b
 1 NULL
 
+query II colnames
+INSERT INTO return (a) VALUES (1) RETURNING *
+----
+a b
+1 NULL
 
 statement error pq: "return.*" cannot be aliased
 INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.* as x
