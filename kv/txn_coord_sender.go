@@ -139,10 +139,13 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 func (tm *txnMetadata) intentSpans() []roachpb.Span {
 	intents := make([]roachpb.Span, 0, tm.keys.Len())
 	if err := tm.keys.ForEach(func(r interval.Range) error {
-		intents = append(intents, roachpb.Span{
-			Key:    roachpb.Key(r.Start),
-			EndKey: roachpb.Key(r.End),
-		})
+		sp := roachpb.Span{
+			Key: roachpb.Key(r.Start),
+		}
+		if endKey := roachpb.Key(r.End); !sp.Key.IsPrev(endKey) {
+			sp.EndKey = endKey
+		}
+		intents = append(intents, sp)
 		return nil
 	}); err != nil {
 		panic(err)
