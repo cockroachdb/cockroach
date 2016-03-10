@@ -673,6 +673,9 @@ message Header {
   optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
   // trace, if set, is the active span of an OpenTracing distributed trace.
   optional util.tracing.Span trace = 7;
+  // if set to a non-zero value, limits the total number of results for
+  // Scan/ReverseScan requests in the batch.
+  optional int64 max_scan_results = 8 [(gogoproto.nullable) = false];
 }
 
 

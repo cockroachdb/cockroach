@@ -43,8 +43,13 @@ type Batch struct {
 	//   _ = db.Run(b)
 	//   // string(b.Results[0].Rows[0].Key) == "a"
 	//   // string(b.Results[1].Rows[0].Key) == "b"
-	Results    []Result
-	reqs       []roachpb.Request
+	Results []Result
+	reqs    []roachpb.Request
+	// If nonzero, limits the total amount of key/values returned by all Scan/ReverseScan operations
+	// in the batch. This can only be used if all requests are of the same type, and that type is
+	// Scan or ReverseScan.
+	MaxScanResults int64
+	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue
 	rowsIdx    int
@@ -317,11 +322,12 @@ func (b *Batch) scan(s, e interface{}, maxRows int64, isReverse bool) {
 	b.initResult(1, 0, nil)
 }
 
-// Scan retrieves the rows between begin (inclusive) and end (exclusive) in
+// Scan retrieves the key/values between begin (inclusive) and end (exclusive) in
 // ascending order.
 //
 // A new result will be appended to the batch which will contain up to maxRows
-// rows and Result.Err will indicate success or failure.
+// "rows" (each row is a key/value pair) and Result.Err will indicate success or
+// failure.
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Scan(s, e interface{}, maxRows int64) {
@@ -332,7 +338,8 @@ func (b *Batch) Scan(s, e interface{}, maxRows int64) {
 // in descending order.
 //
 // A new result will be appended to the batch which will contain up to maxRows
-// rows and Result.Err will indicate success or failure.
+// rows (each "row" is a key/value pair) and Result.Err will indicate success or
+// failure.
 //
 // key can be either a byte slice or a string.
 func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {

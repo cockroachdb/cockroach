@@ -1055,6 +1055,9 @@ type Header struct {
 	ReadConsistency ReadConsistencyType `protobuf:"varint,6,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
 	// trace, if set, is the active span of an OpenTracing distributed trace.
 	Trace *cockroach_util_tracing.Span `protobuf:"bytes,7,opt,name=trace" json:"trace,omitempty"`
+	// if set to a non-zero value, limits the total number of results for
+	// Scan/ReverseScan requests in the batch.
+	MaxScanResults int64 `protobuf:"varint,8,opt,name=max_scan_results" json:"max_scan_results"`
 }
 
 func (m *Header) Reset()         { *m = Header{} }
@@ -3615,6 +3618,9 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 		}
 		i += n125
 	}
+	data[i] = 0x40
+	i++
+	i = encodeVarintApi(data, i, uint64(m.MaxScanResults))
 	return i, nil
 }
 
@@ -4535,6 +4541,7 @@ func (m *Header) Size() (n int) {
 		l = m.Trace.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
+	n += 1 + sovApi(uint64(m.MaxScanResults))
 	return n
 }
 
@@ -12269,6 +12276,25 @@ func (m *Header) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxScanResults", wireType)
+			}
+			m.MaxScanResults = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.MaxScanResults |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

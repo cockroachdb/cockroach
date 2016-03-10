@@ -1116,7 +1116,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, _internal_metadata_),
       -1);
   Header_descriptor_ = file->message_type(53);
-  static const int Header_offsets_[7] = {
+  static const int Header_offsets_[8] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, timestamp_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, replica_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, range_id_),
@@ -1124,6 +1124,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, read_consistency_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, trace_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Header, max_scan_results_),
   };
   Header_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -1682,7 +1683,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "erifyChecksumResponse\022F\n\021check_consisten"
     "cy\030\030 \001(\0132+.cockroach.roachpb.CheckConsis"
     "tencyResponse\022-\n\004noop\030\031 \001(\0132\037.cockroach."
-    "roachpb.NoopResponse:\004\310\240\037\001\"\371\002\n\006Header\0225\n"
+    "roachpb.NoopResponse:\004\310\240\037\001\"\231\003\n\006Header\0225\n"
     "\ttimestamp\030\001 \001(\0132\034.cockroach.roachpb.Tim"
     "estampB\004\310\336\037\000\022;\n\007replica\030\002 \001(\0132$.cockroac"
     "h.roachpb.ReplicaDescriptorB\004\310\336\037\000\022,\n\010ran"
@@ -1692,25 +1693,26 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "ansaction\022F\n\020read_consistency\030\006 \001(\0162&.co"
     "ckroach.roachpb.ReadConsistencyTypeB\004\310\336\037"
     "\000\022+\n\005trace\030\007 \001(\0132\034.cockroach.util.tracin"
-    "g.Span\"\202\001\n\014BatchRequest\0223\n\006header\030\001 \001(\0132"
-    "\031.cockroach.roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010"
-    "requests\030\002 \003(\0132\037.cockroach.roachpb.Reque"
-    "stUnionB\004\310\336\037\000:\004\230\240\037\000\"\214\002\n\rBatchResponse\022A\n"
-    "\006header\030\001 \001(\0132\'.cockroach.roachpb.BatchR"
-    "esponse.HeaderB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 "
-    "\003(\0132 .cockroach.roachpb.ResponseUnionB\004\310"
-    "\336\037\000\032w\n\006Header\022\'\n\005error\030\001 \001(\0132\030.cockroach"
-    ".roachpb.Error\022+\n\003txn\030\003 \001(\0132\036.cockroach."
-    "roachpb.Transaction\022\027\n\017collected_spans\030\004"
-    " \003(\014:\004\230\240\037\000*L\n\023ReadConsistencyType\022\016\n\nCON"
-    "SISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT"
-    "\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAM"
-    "P\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002\032\004\210\243\036"
-    "\0002X\n\010Internal\022L\n\005Batch\022\037.cockroach.roach"
-    "pb.BatchRequest\032 .cockroach.roachpb.Batc"
-    "hResponse\"\0002X\n\010External\022L\n\005Batch\022\037.cockr"
-    "oach.roachpb.BatchRequest\032 .cockroach.ro"
-    "achpb.BatchResponse\"\000B\tZ\007roachpbX\004", 10434);
+    "g.Span\022\036\n\020max_scan_results\030\010 \001(\003B\004\310\336\037\000\"\202"
+    "\001\n\014BatchRequest\0223\n\006header\030\001 \001(\0132\031.cockro"
+    "ach.roachpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests"
+    "\030\002 \003(\0132\037.cockroach.roachpb.RequestUnionB"
+    "\004\310\336\037\000:\004\230\240\037\000\"\214\002\n\rBatchResponse\022A\n\006header\030"
+    "\001 \001(\0132\'.cockroach.roachpb.BatchResponse."
+    "HeaderB\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .co"
+    "ckroach.roachpb.ResponseUnionB\004\310\336\037\000\032w\n\006H"
+    "eader\022\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb"
+    ".Error\022+\n\003txn\030\003 \001(\0132\036.cockroach.roachpb."
+    "Transaction\022\027\n\017collected_spans\030\004 \003(\014:\004\230\240"
+    "\037\000*L\n\023ReadConsistencyType\022\016\n\nCONSISTENT\020"
+    "\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000"
+    "*G\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\016\n\nP"
+    "USH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002\032\004\210\243\036\0002X\n\010Int"
+    "ernal\022L\n\005Batch\022\037.cockroach.roachpb.Batch"
+    "Request\032 .cockroach.roachpb.BatchRespons"
+    "e\"\0002X\n\010External\022L\n\005Batch\022\037.cockroach.roa"
+    "chpb.BatchRequest\032 .cockroach.roachpb.Ba"
+    "tchResponse\"\000B\tZ\007roachpbX\004", 10466);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -25314,6 +25316,7 @@ const int Header::kUserPriorityFieldNumber;
 const int Header::kTxnFieldNumber;
 const int Header::kReadConsistencyFieldNumber;
 const int Header::kTraceFieldNumber;
+const int Header::kMaxScanResultsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Header::Header()
@@ -25346,6 +25349,7 @@ void Header::SharedCtor() {
   txn_ = NULL;
   read_consistency_ = 0;
   trace_ = NULL;
+  max_scan_results_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -25397,8 +25401,9 @@ void Header::Clear() {
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  if (_has_bits_[0 / 32] & 127u) {
+  if (_has_bits_[0 / 32] & 255u) {
     ZR_(range_id_, user_priority_);
+    ZR_(max_scan_results_, read_consistency_);
     if (has_timestamp()) {
       if (timestamp_ != NULL) timestamp_->::cockroach::roachpb::Timestamp::Clear();
     }
@@ -25408,7 +25413,6 @@ void Header::Clear() {
     if (has_txn()) {
       if (txn_ != NULL) txn_->::cockroach::roachpb::Transaction::Clear();
     }
-    read_consistency_ = 0;
     if (has_trace()) {
       if (trace_ != NULL) trace_->::cockroach::util::tracing::Span::Clear();
     }
@@ -25530,6 +25534,21 @@ bool Header::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(64)) goto parse_max_scan_results;
+        break;
+      }
+
+      // optional int64 max_scan_results = 8;
+      case 8: {
+        if (tag == 64) {
+         parse_max_scan_results:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &max_scan_results_)));
+          set_has_max_scan_results();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -25599,6 +25618,11 @@ void Header::SerializeWithCachedSizes(
       7, *this->trace_, output);
   }
 
+  // optional int64 max_scan_results = 8;
+  if (has_max_scan_results()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(8, this->max_scan_results(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -25653,6 +25677,11 @@ void Header::SerializeWithCachedSizes(
         7, *this->trace_, target);
   }
 
+  // optional int64 max_scan_results = 8;
+  if (has_max_scan_results()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(8, this->max_scan_results(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -25664,7 +25693,7 @@ void Header::SerializeWithCachedSizes(
 int Header::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 127u) {
+  if (_has_bits_[0 / 32] & 255u) {
     // optional .cockroach.roachpb.Timestamp timestamp = 1;
     if (has_timestamp()) {
       total_size += 1 +
@@ -25709,6 +25738,13 @@ int Header::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->trace_);
+    }
+
+    // optional int64 max_scan_results = 8;
+    if (has_max_scan_results()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->max_scan_results());
     }
 
   }
@@ -25759,6 +25795,9 @@ void Header::MergeFrom(const Header& from) {
     if (from.has_trace()) {
       mutable_trace()->::cockroach::util::tracing::Span::MergeFrom(from.trace());
     }
+    if (from.has_max_scan_results()) {
+      set_max_scan_results(from.max_scan_results());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -25794,6 +25833,7 @@ void Header::InternalSwap(Header* other) {
   std::swap(txn_, other->txn_);
   std::swap(read_consistency_, other->read_consistency_);
   std::swap(trace_, other->trace_);
+  std::swap(max_scan_results_, other->max_scan_results_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -26053,6 +26093,30 @@ void Header::set_allocated_trace(::cockroach::util::tracing::Span* trace) {
     clear_has_trace();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Header.trace)
+}
+
+// optional int64 max_scan_results = 8;
+bool Header::has_max_scan_results() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+void Header::set_has_max_scan_results() {
+  _has_bits_[0] |= 0x00000080u;
+}
+void Header::clear_has_max_scan_results() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+void Header::clear_max_scan_results() {
+  max_scan_results_ = GOOGLE_LONGLONG(0);
+  clear_has_max_scan_results();
+}
+ ::google::protobuf::int64 Header::max_scan_results() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.max_scan_results)
+  return max_scan_results_;
+}
+ void Header::set_max_scan_results(::google::protobuf::int64 value) {
+  set_has_max_scan_results();
+  max_scan_results_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.max_scan_results)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
