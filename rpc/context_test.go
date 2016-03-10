@@ -77,7 +77,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		context.RemoteClocks.mu.Lock()
 		defer context.RemoteClocks.mu.Unlock()
 
-		if o := context.RemoteClocks.offsets[remoteAddr]; o != expectedOffset {
+		if o := context.RemoteClocks.mu.offsets[remoteAddr]; o != expectedOffset {
 			return util.Errorf("expected:\n%v\nactual:\n%v", expectedOffset, o)
 		}
 		return nil
@@ -122,7 +122,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 	// though the client is still healthy because it received a heartbeat
 	// reply.
 	context.RemoteClocks.mu.Lock()
-	if o, ok := context.RemoteClocks.offsets[remoteAddr]; ok {
+	if o, ok := context.RemoteClocks.mu.offsets[remoteAddr]; ok {
 		t.Errorf("expected offset to not exist, but found %v", o)
 	}
 	context.RemoteClocks.mu.Unlock()
@@ -165,7 +165,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		context.RemoteClocks.mu.Lock()
 		defer context.RemoteClocks.mu.Unlock()
 
-		if _, ok := context.RemoteClocks.offsets[remoteAddr]; !ok {
+		if _, ok := context.RemoteClocks.mu.offsets[remoteAddr]; !ok {
 			return util.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
 		}
 		return nil
@@ -176,7 +176,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		context.RemoteClocks.mu.Lock()
 		defer context.RemoteClocks.mu.Unlock()
 
-		if o := context.RemoteClocks.offsets[remoteAddr]; o != expectedOffset {
+		if o := context.RemoteClocks.mu.offsets[remoteAddr]; o != expectedOffset {
 			return util.Errorf("expected offset of %s to be empty, got %v", remoteAddr, o)
 		}
 		return nil
