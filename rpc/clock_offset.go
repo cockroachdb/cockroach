@@ -207,18 +207,15 @@ func isHealthyOffsetInterval(i clusterOffsetInterval, maxOffset time.Duration) b
 // a majority of remote node offset intervals do not overlap the cluster time.
 func (r *RemoteClockMonitor) findOffsetInterval() (clusterOffsetInterval, error) {
 	endpoints := r.buildEndpointList()
-	sort.Sort(endpoints)
 	numClocks := len(endpoints) / 2
 	if log.V(1) {
 		log.Infof("finding offset interval for monitorInterval: %s, numOffsets %d",
 			monitorInterval, numClocks)
 	}
 	if numClocks == 0 {
-		return clusterOffsetInterval{
-			lowerbound: 0,
-			upperbound: 0,
-		}, nil
+		return clusterOffsetInterval{}, nil
 	}
+	sort.Sort(endpoints)
 
 	best := 0
 	count := 0
