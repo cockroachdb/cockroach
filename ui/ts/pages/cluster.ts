@@ -22,6 +22,7 @@ module AdminViews {
   "use strict";
 
   import MithrilElement = _mithril.MithrilVirtualElement;
+  import NavigationBar = Components.NavigationBar;
 
   /**
    * Cluster is the view for exploring the overall status of the cluster.
@@ -53,6 +54,17 @@ module AdminViews {
       class Controller {
         private static _queryEveryMS: number = 10000;
 
+        private static defaultTargets: NavigationBar.Target[] = [
+          {
+            view: "Overview",
+            route: "",
+          },
+          {
+            view: "Events",
+            route: "events",
+          },
+        ];
+
         public sources: string[] = [];
         exec: Metrics.Executor;
         axes: (any)[] = [];
@@ -70,6 +82,10 @@ module AdminViews {
           "-p75",
           "-p50",
         ];
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+            return ((m.route.param("detail") || "") === t.route);
+        };
 
         public constructor(nodeId?: string) {
           this._query = Metrics.NewQuery();
@@ -167,7 +183,12 @@ module AdminViews {
           );
 
           this.axesSmall.push({
-            title: "Nodes",
+            titleFn: (allStats: Models.Proto.NodeStatus[]): string => {
+              if (allStats && allStats.length === 1) {
+                return "Node";
+              }
+              return "Nodes";
+            },
             visualizationArguments: {
               format: ".0s",
               dataFn: function (allStats: Models.Proto.NodeStatus[], totalStats: Models.Proto.Status): { value: number; } { return {value: allStats && allStats.length || 0 }; },
@@ -183,6 +204,14 @@ module AdminViews {
           clearInterval(this._interval);
         }
 
+        public TargetSet(): NavigationBar.TargetSet {
+          return {
+            baseRoute: "/cluster/",
+            targets: Utils.Prop(Controller.defaultTargets),
+            isActive: Controller.isActive,
+          };
+        }
+
         public RenderGraphs(): MithrilElement {
           return m(".charts", this.axes.map((axis: (any)) => {
             if (axis instanceof Metrics.Axis) {
@@ -191,6 +220,7 @@ module AdminViews {
               let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
               let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
 
+              axis.title = axis.titleFn(allStats);
               axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
@@ -206,6 +236,8 @@ module AdminViews {
             } else {
               let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
               let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
+
+              axis.title = axis.titleFn(allStats);
               axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
@@ -281,6 +313,8 @@ module AdminViews {
       }
 
       export function view(ctrl: Controller): MithrilElement {
+        let detail: string = m.route.param("detail");
+
         // set
         ctrl.sources = _.map(
           nodeStatuses.allStatuses(),
@@ -291,15 +325,20 @@ module AdminViews {
 
         let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at ));
 
-        return m(".page", [
-          m.component(Components.Topbar, {titleImage: m("img", {src: "assets/CockroachDB.png"}), updated: mostRecentlyUpdated}),
-          m(".section", [
-            m(".subtitle", m("h1", "Cluster Overview")),
-            // ctrl.RenderPrimaryStats(),
+        let primaryContent: MithrilElement | MithrilElement[];
+        if (detail === "events") {
+          primaryContent = m(".section.table", m.component(Components.Events, 10));
+        } else  {
+          primaryContent = [
             ctrl.RenderGraphs(),
             ctrl.RenderGraphsSmall(),
-          ]),
-          m(".section.table", m.component(Components.Events, 10)),
+          ];
+        }
+
+        return m(".page", [
+          m.component(Components.Topbar, {titleImage: m("img", {src: "assets/CockroachDB.png"}), updated: mostRecentlyUpdated}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
+          m(".section", primaryContent),
         ]);
       }
     }
