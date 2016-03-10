@@ -128,10 +128,18 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	marshalled := make([]interface{}, len(cols))
 
 	b := p.txn.NewBatch()
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, cols)
+	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
+
+	// Prepare structures for building values to pass to rh.
+	retVals := make(parser.DTuple, len(tableDesc.Columns))
+	colIDToRetIndex := map[ColumnID]int{}
+	for i, col := range tableDesc.Columns {
+		colIDToRetIndex[col.ID] = i
+	}
+
 	for rows.Next() {
 		rowVals := rows.Values()
 
@@ -213,9 +221,16 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		// []byte{} as a non-nil value.
 		b.CPut(sentinelKey, []byte{}, nil)
 
+		// We will fill in the provided values in retVals; the other values will stay NULL.
+		for i := range retVals {
+			retVals[i] = parser.DNull
+		}
+
 		// Write the row columns.
 		for i, val := range rowVals {
 			col := cols[i]
+			retVals[colIDToRetIndex[col.ID]] = val
+
 			if _, ok := primaryKeyCols[col.ID]; ok {
 				// Skip primary key columns as their values are encoded in the row
 				// sentinel key which is guaranteed to exist for as long as the row
@@ -237,7 +252,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := rh.append(rowVals); err != nil {
+		if err := rh.append(retVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
