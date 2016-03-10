@@ -365,7 +365,7 @@ func (m *multiTestContext) rpcSend(_ kv.SendOptions, replicas kv.ReplicaSlice,
 			m.t.Fatal(stErr)
 		}
 		nodeIndex := nodeID - 1
-		// The rpcSend method crosses range boundaries: it is possible that the
+		// The rpcSend method crosses store boundaries: it is possible that the
 		// destination store is stopped while the source is still running.
 		// Run the send in a Task on the destination store to simulate what
 		// would happen with real RPCs.

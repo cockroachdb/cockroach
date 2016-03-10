@@ -483,7 +483,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	{
 		sp := tc.rng.store.Tracer().StartSpan("test")
 		defer sp.Finish()
-		pErr := tc.rng.redirectOnOrAcquireLeaderLease(sp)
+		pErr := tc.rng.redirectOnOrAcquireLeaderLease(sp, tc.rng.context())
 		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
 			t.Fatalf("wanted NotLeaderError, got %s", pErr)
 		}
@@ -493,28 +493,6 @@ func TestRangeLeaderLease(t *testing.T) {
 	tc.manualClock.Increment(21) // 21ns have passed
 	if held, expired := hasLease(tc.rng, tc.clock.Now()); held || !expired {
 		t.Errorf("expected another replica to have expired lease")
-	}
-
-	// Verify that command returns NotLeaderError when lease is rejected.
-	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(cmdIDKey, *pendingCmd) error {
-		return &roachpb.LeaseRejectedError{
-			Message: "replica not found",
-		}
-	}
-	rng.mu.Unlock()
-
-	{
-		sp := tc.store.Tracer().StartSpan("test")
-		defer sp.Finish()
-		err := rng.redirectOnOrAcquireLeaderLease(sp).GetDetail()
-		if _, ok := err.(*roachpb.NotLeaderError); !ok {
-			t.Fatalf("expected %T, got %T", &roachpb.NotLeaderError{}, err)
-		}
 	}
 }
 
