@@ -57,7 +57,8 @@ func TestAllocateIDs(t *testing.T) {
 			makeIndexDescriptor("d", []string{"b", "a"}),
 			makeIndexDescriptor("e", []string{"b"}),
 		},
-		Privileges: sql.NewDefaultPrivilegeDescriptor(),
+		Privileges:    sql.NewDefaultPrivilegeDescriptor(),
+		FormatVersion: sql.BaseFormatVersion,
 	}
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
@@ -90,6 +91,7 @@ func TestAllocateIDs(t *testing.T) {
 		NextColumnID:   4,
 		NextIndexID:    4,
 		NextMutationID: 1,
+		FormatVersion:  sql.BaseFormatVersion,
 	}
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
@@ -120,13 +122,21 @@ func TestValidateTableDesc(t *testing.T) {
 			sql.TableDescriptor{ID: 0, Name: "foo"}},
 		{`invalid parent ID 0`,
 			sql.TableDescriptor{ID: 2, Name: "foo"}},
-		{`table must contain at least 1 column`,
+		{`table "foo" is encoded using using version 0, but this client only supports version 1`,
 			sql.TableDescriptor{ID: 2, ParentID: 1, Name: "foo"}},
+		{`table must contain at least 1 column`,
+			sql.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
+			}},
 		{`empty column name`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 0},
 				},
@@ -134,9 +144,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`invalid column ID 0`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 0, Name: "bar"},
 				},
@@ -144,9 +155,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`table must contain a primary key`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -154,9 +166,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`duplicate column name: "bar"`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "bar"},
@@ -165,9 +178,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`column "blah" duplicate ID of column "bar": 1`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "blah"},
@@ -176,9 +190,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`table must contain a primary key`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -189,9 +204,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`invalid index ID 0`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -202,9 +218,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`index "bar" must contain at least 1 column`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -221,9 +238,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`mismatched column IDs (1) and names (0)`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -233,9 +251,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`mismatched column IDs (1) and names (2)`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
@@ -249,9 +268,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`duplicate index name: "bar"`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -270,9 +290,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`index "blah" duplicate ID of index "bar": 1`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -291,9 +312,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`index "bar" column "bar" should have ID 1, but found ID 2`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -306,9 +328,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`index "bar" contains unknown column "blah"`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -321,9 +344,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 		{`mismatched column IDs (1) and directions (0)`,
 			sql.TableDescriptor{
-				ID:       2,
-				ParentID: 1,
-				Name:     "foo",
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: sql.BaseFormatVersion,
 				Columns: []sql.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
