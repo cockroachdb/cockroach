@@ -234,6 +234,7 @@ func TestUnretryableError(t *testing.T) {
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#5034")
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
