@@ -6335,6 +6335,13 @@ class Header : public ::google::protobuf::Message {
   ::cockroach::util::tracing::Span* release_trace();
   void set_allocated_trace(::cockroach::util::tracing::Span* trace);
 
+  // optional int64 max_scan_results = 8;
+  bool has_max_scan_results() const;
+  void clear_max_scan_results();
+  static const int kMaxScanResultsFieldNumber = 8;
+  ::google::protobuf::int64 max_scan_results() const;
+  void set_max_scan_results(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
   inline void set_has_timestamp();
@@ -6351,6 +6358,8 @@ class Header : public ::google::protobuf::Message {
   inline void clear_has_read_consistency();
   inline void set_has_trace();
   inline void clear_has_trace();
+  inline void set_has_max_scan_results();
+  inline void clear_has_max_scan_results();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -6361,6 +6370,7 @@ class Header : public ::google::protobuf::Message {
   double user_priority_;
   ::cockroach::roachpb::Transaction* txn_;
   ::cockroach::util::tracing::Span* trace_;
+  ::google::protobuf::int64 max_scan_results_;
   int read_consistency_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -13289,6 +13299,30 @@ inline void Header::set_allocated_trace(::cockroach::util::tracing::Span* trace)
     clear_has_trace();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Header.trace)
+}
+
+// optional int64 max_scan_results = 8;
+inline bool Header::has_max_scan_results() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void Header::set_has_max_scan_results() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void Header::clear_has_max_scan_results() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void Header::clear_max_scan_results() {
+  max_scan_results_ = GOOGLE_LONGLONG(0);
+  clear_has_max_scan_results();
+}
+inline ::google::protobuf::int64 Header::max_scan_results() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.max_scan_results)
+  return max_scan_results_;
+}
+inline void Header::set_max_scan_results(::google::protobuf::int64 value) {
+  set_has_max_scan_results();
+  max_scan_results_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.max_scan_results)
 }
 
 // -------------------------------------------------------------------

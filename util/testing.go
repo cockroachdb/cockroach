@@ -32,6 +32,7 @@ import (
 // on "testing".
 type Tester interface {
 	Error(args ...interface{})
+	Errorf(format string, args ...interface{})
 	Failed() bool
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
