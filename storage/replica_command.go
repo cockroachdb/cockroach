@@ -1493,7 +1493,8 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 				if p := r.store.ctx.TestingMocker.BadChecksumPanic; p != nil {
 					p()
 				} else {
-					panic(fmt.Sprintf("checksums: e = %v, v = %v", args.Checksum, c.checksum))
+					// TODO(.*): see #5051.
+					log.Errorf("checksums: e = %v, v = %v", args.Checksum, c.checksum)
 				}
 			}
 		} else {
