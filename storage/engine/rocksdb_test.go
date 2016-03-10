@@ -30,6 +30,7 @@ import (
 	"github.com/termie/go-shutil"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -37,6 +38,14 @@ import (
 )
 
 const testCacheSize = 1 << 30 // 1 GB
+
+func TestMinMemtableBudget(t *testing.T) {
+	rocksdb := NewRocksDB(roachpb.Attributes{}, ".", 0, 0, 0, stop.NewStopper())
+	const expected = "memtable budget must be at least"
+	if err := rocksdb.Open(); !testutils.IsError(err, expected) {
+		t.Fatalf("expected %s, but got %v", expected, err)
+	}
+}
 
 // readAllFiles reads all of the files matching pattern thus ensuring they are
 // in the OS buffer cache.
