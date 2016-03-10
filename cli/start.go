@@ -93,16 +93,20 @@ uninitialized, specify the --join flag to point to any healthy node
 	RunE:         runStart,
 }
 
-// runStart starts the cockroach node using --store as the list of
-// storage devices ("stores") on this machine and --join as the list
-// of other active nodes used to join this node to the cockroach
-// cluster, if this is its first time connecting.
-func runStart(_ *cobra.Command, _ []string) error {
+func initCacheSize() {
 	if !cacheSize.isSet {
 		if size, err := server.GetTotalMemory(); err == nil {
 			cliContext.CacheSize = size / 2
 		}
 	}
+}
+
+// runStart starts the cockroach node using --store as the list of
+// storage devices ("stores") on this machine and --join as the list
+// of other active nodes used to join this node to the cockroach
+// cluster, if this is its first time connecting.
+func runStart(_ *cobra.Command, _ []string) error {
+	initCacheSize()
 
 	// Default the log directory to the the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
