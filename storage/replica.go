@@ -1362,6 +1362,8 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		log.Fatalc(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
+	// Update store-level MVCC stats with merged range stats.
+	r.store.metrics.addMVCCStats(ms)
 
 	if err := batch.Commit(); err != nil {
 		rErr = roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not commit batch"), err, rErr.GoError()))
@@ -1378,10 +1380,9 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		r.mu.Unlock()
 	}
 
-	// On successful write commands, flush to event feed, and handle other
-	// write-related triggers including splitting and config gossip updates.
+	// On successful write commands handle write-related triggers including
+	// splitting and config gossip updates.
 	if rErr == nil && ba.IsWrite() {
-		r.store.metrics.addMVCCStats(ms)
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
 	}
