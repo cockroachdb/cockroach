@@ -35,11 +35,13 @@ var monitorInterval = defaultHeartbeatInterval * 10
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
-	offsets map[string]RemoteOffset // Maps remote string addr to offset.
-	lClock  *hlc.Clock              // The server clock.
-	mu      sync.Mutex
+	clock *hlc.Clock
 
-	lastMonitoredAt time.Time
+	mu struct {
+		sync.Mutex
+		offsets         map[string]RemoteOffset
+		lastMonitoredAt time.Time
+	}
 }
 
 type clusterOffsetInterval struct {
@@ -87,18 +89,17 @@ func (l endpointList) Less(i, j int) bool {
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
-	return &RemoteClockMonitor{
-		offsets: map[string]RemoteOffset{},
-		lClock:  clock,
-	}
+	r := RemoteClockMonitor{clock: clock}
+	r.mu.offsets = make(map[string]RemoteOffset)
+	return &r
 }
 
 // UpdateOffset is a thread-safe way to update the remote clock measurements.
 //
 // It only updates the offset for addr if one the following three cases holds:
 // 1. There is no prior offset for that address.
-// 2. The old offset for addr was measured before r.lastMonitoredAt. We never
-// use values during monitoring that are older than r.lastMonitoredAt.
+// 2. The old offset for addr was measured before r.mu.lastMonitoredAt. We never
+// use values during monitoring that are older than r.mu.lastMonitoredAt.
 // 3. The new offset's error is smaller than the old offset's error.
 //
 // The third case allows the monitor to use the most precise clock reading of
@@ -113,18 +114,18 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if oldOffset, ok := r.offsets[addr]; !ok {
-		r.offsets[addr] = offset
-	} else if oldOffset.measuredAt().Before(r.lastMonitoredAt) {
+	if oldOffset, ok := r.mu.offsets[addr]; !ok {
+		r.mu.offsets[addr] = offset
+	} else if oldOffset.measuredAt().Before(r.mu.lastMonitoredAt) {
 		// No matter what offset is, we weren't going to use oldOffset again,
 		// because it was measured before the last cluster offset calculation.
-		r.offsets[addr] = offset
+		r.mu.offsets[addr] = offset
 	} else if offset.Uncertainty < oldOffset.Uncertainty {
-		r.offsets[addr] = offset
+		r.mu.offsets[addr] = offset
 	}
 
 	if log.V(2) {
-		log.Infof("update offset: %s %v", addr, r.offsets[addr])
+		log.Infof("update offset: %s %v", addr, r.mu.offsets[addr])
 	}
 }
 
@@ -151,25 +152,25 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 			// propagate the information to a status node.
 			// TODO(embark): once there is a framework for collecting timeseries
 			// data about the db, propagate the offset status to that.
-			if maxOffset := r.lClock.MaxOffset(); maxOffset != 0 {
+			if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
 				if err != nil {
 					log.Fatalf("clock offset from the cluster time "+
 						"for remote clocks %v could not be determined: %s",
-						r.offsets, err)
+						r.mu.offsets, err)
 				}
 
 				if !isHealthyOffsetInterval(offsetInterval, maxOffset) {
 					log.Fatalf("clock offset from the cluster time "+
 						"for remote clocks: %v is in interval: %s, which "+
 						"indicates that the true offset is greater than %s",
-						r.offsets, offsetInterval, time.Duration(maxOffset))
+						r.mu.offsets, offsetInterval, time.Duration(maxOffset))
 				}
 				if log.V(1) {
 					log.Infof("healthy cluster offset: %s", offsetInterval)
 				}
 			}
 			r.mu.Lock()
-			r.lastMonitoredAt = r.lClock.PhysicalTime()
+			r.mu.lastMonitoredAt = r.clock.PhysicalTime()
 			r.mu.Unlock()
 		}
 	}
@@ -261,22 +262,22 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	endpoints := make(endpointList, 0, len(r.offsets)*2)
-	for addr, o := range r.offsets {
+	endpoints := make(endpointList, 0, len(r.mu.offsets)*2)
+	for addr, o := range r.mu.offsets {
 		// Remove anything that hasn't been updated since the last time offest
 		// was measured. This indicates that we no longer have a connection to
 		// that addr.
-		if o.measuredAt().Before(r.lastMonitoredAt) {
-			delete(r.offsets, addr)
+		if o.measuredAt().Before(r.mu.lastMonitoredAt) {
+			delete(r.mu.offsets, addr)
 			continue
 		}
 
 		lowpoint := endpoint{
-			offset:  time.Duration(o.Offset-o.Uncertainty)*time.Nanosecond - r.lClock.MaxOffset(),
+			offset:  time.Duration(o.Offset-o.Uncertainty)*time.Nanosecond - r.clock.MaxOffset(),
 			endType: -1,
 		}
 		highpoint := endpoint{
-			offset:  time.Duration(o.Offset+o.Uncertainty)*time.Nanosecond + r.lClock.MaxOffset(),
+			offset:  time.Duration(o.Offset+o.Uncertainty)*time.Nanosecond + r.clock.MaxOffset(),
 			endType: +1,
 		}
 		endpoints = append(endpoints, lowpoint, highpoint)
