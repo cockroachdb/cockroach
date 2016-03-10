@@ -19,9 +19,11 @@ package rpc
 import (
 	"net"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -191,4 +193,101 @@ func (ac *AdvancingClock) UnixNano() int64 {
 	time := ac.time
 	ac.time = time + ac.advancementInterval
 	return time
+}
+
+func TestRemoteOffsetUnhealthy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	const maxOffset = 10 * time.Millisecond
+
+	type nodeContext struct {
+		offset     time.Duration
+		ctx        *Context
+		remoteAddr string
+		errChan    chan error
+	}
+
+	start := time.Date(2012, 12, 07, 0, 0, 0, 0, time.UTC)
+
+	fixedClock := func(i int) *hlc.Clock {
+		return hlc.NewClock(func() int64 { return int64(i) })
+	}
+
+	nodeCtxs := []nodeContext{
+		{offset: 0},
+		{offset: 0},
+		{offset: maxOffset * 4},
+	}
+
+	for i := range nodeCtxs {
+		clock := fixedClock(start.Add(nodeCtxs[i].offset).Nanosecond())
+		nodeCtxs[i].errChan = make(chan error, 1)
+
+		clock.SetMaxOffset(maxOffset)
+		nodeCtxs[i].ctx = newNodeTestContext(clock, stopper)
+		nodeCtxs[i].ctx.HeartbeatInterval = maxOffset / 10
+		nodeCtxs[i].ctx.RemoteClocks.monitorInterval = maxOffset / 10
+
+		s, ln := newTestServer(t, nodeCtxs[i].ctx, true)
+		RegisterHeartbeatServer(s, &HeartbeatService{
+			clock:              clock,
+			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
+		})
+		nodeCtxs[i].remoteAddr = ln.Addr().String()
+
+		// Asynchronously closing over a range variable is unsafe.
+		ctx := nodeCtxs[i].ctx
+		errChan := nodeCtxs[i].errChan
+		stopper.RunWorker(func() {
+			errChan <- ctx.RemoteClocks.MonitorRemoteOffsets(stopper)
+		})
+	}
+
+	// Fully connect the nodes.
+	for _, clientNodeContext := range nodeCtxs {
+		for _, serverNodeContext := range nodeCtxs {
+			if _, err := clientNodeContext.ctx.GRPCDial(serverNodeContext.remoteAddr); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	const errOffsetGreater = "the true offset is greater than"
+
+	for _, nodeCtx := range nodeCtxs {
+		// Wait until this node is fully connected to the others.
+		util.SucceedsSoon(t, func() error {
+			nodeCtx.ctx.RemoteClocks.mu.Lock()
+			defer nodeCtx.ctx.RemoteClocks.mu.Unlock()
+
+			// There is no deduplication here, all the nodes are double-counting.
+			if a, e := len(nodeCtx.ctx.RemoteClocks.mu.offsets), len(nodeCtxs)*2; a != e {
+				return util.Errorf("not yet fully connected: have %d of %d connections", a, e)
+			}
+			return nil
+		})
+
+		if nodeOffset := nodeCtx.offset; nodeOffset > maxOffset {
+			select {
+			case err := <-nodeCtx.errChan:
+				if testutils.IsError(err, errOffsetGreater) {
+					t.Logf("max offset: %s - node with excessive clock offset of %s returned expected error: %s", maxOffset, nodeOffset, err)
+				} else {
+					t.Errorf("max offset: %s - node with excessive clock offset of %s returned unexpected error: %s", maxOffset, nodeOffset, err)
+				}
+			case <-time.After(nodeCtx.ctx.RemoteClocks.monitorInterval * 5):
+				t.Errorf("max offset: %s - node with excessive clock offset of %s should have return an error, but did not", maxOffset, nodeOffset)
+			}
+		} else {
+			select {
+			case err := <-nodeCtx.errChan:
+				t.Errorf("max offset: %s - node with acceptable clock offset of %s returned unexpected error: %s", maxOffset, nodeOffset, err)
+			case <-time.After(nodeCtx.ctx.RemoteClocks.monitorInterval * 5):
+				t.Logf("max offset: %s - node with acceptable clock offset of %s did not return an error, as expected", maxOffset, nodeOffset)
+			}
+		}
+	}
 }

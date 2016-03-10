@@ -117,7 +117,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
 	stopper.RunWorker(func() {
-		s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper)
+		if err := s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper); err != nil {
+			log.Fatal(err)
+		}
 	})
 
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
