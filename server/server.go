@@ -29,7 +29,6 @@ import (
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
@@ -221,18 +220,13 @@ func (s *Server) Start() error {
 	// net.Listen -> cmux.New
 	//               |
 	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
-	//               -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
-	//               -  -> cmux.HTTP2 -> http2.(*Server).ServeConn
-	//               -  -> cmux.Any -> http.(*Server).Serve
+	//               -  -> cmux.Any -> grpc.(*Server).Serve
 	//
 	// TLS case:
 	// net.Listen -> cmux.New
 	//               |
 	//               -  -> pgwire.Match -> pgwire.Server.ServeConn
-	//               -  -> cmux.Any -> tls.NewListener -> cmux.New
-	//                                                    |
-	//                                                    -  -> cmux.HTTP2HeaderField("content-type", "application/grpc") -> grpc.(*Server).Serve
-	//                                                    -  -> cmux.Any -> http.(*Server).Serve
+	//               -  -> cmux.Any -> grpc.(*Server).Serve
 	//
 	// Note that the difference between the TLS and non-TLS cases exists due to
 	// Go's lack of an h2c (HTTP2 Clear Text) implementation. See inline comments
@@ -259,60 +253,46 @@ func (s *Server) Start() error {
 
 	m := cmux.New(ln)
 	pgL := m.Match(pgwire.Match)
+	anyL := m.Match(cmux.Any())
 
-	// GRPC connections get special handling because using GRPC's ServeHTTP is
-	// prohibitively slow. See https://github.com/grpc/grpc-go/issues/586
-	var grpcL net.Listener
-	grpcMatcher := cmux.HTTP2HeaderField("content-type", "application/grpc")
+	httpLn, err := net.Listen("tcp", s.ctx.HTTPAddr)
+	if err != nil {
+		return err
+	}
+	unresolvedHTTPAddr, err := officialAddr(s.ctx.HTTPAddr, httpLn.Addr())
+	if err != nil {
+		return err
+	}
+	s.ctx.HTTPAddr = unresolvedHTTPAddr.String()
 
-	var serveConn func(net.Listener, func(net.Conn)) error
+	s.stopper.RunWorker(func() {
+		<-s.stopper.ShouldDrain()
+		if err := httpLn.Close(); err != nil {
+			log.Fatal(err)
+		}
+	})
+
 	if tlsConfig != nil {
-		anyL := m.Match(cmux.Any())
-
-		tlsM := cmux.New(tls.NewListener(anyL, tlsConfig))
-		grpcL = tlsM.Match(grpcMatcher)
-
-		serveConn = util.ServeHandler(s.stopper, s, tlsM.Match(cmux.Any()), tlsConfig)
-
-		go func() {
-			util.FatalIfUnexpected(tlsM.Serve())
-		}()
-	} else {
-		grpcL = m.Match(grpcMatcher)
-
-		h2L := m.Match(cmux.HTTP2())
-		anyL := m.Match(cmux.Any())
-
-		var h2 http2.Server
-		serveConnOpts := &http2.ServeConnOpts{
-			Handler: s,
-		}
-		serveH2 := func(conn net.Conn) {
-			h2.ServeConn(conn, serveConnOpts)
-		}
-
-		serveConn = util.ServeHandler(s.stopper, s, anyL, tlsConfig)
-
-		go func() {
-			util.FatalIfUnexpected(serveConn(h2L, serveH2))
-		}()
+		httpLn = tls.NewListener(httpLn, tlsConfig)
 	}
 
-	go func() {
-		util.FatalIfUnexpected(s.grpc.Serve(grpcL))
-	}()
+	serveConn := util.ServeHandler(s.stopper, s, httpLn, tlsConfig)
 
-	go func() {
+	s.stopper.RunWorker(func() {
+		util.FatalIfUnexpected(s.grpc.Serve(anyL))
+	})
+
+	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
 				log.Error(err)
 			}
 		}))
-	}()
+	})
 
-	go func() {
+	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(m.Serve())
-	}()
+	})
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
@@ -343,7 +323,8 @@ func (s *Server) Start() error {
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
-	log.Infof("starting %s/postgres server at %s", s.ctx.HTTPRequestScheme(), unresolvedAddr)
+	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
+	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)
 
 	return nil
 }

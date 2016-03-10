@@ -123,7 +123,7 @@ func TestSSLEnforcement(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%d]: failed to get http client: %v", tcNum, err)
 		}
-		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.ServingAddr(), tc.path)
+		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.HTTPAddr(), tc.path)
 		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
 		if (err == nil) != tc.success {
 			t.Fatalf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)

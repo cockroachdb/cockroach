@@ -59,7 +59,7 @@ func TestHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
-	url := testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
+	url := testContext.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +86,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	// Create a custom context. The default one has a default --certs value.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
+	ctx.HTTPAddr = "127.0.0.1:0"
 	ctx.Insecure = true
 	// TestServer.Start does not override the context if set.
 	s := &TestServer{Ctx: ctx}
@@ -98,7 +99,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	if ctx.HTTPRequestScheme() != "http" {
 		t.Fatalf("expected context.HTTPRequestScheme == \"http\", got: %s", ctx.HTTPRequestScheme())
 	}
-	url := ctx.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
+	url := ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
 	httpClient, err := ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +122,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	if testContext.HTTPRequestScheme() != "https" {
 		t.Fatalf("expected context.HTTPRequestScheme == \"http\", got: %s", testContext.HTTPRequestScheme())
 	}
-	url = testContext.HTTPRequestScheme() + "://" + s.ServingAddr() + healthPath
+	url = testContext.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
 	httpClient, err = ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +170,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.ServingAddr()+healthPath, nil)
+		req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.HTTPAddr()+healthPath, nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}

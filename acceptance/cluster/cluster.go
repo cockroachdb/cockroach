@@ -17,7 +17,6 @@
 package cluster
 
 import (
-	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -34,8 +33,6 @@ type Cluster interface {
 	NewClient(*testing.T, int) (*client.DB, *stop.Stopper)
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(int) string
-	// Addr returns the TCP address for the given node.
-	Addr(int) *net.TCPAddr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.

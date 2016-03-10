@@ -29,8 +29,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -168,25 +166,11 @@ func (f *Farmer) Exec(i int, cmd string) error {
 
 // NewClient implements the Cluster interface.
 func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
-	// TODO(tschottdorf,mberhault): TLS all the things!
-	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(&base.Context{
-		User: security.RootUser,
-	}, nil, stopper)
-	sender, err := client.NewSender(rpcContext, f.Addr(i).String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return client.NewDB(sender), stopper
+	panic("unimplemented")
 }
 
 // PGUrl returns a URL string for the given node postgres server.
 func (f *Farmer) PGUrl(i int) string {
-	panic("unimplemented")
-}
-
-// Addr returns the TCP address for the given node.
-func (f *Farmer) Addr(i int) *net.TCPAddr {
 	panic("unimplemented")
 }
 
@@ -268,7 +252,7 @@ func (f *Farmer) Restart(i int) error {
 
 // URL returns the HTTP(s) endpoint.
 func (f *Farmer) URL(i int) string {
-	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultPort)
+	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
 }
 
 func (f *Farmer) logf(format string, args ...interface{}) {
