@@ -43,15 +43,12 @@ type RemoteClockMonitor struct {
 	lastMonitoredAt int64
 }
 
-// ClusterOffsetInterval is the best interval we can construct to estimate this
-// node's offset from the cluster.
-type ClusterOffsetInterval struct {
-	Lowerbound int64 // The lowerbound on the offset in nanoseconds.
-	Upperbound int64 // The upperbound on the offset in nanoseconds.
+type clusterOffsetInterval struct {
+	lowerbound, upperbound int64
 }
 
-func (i ClusterOffsetInterval) String() string {
-	return fmt.Sprintf("{%s, %s}", time.Duration(i.Lowerbound), time.Duration(i.Upperbound))
+func (i clusterOffsetInterval) String() string {
+	return fmt.Sprintf("{%s, %s}", time.Duration(i.lowerbound), time.Duration(i.upperbound))
 }
 
 // errMajorityIntervalNotFound indicates that we could not find a majority
@@ -179,21 +176,17 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 	}
 }
 
-// isHealthyOffsetInterval returns true if the ClusterOffsetInterval indicates
+// isHealthyOffsetInterval returns true if the clusterOffsetInterval indicates
 // that the node's offset is within maxOffset, else false. For example, if the
 // offset interval is [-20, -11] and the maxOffset is 10 nanoseconds, then the
 // clock offset must be too great, because no point in the interval is within
 // the maxOffset.
-func isHealthyOffsetInterval(i ClusterOffsetInterval, maxOffset time.Duration) bool {
-	if i.Lowerbound > maxOffset.Nanoseconds() ||
-		i.Upperbound < -maxOffset.Nanoseconds() {
-		return false
-	}
-	return true
+func isHealthyOffsetInterval(i clusterOffsetInterval, maxOffset time.Duration) bool {
+	return i.lowerbound <= maxOffset.Nanoseconds() && i.upperbound >= -maxOffset.Nanoseconds()
 }
 
 // The routine that measures this node's probable offset from the rest of the
-// cluster. This offset is measured as a ClusterOffsetInterval. For example,
+// cluster. This offset is measured as a clusterOffsetInterval. For example,
 // the output might be [-5, 10], which would indicate that this node's offset
 // is likely between -5 and 10 nanoseconds from the average clock of the
 // cluster.
@@ -208,7 +201,7 @@ func isHealthyOffsetInterval(i ClusterOffsetInterval, maxOffset time.Duration) b
 //
 // If an interval cannot be found, an error is returned, indicating that
 // a majority of remote node offset intervals do not overlap the cluster time.
-func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error) {
+func (r *RemoteClockMonitor) findOffsetInterval() (clusterOffsetInterval, error) {
 	endpoints := r.buildEndpointList()
 	sort.Sort(endpoints)
 	numClocks := len(endpoints) / 2
@@ -217,9 +210,9 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 			monitorInterval, numClocks)
 	}
 	if numClocks == 0 {
-		return ClusterOffsetInterval{
-			Lowerbound: 0,
-			Upperbound: 0,
+		return clusterOffsetInterval{
+			lowerbound: 0,
+			upperbound: 0,
 		}, nil
 	}
 
@@ -243,16 +236,16 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 	// Indicates that fewer than a majority of connected remote clocks seem to
 	// encompass the central offset from the cluster, an error condition.
 	if best <= numClocks/2 {
-		return ClusterOffsetInterval{
-			Lowerbound: math.MaxInt64,
-			Upperbound: math.MaxInt64}, errMajorityIntervalNotFound
+		return clusterOffsetInterval{
+			lowerbound: math.MaxInt64,
+			upperbound: math.MaxInt64}, errMajorityIntervalNotFound
 	}
 
 	// A majority of offset intervals overlap at this interval, which should
 	// contain the true cluster offset.
-	return ClusterOffsetInterval{
-		Lowerbound: lowerbound,
-		Upperbound: upperbound,
+	return clusterOffsetInterval{
+		lowerbound: lowerbound,
+		upperbound: upperbound,
 	}, nil
 }
 
