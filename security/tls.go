@@ -149,8 +149,7 @@ func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	certPool := x509.NewCertPool()
 
 	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
-		err := util.Errorf("failed to parse PEM data to pool")
-		return nil, err
+		return nil, util.Errorf("failed to parse PEM data to pool")
 	}
 
 	return &tls.Config{
