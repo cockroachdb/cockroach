@@ -313,7 +313,7 @@ func (ctx *Context) readEnvironmentVariables() {
 
 // AdminURL returns the URL for the admin UI.
 func (ctx *Context) AdminURL() string {
-	return fmt.Sprintf("%s://%s", ctx.HTTPRequestScheme(), ctx.Addr)
+	return fmt.Sprintf("%s://%s", ctx.HTTPRequestScheme(), ctx.HTTPAddr)
 }
 
 // PGURL returns the URL for the postgres endpoint.
