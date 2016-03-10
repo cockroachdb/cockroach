@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -40,6 +41,8 @@ import (
 const testCacheSize = 1 << 30 // 1 GB
 
 func TestMinMemtableBudget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	rocksdb := NewRocksDB(roachpb.Attributes{}, ".", 0, 0, 0, stop.NewStopper())
 	const expected = "memtable budget must be at least"
 	if err := rocksdb.Open(); !testutils.IsError(err, expected) {
