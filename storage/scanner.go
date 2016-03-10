@@ -207,13 +207,12 @@ func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stop
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		start := time.Now()
-
 		// waitTimer is reset in each call to waitAndProcess.
 		defer rs.waitTimer.Stop()
 
 		for {
 			var shouldStop bool
+			start := time.Now()
 			count := 0
 			rs.replicas.Visit(func(repl *Replica) bool {
 				count++
