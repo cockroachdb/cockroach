@@ -138,18 +138,24 @@ func TestClientGossip(t *testing.T) {
 		}
 	}()
 
-	if err := local.AddInfo("local-key", nil, time.Second); err != nil {
+	if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if err := remote.AddInfo("remote-key", nil, time.Second); err != nil {
+	if err := remote.AddInfo("remote-key", nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
-	client.start(local, disconnected, rpcContext, stopper)
+	disconnected <- client
 
 	util.SucceedsSoon(t, func() error {
+		select {
+		case <-disconnected:
+			// If the client wasn't able to connect, restart it.
+			client.start(local, disconnected, rpcContext, stopper)
+		default:
+		}
 		if _, err := remote.GetInfo("local-key"); err != nil {
 			return err
 		}
