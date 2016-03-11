@@ -72,13 +72,11 @@ Database server port to connect to for HTTP requests.`),
 The name of the database to connect to.`),
 
 	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit. Each
-subsequent positional argument on the command line may contain
-one or more SQL statements, separated by semicolons. If an
-error occurs in any statement, the command exits with a
-non-zero status code and further statements are not
-executed. The results of each SQL statement are printed on
-the standard output.`),
+Execute the SQL statement(s) on the command line, then exit. This flag may be
+specified multiple times and each value may contain multiple semicolon
+separated statements. If an error occurs in any statement, the command exits
+with a non-zero status code and further statements are not executed. The
+results of each SQL statement are printed on the standard output.`),
 
 	"join": wrapText(`
 A comma-separated list of addresses to use when a new node is joining
@@ -341,7 +339,7 @@ func initFlags(ctx *Context) {
 
 	{
 		f := sqlShellCmd.Flags()
-		f.BoolVarP(&ctx.OneShotSQL, "execute", "e", ctx.OneShotSQL, usage("execute"))
+		f.VarP(&ctx.execStmts, "execute", "e", usage("execute"))
 	}
 
 	// Commands that need the cockroach port.
