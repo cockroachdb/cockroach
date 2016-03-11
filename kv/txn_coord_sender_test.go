@@ -402,7 +402,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	}
 	s.Sender.Lock()
 	txnID := *txn.Proto.ID
-	intentSpans := s.Sender.txns[txnID].intentSpans()
+	intentSpans := collectIntentSpans(s.Sender.txns[txnID].keys)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	s.Sender.Unlock()

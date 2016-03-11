@@ -96,7 +96,7 @@ type txnMetadata struct {
 // addKeyRange adds the specified key range to the range group,
 // taking care not to add this range if existing entries already
 // completely cover the range.
-func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
+func addKeyRange(keys interval.RangeGroup, start, end roachpb.Key) {
 	// This gives us a memory-efficient end key if end is empty.
 	// The most common case for keys in the intents interval map
 	// is for single keys. However, the range group requires
@@ -110,7 +110,7 @@ func (tm *txnMetadata) addKeyRange(start, end roachpb.Key) {
 		Start: interval.Comparable(start),
 		End:   interval.Comparable(end),
 	}
-	tm.keys.Add(keyR)
+	keys.Add(keyR)
 }
 
 // setLastUpdate updates the wall time (in nanoseconds) since the most
@@ -133,12 +133,12 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 	return tm.getLastUpdate() < timeout
 }
 
-// intentSpans collects the spans of the intents to be resolved for the
+// collectIntentSpans collects the spans of the intents to be resolved for the
 // transaction. It does not create copies, so the caller must not alter the
-// returned data.
-func (tm *txnMetadata) intentSpans() []roachpb.Span {
-	intents := make([]roachpb.Span, 0, tm.keys.Len())
-	if err := tm.keys.ForEach(func(r interval.Range) error {
+// returned data. Usually called with txnMeta.keys.
+func collectIntentSpans(keys interval.RangeGroup) []roachpb.Span {
+	intents := make([]roachpb.Span, 0, keys.Len())
+	if err := keys.ForEach(func(r interval.Range) error {
 		sp := roachpb.Span{
 			Key: roachpb.Key(r.Start),
 		}
@@ -360,21 +360,25 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			}
 			tc.Lock()
 			txnMeta, metaOK := tc.txns[txnID]
-			if metaOK {
-				et.IntentSpans = txnMeta.intentSpans()
+			{
+				// Populate et.IntentSpans, taking into account both existing
+				// writes (if any) and new writes in this batch, and taking
+				// care to perform proper deduplication.
+				var keys interval.RangeGroup
+				if metaOK {
+					keys = txnMeta.keys
+				} else {
+					keys = interval.NewRangeTree()
+				}
+				ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
+					addKeyRange(keys, key, endKey)
+				})
+				et.IntentSpans = collectIntentSpans(keys)
 			}
 			tc.Unlock()
 
-			if intentSpans := ba.GetIntentSpans(); len(intentSpans) > 0 {
-				// Writes in Batch, so EndTransaction is fine. Should add
-				// outstanding intents to EndTransaction, though.
-				// TODO(tschottdorf): possible issues when the batch fails,
-				// but the intents have been added anyways.
-				// TODO(tschottdorf): some of these intents may be covered
-				// by others, for example {[a,b), a}). This can lead to
-				// some extra requests when those are non-local to the txn
-				// record. But it doesn't seem worth optimizing now.
-				et.IntentSpans = append(et.IntentSpans, intentSpans...)
+			if len(et.IntentSpans) > 0 {
+				// All good, proceed.
 			} else if !metaOK {
 				// If we don't have the transaction, then this must be a retry
 				// by the client. We can no longer reconstruct a correct
@@ -612,7 +616,7 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 		}
 		proceed = false
 		// Grab the intents here to avoid potential race.
-		intentSpans = txnMeta.intentSpans()
+		intentSpans = collectIntentSpans(txnMeta.keys)
 		txnMeta.keys.Clear()
 	}
 	// txnMeta.txn is possibly replaced concurrently,
@@ -774,7 +778,14 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	// unless it is tracking it (on top of it making sense to track it;
 	// after all, it **has** laid down intents and only the coordinator
 	// can augment a potential EndTransaction call). See #3303.
-	intents := ba.GetIntentSpans()
+	var intents []roachpb.Span
+	// TODO(nvanbenschoten): Iterating here to put the intents in a slice for
+	// the sole purpose of later iterating again and calling addKeyRange is a
+	// little wasteful and can likely be avoided.
+	ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
+		intents = append(intents, roachpb.Span{Key: key, EndKey: endKey})
+	})
+
 	if len(intents) > 0 && (pErr == nil || newTxn.Writing) {
 		if txnMeta == nil {
 			if !newTxn.Writing {
@@ -822,7 +833,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
 		for _, intent := range intents {
-			txnMeta.addKeyRange(intent.Key, intent.EndKey)
+			addKeyRange(txnMeta.keys, intent.Key, intent.EndKey)
 		}
 	}
 	if pErr == nil {

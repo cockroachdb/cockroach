@@ -102,19 +102,17 @@ func (br *BatchResponse) Header() *BatchResponse_Header {
 	return &br.BatchResponse_Header
 }
 
-// GetIntentSpans returns a slice of key pairs corresponding to transactional
-// writes contained in the batch.
-func (ba *BatchRequest) GetIntentSpans() []Span {
-	var intents []Span
+// IntentSpanIterate calls the passed method with the key ranges of the
+// transactional writes contained in the batch.
+func (ba *BatchRequest) IntentSpanIterate(fn func(key, endKey Key)) {
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !IsTransactionWrite(req) {
 			continue
 		}
 		h := req.Header()
-		intents = append(intents, Span{Key: h.Key, EndKey: h.EndKey})
+		fn(h.Key, h.EndKey)
 	}
-	return intents
 }
 
 // ResetAll resets all the contained requests to their original state.
