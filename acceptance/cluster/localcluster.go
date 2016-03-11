@@ -51,6 +51,7 @@ const (
 	builderImage     = "cockroachdb/builder"
 	builderTag       = "20160305-182433"
 	builderImageFull = builderImage + ":" + builderTag
+	networkName      = "cockroachdb_acceptance"
 )
 
 // DefaultTCP is the default SQL/RPC port specification.
@@ -176,7 +177,11 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 			continue
 		}
 		for _, status := range msgs {
-			l.expectedEvents <- Event{NodeIndex: index, Status: status}
+			select {
+			case l.expectedEvents <- Event{NodeIndex: index, Status: status}:
+			default:
+				panic("expectedEvents channel filled up")
+			}
 		}
 		break
 	}
@@ -240,8 +245,6 @@ func (l *LocalCluster) panicOnStop() {
 
 func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
-
-	const networkName = "cockroachdb_acceptance"
 
 	nets, err := l.client.NetworkList(types.NetworkListOptions{})
 	maybePanic(err)
@@ -442,8 +445,8 @@ func (l *LocalCluster) startNode(node *testNode) {
 		cmd = append(
 			cmd,
 			"--log-dir="+dockerlogDir,
-			"--logtostderr=false",
-			"--alsologtostderr=INFO")
+			"--logtostderr=false")
+
 	}
 	env := []string{"COCKROACH_SCAN_MAX_IDLE_TIME=200ms"}
 	l.createRoach(node, l.vols, env, cmd...)
@@ -472,7 +475,11 @@ func (l *LocalCluster) processEvent(event events.Message) bool {
 			if log.V(1) {
 				log.Errorf("node=%d status=%s", i, event.Status)
 			}
-			l.events <- Event{NodeIndex: i, Status: event.Status}
+			select {
+			case l.events <- Event{NodeIndex: i, Status: event.Status}:
+			default:
+				panic("events channel filled up")
+			}
 			return true
 		}
 	}
@@ -501,28 +508,44 @@ func (l *LocalCluster) processEvent(event events.Message) bool {
 }
 
 func (l *LocalCluster) monitor() {
-	rc, err := l.client.Events(l.monitorCtx, types.EventsOptions{})
-	maybePanic(err)
-	defer rc.Close()
-	dec := json.NewDecoder(rc)
-	for {
-		var event events.Message
-		if err := dec.Decode(&event); err != nil {
-			break
+	if log.V(1) {
+		log.Infof("events monitor starts")
+		defer log.Infof("events monitor exits")
+	}
+	longPoll := func() bool {
+		// If our context was cancelled, it's time to go home.
+		if l.monitorCtx.Err() != nil {
+			return false
 		}
+		rc, err := l.client.Events(l.monitorCtx, types.EventsOptions{})
+		maybePanic(err)
+		defer rc.Close()
+		dec := json.NewDecoder(rc)
+		for {
+			var event events.Message
+			if err := dec.Decode(&event); err != nil {
+				log.Infof("event stream done, resetting...: %s", err)
+				// Sometimes we get a random string-wrapped EOF error back.
+				// Hard to assert on, so we just let this goroutine spin.
+				return true
+			}
 
-		// Currently, the only events generated (and asserted against) are "die"
-		// and "restart", to maximize compatibility across different versions of
-		// Docker.
-		switch event.Status {
-		case eventDie, eventRestart:
-		default:
-			continue
-		}
+			// Currently, the only events generated (and asserted against) are "die"
+			// and "restart", to maximize compatibility across different versions of
+			// Docker.
+			switch event.Status {
+			case eventDie, eventRestart:
+			default:
+				continue
+			}
 
-		if !l.processEvent(event) {
-			break
+			if !l.processEvent(event) {
+				return false
+			}
 		}
+	}
+
+	for longPoll() {
 	}
 }
 
@@ -547,7 +570,6 @@ func (l *LocalCluster) Start() {
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor()
-
 	for _, node := range l.Nodes {
 		l.startNode(node)
 	}
