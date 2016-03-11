@@ -87,6 +87,9 @@ type replicaScanner struct {
 // replica set, and replica queues.  If scanFn is not nil, after a complete
 // loop that function will be called.
 func newReplicaScanner(targetInterval, maxIdleTime time.Duration, replicas replicaSet) *replicaScanner {
+	if targetInterval <= 0 {
+		log.Fatalf("scanner interval must be greater than zero")
+	}
 	return &replicaScanner{
 		targetInterval: targetInterval,
 		maxIdleTime:    maxIdleTime,
