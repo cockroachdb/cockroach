@@ -1359,6 +1359,7 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
 			Checksum:   c.checksum,
+			Debug:      c.debug,
 		}
 		ba.Add(checkArgs)
 		_, pErr := r.Send(r.context(), ba)
@@ -1398,11 +1399,12 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte) {
+func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte, debug *roachpb.VerifyChecksumRequest_Debug) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
 		c.checksum = sha
+		c.debug = debug
 		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
 		r.mu.checksums[id] = c
 		// Notify
@@ -1454,22 +1456,23 @@ func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h r
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if !stopper.RunAsyncTask(func() {
 		defer snap.Close()
-		sha, err := r.sha512(desc, snap)
+		sha, debug, err := r.sha512(desc, snap)
 		if err != nil {
 			log.Error(err)
 			sha = nil
 		}
-		r.computeChecksumDone(id, sha)
+		r.computeChecksumDone(id, sha, debug)
 	}) {
 		defer snap.Close()
 		// Set checksum to nil.
-		r.computeChecksumDone(id, nil)
+		r.computeChecksumDone(id, nil, nil)
 	}
 	return roachpb.ComputeChecksumResponse{}, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
-func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]byte, error) {
+func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]byte, *roachpb.VerifyChecksumRequest_Debug, error) {
+	debug := &roachpb.VerifyChecksumRequest_Debug{}
 	hasher := sha512.New()
 	// Iterate over all the data in the range.
 	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
@@ -1477,29 +1480,38 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]by
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
 		value := iter.Value()
+
+		if log.V(1) {
+			// Add the k:v into the debug message.
+			debug.Entries = append(debug.Entries, roachpb.VerifyChecksumRequest_Debug_KeyValue{Key: key.Key, Value: value})
+		}
+
 		// Encode the length of the key and value.
 		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := binary.Write(hasher, binary.LittleEndian, int64(len(value))); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := hasher.Write(key.Key); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		timestamp, err := key.Timestamp.Marshal()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := hasher.Write(timestamp); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := hasher.Write(value); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	sha := make([]byte, 0, sha512.Size)
-	return hasher.Sum(sha), nil
+	if !log.V(1) {
+		debug = nil
+	}
+	return hasher.Sum(sha), debug, nil
 }
 
 // VerifyChecksum verifies the checksum that was computed through a
@@ -1532,7 +1544,17 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 		if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 			p()
 		} else {
-			panic(fmt.Sprintf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum))
+			// About to panic print which k:v entries were different.
+			debug := args.Debug
+			for i := range debug.Entries {
+				e := debug.Entries[i]
+				v := c.debug.Entries[i]
+				if !bytes.Equal(e.Key, v.Key) || !bytes.Equal(e.Value, v.Value) {
+					log.Errorf("e = (%s , %x) vs v = (%s, %x)", keys.PrettyPrint(roachpb.Key(e.Key)), e.Value, keys.PrettyPrint(roachpb.Key(v.Key)), v.Value)
+				}
+			}
+			// TODO(.*): see #5051.
+			log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
 		}
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
