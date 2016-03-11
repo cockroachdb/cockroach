@@ -96,7 +96,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	if ctx.Insecure {
-		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure and --certs.")
+		log.Warning("running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 	// Try loading the TLS configs before anything else.
 	if _, err := ctx.GetServerTLSConfig(); err != nil {

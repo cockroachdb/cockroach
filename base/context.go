@@ -149,7 +149,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 				ctx.serverTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.serverTLSConfig.err)
 			}
 		} else {
-			ctx.serverTLSConfig.err = util.Errorf("--insecure=false, but --certs is empty. We need a certs directory")
+			ctx.serverTLSConfig.err = util.Errorf("--insecure=false, but --cert is empty. Certificates must be specified.")
 		}
 	})
 
