@@ -241,8 +241,18 @@ func (l *LocalCluster) panicOnStop() {
 func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
+	const networkName = "cockroachdb_acceptance"
+
+	nets, err := l.client.NetworkList(types.NetworkListOptions{})
+	maybePanic(err)
+	for _, net := range nets {
+		if net.Name == networkName {
+			maybePanic(l.client.NetworkRemove(net.ID))
+		}
+	}
+
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
-		Name:   "cockroachdb_acceptance",
+		Name:   networkName,
 		Driver: "bridge",
 		// Docker gets very confused if two networks have the same name.
 		CheckDuplicate: true,
