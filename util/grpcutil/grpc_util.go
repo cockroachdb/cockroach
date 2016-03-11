@@ -51,7 +51,15 @@ func IsGRPCRequest(r *http.Request) bool {
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
 func IsClosedConnection(err error) bool {
-	if err == context.Canceled || grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() || err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
+	if err == context.Canceled ||
+		grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
+		err == transport.ErrConnClosing {
+		return true
+	}
+	switch grpc.Code(err) {
+	case codes.Canceled, codes.Internal:
+		// transport.ConnectionError is converted to an grpc.rpcError with
+		// codes.Internal.
 		return true
 	}
 	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {
