@@ -163,6 +163,9 @@ type replicaChecksum struct {
 	// This channel is closed after the checksum is computed, and is used
 	// as a notification.
 	notify chan struct{}
+
+	// Some debug output that can be added to the VerifyChecksumRequest.
+	rows []roachpb.KeyValue
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -982,7 +985,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		resp = &reply
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
-		reply, pErr = r.CheckConsistency(*tArgs, r.Desc())
+		reply, pErr = r.CheckConsistency(*tArgs, r.Desc(), true /* withDiff */)
 		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)

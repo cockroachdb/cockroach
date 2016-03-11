@@ -4577,6 +4577,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		ChecksumID: id,
 		Version:    10000001,
 		Checksum:   []byte("bad checksum"),
+		Rows:       []roachpb.KeyValue{},
 	}
 	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
 	if err != nil {
@@ -4591,6 +4592,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !panicked {
 		t.Fatal("VerifyChecksum didn't panic")
 	}
@@ -4612,6 +4614,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		ChecksumID: id,
 		Version:    replicaChecksumVersion,
 		Checksum:   []byte("bad checksum"),
+		Rows:       []roachpb.KeyValue{},
 	}
 	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
 	if err != nil {

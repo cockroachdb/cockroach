@@ -5094,6 +5094,13 @@ class ComputeChecksumRequest : public ::google::protobuf::Message {
   ::std::string* release_checksum_id();
   void set_allocated_checksum_id(::std::string* checksum_id);
 
+  // optional bool dump = 4;
+  bool has_dump() const;
+  void clear_dump();
+  static const int kDumpFieldNumber = 4;
+  bool dump() const;
+  void set_dump(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ComputeChecksumRequest)
  private:
   inline void set_has_header();
@@ -5102,6 +5109,8 @@ class ComputeChecksumRequest : public ::google::protobuf::Message {
   inline void clear_has_version();
   inline void set_has_checksum_id();
   inline void clear_has_checksum_id();
+  inline void set_has_dump();
+  inline void clear_has_dump();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -5109,6 +5118,7 @@ class ComputeChecksumRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* header_;
   ::google::protobuf::internal::ArenaStringPtr checksum_id_;
   ::google::protobuf::uint32 version_;
+  bool dump_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -5313,6 +5323,18 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   ::std::string* release_checksum();
   void set_allocated_checksum(::std::string* checksum);
 
+  // repeated .cockroach.roachpb.KeyValue rows = 1001;
+  int rows_size() const;
+  void clear_rows();
+  static const int kRowsFieldNumber = 1001;
+  const ::cockroach::roachpb::KeyValue& rows(int index) const;
+  ::cockroach::roachpb::KeyValue* mutable_rows(int index);
+  ::cockroach::roachpb::KeyValue* add_rows();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
+      mutable_rows();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+      rows() const;
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.VerifyChecksumRequest)
  private:
   inline void set_has_header();
@@ -5330,6 +5352,7 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* header_;
   ::google::protobuf::internal::ArenaStringPtr checksum_id_;
   ::google::protobuf::internal::ArenaStringPtr checksum_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue > rows_;
   ::google::protobuf::uint32 version_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -10517,6 +10540,30 @@ inline void ComputeChecksumRequest::set_allocated_checksum_id(::std::string* che
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ComputeChecksumRequest.checksum_id)
 }
 
+// optional bool dump = 4;
+inline bool ComputeChecksumRequest::has_dump() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ComputeChecksumRequest::set_has_dump() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ComputeChecksumRequest::clear_has_dump() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void ComputeChecksumRequest::clear_dump() {
+  dump_ = false;
+  clear_has_dump();
+}
+inline bool ComputeChecksumRequest::dump() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumRequest.dump)
+  return dump_;
+}
+inline void ComputeChecksumRequest::set_dump(bool value) {
+  set_has_dump();
+  dump_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ComputeChecksumRequest.dump)
+}
+
 // -------------------------------------------------------------------
 
 // ComputeChecksumResponse
@@ -10739,6 +10786,36 @@ inline void VerifyChecksumRequest::set_allocated_checksum(::std::string* checksu
   }
   checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+
+// repeated .cockroach.roachpb.KeyValue rows = 1001;
+inline int VerifyChecksumRequest::rows_size() const {
+  return rows_.size();
+}
+inline void VerifyChecksumRequest::clear_rows() {
+  rows_.Clear();
+}
+inline const ::cockroach::roachpb::KeyValue& VerifyChecksumRequest::rows(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.rows)
+  return rows_.Get(index);
+}
+inline ::cockroach::roachpb::KeyValue* VerifyChecksumRequest::mutable_rows(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.rows)
+  return rows_.Mutable(index);
+}
+inline ::cockroach::roachpb::KeyValue* VerifyChecksumRequest::add_rows() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.VerifyChecksumRequest.rows)
+  return rows_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >*
+VerifyChecksumRequest::mutable_rows() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.VerifyChecksumRequest.rows)
+  return &rows_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::KeyValue >&
+VerifyChecksumRequest::rows() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.VerifyChecksumRequest.rows)
+  return rows_;
 }
 
 // -------------------------------------------------------------------

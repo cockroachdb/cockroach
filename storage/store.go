@@ -136,10 +136,6 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 			if bytes.Equal(eAddr, end) {
 				return util.Errorf("start key is range-local, but end key is not")
 			}
-		} else if bytes.Compare(start, keys.LocalMax) < 0 {
-			// It's a range op, not local but somehow plows through local data -
-			// not cool.
-			return util.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
 		}
 	}
 

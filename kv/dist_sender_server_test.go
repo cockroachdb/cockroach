@@ -451,9 +451,6 @@ func TestBadRequest(t *testing.T) {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", pErr)
 	}
 
-	if pErr := db.DelRange("", "z"); !testutils.IsPError(pErr, "must be greater than LocalMax") {
-		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", pErr)
-	}
 }
 
 // TestNoSequenceCachePutOnRangeMismatchError verifies that the

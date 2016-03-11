@@ -1370,7 +1370,7 @@ func (r *Replica) LeaderLease(
 // a ComputeChecksum command on the range. It then applies a VerifyChecksum
 // command passing along a locally computed checksum for the range.
 func (r *Replica) CheckConsistency(
-	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
+	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor, withDiff bool,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	ctx := r.context(context.TODO())
 	key := desc.StartKey.AsRawKey()
@@ -1388,6 +1388,7 @@ func (r *Replica) CheckConsistency(
 			},
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
+			Dump:       withDiff,
 		}
 		ba.Add(checkArgs)
 		ba.Timestamp = r.store.Clock().Now()
@@ -1396,6 +1397,7 @@ func (r *Replica) CheckConsistency(
 			return roachpb.CheckConsistencyResponse{}, pErr
 		}
 	}
+
 	// Get local checksum. This might involving waiting for it.
 	c, ok := r.getChecksum(id)
 	if !ok || c.checksum == nil {
@@ -1420,6 +1422,7 @@ func (r *Replica) CheckConsistency(
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
 			Checksum:   c.checksum,
+			Rows:       c.rows,
 		}
 		ba.Add(checkArgs)
 		ba.Timestamp = r.store.Clock().Now()
@@ -1428,6 +1431,7 @@ func (r *Replica) CheckConsistency(
 			return roachpb.CheckConsistencyResponse{}, pErr
 		}
 	}
+
 	return roachpb.CheckConsistencyResponse{}, nil
 }
 
@@ -1460,12 +1464,13 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte) {
+func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte, rows []roachpb.KeyValue) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
 		c.checksum = sha
 		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
+		c.rows = rows
 		r.mu.checksums[id] = c
 		// Notify
 		close(c.notify)
@@ -1518,22 +1523,23 @@ func (r *Replica) ComputeChecksum(
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if !stopper.RunAsyncTask(func() {
 		defer snap.Close()
-		sha, err := r.sha512(desc, snap)
+		sha, rows, err := r.sha512(desc, snap, args.Dump)
 		if err != nil {
 			log.Error(err)
 			sha = nil
 		}
-		r.computeChecksumDone(id, sha)
+		r.computeChecksumDone(id, sha, rows)
 	}) {
 		defer snap.Close()
 		// Set checksum to nil.
-		r.computeChecksumDone(id, nil)
+		r.computeChecksumDone(id, nil, nil)
 	}
 	return roachpb.ComputeChecksumResponse{}, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
-func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]byte, error) {
+func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine, dump bool) ([]byte, []roachpb.KeyValue, error) {
+	var rows []roachpb.KeyValue
 	hasher := sha512.New()
 	// Iterate over all the data in the range.
 	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
@@ -1541,29 +1547,35 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]by
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
 		value := iter.Value()
+
+		if dump {
+			// Add the k:v into the debug message.
+			rows = append(rows, roachpb.KeyValue{Key: key.Key, Value: roachpb.Value{RawBytes: value, Timestamp: key.Timestamp}})
+		}
+
 		// Encode the length of the key and value.
 		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := binary.Write(hasher, binary.LittleEndian, int64(len(value))); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := hasher.Write(key.Key); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		timestamp, err := key.Timestamp.Marshal()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := hasher.Write(timestamp); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, err := hasher.Write(value); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	sha := make([]byte, 0, sha512.Size)
-	return hasher.Sum(sha), nil
+	return hasher.Sum(sha), rows, nil
 }
 
 // VerifyChecksum verifies the checksum that was computed through a
@@ -1596,17 +1608,85 @@ func (r *Replica) VerifyChecksum(
 	}
 	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
 		// Replication consistency problem!
+		// Let's collect some more debug information before we panic.
 		logFunc := log.Errorf
-		if r.store.ctx.ConsistencyCheckPanicOnFailure {
+		if args.Rows == nil {
+			// No debug information; run another consistency check to deliver
+			// more debug information.
+			if !r.store.stopper.RunAsyncTask(func() {
+				desc := r.Desc()
+				if err := r.store.db.CheckConsistency(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()); err != nil {
+					log.Errorf("couldn't rerun consistency check: %s", err)
+				}
+			}) {
+				log.Error("couldn't rerun consistency check as RunAsyncTask")
+			}
+		} else if r.store.ctx.ConsistencyCheckPanicOnFailure {
 			if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 				p()
 			} else {
 				logFunc = log.Fatalf
 			}
 		}
+		// About to panic print which k:v entries were different.
+		diffRange(args.Rows, c.rows)
 		logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
+}
+
+// diffs the two k:v dumps between the leader and the replica.
+func diffRange(l, r []roachpb.KeyValue) {
+	i, j := 0, 0
+	for {
+		var e, v roachpb.KeyValue
+		if i < len(l) {
+			e = l[i]
+		}
+		if j < len(r) {
+			v = r[j]
+		}
+
+		// Compare keys.
+		var comp int
+		if e.Key == nil {
+			if v.Key == nil {
+				// Done!
+				break
+			} else {
+				// skip over all excess replica keys.
+				comp = 1
+			}
+		} else {
+			if v.Key == nil {
+				// skip over all excess leader keys.
+				comp = -1
+			} else {
+				comp = bytes.Compare(e.Key, v.Key)
+			}
+		}
+		switch comp {
+		case -1:
+			log.Errorf("k:v = (%s , %s, %x) not seen on replica",
+				keys.PrettyPrint(roachpb.Key(e.Key)), e.Value.Timestamp, e.Value.RawBytes)
+			i++
+
+		case 0:
+			if !bytes.Equal(e.Value.RawBytes, v.Value.RawBytes) || !e.Value.Timestamp.Equal(v.Value.Timestamp) {
+				log.Errorf("e = (%s , %s, %x) vs v = (%s, %s, %x)",
+					keys.PrettyPrint(roachpb.Key(e.Key)), e.Value.Timestamp, e.Value.RawBytes,
+					keys.PrettyPrint(roachpb.Key(v.Key)), v.Value.Timestamp, v.Value.RawBytes)
+			}
+			i++
+			j++
+
+		case 1:
+			log.Errorf("k:v = (%s, %s, %x) not present on leader",
+				keys.PrettyPrint(roachpb.Key(v.Key)), v.Value.Timestamp, v.Value.RawBytes)
+			j++
+
+		}
+	}
 }
 
 // AdminSplit divides the range into into two ranges, using either

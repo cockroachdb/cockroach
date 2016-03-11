@@ -541,6 +541,9 @@ message ComputeChecksumRequest {
   optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+  // Compute a checksum along with a dump of the entire range, that will
+  // be used in logging a diff during checksum verification.
+  optional bool dump = 4 [(gogoproto.nullable) = false];
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
@@ -560,6 +563,9 @@ message VerifyChecksumRequest {
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional bytes checksum = 4;
+
+  // Used when a diff on checksum mismatch is requested.
+  repeated KeyValue rows = 1001 [(gogoproto.nullable) = false];
 }
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.

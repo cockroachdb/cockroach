@@ -56,7 +56,7 @@ func (*replicaConsistencyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 // process() is called on every range for which this node is a leader.
 func (q *replicaConsistencyQueue) process(_ roachpb.Timestamp, rng *Replica, _ config.SystemConfig) error {
 	req := roachpb.CheckConsistencyRequest{}
-	_, pErr := rng.CheckConsistency(req, rng.Desc())
+	_, pErr := rng.CheckConsistency(req, rng.Desc(), false /* withDiff */)
 	if pErr != nil {
 		log.Error(pErr.GoError())
 	}
