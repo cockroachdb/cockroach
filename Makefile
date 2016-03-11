@@ -177,6 +177,8 @@ check:
 	@! git grep -E '\.Clone\([^)]+\)' | grep -vE '^util/clone_proto(_test)?\.go:'
 	@echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"
 	@! git grep -E 'grpc\.NewServer\(\)' | grep -vE '^rpc/context(_test)?\.go:'
+	@echo "checking for missing defer leaktest.AfterTest"
+	@util/leaktest/check-leaktest.sh
 	@echo "misspell"
 	@! git ls-files | xargs misspell | grep -vF 'No Exceptions'
 	@echo "checking for tabs in shell scripts"
