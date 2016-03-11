@@ -22,11 +22,12 @@ import (
 	"sort"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestIntentResolution(t *testing.T) {
@@ -39,74 +40,77 @@ func TestIntentResolution(t *testing.T) {
 	}{
 		// Note that the first key (or, range, if no keys present) determines
 		// the base key of the Txn. In these examples, it's always the first
-		// range, so "a"-"s" is local.
+		// range, so "a"-"s" is local. Any examples added must stick to that
+		// convention and write the first key into "a"-"s".
+
 		{
-			// All local points, except for "s" and "x"
 			keys:   []string{"a", "x", "b", "c", "s"},
 			ranges: [][2]string{{"d", "e"}},
 			exp:    []string{"s", "x"},
 		},
 		{
-			// h is local, y is covered by the Range below but still gets an
-			// explicit request since we do it all in the same batch (didn't
-			// seem worth optimizing), and z is an explicit end point.
 			keys:   []string{"h", "y", "z"},
 			ranges: [][2]string{{"g", "z"}},
-			exp:    []string{`"s"-"z"`, "z" /* optimizable: */, "y"},
+			exp:    []string{`"s"-"z\x00"`},
 		},
 		{
-			// This test demonstrates another redundancy. Two overlapping key
-			// ranges aren't reduced to a wider range intent for the non-local
-			// part, though the contained ranges "a"-"u" and "t"-"u" are.
-			// Might make sense to optimize this away at some point, along with
-			// "s" which is also already covered by the range intents.
 			keys:   []string{"q", "s"},
 			ranges: [][2]string{{"a", "w"}, {"b", "x"}, {"t", "u"}},
-			exp:    []string{`"s"-"w"`, `"s"-"x"` /* optimizable: */, `"t"-"u"`, "s"},
+			exp:    []string{`"s"-"x"`},
+		},
+		{
+			keys:   []string{"q", "s", "y", "v"},
+			ranges: [][2]string{{"a", "s"}, {"r", "t"}, {"u", "w"}},
+			exp:    []string{`"s"-"t"`, `"u"-"w"`, "y"},
 		},
 	}
 
 	splitKey := []byte("s")
-	results := map[string]struct{}{}
 	for i, tc := range testCases {
-		var mu sync.Mutex
-		closer := make(chan struct{}, 2)
+		// Use deterministic randomness to randomly put the writes in separate
+		// batches or commit them with EndTransaction.
+		rnd, seed := randutil.NewPseudoRand()
+		log.Infof("%d: using intent test seed %d", i, seed)
 
-		ctx := NewTestContext()
-		ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-			func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-				mu.Lock()
-				defer mu.Unlock()
-				header := args.Header()
-				// Ignore anything outside of the intent key range of "a" - "z"
-				if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
+		results := map[string]struct{}{}
+		func() {
+			var mu sync.Mutex
+			closer := make(chan struct{}, 2)
+			var done bool
+			ctx := NewTestContext()
+			ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
+				func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+					mu.Lock()
+					defer mu.Unlock()
+					header := args.Header()
+					// Ignore anything outside of the intent key range of "a" - "z"
+					if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
+						return nil
+					}
+					var entry string
+					switch arg := args.(type) {
+					case *roachpb.ResolveIntentRequest:
+						if arg.Status == roachpb.COMMITTED {
+							entry = string(header.Key)
+						}
+					case *roachpb.ResolveIntentRangeRequest:
+						if arg.Status == roachpb.COMMITTED {
+							entry = fmt.Sprintf("%s-%s", header.Key, header.EndKey)
+						}
+					}
+					if entry != "" {
+						log.Infof("got %s", entry)
+						results[entry] = struct{}{}
+					}
+					if len(results) >= len(tc.exp) && !done {
+						done = true
+						close(closer)
+					}
 					return nil
 				}
-				switch args.(type) {
-				case *roachpb.ResolveIntentRequest:
-					results[string(header.Key)] = struct{}{}
-				case *roachpb.ResolveIntentRangeRequest:
-					results[fmt.Sprintf("%s-%s", header.Key, header.EndKey)] = struct{}{}
-				}
-				if len(results) == len(tc.exp) {
-					closer <- struct{}{}
-				}
-				return nil
-			}
-		func() {
+
 			s := StartTestServerWithContext(t, ctx)
 			defer s.Stop()
-
-			go func() {
-				// Sets a timeout, cut short by the stopper having drained.
-				select {
-				case <-time.After(time.Second):
-				case <-s.Server.stopper.ShouldStop():
-					return
-				}
-				closer <- struct{}{}
-			}()
-
 			// Split the Range. This should not have any asynchronous intents.
 			if err := s.db.AdminSplit(splitKey); err != nil {
 				t.Fatal(err)
@@ -114,17 +118,42 @@ func TestIntentResolution(t *testing.T) {
 
 			if pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 				b := txn.NewBatch()
-				for _, key := range tc.keys {
-					b.Put(key, "test")
+				if tc.keys[0] >= string(splitKey) {
+					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
 				}
+				for i, key := range tc.keys {
+					// The first write must not go to batch, it anchors the
+					// transaction to the correct range.
+					local := i != 0 && rnd.Intn(2) == 0
+					log.Infof("%d: %s: local: %t", i, key, local)
+					if local {
+						b.Put(key, "test")
+					} else if pErr := txn.Put(key, "test"); pErr != nil {
+						return pErr
+					}
+				}
+
 				for _, kr := range tc.ranges {
-					b.DelRange(kr[0], kr[1], false)
+					local := rnd.Intn(2) == 0
+					log.Infof("%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
+					if local {
+						b.DelRange(kr[0], kr[1], false)
+					} else if pErr := txn.DelRange(kr[0], kr[1]); pErr != nil {
+						return pErr
+					}
 				}
+
 				return txn.CommitInBatch(b)
 			}); pErr != nil {
 				t.Fatalf("%d: %s", i, pErr)
 			}
 			<-closer // wait for async intents
+			// Use Raft to make it likely that any straddling intent
+			// resolutions have come in. Don't touch existing data; that could
+			// generate unexpected intent resolutions.
+			if _, pErr := s.db.Scan("z\x00", "z\x00\x00", 0); pErr != nil {
+				t.Fatal(pErr)
+			}
 		}()
 		// Verification. Note that this runs after the system has stopped, so that
 		// everything asynchronous has already happened.
@@ -135,8 +164,8 @@ func TestIntentResolution(t *testing.T) {
 			actResult = append(actResult, k)
 		}
 		sort.Strings(actResult)
-		if !reflect.DeepEqual(expResult, expResult) {
-			t.Fatalf("%d: unexpected non-local intents, expected %s: %s", i, expResult, expResult)
+		if !reflect.DeepEqual(actResult, expResult) {
+			t.Fatalf("%d: unexpected non-local intents, expected %s: %s", i, expResult, actResult)
 		}
 	}
 }
