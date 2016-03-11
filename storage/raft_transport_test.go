@@ -91,22 +91,12 @@ func TestSendAndReceive(t *testing.T) {
 		5: 1,
 	}
 
-	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// tls.Config is not safe for concurrent use because it is lazily initialized
-	// - grpc/credentials.NewTLS (called from rpc.NewServer) makes a shallow copy
-	// of the passed-in *tls.Config which can race with this lazy initialization.
-	// To work around this, we make a single copy here which will be used by all
-	// HTTP servers and not shared with calls to grpc/credentials.NewTLS.
-	tlsConfigCopy := *tlsConfig
-
 	for serverIndex := 0; serverIndex < numServers; serverIndex++ {
 		nodeID := nextNodeID
 		nextNodeID++
 		grpcServer := rpc.NewServer(nodeRPCContext)
-		ln, err := util.ListenAndServe(stopper, grpcServer, util.CreateTestAddr("tcp"), &tlsConfigCopy)
+		ln, err := util.ListenAndServeGRPC(stopper, grpcServer,
+			util.CreateTestAddr("tcp"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +112,8 @@ func TestSendAndReceive(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		transport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
+		transport := storage.NewRaftTransport(storage.GossipAddressResolver(g),
+			grpcServer, nodeRPCContext)
 		transports[nodeID] = transport
 
 		for store := 0; store < storesPerServer; store++ {
@@ -241,11 +232,7 @@ func TestInOrderDelivery(t *testing.T) {
 	g := gossip.New(nodeRPCContext, nil, stopper)
 
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln, err := util.ListenAndServe(stopper, grpcServer, util.CreateTestAddr("tcp"), tlsConfig)
+	ln, err := util.ListenAndServeGRPC(stopper, grpcServer, util.CreateTestAddr("tcp"))
 	if err != nil {
 		t.Fatal(err)
 	}

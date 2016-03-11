@@ -32,7 +32,6 @@ func interestingGoroutines() (gs []string) {
 
 		if stack == "" ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/log.init") ||
-
 			strings.Contains(stack, "testing.Main(") ||
 			strings.Contains(stack, "runtime.goexit") ||
 			strings.Contains(stack, "created by runtime.gc") ||

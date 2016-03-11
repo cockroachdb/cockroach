@@ -544,15 +544,11 @@ func (m *multiTestContext) addStore() {
 		}
 	}
 
-	tlsConfig, err := m.rpcContext.GetServerTLSConfig()
-	if err != nil {
-		m.t.Fatal(err)
-	}
-
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
-	ln, err := util.ListenAndServe(m.transportStopper, m.grpcServers[idx], util.CreateTestAddr("tcp"), tlsConfig)
+	ln, err := util.ListenAndServeGRPC(m.transportStopper,
+		m.grpcServers[idx], util.CreateTestAddr("tcp"))
 	if err != nil {
 		m.t.Fatal(err)
 	}

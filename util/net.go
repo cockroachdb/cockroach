@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"golang.org/x/net/http2"
 
 	"github.com/cockroachdb/cmux"
@@ -32,60 +34,23 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-// ListenAndServe creates a listener and serves handler on it, closing the
-// listener when signalled by the stopper. The handling server implements HTTP1
-// and HTTP2, with or without TLS. Note that the "real" server also implements
-// the postgres wire protocol, and so does not use this function, but the
-// pattern used is similar; that implementation is in server/server.go.
-func ListenAndServe(stopper *stop.Stopper, handler http.Handler, addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
+// ListenAndServeGRPC creates a listener and serves the specified grpc Server
+// on it, closing the listener when signalled by the stopper.
+func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server,
+	addr net.Addr) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		return ln, err
 	}
+
 	stopper.RunWorker(func() {
 		<-stopper.ShouldDrain()
-		// Some unit tests manually close `ln`, so it may already be closed
-		// when we get here.
-		FatalIfUnexpected(ln.Close())
+		server.Stop()
 	})
 
-	if tlsConfig != nil {
-		// We're in TLS mode. ALPN will be used to automatically handle HTTP1 and
-		// HTTP2 requests.
-		ServeHandler(stopper, handler, tls.NewListener(ln, tlsConfig), tlsConfig)
-	} else {
-		// We're not in TLS mode. We're going to implement h2c (HTTP2 Clear Text)
-		// ourselves.
-
-		m := cmux.New(ln)
-		// HTTP2 connections are easy to identify because they have a common
-		// preface.
-		h2L := m.Match(cmux.HTTP2())
-		// All other connections will get the default treatment.
-		anyL := m.Match(cmux.Any())
-
-		// Construct our h2c handler function.
-		var h2 http2.Server
-		serveConnOpts := &http2.ServeConnOpts{
-			Handler: handler,
-		}
-		serveH2 := func(conn net.Conn) {
-			h2.ServeConn(conn, serveConnOpts)
-		}
-
-		// Start serving HTTP1 on all non-HTTP2 connections.
-		serveConn := ServeHandler(stopper, handler, anyL, tlsConfig)
-
-		// Start serving h2c on all HTTP2 connections.
-		stopper.RunWorker(func() {
-			FatalIfUnexpected(serveConn(h2L, serveH2))
-		})
-
-		// Finally start the multiplexing listener.
-		stopper.RunWorker(func() {
-			FatalIfUnexpected(m.Serve())
-		})
-	}
+	stopper.RunWorker(func() {
+		FatalIfUnexpected(server.Serve(ln))
+	})
 	return ln, nil
 }
 
@@ -162,10 +127,12 @@ func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, 
 	}
 }
 
-// IsClosedConnection returns true if err is cmux.ErrListenerClosed, io.EOF, or
-// the net package's errClosed.
+// IsClosedConnection returns true if err is cmux.ErrListenerClosed,
+// grpc.ErrServerStopped, io.EOF, or the net package's errClosed.
 func IsClosedConnection(err error) bool {
-	return err == cmux.ErrListenerClosed || err == io.EOF ||
+	return err == cmux.ErrListenerClosed ||
+		err == grpc.ErrServerStopped ||
+		err == io.EOF ||
 		strings.Contains(err.Error(), "use of closed network connection")
 }
 

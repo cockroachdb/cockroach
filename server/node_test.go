@@ -61,11 +61,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.ScanInterval = 10 * time.Hour
 	ctx.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	tlsConfig, err := nodeRPCContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln, err := util.ListenAndServe(stopper, grpcServer, addr, tlsConfig)
+	ln, err := util.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
