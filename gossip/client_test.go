@@ -17,6 +17,7 @@
 package gossip
 
 import (
+	"crypto/tls"
 	"errors"
 	"math"
 	"net"
@@ -46,7 +47,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := util.ListenAndServe(stopper, server, addr, tlsConfig)
+	ln, err := listenAndServe(stopper, server, addr, tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +98,25 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 	}
 }
 
+func listenAndServe(stopper *stop.Stopper, server *grpc.Server, addr net.Addr, tlsConfig *tls.Config) (net.Listener, error) {
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err != nil {
+		return ln, err
+	}
+	stopper.RunWorker(func() {
+		<-stopper.ShouldDrain()
+		// Some unit tests manually close `ln`, so it may already be closed
+		// when we get here.
+		util.FatalIfUnexpected(ln.Close())
+	})
+
+	stopper.RunWorker(func() {
+		server.Serve(ln)
+	})
+
+	return ln, nil
+}
+
 // startFakeServerGossips creates local gossip instances and remote
 // faked gossip instance. The remote gossip instance launches its
 // faked gossip service just for check the client message.
@@ -110,7 +130,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	lln, err := util.ListenAndServe(stopper, lserver, laddr, lTLSConfig)
+	lln, err := listenAndServe(stopper, lserver, laddr, lTLSConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +145,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-	rln, err := util.ListenAndServe(stopper, rserver, raddr, rTLSConfig)
+	rln, err := listenAndServe(stopper, rserver, raddr, rTLSConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +153,6 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	remote = newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	time.Sleep(time.Millisecond)
 	return
 }
 
@@ -328,7 +347,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ln, err := util.ListenAndServe(stopper, server, addr, TLSConfig)
+		ln, err := listenAndServe(stopper, server, addr, TLSConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
