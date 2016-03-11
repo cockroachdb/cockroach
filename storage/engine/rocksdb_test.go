@@ -690,3 +690,62 @@ func BenchmarkMVCCPutDelete(b *testing.B) {
 		}
 	}
 }
+
+func TestBatchIterReadOwnWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const cacheSize = 1 << 30 // 1 GB
+
+	stopper := stop.NewStopper()
+	db := NewInMem(roachpb.Attributes{}, cacheSize, stopper)
+	defer stopper.Stop()
+
+	b := db.NewBatch()
+
+	k := MakeMVCCMetadataKey(testKey1)
+
+	before := b.NewIterator(nil)
+	defer before.Close()
+
+	nonBatchBefore := db.NewIterator(nil)
+	defer nonBatchBefore.Close()
+
+	if err := b.Put(k, []byte("abc")); err != nil {
+		t.Fatal(err)
+	}
+
+	after := b.NewIterator(nil)
+	defer after.Close()
+
+	if after.Seek(k); !after.Valid() {
+		t.Fatal("write missing on batch iter created after write")
+	}
+	if before.Seek(k); !before.Valid() {
+		t.Fatal("write missing on batch iter created before write")
+	}
+	if nonBatchBefore.Seek(k); nonBatchBefore.Valid() {
+		t.Fatal("uncommitted write seen by non-batch iter")
+	}
+
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	nonBatchAfter := db.NewIterator(nil)
+	defer nonBatchAfter.Close()
+
+	if nonBatchBefore.Seek(k); nonBatchBefore.Valid() {
+		t.Fatal("committed write seen by non-batch iter created before commit")
+	}
+	if nonBatchAfter.Seek(k); !nonBatchAfter.Valid() {
+		t.Fatal("committed write missing by non-batch iter created after commit")
+	}
+
+	// NB(dt): `Commit` frees the underlying batch, rendering iterators that
+	// are backed by it invalid, but they can still return (incorrect) results.
+	// if after.Seek(k); !after.Valid() {
+	// 	t.Fatal("write missing on batch iter created after write")
+	// }
+	// if before.Seek(k); !before.Valid() {
+	// 	t.Fatalf("write missing on batch iter created before write")
+	// }
+}
