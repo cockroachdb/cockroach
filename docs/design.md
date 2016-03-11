@@ -571,8 +571,8 @@ timestamps such thats<sub>1</sub> \< s<sub>2</sub>.
 # Logical Map Content
 
 Logically, the map contains a series of reserved system key / value
-pairs covering accounting, range metadata, node accounting and
-permissions before the actual key / value pairs for non-system data
+pairs covering accounting, range metadata and node accounting 
+before the actual key / value pairs for non-system data
 (e.g. the actual meat of the map).
 
 - `\0\0meta1` Range metadata for location of `\0\0meta2`.
@@ -589,9 +589,6 @@ permissions before the actual key / value pairs for non-system data
 - `\0node<node-address0>`: Accounting data for node 0.
 - ...
 - `\0node<node-addressN>`: Accounting data for node N.
-- `\0perm<key0><user0>`: Permissions for user0 for key prefix key0.
-- ...
-- `\0perm<keyN><userN>`: Permissions for userN for key prefix keyN.
 - `\0tree_root`: Range key for root of range-spanning tree.
 - `\0tx<tx-id0>`: Transaction record for transaction 0.
 - ...
@@ -1112,16 +1109,16 @@ particular, the maximum number of hops for gossipped information to take
 before reaching a node is given by `ceil(log(node count) / log(max
 fanout)) + 1`.
 
-# Key-prefix Accounting, Zones & Permissions
+# Key-prefix Accounting and Zones
 
-Arbitrarily fine-grained accounting and permissions are specified via
+Arbitrarily fine-grained accounting is specified via
 key prefixes. Key prefixes can overlap, as is necessary for capturing
 hierarchical relationships. For illustrative purposes, let’s say keys
 specifying rows in a set of databases have the following format:
 
 `<db>:<table>:<primary-key>[:<secondary-key>]`
 
-In this case, we might collect accounting or specify permissions with
+In this case, we might collect accounting with
 key prefixes:
 
 `db1`, `db1:user`, `db1:order`,
@@ -1227,46 +1224,6 @@ existing zones for its ranges against the zone configuration. If
 it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
 split to a duplicate range comprising the new configuration.
-
-## Permissions
-permissions are stored in the map with keys prefixed by *\0perm* followed by
-the key prefix and user to which the specified permissions apply. The format of
-permissions keys is:
-
-`\0perm<key-prefix><user>`
-
-Permission values are a protobuf containing the permission details;
-please see [config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/config/config.proto) for up-to-date data structures used, the best entry point being `message PermConfig`.
-
-A default system root permission is assumed for the entire map
-with an empty key prefix and read/write as true.
-
-When determining whether or not to allow a read or a write a key
-value (e.g. `db1:user:1` for user `spencer`), a RoachNode would
-read the following permissions values:
-
-```
-\0perm<db1:user:1>spencer
-\0perm<db1:user>spencer
-\0perm<db1>spencer
-\0perm<>spencer
-```
-
-If any prefix in the hierarchy provides the required permission,
-the request is satisfied; otherwise, the request returns an
-error.
-
-The priority for a user permission is used to order requests at
-Raft consensus ranges and for choosing an initial priority for
-distributed transactions. When scheduling operations at the Raft
-consensus range, all outstanding requests are ordered by key
-prefix and each assigned priorities according to key, user and
-arrival time. The next request is chosen probabilistically using
-priorities to weight the choice. Each key can have multiple
-priorities as they’re hierarchical (e.g. for /user/key, one
-priority for root ‘/’, and one for ‘/user/key’). The most general
-priority is used first. If two keys share the most general, then
-they’re compared with the next most general if applicable, and so on.
 
 # Key-Value API
 
