@@ -89,7 +89,7 @@ func NewNetwork(nodeCount int) *Network {
 func (n *Network) CreateNode() (*Node, error) {
 	server := rpc.NewServer(n.rpcContext)
 	testAddr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServe(n.Stopper, server, testAddr, n.tlsConfig)
+	ln, err := util.ListenAndServeGRPC(n.Stopper, server, testAddr)
 	if err != nil {
 		return nil, err
 	}

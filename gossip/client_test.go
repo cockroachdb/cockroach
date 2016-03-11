@@ -42,11 +42,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 
 	addr := util.CreateTestAddr("tcp")
 	server := rpc.NewServer(rpcContext)
-	tlsConfig, err := rpcContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln, err := util.ListenAndServe(stopper, server, addr, tlsConfig)
+	ln, err := util.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,11 +102,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 
 	laddr := util.CreateTestAddr("tcp")
 	lserver := rpc.NewServer(lRPCContext)
-	lTLSConfig, err := lRPCContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	lln, err := util.ListenAndServe(stopper, lserver, laddr, lTLSConfig)
+	lln, err := util.ListenAndServeGRPC(stopper, lserver, laddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,11 +113,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 
 	raddr := util.CreateTestAddr("tcp")
 	rserver := rpc.NewServer(rRPCContext)
-	rTLSConfig, err := rRPCContext.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rln, err := util.ListenAndServe(stopper, rserver, raddr, rTLSConfig)
+	rln, err := util.ListenAndServeGRPC(stopper, rserver, raddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +121,6 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	remote = newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	time.Sleep(time.Millisecond)
 	return
 }
 
@@ -324,11 +311,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 
 		addr := util.CreateTestAddr("tcp")
 		server := rpc.NewServer(RPCContext)
-		TLSConfig, err := RPCContext.GetServerTLSConfig()
-		if err != nil {
-			t.Fatal(err)
-		}
-		ln, err := util.ListenAndServe(stopper, server, addr, TLSConfig)
+		ln, err := util.ListenAndServeGRPC(stopper, server, addr)
 		if err != nil {
 			t.Fatal(err)
 		}
