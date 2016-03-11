@@ -982,6 +982,7 @@ func countImpls() []builtin {
 	types := argTypes{boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType, tupleType}
 	for _, t := range types {
 		r = append(r, builtin{
+			impure:     true, // COUNT(1) is not a const. #5170.
 			types:      argTypes{t},
 			returnType: typeInt,
 		})

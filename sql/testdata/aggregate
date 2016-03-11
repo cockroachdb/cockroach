@@ -238,6 +238,26 @@ SELECT k FROM kv HAVING k > 7;
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
 
+query I
+SELECT COUNT(*);
+----
+1
+
+query I
+SELECT COUNT(k) from kv;
+----
+6
+
+query I
+SELECT COUNT(1);
+----
+1
+
+query I
+SELECT COUNT(1) from kv;
+----
+6
+
 query error unknown signature for COUNT: COUNT\(int, int\)
 SELECT COUNT(k, v) FROM kv
 
@@ -547,4 +567,4 @@ NULL
 query ITTT
 EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 ----
-0 /xyz/zyx/3.0/2/1 NULL ROW 
+0 /xyz/zyx/3.0/2/1 NULL ROW
