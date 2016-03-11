@@ -170,13 +170,11 @@ func TestClientNodeID(t *testing.T) {
 	nodeID := roachpb.NodeID(1)
 	local.SetNodeID(nodeID)
 
-	disconnected := make(chan *client, 1)
-
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	// Start a gossip client.
-	c := newClient(&remote.nodeAddr)
+	var c *client
+	var disconnected chan *client
 	defer func() {
 		stopper.Stop()
 		if c != <-disconnected {
@@ -184,10 +182,26 @@ func TestClientNodeID(t *testing.T) {
 		}
 	}()
 
-	c.start(local, disconnected, rpcContext, stopper)
-	// Wait for c.gossip to start.
-	if receivedNodeID := <-remote.nodeIDChan; receivedNodeID != nodeID {
-		t.Errorf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
+	// A gossip client may fail to start if the grpc connection times out which
+	// can happen under load (such as in CircleCI or using `make stress`). So we
+	// loop creating clients until success or the test times out.
+	for {
+		disconnected = make(chan *client, 1)
+
+		// Start a gossip client.
+		c = newClient(&remote.nodeAddr)
+		c.start(local, disconnected, rpcContext, stopper)
+
+		// Wait for c.gossip to start.
+		select {
+		case receivedNodeID := <-remote.nodeIDChan:
+			if receivedNodeID != nodeID {
+				t.Fatalf("client should send NodeID with %v, got %v", nodeID, receivedNodeID)
+			}
+			return
+		case <-disconnected:
+			// The client failed to start, loop and try again.
+		}
 	}
 }
 
