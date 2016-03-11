@@ -96,7 +96,7 @@ func TestSendAndReceive(t *testing.T) {
 		nextNodeID++
 		grpcServer := rpc.NewServer(nodeRPCContext)
 		ln, err := util.ListenAndServeGRPC(stopper, grpcServer,
-			util.CreateTestAddr("tcp"))
+			util.TestAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +232,7 @@ func TestInOrderDelivery(t *testing.T) {
 	g := gossip.New(nodeRPCContext, nil, stopper)
 
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	ln, err := util.ListenAndServeGRPC(stopper, grpcServer, util.CreateTestAddr("tcp"))
+	ln, err := util.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}

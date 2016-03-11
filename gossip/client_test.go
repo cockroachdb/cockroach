@@ -40,12 +40,12 @@ import (
 func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Gossip {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	addr := util.CreateTestAddr("tcp")
 	server := rpc.NewServer(rpcContext)
-	ln, err := util.ListenAndServeGRPC(stopper, server, addr)
+	ln, err := util.ListenAndServeGRPC(stopper, server, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
+	addr := ln.Addr()
 	g := New(rpcContext, nil, stopper)
 	g.SetNodeID(nodeID)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
@@ -54,7 +54,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Go
 	}); err != nil {
 		t.Fatal(err)
 	}
-	g.start(server, ln.Addr())
+	g.start(server, addr)
 	time.Sleep(time.Millisecond)
 	return g
 }
@@ -100,9 +100,8 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	stopper = stop.NewStopper()
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	laddr := util.CreateTestAddr("tcp")
 	lserver := rpc.NewServer(lRPCContext)
-	lln, err := util.ListenAndServeGRPC(stopper, lserver, laddr)
+	lln, err := util.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,9 +110,8 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	raddr := util.CreateTestAddr("tcp")
 	rserver := rpc.NewServer(rRPCContext)
-	rln, err := util.ListenAndServeGRPC(stopper, rserver, raddr)
+	rln, err := util.ListenAndServeGRPC(stopper, rserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,9 +307,8 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-		addr := util.CreateTestAddr("tcp")
 		server := rpc.NewServer(RPCContext)
-		ln, err := util.ListenAndServeGRPC(stopper, server, addr)
+		ln, err := util.ListenAndServeGRPC(stopper, server, util.TestAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
