@@ -63,16 +63,16 @@ type HeartbeatService struct {
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
-	reply := &PingResponse{}
-	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
 	if peer, ok := peer.FromContext(ctx); ok {
 		hs.remoteClockMonitor.UpdateOffset(peer.Addr.String(), serverOffset)
 	}
-	reply.ServerTime = hs.clock.PhysicalNow()
-	return reply, nil
+	return &PingResponse{
+		Pong:       args.Ping,
+		ServerTime: hs.clock.PhysicalNow(),
+	}, nil
 }
 
 // A ManualHeartbeatService allows manual control of when heartbeats occur, to
