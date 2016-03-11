@@ -49,18 +49,8 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 func newTestServer(t *testing.T, ctx *rpc.Context) (*grpc.Server, net.Listener) {
 	s := rpc.NewServer(ctx)
 
-	tlsConfig, err := ctx.GetServerTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// We may be called in a loop, meaning tlsConfig is may be in used by a
-	// running server during a call to `util.ListenAndServe`, which may
-	// mutate it (due to http2.ConfigureServer). Make a copy to avoid trouble.
-	tlsConfigCopy := *tlsConfig
-
 	addr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServe(ctx.Stopper, s, addr, &tlsConfigCopy)
+	ln, err := util.ListenAndServeGRPC(ctx.Stopper, s, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
