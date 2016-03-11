@@ -690,3 +690,33 @@ func BenchmarkMVCCPutDelete(b *testing.B) {
 		}
 	}
 }
+
+func TestReuseIter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const cacheSize = 1 << 30 // 1 GB
+
+	stopper := stop.NewStopper()
+	rocksdb := NewInMem(roachpb.Attributes{}, cacheSize, stopper)
+	defer stopper.Stop()
+
+	b := rocksdb.NewBatch()
+
+	k := MakeMVCCMetadataKey(testKey1)
+
+	i1 := b.NewIterator(nil)
+	defer i1.Close()
+
+	if err := b.Put(k, []byte("abc")); err != nil {
+		t.Fatal(err)
+	}
+
+	i2 := b.NewIterator(nil)
+	defer i2.Close()
+
+	i1.Seek(k)
+	i2.Seek(k)
+
+	if actual, expected := i2.Valid(), i1.Valid(); actual != expected {
+		t.Fatalf("after != before: %v != %v", actual, expected)
+	}
+}
