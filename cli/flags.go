@@ -320,9 +320,11 @@ func initFlags(ctx *Context) {
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, kvCmd, rangeCmd,
-		userCmd, zoneCmd, nodeCmd,
 		exterminateCmd, quitCmd, /* startCmd is covered above */
 	}
+	clientCmds = append(clientCmds, userCmds...)
+	clientCmds = append(clientCmds, zoneCmds...)
+	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
@@ -346,13 +348,18 @@ func initFlags(ctx *Context) {
 		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
 	}
 
-	for _, cmd := range []*cobra.Command{nodeCmd, quitCmd} {
+	// Commands that need an http port.
+	httpCmds := []*cobra.Command{quitCmd}
+	httpCmds = append(httpCmds, nodeCmds...)
+	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("http_port"))
 	}
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd, userCmd, zoneCmd}
+	sqlCmds := []*cobra.Command{sqlShellCmd}
+	sqlCmds = append(sqlCmds, zoneCmds...)
+	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&connURL, "url", "", usage("url"))
