@@ -147,7 +147,7 @@ Then, add nodes 2, 3, etc. to the cluster by specifying the `--join` flag to con
 
 Verify that the cluster is connected on the web UI by directing your browser at
 ```
-https://<any_node>:26257
+https://<any_node>:8080
 ```
 
 ## Get in touch
