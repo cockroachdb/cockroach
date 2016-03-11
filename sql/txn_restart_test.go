@@ -20,14 +20,15 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	_ "github.com/cockroachdb/pq"
 )
 
@@ -46,8 +47,17 @@ type filterVals struct {
 	// be done on the first write of a txn, otherwise the previously written
 	// intents will linger on.
 	abortCounts map[string]int
+
+	// Map from a values to the number of times we'll inject a
+	// TransactionRetryError in the transaction writing that value.
+	endTxnRestartCounts map[string]int
+
 	// Keys for which we injected an error.
 	failedValues map[string]failureRecord
+
+	// Map in which we're accumulated the ids of the txns that we need to inject
+	// errors into because of endTxnRestartCounts.
+	txnsToFail map[uuid.UUID]bool
 }
 
 func createFilterVals(
@@ -56,7 +66,9 @@ func createFilterVals(
 	return &filterVals{
 		restartCounts: restartCounts,
 		abortCounts:   abortCounts,
-		failedValues:  map[string]failureRecord{}}
+		failedValues:  map[string]failureRecord{},
+		txnsToFail:    map[uuid.UUID]bool{},
+	}
 }
 
 // checkCorrectTxn checks that the current txn is the correct one, according to
@@ -96,6 +108,7 @@ func injectErrors(
 
 	switch req := req.(type) {
 	case *roachpb.ConditionalPutRequest:
+		txnID := *hdr.Txn.TxnMeta.ID
 		for key, count := range magicVals.restartCounts {
 			checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn)
 			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
@@ -117,7 +130,29 @@ func injectErrors(
 				return err
 			}
 		}
+		// If we're writing a value that's marked for an EndTransaction failure,
+		// keep track of the txn id so we can fail it later on.
+		for key, count := range magicVals.endTxnRestartCounts {
+			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
+				if _, found := magicVals.txnsToFail[txnID]; found {
+					continue
+				}
+				magicVals.endTxnRestartCounts[key]--
+				magicVals.txnsToFail[txnID] = true
+			}
+		}
 		return nil
+	case *roachpb.EndTransactionRequest:
+		txnID := *hdr.Txn.TxnMeta.ID
+		if !magicVals.txnsToFail[txnID] {
+			return nil
+		}
+		delete(magicVals.txnsToFail, txnID)
+		// Note that we can't return TransactionAborted errors, although those are
+		// more representative for the errors that EndTransaction might encounter,
+		// because returning those would result in the txn's intents being left
+		// around.
+		return roachpb.NewTransactionRetryError()
 	default:
 		return nil
 	}
@@ -130,16 +165,30 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 	for key, count := range magicVals.restartCounts {
 		if count != 0 {
 			file, line, _ := caller.Lookup(1)
-			t.Fatalf("%s:%d: INSERT for \"%s\" still has to be retried %d times",
+			t.Errorf("%s:%d: INSERT for \"%s\" still has to be retried %d times",
 				file, line, key, count)
 		}
 	}
 	for key, count := range magicVals.abortCounts {
 		if count != 0 {
 			file, line, _ := caller.Lookup(1)
-			t.Fatalf("%s:%d: INSERT for \"%s\" still has to be aborted %d times",
+			t.Errorf("%s:%d: INSERT for \"%s\" still has to be aborted %d times",
 				file, line, key, count)
 		}
+	}
+	for key, count := range magicVals.endTxnRestartCounts {
+		if count != 0 {
+			file, line, _ := caller.Lookup(1)
+			t.Errorf("%s:%d: txn writing \"%s\" still has to be aborted %d times",
+				file, line, key, count)
+		}
+	}
+	if len(magicVals.txnsToFail) > 0 {
+		file, line, _ := caller.Lookup(1)
+		t.Errorf("%s:%d: txns still to be failed: %v", file, line, magicVals.txnsToFail)
+	}
+	if t.Failed() {
+		t.Fatalf("checking error injection failed")
 	}
 }
 
@@ -179,6 +228,12 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 		"josephine": 2,
 		"laureal":   2,
 	}
+	magicVals.endTxnRestartCounts = map[string]int{
+		"boulanger": 2,
+		"dromedary": 2,
+		"fajita":    2,
+		"hooly":     2,
+	}
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
 			return injectErrors(sid, req, hdr, magicVals)
@@ -203,6 +258,18 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 
 	checkRestarts(t, magicVals)
 
+	if _, err := sqlDB.Exec("END;"); err != nil {
+		t.Fatal(err)
+	}
+	// Check that the txns succeeded by reading the rows.
+	var count int
+	if err := sqlDB.QueryRow("SELECT COUNT(*) FROM t.test").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 6 {
+		t.Fatalf("Expected 6 rows, got %d", count)
+	}
+
 	// Now test that we don't retry what we shouldn't: insert an error into a txn
 	// we can't automatically retry (because it spans requests).
 
@@ -218,7 +285,6 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 
 	// Start a txn.
 	if _, err := sqlDB.Exec(`
-END;
 DELETE FROM t.test WHERE true;
 BEGIN;
 `); err != nil {
@@ -227,8 +293,8 @@ BEGIN;
 
 	// Continue the txn in a new request, which is not retriable.
 	_, err := sqlDB.Exec("INSERT INTO t.test (k, v) VALUES ('g', 'hooly')")
-	if err == nil || !strings.Contains(
-		err.Error(), "encountered previous write with future timestamp") {
+	if !testutils.IsError(
+		err, "encountered previous write with future timestamp") {
 		t.Errorf("didn't get expected injected error. Got: %s", err)
 	}
 }
@@ -242,6 +308,7 @@ func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO(andrei): make the priority deterministic here once Radu introduces that syntax.
 	if _, err := tx.Exec("RETRY INTENT; SET TRANSACTION PRIORITY LOW;"); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +331,7 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 	var err error
 	if retriesNeeded {
 		_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (1, 'boulanger')")
-		if err == nil || !strings.Contains(err.Error(), expectedErr) {
+		if !testutils.IsError(err, expectedErr) {
 			t.Fatalf("expected to fail here. err: %s", err)
 		}
 		return true
@@ -278,7 +345,7 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 	retriesNeeded = *injectReleaseError
 	if retriesNeeded {
 		*injectReleaseError = false
-		pushTxn(t, sqlDB, 0)
+		abortTxn(t, sqlDB, 0)
 	}
 	_, err = tx.Exec("RELEASE TRANSACTION")
 	if retriesNeeded {
@@ -294,19 +361,20 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 	}
 }
 
-// pushTxn writes to a key (with retries) and as a side effect pushes a txn
+// abortTxn writes to a key (with retries) and as a side effect aborts a txn
 // that had an intent on that key.
 // This cannot be done as an injected error, since we want the pusher to clean
 // up the intents of the pushee.
-func pushTxn(t *testing.T, sqlDB *sql.DB, key int) {
+func abortTxn(t *testing.T, sqlDB *sql.DB, key int) {
 	// Execute all statements in one batch so that the server retries it
 	// automatically in case our txn (the pusher) fails to push the victim. Even
 	// though it starts with a HIGH priority, that's no guarantee it'll always
 	// succeed from the first try.
-	insertCmd := fmt.Sprintf("INSERT INTO t.test (k, v) VALUES "+
-		"(%d, 'Boris the Soviet Transaction Hammer')", key)
+	// TODO(andrei): make the priority deterministic here once Radu introduces
+	// that syntax and then we won't need all the statements in one batch.
+	deleteCmd := fmt.Sprintf("DELETE FROM t.test WHERE k = %d", key)
 	if _, err := sqlDB.Exec(
-		fmt.Sprintf("BEGIN; SET TRANSACTION PRIORITY HIGH; %s; COMMIT;", insertCmd)); err != nil {
+		fmt.Sprintf("BEGIN; SET TRANSACTION PRIORITY HIGH; %s; COMMIT;", deleteCmd)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -337,13 +405,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			magicVals: createFilterVals(
 				map[string]int{"boulanger": 2}, // restartCounts
 				nil),
-			expectedErr: "encountered previous write with future timestamp",
+			expectedErr: ".*encountered previous write with future timestamp.*",
 		},
 		{
 			magicVals: createFilterVals(
 				nil,
 				map[string]int{"boulanger": 2}), // abortCounts
-			expectedErr: "txn aborted",
+			expectedErr: ".*txn aborted.*",
 		},
 	}
 
@@ -409,18 +477,17 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'sentinel');")
-	if err == nil || !strings.Contains(err.Error(),
-		"current transaction is committed") {
+	if !testutils.IsError(err, "current transaction is committed") {
 		t.Fatal(err)
 	}
 	// Rollback should respond with a COMMIT command tag.
 	err = tx.Rollback()
-	if err == nil || !strings.Contains(err.Error(), "unexpected command tag COMMIT") {
+	if !testutils.IsError(err, "unexpected command tag COMMIT") {
 		t.Fatal(err)
 	}
 }
 
-// Test that if there's an error on COMMIT that needs to be reported to the used
+// Test that if there's an error on COMMIT that needs to be reported to the user
 // the txn will be rolled back. As opposed to an error on a COMMIT in an auto-retry
 // txn, where we retry the txn (not tested here).
 func TestErrorOnCommit(t *testing.T) {
@@ -438,6 +505,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO(andrei): make the priority deterministic here once Radu introduces that syntax.
 	if _, err := tx.Exec("RETRY INTENT; SET TRANSACTION PRIORITY LOW;"); err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +513,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 
-	pushTxn(t, sqlDB, 0)
+	abortTxn(t, sqlDB, 0)
 
 	if err = tx.Commit(); err == nil {
 		t.Fatal("expected commit to fail")
@@ -456,13 +524,11 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if rows, err = sqlDB.Query("SELECT * FROM t.test"); err != nil {
 		t.Fatal(err)
 	}
-	for rows.Next() {
+	if rows.Next() {
 		var k int
 		var v string
 		_ = rows.Scan(&k, &v)
-		if k != 0 || v != "Boris the Soviet Transaction Hammer" {
-			t.Fatalf("found unexpected row: %d %s", k, v)
-		}
+		t.Fatalf("found unexpected row: %d %s", k, v)
 	}
 	rows.Close()
 }
@@ -477,8 +543,7 @@ func TestRestartStatement(t *testing.T) {
 
 	// RESTART without a transaction
 	_, err := sqlDB.Exec("RESTART TRANSACTION")
-	if err == nil || !strings.Contains(err.Error(),
-		"the transaction is not in a retriable state") {
+	if !testutils.IsError(err, "the transaction is not in a retriable state") {
 		t.Fatal("expected to fail here. err: ", err)
 	}
 
@@ -494,7 +559,7 @@ func TestRestartStatement(t *testing.T) {
 		t.Fatalf("expected to fail here. err: %s", err)
 	}
 	_, err = tx.Exec("RESTART TRANSACTION")
-	if err == nil || !strings.Contains(err.Error(),
+	if !testutils.IsError(err,
 		"RETRY INTENT has not been used or a non-retriable error was encountered") {
 		t.Fatal("expected to fail here. err: ", err)
 	}
