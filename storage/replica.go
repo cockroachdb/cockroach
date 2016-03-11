@@ -21,6 +21,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -1995,19 +1996,19 @@ func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, 
 	return nil
 }
 
-var errSystemConfigIntent = roachpb.NewErrorf("must retry later due to intent on SystemConfigSpan")
+var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
 
 // loadSystemConfigSpan scans the entire SystemConfig span and returns the full
 // list of key/value pairs along with the sha1 checksum of the contents (key
 // and value).
-func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, *roachpb.Error) {
+func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	br, intents, pErr := r.executeBatch(r.store.Engine(), nil, ba)
 	if pErr != nil {
-		return nil, nil, pErr
+		return nil, nil, pErr.GoError()
 	}
 	if len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
@@ -2017,7 +2018,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, *roachpb.E
 		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	return kvs, config.SystemConfig{Values: kvs}.Hash(), pErr
+	return kvs, config.SystemConfig{Values: kvs}.Hash(), nil
 }
 
 // maybeAddToSplitQueue checks whether the current size of the range
