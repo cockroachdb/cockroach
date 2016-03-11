@@ -378,26 +378,38 @@ func Example_logging() {
 	c := newCLITest()
 	defer c.stop()
 
-	c.Run("debug kv --alsologtostderr=false scan")
-	c.Run("debug kv --log-backtrace-at=foo.go:1 scan")
-	c.Run("debug kv --log-dir='' scan")
-	c.Run("debug kv --logtostderr=true scan")
-	c.Run("debug kv --verbosity=0 scan")
-	c.Run("debug kv --vmodule=foo=1 scan")
+	c.RunWithArgs([]string{"sql", "--alsologtostderr=false", "-e", "select 1"})
+	c.RunWithArgs([]string{"sql", "--log-backtrace-at=foo.go:1", "-e", "select 1"})
+	c.RunWithArgs([]string{"sql", "--log-dir=", "-e", "select 1"})
+	c.RunWithArgs([]string{"sql", "--logtostderr=true", "-e", "select 1"})
+	c.RunWithArgs([]string{"sql", "--verbosity=0", "-e", "select 1"})
+	c.RunWithArgs([]string{"sql", "--vmodule=foo=1", "-e", "select 1"})
 
 	// Output:
-	// debug kv --alsologtostderr=false scan
-	// 0 result(s)
-	// debug kv --log-backtrace-at=foo.go:1 scan
-	// 0 result(s)
-	// debug kv --log-dir='' scan
-	// 0 result(s)
-	// debug kv --logtostderr=true scan
-	// 0 result(s)
-	// debug kv --verbosity=0 scan
-	// 0 result(s)
-	// debug kv --vmodule=foo=1 scan
-	// 0 result(s)
+	// sql --alsologtostderr=false -e select 1
+	// 1 row
+	// 1
+	// 1
+	// sql --log-backtrace-at=foo.go:1 -e select 1
+	// 1 row
+	// 1
+	// 1
+	// sql --log-dir= -e select 1
+	// 1 row
+	// 1
+	// 1
+	// sql --logtostderr=true -e select 1
+	// 1 row
+	// 1
+	// 1
+	// sql --verbosity=0 -e select 1
+	// 1 row
+	// 1
+	// 1
+	// sql --vmodule=foo=1 -e select 1
+	// 1 row
+	// 1
+	// 1
 }
 
 func Example_cput() {
