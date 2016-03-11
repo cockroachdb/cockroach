@@ -88,7 +88,7 @@ func NewNetwork(nodeCount int) *Network {
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode() (*Node, error) {
 	server := rpc.NewServer(n.rpcContext)
-	testAddr := util.CreateTestAddr("tcp")
+	testAddr := util.CreateTestAddr()
 	ln, err := util.ListenAndServeGRPC(n.Stopper, server, testAddr)
 	if err != nil {
 		return nil, err

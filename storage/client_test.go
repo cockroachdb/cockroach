@@ -548,7 +548,7 @@ func (m *multiTestContext) addStore() {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
 	}
 	ln, err := util.ListenAndServeGRPC(m.transportStopper,
-		m.grpcServers[idx], util.CreateTestAddr("tcp"))
+		m.grpcServers[idx], util.CreateTestAddr())
 	if err != nil {
 		m.t.Fatal(err)
 	}

@@ -22,9 +22,8 @@ import (
 	"time"
 )
 
-// verifyAddr starts a server listener at the specified addr and
-// then dials a client to verify a connection is established.
-func verifyAddr(addr net.Addr, t *testing.T) {
+func TestCreateTestAddr(t *testing.T) {
+	addr := CreateTestAddr()
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		t.Error(err)
@@ -53,11 +52,6 @@ func verifyAddr(addr net.Addr, t *testing.T) {
 		t.Error("timeout waiting for client connection after 500ms")
 	}
 	conn.Close()
-}
-
-func TestCreateTestAddr(t *testing.T) {
-	verifyAddr(CreateTestAddr("unix"), t)
-	verifyAddr(CreateTestAddr("tcp"), t)
 }
 
 func TestSucceedsSoon(t *testing.T) {

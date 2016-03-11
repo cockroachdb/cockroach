@@ -181,7 +181,7 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 	}
-	_, _, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, util.CreateTestAddr("tcp"), t)
+	_, _, node, stopper := createAndStartTestNode(util.CreateTestAddr(), engines, util.CreateTestAddr(), t)
 	defer stopper.Stop()
 
 	// Non-initialized stores (in this case the new in-memory-based
@@ -219,13 +219,13 @@ func TestNodeJoin(t *testing.T) {
 
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
-	addr1 := util.CreateTestAddr("tcp")
+	addr1 := util.CreateTestAddr()
 	_, server1Addr, node1, stopper1 := createAndStartTestNode(addr1, engines1, addr1, t)
 	defer stopper1.Stop()
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
-	addr2 := util.CreateTestAddr("tcp")
+	addr2 := util.CreateTestAddr()
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(addr2, engines2, server1Addr, t)
 	defer stopper2.Stop()
 
@@ -267,7 +267,7 @@ func TestNodeJoinSelf(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
-	addr := util.CreateTestAddr("tcp")
+	addr := util.CreateTestAddr()
 	_, addr, _, node, stopper := createTestNode(addr, engines, addr, t)
 	defer stopper.Stop()
 	err := node.start(addr, engines, roachpb.Attributes{})
@@ -298,7 +298,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	_, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	_, serverAddr, _, node, stopper := createTestNode(util.CreateTestAddr(), engines, nil, t)
 	stopper.Stop()
 	if err := node.start(serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)

@@ -40,7 +40,7 @@ import (
 func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T) *Gossip {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	addr := util.CreateTestAddr("tcp")
+	addr := util.CreateTestAddr()
 	server := rpc.NewServer(rpcContext)
 	ln, err := util.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
@@ -100,7 +100,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	stopper = stop.NewStopper()
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	laddr := util.CreateTestAddr("tcp")
+	laddr := util.CreateTestAddr()
 	lserver := rpc.NewServer(lRPCContext)
 	lln, err := util.ListenAndServeGRPC(stopper, lserver, laddr)
 	if err != nil {
@@ -111,7 +111,7 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-	raddr := util.CreateTestAddr("tcp")
+	raddr := util.CreateTestAddr()
 	rserver := rpc.NewServer(rRPCContext)
 	rln, err := util.ListenAndServeGRPC(stopper, rserver, raddr)
 	if err != nil {
@@ -309,7 +309,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		RPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
-		addr := util.CreateTestAddr("tcp")
+		addr := util.CreateTestAddr()
 		server := rpc.NewServer(RPCContext)
 		ln, err := util.ListenAndServeGRPC(stopper, server, addr)
 		if err != nil {
