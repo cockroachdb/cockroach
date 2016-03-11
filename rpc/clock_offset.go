@@ -277,10 +277,10 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 // prevent us from running through the list an extra time under a lock).
 //
 // A RemoteOffset r is represented by this interval:
-// [r.Offset - r.Error - MaxOffset, r.Offset + r.Error + MaxOffset],
+// [r.Offset - r.Uncertainty - MaxOffset, r.Offset + r.Uncertainty + MaxOffset],
 // where MaxOffset is the furthest a node's clock can deviate from the cluster
 // time. While the offset between this node and the remote time is actually
-// within [r.Offset - r.Error, r.Offset + r.Error], we also must expand the
+// within [r.Offset - r.Uncertainty, r.Offset + r.Uncertainty], we also must expand the
 // interval by MaxOffset. This accounts for the fact that the remote clock is at
 // most MaxOffset distance from the cluster time. Thus the expanded interval
 // ought to contain this node's offset from the true cluster time, not just the
