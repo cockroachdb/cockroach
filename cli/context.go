@@ -16,17 +16,34 @@
 
 package cli
 
-import "github.com/cockroachdb/cockroach/server"
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/server"
+)
+
+type stringSliceValue []string
+
+func (s *stringSliceValue) String() string {
+	return strings.Join(*s, ";")
+}
+
+func (s *stringSliceValue) Type() string {
+	return "stringSliceValue"
+}
+
+func (s *stringSliceValue) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
 
 // Context contains global settings for the command-line client.
 type Context struct {
 	// Embed the server context.
 	server.Context
 
-	// OneShotSQL indicates the SQL client should run the command-line
-	// statement(s) and terminate directly, without presenting a REPL to
-	// the user.
-	OneShotSQL bool
+	// execStmts is a list of statements to execute.
+	execStmts stringSliceValue
 }
 
 // NewContext returns a Context with default values.
@@ -39,5 +56,4 @@ func NewContext() *Context {
 // InitDefaults sets up the default values for a Context.
 func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
-	ctx.OneShotSQL = false
 }

@@ -151,6 +151,8 @@ func (c cliTest) RunWithCapture(line string) (out string, err error) {
 }
 
 func (c cliTest) RunWithArgs(a []string) {
+	cliContext.execStmts = nil
+
 	var args []string
 	args = append(args, a[0])
 	h, err := c.ServingHost()
@@ -535,24 +537,24 @@ func Example_sql() {
 	defer c.stop()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-	c.RunWithArgs([]string{"sql", "-e", "select 3", "select * from t.f"})
-	c.RunWithArgs([]string{"sql", "-e", "begin", "select 3", "commit"})
+	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
+	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
-	c.RunWithArgs([]string{"sql", "-e", "show databases"})
+	c.RunWithArgs([]string{"sql", "--execute=show databases"})
 	c.RunWithArgs([]string{"sql", "-e", "explain select 3"})
 	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2"})
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
-	// sql -e select 3 select * from t.f
+	// sql -e select 3 -e select * from t.f
 	// 1 row
 	// 3
 	// 3
 	// 1 row
 	// x	y
 	// 42	69
-	// sql -e begin select 3 commit
+	// sql -e begin -e select 3 -e commit
 	// BEGIN
 	// 1 row
 	// 3
@@ -562,7 +564,7 @@ func Example_sql() {
 	// 1 row
 	// x	y
 	// 42	69
-	// sql -e show databases
+	// sql --execute=show databases
 	// 2 rows
 	// Database
 	// system
