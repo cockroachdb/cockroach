@@ -250,8 +250,9 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, cmp, err := typeCheckComparisonOp(args, expr.Operator, leftType, rightType)
+	d, cmp, mixed, err := typeCheckComparisonOp(args, expr.Operator, leftType, rightType)
 	expr.fn = cmp
+	expr.MixedType = mixed
 	return d, err
 }
 
@@ -422,10 +423,10 @@ func (expr *RangeCond) TypeCheck(args MapArgs) (Datum, error) {
 		return nil, err
 	}
 
-	if _, _, err := typeCheckComparisonOp(args, GT, leftType, fromType); err != nil {
+	if _, _, _, err := typeCheckComparisonOp(args, GT, leftType, fromType); err != nil {
 		return nil, err
 	}
-	if _, _, err := typeCheckComparisonOp(args, LT, leftType, toType); err != nil {
+	if _, _, _, err := typeCheckComparisonOp(args, LT, leftType, toType); err != nil {
 		return nil, err
 	}
 
@@ -596,13 +597,13 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 	return DummyBool, nil
 }
 
-func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
+func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, bool, error) {
 	if set, err := args.SetInferredType(dummyLeft, dummyRight); err != nil {
-		return nil, cmpOp{}, err
+		return nil, cmpOp{}, false, err
 	} else if set != nil {
 		dummyLeft = set
 	} else if set, err := args.SetInferredType(dummyRight, dummyLeft); err != nil {
-		return nil, cmpOp{}, err
+		return nil, cmpOp{}, false, err
 	} else if set != nil {
 		dummyRight = set
 	}
@@ -613,9 +614,9 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
 			// dummyLeft.TypeEquals(DummyBool). We currently can't distinguish NULL from
 			// UNKNOWN. Is it important to do so?
-			return DummyBool, cmpOp{}, nil
+			return DummyBool, cmpOp{}, false, nil
 		default:
-			return DNull, cmpOp{}, nil
+			return DNull, cmpOp{}, false, nil
 		}
 	}
 	op, dummyLeft, dummyRight, _ = foldComparisonExpr(op, dummyLeft, dummyRight)
@@ -623,50 +624,61 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 	rType := reflect.TypeOf(dummyRight)
 
 	if cmp, ok := cmpOps[cmpArgs{op, lType, rType}]; ok {
+		mixedType := lType != rType
 		if op == EQ && lType == tupleType && rType == tupleType {
-			if err := typeCheckTupleEQ(args, dummyLeft, dummyRight); err != nil {
-				return nil, cmpOp{}, err
+			mt, err := typeCheckTupleEQ(args, dummyLeft, dummyRight)
+			if err != nil {
+				return nil, cmpOp{}, false, err
 			}
+			mixedType = mt
 		} else if op == In && rType == tupleType {
-			if err := typeCheckTupleIN(args, dummyLeft, dummyRight); err != nil {
-				return nil, cmpOp{}, err
+			mt, err := typeCheckTupleIN(args, dummyLeft, dummyRight)
+			if err != nil {
+				return nil, cmpOp{}, false, err
 			}
+			mixedType = mt
 		}
 
-		return cmpOpResultType, cmp, nil
+		return cmpOpResultType, cmp, mixedType, nil
 	}
 
-	return nil, cmpOp{}, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+	return nil, cmpOp{}, false, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 		dummyLeft.Type(), op, dummyRight.Type())
 }
 
-func typeCheckTupleEQ(args MapArgs, lDummy, rDummy Datum) error {
+func typeCheckTupleEQ(args MapArgs, lDummy, rDummy Datum) (bool, error) {
 	lTuple := lDummy.(DTuple)
 	rTuple := rDummy.(DTuple)
 	if len(lTuple) != len(rTuple) {
-		return fmt.Errorf("unequal number of entries in tuple expressions: %d, %d", len(lTuple), len(rTuple))
+		return false, fmt.Errorf("unequal number of entries in tuple expressions: %d, %d", len(lTuple), len(rTuple))
 	}
 
+	mixedType := false
 	for i := range lTuple {
-		if _, _, err := typeCheckComparisonOp(args, EQ, lTuple[i], rTuple[i]); err != nil {
-			return err
+		_, _, mt, err := typeCheckComparisonOp(args, EQ, lTuple[i], rTuple[i])
+		if err != nil {
+			return false, err
 		}
+		mixedType = mixedType || mt
 	}
 
-	return nil
+	return mixedType, nil
 }
 
-func typeCheckTupleIN(args MapArgs, arg, values Datum) error {
+func typeCheckTupleIN(args MapArgs, arg, values Datum) (bool, error) {
 	if arg == DNull {
-		return nil
+		return false, nil
 	}
 
+	mixedType := false
 	vtuple := values.(DTuple)
 	for _, val := range vtuple {
-		if _, _, err := typeCheckComparisonOp(args, EQ, arg, val); err != nil {
-			return err
+		_, _, mt, err := typeCheckComparisonOp(args, EQ, arg, val)
+		if err != nil {
+			return false, err
 		}
+		mixedType = mixedType || mt
 	}
 
-	return nil
+	return mixedType, nil
 }

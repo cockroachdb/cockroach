@@ -218,3 +218,42 @@ query ITT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 0 empty -
+
+# Make sure that mixed type comparison operations are not used
+# for selecting indexes.
+
+query I
+SELECT a FROM t WHERE a < 4.0
+----
+1
+3
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE a > 1
+----
+0 scan t@primary /2-
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE a < 1
+----
+0 scan t@primary /#-/1
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE a > 1.0
+----
+0 scan t@ab -
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE a < 1.0
+----
+0 scan t@ab -
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE a > 1.0 AND b < 5
+----
+0 scan t@ab -
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE a > 1 AND b < 5
+----
+0 scan t@primary /2-

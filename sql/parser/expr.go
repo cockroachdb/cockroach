@@ -141,6 +141,7 @@ func (i ComparisonOp) String() string {
 type ComparisonExpr struct {
 	Operator    ComparisonOp
 	Left, Right Expr
+	MixedType   bool
 	fn          cmpOp
 }
 

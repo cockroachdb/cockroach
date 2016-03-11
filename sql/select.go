@@ -1088,9 +1088,10 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 						continue
 					}
 					*startExpr = &parser.ComparisonExpr{
-						Operator: parser.IsNot,
-						Left:     c.Left,
-						Right:    parser.DNull,
+						Operator:  parser.IsNot,
+						Left:      c.Left,
+						Right:     parser.DNull,
+						MixedType: c.MixedType,
 					}
 				case parser.In:
 					// Only allow the IN constraint if the previous constraints are all
@@ -1124,15 +1125,17 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					}
 					if c.Right.(parser.Datum).IsMax() {
 						*startExpr = &parser.ComparisonExpr{
-							Operator: parser.EQ,
-							Left:     c.Left,
-							Right:    c.Right,
+							Operator:  parser.EQ,
+							Left:      c.Left,
+							Right:     c.Right,
+							MixedType: c.MixedType,
 						}
 					} else if c.Right.(parser.Datum).HasNext() {
 						*startExpr = &parser.ComparisonExpr{
-							Operator: parser.GE,
-							Left:     c.Left,
-							Right:    c.Right.(parser.Datum).Next(),
+							Operator:  parser.GE,
+							Left:      c.Left,
+							Right:     c.Right.(parser.Datum).Next(),
+							MixedType: c.MixedType,
 						}
 					} else {
 						*startExpr = c
@@ -1144,15 +1147,17 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					// Transform "<" into "<=".
 					if c.Right.(parser.Datum).IsMin() {
 						*endExpr = &parser.ComparisonExpr{
-							Operator: parser.EQ,
-							Left:     c.Left,
-							Right:    c.Right,
+							Operator:  parser.EQ,
+							Left:      c.Left,
+							Right:     c.Right,
+							MixedType: c.MixedType,
 						}
 					} else if c.Right.(parser.Datum).HasPrev() {
 						*endExpr = &parser.ComparisonExpr{
-							Operator: parser.LE,
-							Left:     c.Left,
-							Right:    c.Right.(parser.Datum).Prev(),
+							Operator:  parser.LE,
+							Left:      c.Left,
+							Right:     c.Right.(parser.Datum).Prev(),
+							MixedType: c.MixedType,
 						}
 					} else {
 						*endExpr = c
@@ -1171,6 +1176,16 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					}
 				}
 			}
+		}
+
+		// If the constraint includes a mixed-type comparison expression,
+		// we can not include it in the index constraints because the index
+		// encoding would be incorrect. See #4313.
+		if *startExpr != nil && (*startExpr).MixedType {
+			*startExpr = nil
+		}
+		if *endExpr != nil && (*endExpr).MixedType {
+			*endExpr = nil
 		}
 
 		if *endExpr != nil && (*endExpr).Operator == parser.LT {
