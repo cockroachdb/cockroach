@@ -24,10 +24,11 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/dustin/go-humanize"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
-
-	"github.com/dustin/go-humanize"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var minimumStoreSize = 10 * int64(config.DefaultZoneConfig().RangeMaxBytes)
@@ -52,7 +53,7 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
 	if ss.SizeInBytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanize.IBytes(uint64(ss.SizeInBytes)))
+		fmt.Fprintf(&buffer, "size=%s,", util.IBytes(ss.SizeInBytes))
 	}
 	if ss.SizePercent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
@@ -157,16 +158,14 @@ func newStoreSpec(value string) (StoreSpec, error) {
 					return StoreSpec{}, fmt.Errorf("store size (%s) must be between 1%% and 100%%", value)
 				}
 			} else {
-				// Value is a specific size in bytes. The backwards ordering
-				// is due to the linter complaining.
-				if sib, err := humanize.ParseBytes(value); err == nil {
-					ss.SizeInBytes = int64(sib)
-				} else {
+				var err error
+				ss.SizeInBytes, err = util.ParseBytes(value)
+				if err != nil {
 					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
 				}
 				if ss.SizeInBytes < minimumStoreSize {
 					return StoreSpec{}, fmt.Errorf("store size (%s) must be larger than %s", value,
-						humanize.IBytes(uint64(minimumStoreSize)))
+						util.IBytes(minimumStoreSize))
 				}
 			}
 		case "attrs":
