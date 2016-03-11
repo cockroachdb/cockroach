@@ -1494,7 +1494,7 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 					p()
 				} else {
 					// TODO(.*): see #5051.
-					log.Errorf("checksums: e = %v, v = %v", args.Checksum, c.checksum)
+					log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
 				}
 			}
 		} else {
