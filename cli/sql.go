@@ -258,7 +258,7 @@ func runStatements(conn *sqlConn, stmts []string) error {
 }
 
 func runTerm(cmd *cobra.Command, args []string) error {
-	if !(cliContext.OneShotSQL || len(args) == 0) {
+	if len(args) > 0 {
 		mustUsage(cmd)
 		return errMissingParams
 	}
@@ -266,9 +266,9 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	conn := makeSQLClient()
 	defer conn.Close()
 
-	if cliContext.OneShotSQL {
+	if len(cliContext.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, args)
+		return runStatements(conn, cliContext.execStmts)
 	}
 	return runInteractive(conn)
 }
