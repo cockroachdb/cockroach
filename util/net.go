@@ -18,6 +18,7 @@ package util
 
 import (
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -161,10 +162,11 @@ func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, 
 	}
 }
 
-// IsClosedConnection returns true if err is cmux.ErrListenerClosed, or the net
-// package's errClosed.
+// IsClosedConnection returns true if err is cmux.ErrListenerClosed, io.EOF, or
+// the net package's errClosed.
 func IsClosedConnection(err error) bool {
-	return err == cmux.ErrListenerClosed || strings.Contains(err.Error(), "use of closed network connection")
+	return err == cmux.ErrListenerClosed || err == io.EOF ||
+		strings.Contains(err.Error(), "use of closed network connection")
 }
 
 // FatalIfUnexpected calls Log.Fatal(err) unless err is nil,
