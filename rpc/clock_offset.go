@@ -175,7 +175,7 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 					log.Fatalf("clock offset from the cluster time "+
 						"for remote clocks: %v is in interval: %s, which "+
 						"indicates that the true offset is greater than %s",
-						r.offsets, offsetInterval, time.Duration(r.lClock.MaxOffset()))
+						r.offsets, offsetInterval, r.lClock.MaxOffset())
 				}
 				if log.V(1) {
 					log.Infof("healthy cluster offset: %s", offsetInterval)
