@@ -161,6 +161,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 
 	ctx := storage.StoreContext{}
 	ctx.ScanInterval = 10 * time.Minute
+	ctx.ConsistencyCheckInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	ctx.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
