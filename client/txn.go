@@ -450,8 +450,8 @@ type TxnExecOptions struct {
 // that a ROLLBACK will reset the state. Neither opt.AutoRetry not opt.AutoCommit
 // can be set in this case.
 //
-// When this method returns, txn might be in any state; it might need to be
-// cleaned up, depending on the error returned. In case of
+// When this method returns, txn might be in any state; Exec does not attempt
+// to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
 func (txn *Txn) Exec(

@@ -556,7 +556,7 @@ func (e *SqlTransactionCommittedError) Error() string {
 }
 
 // message returns an error message.
-func (e *SqlTransactionCommittedError) message(_ *Error) string {
+func (*SqlTransactionCommittedError) message(_ *Error) string {
 	return "current transaction is committed, commands ignored until end of transaction block"
 }
 
@@ -569,11 +569,11 @@ func (e *SqlTransactionAbortedError) Error() string {
 
 // message returns an error message.
 func (e *SqlTransactionAbortedError) message(_ *Error) string {
+	msg := "current transaction is aborted, commands ignored until end of transaction block"
 	if e.CustomMsg != "" {
-		return "current transaction is aborted, commands ignored until " +
-			"end of transaction block; " + e.CustomMsg
+		msg += "; " + e.CustomMsg
 	}
-	return "current transaction is aborted, commands ignored until end of transaction block"
+	return msg
 }
 
 var _ ErrorDetailInterface = &SqlTransactionAbortedError{}
