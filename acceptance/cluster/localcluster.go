@@ -241,6 +241,14 @@ func (l *LocalCluster) panicOnStop() {
 func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
+	nets, err := l.client.NetworkList(types.NetworkListOptions{})
+	maybePanic(err)
+	for _, net := range nets {
+		if net.Name == "cockroachdb_acceptance" {
+			maybePanic(l.client.NetworkRemove(net.ID))
+		}
+	}
+
 	resp, err := l.client.NetworkCreate(types.NetworkCreate{
 		Name:   "cockroachdb_acceptance",
 		Driver: "bridge",
