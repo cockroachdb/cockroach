@@ -100,6 +100,8 @@ class ScanResponse;
 class TruncateLogRequest;
 class TruncateLogResponse;
 class VerifyChecksumRequest;
+class VerifyChecksumRequest_Debug;
+class VerifyChecksumRequest_Debug_KeyValue;
 class VerifyChecksumResponse;
 
 enum ReadConsistencyType {
@@ -5198,6 +5200,209 @@ class ComputeChecksumResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class VerifyChecksumRequest_Debug_KeyValue : public ::google::protobuf::Message {
+ public:
+  VerifyChecksumRequest_Debug_KeyValue();
+  virtual ~VerifyChecksumRequest_Debug_KeyValue();
+
+  VerifyChecksumRequest_Debug_KeyValue(const VerifyChecksumRequest_Debug_KeyValue& from);
+
+  inline VerifyChecksumRequest_Debug_KeyValue& operator=(const VerifyChecksumRequest_Debug_KeyValue& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const VerifyChecksumRequest_Debug_KeyValue& default_instance();
+
+  void Swap(VerifyChecksumRequest_Debug_KeyValue* other);
+
+  // implements Message ----------------------------------------------
+
+  inline VerifyChecksumRequest_Debug_KeyValue* New() const { return New(NULL); }
+
+  VerifyChecksumRequest_Debug_KeyValue* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const VerifyChecksumRequest_Debug_KeyValue& from);
+  void MergeFrom(const VerifyChecksumRequest_Debug_KeyValue& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(VerifyChecksumRequest_Debug_KeyValue* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes key = 1;
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // optional bytes value = 2;
+  bool has_value() const;
+  void clear_value();
+  static const int kValueFieldNumber = 2;
+  const ::std::string& value() const;
+  void set_value(const ::std::string& value);
+  void set_value(const char* value);
+  void set_value(const void* value, size_t size);
+  ::std::string* mutable_value();
+  ::std::string* release_value();
+  void set_allocated_value(::std::string* value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue)
+ private:
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_value();
+  inline void clear_has_value();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr value_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static VerifyChecksumRequest_Debug_KeyValue* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class VerifyChecksumRequest_Debug : public ::google::protobuf::Message {
+ public:
+  VerifyChecksumRequest_Debug();
+  virtual ~VerifyChecksumRequest_Debug();
+
+  VerifyChecksumRequest_Debug(const VerifyChecksumRequest_Debug& from);
+
+  inline VerifyChecksumRequest_Debug& operator=(const VerifyChecksumRequest_Debug& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const VerifyChecksumRequest_Debug& default_instance();
+
+  void Swap(VerifyChecksumRequest_Debug* other);
+
+  // implements Message ----------------------------------------------
+
+  inline VerifyChecksumRequest_Debug* New() const { return New(NULL); }
+
+  VerifyChecksumRequest_Debug* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const VerifyChecksumRequest_Debug& from);
+  void MergeFrom(const VerifyChecksumRequest_Debug& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(VerifyChecksumRequest_Debug* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  typedef VerifyChecksumRequest_Debug_KeyValue KeyValue;
+
+  // accessors -------------------------------------------------------
+
+  // repeated .cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue entries = 1;
+  int entries_size() const;
+  void clear_entries();
+  static const int kEntriesFieldNumber = 1;
+  const ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue& entries(int index) const;
+  ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue* mutable_entries(int index);
+  ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue* add_entries();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue >*
+      mutable_entries();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue >&
+      entries() const;
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.VerifyChecksumRequest.Debug)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue > entries_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
+
+  void InitAsDefaultInstance();
+  static VerifyChecksumRequest_Debug* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class VerifyChecksumRequest : public ::google::protobuf::Message {
  public:
   VerifyChecksumRequest();
@@ -5260,6 +5465,8 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
+  typedef VerifyChecksumRequest_Debug Debug;
+
   // accessors -------------------------------------------------------
 
   // optional .cockroach.roachpb.Span header = 1;
@@ -5302,6 +5509,15 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   ::std::string* release_checksum();
   void set_allocated_checksum(::std::string* checksum);
 
+  // optional .cockroach.roachpb.VerifyChecksumRequest.Debug debug = 5;
+  bool has_debug() const;
+  void clear_debug();
+  static const int kDebugFieldNumber = 5;
+  const ::cockroach::roachpb::VerifyChecksumRequest_Debug& debug() const;
+  ::cockroach::roachpb::VerifyChecksumRequest_Debug* mutable_debug();
+  ::cockroach::roachpb::VerifyChecksumRequest_Debug* release_debug();
+  void set_allocated_debug(::cockroach::roachpb::VerifyChecksumRequest_Debug* debug);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.VerifyChecksumRequest)
  private:
   inline void set_has_header();
@@ -5312,6 +5528,8 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   inline void clear_has_checksum_id();
   inline void set_has_checksum();
   inline void clear_has_checksum();
+  inline void set_has_debug();
+  inline void clear_has_debug();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -5319,6 +5537,7 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* header_;
   ::google::protobuf::internal::ArenaStringPtr checksum_id_;
   ::google::protobuf::internal::ArenaStringPtr checksum_;
+  ::cockroach::roachpb::VerifyChecksumRequest_Debug* debug_;
   ::google::protobuf::uint32 version_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -10531,6 +10750,150 @@ inline void ComputeChecksumResponse::set_allocated_header(::cockroach::roachpb::
 
 // -------------------------------------------------------------------
 
+// VerifyChecksumRequest_Debug_KeyValue
+
+// optional bytes key = 1;
+inline bool VerifyChecksumRequest_Debug_KeyValue::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+inline const ::std::string& VerifyChecksumRequest_Debug_KeyValue::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.key)
+  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.key)
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_key(const char* value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.key)
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.key)
+}
+inline ::std::string* VerifyChecksumRequest_Debug_KeyValue::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* VerifyChecksumRequest_Debug_KeyValue::release_key() {
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.key)
+}
+
+// optional bytes value = 2;
+inline bool VerifyChecksumRequest_Debug_KeyValue::has_value() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_has_value() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::clear_has_value() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::clear_value() {
+  value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_value();
+}
+inline const ::std::string& VerifyChecksumRequest_Debug_KeyValue::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.value)
+  return value_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_value(const ::std::string& value) {
+  set_has_value();
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.value)
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_value(const char* value) {
+  set_has_value();
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.value)
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_value(const void* value, size_t size) {
+  set_has_value();
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.value)
+}
+inline ::std::string* VerifyChecksumRequest_Debug_KeyValue::mutable_value() {
+  set_has_value();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.value)
+  return value_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* VerifyChecksumRequest_Debug_KeyValue::release_value() {
+  clear_has_value();
+  return value_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VerifyChecksumRequest_Debug_KeyValue::set_allocated_value(::std::string* value) {
+  if (value != NULL) {
+    set_has_value();
+  } else {
+    clear_has_value();
+  }
+  value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue.value)
+}
+
+// -------------------------------------------------------------------
+
+// VerifyChecksumRequest_Debug
+
+// repeated .cockroach.roachpb.VerifyChecksumRequest.Debug.KeyValue entries = 1;
+inline int VerifyChecksumRequest_Debug::entries_size() const {
+  return entries_.size();
+}
+inline void VerifyChecksumRequest_Debug::clear_entries() {
+  entries_.Clear();
+}
+inline const ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue& VerifyChecksumRequest_Debug::entries(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.Debug.entries)
+  return entries_.Get(index);
+}
+inline ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue* VerifyChecksumRequest_Debug::mutable_entries(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.Debug.entries)
+  return entries_.Mutable(index);
+}
+inline ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue* VerifyChecksumRequest_Debug::add_entries() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.VerifyChecksumRequest.Debug.entries)
+  return entries_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue >*
+VerifyChecksumRequest_Debug::mutable_entries() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.VerifyChecksumRequest.Debug.entries)
+  return &entries_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::VerifyChecksumRequest_Debug_KeyValue >&
+VerifyChecksumRequest_Debug::entries() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.VerifyChecksumRequest.Debug.entries)
+  return entries_;
+}
+
+// -------------------------------------------------------------------
+
 // VerifyChecksumRequest
 
 // optional .cockroach.roachpb.Span header = 1;
@@ -10704,6 +11067,49 @@ inline void VerifyChecksumRequest::set_allocated_checksum(::std::string* checksu
   }
   checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+
+// optional .cockroach.roachpb.VerifyChecksumRequest.Debug debug = 5;
+inline bool VerifyChecksumRequest::has_debug() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void VerifyChecksumRequest::set_has_debug() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void VerifyChecksumRequest::clear_has_debug() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void VerifyChecksumRequest::clear_debug() {
+  if (debug_ != NULL) debug_->::cockroach::roachpb::VerifyChecksumRequest_Debug::Clear();
+  clear_has_debug();
+}
+inline const ::cockroach::roachpb::VerifyChecksumRequest_Debug& VerifyChecksumRequest::debug() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.debug)
+  return debug_ != NULL ? *debug_ : *default_instance_->debug_;
+}
+inline ::cockroach::roachpb::VerifyChecksumRequest_Debug* VerifyChecksumRequest::mutable_debug() {
+  set_has_debug();
+  if (debug_ == NULL) {
+    debug_ = new ::cockroach::roachpb::VerifyChecksumRequest_Debug;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.debug)
+  return debug_;
+}
+inline ::cockroach::roachpb::VerifyChecksumRequest_Debug* VerifyChecksumRequest::release_debug() {
+  clear_has_debug();
+  ::cockroach::roachpb::VerifyChecksumRequest_Debug* temp = debug_;
+  debug_ = NULL;
+  return temp;
+}
+inline void VerifyChecksumRequest::set_allocated_debug(::cockroach::roachpb::VerifyChecksumRequest_Debug* debug) {
+  delete debug_;
+  debug_ = debug;
+  if (debug) {
+    set_has_debug();
+  } else {
+    clear_has_debug();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.debug)
 }
 
 // -------------------------------------------------------------------
@@ -13569,6 +13975,10 @@ BatchResponse::responses() const {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -553,6 +553,16 @@ message VerifyChecksumRequest {
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional bytes checksum = 4;
+  // A Debug message can be added to a VerifyChecksumRequest
+  // while in debug mode.
+  message Debug {
+    message KeyValue {
+      optional bytes key = 1;
+      optional bytes value = 2;
+    }
+    repeated KeyValue entries = 1 [(gogoproto.nullable) = false];
+  }
+  optional Debug debug = 5;
 }
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
