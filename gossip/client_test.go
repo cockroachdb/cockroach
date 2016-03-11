@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -138,26 +139,34 @@ func TestClientGossip(t *testing.T) {
 		}
 	}()
 
-	if err := local.AddInfo("local-key", nil, time.Second); err != nil {
+	if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if err := remote.AddInfo("remote-key", nil, time.Second); err != nil {
+	if err := remote.AddInfo("remote-key", nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
-	client.start(local, disconnected, rpcContext, stopper)
+	disconnected <- client
 
-	util.SucceedsSoon(t, func() error {
+	for ; true; time.Sleep(10 * time.Millisecond) {
+		select {
+		case <-disconnected:
+			// If the client wasn't able to connect, restart it.
+			client.start(local, disconnected, rpcContext, stopper)
+		default:
+		}
 		if _, err := remote.GetInfo("local-key"); err != nil {
-			return err
+			log.Info(err)
+			continue
 		}
 		if _, err := local.GetInfo("remote-key"); err != nil {
-			return err
+			log.Info(err)
+			continue
 		}
-		return nil
-	})
+		break
+	}
 }
 
 // TestClientNodeID verifies a client's gossip request with correct NodeID.
