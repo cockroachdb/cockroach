@@ -108,9 +108,11 @@ func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
 	if rs.IntentCount == 0 {
 		return 0
 	}
+	// Make a copy so that rs is not updated.
+	cp := rs.MVCCStats
 	// Advance age by any elapsed time since last computed.
-	rs.AgeTo(nowNanos)
-	return float64(rs.IntentAge) / float64(rs.IntentCount)
+	cp.AgeTo(nowNanos)
+	return float64(cp.IntentAge) / float64(cp.IntentCount)
 }
 
 // GetGCBytesAge returns the total age of outstanding gc'able
@@ -120,8 +122,10 @@ func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
 func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 	rs.Lock()
 	defer rs.Unlock()
-	rs.AgeTo(nowNanos)
-	return rs.GCBytesAge
+	// Make a copy so that rs is not updated.
+	cp := rs.MVCCStats
+	cp.AgeTo(nowNanos)
+	return cp.GCBytesAge
 }
 
 // ComputeStatsForRange computes the stats for a given range by
