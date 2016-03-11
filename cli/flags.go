@@ -65,6 +65,9 @@ Database server host to connect to.`),
 	"client_port": wrapText(`
 Database server port to connect to.`),
 
+	"client_http_port": wrapText(`
+Database server port to connect to for HTTP requests.`),
+
 	"database": wrapText(`
 The name of the database to connect to.`),
 
@@ -109,8 +112,8 @@ provide the password on standard input.`),
 	"server_port": wrapText(`
 The port to bind to.`),
 
-	"http_port": wrapText(`
-The host:port to bind for HTTP requests.`),
+	"server_http_port": wrapText(`
+The port to bind to for HTTP requests.`),
 
 	"ca-cert": wrapText(`
 Path to the CA certificate. Needed by clients and servers in secure mode.`),
@@ -268,7 +271,7 @@ func initFlags(ctx *Context) {
 		// Server flags.
 		f.StringVar(&connHost, "host", "", usage("server_host"))
 		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("http_port"))
+		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("server_http_port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
 
@@ -348,7 +351,7 @@ func initFlags(ctx *Context) {
 
 	for _, cmd := range []*cobra.Command{nodeCmd, quitCmd} {
 		f := cmd.PersistentFlags()
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("http_port"))
+		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("client_http_port"))
 	}
 
 	// Commands that establish a SQL connection.
