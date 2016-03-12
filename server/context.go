@@ -146,7 +146,7 @@ type Context struct {
 	TestingKnobs TestingKnobs
 }
 
-// TestingKnobs is a contains facilities for controlling various parts of the
+// TestingKnobs contains facilities for controlling various parts of the
 // system for testing.
 type TestingKnobs struct {
 	StoreTestingKnobs    storage.StoreTestingKnobs
