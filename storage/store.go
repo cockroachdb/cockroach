@@ -556,10 +556,15 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.gcQueue = newGCQueue(s.ctx.Gossip)
 	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.ctx.Gossip, s.ReplicaCount)
-	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+	if s.ctx.StorePool != nil {
+		s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+	}
 	s.replicaGCQueue = newReplicaGCQueue(s.db, s.ctx.Gossip)
 	s.raftLogQueue = newRaftLogQueue(s.db, s.ctx.Gossip)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicaGCQueue, s.raftLogQueue)
+	if s.replicateQueue != nil {
+		s.scanner.AddQueues(s.replicateQueue)
+	}
 
 	// Add consistency check scanner.
 	s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
@@ -605,7 +610,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		s.gcQueue.Close()
 		s.splitQueue.Close()
 		s.verifyQueue.Close()
-		s.replicateQueue.Close()
+		if s.replicateQueue != nil {
+			s.replicateQueue.Close()
+		}
 		s.replicaGCQueue.Close()
 		s.raftLogQueue.Close()
 	}))
