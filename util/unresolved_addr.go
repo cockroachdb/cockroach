@@ -21,6 +21,9 @@ import (
 	"net"
 )
 
+// TestAddr is an unused address for testing.
+var TestAddr = NewUnresolvedAddr("tcp", "127.0.0.1:0")
+
 // MakeUnresolvedAddr populates an UnresolvedAddr from a network and raw
 // address string.
 func MakeUnresolvedAddr(network, addr string) UnresolvedAddr {

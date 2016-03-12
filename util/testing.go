@@ -19,7 +19,6 @@ package util
 import (
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -55,26 +54,6 @@ func (pt panicTesterImpl) Fatal(args ...interface{}) {
 
 func (panicTesterImpl) Fatalf(format string, args ...interface{}) {
 	panic(fmt.Sprintf(format, args...))
-}
-
-// tempUnixFile creates a temporary file for use with a unix domain socket.
-// TODO(bdarnell): use TempDir instead to make this atomic.
-func tempUnixFile() string {
-	f, err := ioutil.TempFile("", "unix-socket")
-	if err != nil {
-		panic(fmt.Sprintf("unable to create temp file: %s", err))
-	}
-	f.Close()
-	if err := os.Remove(f.Name()); err != nil {
-		panic(fmt.Sprintf("unable to remove temp file: %s", err))
-	}
-	return f.Name()
-}
-
-// tempLocalhostAddr creates an address to localhost using a monotonically
-// increasing port number in the range [minLocalhostPort, ...].
-func tempLocalhostAddr() string {
-	return "127.0.0.1:0"
 }
 
 // CreateTempDir creates a temporary directory and returns its path.
@@ -131,26 +110,6 @@ func CleanupDirs(dirs []string) {
 	for _, dir := range dirs {
 		_ = os.RemoveAll(dir)
 	}
-}
-
-// CreateTestAddr creates an unused address for testing. The "network"
-// parameter should be one of "tcp" or "unix".
-func CreateTestAddr(network string) net.Addr {
-	switch network {
-	case "tcp":
-		addr, err := net.ResolveTCPAddr("tcp", tempLocalhostAddr())
-		if err != nil {
-			panic(err)
-		}
-		return addr
-	case "unix":
-		addr, err := net.ResolveUnixAddr("unix", tempUnixFile())
-		if err != nil {
-			panic(err)
-		}
-		return addr
-	}
-	panic(fmt.Sprintf("unknown network type: %s", network))
 }
 
 const defaultSucceedsSoonDuration = 15 * time.Second

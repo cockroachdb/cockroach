@@ -17,48 +17,9 @@
 package util
 
 import (
-	"net"
 	"testing"
 	"time"
 )
-
-// verifyAddr starts a server listener at the specified addr and
-// then dials a client to verify a connection is established.
-func verifyAddr(addr net.Addr, t *testing.T) {
-	ln, err := net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	acceptChan := make(chan struct{})
-	go func() {
-		_, err := ln.Accept()
-		if err != nil {
-			t.Error(err)
-		}
-		close(acceptChan)
-	}()
-
-	addr = ln.Addr()
-	conn, err := net.Dial(addr.Network(), addr.String())
-	if err != nil {
-		t.Errorf("could not connect to %s", addr)
-		return
-	}
-	select {
-	case <-acceptChan:
-		// success.
-	case <-time.After(500 * time.Millisecond):
-		t.Error("timeout waiting for client connection after 500ms")
-	}
-	conn.Close()
-}
-
-func TestCreateTestAddr(t *testing.T) {
-	verifyAddr(CreateTestAddr("unix"), t)
-	verifyAddr(CreateTestAddr("tcp"), t)
-}
 
 func TestSucceedsSoon(t *testing.T) {
 	// Try a method which always succeeds.

@@ -49,8 +49,7 @@ func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 func newTestServer(t *testing.T, ctx *rpc.Context) (*grpc.Server, net.Listener) {
 	s := rpc.NewServer(ctx)
 
-	addr := util.CreateTestAddr("tcp")
-	ln, err := util.ListenAndServeGRPC(ctx.Stopper, s, addr)
+	ln, err := util.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
