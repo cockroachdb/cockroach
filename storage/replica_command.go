@@ -43,12 +43,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// executeCmd switches over the method and multiplexes to execute the appropriate storage API
-// command. It returns the response, an error, and a slice of intents that were skipped during
-// execution.  If an error is returned, any returned intents should still be resolved.
-// remScanResults is the number of scan results remaining for this batch (MaxInt64 for no
-// limit).
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, remScanResults int64,
+func (r *Replica) executeCmd(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, remScanResults int64,
 	args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
 	ts := h.Timestamp
 
@@ -62,7 +57,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.ctx.TestingMocker.TestingCommandFilter; filter != nil {
-		err := filter(r.store.StoreID(), args, h)
+		err := filter(ctx, r.store.StoreID(), args, h)
 		if err != nil {
 			pErr := roachpb.NewErrorWithTxn(err, h.Txn)
 			log.Infof("test injecting error: %s", pErr)

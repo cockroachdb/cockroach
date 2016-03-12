@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -510,7 +512,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	ctx := server.NewTestContext()
 	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
 					return roachpb.NewReadWithinUncertaintyIntervalError(
