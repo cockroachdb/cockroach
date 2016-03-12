@@ -68,6 +68,17 @@ func readAllFiles(pattern string) {
 	}
 }
 
+func setupMVCCRocksDB(b *testing.B, loc string) (Engine, *stop.Stopper) {
+	const cacheSize = 0
+	const memtableBudget = 512 << 20 // 512 MB
+	stopper := stop.NewStopper()
+	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, 0, stopper)
+	if err := rocksdb.Open(); err != nil {
+		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
+	}
+	return rocksdb, stopper
+}
+
 // setupMVCCData writes up to numVersions values at each of numKeys
 // keys. The number of versions written for each key is chosen
 // randomly according to a uniform distribution. Each successive
@@ -82,8 +93,8 @@ func readAllFiles(pattern string) {
 // The creation of the rocksdb database is time consuming, especially
 // for larger numbers of versions. The database is persisted between
 // runs and stored in the current directory as
-// "mvcc_scan_<versions>_<keys>_<valueBytes>".
-func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB, *stop.Stopper) {
+// "mvcc_scan_<versions>_<keys>_<valueBytes>" (which is also returned).
+func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (Engine, string, *stop.Stopper) {
 	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", numVersions, numKeys, valueBytes)
 
 	exists := true
@@ -91,17 +102,11 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 		exists = false
 	}
 
-	const cacheSize = 0
-	const memtableBudget = 512 << 20 // 512 MB
-	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(roachpb.Attributes{}, loc, cacheSize, memtableBudget, 0, stopper)
-	if err := rocksdb.Open(); err != nil {
-		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
-	}
+	rocksdb, stopper := setupMVCCRocksDB(b, loc)
 
 	if exists {
 		readAllFiles(filepath.Join(loc, "*"))
-		return rocksdb, stopper
+		return rocksdb, loc, stopper
 	}
 
 	log.Infof("creating mvcc data: %s", loc)
@@ -162,7 +167,7 @@ func setupMVCCData(numVersions, numKeys, valueBytes int, b *testing.B) (*RocksDB
 		b.Fatal(err)
 	}
 
-	return rocksdb, stopper
+	return rocksdb, loc, stopper
 }
 
 // runMVCCScan first creates test data (and resets the benchmarking
@@ -176,7 +181,7 @@ func runMVCCScan(numRows, numVersions, valueSize int, b *testing.B) {
 	// datasets all fit in cache and the cache is pre-warmed.
 	const numKeys = 100000
 
-	rocksdb, stopper := setupMVCCData(numVersions, numKeys, valueSize, b)
+	rocksdb, _, stopper := setupMVCCData(numVersions, numKeys, valueSize, b)
 	defer stopper.Stop()
 
 	b.SetBytes(int64(numRows * valueSize))
@@ -322,7 +327,7 @@ func runMVCCGet(numVersions, valueSize int, b *testing.B) {
 	// amount of data.
 	numKeys := targetSize / ((overhead + valueSize) * (1 + (numVersions-1)/2))
 
-	rocksdb, stopper := setupMVCCData(numVersions, numKeys, valueSize, b)
+	rocksdb, _, stopper := setupMVCCData(numVersions, numKeys, valueSize, b)
 	defer stopper.Stop()
 
 	b.SetBytes(int64(valueSize))
@@ -582,7 +587,7 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 	const rangeBytes = 512 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
-	rocksdb, stopper := setupMVCCData(1, numKeys, valueBytes, b)
+	_, dir, stopper := setupMVCCData(1, numKeys, valueBytes, b)
 	stopper.Stop()
 
 	b.SetBytes(rangeBytes)
@@ -590,19 +595,14 @@ func runMVCCDeleteRange(valueBytes int, b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		locDirty := rocksdb.dir + "_dirty"
+		locDirty := dir + "_dirty"
 		if err := os.RemoveAll(locDirty); err != nil {
 			b.Fatal(err)
 		}
-		if err := shutil.CopyTree(rocksdb.dir, locDirty, nil); err != nil {
+		if err := shutil.CopyTree(dir, locDirty, nil); err != nil {
 			b.Fatal(err)
 		}
-		stopper := stop.NewStopper()
-		dupRocksdb := NewRocksDB(roachpb.Attributes{}, locDirty, rocksdb.cacheSize,
-			rocksdb.memtableBudget, 0, stopper)
-		if err := dupRocksdb.Open(); err != nil {
-			b.Fatal(err)
-		}
+		dupRocksdb, stopper := setupMVCCRocksDB(b, locDirty)
 
 		b.StartTimer()
 		_, err := MVCCDeleteRange(dupRocksdb, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
@@ -632,7 +632,7 @@ func runMVCCComputeStats(valueBytes int, b *testing.B) {
 	const rangeBytes = 64 * 1024 * 1024
 	const overhead = 48 // Per key/value overhead (empirically determined)
 	numKeys := rangeBytes / (overhead + valueBytes)
-	rocksdb, stopper := setupMVCCData(1, numKeys, valueBytes, b)
+	rocksdb, _, stopper := setupMVCCData(1, numKeys, valueBytes, b)
 	defer stopper.Stop()
 
 	b.SetBytes(rangeBytes)
