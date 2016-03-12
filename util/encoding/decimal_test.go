@@ -150,52 +150,55 @@ func TestEncodeDecimal(t *testing.T) {
 	}
 
 	var lastEncoded []byte
-	for _, dir := range []Direction{Ascending, Descending} {
-		for i, c := range testCases {
-			var enc []byte
-			var err error
-			var dec *inf.Dec
-			if dir == Ascending {
-				enc = EncodeDecimalAscending(nil, c.Value)
-				_, dec, err = DecodeDecimalAscending(enc, nil)
-			} else {
-				enc = EncodeDecimalDescending(nil, c.Value)
-				_, dec, err = DecodeDecimalDescending(enc, nil)
-			}
-			if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
-				t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
-					c.Value, c.Encoding, enc)
-			}
-			if i > 0 {
-				if (bytes.Compare(lastEncoded, enc) > 0 && dir == Ascending) ||
-					(bytes.Compare(lastEncoded, enc) < 0 && dir == Descending) {
-					t.Errorf("%v: expected [% x] to be less than or equal to [% x]",
-						c.Value, testCases[i-1].Encoding, enc)
+	for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
+		tmp = tmp[:0]
+		for _, dir := range []Direction{Ascending, Descending} {
+			for i, c := range testCases {
+				var enc []byte
+				var err error
+				var dec *inf.Dec
+				if dir == Ascending {
+					enc = EncodeDecimalAscending(nil, c.Value)
+					_, dec, err = DecodeDecimalAscending(enc, tmp)
+				} else {
+					enc = EncodeDecimalDescending(nil, c.Value)
+					_, dec, err = DecodeDecimalDescending(enc, tmp)
 				}
+				if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
+					t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
+						c.Value, c.Encoding, enc)
+				}
+				if i > 0 {
+					if (bytes.Compare(lastEncoded, enc) > 0 && dir == Ascending) ||
+						(bytes.Compare(lastEncoded, enc) < 0 && dir == Descending) {
+						t.Errorf("%v: expected [% x] to be less than or equal to [% x]",
+							c.Value, testCases[i-1].Encoding, enc)
+					}
+				}
+				if err != nil {
+					t.Error(err)
+					continue
+				}
+				if dec.Cmp(c.Value) != 0 {
+					t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
+				}
+				lastEncoded = enc
 			}
-			if err != nil {
-				t.Error(err)
-				continue
-			}
-			if dec.Cmp(c.Value) != 0 {
-				t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
-			}
-			lastEncoded = enc
-		}
 
-		// Test that appending the decimal to an existing buffer works.
-		var enc []byte
-		var dec *inf.Dec
-		other := inf.NewDec(123, 2)
-		if dir == Ascending {
-			enc = EncodeDecimalAscending([]byte("hello"), other)
-			_, dec, _ = DecodeDecimalAscending(enc[5:], nil)
-		} else {
-			enc = EncodeDecimalDescending([]byte("hello"), other)
-			_, dec, _ = DecodeDecimalDescending(enc[5:], nil)
-		}
-		if dec.Cmp(other) != 0 {
-			t.Errorf("unexpected mismatch for %v. got %v", 1.23, other)
+			// Test that appending the decimal to an existing buffer works.
+			var enc []byte
+			var dec *inf.Dec
+			other := inf.NewDec(123, 2)
+			if dir == Ascending {
+				enc = EncodeDecimalAscending([]byte("hello"), other)
+				_, dec, _ = DecodeDecimalAscending(enc[5:], tmp)
+			} else {
+				enc = EncodeDecimalDescending([]byte("hello"), other)
+				_, dec, _ = DecodeDecimalDescending(enc[5:], tmp)
+			}
+			if dec.Cmp(other) != 0 {
+				t.Errorf("unexpected mismatch for %v. got %v", 1.23, other)
+			}
 		}
 	}
 }

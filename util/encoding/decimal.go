@@ -172,28 +172,28 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, *inf.Dec, error
 	switch {
 	case buf[0] == floatNegLarge:
 		// Negative large.
-		e, m := decodeLargeNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeDecimalFromMandE(!invert, e, m, tmp), nil
+		e, m, tmp2 := decodeLargeNumber(true, buf[:idx+1], tmp)
+		return buf[idx+1:], makeDecimalFromMandE(!invert, e, m, tmp2), nil
 	case buf[0] > floatNegLarge && buf[0] <= floatNegMedium:
 		// Negative medium.
-		e, m := decodeMediumNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeDecimalFromMandE(!invert, e, m, tmp), nil
+		e, m, tmp2 := decodeMediumNumber(true, buf[:idx+1], tmp)
+		return buf[idx+1:], makeDecimalFromMandE(!invert, e, m, tmp2), nil
 	case buf[0] == floatNegSmall:
 		// Negative small.
-		e, m := decodeSmallNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeDecimalFromMandE(!invert, e, m, tmp), nil
+		e, m, tmp2 := decodeSmallNumber(true, buf[:idx+1], tmp)
+		return buf[idx+1:], makeDecimalFromMandE(!invert, e, m, tmp2), nil
 	case buf[0] == floatPosLarge:
 		// Positive large.
-		e, m := decodeLargeNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp), nil
+		e, m, tmp2 := decodeLargeNumber(false, buf[:idx+1], tmp)
+		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp2), nil
 	case buf[0] >= floatPosMedium && buf[0] < floatPosLarge:
 		// Positive medium.
-		e, m := decodeMediumNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp), nil
+		e, m, tmp2 := decodeMediumNumber(false, buf[:idx+1], tmp)
+		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp2), nil
 	case buf[0] == floatPosSmall:
 		// Positive small.
-		e, m := decodeSmallNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp), nil
+		e, m, tmp2 := decodeSmallNumber(false, buf[:idx+1], tmp)
+		return buf[idx+1:], makeDecimalFromMandE(invert, e, m, tmp2), nil
 	default:
 		return nil, nil, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
