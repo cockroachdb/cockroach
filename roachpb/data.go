@@ -139,6 +139,14 @@ func (k Key) Next() Key {
 	return Key(BytesNext(k))
 }
 
+// ShallowNext returns the next key in lexicographic sort order, using
+// extra capacity of the recevier key if possible. The method may only
+// take a shallow copy of the RKey, so it should be treated as immutable
+// after.
+func (k Key) ShallowNext() Key {
+	return append(k, 0)
+}
+
 // IsPrev is a more efficient version of k.Next().Equal(m).
 func (k Key) IsPrev(m Key) bool {
 	l := len(m) - 1

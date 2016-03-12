@@ -61,7 +61,7 @@ func (k MVCCKey) Next() MVCCKey {
 	ts := k.Timestamp.Prev()
 	if ts == roachpb.ZeroTimestamp {
 		return MVCCKey{
-			Key: k.Key.Next(),
+			Key: k.Key.ShallowNext(),
 		}
 	}
 	return MVCCKey{
@@ -1332,7 +1332,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 			}
 
 		} else {
-			iter.Seek(MakeMVCCMetadataKey(metaKey.Key.Next()))
+			iter.Seek(MakeMVCCMetadataKey(metaKey.Key.ShallowNext()))
 			if !iter.Valid() {
 				if err := iter.Error(); err != nil {
 					return nil, err

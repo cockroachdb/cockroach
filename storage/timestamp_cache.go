@@ -109,7 +109,7 @@ func (tc *TimestampCache) SetLowWater(lowWater roachpb.Timestamp) {
 func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestamp, txnID *uuid.UUID, readOnly bool) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
-		end = start.Next()
+		end = start.ShallowNext()
 		start = end[:len(start)]
 	}
 	if tc.latest.Less(timestamp) {
@@ -273,7 +273,7 @@ func (tc *TimestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) 
 
 func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readOnly bool) roachpb.Timestamp {
 	if len(end) == 0 {
-		end = start.Next()
+		end = start.ShallowNext()
 	}
 	max := tc.lowWater
 	cache := tc.wCache

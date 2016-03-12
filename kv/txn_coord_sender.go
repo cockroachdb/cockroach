@@ -103,7 +103,7 @@ func addKeyRange(keys interval.RangeGroup, start, end roachpb.Key) {
 	// a non-empty interval, so we create two key slices which
 	// share the same underlying byte array.
 	if len(end) == 0 {
-		end = start.Next()
+		end = start.ShallowNext()
 		start = end[:len(start)]
 	}
 	keyR := interval.Range{
