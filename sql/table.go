@@ -539,16 +539,22 @@ func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
 // len(valTypes). The types of the decoded values will match the corresponding
 // entry in the valTypes parameter with the exception that a value might also
 // be parser.DNull. The remaining bytes in the key after decoding the values
-// are returned.
+// are returned. A slice of directions can be provided to enforce encoding
+// direction on each value in valTypes. If this slice is nil, the direction
+// used will default to encoding.Ascending.
 func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Direction,
 	key []byte) ([]byte, error) {
-	if len(directions) != len(valTypes) {
+	if directions != nil && len(directions) != len(valTypes) {
 		return nil, util.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
 			len(directions), len(valTypes))
 	}
 	for j := range valTypes {
+		direction := encoding.Ascending
+		if directions != nil {
+			direction = directions[j]
+		}
 		var err error
-		vals[j], key, err = decodeTableKey(valTypes[j], key, directions[j])
+		vals[j], key, err = decodeTableKey(valTypes[j], key, direction)
 		if err != nil {
 			return nil, err
 		}
