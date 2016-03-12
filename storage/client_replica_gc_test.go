@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -46,7 +48,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	ctx := storage.TestStoreContext()
 	mtc.storeContext = &ctx
 	mtc.storeContext.TestingMocker.TestingCommandFilter =
-		func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		func(_ context.Context, id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			et, ok := args.(*roachpb.EndTransactionRequest)
 			if !ok || id != 2 {
 				return nil

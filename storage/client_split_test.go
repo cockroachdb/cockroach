@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -903,7 +905,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 	var getStarted sync.WaitGroup
 	sCtx := storage.TestStoreContext()
 	sCtx.TestingMocker.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if et, ok := args.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()
 				if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {

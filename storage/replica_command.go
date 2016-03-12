@@ -44,7 +44,9 @@ import (
 // appropriate storage API command. It returns the response, an error,
 // and a slice of intents that were skipped during execution.
 // If an error is returned, any returned intents should still be resolved.
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
+func (r *Replica) executeCmd(ctx context.Context, batch engine.Engine,
+	ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (
+	roachpb.Response, []roachpb.Intent, *roachpb.Error) {
 	ts := h.Timestamp
 
 	if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -57,7 +59,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.ctx.TestingMocker.TestingCommandFilter; filter != nil {
-		err := filter(r.store.StoreID(), args, h)
+		err := filter(ctx, r.store.StoreID(), args, h)
 		if err != nil {
 			pErr := roachpb.NewErrorWithTxn(err, h.Txn)
 			log.Infof("test injecting error: %s", pErr)
