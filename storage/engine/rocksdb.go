@@ -64,6 +64,8 @@ type RocksDB struct {
 	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
 }
 
+var _ Engine = &RocksDB{}
+
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(attrs roachpb.Attributes, dir string, cacheSize, memtableBudget, maxSize int64,
 	stopper *stop.Stopper) *RocksDB {
