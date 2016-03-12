@@ -267,7 +267,7 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	// end-key is non-inclusive by default.
 	var metaKey roachpb.RKey
 	if !inclusive {
-		metaKey = meta(key.Next())
+		metaKey = meta(key.ShallowNext())
 	} else {
 		metaKey = meta(key)
 	}

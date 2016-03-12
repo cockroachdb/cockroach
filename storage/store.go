@@ -956,7 +956,7 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	defer s.mu.Unlock()
 
 	var rng *Replica
-	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(start.Next()), func(i btree.Item) bool {
+	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(start.ShallowNext()), func(i btree.Item) bool {
 		rng = i.(*Replica)
 		return false
 	})
@@ -970,7 +970,7 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 // descriptor is present on the Store.
 func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bool {
 	var rng *Replica
-	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(rngDesc.StartKey.Next()), func(i btree.Item) bool {
+	s.mu.replicasByKey.AscendGreaterOrEqual((rangeBTreeKey)(rngDesc.StartKey.ShallowNext()), func(i btree.Item) bool {
 		rng = i.(*Replica)
 		return false
 	})
