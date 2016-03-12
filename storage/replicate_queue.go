@@ -81,6 +81,10 @@ func (*replicateQueue) acceptsUnsplitRanges() bool {
 
 func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
+	if rq.allocator.storePool == nil {
+		// Do nothing if storePool is nil for some unittests.
+		return
+	}
 
 	desc := repl.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
