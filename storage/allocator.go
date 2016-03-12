@@ -198,6 +198,11 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 // be performed.
 func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDescriptor) (
 	AllocatorAction, float64) {
+	if a.storePool == nil {
+		// Do nothing if storePool is nil for some unittests.
+		return AllocatorNoop, 0
+	}
+
 	deadReplicas := a.storePool.deadReplicas(desc.Replicas)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
