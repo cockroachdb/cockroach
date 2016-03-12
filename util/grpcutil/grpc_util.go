@@ -29,18 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// GRPCHandlerFunc returns an http.Handler that delegates to grpcServer on incoming gRPC
-// connections or otherHandler otherwise.
-func GRPCHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if IsGRPCRequest(r) {
-			grpcServer.ServeHTTP(w, r)
-		} else {
-			otherHandler.ServeHTTP(w, r)
-		}
-	})
-}
-
 // IsGRPCRequest returns true if r came from a grpc client.
 //
 // Its logic is a partial recreation of gRPC's internal checks, see
@@ -51,7 +39,10 @@ func IsGRPCRequest(r *http.Request) bool {
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
 func IsClosedConnection(err error) bool {
-	if err == context.Canceled || grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() || err == transport.ErrConnClosing || grpc.Code(err) == codes.Canceled {
+	if err == context.Canceled ||
+		grpc.Code(err) == codes.Canceled ||
+		grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
+		strings.Contains(err.Error(), "is closing") {
 		return true
 	}
 	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {
