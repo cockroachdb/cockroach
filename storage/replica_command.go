@@ -437,6 +437,9 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		desc = &mergeTrigger.UpdatedDesc
 	}
 
+	iterAndBuf := engine.GetIterAndBuf(batch)
+	defer iterAndBuf.Cleanup()
+
 	var externalIntents []roachpb.Intent
 	for _, span := range args.IntentSpans {
 		if err := func() error {
@@ -456,7 +459,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 					// merge trigger.
 					resolveMs = nil
 				}
-				return engine.MVCCResolveWriteIntent(batch, resolveMs, intent)
+				return engine.MVCCResolveWriteIntentUsingIter(batch, iterAndBuf, resolveMs, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
@@ -469,7 +472,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 			}
 			if inSpan != nil {
 				intent.Span = *inSpan
-				_, err := engine.MVCCResolveWriteIntentRange(batch, ms, intent, 0)
+				_, err := engine.MVCCResolveWriteIntentRangeUsingIter(batch, iterAndBuf, ms, intent, 0)
 				return err
 			}
 			return nil
