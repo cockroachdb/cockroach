@@ -83,7 +83,7 @@ func TestHealth(t *testing.T) {
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Create a custom context. The default one has a default --certs value.
+	// Create a custom context. The default one uses embedded certs.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
 	ctx.HTTPAddr = "127.0.0.1:0"
