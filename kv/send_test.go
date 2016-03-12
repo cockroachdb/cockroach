@@ -228,9 +228,15 @@ func TestClientNotReady(t *testing.T) {
 
 	nodeContext := newNodeTestContext(nil, stopper)
 
-	// Construct a server that listens but doesn't do anything.
-	s, ln := newTestServer(t, nodeContext)
+	// Construct a server that listens but doesn't do anything. Notice that we
+	// never start accepting connections on the listener.
+	s := rpc.NewServer(nodeContext)
 	roachpb.RegisterInternalServer(s, Node(50*time.Millisecond))
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
 
 	sp := tracing.NewTracer().StartSpan("node test")
 	defer sp.Finish()
@@ -259,9 +265,15 @@ func TestClientNotReady(t *testing.T) {
 	opts.SendNextTimeout = 0
 	opts.Timeout = 0
 	c := make(chan error)
+	sent := make(chan struct{})
 	go func() {
+		// This is inherently racy. We want to close the connection after the batch
+		// RPC is sent, so we delay 100ms from now to close the sent channel.
+		time.AfterFunc(100*time.Millisecond, func() {
+			close(sent)
+		})
 		if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext); !testutils.IsError(err, "(failed as client connection was closed|transport is closing)") {
-			c <- util.Errorf("unexpected error when client was closed: %v", err)
+			c <- util.Errorf("unexpected error: %v", err)
 		}
 		close(c)
 	}()
@@ -269,7 +281,7 @@ func TestClientNotReady(t *testing.T) {
 	select {
 	case err := <-c:
 		t.Fatalf("Unexpected end of rpc call: %v", err)
-	case <-time.After(10 * time.Millisecond):
+	case <-sent:
 	}
 
 	// Grab the client for our invalid address and close it. This will cause the
