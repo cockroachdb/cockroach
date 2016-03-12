@@ -482,8 +482,31 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		panic("empty batch")
 	}
 
+	if ba.MaxScanResults != 0 {
+		// Verify that the batch contains only Scan or ReverseScan requests.
+		fwd, rev := false, false
+		for _, req := range ba.Requests {
+			switch req.GetInner().(type) {
+			case *roachpb.ScanRequest:
+				fwd = true
+			case *roachpb.ReverseScanRequest:
+				rev = true
+			default:
+				return nil, roachpb.NewErrorf("batch with limit contains non-scan requests")
+			}
+		}
+		if fwd && rev {
+			return nil, roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
+		}
+	}
+
 	var rplChunks []*roachpb.BatchResponse
 	parts := ba.Split(false /* don't split ET */)
+	if len(parts) > 1 && ba.MaxScanResults != 0 {
+		// We already verified above that the batch contains only scan requests of the same type.
+		// Such a batch should never need splitting.
+		panic("batch with MaxScanResults needs splitting")
+	}
 	for len(parts) > 0 {
 		part := parts[0]
 		ba.Requests = part
@@ -538,6 +561,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	// (for example, non-range requests with EndKey, or empty key ranges).
 	rs := keys.Range(ba)
 	var br *roachpb.BatchResponse
+
 	// Send the request to one range per iteration.
 	for {
 		considerIntents := false
@@ -614,6 +638,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if trErr != nil {
 					return nil, roachpb.NewError(trErr)
 				}
+				truncBA.MaxScanResults = ba.MaxScanResults
 
 				return ds.sendSingleRange(sp, truncBA, desc)
 			}()
@@ -731,6 +756,38 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Combine the new response with the existing one.
 			if err := br.Combine(curReply); err != nil {
 				return nil, roachpb.NewError(err), false
+			}
+		}
+
+		if ba.MaxScanResults > 0 {
+			// Count how many results we received.
+			var numResults int64
+			for _, resp := range curReply.Responses {
+				if cResp, ok := resp.GetInner().(roachpb.Countable); ok {
+					numResults += cResp.Count()
+				}
+			}
+			if numResults > ba.MaxScanResults {
+				panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxScanResults))
+			}
+			ba.MaxScanResults -= numResults
+			if ba.MaxScanResults == 0 {
+				// We are done with this batch. Some requests might have NoopResponses; we must
+				// replace them with empty responses of the proper type.
+				for i, req := range ba.Requests {
+					if _, ok := br.Responses[i].GetInner().(*roachpb.NoopResponse); !ok {
+						continue
+					}
+					resp := roachpb.ResponseUnion{}
+					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
+						resp.SetValue(&roachpb.ScanResponse{})
+					} else {
+						_ = req.GetInner().(*roachpb.ReverseScanRequest)
+						resp.SetValue(&roachpb.ReverseScanResponse{})
+					}
+					br.Responses[i] = resp
+				}
+				return br, nil, false
 			}
 		}
 

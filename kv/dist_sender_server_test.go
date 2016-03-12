@@ -18,7 +18,6 @@ package kv_test
 
 import (
 	"errors"
-	"reflect"
 	"sync/atomic"
 	"testing"
 
@@ -90,7 +89,16 @@ func setupMultipleRanges(t *testing.T, ts *server.TestServer, splitAt ...string)
 	return db
 }
 
-func TestMultiRangeBatchBounded(t *testing.T) {
+func checkScanResults(t *testing.T, results []client.Result, expResults [][]string) {
+	if len(expResults) != len(results) {
+		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
+	}
+	for i, res := range results {
+		client.CheckKeysInKVs(t, res.Rows, expResults[i]...)
+	}
+}
+
+func TestMultiRangeBatchBoundedScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
@@ -101,12 +109,6 @@ func TestMultiRangeBatchBounded(t *testing.T) {
 		}
 	}
 
-	expResults := [][]string{
-		{"aaa", "b", "bb"},
-		{"a", "aa"},
-		{"cc", "d", "dd"},
-	}
-
 	b := db.NewBatch()
 	b.Scan("aaa", "dd", 3)
 	b.Scan("a", "z", 2)
@@ -115,18 +117,52 @@ func TestMultiRangeBatchBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(expResults) != len(b.Results) {
-		t.Fatalf("only got %d results, wanted %d", len(expResults), len(b.Results))
+	checkScanResults(t, b.Results, [][]string{
+		{"aaa", "b", "bb"},
+		{"a", "aa"},
+		{"cc", "d", "dd"},
+	})
+}
+
+func TestMultiRangeBoundedBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	for i, res := range b.Results {
-		expRes := expResults[i]
-		var actRes []string
-		for _, k := range res.Rows {
-			actRes = append(actRes, string(k.Key))
+
+	for bound := 1; bound <= 20; bound++ {
+		b := db.NewBatch()
+		b.MaxScanResults = int64(bound)
+
+		b.Scan("a", "c", 0)
+		b.Scan("b", "f", 3)
+		b.Scan("c", "g", 0)
+		b.Scan("f1a", "g", 1)
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(actRes, expRes) {
-			t.Errorf("%d: got %v, wanted %v", i, actRes, expRes)
+
+		// These are the expected results if there is no bound; we trim them below.
+		expResults := [][]string{
+			{"a1", "a2", "a3", "b1", "b2"},
+			{"b1", "b2", "c1"},
+			{"c1", "c2", "d1", "f1", "f2", "f3"},
+			{"f2"},
 		}
+		rem := bound
+		for i := range expResults {
+			if rem < len(expResults[i]) {
+				expResults[i] = expResults[i][:rem]
+			}
+			rem -= len(expResults[i])
+		}
+		checkScanResults(t, b.Results, expResults)
 	}
 }
 

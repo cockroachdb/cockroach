@@ -381,14 +381,11 @@ func TestClientEmptyValues(t *testing.T) {
 
 // TestClientBatch runs a batch of increment calls and then verifies the
 // results.
-// TODO(tschottdorf): some assertions disabled, see #1891.
 func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
-
-	skipBecauseOf1891 := true // TODO(tschottdorf): remove when unnecessary
 
 	keys := []roachpb.Key{}
 	{
@@ -418,27 +415,44 @@ func TestClientBatch(t *testing.T) {
 		if pErr := db.Run(b); pErr != nil {
 			t.Error(pErr)
 		}
+		client.CheckKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
+		client.CheckKVs(t, b.Results[1].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
+	}
 
-		scan1 := b.Results[0].Rows
-		scan2 := b.Results[1].Rows
-		if len(scan1) != 5 || len(scan2) != 5 {
-			t.Fatalf("expected scan results to include 5 and 5 rows; got %d and %d",
-				len(scan1), len(scan2))
+	// Try a limited batch of 2 scans.
+	{
+		b := &client.Batch{MaxScanResults: 7}
+		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
-		for i := 0; i < 5; i++ {
-			if key := roachpb.Key(scan1[i].Key); !key.Equal(keys[i]) {
-				t.Errorf("expected scan1 key %d to be %q; got %q", i, keys[i], key)
-			}
-			if val := scan1[i].ValueInt(); val != int64(i) {
-				t.Errorf("expected scan1 result %d to be %d; got %d", i, i, val)
-			}
-			if key := roachpb.Key(scan2[i].Key); !key.Equal(keys[i+5]) {
-				t.Errorf("expected scan2 key %d to be %q; got %q", i, keys[i+5], key)
-			}
-			if val := scan2[i].ValueInt(); val != int64(i+5) {
-				t.Errorf("expected scan2 result %d to be %d; got %d", i, i+5, val)
-			}
+		client.CheckKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
+		client.CheckKVs(t, b.Results[1].Rows, keys[5], 5, keys[6], 6)
+	}
+
+	// Try a limited batch of 2 scans.
+	{
+		b := &client.Batch{MaxScanResults: 7}
+		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
+		client.CheckKVs(t, b.Results[0].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
+		client.CheckKVs(t, b.Results[1].Rows, keys[0], 0, keys[1], 1)
+	}
+
+	// Try a limited batch of 2 scans.
+	{
+		b := &client.Batch{MaxScanResults: 3}
+		b.Scan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.Scan(testUser+"/key 05", testUser+"/key 10", 0)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
+		}
+		client.CheckKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2)
+		client.CheckKVs(t, b.Results[1].Rows)
 	}
 
 	// Try 2 reverse scans.
@@ -449,30 +463,44 @@ func TestClientBatch(t *testing.T) {
 		if pErr := db.Run(b); pErr != nil {
 			t.Error(pErr)
 		}
+		client.CheckKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		client.CheckKVs(t, b.Results[1].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
+	}
 
-		revScan1 := b.Results[0].Rows
-		revScan2 := b.Results[1].Rows
-		expectedCount := 5
-		rev1TopIndex := 4
-		rev2TopIndex := 9
-		if len(revScan1) != expectedCount || len(revScan2) != expectedCount {
-			t.Errorf("expected reverse scan results to include 5 and 5 rows; got %d and %d",
-				len(revScan1), len(revScan2))
+	// Try a limited batch of 2 reverse scans.
+	{
+		b := &client.Batch{MaxScanResults: 7}
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
-		for i := 0; i < expectedCount; i++ {
-			if key := roachpb.Key(revScan1[i].Key); !key.Equal(keys[rev1TopIndex-i]) {
-				t.Errorf("expected revScan1 key %d to be %q; got %q", i, keys[rev1TopIndex-i], key)
-			}
-			if val := revScan1[i].ValueInt(); val != int64(rev1TopIndex-i) {
-				t.Errorf("expected revScan1 result %d to be %d; got %d", i, rev1TopIndex-i, val)
-			}
-			if key := roachpb.Key(revScan2[i].Key); !key.Equal(keys[rev2TopIndex-i]) {
-				t.Errorf("expected revScan2 key %d to be %q; got %q", i, keys[rev2TopIndex-i], key)
-			}
-			if val := revScan2[i].ValueInt(); val != int64(rev2TopIndex-i) {
-				t.Errorf("expected revScan2 result %d to be %d; got %d", i, rev2TopIndex-i, val)
-			}
+		client.CheckKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		client.CheckKVs(t, b.Results[1].Rows, keys[9], 9, keys[8], 8)
+	}
+
+	// Try a limited batch of 2 reverse scans.
+	{
+		b := &client.Batch{MaxScanResults: 7}
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
 		}
+		client.CheckKVs(t, b.Results[0].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
+		client.CheckKVs(t, b.Results[1].Rows, keys[4], 4, keys[3], 3)
+	}
+
+	// Try a limited batch of 2 reverse scans.
+	{
+		b := &client.Batch{MaxScanResults: 3}
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05", 0)
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10", 0)
+		if pErr := db.Run(b); pErr != nil {
+			t.Error(pErr)
+		}
+		client.CheckKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		client.CheckKVs(t, b.Results[1].Rows)
 	}
 
 	// Induce a non-transactional failure.
@@ -494,7 +522,7 @@ func TestClientBatch(t *testing.T) {
 					break
 				}
 			}
-			if !foundError && !skipBecauseOf1891 {
+			if !foundError {
 				t.Error("results did not contain an error")
 			}
 		}
@@ -521,7 +549,7 @@ func TestClientBatch(t *testing.T) {
 					break
 				}
 			}
-			if !foundError && !skipBecauseOf1891 {
+			if !foundError {
 				t.Error("results did not contain an error")
 			}
 		}

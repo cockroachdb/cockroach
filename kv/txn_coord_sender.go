@@ -858,6 +858,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	pErr := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
+		b.MaxScanResults = ba.MaxScanResults
 		for _, arg := range ba.Requests {
 			req := arg.GetInner()
 			b.InternalAddRequest(req)
