@@ -1440,12 +1440,8 @@ DBIterator* DBBatch::NewIter(DBSlice prefix) {
   opts.iterate_upper_bound = iter->upper_bound();
   opts.total_order_seek = iter->upper_bound() == NULL;
   rocksdb::Iterator* base = rep->NewIterator(opts);
-  if (updates == 0) {
-    iter->rep.reset(base);
-  } else {
-    rocksdb::WBWIIterator* delta = batch.NewIterator();
-    iter->rep.reset(new BaseDeltaIterator(base, delta));
-  }
+  rocksdb::WBWIIterator* delta = batch.NewIterator();
+  iter->rep.reset(new BaseDeltaIterator(base, delta));
   return iter;
 }
 
