@@ -825,7 +825,7 @@ func (s *Store) startGossip() {
 // timeouts. The retry loop makes sure we try hard to keep asking for
 // the lease instead of waiting for the next sentinelGossipInterval
 // to transpire.
-func (s *Store) maybeGossipFirstRange() *roachpb.Error {
+func (s *Store) maybeGossipFirstRange() error {
 	retryOptions := retry.Options{
 		InitialBackoff: 100 * time.Millisecond, // first backoff at 100ms
 		MaxBackoff:     1 * time.Second,        // max backoff is 1s
@@ -837,7 +837,7 @@ func (s *Store) maybeGossipFirstRange() *roachpb.Error {
 		if rng != nil {
 			pErr := rng.maybeGossipFirstRange()
 			if nlErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || nlErr.Leader != nil {
-				return pErr
+				return pErr.GoError()
 			}
 		} else {
 			return nil
@@ -848,7 +848,7 @@ func (s *Store) maybeGossipFirstRange() *roachpb.Error {
 
 // maybeGossipSystemConfig looks for the range containing SystemConfig keys and
 // lets that range gossip them.
-func (s *Store) maybeGossipSystemConfig() *roachpb.Error {
+func (s *Store) maybeGossipSystemConfig() error {
 	rng := s.LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil)
 	if rng == nil {
 		// This store has no range with this configuration.
@@ -859,7 +859,7 @@ func (s *Store) maybeGossipSystemConfig() *roachpb.Error {
 	// have an active lease but we still failed to obtain it), return
 	// that error.
 	_, pErr := rng.getLeaseForGossip(s.Context(nil))
-	return pErr
+	return pErr.GoError()
 }
 
 // systemGossipUpdate is a callback for gossip updates to
@@ -2046,7 +2046,7 @@ func raftEntryFormatter(data []byte) string {
 // GetStatus fetches the latest store status from the stored value on the cluster.
 // Returns nil if the scanner has not yet run. The scanner runs once every
 // ctx.ScanInterval.
-func (s *Store) GetStatus() (*StoreStatus, *roachpb.Error) {
+func (s *Store) GetStatus() (*StoreStatus, error) {
 	if s.scanner.Count() == 0 {
 		// The scanner hasn't completed a first run yet.
 		return nil, nil
@@ -2054,7 +2054,7 @@ func (s *Store) GetStatus() (*StoreStatus, *roachpb.Error) {
 	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
 	status := &StoreStatus{}
 	if pErr := s.db.GetProto(key, status); pErr != nil {
-		return nil, pErr
+		return nil, pErr.GoError()
 	}
 	return status, nil
 }

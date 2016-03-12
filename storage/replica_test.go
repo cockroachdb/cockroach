@@ -3687,9 +3687,9 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 			return err
 		}
 
-		kvs, _, pErr := rng.loadSystemConfigSpan()
-		if pErr != nil {
-			return pErr.GoError()
+		kvs, _, err := rng.loadSystemConfigSpan()
+		if err != nil {
+			return err
 		}
 
 		if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, keys.SystemConfigSpan.Key) {
