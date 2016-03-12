@@ -21,7 +21,8 @@ import (
 	"net"
 )
 
-// TestAddr is an unused address for testing.
+// TestAddr is an address to use for test servers. Listening on port 0 causes
+// the kernel to allocate an unused port.
 var TestAddr = NewUnresolvedAddr("tcp", "127.0.0.1:0")
 
 // MakeUnresolvedAddr populates an UnresolvedAddr from a network and raw
