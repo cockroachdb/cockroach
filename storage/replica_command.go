@@ -24,6 +24,8 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"math"
+
 	"math/rand"
 	"time"
 
@@ -40,11 +42,13 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// executeCmd switches over the method and multiplexes to execute the
-// appropriate storage API command. It returns the response, an error,
-// and a slice of intents that were skipped during execution.
-// If an error is returned, any returned intents should still be resolved.
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
+// executeCmd switches over the method and multiplexes to execute the appropriate storage API
+// command. It returns the response, an error, and a slice of intents that were skipped during
+// execution.  If an error is returned, any returned intents should still be resolved.
+// remScanResults is the number of scan results remaining for this batch (MaxInt64 for no
+// limit).
+func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, remScanResults int64,
+	args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
 	ts := h.Timestamp
 
 	if _, ok := args.(*roachpb.NoopRequest); ok {
@@ -101,11 +105,11 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 		reply = &resp
 	case *roachpb.ScanRequest:
 		var resp roachpb.ScanResponse
-		resp, intents, err = r.Scan(batch, h, *tArgs)
+		resp, intents, err = r.Scan(batch, h, remScanResults, *tArgs)
 		reply = &resp
 	case *roachpb.ReverseScanRequest:
 		var resp roachpb.ReverseScanResponse
-		resp, intents, err = r.ReverseScan(batch, h, *tArgs)
+		resp, intents, err = r.ReverseScan(batch, h, remScanResults, *tArgs)
 		reply = &resp
 	case *roachpb.BeginTransactionRequest:
 		var resp roachpb.BeginTransactionResponse
@@ -231,25 +235,54 @@ func (r *Replica) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, h roach
 	return reply, err
 }
 
-// Scan scans the key range specified by start key through end key in ascending
-// order up to some maximum number of results.
-func (r *Replica) Scan(batch engine.Engine, h roachpb.Header, args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
-	var reply roachpb.ScanResponse
-
-	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	reply.Rows = rows
-	return reply, intents, err
+// scanMaxResultsValue returns the max results value to pass to a scan or reverse scan request (0
+// for no limit).
+//    remScanResults is the number of remaining results for this batch (MaxInt64 for no
+// limit).
+//    scanMaxResults is the limit in this scan request (0 for no limit)
+func scanMaxResultsValue(remScanResults int64, scanMaxResults int64) int64 {
+	if remScanResults == math.MaxInt64 {
+		// Unlimited batch.
+		return scanMaxResults
+	}
+	if scanMaxResults != 0 && scanMaxResults < remScanResults {
+		// Scan limit is less than remaining batch limit.
+		return scanMaxResults
+	}
+	// Reamining batch limit is less than scan limit.
+	return remScanResults
 }
 
-// ReverseScan scans the key range specified by start key through end key in
-// descending order up to some maximum number of results.
-func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
-	var reply roachpb.ReverseScanResponse
+// Scan scans the key range specified by start key through end key in ascending order up to some
+// maximum number of results. remScanResults stores the number of scan results remaining for this
+// batch (MaxInt64 for no limit).
+func (r *Replica) Scan(batch engine.Engine, h roachpb.Header, remScanResults int64,
+	args roachpb.ScanRequest) (roachpb.ScanResponse, []roachpb.Intent, error) {
+	if remScanResults == 0 {
+		// We can't return any more results; skip the scan
+		return roachpb.ScanResponse{}, nil, nil
+	}
+	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
 
-	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, args.MaxResults, h.Timestamp,
+	rows, intents, err := engine.MVCCScan(batch, args.Key, args.EndKey, maxResults, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	reply.Rows = rows
-	return reply, intents, err
+	return roachpb.ScanResponse{Rows: rows}, intents, err
+}
+
+// ReverseScan scans the key range specified by start key through end key in descending order up to
+// some maximum number of results. remScanResults stores the number of scan results remaining for
+// this batch (MaxInt64 for no limit).
+func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, remScanResults int64,
+	args roachpb.ReverseScanRequest) (roachpb.ReverseScanResponse, []roachpb.Intent, error) {
+	if remScanResults == 0 {
+		// We can't return any more results; skip the scan
+		return roachpb.ReverseScanResponse{}, nil, nil
+	}
+	maxResults := scanMaxResultsValue(remScanResults, args.MaxResults)
+
+	rows, intents, err := engine.MVCCReverseScan(batch, args.Key, args.EndKey, maxResults,
+		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	return roachpb.ReverseScanResponse{Rows: rows}, intents, err
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
