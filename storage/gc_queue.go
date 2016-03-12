@@ -96,7 +96,6 @@ func (*gcQueue) acceptsUnsplitRanges() bool {
 // intents exceed thresholds.
 func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
-
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {

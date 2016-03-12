@@ -414,7 +414,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		span := repl.store.Tracer().StartSpan("queue")
 		defer span.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(span); err != nil {
+		if err := repl.redirectOnOrAcquireLeaderLease(span, repl.context()); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return nil
 		}
