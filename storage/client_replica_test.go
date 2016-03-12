@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -194,7 +196,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext()
 	ctx.TestingMocker.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if _, ok := args.(*roachpb.GetRequest); ok &&
 				args.Header().Key.Equal(roachpb.Key(key)) &&
 				h.Txn == nil {

@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -41,43 +43,82 @@ func init() {
 // CommandFilters provides facilities for registering "TestingCommandFilters"
 // (i.e. functions to be run on every replica command).
 // CommandFilters is thread-safe.
+// CommandFilters also optionally does replay protection if filters need it.
 type CommandFilters struct {
 	sync.RWMutex
 	filters []struct {
-		id     int
-		filter storage.CommandFilter
+		id         int
+		idempotent bool
+		filter     storage.CommandFilter
 	}
 	nextID int
+
+	numFiltersTrackingReplays int
+	processedCommands         map[storage.RaftCmdID]error
+}
+
+func (c *CommandFilters) detectReplayLocked(cmdId storage.RaftCmdID) (error, bool) {
+	if c.numFiltersTrackingReplays == 0 {
+		return nil, false
+	}
+	err, found := c.processedCommands[cmdId]
+	// We've detected a replay.
+	return err, found
 }
 
 // runFilters executes the registered filters, stopping at the first one
 // that returns an error.
-func (c *CommandFilters) runFilters(
-	sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+func (c *CommandFilters) runFilters(ctx context.Context, sid roachpb.StoreID,
+	req roachpb.Request, hdr roachpb.Header) error {
 
 	c.RLock()
 	defer c.RUnlock()
-	for _, f := range c.filters {
-		if err := f.filter(sid, req, hdr); err != nil {
+
+	cmdId, idPresent := storage.RaftCmdIDFromContext(ctx)
+	if idPresent {
+		if err, found := c.detectReplayLocked(cmdId); found {
 			return err
 		}
 	}
-	return nil
+
+	var err error
+	for _, f := range c.filters {
+		if err = f.filter(ctx, sid, req, hdr); err != nil {
+			break
+		}
+	}
+
+	if idPresent && c.numFiltersTrackingReplays > 0 {
+		c.processedCommands[cmdId] = err
+	}
+
+	return err
 }
 
 // AppendFilter registers a filter function to run after all the previously
 // registered filters.
+// idempotent specifies if this filter can be safely run multiple times on the
+// same command. If this property doesn't hold, CommandFilters will start
+// tracking commands for replay protection, which might be expensive.
 // Returns a closure that the client must run for doing cleanup when the
 // filter should be deregistered.
-func (c *CommandFilters) AppendFilter(filter storage.CommandFilter) func() {
+func (c *CommandFilters) AppendFilter(filter storage.CommandFilter, idempotent bool) func() {
 	c.Lock()
 	defer c.Unlock()
 	id := c.nextID
 	c.nextID++
 	c.filters = append(c.filters, struct {
-		id     int
-		filter storage.CommandFilter
-	}{id, filter})
+		id         int
+		idempotent bool
+		filter     storage.CommandFilter
+	}{id, idempotent, filter})
+
+	if !idempotent {
+		if c.numFiltersTrackingReplays == 0 {
+			c.processedCommands = map[storage.RaftCmdID]error{}
+		}
+		c.numFiltersTrackingReplays++
+	}
 
 	return func() {
 		c.removeFilter(id)
@@ -91,6 +132,12 @@ func (c *CommandFilters) removeFilter(id int) {
 	defer c.Unlock()
 	for i, f := range c.filters {
 		if f.id == id {
+			if !f.idempotent {
+				c.numFiltersTrackingReplays--
+				if c.numFiltersTrackingReplays == 0 {
+					c.processedCommands = nil
+				}
+			}
 			c.filters = append(c.filters[:i], c.filters[i+1:]...)
 			return
 		}
@@ -102,7 +149,7 @@ func (c *CommandFilters) removeFilter(id int) {
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
+func checkEndTransactionTrigger(_ context.Context, _ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
 	args, ok := req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil
@@ -155,7 +202,7 @@ func setupTestServer(t *testing.T) *testServer {
 func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters
-	cmdFilters.AppendFilter(checkEndTransactionTrigger)
+	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter = cmdFilters.runFilters
 	return ctx, &cmdFilters
 }

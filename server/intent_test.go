@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -79,7 +81,7 @@ func TestIntentResolution(t *testing.T) {
 			var done bool
 			ctx := NewTestContext()
 			ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-				func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 					mu.Lock()
 					defer mu.Unlock()
 					header := args.Header()
