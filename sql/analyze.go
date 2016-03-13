@@ -82,18 +82,32 @@ func splitAndExpr(e parser.Expr, exprs parser.Exprs) parser.Exprs {
 	return append(exprs, e)
 }
 
+// joinOrExprs performs the inverse operation of splitOrExpr, joining
+// together the individual expressions using OrExpr nodes.
+func joinOrExprs(exprs parser.Exprs) parser.Expr {
+	return joinExprs(exprs, func(left, right parser.Expr) parser.Expr {
+		return &parser.OrExpr{Left: left, Right: right}
+	})
+}
+
 // joinAndExprs performs the inverse operation of splitAndExpr, joining
 // together the individual expressions using AndExpr nodes.
 func joinAndExprs(exprs parser.Exprs) parser.Expr {
+	return joinExprs(exprs, func(left, right parser.Expr) parser.Expr {
+		return &parser.AndExpr{Left: left, Right: right}
+	})
+}
+
+func joinExprs(exprs parser.Exprs, joinExprsFn func(left, right parser.Expr) parser.Expr) parser.Expr {
 	switch len(exprs) {
 	case 0:
 		return nil
 	case 1:
 		return exprs[0]
 	default:
-		a := &parser.AndExpr{Left: exprs[len(exprs)-2], Right: exprs[len(exprs)-1]}
+		a := joinExprsFn(exprs[len(exprs)-2], exprs[len(exprs)-1])
 		for i := len(exprs) - 3; i >= 0; i-- {
-			a = &parser.AndExpr{Left: exprs[i], Right: a}
+			a = joinExprsFn(exprs[i], a)
 		}
 		return a
 	}
@@ -243,14 +257,7 @@ outer:
 	}
 
 	// Reform the AND expressions.
-	if len(exprs) == 1 {
-		return exprs[0], equivalent
-	}
-	a := &parser.AndExpr{Left: exprs[len(exprs)-2], Right: exprs[len(exprs)-1]}
-	for i := len(exprs) - 3; i >= 0; i-- {
-		a = &parser.AndExpr{Left: exprs[i], Right: a}
-	}
-	return a, equivalent
+	return joinAndExprs(exprs), equivalent
 }
 
 func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool) {
@@ -766,14 +773,7 @@ outer:
 	}
 
 	// Reform the OR expressions.
-	if len(exprs) == 1 {
-		return exprs[0], equivalent
-	}
-	a := &parser.OrExpr{Left: exprs[len(exprs)-2], Right: exprs[len(exprs)-1]}
-	for i := len(exprs) - 3; i >= 0; i-- {
-		a = &parser.OrExpr{Left: exprs[i], Right: a}
-	}
-	return a, equivalent
+	return joinOrExprs(exprs), equivalent
 }
 
 func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool) {
