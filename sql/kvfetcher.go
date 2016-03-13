@@ -128,63 +128,72 @@ func makeKVFetcher(txn *client.Txn, spans spans, reverse bool, firstBatchLimit i
 // fetch retrieves spans from the kv
 func (f *kvFetcher) fetch() *roachpb.Error {
 	// Retrieve all the spans.
-	b := &client.Batch{}
+	batchSize := int64(kvBatchSize)
+	if f.firstBatchLimit != 0 && len(f.kvs) == 0 && f.firstBatchLimit < batchSize {
+		batchSize = f.firstBatchLimit
+	}
 
-	// TODO(radu): until we have a per-batch limit (issue #4696), we
-	// only do batching if we have a single span.
-	if len(f.spans) == 1 {
-		count := int64(kvBatchSize)
-		if f.firstBatchLimit != 0 && f.firstBatchLimit < count && len(f.kvs) == 0 {
-			count = f.firstBatchLimit
-		}
-		if f.spans[0].count != 0 {
-			if f.spans[0].count <= f.totalFetched {
-				panic(fmt.Sprintf("trying to fetch beyond span count %d (fetched: %d)",
-					f.spans[0].count, f.totalFetched))
-			}
-			remaining := f.spans[0].count - f.totalFetched
-			if count > remaining {
-				count = remaining
-			}
-		}
-		if f.reverse {
-			end := f.spans[0].end
-			if len(f.kvs) > 0 {
-				// the new range ends at the last key (non-inclusive)
-				end = f.kvs[len(f.kvs)-1].Key
-				if end.Equal(f.spans[0].start) {
-					// No more keys
-					f.kvs = nil
-					f.fetchEnd = true
-					return nil
-				}
-			}
-			b.ReverseScan(f.spans[0].start, end, count)
-		} else {
-			start := f.spans[0].start
-			if len(f.kvs) > 0 {
-				// the new range starts after the last key
-				start = f.kvs[len(f.kvs)-1].Key.ShallowNext()
-				if start.Equal(f.spans[0].end) {
-					// No more keys
-					f.kvs = nil
-					f.fetchEnd = true
-					return nil
-				}
-			}
-			b.Scan(start, f.spans[0].end, count)
-		}
-	} else {
-		if f.reverse {
-			for i := len(f.spans) - 1; i >= 0; i-- {
-				b.ReverseScan(f.spans[i].start, f.spans[i].end, f.spans[i].count)
-			}
-		} else {
-			for i := 0; i < len(f.spans); i++ {
-				b.Scan(f.spans[i].start, f.spans[i].end, f.spans[i].count)
-			}
+	b := &client.Batch{MaxScanResults: batchSize}
+
+	var resumeKey roachpb.Key
+	if len(f.kvs) > 0 {
+		resumeKey = f.kvs[len(f.kvs)-1].Key
+		// To resume forward scans we will set the (inclusive) scan start to the Next of the last
+		// received key. To resume reverse scans we will set the (exclusive) scan end to the last
+		// received key.
+		if !f.reverse {
+			resumeKey = resumeKey.ShallowNext()
 		}
 	}
+
+	atEnd := true
+	if !f.reverse {
+		for i := 0; i < len(f.spans); i++ {
+			start := f.spans[i].start
+			if resumeKey != nil {
+				if resumeKey.Compare(f.spans[i].end) >= 0 {
+					// We are resuming from a key after this span.
+					continue
+				}
+				if resumeKey.Compare(start) > 0 {
+					// We are resuming from a key inside this span.
+					// In this case we should technically reduce the max count for the span; but
+					// since this count is only an optimization it's not incorrect to retrieve more
+					// keys for the span.
+					start = resumeKey
+				}
+			}
+			atEnd = false
+			b.Scan(start, f.spans[i].end, f.spans[i].count)
+		}
+	} else {
+		for i := len(f.spans) - 1; i >= 0; i-- {
+			end := f.spans[i].end
+			if resumeKey != nil {
+				if resumeKey.Compare(f.spans[i].start) <= 0 {
+					// We are resuming from a key before this span.
+					continue
+				}
+				if resumeKey.Compare(end) < 0 {
+					// We are resuming from a key inside this span.
+					// In this case we should technically reduce the max count for the span; but
+					// since this count is only an optimization it's not incorrect to retrieve more
+					// keys for the span.
+					end = resumeKey
+				}
+			}
+			atEnd = false
+			b.ReverseScan(f.spans[i].start, end, f.spans[i].count)
+		}
+	}
+
+	if atEnd {
+		// The last scan happened to finish just at the end of the last span.
+		f.kvs = nil
+		f.fetchEnd = true
+		return nil
+	}
+
 	if pErr := f.txn.Run(b); pErr != nil {
 		return pErr
 	}
@@ -206,8 +215,7 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 	f.totalFetched += int64(len(f.kvs))
 	f.kvIndex = 0
 
-	if !(len(f.spans) == 1 && len(f.kvs) == kvBatchSize &&
-		(f.spans[0].count == 0 || f.spans[0].count > f.totalFetched)) {
+	if int64(len(f.kvs)) < batchSize {
 		f.fetchEnd = true
 	}
 
