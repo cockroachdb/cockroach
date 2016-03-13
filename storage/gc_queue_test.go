@@ -52,9 +52,9 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
 	desc := tc.rng.Desc()
 	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
@@ -241,9 +241,9 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
 
 	// Process through a scan queue.
@@ -388,9 +388,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	gcQ := newGCQueue(tc.gossip)
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
 
 	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
@@ -466,9 +466,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		}
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
 
 	// Process through a scan queue.

@@ -254,7 +254,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	// Wait for gossip to startup.
 	util.SucceedsSoon(t, func() error {
 		for i, g := range m.gossips {
-			if g.GetSystemConfig() == nil {
+			if _, ok := g.GetSystemConfig(); !ok {
 				return util.Errorf("system config not available at index %d", i)
 			}
 		}

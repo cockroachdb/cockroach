@@ -109,11 +109,11 @@ type queueImpl interface {
 
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
-	shouldQueue(roachpb.Timestamp, *Replica, *config.SystemConfig) (shouldQueue bool, priority float64)
+	shouldQueue(roachpb.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it.
-	process(roachpb.Timestamp, *Replica, *config.SystemConfig) error
+	process(roachpb.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -252,8 +252,8 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	// Load the system config.
-	cfg := bq.gossip.GetSystemConfig()
-	if cfg == nil {
+	cfg, ok := bq.gossip.GetSystemConfig()
+	if !ok {
 		bq.eventLog.Infof(log.V(1), "no system config available. skipping")
 		return
 	}
@@ -393,8 +393,8 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // while calling this method.
 func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// Load the system config.
-	cfg := bq.gossip.GetSystemConfig()
-	if cfg == nil {
+	cfg, ok := bq.gossip.GetSystemConfig()
+	if !ok {
 		bq.eventLog.Infof(log.V(1), "no system config available. skipping")
 		return nil
 	}

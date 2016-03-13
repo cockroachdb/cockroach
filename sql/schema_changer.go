@@ -490,7 +490,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg := *s.gossip.GetSystemConfig()
+				cfg, _ := s.gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info("received a new config %v", cfg)

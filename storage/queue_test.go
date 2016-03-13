@@ -51,8 +51,8 @@ func gossipForTest(t *testing.T) (*gossip.Gossip, *stop.Stopper) {
 
 	// Wait for SystemConfig.
 	util.SucceedsSoon(t, func() error {
-		if g.GetSystemConfig() == nil {
-			return util.Errorf("expected non-nil system config")
+		if _, ok := g.GetSystemConfig(); !ok {
+			return util.Errorf("expected system config to be set")
 		}
 		return nil
 	})
@@ -74,11 +74,11 @@ type testQueueImpl struct {
 func (tq *testQueueImpl) needsLeaderLease() bool     { return false }
 func (tq *testQueueImpl) acceptsUnsplitRanges() bool { return tq.acceptUnsplit }
 
-func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) error {
+func (tq *testQueueImpl) process(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
@@ -387,9 +387,9 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(clock, stopper)
 
 	// Check our config.
-	sysCfg := g.GetSystemConfig()
-	if sysCfg == nil {
-		t.Fatal("nil config")
+	sysCfg, ok := g.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
 	neverSplitsDesc := neverSplits.Desc()
 	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
