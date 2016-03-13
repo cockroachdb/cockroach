@@ -1589,7 +1589,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			resolveIntents, pErrPush := s.intentResolver.resolveWriteIntentError(ctx, wiErr, rng, args, h, pushType)
+			resolveIntents, pErrPush := s.intentResolver.maybePushTransactions(ctx, *wiErr, args, h, pushType)
 			if len(resolveIntents) > 0 {
 				if resErr := s.intentResolver.resolveIntents(ctx, rng, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
 					// When resolving asynchronously, errors should not

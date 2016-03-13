@@ -929,7 +929,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		// conditions as described in #2231.
 		pErr = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
 	}
-	r.store.intentResolver.handleSkippedIntents(r, intents)
+	r.store.intentResolver.processIntentsAsync(r, intents)
 	return br, pErr
 }
 
@@ -1442,7 +1442,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	// On the replica on which this command originated, resolve skipped intents
 	// asynchronously - even on failure.
 	if originReplica.StoreID == r.store.StoreID() {
-		r.store.intentResolver.handleSkippedIntents(r, intents)
+		r.store.intentResolver.processIntentsAsync(r, intents)
 	}
 
 	return br, rErr
@@ -1875,7 +1875,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		r.store.intentResolver.handleSkippedIntents(r, intents)
+		r.store.intentResolver.processIntentsAsync(r, intents)
 		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows

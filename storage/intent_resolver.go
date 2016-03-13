@@ -42,15 +42,23 @@ func newIntentResolver(store *Store) *intentResolver {
 	return &intentResolver{store}
 }
 
-// resolveWriteIntentError tries to push the conflicting transaction (if
-// necessary, i.e. if the transaction is pending): either move its timestamp
-// forward on a read/write conflict, or abort it on a write/write conflict. If
-// the push succeeds (or if it wasn't necessary), the error's Resolved flag is
-// set to to true and the caller should call resolveIntents and retry its
-// command immediately. If the push fails, the error's Resolved flag is set to
-// false so that the client backs off before reissuing the command. On
-// write/write conflicts, a potential push error is returned; otherwise the
-// updated WriteIntentError is returned.
+// maybePushTransaction tries to push the conflicting transaction(s)
+// responsible for the given WriteIntentError: either move its
+// timestamp forward on a read/write conflict, abort it on a
+// write/write conflict, or do nothing if the transaction is no longer
+// pending.
+//
+// Returns a slice of intents which can now be resolved and an error
+// which should be returned to the client in place of the original
+// WriteIntentError. The returned intents should be resolved via
+// intentResolver.resolveIntents regardless of any error returned by
+// maybePushTransaction.
+//
+// The returned error may be a copy of the original WriteIntentError,
+// with or without the Resolved flag set, which governs the client's
+// retry behavior. (if the transaction is pushed, the Resolved flag is
+// set to tell the client to retry immediately; otherwise it is false
+// to cause the client to back off).
 //
 // Callers are involved with
 // a) conflict resolution for commands being executed at the Store with the
@@ -59,7 +67,7 @@ func newIntentResolver(store *Store) *intentResolver {
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (ir *intentResolver) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, *roachpb.Error) {
+func (ir *intentResolver) maybePushTransactions(ctx context.Context, wiErr roachpb.WriteIntentError, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, *roachpb.Error) {
 	method := args.Method()
 	pusherTxn := h.Txn
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
@@ -135,7 +143,7 @@ func (ir *intentResolver) resolveWriteIntentError(ctx context.Context, wiErr *ro
 		// For read/write conflicts, return the write intent error which
 		// engages backoff/retry (with !Resolved). We don't need to
 		// restart the txn, only resend the read with a backoff.
-		return nil, roachpb.NewError(wiErr)
+		return nil, roachpb.NewError(&wiErr)
 	}
 	wiErr.Resolved = true // success!
 
@@ -145,10 +153,15 @@ func (ir *intentResolver) resolveWriteIntentError(ctx context.Context, wiErr *ro
 		intent.Status = pushee.Status
 		resolveIntents = append(resolveIntents, intent)
 	}
-	return resolveIntents, roachpb.NewError(wiErr)
+	return resolveIntents, roachpb.NewError(&wiErr)
 }
 
-func (ir *intentResolver) handleSkippedIntents(r *Replica, intents []intentsWithArg) {
+// processIntentsAsync asynchronously processes intents which were
+// encountered during another command but did not interfere with the
+// execution of that command. This occurs in two cases: inconsistent
+// reads and EndTransaction (which queues its own intents for
+// processing via this method).
+func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithArg) {
 	if len(intents) == 0 {
 		return
 	}
@@ -169,15 +182,15 @@ func (ir *intentResolver) handleSkippedIntents(r *Replica, intents []intentsWith
 			ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 			defer cancel()
 			h := roachpb.Header{Timestamp: now}
-			resolveIntents, pErr := ir.resolveWriteIntentError(ctxWithTimeout, &roachpb.WriteIntentError{
+			resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout, roachpb.WriteIntentError{
 				Intents: item.intents,
-			}, r, args, h, roachpb.PUSH_TOUCH)
-			if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
-				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pErr)
-				return
-			}
+			}, args, h, roachpb.PUSH_TOUCH)
 			if pErr := ir.resolveIntents(ctxWithTimeout, r, resolveIntents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
 				log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
+				return
+			}
+			if wiErr, ok := pushErr.GetDetail().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
+				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pushErr)
 				return
 			}
 			// We successfully resolved the intents, so we're able to GC from
@@ -228,14 +241,15 @@ func (ir *intentResolver) handleSkippedIntents(r *Replica, intents []intentsWith
 	}
 }
 
-// resolveIntents resolves the given intents. For those which are local to the
-// range, we submit directly to the range-local Raft instance; all non-local
-// intents are resolved asynchronously in a batch. If `wait` is true, all
-// operations are carried out synchronously and an error is returned.
-// Otherwise, the call returns without error as soon as all local resolve
-// commands have been **proposed** (not executed). This ensures that if a
-// waiting client retries immediately after calling this function, it will not
-// hit the same intents again.
+// resolveIntents resolves the given intents. For those which are
+// local to the range, we submit directly to the local Raft instance;
+// all non-local intents are resolved asynchronously in a batch. If
+// `wait` is true, all operations are carried out synchronously and an
+// error is returned. Otherwise, the call returns without error as
+// soon as all local resolve commands have been **proposed** (not
+// executed). This ensures that if a waiting client retries
+// immediately after calling this function, it will not hit the same
+// intents again.
 func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica, intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
 	sp, cleanupSp := tracing.SpanFromContext(opReplica, ir.store.Tracer(), ctx)
 	defer cleanupSp()
