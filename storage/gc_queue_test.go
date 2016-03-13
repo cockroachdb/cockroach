@@ -136,7 +136,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := gcQ.shouldQueue(now, tc.rng, &cfg)
+		shouldQ, priority := gcQ.shouldQueue(now, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
@@ -248,7 +248,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.gossip)
-	if err := gcQ.process(tc.clock.Now(), tc.rng, &cfg); err != nil {
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -393,7 +393,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(tc.clock.Now(), tc.rng, &cfg); err != nil {
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -473,7 +473,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.gossip)
-	if err := gcQ.process(tc.clock.Now(), tc.rng, &cfg); err != nil {
+	if err := gcQ.process(tc.clock.Now(), tc.rng, cfg); err != nil {
 		t.Fatal(err)
 	}
 

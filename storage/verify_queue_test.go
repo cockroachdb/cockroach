@@ -20,6 +20,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -53,9 +54,10 @@ func TestVerifyQueueShouldQueue(t *testing.T) {
 	}
 
 	verifyQ := newVerifyQueue(tc.gossip, nil)
+	emptyConfig := config.SystemConfig{}
 
 	for i, test := range testCases {
-		shouldQ, priority := verifyQ.shouldQueue(test.now, tc.rng, nil /* system config not used */)
+		shouldQ, priority := verifyQ.shouldQueue(test.now, tc.rng, emptyConfig)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

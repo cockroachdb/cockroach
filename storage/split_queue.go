@@ -62,7 +62,7 @@ func (*splitQueue) acceptsUnsplitRanges() bool {
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
 func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
-	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
+	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := rng.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
@@ -88,7 +88,7 @@ func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
-	sysCfg *config.SystemConfig) error {
+	sysCfg config.SystemConfig) error {
 
 	// First handle case of splitting due to zone config maps.
 	desc := rng.Desc()

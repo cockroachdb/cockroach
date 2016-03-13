@@ -49,12 +49,12 @@ func (*replicaConsistencyQueue) acceptsUnsplitRanges() bool {
 }
 
 func (*replicaConsistencyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
-	_ *config.SystemConfig) (bool, float64) {
+	_ config.SystemConfig) (bool, float64) {
 	return true, 1.0
 }
 
 // process() is called on every range for which this node is a leader.
-func (q *replicaConsistencyQueue) process(_ roachpb.Timestamp, rng *Replica, _ *config.SystemConfig) error {
+func (q *replicaConsistencyQueue) process(_ roachpb.Timestamp, rng *Replica, _ config.SystemConfig) error {
 	req := roachpb.CheckConsistencyRequest{}
 	_, pErr := rng.CheckConsistency(req, rng.Desc())
 	if pErr != nil {

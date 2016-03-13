@@ -80,7 +80,7 @@ func (*replicateQueue) acceptsUnsplitRanges() bool {
 }
 
 func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
-	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
+	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := repl.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
@@ -104,7 +104,7 @@ func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	return shouldRebalance, 0
 }
 
-func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg *config.SystemConfig) error {
+func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg config.SystemConfig) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)

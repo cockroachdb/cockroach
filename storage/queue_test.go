@@ -74,11 +74,11 @@ type testQueueImpl struct {
 func (tq *testQueueImpl) needsLeaderLease() bool     { return false }
 func (tq *testQueueImpl) acceptsUnsplitRanges() bool { return tq.acceptUnsplit }
 
-func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(now roachpb.Timestamp, r *Replica, _ *config.SystemConfig) error {
+func (tq *testQueueImpl) process(now roachpb.Timestamp, r *Replica, _ config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }

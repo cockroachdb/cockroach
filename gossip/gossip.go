@@ -595,7 +595,7 @@ func (g *Gossip) CheckSystemConfig() bool {
 func (g *Gossip) GetSystemConfig() (config.SystemConfig, bool) {
 	g.systemConfigMu.RLock()
 	defer g.systemConfigMu.RUnlock()
-	return g.systemConfig, g.CheckSystemConfig()
+	return g.systemConfig, g.systemConfigSet
 }
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
@@ -611,7 +611,7 @@ func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
 	// Notify the channel right away if we have a config.
-	if g.CheckSystemConfig() {
+	if g.systemConfigSet {
 		c <- struct{}{}
 	}
 

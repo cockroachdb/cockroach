@@ -88,7 +88,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.setDesc(&copy); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := splitQ.shouldQueue(roachpb.ZeroTimestamp, tc.rng, &cfg)
+		shouldQ, priority := splitQ.shouldQueue(roachpb.ZeroTimestamp, tc.rng, cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

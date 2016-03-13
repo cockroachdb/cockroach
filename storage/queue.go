@@ -109,11 +109,11 @@ type queueImpl interface {
 
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
-	shouldQueue(roachpb.Timestamp, *Replica, *config.SystemConfig) (shouldQueue bool, priority float64)
+	shouldQueue(roachpb.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it.
-	process(roachpb.Timestamp, *Replica, *config.SystemConfig) error
+	process(roachpb.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -268,7 +268,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
-	should, priority := bq.impl.shouldQueue(now, repl, &cfg)
+	should, priority := bq.impl.shouldQueue(now, repl, cfg)
 	if err := bq.addInternal(repl, should, priority); err != nil {
 		bq.eventLog.Infof(log.V(3), "unable to add %s: %s", repl, err)
 	}
@@ -422,7 +422,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 
 	bq.eventLog.Infof(log.V(3), "%s: processing", repl)
 	start := time.Now()
-	if err := bq.impl.process(clock.Now(), repl, &cfg); err != nil {
+	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
 		return err
 	}
 	bq.eventLog.Infof(log.V(2), "%s: done: %s", repl, time.Since(start))
