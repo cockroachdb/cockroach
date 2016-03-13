@@ -32,6 +32,16 @@ import (
 	"golang.org/x/net/context"
 )
 
+// intentResolver manages the process of pushing transactions and
+// resolving intents.
+type intentResolver struct {
+	store *Store
+}
+
+func newIntentResolver(store *Store) *intentResolver {
+	return &intentResolver{store}
+}
+
 // resolveWriteIntentError tries to push the conflicting transaction (if
 // necessary, i.e. if the transaction is pending): either move its timestamp
 // forward on a read/write conflict, or abort it on a write/write conflict. If
@@ -49,7 +59,7 @@ import (
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, *roachpb.Error) {
+func (ir *intentResolver) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, *roachpb.Error) {
 	method := args.Method()
 	pusherTxn := h.Txn
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
@@ -58,7 +68,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
 	}
-	sp, cleanupSp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
+	sp, cleanupSp := tracing.SpanFromContext(opStore, ir.store.Tracer(), ctx)
 	defer cleanupSp()
 	sp.LogEvent("intent resolution")
 
@@ -76,7 +86,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
-	now := s.Clock().Now()
+	now := ir.store.Clock().Now()
 
 	// TODO(tschottdorf): need deduplication here (many pushes for the same
 	// txn are awkward but even worse, could ratchet up the priority).
@@ -109,7 +119,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	// txn is correctly propagated in an error response.
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)
-	br, pushErr := s.db.RunWithResponse(b)
+	br, pushErr := ir.store.db.RunWithResponse(b)
 	if pushErr != nil {
 		if log.V(1) {
 			log.Infoc(ctx, "on %s: %s", method, pushErr)
@@ -138,7 +148,7 @@ func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.Writ
 	return resolveIntents, roachpb.NewError(wiErr)
 }
 
-func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
+func (ir *intentResolver) handleSkippedIntents(r *Replica, intents []intentsWithArg) {
 	if len(intents) == 0 {
 		return
 	}
@@ -159,14 +169,14 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 			ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 			defer cancel()
 			h := roachpb.Header{Timestamp: now}
-			resolveIntents, pErr := r.store.resolveWriteIntentError(ctxWithTimeout, &roachpb.WriteIntentError{
+			resolveIntents, pErr := ir.resolveWriteIntentError(ctxWithTimeout, &roachpb.WriteIntentError{
 				Intents: item.intents,
 			}, r, args, h, roachpb.PUSH_TOUCH)
 			if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok || wiErr == nil || !wiErr.Resolved {
 				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pErr)
 				return
 			}
-			if pErr := r.resolveIntents(ctxWithTimeout, resolveIntents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
+			if pErr := ir.resolveIntents(ctxWithTimeout, r, resolveIntents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
 				log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
 				return
 			}
@@ -226,8 +236,8 @@ func (r *Replica) handleSkippedIntents(intents []intentsWithArg) {
 // commands have been **proposed** (not executed). This ensures that if a
 // waiting client retries immediately after calling this function, it will not
 // hit the same intents again.
-func (r *Replica) resolveIntents(ctx context.Context, intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
+func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica, intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
+	sp, cleanupSp := tracing.SpanFromContext(opReplica, ir.store.Tracer(), ctx)
 	defer cleanupSp()
 
 	ctx = opentracing.ContextWithSpan(ctx, nil) // we're doing async stuff below; those need new traces

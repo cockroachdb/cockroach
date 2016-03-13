@@ -268,6 +268,7 @@ type Store struct {
 	replicaConsistencyQueue *replicaConsistencyQueue // Replica consistency check queue
 	consistencyScanner      *replicaScanner          // Consistency checker scanner
 	metrics                 *storeMetrics
+	intentResolver          *intentResolver
 	wakeRaftLoop            chan struct{}
 	started                 int32
 	stopper                 *stop.Stopper
@@ -536,6 +537,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		raftRequestChan: make(chan *RaftMessageRequest, raftReqBufferSize),
 		metrics:         newStoreMetrics(),
 	}
+	s.intentResolver = newIntentResolver(s)
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
@@ -1587,9 +1589,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			resolveIntents, pErrPush := s.resolveWriteIntentError(ctx, wiErr, rng, args, h, pushType)
+			resolveIntents, pErrPush := s.intentResolver.resolveWriteIntentError(ctx, wiErr, rng, args, h, pushType)
 			if len(resolveIntents) > 0 {
-				if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
+				if resErr := s.intentResolver.resolveIntents(ctx, rng, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
 					// When resolving asynchronously, errors should not
 					// usually be returned here, although there are some cases
 					// when they may be (especially when a test cluster is in

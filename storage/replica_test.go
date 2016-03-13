@@ -2286,7 +2286,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey)
 	txn := newTransaction("name", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
-	if pErr := tc.rng.resolveIntents(context.Background(), []roachpb.Intent{{
+	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng, []roachpb.Intent{{
 		Span:   roachpb.Span{Key: key},
 		Txn:    txn.TxnMeta,
 		Status: txn.Status,

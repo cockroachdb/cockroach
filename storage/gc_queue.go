@@ -283,7 +283,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		}
 	}
 
-	if pErr := repl.resolveIntents(repl.context(), intents, true /* wait */, false /* !poison */); pErr != nil {
+	if pErr := repl.store.intentResolver.resolveIntents(repl.context(), repl, intents, true /* wait */, false /* !poison */); pErr != nil {
 		return pErr.GoError()
 	}
 
@@ -346,14 +346,14 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 			// Note: Most aborted transaction weren't aborted by their client,
 			// but instead by the coordinator - those will not have any intents
 			// persisted, though they still might exist in the system.
-			if err := r.resolveIntents(r.context(),
+			if err := r.store.intentResolver.resolveIntents(r.context(), r,
 				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
 			}
 		case roachpb.COMMITTED:
 			// It's committed, so it doesn't need a push but we can only
 			// GC it after its intents are resolved.
-			if err := r.resolveIntents(r.context(),
+			if err := r.store.intentResolver.resolveIntents(r.context(), r,
 				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
