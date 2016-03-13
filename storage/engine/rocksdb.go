@@ -502,7 +502,9 @@ func (r *rocksDBBatch) Flush() error {
 }
 
 func (r *rocksDBBatch) NewIterator(prefix roachpb.Key) Iterator {
-	return newRocksDBIterator(r.batch, prefix)
+	i := newRocksDBIterator(r.batch, prefix)
+	i.batch = r
+	return i
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
@@ -541,6 +543,7 @@ type rocksDBIterator struct {
 	valid bool
 	key   C.DBKey
 	value C.DBSlice
+	batch *rocksDBBatch
 }
 
 // newRocksDBIterator returns a new iterator over the supplied RocksDB
@@ -563,6 +566,9 @@ func (r *rocksDBIterator) Close() {
 }
 
 func (r *rocksDBIterator) Seek(key MVCCKey) {
+	if r.batch != nil && r.batch.batch == nil {
+		panic("batch iterator used after batch committed")
+	}
 	if len(key.Key) == 0 {
 		// start=Key("") needs special treatment since we need
 		// to access start[0] in an explicit seek.
@@ -581,10 +587,16 @@ func (r *rocksDBIterator) Valid() bool {
 }
 
 func (r *rocksDBIterator) Next() {
+	if r.batch != nil && r.batch.batch == nil {
+		panic("batch iterator used after batch committed")
+	}
 	r.setState(C.DBIterNext(r.iter))
 }
 
 func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
+	if r.batch != nil && r.batch.batch == nil {
+		panic("batch iterator used after batch committed")
+	}
 	if len(key.Key) == 0 {
 		r.setState(C.DBIterSeekToLast(r.iter))
 	} else {
@@ -604,6 +616,9 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 }
 
 func (r *rocksDBIterator) Prev() {
+	if r.batch != nil && r.batch.batch == nil {
+		panic("batch iterator used after batch committed")
+	}
 	r.setState(C.DBIterPrev(r.iter))
 }
 
