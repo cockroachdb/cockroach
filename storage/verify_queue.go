@@ -65,7 +65,7 @@ func (*verifyQueue) acceptsUnsplitRanges() bool {
 // for shouldQ in the event that it's been longer since the last scan
 // than the verification interval.
 func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
-	_ *config.SystemConfig) (shouldQ bool, priority float64) {
+	_ config.SystemConfig) (shouldQ bool, priority float64) {
 
 	// Get last verification timestamp.
 	lastVerify, err := rng.getLastVerificationTimestamp()
@@ -85,7 +85,7 @@ func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 // act of scanning keys verifies on-disk checksums, as each block
 // checksum is checked on load.
 func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
-	_ *config.SystemConfig) error {
+	_ config.SystemConfig) error {
 
 	snap := rng.store.Engine().NewSnapshot()
 	iter := newReplicaDataIterator(rng.Desc(), snap, false /* !replicatedOnly */)

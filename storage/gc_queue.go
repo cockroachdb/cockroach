@@ -95,7 +95,7 @@ func (*gcQueue) acceptsUnsplitRanges() bool {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
-	sysCfg *config.SystemConfig) (shouldQ bool, priority float64) {
+	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
@@ -145,7 +145,7 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
-	sysCfg *config.SystemConfig) error {
+	sysCfg config.SystemConfig) error {
 
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
