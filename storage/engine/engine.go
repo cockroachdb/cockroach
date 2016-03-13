@@ -150,6 +150,10 @@ type Engine interface {
 	// with the defer statement, the last callback to be deferred is the
 	// first to be executed.
 	Defer(fn func())
+	// Closed returns true if the engine has been close or not usable.
+	// Objects backed by this engine (e.g. Iterators) can check this to ensure
+	// that they are not using an closed engine.
+	Closed() bool
 }
 
 var bufferPool = sync.Pool{
