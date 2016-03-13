@@ -120,7 +120,6 @@ func TestRetryableError(t *testing.T) {
 	clientStopper := stop.NewStopper()
 	defer clientStopper.Stop()
 	clientContext := newNodeTestContext(nil, clientStopper)
-	clientContext.HeartbeatTimeout = 10 * clientContext.HeartbeatInterval
 
 	serverStopper := stop.NewStopper()
 	serverContext := newNodeTestContext(nil, serverStopper)
@@ -133,25 +132,23 @@ func TestRetryableError(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	// Wait until the client becomes healthy and shut down the server.
-	for clientState, err := conn.State(); clientState != grpc.Ready; clientState, err = conn.WaitForStateChange(ctx, clientState) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		if clientState == grpc.Shutdown {
-			t.Fatalf("%v has unexpectedly shut down", conn)
+	waitForConnState := func(desiredState grpc.ConnectivityState) {
+		clientState, err := conn.State()
+		for clientState != desiredState {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if clientState == grpc.Shutdown {
+				t.Fatalf("%v has unexpectedly shut down", conn)
+			}
+			clientState, err = conn.WaitForStateChange(ctx, clientState)
 		}
 	}
+	// Wait until the client becomes healthy and shut down the server.
+	waitForConnState(grpc.Ready)
 	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
-	for clientState, err := conn.State(); clientState != grpc.TransientFailure; clientState, err = conn.WaitForStateChange(ctx, clientState) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		if clientState == grpc.Shutdown {
-			t.Fatalf("%v has unexpectedly shut down", conn)
-		}
-	}
+	waitForConnState(grpc.TransientFailure)
 
 	sp := tracing.NewTracer().StartSpan("node test")
 	defer sp.Finish()
