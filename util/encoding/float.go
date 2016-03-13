@@ -95,28 +95,28 @@ func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
 	switch {
 	case buf[0] == floatNegLarge:
 		// Negative large.
-		e, m := decodeLargeNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp), nil
+		e, m, tmp2 := decodeLargeNumber(true, buf[:idx+1], tmp)
+		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp2), nil
 	case buf[0] > floatNegLarge && buf[0] <= floatNegMedium:
 		// Negative medium.
-		e, m := decodeMediumNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp), nil
+		e, m, tmp2 := decodeMediumNumber(true, buf[:idx+1], tmp)
+		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp2), nil
 	case buf[0] == floatNegSmall:
 		// Negative small.
-		e, m := decodeSmallNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp), nil
+		e, m, tmp2 := decodeSmallNumber(true, buf[:idx+1], tmp)
+		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp2), nil
 	case buf[0] == floatPosLarge:
 		// Positive large.
-		e, m := decodeLargeNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp), nil
+		e, m, tmp2 := decodeLargeNumber(false, buf[:idx+1], tmp)
+		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp2), nil
 	case buf[0] >= floatPosMedium && buf[0] < floatPosLarge:
 		// Positive medium.
-		e, m := decodeMediumNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp), nil
+		e, m, tmp2 := decodeMediumNumber(false, buf[:idx+1], tmp)
+		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp2), nil
 	case buf[0] == floatPosSmall:
 		// Positive small.
-		e, m := decodeSmallNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp), nil
+		e, m, tmp2 := decodeSmallNumber(false, buf[:idx+1], tmp)
+		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp2), nil
 	default:
 		return nil, 0, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
@@ -331,11 +331,11 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	return buf[:l+1]
 }
 
-func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
-	var e uint64
+func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, newTmp []byte) {
+	var ex uint64
 	var n int
 	if negative {
-		e, n = getUvarint(buf[1:])
+		ex, n = getUvarint(buf[1:])
 	} else {
 		var t []byte
 		if len(tmp) > 0 {
@@ -344,13 +344,13 @@ func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
 		} else {
 			t = []byte{^buf[1]}
 		}
-		e, n = getUvarint(t)
+		ex, n = getUvarint(t)
 	}
 
 	// We don't need the prefix and last terminator.
-	var m []byte
 	if k := len(buf) - (2 + n); k <= len(tmp) {
 		m = tmp[:k]
+		tmp = tmp[k:]
 	} else {
 		m = make([]byte, len(buf)-(2+n))
 	}
@@ -359,33 +359,32 @@ func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
 	if negative {
 		onesComplement(m)
 	}
-	return int(-e), m
+	return int(-ex), m, tmp
 }
 
-func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
+func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, newTmp []byte) {
 	// We don't need the prefix and last terminator.
-	var m []byte
 	if n := len(buf) - 2; n <= len(tmp) {
 		m = tmp[:n]
+		tmp = tmp[n:]
 	} else {
 		m = make([]byte, n)
 	}
 	copy(m, buf[1:len(buf)-1])
 
-	var e int
 	if negative {
 		e = floatNegMedium - int(buf[0])
 		onesComplement(m)
 	} else {
 		e = int(buf[0]) - floatPosMedium
 	}
-	return e, m
+	return e, m, tmp
 }
 
-func decodeLargeNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
-	var m []byte
+func decodeLargeNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, newTmp []byte) {
 	if n := len(buf); n <= len(tmp) {
 		m = tmp[:n]
+		tmp = tmp[n:]
 	} else {
 		m = make([]byte, n)
 	}
@@ -393,8 +392,8 @@ func decodeLargeNumber(negative bool, buf []byte, tmp []byte) (int, []byte) {
 	if negative {
 		onesComplement(m[1:])
 	}
-	e, l := getUvarint(m[1:])
+	ex, l := getUvarint(m[1:])
 
 	// We don't need the prefix and last terminator.
-	return int(e), m[l+1 : len(m)-1]
+	return int(ex), m[l+1 : len(m)-1], tmp
 }

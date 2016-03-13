@@ -125,55 +125,58 @@ func TestEncodeFloat(t *testing.T) {
 	}
 
 	var lastEncoded []byte
-	for _, dir := range []Direction{Ascending, Descending} {
-		for i, c := range testCases {
-			var enc []byte
-			var err error
-			var dec float64
-			if dir == Ascending {
-				enc = EncodeFloatAscending(nil, c.Value)
-				_, dec, err = DecodeFloatAscending(enc, nil)
-			} else {
-				enc = EncodeFloatDescending(nil, c.Value)
-				_, dec, err = DecodeFloatDescending(enc, nil)
-			}
-			if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
-				t.Errorf("unexpected mismatch for %v. expected [% x], got [% x]",
-					c.Value, c.Encoding, enc)
-			}
-			if i > 0 {
-				if (bytes.Compare(lastEncoded, enc) >= 0 && dir == Ascending) ||
-					(bytes.Compare(lastEncoded, enc) <= 0 && dir == Descending) {
-					t.Errorf("%v: expected [% x] to be less than [% x]",
-						c.Value, testCases[i-1].Encoding, enc)
+	for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
+		tmp = tmp[:0]
+		for _, dir := range []Direction{Ascending, Descending} {
+			for i, c := range testCases {
+				var enc []byte
+				var err error
+				var dec float64
+				if dir == Ascending {
+					enc = EncodeFloatAscending(nil, c.Value)
+					_, dec, err = DecodeFloatAscending(enc, tmp)
+				} else {
+					enc = EncodeFloatDescending(nil, c.Value)
+					_, dec, err = DecodeFloatDescending(enc, tmp)
 				}
-			}
-			if err != nil {
-				t.Error(err)
-				continue
-			}
-			if math.IsNaN(c.Value) {
-				if !math.IsNaN(dec) {
+				if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
+					t.Errorf("unexpected mismatch for %v. expected [% x], got [% x]",
+						c.Value, c.Encoding, enc)
+				}
+				if i > 0 {
+					if (bytes.Compare(lastEncoded, enc) >= 0 && dir == Ascending) ||
+						(bytes.Compare(lastEncoded, enc) <= 0 && dir == Descending) {
+						t.Errorf("%v: expected [% x] to be less than [% x]",
+							c.Value, testCases[i-1].Encoding, enc)
+					}
+				}
+				if err != nil {
+					t.Error(err)
+					continue
+				}
+				if math.IsNaN(c.Value) {
+					if !math.IsNaN(dec) {
+						t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+					}
+				} else if dec != c.Value {
 					t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 				}
-			} else if dec != c.Value {
-				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+				lastEncoded = enc
 			}
-			lastEncoded = enc
-		}
 
-		// Test that appending the float to an existing buffer works.
-		var enc []byte
-		var dec float64
-		if dir == Ascending {
-			enc = EncodeFloatAscending([]byte("hello"), 1.23)
-			_, dec, _ = DecodeFloatAscending(enc[5:], nil)
-		} else {
-			enc = EncodeFloatDescending([]byte("hello"), 1.23)
-			_, dec, _ = DecodeFloatDescending(enc[5:], nil)
-		}
-		if dec != 1.23 {
-			t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
+			// Test that appending the float to an existing buffer works.
+			var enc []byte
+			var dec float64
+			if dir == Ascending {
+				enc = EncodeFloatAscending([]byte("hello"), 1.23)
+				_, dec, _ = DecodeFloatAscending(enc[5:], tmp)
+			} else {
+				enc = EncodeFloatDescending([]byte("hello"), 1.23)
+				_, dec, _ = DecodeFloatDescending(enc[5:], tmp)
+			}
+			if dec != 1.23 {
+				t.Errorf("unexpected mismatch for %v. got %v", 1.23, dec)
+			}
 		}
 	}
 }
