@@ -50,7 +50,7 @@ func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
 func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 	switch level {
 	case parser.UnspecifiedIsolation:
-		return p.txn.SetIsolation(p.session.DefaultIsolationLevel)
+		return nil
 	case parser.SnapshotIsolation:
 		return p.txn.SetIsolation(roachpb.SNAPSHOT)
 	case parser.SerializableIsolation:

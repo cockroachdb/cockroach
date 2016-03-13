@@ -198,6 +198,18 @@ statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
 statement error cannot change the isolation level of a running transaction
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement error cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
 statement ok
@@ -268,7 +280,19 @@ BEGIN TRANSACTION; SET TRANSACTION PRIORITY NORMAL; COMMIT
 statement ok
 BEGIN TRANSACTION; SET TRANSACTION PRIORITY HIGH; COMMIT
 
-# It is an error to change the isolation level of a running transaction.
+# It is an error to change the user priority of a running transaction.
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+UPDATE kv SET v = 'b' WHERE k in ('a')
+
+statement error cannot change the user priority of a running transaction
+SET TRANSACTION PRIORITY NORMAL
+
+statement ok
+ROLLBACK
 
 statement ok
 BEGIN TRANSACTION
