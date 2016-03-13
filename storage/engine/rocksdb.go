@@ -502,7 +502,9 @@ func (r *rocksDBBatch) Flush() error {
 }
 
 func (r *rocksDBBatch) NewIterator(prefix roachpb.Key) Iterator {
-	return newRocksDBIterator(r.batch, prefix)
+	i := newRocksDBIterator(r.batch, prefix)
+	i.batch = r
+	return i
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
@@ -541,6 +543,7 @@ type rocksDBIterator struct {
 	valid bool
 	key   C.DBKey
 	value C.DBSlice
+	batch *rocksDBBatch
 }
 
 // newRocksDBIterator returns a new iterator over the supplied RocksDB
@@ -638,6 +641,9 @@ func (r *rocksDBIterator) Error() error {
 }
 
 func (r *rocksDBIterator) setState(state C.DBIterState) {
+	if r.batch != nil && r.batch.batch == nil {
+		panic("batch iterator used after batch committed")
+	}
 	r.valid = bool(state.valid)
 	r.key = state.key
 	r.value = state.value

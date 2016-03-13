@@ -740,12 +740,12 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal("committed write missing by non-batch iter created after commit")
 	}
 
-	// NB(dt): `Commit` frees the underlying batch, rendering iterators that
-	// are backed by it invalid, but they can still return (incorrect) results.
-	// if after.Seek(k); !after.Valid() {
-	// 	t.Fatal("write missing on batch iter created after write")
-	// }
-	// if before.Seek(k); !before.Valid() {
-	// 	t.Fatalf("write missing on batch iter created before write")
-	// }
+	// `Commit` frees the batch, so iterators backed by it should panic.
+	func() {
+		defer func() {
+			_ = recover()
+		}()
+		after.Seek(k)
+		t.Fatal("Seek on batch-backed iter after batched closed should panic")
+	}()
 }
