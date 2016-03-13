@@ -468,12 +468,8 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 		}
 	} else {
 		if n.implicitVals != nil {
-			implicitDirs := make([]encoding.Direction, 0, len(n.index.ImplicitColumnIDs))
-			for range n.index.ImplicitColumnIDs {
-				implicitDirs = append(implicitDirs, encoding.Ascending)
-			}
 			var err error
-			_, err = decodeKeyVals(n.implicitValTypes, n.implicitVals, implicitDirs, kv.ValueBytes())
+			_, err = decodeKeyVals(n.implicitValTypes, n.implicitVals, nil, kv.ValueBytes())
 			n.pErr = roachpb.NewError(err)
 			if n.pErr != nil {
 				return false
