@@ -92,7 +92,7 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		// This gives us a memory-efficient end key if end is empty.
 		start, end := span.Key, span.EndKey
 		if len(end) == 0 {
-			end = start.Next()
+			end = start.ShallowNext()
 			start = end[:len(start)]
 		}
 		newCmdRange := interval.Range{
@@ -298,7 +298,8 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} 
 	for _, span := range spans {
 		start, end := span.Key, span.EndKey
 		if len(end) == 0 {
-			end = start.Next()
+			end = start.ShallowNext()
+			start = end[:len(start)]
 		}
 		alloc := struct {
 			key   cache.IntervalKey

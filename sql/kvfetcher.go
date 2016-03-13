@@ -164,7 +164,7 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 			start := f.spans[0].start
 			if len(f.kvs) > 0 {
 				// the new range starts after the last key
-				start = f.kvs[len(f.kvs)-1].Key.Next()
+				start = f.kvs[len(f.kvs)-1].Key.ShallowNext()
 				if start.Equal(f.spans[0].end) {
 					// No more keys
 					f.kvs = nil

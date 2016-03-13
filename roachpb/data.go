@@ -80,6 +80,14 @@ func (rk RKey) Next() RKey {
 	return RKey(BytesNext(rk))
 }
 
+// ShallowNext returns the RKey that sorts immediately after the
+// given one, using extra capacity of the recevier key if possible.
+// The method may only take a shallow copy of the RKey, so both the
+// receiver and the return value should be treated as immutable after.
+func (rk RKey) ShallowNext() RKey {
+	return append(rk, 0)
+}
+
 // PrefixEnd determines the end key given key as a prefix, that is the
 // key that sorts precisely behind all keys starting with prefix: "1"
 // is added to the final byte and the carry propagated. The special
@@ -137,6 +145,14 @@ func bytesPrefixEnd(b []byte) []byte {
 // Next returns the next key in lexicographic sort order.
 func (k Key) Next() Key {
 	return Key(BytesNext(k))
+}
+
+// ShallowNext returns the next key in lexicographic sort order, using
+// extra capacity of the recevier key if possible. The method may only
+// take a shallow copy of the Key, so both the receiver and the return
+// value should be treated as immutable after.
+func (k Key) ShallowNext() Key {
+	return append(k, 0)
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
