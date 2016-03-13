@@ -252,8 +252,8 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) error {
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 	// Load the system config.
-	cfg := bq.gossip.GetSystemConfig()
-	if cfg == nil {
+	cfg, ok := bq.gossip.GetSystemConfig()
+	if !ok {
 		bq.eventLog.Infof(log.V(1), "no system config available. skipping")
 		return
 	}
@@ -268,7 +268,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now roachpb.Timestamp) {
 
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
-	should, priority := bq.impl.shouldQueue(now, repl, cfg)
+	should, priority := bq.impl.shouldQueue(now, repl, &cfg)
 	if err := bq.addInternal(repl, should, priority); err != nil {
 		bq.eventLog.Infof(log.V(3), "unable to add %s: %s", repl, err)
 	}
@@ -393,8 +393,8 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // while calling this method.
 func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// Load the system config.
-	cfg := bq.gossip.GetSystemConfig()
-	if cfg == nil {
+	cfg, ok := bq.gossip.GetSystemConfig()
+	if !ok {
 		bq.eventLog.Infof(log.V(1), "no system config available. skipping")
 		return nil
 	}
@@ -422,7 +422,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 
 	bq.eventLog.Infof(log.V(3), "%s: processing", repl)
 	start := time.Now()
-	if err := bq.impl.process(clock.Now(), repl, cfg); err != nil {
+	if err := bq.impl.process(clock.Now(), repl, &cfg); err != nil {
 		return err
 	}
 	bq.eventLog.Infof(log.V(2), "%s: done: %s", repl, time.Since(start))

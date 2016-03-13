@@ -216,7 +216,7 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg := ctx.Gossip.GetSystemConfig()
+				cfg, _ := ctx.Gossip.GetSystemConfig()
 				exec.updateSystemConfig(cfg)
 			case <-stopper.ShouldStop():
 				return
@@ -235,9 +235,9 @@ func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
-func (e *Executor) updateSystemConfig(cfg *config.SystemConfig) {
+func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	e.systemConfigMu.Lock()
-	e.systemConfig = *cfg
+	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
 	e.databaseCache = &databaseCache{
 		databases: map[string]ID{},

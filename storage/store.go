@@ -717,7 +717,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			for {
 				select {
 				case <-gossipUpdateC:
-					cfg := s.ctx.Gossip.GetSystemConfig()
+					cfg, _ := s.ctx.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
 				case <-s.stopper.ShouldStop():
 					return
@@ -864,7 +864,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
-func (s *Store) systemGossipUpdate(cfg *config.SystemConfig) {
+func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// For every range, update its MaxBytes and check if it needs to be split.
@@ -2067,8 +2067,8 @@ func (s *Store) GetStatus() (*StoreStatus, error) {
 func (s *Store) computeReplicationStatus(now int64) (
 	leaderRangeCount, replicatedRangeCount, availableRangeCount int64) {
 	// Load the system config.
-	cfg := s.Gossip().GetSystemConfig()
-	if cfg == nil {
+	cfg, ok := s.Gossip().GetSystemConfig()
+	if !ok {
 		log.Infof("system config not yet available")
 		return
 	}

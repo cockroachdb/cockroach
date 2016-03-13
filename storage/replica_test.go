@@ -211,8 +211,8 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	}
 
 	util.SucceedsSoon(t, func() error {
-		if tc.gossip.GetSystemConfig() == nil {
-			return util.Errorf("expected non-nil system config")
+		if !tc.gossip.CheckSystemConfig() {
+			return util.Errorf("expected system config to be set")
 		}
 		return nil
 	})
@@ -608,7 +608,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if cfg := tc.gossip.GetSystemConfig(); cfg != nil {
+	if cfg, ok := tc.gossip.GetSystemConfig(); ok {
 		if nv := len(cfg.Values); nv == 1 && cfg.Values[nv-1].Key.Equal(key) {
 			t.Errorf("unexpected gossip of system config: %s", cfg)
 		}
@@ -646,9 +646,9 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	})
 
 	util.SucceedsSoon(t, func() error {
-		cfg := tc.gossip.GetSystemConfig()
-		if cfg == nil {
-			return util.Errorf("expected non-nil system config")
+		cfg, ok := tc.gossip.GetSystemConfig()
+		if !ok {
+			return util.Errorf("expected system config to be set")
 		}
 		numValues := len(cfg.Values)
 		if numValues != 1 {
@@ -800,9 +800,8 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
+	if !tc.gossip.CheckSystemConfig() {
+		t.Fatal("config not set")
 	}
 }
 
@@ -863,9 +862,9 @@ func TestRangeNoGossipConfig(t *testing.T) {
 		txn.Writing = true
 
 		// System config is not gossiped.
-		cfg := tc.gossip.GetSystemConfig()
-		if cfg == nil {
-			t.Fatal("nil config")
+		cfg, ok := tc.gossip.GetSystemConfig()
+		if !ok {
+			t.Fatal("config not set")
 		}
 		if len(cfg.Values) != 0 {
 			t.Errorf("System config was gossiped at #%d", i)

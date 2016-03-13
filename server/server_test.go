@@ -384,7 +384,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	var systemConfig config.SystemConfig
 	select {
 	case <-resultChan:
-		systemConfig = *s.gossip.GetSystemConfig()
+		systemConfig, _ = s.gossip.GetSystemConfig()
 		t.Fatalf("unexpected message received on gossip channel: %v", systemConfig)
 
 	case <-time.After(50 * time.Millisecond):
@@ -401,7 +401,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	// New system config received.
 	select {
 	case <-resultChan:
-		systemConfig = *s.gossip.GetSystemConfig()
+		systemConfig, _ = s.gossip.GetSystemConfig()
 
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("did not receive gossip message")

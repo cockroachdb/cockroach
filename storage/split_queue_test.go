@@ -73,9 +73,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 	splitQ := newSplitQueue(nil, tc.gossip)
 
-	cfg := tc.gossip.GetSystemConfig()
-	if cfg == nil {
-		t.Fatal("nil config")
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
 
 	for i, test := range testCases {
@@ -88,7 +88,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.setDesc(&copy); err != nil {
 			t.Fatal(err)
 		}
-		shouldQ, priority := splitQ.shouldQueue(roachpb.ZeroTimestamp, tc.rng, cfg)
+		shouldQ, priority := splitQ.shouldQueue(roachpb.ZeroTimestamp, tc.rng, &cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

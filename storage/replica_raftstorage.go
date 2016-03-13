@@ -472,8 +472,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// since the original range and the new range might belong
 	// to different zones.
 	// Load the system config.
-	cfg := r.store.Gossip().GetSystemConfig()
-	if cfg == nil {
+	cfg, ok := r.store.Gossip().GetSystemConfig()
+	if !ok {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
 		log.Warningf("no system config available, cannot determine range MaxBytes")
