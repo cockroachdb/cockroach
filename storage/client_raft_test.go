@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	storage_util "github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -169,7 +170,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		defer stopper.Stop()
 		sCtx := storage.TestStoreContext()
 		sCtx.TestingMocker.TestingCommandFilter =
-			func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+			func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+				args roachpb.Request, _ roachpb.Header) error {
 				if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
 					numIncrements++
 				}
@@ -370,7 +372,8 @@ func TestFailedReplicaChange(t *testing.T) {
 	mtc := &multiTestContext{}
 	mtc.storeContext = &ctx
 	mtc.storeContext.TestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+			args roachpb.Request, _ roachpb.Header) error {
 			if runFilter.Load().(bool) {
 				if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
 					return util.Errorf("boom")

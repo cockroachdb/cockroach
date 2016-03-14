@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -372,7 +373,7 @@ type StoreContext struct {
 // StoreTestingMocker is a part of the context used to control parts of the system.
 type StoreTestingMocker struct {
 	// A callback to be called when executing every replica command.
-	TestingCommandFilter CommandFilter
+	TestingCommandFilter testutils.ReplicaCommandFilter
 	// A callback to be called instead of panicking due to a
 	// checksum mismatch in VerifyChecksum()
 	BadChecksumPanic func()

@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/pq"
 )
@@ -79,7 +80,7 @@ func TestTxnRestart(t *testing.T) {
 		vals:          []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"},
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(_ context.Context, sid roachpb.StoreID,
+		func(_ context.Context, _ util.RaftCmdIDAndIndex, sid roachpb.StoreID,
 			req roachpb.Request, hdr roachpb.Header) error {
 			return injectRetriableErrors(sid, req, hdr, magicVals)
 		}, false)
@@ -125,7 +126,7 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 		restartCounts: make(map[string]int),
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
-		func(_ context.Context, sid roachpb.StoreID,
+		func(_ context.Context, _ util.RaftCmdIDAndIndex, sid roachpb.StoreID,
 			req roachpb.Request, hdr roachpb.Header) error {
 			return injectRetriableErrors(sid, req, hdr, magicVals)
 		}, false)

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	storage_util "github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -196,7 +197,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext()
 	ctx.TestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if _, ok := args.(*roachpb.GetRequest); ok &&
 				args.Header().Key.Equal(roachpb.Key(key)) &&
 				h.Txn == nil {

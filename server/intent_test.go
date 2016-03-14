@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	storage_util "github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -81,7 +82,8 @@ func TestIntentResolution(t *testing.T) {
 			var done bool
 			ctx := NewTestContext()
 			ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-				func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+					args roachpb.Request, _ roachpb.Header) error {
 					mu.Lock()
 					defer mu.Unlock()
 					header := args.Header()

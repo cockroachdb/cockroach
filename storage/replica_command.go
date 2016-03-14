@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	storage_util "github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -43,7 +44,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-func (r *Replica) executeCmd(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, remScanResults int64,
+func (r *Replica) executeCmd(ctx context.Context, raftCmdID storage_util.RaftCmdIDAndIndex, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, remScanResults int64,
 	args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
 	ts := h.Timestamp
 
@@ -57,7 +58,7 @@ func (r *Replica) executeCmd(ctx context.Context, batch engine.Engine, ms *engin
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.ctx.TestingMocker.TestingCommandFilter; filter != nil {
-		err := filter(ctx, r.store.StoreID(), args, h)
+		err := filter(ctx, raftCmdID, r.store.StoreID(), args, h)
 		if err != nil {
 			pErr := roachpb.NewErrorWithTxn(err, h.Txn)
 			log.Infof("test injecting error: %s", pErr)

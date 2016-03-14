@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	storage_util "github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -619,7 +620,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 		func() {
 			ctx := TestStoreContext()
 			ctx.TestingMocker.TestingCommandFilter =
-				func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 					if bytes.Equal(args.Header().Key, badKey) {
 						return fmt.Errorf("boom")
 					}
@@ -958,7 +959,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	var stopper *stop.Stopper
 	ctx := TestStoreContext()
 	ctx.TestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+			args roachpb.Request, h roachpb.Header) error {
 			pr, ok := args.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
 				return nil
@@ -1431,7 +1433,8 @@ func TestStoreScanIntents(t *testing.T) {
 	countPtr := &count
 
 	ctx.TestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+			args roachpb.Request, _ roachpb.Header) error {
 			if _, ok := args.(*roachpb.ScanRequest); ok {
 				atomic.AddInt32(countPtr, 1)
 			}
@@ -1548,7 +1551,8 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	intercept.Store(true)
 	ctx := TestStoreContext()
 	ctx.TestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+			args roachpb.Request, _ roachpb.Header) error {
 			if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
 				return util.Errorf("error on purpose")
 			}

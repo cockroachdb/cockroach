@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	storage_util "github.com/cockroachdb/cockroach/storage/util"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -512,7 +513,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	ctx := server.NewTestContext()
 	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
+		func(_ context.Context, _ storage_util.RaftCmdIDAndIndex, _ roachpb.StoreID,
+			args roachpb.Request, h roachpb.Header) error {
 			if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
 					return roachpb.NewReadWithinUncertaintyIntervalError(
