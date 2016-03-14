@@ -632,7 +632,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 	origLeft, origRight := left, right
 
 	switch left.Operator {
-	case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE, parser.Is:
+	case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE, parser.Is:
 		switch right.Operator {
 		case parser.In:
 			left, right = right, left
@@ -647,7 +647,7 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 				return parser.DBool(false), nil
 			}
 
-		case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
+		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			// Our tuple will be sorted (see simplifyComparisonExpr). Binary search
 			// for the right datum.
 			datum := right.Right.(parser.Datum)
@@ -661,6 +661,19 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 					return right, nil
 				}
 				return parser.DBool(false), nil
+
+			case parser.NE:
+				if i < len(ltuple) && ltuple[i].Compare(datum) == 0 {
+					if len(ltuple) < 2 {
+						return parser.DBool(false), nil
+					}
+					ltuple = remove(ltuple, i)
+				}
+				return &parser.ComparisonExpr{
+					Operator: parser.In,
+					Left:     left.Left,
+					Right:    ltuple,
+				}, nil
 
 			case parser.GT:
 				if i < len(ltuple) {
@@ -1425,6 +1438,13 @@ func intersectSorted(a, b parser.DTuple) parser.DTuple {
 			b = b[1:]
 		}
 	}
+	return r
+}
+
+func remove(a parser.DTuple, i int) parser.DTuple {
+	r := make(parser.DTuple, len(a)-1)
+	copy(r, a[:i])
+	copy(r[i:], a[i+1:])
 	return r
 }
 
