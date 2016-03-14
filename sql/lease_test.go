@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -30,6 +29,7 @@ import (
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 type leaseTest struct {
@@ -255,7 +255,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer func() {
 		csql.LeaseDuration, csql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
 	}()
-	csql.MinLeaseDuration = l1.Expiration().Sub(time.Now())
+	csql.MinLeaseDuration = l1.Expiration().Sub(timeutil.Now())
 	csql.LeaseDuration = 2 * csql.MinLeaseDuration
 
 	// Another lease acquisition from the same node will result in a new lease.

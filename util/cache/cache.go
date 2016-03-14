@@ -58,7 +58,7 @@ type Config struct {
 	// To support max TTL in the cache, use something like:
 	//
 	//   func(size int, key Key, value interface{}) {
-	//     return time.Now().UnixNano() - value.(int64) > maxTTLNanos
+	//     return timeutil.Now().UnixNano() - value.(int64) > maxTTLNanos
 	//   }
 	ShouldEvict func(size int, key, value interface{}) bool
 

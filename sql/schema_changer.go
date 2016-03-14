@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // SchemaChanger is used to change the schema on a table.
@@ -59,7 +60,7 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		p.user = security.RootUser
 		p.systemConfig = sc.cfg
 		p.leaseMgr = sc.leaseMgr
-		p.setTxn(txn, time.Now())
+		p.setTxn(txn, timeutil.Now())
 
 		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
 		if pErr != nil {
@@ -98,7 +99,7 @@ func NewSchemaChangerForTesting(tableID ID, mutationID MutationID, nodeID roachp
 }
 
 func (sc *SchemaChanger) createSchemaChangeLease() TableDescriptor_SchemaChangeLease {
-	return TableDescriptor_SchemaChangeLease{NodeID: sc.nodeID, ExpirationTime: time.Now().Add(jitteredLeaseDuration()).UnixNano()}
+	return TableDescriptor_SchemaChangeLease{NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(jitteredLeaseDuration()).UnixNano()}
 }
 
 // AcquireLease acquires a schema change lease on the table if
@@ -120,7 +121,7 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 		expirationTimeUncertainty := time.Second
 
 		if tableDesc.Lease != nil {
-			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(time.Now()) {
+			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
 				return roachpb.NewError(&roachpb.ExistingSchemaChangeLeaseError{})
 			}
 			log.Infof("Overriding existing expired lease %v", tableDesc.Lease)
@@ -463,7 +464,7 @@ func TestDisableAsyncSchemaChangeExec() func() {
 // when to run the next schema changer.
 func (s *SchemaChangeManager) newTimer() *time.Timer {
 	waitDuration := time.Duration(math.MaxInt64)
-	now := time.Now()
+	now := timeutil.Now()
 	for _, sc := range s.schemaChangers {
 		d := sc.execAfter.Sub(now)
 		if d < waitDuration {
@@ -505,7 +506,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for k := range s.schemaChangers {
 					oldSchemaChangers[k] = struct{}{}
 				}
-				execAfter := time.Now().Add(asyncSchemaChangeExecDelay)
+				execAfter := timeutil.Now().Add(asyncSchemaChangeExecDelay)
 				// Loop through the configuration to find all the tables.
 				for _, kv := range cfg.Values {
 					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
@@ -579,7 +580,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						}
 						// Advance the execAfter time so that this schema changer
 						// doesn't get called again for a while.
-						sc.execAfter = time.Now().Add(asyncSchemaChangeExecDelay)
+						sc.execAfter = timeutil.Now().Add(asyncSchemaChangeExecDelay)
 					}
 					// Only attempt to run one schema changer.
 					break

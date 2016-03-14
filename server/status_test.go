@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -303,13 +304,13 @@ func TestStatusLocalLogs(t *testing.T) {
 	defer ts.Stop()
 
 	// Log an error which we expect to show up on every log file.
-	timestamp := time.Now().UnixNano()
+	timestamp := timeutil.Now().UnixNano()
 	log.Errorf("TestStatusLocalLogFile test message-Error")
-	timestampE := time.Now().UnixNano()
+	timestampE := timeutil.Now().UnixNano()
 	log.Warningf("TestStatusLocalLogFile test message-Warning")
-	timestampEW := time.Now().UnixNano()
+	timestampEW := timeutil.Now().UnixNano()
 	log.Infof("TestStatusLocalLogFile test message-Info")
-	timestampEWI := time.Now().UnixNano()
+	timestampEWI := timeutil.Now().UnixNano()
 
 	type logsWrapper struct {
 		Data []log.FileInfo `json:"d"`
