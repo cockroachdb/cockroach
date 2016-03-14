@@ -117,7 +117,7 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	if intentScore >= 1 {
 		priority += intentScore
 	}
-	shouldQ = priority > 0
+	shouldQ = priority > 1 // arbitrary threshold
 	return
 }
 
