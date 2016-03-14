@@ -110,3 +110,11 @@ query ITTT
 EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub
 ----
 0  /abc/primary/2/'two'    NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT DISTINCT * FROM (VALUES (1, 2, 3), (4, 5, 6), (1, 2, 3), (1, 2, 4)) AS a;
+----
+0 0 (1, 2, 3) ROW
+1 1 (4, 5, 6) ROW
+2 2 (1, 2, 3) FILTERED
+3 3 (1, 2, 4) ROW
