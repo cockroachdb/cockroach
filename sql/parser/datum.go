@@ -86,6 +86,7 @@ type Datum interface {
 	TypeEqual(other Datum) bool
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
+	// TODO(nvanbenschoten) Should we look into merging this with cmpOps?
 	Compare(other Datum) int
 	// HasPrev specifies if Prev() can be used to compute a previous value for
 	// a datum. For example, DBytes doesn't support it (the previous for BB is BAZZZ..).
@@ -211,7 +212,11 @@ func (d DInt) Compare(other Datum) int {
 	}
 	v, ok := other.(DInt)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		cmp, ok := mixedTypeCompare(d, other)
+		if !ok {
+			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		}
+		return cmp
 	}
 	if d < v {
 		return -1
@@ -278,7 +283,11 @@ func (d DFloat) Compare(other Datum) int {
 	}
 	v, ok := other.(DFloat)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		cmp, ok := mixedTypeCompare(d, other)
+		if !ok {
+			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		}
+		return cmp
 	}
 	if d < v {
 		return -1
@@ -363,7 +372,11 @@ func (d *DDecimal) Compare(other Datum) int {
 	}
 	v, ok := other.(*DDecimal)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		cmp, ok := mixedTypeCompare(d, other)
+		if !ok {
+			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		}
+		return cmp
 	}
 	return d.Cmp(&v.Dec)
 }
@@ -1015,4 +1028,39 @@ func (DValArg) IsMin() bool {
 
 func (d DValArg) String() string {
 	return "$" + d.name
+}
+
+// Temporary workaround for #3633, allowing comparisons between
+// heterogeneous types.
+// TODO(andreimatei) Remove when type inference improves.
+func mixedTypeCompare(l, r Datum) (int, bool) {
+	lType := reflect.TypeOf(l)
+	rType := reflect.TypeOf(r)
+
+	// Check equality.
+	eqOp, ok := cmpOps[cmpArgs{EQ, lType, rType}]
+	if !ok {
+		return 0, false
+	}
+	eq, err := eqOp.fn(EvalContext{}, l, r)
+	if err != nil {
+		panic(err)
+	}
+	if eq {
+		return 0, true
+	}
+
+	// Check less than.
+	ltOp, ok := cmpOps[cmpArgs{LT, lType, rType}]
+	if !ok {
+		return 0, false
+	}
+	lt, err := ltOp.fn(EvalContext{}, l, r)
+	if err != nil {
+		panic(err)
+	}
+	if lt {
+		return -1, true
+	}
+	return 1, true
 }
