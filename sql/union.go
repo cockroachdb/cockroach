@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
@@ -131,6 +133,8 @@ type unionNode struct {
 	emitAll     bool // emitAll is a performance optimization for UNION ALL.
 	emit        unionNodeEmit
 	scratch     []byte
+	explain     explainMode
+	debugVals   debugValues
 }
 
 func (n *unionNode) Columns() []ResultColumn { return n.left.Columns() }
@@ -164,27 +168,26 @@ func (n *unionNode) ExplainPlan() (name, description string, children []planNode
 }
 
 func (n *unionNode) MarkDebug(mode explainMode) {
-	// TODO(radu): implement proper debug support (#4110)
-	panic("debug mode not implemented")
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+	n.left.MarkDebug(mode)
+	n.right.MarkDebug(mode)
 }
 
 func (n *unionNode) DebugValues() debugValues {
-	switch {
-	case !n.rightDone:
-		return n.right.DebugValues()
-	case !n.leftDone:
-		return n.left.DebugValues()
-	default:
-		return debugValues{}
-	}
+	return n.debugVals
 }
 
 func (n *unionNode) readRight() bool {
-	for {
-		hasNext := n.right.Next()
-		if !hasNext {
-			n.rightDone = true
-			return n.readLeft()
+	for n.right.Next() {
+		if n.explain == explainDebug {
+			n.debugVals = n.right.DebugValues()
+			if n.debugVals.output != debugValueRow {
+				// Pass through any non-row debug info.
+				return true
+			}
 		}
 
 		if n.emitAll {
@@ -200,15 +203,25 @@ func (n *unionNode) readRight() bool {
 		if n.emit.emitRight(n.scratch) {
 			return true
 		}
+		if n.explain == explainDebug {
+			// Mark the row as filtered out.
+			n.debugVals.output = debugValueFiltered
+			return true
+		}
 	}
+
+	n.rightDone = true
+	return n.readLeft()
 }
 
 func (n *unionNode) readLeft() bool {
-	for {
-		hasNext := n.left.Next()
-		if !hasNext {
-			n.leftDone = true
-			return false
+	for n.left.Next() {
+		if n.explain == explainDebug {
+			n.debugVals = n.left.DebugValues()
+			if n.debugVals.output != debugValueRow {
+				// Pass through any non-row debug info.
+				return true
+			}
 		}
 
 		if n.emitAll {
@@ -221,7 +234,14 @@ func (n *unionNode) readLeft() bool {
 		if n.emit.emitLeft(n.scratch) {
 			return true
 		}
+		if n.explain == explainDebug {
+			// Mark the row as filtered out.
+			n.debugVals.output = debugValueFiltered
+			return true
+		}
 	}
+	n.leftDone = true
+	return false
 }
 
 func (n *unionNode) Next() bool {
