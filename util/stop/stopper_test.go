@@ -18,6 +18,7 @@ package stop_test
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -372,6 +373,47 @@ func TestStopperShouldDrain(t *testing.T) {
 	s.Stop()
 	close(waiting)
 	<-cleanup
+}
+
+func TestStopperRunLimitedAsyncTask(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	defer s.Stop()
+
+	const maxConcurrency = 5
+	const duration = 10 * time.Millisecond
+	sem := make(chan struct{}, maxConcurrency)
+	var mu sync.Mutex
+	concurrency := 0
+	peakConcurrency := 0
+	var wg sync.WaitGroup
+
+	f := func() {
+		mu.Lock()
+		concurrency++
+		if concurrency > peakConcurrency {
+			peakConcurrency = concurrency
+		}
+		mu.Unlock()
+		time.Sleep(duration)
+		mu.Lock()
+		concurrency--
+		mu.Unlock()
+		wg.Done()
+	}
+
+	for i := 0; i < maxConcurrency*3; i++ {
+		wg.Add(1)
+		s.RunLimitedAsyncTask(sem, f)
+	}
+	wg.Wait()
+	if concurrency != 0 {
+		t.Fatalf("expected 0 concurrency at end of test but got %d", concurrency)
+	}
+	if peakConcurrency != maxConcurrency {
+		t.Fatalf("expected peak concurrency %d to equal max concurrency %d",
+			peakConcurrency, maxConcurrency)
+	}
 }
 
 func maybePrint() {

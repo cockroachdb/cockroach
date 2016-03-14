@@ -268,6 +268,7 @@ type Store struct {
 	replicaConsistencyQueue *replicaConsistencyQueue // Replica consistency check queue
 	consistencyScanner      *replicaScanner          // Consistency checker scanner
 	metrics                 *storeMetrics
+	intentResolver          *intentResolver
 	wakeRaftLoop            chan struct{}
 	started                 int32
 	stopper                 *stop.Stopper
@@ -581,6 +582,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		raftRequestChan: make(chan *RaftMessageRequest, raftReqBufferSize),
 		metrics:         newStoreMetrics(),
 	}
+	s.intentResolver = newIntentResolver(s)
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
@@ -1632,16 +1634,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			resolveIntents, pErrPush := s.resolveWriteIntentError(ctx, wiErr, rng, args, h, pushType)
-			if len(resolveIntents) > 0 {
-				if resErr := rng.resolveIntents(ctx, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
-					// When resolving asynchronously, errors should not
-					// usually be returned here, although there are some cases
-					// when they may be (especially when a test cluster is in
-					// the process of shutting down).
-					log.Warningf("asynchronous resolveIntents failed: %s", resErr)
-				}
-			}
+			pErrPush := s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
 			// Preserve the error index.
 			oldIndex := pErr.Index
 			pErr = pErrPush
@@ -1692,112 +1685,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 	}
 	return nil, pErr
-}
-
-// resolveWriteIntentError tries to push the conflicting transaction (if
-// necessary, i.e. if the transaction is pending): either move its timestamp
-// forward on a read/write conflict, or abort it on a write/write conflict. If
-// the push succeeds (or if it wasn't necessary), the error's Resolved flag is
-// set to to true and the caller should call resolveIntents and retry its
-// command immediately. If the push fails, the error's Resolved flag is set to
-// false so that the client backs off before reissuing the command. On
-// write/write conflicts, a potential push error is returned; otherwise the
-// updated WriteIntentError is returned.
-//
-// Callers are involved with
-// a) conflict resolution for commands being executed at the Store with the
-//    client waiting,
-// b) resolving intents encountered during inconsistent operations, and
-// c) resolving intents upon EndTransaction which are not local to the given
-//    range. This is the only path in which the transaction is going to be
-//    in non-pending state and doesn't require a push.
-func (s *Store) resolveWriteIntentError(ctx context.Context, wiErr *roachpb.WriteIntentError, rng *Replica, args roachpb.Request, h roachpb.Header, pushType roachpb.PushTxnType) ([]roachpb.Intent, *roachpb.Error) {
-	method := args.Method()
-	pusherTxn := h.Txn
-	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
-	args = nil
-
-	if log.V(6) {
-		log.Infoc(ctx, "resolving write intent %s", wiErr)
-	}
-	sp, cleanupSp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
-	defer cleanupSp()
-	sp.LogEvent("intent resolution")
-
-	// Split intents into those we need to push and those which are good to
-	// resolve.
-	// TODO(tschottdorf): can optimize this and use same underlying slice.
-	var pushIntents, resolveIntents []roachpb.Intent
-	for _, intent := range wiErr.Intents {
-		// The current intent does not need conflict resolution.
-		if intent.Status != roachpb.PENDING {
-			resolveIntents = append(resolveIntents, intent)
-		} else {
-			pushIntents = append(pushIntents, intent)
-		}
-	}
-
-	// Attempt to push the transaction(s) which created the conflicting intent(s).
-	now := s.Clock().Now()
-
-	// TODO(tschottdorf): need deduplication here (many pushes for the same
-	// txn are awkward but even worse, could ratchet up the priority).
-	// If there's no pusher, we communicate a priority by sending an empty
-	// txn with only the priority set.
-	if pusherTxn == nil {
-		pusherTxn = &roachpb.Transaction{
-			Priority: roachpb.MakePriority(h.UserPriority),
-		}
-	}
-	var pushReqs []roachpb.Request
-	for _, intent := range pushIntents {
-		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
-			Span: roachpb.Span{
-				Key: intent.Txn.Key,
-			},
-			PusherTxn: *pusherTxn,
-			PusheeTxn: intent.Txn,
-			PushTo:    h.Timestamp,
-			// The timestamp is used by PushTxn for figuring out whether the
-			// transaction is abandoned. If we used the argument's timestamp
-			// here, we would run into busy loops because that timestamp
-			// usually stays fixed among retries, so it will never realize
-			// that a transaction has timed out. See #877.
-			Now:      now,
-			PushType: pushType,
-		})
-	}
-	// TODO(kaneda): Set the transaction in the header so that the
-	// txn is correctly propagated in an error response.
-	b := &client.Batch{}
-	b.InternalAddRequest(pushReqs...)
-	br, pushErr := s.db.RunWithResponse(b)
-	if pushErr != nil {
-		if log.V(1) {
-			log.Infoc(ctx, "on %s: %s", method, pushErr)
-		}
-
-		// For write/write conflicts within a transaction, propagate the
-		// push failure, not the original write intent error. The push
-		// failure will instruct the client to restart the transaction
-		// with a backoff.
-		if pusherTxn.ID != nil && !readOnly {
-			return nil, pushErr
-		}
-		// For read/write conflicts, return the write intent error which
-		// engages backoff/retry (with !Resolved). We don't need to
-		// restart the txn, only resend the read with a backoff.
-		return nil, roachpb.NewError(wiErr)
-	}
-	wiErr.Resolved = true // success!
-
-	for i, intent := range pushIntents {
-		pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-		intent.Txn = pushee.TxnMeta
-		intent.Status = pushee.Status
-		resolveIntents = append(resolveIntents, intent)
-	}
-	return resolveIntents, roachpb.NewError(wiErr)
 }
 
 // enqueueRaftMessage enqueues a request for eventual processing. It
