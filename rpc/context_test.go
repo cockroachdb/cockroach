@@ -19,6 +19,7 @@ package rpc
 import (
 	"net"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -132,50 +133,49 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	serverManual := hlc.NewManualClock(0)
-	serverClock := hlc.NewClock(serverManual.UnixNano)
-	ctx := newNodeTestContext(serverClock, stopper)
-	s, ln := newTestServer(t, ctx, true)
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(hlc.NewManualClock(1).UnixNano)
+
+	serverCtx := newNodeTestContext(clock, stopper)
+	serverCtx.RemoteClocks.monitorInterval = 100 * time.Millisecond
+	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
 	heartbeat := &ManualHeartbeatService{
-		clock:              serverClock,
-		remoteClockMonitor: ctx.RemoteClocks,
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
 		ready:              make(chan struct{}),
 		stopper:            stopper,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
 	// Create a client that never receives a heartbeat after the first.
-	clientManual := hlc.NewManualClock(0)
-	clientClock := hlc.NewClock(clientManual.UnixNano)
-	context := newNodeTestContext(clientClock, stopper)
+	clientCtx := newNodeTestContext(clock, stopper)
 	// Increase the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
-	context.HeartbeatTimeout = 20 * context.HeartbeatInterval
-	_, err := context.GRPCDial(remoteAddr)
+	clientCtx.HeartbeatTimeout = 20 * clientCtx.HeartbeatInterval
+	_, err := clientCtx.GRPCDial(remoteAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 
 	util.SucceedsSoon(t, func() error {
-		context.RemoteClocks.mu.Lock()
-		defer context.RemoteClocks.mu.Unlock()
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
 
-		if _, ok := context.RemoteClocks.mu.offsets[remoteAddr]; !ok {
+		if _, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; !ok {
 			return util.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
 		}
 		return nil
 	})
 
-	expectedOffset := RemoteOffset{}
 	util.SucceedsSoon(t, func() error {
-		context.RemoteClocks.mu.Lock()
-		defer context.RemoteClocks.mu.Unlock()
+		serverCtx.RemoteClocks.mu.Lock()
+		defer serverCtx.RemoteClocks.mu.Unlock()
 
-		if o := context.RemoteClocks.mu.offsets[remoteAddr]; o != expectedOffset {
-			return util.Errorf("expected offset of %s to be empty, got %v", remoteAddr, o)
+		if o, ok := serverCtx.RemoteClocks.mu.offsets[remoteAddr]; ok {
+			return util.Errorf("expected offset of %s to not be initialized, but it was: %v", remoteAddr, o)
 		}
 		return nil
 	})

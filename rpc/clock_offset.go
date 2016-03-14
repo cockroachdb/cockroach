@@ -116,6 +116,11 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	var emptyOffset RemoteOffset
+	if offset == emptyOffset {
+		return
+	}
+
 	if oldOffset, ok := r.mu.offsets[addr]; !ok {
 		r.mu.offsets[addr] = offset
 	} else if oldOffset.measuredAt().Before(r.mu.lastMonitoredAt) {
