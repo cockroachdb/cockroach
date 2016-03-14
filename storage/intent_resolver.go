@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -187,7 +186,9 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 // encountered during another command but did not interfere with the
 // execution of that command. This occurs in two cases: inconsistent
 // reads and EndTransaction (which queues its own intents for
-// processing via this method).
+// processing via this method). The two cases are handled somewhat
+// differently and would be better served by different entry points,
+// but combining them simplifies the plumbing necessary in Replica.
 func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithArg) {
 	if len(intents) == 0 {
 		return
@@ -197,57 +198,66 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 	stopper := r.store.Stopper()
 
 	for _, item := range intents {
-		// TODO(tschottdorf): avoid data race related to batch unrolling in ExecuteCmd;
-		// can probably go again when that provisional code there is gone. Should
-		// still be careful though, a retry could happen and race with args.
-		args := util.CloneProto(item.args).(roachpb.Request)
-		stopper.RunAsyncTask(func() {
-			// Everything here is best effort; give up rather than waiting
-			// too long (helps avoid deadlocks during test shutdown,
-			// although this is imperfect due to the use of an
-			// uninterruptible WaitGroup.Wait in beginCmds).
-			ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
-			defer cancel()
-			h := roachpb.Header{Timestamp: now}
-			resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
-				item.intents, h, roachpb.PUSH_TOUCH)
-			if pErr := ir.resolveIntents(ctxWithTimeout, r, resolveIntents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
-				log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
-				return
-			}
-			if pushErr != nil {
-				log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pushErr)
-				return
-			}
-			// We successfully resolved the intents, so we're able to GC from
-			// the txn span directly. Note that the sequence cache was cleared
-			// out synchronously with EndTransaction (see comments within for
-			// an explanation of why that is kosher).
-			//
-			// Note that we poisoned the sequence caches on the external ranges
-			// above. This may seem counter-intuitive, but it's actually
-			// necessary: Assume a transaction has committed here, with two
-			// external intents, and assume that we did not poison. Normally,
-			// these two intents would be resolved in the same batch, but that
-			// is not guaranteed (for example, if DistSender has a stale
-			// descriptor after a Merge). When resolved separately, the first
-			// ResolveIntent would clear out the sequence cache; an individual
-			// write on the second (still present) intent could then be
-			// replayed and would resolve to a real value (at least for a
-			// window of time unless we delete the local txn entry). That's not
-			// OK for non-idempotent commands such as Increment.
-			// TODO(tschottdorf): We should have another side effect on
-			// MVCCResolveIntent (on commit/abort): If it were able to remove
-			// the txn from its corresponding entries in the timestamp cache,
-			// no more replays at the same timestamp would be possible. This
-			// appears to be a useful performance optimization; we could then
-			// not poison on EndTransaction. In fact, the above mechanism
-			// could be an effective alternative to sequence-cache based
-			// poisoning (or the whole sequence cache?) itself.
-			//
-			// TODO(tschottdorf): down the road, can probably unclog the system
-			// here by batching up a bunch of those GCRequests before proposing.
-			if args.Method() == roachpb.EndTransaction {
+		if item.args.Method() != roachpb.EndTransaction {
+			stopper.RunAsyncTask(func() {
+				// Everything here is best effort; give up rather than waiting
+				// too long (helps avoid deadlocks during test shutdown,
+				// although this is imperfect due to the use of an
+				// uninterruptible WaitGroup.Wait in beginCmds).
+				ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+				defer cancel()
+				h := roachpb.Header{Timestamp: now}
+				resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
+					item.intents, h, roachpb.PUSH_TOUCH)
+				if pErr := ir.resolveIntents(ctxWithTimeout, r, resolveIntents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
+					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
+					return
+				}
+				if pushErr != nil {
+					log.Warningc(ctxWithTimeout, "failed to push during intent resolution: %s", pushErr)
+					return
+				}
+			})
+		} else { // EndTransaction
+			stopper.RunAsyncTask(func() {
+				ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+				defer cancel()
+
+				// For EndTransaction, we know the transaction is finalized so
+				// we can skip the push and go straight to the resolve.
+				if pErr := ir.resolveIntents(ctxWithTimeout, r, item.intents, true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
+					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
+					return
+				}
+
+				// We successfully resolved the intents, so we're able to GC from
+				// the txn span directly. Note that the sequence cache was cleared
+				// out synchronously with EndTransaction (see comments within for
+				// an explanation of why that is kosher).
+				//
+				// Note that we poisoned the sequence caches on the external ranges
+				// above. This may seem counter-intuitive, but it's actually
+				// necessary: Assume a transaction has committed here, with two
+				// external intents, and assume that we did not poison. Normally,
+				// these two intents would be resolved in the same batch, but that
+				// is not guaranteed (for example, if DistSender has a stale
+				// descriptor after a Merge). When resolved separately, the first
+				// ResolveIntent would clear out the sequence cache; an individual
+				// write on the second (still present) intent could then be
+				// replayed and would resolve to a real value (at least for a
+				// window of time unless we delete the local txn entry). That's not
+				// OK for non-idempotent commands such as Increment.
+				// TODO(tschottdorf): We should have another side effect on
+				// MVCCResolveIntent (on commit/abort): If it were able to remove
+				// the txn from its corresponding entries in the timestamp cache,
+				// no more replays at the same timestamp would be possible. This
+				// appears to be a useful performance optimization; we could then
+				// not poison on EndTransaction. In fact, the above mechanism
+				// could be an effective alternative to sequence-cache based
+				// poisoning (or the whole sequence cache?) itself.
+				//
+				// TODO(tschottdorf): down the road, can probably unclog the system
+				// here by batching up a bunch of those GCRequests before proposing.
 				var ba roachpb.BatchRequest
 				txn := item.intents[0].Txn
 				gcArgs := roachpb.GCRequest{
@@ -262,8 +272,8 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				if _, pErr := r.addWriteCmd(ctxWithTimeout, ba, nil /* nil */); pErr != nil {
 					log.Warningf("could not GC completed transaction: %s", pErr)
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
