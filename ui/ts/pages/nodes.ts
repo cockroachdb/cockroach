@@ -379,109 +379,75 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .sources([nodeId])
                 .title("Client Connections")
-              )
-              .label("Count"));
+            ).format(d3.format("d")).title("SQL Connections")
+          );
           this._addChart(
             this.networkAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("Client Bytes In")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            this.networkAxes,
-            Metrics.NewAxis(
+                .nonNegativeRate()
+                .title("Bytes In"),
               Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("Client Bytes Out")
-              )
-              .label("Count / 10 sec."));
+                .nonNegativeRate()
+                .title("Bytes Out")
+            ).format(Utils.Format.Bytes).title("SQL Traffic")
+          );
 
           // Add SQL charts.
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("SELECTs")
-              )
-              .label("Count / 10 sec."));
+                .nonNegativeRate()
+                .title("Selects")
+            ).format(d3.format("d")).title("Reads")
+           );
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.update.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("UPDATEs")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
+                .nonNegativeRate()
+                .title("Updates"),
               Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("INSERTs")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
+                .nonNegativeRate()
+                .title("Inserts"),
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("DELETEs")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.txn.begin.count"))
                 .nonNegativeRate()
-                .sources([nodeId])
-                .title("BEGINs")
-              )
-              .label("Count / 10 sec."));
+                .title("Deletes")
+            ).format(d3.format("d")).title("Writes")
+          );
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("COMMITs")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
+                .nonNegativeRate()
+                .title("Commits"),
               Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("ROLLBACKs")
-              )
-              .label("Count / 10 sec."));
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
+                .nonNegativeRate()
+                .title("Rollbacks"),
               Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
-                .title("Aborted Transactions")
-              )
-              .label("Count / 10 sec."));
+                .nonNegativeRate()
+                .title("Aborts")
+            ).format(d3.format("d")).title("Transactions")
+          );
           this._addChart(
             this.sqlAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
-                .nonNegativeRate()
                 .sources([nodeId])
+                .nonNegativeRate()
                 .title("DDL Statements")
-              )
-              .label("Count / 10 sec."));
+            ).format(d3.format("d")).title("Schema Changes")
+          );
 
           this.exec = new Metrics.Executor(this._query);
           this._refresh();
