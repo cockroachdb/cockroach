@@ -264,6 +264,7 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	maxOffset := r.clock.MaxOffset()
 	endpoints := make(endpointList, 0, len(r.mu.offsets)*2)
 	for addr, o := range r.mu.offsets {
 		// Remove anything that hasn't been updated since the last time offest
@@ -275,11 +276,11 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 		}
 
 		lowpoint := endpoint{
-			offset:  time.Duration(o.Offset-o.Uncertainty)*time.Nanosecond - r.clock.MaxOffset(),
+			offset:  time.Duration(o.Offset-o.Uncertainty)*time.Nanosecond - maxOffset,
 			endType: -1,
 		}
 		highpoint := endpoint{
-			offset:  time.Duration(o.Offset+o.Uncertainty)*time.Nanosecond + r.clock.MaxOffset(),
+			offset:  time.Duration(o.Offset+o.Uncertainty)*time.Nanosecond + maxOffset,
 			endType: +1,
 		}
 		endpoints = append(endpoints, lowpoint, highpoint)
