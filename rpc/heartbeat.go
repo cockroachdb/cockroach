@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc/peer"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -37,10 +36,13 @@ func (*PingRequest) GetUser() string {
 	return security.NodeUser
 }
 
+func (r RemoteOffset) measuredAt() time.Time {
+	return time.Unix(0, r.MeasuredAt).UTC()
+}
+
 // String formats the RemoteOffset for human readability.
 func (r RemoteOffset) String() string {
-	t := time.Unix(r.MeasuredAt/1E9, 0).UTC()
-	return fmt.Sprintf("off=%.9fs, err=%.9fs, at=%s", float64(r.Offset)/1E9, float64(r.Uncertainty)/1E9, t)
+	return fmt.Sprintf("off=%s, err=%s, at=%s", time.Duration(r.Offset), time.Duration(r.Uncertainty), r.measuredAt())
 }
 
 // A HeartbeatService exposes a method to echo its request params. It doubles
@@ -60,16 +62,14 @@ type HeartbeatService struct {
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
-	reply := &PingResponse{}
-	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	if peer, ok := peer.FromContext(ctx); ok {
-		hs.remoteClockMonitor.UpdateOffset(peer.Addr.String(), serverOffset)
-	}
-	reply.ServerTime = hs.clock.PhysicalNow()
-	return reply, nil
+	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
+	return &PingResponse{
+		Pong:       args.Ping,
+		ServerTime: hs.clock.PhysicalNow(),
+	}, nil
 }
 
 // A ManualHeartbeatService allows manual control of when heartbeats occur, to

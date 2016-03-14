@@ -34,7 +34,7 @@ func TestRemoteOffsetString(t *testing.T) {
 		Uncertainty: 351698,
 		MeasuredAt:  1430348776127420269,
 	}
-	expStr := "off=-0.501584461s, err=0.000351698s, at=2015-04-29 23:06:16 +0000 UTC"
+	expStr := "off=-501.584461ms, err=351.698µs, at=2015-04-29 23:06:16.127420269 +0000 UTC"
 	if str := ro.String(); str != expStr {
 		t.Errorf("expected %s; got %s", expStr, str)
 	}
@@ -115,11 +115,13 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 
 	_, ln := newTestServer(t, ctx, false)
 	remoteAddr := ln.Addr().String()
-	ctx.RemoteClocks.offsets[remoteAddr] = RemoteOffset{
+	ctx.RemoteClocks.mu.Lock()
+	ctx.RemoteClocks.mu.offsets[remoteAddr] = RemoteOffset{
 		Offset:      10,
 		Uncertainty: 5,
 		MeasuredAt:  20,
 	}
+	ctx.RemoteClocks.mu.Unlock()
 	// Create a client and set its remote offset. On first heartbeat,
 	// it will update the server's remote clocks map.
 	_, err := ctx.GRPCDial(remoteAddr)
@@ -128,7 +130,7 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	}
 
 	ctx.RemoteClocks.mu.Lock()
-	o := ctx.RemoteClocks.offsets[remoteAddr]
+	o := ctx.RemoteClocks.mu.offsets[remoteAddr]
 	ctx.RemoteClocks.mu.Unlock()
 	expServerOffset := RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
 	if proto.Equal(&o, &expServerOffset) {
@@ -140,12 +142,12 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	// remote end. A new offset for the server should not be added to the clock
 	// monitor.
 	ctx.RemoteClocks.mu.Lock()
-	delete(ctx.RemoteClocks.offsets, remoteAddr)
+	delete(ctx.RemoteClocks.mu.offsets, remoteAddr)
 	ln.Close()
 	ctx.RemoteClocks.mu.Unlock()
 
 	ctx.RemoteClocks.mu.Lock()
-	if offset, ok := ctx.RemoteClocks.offsets[remoteAddr]; ok {
+	if offset, ok := ctx.RemoteClocks.mu.offsets[remoteAddr]; ok {
 		t.Errorf("unexpected updated offset: %v", offset)
 	}
 	ctx.RemoteClocks.mu.Unlock()

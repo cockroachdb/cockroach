@@ -139,9 +139,9 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 	var rows [][]string
 	for _, nodeStatus := range statuses {
 		hostPort := nodeStatus.Desc.Address.AddressField
-		updatedAt := time.Unix(nodeStatus.UpdatedAt/1e9, nodeStatus.UpdatedAt%1e9)
+		updatedAt := time.Unix(0, nodeStatus.UpdatedAt)
 		updatedAtStr := updatedAt.Format(localTimeFormat)
-		startedAt := time.Unix(nodeStatus.StartedAt/1e9, nodeStatus.StartedAt%1e9)
+		startedAt := time.Unix(0, nodeStatus.StartedAt)
 		startedAtStr := startedAt.Format(localTimeFormat)
 
 		rows = append(rows, []string{

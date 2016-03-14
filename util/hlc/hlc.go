@@ -176,8 +176,7 @@ func (c *Clock) PhysicalNow() int64 {
 
 // PhysicalTime returns a time.Time struct using the local wall time.
 func (c *Clock) PhysicalTime() time.Time {
-	physNow := c.PhysicalNow()
-	return time.Unix(physNow/1E9, physNow%1E9)
+	return time.Unix(0, c.PhysicalNow()).UTC()
 }
 
 // Update takes a hybrid timestamp, usually originating from
@@ -206,11 +205,9 @@ func (c *Clock) Update(rt roachpb.Timestamp) roachpb.Timestamp {
 	// as it is behind the local and remote wall times. Instead,
 	// the logical clock comes into play.
 	if rt.WallTime > c.state.WallTime {
-		if c.maxOffset.Nanoseconds() > 0 &&
-			rt.WallTime-physicalClock > c.maxOffset.Nanoseconds() {
-			// The remote wall time is too far ahead to be trustworthy.
-			log.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
-				rt.WallTime, rt.WallTime-physicalClock)
+		offset := time.Duration(rt.WallTime-physicalClock) * time.Nanosecond
+		if c.maxOffset > 0 && offset > c.maxOffset {
+			log.Warningf("remote wall time is too far ahead (%s) to be trustworthy - updating anyway", offset)
 		}
 		// The remote clock is ahead of ours, and we update
 		// our own logical clock with theirs.
