@@ -32,14 +32,12 @@ $subnav-background  = $secondary-gray-3
 html
 body
   height 100%
-  min-width 1480px
   background-color $secondary-gray-4
 
 #root
   position relative
   padding-left $nav-width
   min-height 100% // TODO or calc(100% - 4rem)
-  min-width 100%
 
   &:after
     content ""
@@ -48,6 +46,12 @@ body
 
 #content
   min-height 100%
+
+.page
+  position relative
+
+.page.cluster
+  min-width $chart-width
 
 .page.registration
   height 100%
@@ -70,7 +74,8 @@ body
 
   &.table
     margin 0
-    padding 0
+    padding-left 0
+    padding-right 0
 
   h1
     font-family Lato-Medium
@@ -81,7 +86,7 @@ body
     font-weight normal
 
   .header
-    width 100%
+    width calc(100% + 40px)
     height 88px
     background-color $secondary-gray-4
     margin -20px -20px 0 -20px
@@ -161,7 +166,7 @@ button
   background-color white
   border-bottom 1px solid $topbar-border
   height $top-bar-height
-  width "calc(100% - %s)" % $nav-width
+  width 100%
   position absolute
   top 0
   right 0
@@ -239,7 +244,7 @@ button
   position absolute
   top $top-bar-height
   right 0
-  width "calc(100% - %s)" % $nav-width
+  width 100%
   z-index 1
 
 .sql-table
@@ -259,12 +264,16 @@ a.toggle
   &.healthy
     color $main-green
 
-.charts h2
-  clear both
-  padding-top 15px
+.section.charts
+  h2
+    clear both
+    padding-top 15px
 
-.charts h2:first-child
-  padding-top 0
+    &:first-child
+      padding-top 0
+
+  .charts
+    width $chart-width
 
 .banner
   width 100%

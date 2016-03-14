@@ -32,7 +32,7 @@ $viz-sides = 62px
   flex-direction column
   justify-content space-between
   align-items stretch
-  width 336px
+  width 316px
   height 289px
   position relative
 
@@ -79,11 +79,15 @@ $viz-sides = 62px
   opacity .6
   font-size 10px
 
-.half
-  .visualization-wrapper
-    height 145px
-
 .small
   .visualization-wrapper
-    width 269px
+    width 253px
     height 250px
+  &.half
+    .visualization-wrapper
+      height 145px
+      .linegraph
+        height 70px
+
+
+
