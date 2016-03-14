@@ -70,7 +70,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	bc := int64(gcByteCountNormalization)
 	ttl := int64(policy.TTLSeconds)
 
-	now := makeTS(iaN, 0) // at time of stats object
+	now := makeTS(considerThreshold*iaN, 0) // at time of stats object
 
 	testCases := []struct {
 		gcBytes     int64
@@ -91,22 +91,22 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// No GC'able bytes, with intent age=1/2 period, and other 1/2 period elapsed.
 		{0, 0, 1, ia / 2, now, false, 0},
 		// No GC'able bytes, with (abs and avg) intent age=1.5*normalization.
-		{0, 0, 1, 3 * ia / 2, now, true, 1.5},
+		{0, 0, 1, 3 * ia / 2, now, true, 1.5 * considerThreshold},
 		// No GC'able bytes, 2 intents, with avg intent age=3.5*normalization.
-		{0, 0, 2, 7 * ia, now, true, 3.5},
+		{0, 0, 2, 7 * ia, now, true, 3.5 * considerThreshold},
 		// GC'able bytes, no time elapsed.
 		{bc, 0, 0, 0, now, false, 0},
 		// GC'able bytes, avg age = just below TTLSeconds.
 		{bc, bc*ttl - 1, 0, 0, now, false, 0},
 		// GC'able bytes, avg age = 2*TTLSeconds.
-		{bc, 2 * bc * ttl, 0, 0, now, true, 2},
+		{bc, 2 * bc * ttl, 0, 0, now, true, 2 * considerThreshold},
 		// x2 GC'able bytes, avg age = TTLSeconds.
-		{2 * bc, 2 * bc * ttl, 0, 0, now, true, 2},
+		{2 * bc, 2 * bc * ttl, 0, 0, now, true, 2 * considerThreshold},
 		// GC'able bytes, intent bytes, and intent normalization * 2 elapsed.
 		// Queues solely because of gc'able bytes.
-		{bc, 5 * bc * ttl, 10 * ia, 0, now, true, 5},
+		{bc, 5 * bc * ttl, 10 * ia, 0, now, true, 5 * considerThreshold},
 		// A contribution of 1 from gc, 10/5 from intents.
-		{bc, bc * ttl, 5, 10 * ia, now, true, 1 + 2},
+		{bc, bc * ttl, 5, 10 * ia, now, true, (1 + 2) * considerThreshold},
 
 		// Some tests where the ages increase since we call shouldNow with
 		// a later timestamp.
@@ -116,7 +116,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 
 		// 2 intents aging from zero to now (which is exactly the intent age
 		// normalization).
-		{0, 0, 2, 0, roachpb.ZeroTimestamp, true, 1},
+		{0, 0, 2, 0, roachpb.ZeroTimestamp, true, considerThreshold},
 	}
 
 	gcQ := newGCQueue(tc.gossip)
@@ -129,8 +129,8 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		stats := engine.MVCCStats{
 			KeyBytes:        test.gcBytes,
 			IntentCount:     test.intentCount,
-			IntentAge:       test.intentAge,
-			GCBytesAge:      test.gcBytesAge,
+			IntentAge:       test.intentAge * considerThreshold,
+			GCBytesAge:      test.gcBytesAge * considerThreshold,
 			LastUpdateNanos: test.now.WallTime,
 		}
 		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
