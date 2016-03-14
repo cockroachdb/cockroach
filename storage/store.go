@@ -1527,7 +1527,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		// before we reach that point.
 		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
 		if offset > s.Clock().MaxOffset() {
-			return nil, roachpb.NewErrorf("Rejecting command with timestamp in the future: %d (%s ahead)",
+			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
 				ba.Timestamp.WallTime, offset)
 		}
 	}

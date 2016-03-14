@@ -1353,6 +1353,17 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
+func SendWrapped(sender client.Sender, ctx context.Context, header roachpb.Header, args roachpb.Request) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
+	var ba roachpb.BatchRequest
+	ba.Add(args)
+	ba.Header = header
+	br, pErr := sender.Send(ctx, ba)
+	if pErr != nil {
+		return nil, roachpb.BatchResponse_Header{}, pErr
+	}
+	return br.Responses[0].GetInner(), br.BatchResponse_Header, pErr
+}
+
 // TestRangeUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestRangeUseTSCache(t *testing.T) {
@@ -1372,13 +1383,12 @@ func TestRangeUseTSCache(t *testing.T) {
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"))
 
-	reply, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &pArgs)
+	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{}, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pReply := reply.(*roachpb.PutResponse)
-	if pReply.Timestamp.WallTime != tc.clock.Timestamp().WallTime {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", pReply.Timestamp)
+	if respH.Timestamp.WallTime != tc.clock.Timestamp().WallTime {
+		t.Errorf("expected write timestamp to upgrade to 1s; got %s", respH.Timestamp)
 	}
 }
 
@@ -1405,13 +1415,12 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"))
 
-	reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: roachpb.ZeroTimestamp.Add(0, 1)}, &pArgs)
+	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: roachpb.ZeroTimestamp.Add(0, 1)}, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pReply := reply.(*roachpb.PutResponse)
-	if pReply.Timestamp.WallTime == tc.clock.Timestamp().WallTime {
-		t.Errorf("expected write timestamp not to upgrade to 1s; got %s", pReply.Timestamp)
+	if respH.Timestamp.WallTime == tc.clock.Timestamp().WallTime {
+		t.Errorf("expected write timestamp not to upgrade to 1s; got %s", respH.Timestamp)
 	}
 }
 
@@ -1432,13 +1441,12 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs := putArgs(key, []byte("value"))
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 
-		reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
+		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			Txn: txn,
 		}, &pArgs)
 		if pErr != nil {
 			t.Fatalf("test %d: %s", i, pErr)
 		}
-		pReply := reply.(*roachpb.PutResponse)
 
 		// Now attempt read or write.
 		args := readOrWriteArgs(key, read)
@@ -1452,13 +1460,10 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 
 		// Write the intent again -- should not have its timestamp upgraded!
 		txn.Sequence++
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-			Txn: txn,
-		}, &pArgs); pErr != nil {
+		if _, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 			t.Fatalf("test %d: %s", i, pErr)
-		}
-		if !pReply.Timestamp.Equal(txn.Timestamp) {
-			t.Errorf("expected timestamp not to advance %s != %s", pReply.Timestamp, txn.Timestamp)
+		} else if !respH.Txn.Timestamp.Equal(txn.Timestamp) {
+			t.Errorf("expected timestamp not to advance %s != %s", respH.Timestamp, txn.Timestamp)
 		}
 	}
 }
@@ -1489,15 +1494,12 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	pArgs := putArgs(key, []byte("value"))
 
 	txn.Sequence++
-	reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
-		Txn: txn,
-	}, &pArgs)
+	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pReply := reply.(*roachpb.PutResponse)
-	if !pReply.Timestamp.Equal(txn.Timestamp) {
-		t.Errorf("expected timestamp to remain %s; got %s", txn.Timestamp, pReply.Timestamp)
+	if !respH.Txn.Timestamp.Equal(txn.Timestamp) {
+		t.Errorf("expected timestamp to remain %s; got %s", txn.Timestamp, respH.Timestamp)
 	}
 
 	// Resolve the intent.
@@ -1516,12 +1518,12 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	expTS := ts
 	expTS.Logical++
 
-	if reply, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &pArgs); pErr != nil {
+	_, respH, pErr = SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &pArgs)
+	if pErr != nil {
 		t.Errorf("unexpected pError: %s", pErr)
 	}
-	pReply = reply.(*roachpb.PutResponse)
-	if !pReply.Timestamp.Equal(expTS) {
-		t.Errorf("expected timestamp to increment to %s; got %s", expTS, pReply.Timestamp)
+	if !respH.Timestamp.Equal(expTS) {
+		t.Errorf("expected timestamp to increment to %s; got %s", expTS, respH.Timestamp)
 	}
 }
 

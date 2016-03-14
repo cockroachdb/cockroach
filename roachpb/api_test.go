@@ -31,7 +31,6 @@ func TestCombinable(t *testing.T) {
 	}
 	// Test that {Scan,DeleteRange}Response properly implement it.
 	sr1 := &ScanResponse{
-		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{
 			{Key: Key("A"), Value: MakeValueFromString("V")},
 		},
@@ -42,16 +41,13 @@ func TestCombinable(t *testing.T) {
 	}
 
 	sr2 := &ScanResponse{
-		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{
 			{Key: Key("B"), Value: MakeValueFromString("W")},
 		},
 	}
-	sr2.Timestamp = MaxTimestamp
 
 	wantedSR := &ScanResponse{
-		ResponseHeader: ResponseHeader{Timestamp: MaxTimestamp},
-		Rows:           append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
+		Rows: append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
 	}
 
 	if err := sr1.combine(sr2); err != nil {
@@ -66,23 +62,19 @@ func TestCombinable(t *testing.T) {
 	}
 
 	dr1 := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 100}},
-		Keys:           []Key{[]byte("1")},
+		Keys: []Key{[]byte("1")},
 	}
 	if _, ok := interface{}(dr1).(combinable); !ok {
 		t.Fatalf("DeleteRangeResponse does not implement combinable")
 	}
 	dr2 := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 1}},
-		Keys:           []Key{[]byte("2")},
+		Keys: []Key{[]byte("2")},
 	}
 	dr3 := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
-		Keys:           nil,
+		Keys: nil,
 	}
 	wantedDR := &DeleteRangeResponse{
-		ResponseHeader: ResponseHeader{Timestamp: Timestamp{Logical: 111}},
-		Keys:           []Key{[]byte("1"), []byte("2")},
+		Keys: []Key{[]byte("1"), []byte("2")},
 	}
 	if err := dr2.combine(dr3); err != nil {
 		t.Fatal(err)

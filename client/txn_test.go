@@ -33,7 +33,7 @@ import (
 var (
 	testKey     = roachpb.Key("a")
 	testTS      = roachpb.Timestamp{WallTime: 1, Logical: 1}
-	testPutResp = &roachpb.PutResponse{ResponseHeader: roachpb.ResponseHeader{Timestamp: testTS}}
+	testPutResp = &roachpb.PutResponse{}
 )
 
 func newDB(sender Sender) *DB {

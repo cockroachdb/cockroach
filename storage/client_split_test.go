@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -966,12 +968,12 @@ func TestStoreSplitReadRace(t *testing.T) {
 		h.Timestamp = now
 		args := putArgs(key(i), []byte("foo"))
 		h.RangeID = store.LookupReplica(keys.Addr(args.Key), nil).RangeID
-		reply, pErr := client.SendWrappedWith(store, nil, h, &args)
+		_, respH, pErr := storage.SendWrapped(store, context.Background(), h, &args)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		if reply.Header().Timestamp.Less(ts(i)) {
-			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), reply.Header().Timestamp)
+		if respH.Timestamp.Less(ts(i)) {
+			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), respH.Timestamp)
 		}
 	}
 }
