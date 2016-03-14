@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package testutils
+package buildutil
 
 import "go/build"
 
