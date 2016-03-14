@@ -296,12 +296,12 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 					return right, nil, true
 				case parser.Is:
 					if rcmp.Right == parser.DNull {
-						// a IS NOT NULL and a IS NULL
+						// a IS NOT NULL AND a IS NULL
 						return parser.DBool(false), nil, true
 					}
 				case parser.IsNot:
 					if rcmp.Right == parser.DNull {
-						// a IS NOT NULL and a IS NOT NULL
+						// a IS NOT NULL AND a IS NOT NULL
 						return left, nil, true
 					}
 				}
@@ -822,6 +822,33 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 	if !varEqual(lcmp.Left, rcmp.Left) {
 		return left, right, true
 	}
+
+	if lcmp.Operator == parser.IsNot || rcmp.Operator == parser.IsNot {
+		switch lcmp.Operator {
+		case parser.Is:
+			if lcmp.Right == parser.DNull && rcmp.Right == parser.DNull {
+				// a IS NULL OR a IS NOT NULL
+				return parser.DBool(true), nil, true
+			}
+		case parser.IsNot:
+			if lcmp.Right == parser.DNull {
+				switch rcmp.Operator {
+				case parser.Is:
+					if rcmp.Right == parser.DNull {
+						// a IS NOT NULL OR a IS NULL
+						return parser.DBool(true), nil, true
+					}
+				case parser.IsNot:
+					if rcmp.Right == parser.DNull {
+						// a IS NOT NULL OR a IS NOT NULL
+						return left, nil, true
+					}
+				}
+			}
+		}
+		return left, right, true
+	}
+
 	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
 		left, right = simplifyOneOrInExpr(lcmp, rcmp)
 		return left, right, true
@@ -1169,6 +1196,15 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// x >= y
 			return left, nil, true
 		}
+
+	case parser.Is:
+		switch rcmp.Operator {
+		case parser.Is:
+			if lcmp.Right == parser.DNull && rcmp.Right == parser.DNull {
+				// a IS NULL OR a IS NULL
+				return left, nil, true
+			}
+		}
 	}
 
 	return parser.DBool(true), nil, false
@@ -1182,7 +1218,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 	origLeft, origRight := left, right
 
 	switch left.Operator {
-	case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
+	case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 		switch right.Operator {
 		case parser.In:
 			left, right = right, left
@@ -1191,7 +1227,6 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 
 	case parser.In:
 		tuple := left.Right.(parser.DTuple)
-
 		switch right.Operator {
 		case parser.EQ:
 			datum := right.Right.(parser.Datum)
@@ -1203,22 +1238,19 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 				Right:    mergeSorted(tuple, parser.DTuple{datum}),
 			}, nil
 
-		case parser.In:
-			// We keep the tuples for an IN expression in sorted order. So now we
-			// just merge the two sorted lists.
-			return &parser.ComparisonExpr{
-				Operator: parser.In,
-				Left:     left.Left,
-				Right:    mergeSorted(tuple, right.Right.(parser.DTuple)),
-			}, nil
-
-		case parser.GT, parser.GE, parser.LT, parser.LE:
+		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			datum := right.Right.(parser.Datum)
 			i := sort.Search(len(tuple), func(i int) bool {
 				return tuple[i].(parser.Datum).Compare(datum) >= 0
 			})
 
 			switch right.Operator {
+			case parser.NE:
+				if i < len(tuple) && tuple[i].Compare(datum) == 0 {
+					return makeIsNotNull(right.Left), nil
+				}
+				return right, nil
+
 			case parser.GT:
 				if i == 0 {
 					// datum >= tuple[0]
@@ -1259,6 +1291,15 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 					return right, nil
 				}
 			}
+
+		case parser.In:
+			// We keep the tuples for an IN expression in sorted order. So now we
+			// just merge the two sorted lists.
+			return &parser.ComparisonExpr{
+				Operator: parser.In,
+				Left:     left.Left,
+				Right:    mergeSorted(tuple, right.Right.(parser.DTuple)),
+			}, nil
 		}
 	}
 
