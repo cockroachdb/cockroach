@@ -27,9 +27,7 @@ module AdminViews {
   import Moment = moment.Moment;
   import MithrilVirtualElement = _mithril.MithrilVirtualElement;
   import MithrilComponent = _mithril.MithrilComponent;
-  import bytesAndCountReducer = Models.Status.bytesAndCountReducer;
   import sumReducer = Models.Status.sumReducer;
-  import BytesAndCount = Models.Status.BytesAndCount;
   import StoreStatus = Models.Proto.StoreStatus;
 
   /**
@@ -56,17 +54,26 @@ module AdminViews {
      */
     export module NodesPage {
 
-      function ByteColumn(key: string, section: string, title?: string): Table.TableColumn<NodeStatus> {
-        let byteKey: string = key + "_bytes";
-        let countKey: string = key + "_count";
+      function AggregateByteColumn(keys: string[], section?: string, title?: string): Table.TableColumn<NodeStatus> {
+        let byteSum: (s: NodeStatus) => number = (s: NodeStatus): number => {
+          return _.sum(_.map(keys, (key: string) => {
+            let byteKey: string = key + "_bytes";
+            return parseFloat(_.get<string>(s, byteKey));
+          }));
+        };
+
         return {
-          title: title || Utils.Format.Titlecase(_.last(byteKey.split("."))),
-          view: (status: NodeStatus): MithrilVirtualElement => Table.FormatBytes(parseFloat(_.get<string>(status, byteKey))),
+          title: title || Utils.Format.Titlecase(_.last(keys[0].split(".")) + "Bytes"),
+          view: (status: NodeStatus): MithrilVirtualElement => {
+            return Table.FormatBytes(byteSum(status));
+          },
           sortable: true,
-          sortValue: (status: NodeStatus): number => parseFloat(_.get<string>(status, byteKey)),
+          sortValue: (status: NodeStatus): number => byteSum(status),
           rollup: function(rows: NodeStatus[]): MithrilVirtualElement {
-            let total: BytesAndCount = bytesAndCountReducer(byteKey, countKey, rows);
-            return Table.FormatBytes(total.bytes);
+            return Table.FormatBytes(_.sum(_.map(keys, (key: string): number => {
+              let byteKey: string = key + "_bytes";
+              return sumReducer(byteKey, rows);
+            })));
           },
           section: section,
         };
@@ -101,11 +108,11 @@ module AdminViews {
             sortable: true,
           },
           {
-            title: "Node ID",
+            title: "Node",
             view: (status: NodeStatus): MithrilElement =>
-              m("a", {href: "/nodes/" + nodeId(status), config: m.route}, nodeId(status) ? nodeId(status).toString() : null),
+              m("a", {href: "/nodes/" + nodeId(status), config: m.route}, status.desc.address.address),
             sortable: true,
-            sortValue: (status: NodeStatus): number => nodeId(status),
+            sortValue: (status: NodeStatus): string => status.desc.address.address,
             rollup: function(rows: NodeStatus[]): MithrilVirtualElement {
               interface StatusTotals {
                 missing?: number;
@@ -124,61 +131,40 @@ module AdminViews {
             },
           },
           {
-            title: "Stores",
-            view: (status: NodeStatus): MithrilElement => (<NodeStatus>status).store_ids.length,
-            sortable: true,
-            sortValue: (status: NodeStatus): number => (<NodeStatus>status).store_ids.length,
-            rollup: function(rows: NodeStatus[]): string {
-              return sumReducer("store_ids.length", <NodeStatus[]>rows).toString();
-            },
-          },
-          {
-            title: "Address",
-            view: (status: NodeStatus): string => status.desc.address.address,
-            sortable: true,
-          },
-          {
-            title: "Started At",
+            title: "Started",
             view: (status: NodeStatus): string => {
-              let date = new Date(Utils.Convert.NanoToMilli(status.started_at));
-              return Utils.Format.Date(date);
+              return moment((Utils.Convert.NanoToMilli(status.started_at))).fromNow();
             },
             sortable: true,
           },
-          ByteColumn("stats.live", "storage"),
-          ByteColumn("stats.key", "storage"),
-          ByteColumn("stats.val", "storage", "Value Bytes"),
-          ByteColumn("stats.intent", "storage"),
-          ByteColumn("stats.sys", "storage", "System Bytes"),
+          AggregateByteColumn(["stats.live", "stats.intent", "stats.sys"], null, "Bytes"),
           {
-            title: "Leader Ranges",
-            view: (status: NodeStatus): string => status.leader_range_count.toString(),
+            title: "Ranges",
+            view: (status: NodeStatus): string => status.range_count.toString(),
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.leader_range_count,
+            sortValue: (status: NodeStatus): number => status.range_count,
             rollup: function(rows: NodeStatus[]): string {
-              return sumReducer("leader_range_count", rows).toString();
+              return sumReducer("range_count", rows).toString();
             },
-            section: "ranges",
+          },
+          // TODO: add more stats
+          {
+            title: "Connections",
+            view: (status: NodeStatus): string => "",
+            sortable: true,
+            sortValue: (status: NodeStatus): number => 0,
           },
           {
-            title: "Replicated Ranges",
-            view: (status: NodeStatus): string => status.replicated_range_count.toString(),
+            title: "CPU Usage",
+            view: (status: NodeStatus): string => "",
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.replicated_range_count,
-            rollup: function(rows: NodeStatus[]): string {
-              return sumReducer("replicated_range_count", rows).toString();
-            },
-            section: "ranges",
+            sortValue: (status: NodeStatus): number => 0,
           },
           {
-            title: "Available Ranges",
-            view: (status: NodeStatus): string => status.available_range_count.toString(),
+            title: "Mem Usage",
+            view: (status: NodeStatus): string => "",
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.available_range_count,
-            rollup: function(rows: NodeStatus[]): string {
-              return sumReducer("available_range_count", rows).toString();
-            },
-            section: "ranges",
+            sortValue: (status: NodeStatus): number => 0,
           },
           {
             title: "Logs",
