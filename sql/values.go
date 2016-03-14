@@ -98,6 +98,8 @@ func (n *valuesNode) Values() parser.DTuple {
 	return n.rows[n.nextRow-1]
 }
 
+func (*valuesNode) MarkDebug(_ explainMode) {}
+
 func (n *valuesNode) DebugValues() debugValues {
 	return debugValues{
 		rowIdx: n.nextRow - 1,

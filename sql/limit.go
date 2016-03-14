@@ -90,6 +90,14 @@ type limitNode struct {
 	debugVals debugValues
 }
 
+func (n *limitNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+	n.planNode.MarkDebug(mode)
+}
+
 func (n *limitNode) DebugValues() debugValues {
 	if n.explain != explainDebug {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
