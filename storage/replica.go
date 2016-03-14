@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -78,14 +79,6 @@ const (
 
 	opReplica = "replica"
 )
-
-// CommandFilter may be used in tests through the StorageTestingMocker to
-// intercept the handling of commands and artificially generate errors. Return
-// nil to continue with regular processing or non-nil to terminate processing
-// with the returned error. Note that in a multi-replica test this filter will
-// be run once for each replica and must produce consistent results each time.
-type CommandFilter func(
-	context.Context, roachpb.StoreID, roachpb.Request, roachpb.Header) error
 
 // This flag controls whether Transaction entries are automatically gc'ed
 // upon EndTransaction if they only have local intents (which can be
@@ -137,12 +130,10 @@ func usesTimestampCache(r roachpb.Request) bool {
 // via the done channel.
 type pendingCmd struct {
 	ctx     context.Context
-	idKey   cmdIDKey
+	idKey   storagebase.CmdIDKey
 	raftCmd roachpb.RaftCommand
 	done    chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
-
-type cmdIDKey string
 
 type replicaChecksum struct {
 	// Set to true when the checksum computation is ready. The checksum
@@ -181,15 +172,15 @@ type Replica struct {
 		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
 		leaderLease    *roachpb.Lease
 		maxBytes       int64 // Max bytes before split.
-		pendingCmds    map[cmdIDKey]*pendingCmd
-		pendingSeq     uint64 // atomic sequence counter for cmdIDKey generation.
+		pendingCmds    map[storagebase.CmdIDKey]*pendingCmd
+		pendingSeq     uint64 // atomic sequence counter for CmdIDKey generation.
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
 		tsCache        *TimestampCache       // Most recent timestamps for keys / key ranges
 		llChans        []chan *roachpb.Error // Slice of channels to send on after leader lease acquisition
 		// proposeRaftCommandFn can be set to mock out the propose operation.
-		proposeRaftCommandFn func(cmdIDKey, *pendingCmd) error
+		proposeRaftCommandFn func(*pendingCmd) error
 		checksums            map[uuid.UUID]replicaChecksum // computed checksum at a snapshot UUID.
 		checksumNotify       map[uuid.UUID]chan []byte     // notify of computed checksum.
 	}
@@ -228,7 +219,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 	r.mu.cmdQ = NewCommandQueue()
 	r.mu.tsCache = NewTimestampCache(clock)
-	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
+	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	r.mu.checksumNotify = map[uuid.UUID]chan []byte{}
 	r.setDescWithoutProcessUpdateLocked(desc)
@@ -287,7 +278,7 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 		}
 	}
 	// Clear the map.
-	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
+	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.Unlock()
 
 	return r.store.destroyReplicaData(desc)
@@ -923,7 +914,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
 	var intents []intentsWithArg
-	br, intents, pErr = r.executeBatch(ctx, r.store.Engine(), nil, ba)
+	br, intents, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
 		// Checking the sequence cache on reads makes sure that when our
@@ -1066,7 +1057,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 // map. This is possible until execution of the command at the local replica
 // has already begun, in which case false is returned and the client needs to
 // continue waiting for successful execution.
-func (r *Replica) tryAbandon(idKey cmdIDKey) bool {
+func (r *Replica) tryAbandon(idKey storagebase.CmdIDKey) bool {
 	r.mu.Lock()
 	_, ok := r.mu.pendingCmds[idKey]
 	delete(r.mu.pendingCmds, idKey)
@@ -1087,7 +1078,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	}
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
-	idKey := cmdIDKey(idKeyBuf)
+	idKey := storagebase.CmdIDKey(idKeyBuf)
 	pendingCmd := &pendingCmd{
 		ctx:   ctx,
 		idKey: idKey,
@@ -1113,9 +1104,9 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
 // The replica lock must be held.
-func (r *Replica) proposePendingCmdLocked(idKey cmdIDKey, p *pendingCmd) error {
+func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pendingCmd) error {
 	if r.mu.proposeRaftCommandFn != nil {
-		return r.mu.proposeRaftCommandFn(idKey, p)
+		return r.mu.proposeRaftCommandFn(p)
 	}
 
 	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
@@ -1230,7 +1221,7 @@ func (r *Replica) handleRaftReady() error {
 
 			// Discard errors from processRaftCommand. The error has been sent
 			// to the client that originated it, where it will be handled.
-			_ = r.processRaftCommand(cmdIDKey(commandID), e.Index, command)
+			_ = r.processRaftCommand(storagebase.CmdIDKey(commandID), e.Index, command)
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
@@ -1245,7 +1236,7 @@ func (r *Replica) handleRaftReady() error {
 			if err := command.Unmarshal(ctx.Payload); err != nil {
 				return err
 			}
-			if err := r.processRaftCommand(cmdIDKey(ctx.CommandID), e.Index, command); err != nil {
+			if err := r.processRaftCommand(storagebase.CmdIDKey(ctx.CommandID), e.Index, command); err != nil {
 				// If processRaftCommand failed, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
 			}
@@ -1339,39 +1330,11 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	}
 }
 
-// RaftCmdID identifies a batch and a command within it.
-type RaftCmdID struct {
-	idKey cmdIDKey
-	index int
-}
-
-type raftCmdIDContextKeyType struct{}
-type raftCmdIndexInBatchContextKeyType struct{}
-
-var raftCmdIDContextKey raftCmdIDContextKeyType
-var raftCmdIndexInBatchContextKey raftCmdIndexInBatchContextKeyType
-
-// RaftCmdIDFromContext extracts a RaftCmdID from the well-known context key.
-func RaftCmdIDFromContext(ctx context.Context) (cmdID RaftCmdID, present bool) {
-	var idKey cmdIDKey
-	var idx int
-	idKey, present = ctx.Value(raftCmdIDContextKey).(cmdIDKey)
-	if !present {
-		return
-	}
-	idx, present = ctx.Value(raftCmdIndexInBatchContextKey).(int)
-	if !present {
-		panic("context has cmdID but not index")
-	}
-	cmdID = RaftCmdID{idKey, idx}
-	return
-}
-
 // processRaftCommand processes a raft command by unpacking the command
 // struct to get args and reply and then applying the command to the
 // state machine via applyRaftCommand(). The error result is sent on
 // the command's done channel, if available.
-func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roachpb.RaftCommand) *roachpb.Error {
+func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, raftCmd roachpb.RaftCommand) *roachpb.Error {
 	if index == 0 {
 		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
 	}
@@ -1389,9 +1352,6 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 		// TODO(tschottdorf): consider the Trace situation here.
 		ctx = r.context()
 	}
-	if r.store.ctx.TestingMocker.TestingCommandFilter != nil {
-		ctx = context.WithValue(ctx, raftCmdIDContextKey, idKey)
-	}
 
 	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
 	defer cleanupSp()
@@ -1400,7 +1360,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	br, err := r.applyRaftCommand(ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
+	br, err := r.applyRaftCommand(idKey, ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
 	err = r.maybeSetCorrupt(err)
 
 	if cmd != nil {
@@ -1416,7 +1376,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
 // returned and must be handled by the caller.
-func (r *Replica) applyRaftCommand(ctx context.Context, index uint64,
+func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Context, index uint64,
 	originReplica roachpb.ReplicaDescriptor, ba roachpb.BatchRequest) (
 	*roachpb.BatchResponse, *roachpb.Error) {
 	if index <= 0 {
@@ -1435,7 +1395,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64,
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	ms := engine.MVCCStats{}
-	batch, br, intents, rErr := r.applyRaftCommandInBatch(ctx, originReplica, ba, &ms)
+	batch, br, intents, rErr := r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba, &ms)
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -1485,8 +1445,10 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64,
 // applyRaftCommandInBatch executes the command in a batch engine and
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
-func (r *Replica) applyRaftCommandInBatch(ctx context.Context, originReplica roachpb.ReplicaDescriptor,
-	ba roachpb.BatchRequest, ms *engine.MVCCStats) (engine.Engine, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+func (r *Replica) applyRaftCommandInBatch(
+	ctx context.Context, idKey storagebase.CmdIDKey, originReplica roachpb.ReplicaDescriptor,
+	ba roachpb.BatchRequest, ms *engine.MVCCStats) (
+	engine.Engine, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
@@ -1533,7 +1495,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, originReplica roa
 	// Execute the commands. If this returns without an error, the batch must
 	// be committed (EndTransaction with a CommitTrigger may unlock
 	// readOnlyCmdMu via a batch.Defer).
-	br, intents, err := r.executeBatch(ctx, btch, ms, ba)
+	br, intents, err := r.executeBatch(ctx, idKey, btch, ms, ba)
 
 	// Regardless of error, add result to the sequence cache if this is
 	// a write method. This must be done as part of the execution of
@@ -1619,7 +1581,10 @@ type intentsWithArg struct {
 	intents []roachpb.Intent
 }
 
-func (r *Replica) executeBatch(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+func (r *Replica) executeBatch(
+	ctx context.Context, idKey storagebase.CmdIDKey,
+	batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (
+	*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := &roachpb.BatchResponse{}
 	var intents []intentsWithArg
 	// If transactional, we use ba.Txn for each individual command and
@@ -1684,10 +1649,8 @@ func (r *Replica) executeBatch(ctx context.Context, batch engine.Engine, ms *eng
 			header.Timestamp = ba.Timestamp.Add(0, int32(1-len(ba.Requests)+index))
 		}
 
-		if r.store.ctx.TestingMocker.TestingCommandFilter != nil {
-			ctx = context.WithValue(ctx, raftCmdIndexInBatchContextKey, index)
-		}
-		reply, curIntents, pErr := r.executeCmd(ctx, batch, ms, header, remScanResults, args)
+		reply, curIntents, pErr := r.executeCmd(
+			ctx, idKey, index, batch, ms, header, remScanResults, args)
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
@@ -2101,7 +2064,8 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
-	br, intents, pErr := r.executeBatch(r.context(), r.store.Engine(), nil, ba)
+	br, intents, pErr :=
+		r.executeBatch(r.context(), storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}

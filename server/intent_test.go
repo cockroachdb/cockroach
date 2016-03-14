@@ -23,10 +23,9 @@ import (
 	"sync"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -81,16 +80,16 @@ func TestIntentResolution(t *testing.T) {
 			var done bool
 			ctx := NewTestContext()
 			ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-				func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+				func(filterArgs storageutils.FilterArgs) error {
 					mu.Lock()
 					defer mu.Unlock()
-					header := args.Header()
+					header := filterArgs.Req.Header()
 					// Ignore anything outside of the intent key range of "a" - "z"
 					if header.Key.Compare(roachpb.Key("a")) < 0 || header.Key.Compare(roachpb.Key("z")) > 0 {
 						return nil
 					}
 					var entry string
-					switch arg := args.(type) {
+					switch arg := filterArgs.Req.(type) {
 					case *roachpb.ResolveIntentRequest:
 						if arg.Status == roachpb.COMMITTED {
 							entry = string(header.Key)

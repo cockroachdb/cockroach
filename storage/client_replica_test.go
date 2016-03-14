@@ -24,14 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -196,10 +195,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext()
 	ctx.TestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
-			if _, ok := args.(*roachpb.GetRequest); ok &&
-				args.Header().Key.Equal(roachpb.Key(key)) &&
-				h.Txn == nil {
+		func(filterArgs storageutils.FilterArgs) error {
+			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
+				filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
+				filterArgs.Hdr.Txn == nil {
 				// The Reader executes two get operations, each of which triggers two get requests
 				// (the first request fails and triggers txn push, and then the second request
 				// succeeds). Returns an error for the fourth get request to avoid timestamp cache

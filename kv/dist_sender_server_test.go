@@ -21,8 +21,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -30,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -512,8 +511,9 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	ctx := server.NewTestContext()
 	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
-		func(_ context.Context, _ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
-			if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
+		func(fArgs storageutils.FilterArgs) error {
+			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
+			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
 					return roachpb.NewReadWithinUncertaintyIntervalError(
 						roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)

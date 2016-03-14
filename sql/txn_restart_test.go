@@ -22,9 +22,8 @@ import (
 	"sync"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/pq"
 )
@@ -79,9 +78,8 @@ func TestTxnRestart(t *testing.T) {
 		vals:          []string{"boulanger", "dromedary", "fajita", "hooly", "josephine", "laureal"},
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(_ context.Context, sid roachpb.StoreID,
-			req roachpb.Request, hdr roachpb.Header) error {
-			return injectRetriableErrors(sid, req, hdr, magicVals)
+		func(args storageutils.FilterArgs) error {
+			return injectRetriableErrors(args.Sid, args.Req, args.Hdr, magicVals)
 		}, false)
 	func() {
 		if _, err := sqlDB.Exec(`
@@ -125,9 +123,8 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 		restartCounts: make(map[string]int),
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
-		func(_ context.Context, sid roachpb.StoreID,
-			req roachpb.Request, hdr roachpb.Header) error {
-			return injectRetriableErrors(sid, req, hdr, magicVals)
+		func(args storageutils.FilterArgs) error {
+			return injectRetriableErrors(args.Sid, args.Req, args.Hdr, magicVals)
 		}, false)
 	defer cleanupFilter()
 
