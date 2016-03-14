@@ -178,7 +178,7 @@ func TestGossipStorage(t *testing.T) {
 	}
 
 	network.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
-		if cycle > 100 {
+		if cycle > 1000 {
 			t.Fatal("failed to connect to gossip")
 		}
 		select {
