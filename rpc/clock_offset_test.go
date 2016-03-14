@@ -367,11 +367,11 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 func TestClockOffsetMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop()
 
 	// Temporarily make the monitor interval very short, so that this test can
 	// complete quickly.
 	defer func(origMonitorInterval time.Duration) {
+		stopper.Stop()
 		monitorInterval = origMonitorInterval
 	}(monitorInterval)
 	monitorInterval = 10 * time.Nanosecond
