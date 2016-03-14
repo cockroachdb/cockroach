@@ -141,8 +141,9 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		return t, err
 
 	case *groupNode:
-		// Replace the group node with the node it wraps.
-		return markDebug(t.plan, mode)
+		t.explain = mode
+		_, err := markDebug(t.plan, mode)
+		return t, err
 
 	case *emptyNode:
 		// emptyNode supports DebugValues without any explicit enablement.
