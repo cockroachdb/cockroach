@@ -19,12 +19,52 @@ package stop
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util/caller"
 )
+
+func register(s *Stopper) {
+	trackedStoppers.Lock()
+	trackedStoppers.stoppers = append(trackedStoppers.stoppers, s)
+	trackedStoppers.Unlock()
+}
+
+func unregister(s *Stopper) {
+	trackedStoppers.Lock()
+	defer trackedStoppers.Unlock()
+	sl := trackedStoppers.stoppers
+	for i, tracked := range sl {
+		if tracked == s {
+			trackedStoppers.stoppers = sl[:i+copy(sl[i:], sl[i+1:])]
+			return
+		}
+	}
+	panic("attempt to unregister untracked stopper")
+}
+
+var trackedStoppers struct {
+	sync.Mutex
+	stoppers []*Stopper
+}
+
+func handleDebug(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	trackedStoppers.Lock()
+	defer trackedStoppers.Unlock()
+	for _, s := range trackedStoppers.stoppers {
+		s.mu.Lock()
+		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.numTasks, s.runningTasksLocked())
+		s.mu.Unlock()
+	}
+}
+
+func init() {
+	http.Handle("/debug/stopper", http.HandlerFunc(handleDebug))
+}
 
 // Closer is an interface for objects to attach to the stopper to
 // be closed once the stopper completes.
@@ -86,6 +126,7 @@ func NewStopper() *Stopper {
 		tasks:   map[taskKey]int{},
 	}
 	s.drain = sync.NewCond(&s.mu)
+	register(s)
 	return s
 }
 
@@ -204,6 +245,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped.
 func (s *Stopper) Stop() {
+	defer unregister(s)
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
 	// avoids stalls and helps some tests in `./cli` finish cleanly (where
