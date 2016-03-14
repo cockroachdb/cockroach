@@ -26,11 +26,17 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // How often the cluster offset is measured.
 var monitorInterval = defaultHeartbeatInterval * 10
+
+type remoteClockMetrics struct {
+	ClusterOffsetLowerBound *metric.Gauge
+	ClusterOffsetUpperBound *metric.Gauge
+}
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
@@ -40,6 +46,8 @@ type RemoteClockMonitor struct {
 	mu      sync.Mutex
 	// Wall time in nanoseconds when we last monitored cluster offset.
 	lastMonitoredAt int64
+	metrics         remoteClockMetrics
+	registry        *metric.Registry
 }
 
 // ClusterOffsetInterval is the best interval we can construct to estimate this
@@ -94,10 +102,16 @@ func (l endpointList) Less(i, j int) bool {
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
-	return &RemoteClockMonitor{
-		offsets: map[string]RemoteOffset{},
-		lClock:  clock,
+	r := &RemoteClockMonitor{
+		offsets:  map[string]RemoteOffset{},
+		lClock:   clock,
+		registry: metric.NewRegistry(),
 	}
+	r.metrics = remoteClockMetrics{
+		ClusterOffsetLowerBound: r.registry.Gauge("lower-bound-nanos"),
+		ClusterOffsetUpperBound: r.registry.Gauge("upper-bound-nanos"),
+	}
+	return r
 }
 
 // UpdateOffset is a thread-safe way to update the remote clock measurements.
@@ -160,8 +174,6 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 			// By the contract of the hlc, if the value is 0, then safety checking
 			// of the max offset is disabled. However we may still want to
 			// propagate the information to a status node.
-			// TODO(embark): once there is a framework for collecting timeseries
-			// data about the db, propagate the offset status to that.
 			// Don't forget to protect r.offsets through the Mutex if those
 			// Fatalf's below ever turn into something less destructive.
 			if r.lClock.MaxOffset() != 0 {
@@ -181,6 +193,10 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) {
 					log.Infof("healthy cluster offset: %s", offsetInterval)
 				}
 			}
+
+			r.metrics.ClusterOffsetLowerBound.Update(int64(offsetInterval.Lowerbound))
+			r.metrics.ClusterOffsetUpperBound.Update(int64(offsetInterval.Upperbound))
+
 			r.mu.Lock()
 			r.lastMonitoredAt = r.lClock.PhysicalNow()
 			r.mu.Unlock()
@@ -308,4 +324,10 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 		endpoints = append(endpoints, lowpoint, highpoint)
 	}
 	return endpoints
+}
+
+// Registry returns a registry with the metrics tracked by this server, which can be used to
+// access its stats or be added to another registry.
+func (r *RemoteClockMonitor) Registry() *metric.Registry {
+	return r.registry
 }

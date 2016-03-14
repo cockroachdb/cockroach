@@ -191,6 +191,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder = status.NewMetricsRecorder(s.clock)
 	s.recorder.AddNodeRegistry("sql.%s", sqlRegistry)
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
+	s.recorder.AddNodeRegistry("clock-offset.%s", s.rpcContext.RemoteClocks.Registry())
 
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
