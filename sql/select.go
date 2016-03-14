@@ -1069,6 +1069,8 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					continue
 				}
 
+				preStart := *startExpr
+				preEnd := *endExpr
 				switch c.Operator {
 				case parser.EQ:
 					// An equality constraint will overwrite any other type
@@ -1170,6 +1172,24 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 						*startExpr = c
 					}
 				}
+
+				// If a new constraint includes a mixed-type comparison expression,
+				// we can not include it in the index constraints because the index
+				// encoding would be incorrect. See #4313.
+				if preStart != *startExpr {
+					if mixed, err := isMixedTypeComparison(*startExpr); err != nil {
+						return err
+					} else if mixed {
+						*startExpr = nil
+					}
+				}
+				if preEnd != *endExpr {
+					if mixed, err := isMixedTypeComparison(*endExpr); err != nil {
+						return err
+					} else if mixed {
+						*endExpr = nil
+					}
+				}
 			}
 		}
 
@@ -1232,6 +1252,33 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 		}
 	}
 	return true
+}
+
+func isMixedTypeComparison(c *parser.ComparisonExpr) (bool, error) {
+	switch c.Operator {
+	case parser.In, parser.NotIn:
+		tuple := c.Right.(parser.DTuple)
+		for _, expr := range tuple {
+			if mixed, err := sameTypeExprs(c.Left, expr); mixed || err != nil {
+				return mixed, err
+			}
+		}
+		return false, nil
+	default:
+		return sameTypeExprs(c.Left, c.Right)
+	}
+}
+
+func sameTypeExprs(left, right parser.Expr) (bool, error) {
+	dummyLeft, err := left.TypeCheck(nil)
+	if err != nil || dummyLeft == parser.DNull {
+		return false, err
+	}
+	dummyRight, err := right.TypeCheck(nil)
+	if err != nil || dummyRight == parser.DNull {
+		return false, err
+	}
+	return !dummyLeft.TypeEqual(dummyRight), nil
 }
 
 type indexInfoByCost []*indexInfo
