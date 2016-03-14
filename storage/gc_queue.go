@@ -283,7 +283,8 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		}
 	}
 
-	if pErr := repl.store.intentResolver.resolveIntents(repl.context(), repl, intents, true /* wait */, false /* !poison */); pErr != nil {
+	if pErr := repl.store.intentResolver.resolveIntents(repl.context(), repl, intents,
+		true /* wait */, false /* !poison */); pErr != nil {
 		return pErr.GoError()
 	}
 
