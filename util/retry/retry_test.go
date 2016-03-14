@@ -19,35 +19,24 @@ package retry
 import (
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
 	opts := Options{
 		InitialBackoff: time.Microsecond * 10,
-		MaxBackoff:     time.Microsecond * 10,
-		Multiplier:     1e5,
-		MaxRetries:     1,
+		MaxBackoff:     time.Microsecond * 100,
+		Multiplier:     2,
+		MaxRetries:     10,
 	}
 
-	// tolerate a duration two orders of magnitude lower than if MaxBackoff is
-	// not respected.
-	fudgeFactor := opts.Multiplier / 100
-
-	attempts := 0
-	start := timeutil.Now()
-	for r := Start(opts); r.Next(); attempts++ {
-	}
-
-	duration := time.Since(start)
-
-	if expDuration := time.Duration(fudgeFactor) * time.Duration(opts.MaxRetries+1) * opts.MaxBackoff; duration > expDuration {
-		t.Errorf("expected retry loop to run for %s, actually ran for %s", expDuration, duration)
-	}
-
-	if expAttempts := opts.MaxRetries + 1; attempts != expAttempts {
-		t.Errorf("expected %d attempts, got %d attempts", expAttempts, attempts)
+	r := Start(opts)
+	r.opts.RandomizationFactor = 0
+	for i := 0; i < 10; i++ {
+		d := r.retryIn()
+		if d > opts.MaxBackoff {
+			t.Fatalf("expected backoff less than max-backoff: %s vs %s", d, opts.MaxBackoff)
+		}
+		r.currentAttempt++
 	}
 }
 
