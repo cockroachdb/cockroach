@@ -34,14 +34,15 @@ module AdminViews {
     import MithrilComponent = _mithril.MithrilComponent;
 
     let nodeStatuses: Models.Status.Nodes = new Models.Status.Nodes();
+    let storeStatuses: Models.Status.Stores = new Models.Status.Stores();
 
     function _nodeMetric(metric: string): string {
       return "cr.node." + metric;
     }
 
-    function _storeMetric(metric: string): string {
-      return "cr.store." + metric;
-    }
+    // function _storeMetric(metric: string): string {
+    //   return "cr.store." + metric;
+    // }
 
     function _sysMetric(metric: string): string {
       return "cr.node.sys." + metric;
@@ -65,7 +66,6 @@ module AdminViews {
           },
         ];
 
-        public sources: string[] = [];
         exec: Metrics.Executor;
         axes: (any)[] = [];
         axesSmall: (any)[] = [];
@@ -74,11 +74,11 @@ module AdminViews {
 
         private _quantiles: string[] = [
           "-max",
-          "-p99.999",
-          "-p99.99",
-          "-p99.9",
+          // "-p99.999",
+          // "-p99.99",
+          // "-p99.9",
           "-p99",
-          "-p90",
+          // "-p90",
           "-p75",
           "-p50",
         ];
@@ -90,46 +90,70 @@ module AdminViews {
         public constructor(nodeId?: string) {
           this._query = Metrics.NewQuery();
 
+          this.axesSmall.push({
+            titleFn: (allStats: Models.Proto.NodeStatus[]): string => {
+              if (allStats && allStats.length === 1) {
+                return "Node";
+              }
+              return "Nodes";
+            },
+            visualizationArguments: {
+              format: "s",
+              dataFn: function (allStats: Models.Proto.NodeStatus[]): { value: number; } { return {value: allStats && allStats.length || 0 }; },
+            },
+          });
+
+          this.axesSmall.push({
+            title: "Capacity Used",
+            visualizationArguments: {
+              format: "0.1%",
+              dataFn: function (allStats: any, storeStats: Models.Proto.StoreStatus[], totalStats: any, totalStoreStats: Models.Proto.Status): { value: number; } {
+                return {value: totalStats.stats.live_bytes / _.sum(_.map(storeStats, (v: Models.Proto.StoreStatus): number => v.desc.capacity.capacity)) }; },
+              zoom: "50%",
+            },
+          });
+
           let latencySelectors: Selector[] = _.map(
             this._quantiles,
             (q: string): Selector => {
               return Metrics.Select.Avg(_nodeMetric("exec.latency-1m" + q))
                 .title("Latency" + q);
             });
-          this._addChart(Metrics.NewAxis.apply(this, latencySelectors)
-          .format(Utils.Convert.NanoToMilli)
-          .title("Latency (ms)")
+          let fmt: (v: number) => string = d3.format(".1f");
+          this._addChartSmall(Metrics.NewAxis.apply(this, latencySelectors)
+          .format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
+          .title("Query Time (ms)")
           .label("Milliseconds")
           .range([0]));
 
-          this._addChart(
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("exec.error-count"))
-                .nonNegativeRate()
-                .title("Error Calls"),
-              Metrics.Select.Avg(_nodeMetric("exec.success-count"))
-                .nonNegativeRate()
-                .title("Success Calls")
-              ).format(d3.format("d")).title("Successes vs Errors").range([0]));
-
-          this._addChart(
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_storeMetric("livebytes"))
-                .title("Live Bytes"),
-              Metrics.Select.Avg(_storeMetric("capacity.available"))
-                .title("Available Capacity")
-              ).format(Utils.Format.Bytes).title("Capacity").range([0]));
-
-          this._addChart(
+          // TODO: load instead of CPU
+          // TODO: range should take into account # of cpus
+          this._addChartSmall(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
                 .title("CPU User %"),
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
                 .title("CPU Sys %")
-              ).format(d3.format(".2%")).title("CPU").range([0, 1]).stacked(true)
+            ).format(d3.format(".2%")).title("Load").stacked(true)
           );
 
           this._addChartSmall(
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_sysMetric("allocbytes"))
+                .title("Memory allocated")
+            ).format(Utils.Format.Bytes).title("Memory Usage")
+          );
+
+          // TODO: add QPS on another axis
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.conns"))
+                .nonNegativeRate()
+                .title("Connections")
+              ).format(d3.format("d")).title("Connections").range([0])
+          );
+
+          this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
                 .nonNegativeRate()
@@ -140,60 +164,27 @@ module AdminViews {
             ).format(Utils.Format.Bytes).title("data")
           );
 
-          this._addChartSmall(
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.txn.begin.count"))
-                .nonNegativeRate()
-                .title("BEGIN"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
-                .nonNegativeRate()
-                .title("COMMIT"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
-                .nonNegativeRate()
-                .title("ROLLBACK"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
-                .nonNegativeRate()
-                .title("ABORT")
-            ).format(d3.format("d")).title("Transaction Info")
-          );
-
-          this._addChartSmall(
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
-                .nonNegativeRate()
-                .title("Updates"),
-              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
-                .nonNegativeRate()
-                .title("Inserts"),
-              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
-                .nonNegativeRate()
-                .title("Deletes"),
-              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
-                .nonNegativeRate()
-                .title("DDL")
-            ).format(d3.format("d")).title("SQL Writes")
-          );
-
-          this._addChartSmall(
+          this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format("d")).title("SQL Reads")
+            ).format(d3.format("d")).title("SELECTs")
           );
 
-          this.axesSmall.push({
-            titleFn: (allStats: Models.Proto.NodeStatus[]): string => {
-              if (allStats && allStats.length === 1) {
-                return "Node";
-              }
-              return "Nodes";
-            },
-            visualizationArguments: {
-              format: "s",
-              dataFn: function (allStats: Models.Proto.NodeStatus[], totalStats: Models.Proto.Status): { value: number; } { return {value: allStats && allStats.length || 0 }; },
-            },
-          });
+          this._addChart(
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
+                .nonNegativeRate()
+                .title("Insert"),
+              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
+                .nonNegativeRate()
+                .title("Update"),
+              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
+                .nonNegativeRate()
+                .title("Delete")
+            ).format(d3.format("d")).title("INSERTs, UPDATEs, DELETEs")
+          );
 
           this.exec = new Metrics.Executor(this._query);
           this._refresh();
@@ -218,10 +209,13 @@ module AdminViews {
               return m("", {style: "float:left"}, Components.Metrics.LineGraph.create(this.exec, axis));
             } else {
               let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
-              let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
+              let allStoreStats: Models.Proto.StoreStatus[] = storeStatuses.allStatuses();
 
-              axis.title = axis.titleFn(allStats);
-              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
+              let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
+              let totalStoreStats: Models.Proto.StoreStatus = <Models.Proto.StoreStatus>storeStatuses.totalStatus();
+
+              axis.title = axis.titleFn && axis.titleFn(allStats) || axis.title;
+              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, allStoreStats, totalStats, totalStoreStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
               return m("", {style: "float:left"}, m.component(Visualizations.VisualizationWrapper, axis));
@@ -230,18 +224,22 @@ module AdminViews {
         }
 
         public RenderGraphsSmall(): MithrilElement {
-          return m(".charts", this.axesSmall.map((axis: (any)) => {
+          return m(".charts.half", this.axesSmall.map((axis: (any)) => {
             if (axis instanceof Metrics.Axis) {
-              return m(".small", {style: "float:left"}, Components.Metrics.LineGraph.create(this.exec, axis));
+              axis.legend(false).xAxis(false);
+              return m(".small.half", {style: "float:left"}, Components.Metrics.LineGraph.create(this.exec, axis));
             } else {
               let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
-              let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
+              let allStoreStats: Models.Proto.StoreStatus[] = storeStatuses.allStatuses();
 
-              axis.title = axis.titleFn(allStats);
-              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
+              let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
+              let totalStoreStats: Models.Proto.StoreStatus = <Models.Proto.StoreStatus>storeStatuses.totalStatus();
+
+              axis.title = axis.titleFn && axis.titleFn(allStats) || axis.title;
+              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, allStoreStats, totalStats, totalStoreStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
-              return m(".small", {style: "float:left"},  m.component(Visualizations.VisualizationWrapper, axis));
+              return m(".small.half", {style: "float:left"},  m.component(Visualizations.VisualizationWrapper, axis));
             }
           }));
         }
@@ -294,6 +292,7 @@ module AdminViews {
         private _refresh(): void {
           this.exec.refresh();
           nodeStatuses.refresh();
+          storeStatuses.refresh();
           Models.Events.eventSingleton.refresh();
         }
 
@@ -315,14 +314,6 @@ module AdminViews {
       export function view(ctrl: Controller): MithrilElement {
         let detail: string = m.route.param("detail");
 
-        // set
-        ctrl.sources = _.map(
-          nodeStatuses.allStatuses(),
-          function(v: NodeStatus): string {
-            return v.desc.node_id.toString();
-          }
-        );
-
         let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at ));
 
         let primaryContent: MithrilElement | MithrilElement[];
@@ -330,8 +321,8 @@ module AdminViews {
           primaryContent = m(".section.table", m.component(Components.Events, 10));
         } else  {
           primaryContent = m(".section.charts", [
-            ctrl.RenderGraphs(),
             ctrl.RenderGraphsSmall(),
+            ctrl.RenderGraphs(),
           ]);
         }
 
