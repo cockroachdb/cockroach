@@ -70,10 +70,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 	}
 	switch mode {
 	case explainDebug:
-		plan, err = markDebug(plan, mode)
-		if err != nil {
-			return nil, roachpb.NewUErrorf("%v: %s", err, n)
-		}
+		plan.MarkDebug(mode)
+
 		// Wrap the plan in an explainDebugNode.
 		return &explainDebugNode{plan}, nil
 
@@ -88,10 +86,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 		return v, nil
 
 	case explainTrace:
-		plan, err = markDebug(plan, explainDebug)
-		if err != nil {
-			return nil, roachpb.NewUErrorf("%v: %s", err, n)
-		}
+		plan.MarkDebug(explainDebug)
 		return (&sortNode{
 			ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
 			columns:  traceColumns,
@@ -99,66 +94,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 
 	default:
 		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
-	}
-}
-
-func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
-	switch t := plan.(type) {
-	case *selectNode:
-		t.explain = mode
-		// Mark the from node as debug (and potentially replace it).
-		newNode, err := markDebug(t.table.node, mode)
-		t.table.node = newNode
-		return t, err
-
-	case *scanNode:
-		t.explain = mode
-		return t, nil
-
-	case *indexJoinNode:
-		t.explain = mode
-		// Mark both the index and the table scan nodes as debug.
-		_, err := markDebug(t.index, mode)
-		if err != nil {
-			return t, err
-		}
-		_, err = markDebug(t.table, mode)
-		return t, err
-
-	case *limitNode:
-		t.explain = mode
-		_, err := markDebug(t.planNode, mode)
-		return t, err
-
-	case *distinctNode:
-		t.explain = mode
-		_, err := markDebug(t.planNode, mode)
-		return t, err
-
-	case *sortNode:
-		t.explain = mode
-		_, err := markDebug(t.plan, mode)
-		return t, err
-
-	case *groupNode:
-		t.explain = mode
-		_, err := markDebug(t.plan, mode)
-		return t, err
-
-	case *emptyNode:
-		// emptyNode supports DebugValues without any explicit enablement.
-		return t, nil
-
-	case *valuesNode:
-		// valuesNode supports DebugValues without any explicit enablement.
-		return t, nil
-
-	case *returningNode:
-		// returningNode supports DebugValues on the underlying valuesNode.
-		return &t.valuesNode, nil
-
-	default:
-		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }
 
@@ -285,6 +220,10 @@ func (n *explainDebugNode) Values() parser.DTuple {
 		parser.DString(vals.value),
 		parser.DString(vals.output.String()),
 	}
+}
+
+func (*explainDebugNode) MarkDebug(_ explainMode) {
+	panic("debug mode not implemented in explainDebugNode")
 }
 
 func (*explainDebugNode) DebugValues() debugValues {
