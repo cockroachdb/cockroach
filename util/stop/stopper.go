@@ -151,11 +151,22 @@ func (s *Stopper) RunAsyncTask(f func()) bool {
 func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) bool {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
+
+	// Wait for permission to run from the semaphore.
 	select {
 	case sem <- struct{}{}:
 	case <-s.ShouldDrain():
 		return false
+	default:
+		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
+		// Retry the select without the default.
+		select {
+		case sem <- struct{}{}:
+		case <-s.ShouldDrain():
+			return false
+		}
 	}
+
 	if !s.runPrelude(key) {
 		<-sem
 		return false
