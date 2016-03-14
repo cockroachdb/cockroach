@@ -305,8 +305,9 @@ type planNode interface {
 	// until the next call to Next().
 	Values() parser.DTuple
 	// DebugValues returns a set of debug values, valid until the next call to Next(). This is only
-	// available for nodes that have been put in a special "explainDebug" mode. When the output
-	// field in the results is debugValueRow, a set of values is also available through Values().
+	// available for nodes that have been put in a special "explainDebug" mode (using
+	// MarkDebug). When the output field in the result is debugValueRow, a set of values is
+	// also available through Values().
 	DebugValues() debugValues
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
@@ -319,6 +320,8 @@ type planNode interface {
 	// the first `numRows` rows. This is only a hint; the node must still be able to produce all
 	// results if requested.
 	SetLimitHint(numRows int64)
+	// MarkDebug puts the node in a special debugging mode, which allows DebugValues to be used.
+	MarkDebug(mode explainMode)
 }
 
 var _ planNode = &distinctNode{}
@@ -351,6 +354,8 @@ func (*emptyNode) PErr() *roachpb.Error    { return nil }
 func (*emptyNode) ExplainPlan() (name, description string, children []planNode) {
 	return "empty", "-", nil
 }
+
+func (*emptyNode) MarkDebug(_ explainMode) {}
 
 func (*emptyNode) DebugValues() debugValues {
 	return debugValues{

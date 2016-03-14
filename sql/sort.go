@@ -185,6 +185,14 @@ func (n *sortNode) Values() parser.DTuple {
 	return v[:len(n.columns)]
 }
 
+func (n *sortNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+	n.plan.MarkDebug(mode)
+}
+
 func (n *sortNode) DebugValues() debugValues {
 	vals := n.plan.DebugValues()
 	// If needSort is true, we read a row and stored it in the values node.
