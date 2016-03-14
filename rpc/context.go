@@ -62,8 +62,8 @@ type Context struct {
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
 
-	LocalInternalServer roachpb.InternalServer
-	LocalAddr           string
+	localInternalServer roachpb.InternalServer
+	localAddr           string
 
 	conns struct {
 		sync.Mutex
@@ -108,10 +108,19 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 	return ctx
 }
 
+// GetLocalInternalServerForAddr returns the context's internal batch server
+// for addr, if it exists.
+func (ctx *Context) GetLocalInternalServerForAddr(addr string) roachpb.InternalServer {
+	if addr == ctx.localAddr {
+		return ctx.localInternalServer
+	}
+	return nil
+}
+
 // SetLocalInternalServer sets the context's local internal batch server.
 func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer, addr string) {
-	ctx.LocalInternalServer = internalServer
-	ctx.LocalAddr = addr
+	ctx.localInternalServer = internalServer
+	ctx.localAddr = addr
 }
 
 func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {

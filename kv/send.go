@@ -245,7 +245,7 @@ func sendOne(client batchClient, timeout time.Duration,
 		ctx, _ = context.WithTimeout(ctx, timeout)
 	}
 
-	if localServer := rpcContext.LocalInternalServer; enableLocalCalls && localServer != nil && addr == rpcContext.LocalAddr {
+	if localServer := rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
 		reply, err := localServer.Batch(ctx, &client.args)
 		done <- batchCall{reply: reply, err: err}
 		return
