@@ -142,6 +142,32 @@ func (s *Stopper) RunAsyncTask(f func()) bool {
 	return true
 }
 
+// RunLimitedAsyncTask runs function f in a goroutine, using the given
+// channel as a semaphore to limit the number of tasks that are run
+// concurrently to the channel's capacity. Blocks until the semaphore
+// is available in order to push back on callers that may be trying to
+// create many tasks. Returns false if the Stopper is draining and the
+// function is not executed.
+func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) bool {
+	file, line, _ := caller.Lookup(1)
+	key := taskKey{file, line}
+	select {
+	case sem <- struct{}{}:
+	case <-s.ShouldDrain():
+		return false
+	}
+	if !s.runPrelude(key) {
+		<-sem
+		return false
+	}
+	go func() {
+		defer s.runPostlude(key)
+		defer func() { <-sem }()
+		f()
+	}()
+	return true
+}
+
 func (s *Stopper) runPrelude(key taskKey) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
