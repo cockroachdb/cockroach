@@ -906,14 +906,7 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
 }
 
-func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
-	f func(MVCCKeyValue) (bool, error)) error {
-	if !start.Less(end) {
-		return nil
-	}
-	it := newRocksDBIterator(rdb, nil, engine)
-	defer it.Close()
-
+func iterFromTo(it Iterator, start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
 	it.Seek(start)
 	for ; it.Valid(); it.Next() {
 		k := it.Key()
@@ -926,4 +919,14 @@ func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
 	}
 	// Check for any errors during iteration.
 	return it.Error()
+}
+
+func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
+	f func(MVCCKeyValue) (bool, error)) error {
+	if !start.Less(end) {
+		return nil
+	}
+	it := newRocksDBIterator(rdb, nil, engine)
+	defer it.Close()
+	return iterFromTo(it, start, end, f)
 }
