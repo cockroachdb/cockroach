@@ -303,11 +303,12 @@ func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 }
 
 // GetStoreList returns a storeList that contains all active stores that
-// contain the required attributes and their associated stats.
+// contain the required attributes and their associated stats. It also returns
+// the number of total alive stores.
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) StoreList {
+func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
@@ -321,12 +322,16 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 		sort.Sort(storeIDs)
 	}
 	sl := StoreList{}
+	var aliveStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.stores[roachpb.StoreID(storeID)]
 		if !detail.dead && required.IsSubset(*detail.desc.CombinedAttrs()) {
 			desc := detail.desc
 			sl.add(&desc)
 		}
+		if !detail.dead {
+			aliveStoreCount++
+		}
 	}
-	return sl
+	return sl, aliveStoreCount
 }

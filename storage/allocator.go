@@ -91,6 +91,7 @@ const (
 type allocatorError struct {
 	required         roachpb.Attributes
 	relaxConstraints bool
+	aliveStoreCount  int
 }
 
 func (ae *allocatorError) Error() string {
@@ -98,8 +99,8 @@ func (ae *allocatorError) Error() string {
 	if ae.relaxConstraints {
 		anyAll = "any"
 	}
-	return fmt.Sprintf("no target store with %s attributes matching %s available, are you running enough nodes?",
-		anyAll, ae.required)
+	return fmt.Sprintf("0 of %d stores with %s attributes matching %s",
+		ae.aliveStoreCount, anyAll, ae.required)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}
@@ -247,12 +248,16 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
-		sl := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, a.options.Deterministic)
+		sl, aliveStoreCount := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, a.options.Deterministic)
 		if target := a.balancer.selectGood(sl, existingNodes); target != nil {
 			return target, nil
 		}
 		if len(attrs) == 0 || !relaxConstraints {
-			return nil, &allocatorError{required: required, relaxConstraints: relaxConstraints}
+			return nil, &allocatorError{
+				required:         required,
+				relaxConstraints: relaxConstraints,
+				aliveStoreCount:  aliveStoreCount,
+			}
 		}
 	}
 }
@@ -315,7 +320,7 @@ func (a Allocator) RebalanceTarget(storeID roachpb.StoreID, required roachpb.Att
 		existingNodes[repl.NodeID] = struct{}{}
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
-	sl := a.storePool.getStoreList(required, a.options.Deterministic)
+	sl, _ := a.storePool.getStoreList(required, a.options.Deterministic)
 	if replacement := a.balancer.improve(storeDesc, sl, existingNodes); replacement != nil {
 		return replacement
 	}
@@ -345,7 +350,7 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 
-	sl := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
+	sl, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
 
 	// ShouldRebalance is true if a suitable replacement can be found.
 	return a.balancer.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
