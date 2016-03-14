@@ -136,8 +136,9 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		return t, err
 
 	case *sortNode:
-		// Replace the sort node with the node it wraps.
-		return markDebug(t.plan, mode)
+		t.explain = mode
+		_, err := markDebug(t.plan, mode)
+		return t, err
 
 	case *groupNode:
 		// Replace the group node with the node it wraps.
@@ -184,6 +185,10 @@ const (
 	// The debug values refer to a full result row but the row was filtered out.
 	debugValueFiltered
 
+	// The debug value refers to a full result row that has been stored in a buffer
+	// and will be emitted later.
+	debugValueBuffered
+
 	// The debug values refer to a full result row.
 	debugValueRow
 )
@@ -195,6 +200,9 @@ func (t debugValueType) String() string {
 
 	case debugValueFiltered:
 		return "FILTERED"
+
+	case debugValueBuffered:
+		return "BUFFERED"
 
 	case debugValueRow:
 		return "ROW"

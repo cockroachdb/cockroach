@@ -163,6 +163,8 @@ type sortNode struct {
 	ordering columnOrdering
 	needSort bool
 	pErr     *roachpb.Error
+	explain  explainMode
+	values   valuesNode
 }
 
 func (n *sortNode) Columns() []ResultColumn {
@@ -183,19 +185,15 @@ func (n *sortNode) Values() parser.DTuple {
 	return v[:len(n.columns)]
 }
 
-func (*sortNode) DebugValues() debugValues {
-	// TODO(radu)
-	panic("debug mode not implemented in sortNode")
-}
-
-func (n *sortNode) Next() bool {
-	if n.needSort {
-		n.needSort = false
-		if !n.initValues() {
-			return false
-		}
+func (n *sortNode) DebugValues() debugValues {
+	vals := n.plan.DebugValues()
+	// If needSort is true, we read a row and stored it in the values node.
+	// If needSort is false, we are reading either from an already sorted node, or from the values
+	// node we created.
+	if n.needSort && vals.output == debugValueRow {
+		vals.output = debugValueBuffered
 	}
-	return n.plan.Next()
+	return vals
 }
 
 func (n *sortNode) PErr() *roachpb.Error {
@@ -260,30 +258,55 @@ func (n *sortNode) wrap(plan planNode) planNode {
 	return plan
 }
 
-func (n *sortNode) initValues() bool {
+func (n *sortNode) Next() bool {
+	if n.pErr != nil {
+		return false
+	}
+
 	// TODO(pmattis): If the result set is large, we might need to perform the
 	// sort on disk.
-	var v *valuesNode
-	if x, ok := n.plan.(*valuesNode); ok {
-		v = x
-		v.ordering = n.ordering
-	} else {
-		v = &valuesNode{ordering: n.ordering}
+
+	for n.needSort {
+		if v, ok := n.plan.(*valuesNode); ok {
+			// The plan we wrap is already a values node. Just sort it.
+			v.ordering = n.ordering
+			sort.Sort(v)
+			n.needSort = false
+			break
+		}
+
 		// TODO(andrei): If we're scanning an index with a prefix matching an
 		// ordering prefix, we should only accumulate values for equal fields
 		// in this prefix, then sort the accumulated chunk and output.
-		for n.plan.Next() {
-			values := n.plan.Values()
-			valuesCopy := make(parser.DTuple, len(values))
-			copy(valuesCopy, values)
-			v.rows = append(v.rows, valuesCopy)
+		if !n.plan.Next() {
+			n.pErr = n.plan.PErr()
+			if n.pErr != nil {
+				return false
+			}
+
+			n.values.ordering = n.ordering
+			sort.Sort(&n.values)
+			// Replace the plan with the sorted values node.
+			n.plan = &n.values
+			n.needSort = false
+			break
 		}
-		n.pErr = n.plan.PErr()
-		if n.pErr != nil {
-			return false
+
+		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
+			// Pass through non-row debug values.
+			return true
+		}
+
+		values := n.plan.Values()
+		valuesCopy := make(parser.DTuple, len(values))
+		copy(valuesCopy, values)
+		n.values.rows = append(n.values.rows, valuesCopy)
+
+		if n.explain == explainDebug {
+			// Emit a "buffered" row.
+			return true
 		}
 	}
-	sort.Sort(v)
-	n.plan = v
-	return true
+
+	return n.plan.Next()
 }
