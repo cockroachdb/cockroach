@@ -24,8 +24,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // TestUpdateOffset tests the three cases that UpdateOffset should or should
@@ -344,6 +346,42 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 		upperbound: math.MaxInt64,
 	}
 	assertIntervalHealth(false, interval, maxOffset, t)
+}
+
+func TestClockOffsetMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Create a RemoteClockMonitor with a hand-picked offset.
+	offset := RemoteOffset{
+		Offset:      13,
+		Uncertainty: 7,
+		MeasuredAt:  6,
+	}
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	monitor := newRemoteClockMonitor(clock)
+	monitor.monitorInterval = 10 * time.Nanosecond
+	monitor.UpdateOffset("0", offset)
+
+	// Update clock offset interval metrics.
+	stopper.RunWorker(func() {
+		if err := monitor.MonitorRemoteOffsets(stopper); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	reg := monitor.Registry()
+	util.SucceedsSoon(t, func() error {
+		if a, e := reg.GetGauge("lower-bound-nanos").Value(), int64(6); a != e {
+			return util.Errorf("lower bound %d != expected %d", a, e)
+		}
+		if a, e := reg.GetGauge("upper-bound-nanos").Value(), int64(20); a != e {
+			return util.Errorf("upper bound %d != expected %d", a, e)
+		}
+		return nil
+	})
 }
 
 func assertMajorityIntervalError(clocks *RemoteClockMonitor, t *testing.T) {

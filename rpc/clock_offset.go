@@ -25,8 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+type remoteClockMetrics struct {
+	ClusterOffsetLowerBound *metric.Gauge
+	ClusterOffsetUpperBound *metric.Gauge
+}
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
@@ -39,6 +45,9 @@ type RemoteClockMonitor struct {
 		offsets         map[string]RemoteOffset
 		lastMonitoredAt time.Time
 	}
+
+	metrics  remoteClockMetrics
+	registry *metric.Registry
 }
 
 type clusterOffsetInterval struct {
@@ -91,8 +100,16 @@ func (l endpointList) Less(i, j int) bool {
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
-	r := RemoteClockMonitor{clock: clock, monitorInterval: defaultHeartbeatInterval * 10}
+	r := RemoteClockMonitor{
+		clock:           clock,
+		monitorInterval: defaultHeartbeatInterval * 10,
+		registry:        metric.NewRegistry(),
+	}
 	r.mu.offsets = make(map[string]RemoteOffset)
+	r.metrics = remoteClockMetrics{
+		ClusterOffsetLowerBound: r.registry.Gauge("lower-bound-nanos"),
+		ClusterOffsetUpperBound: r.registry.Gauge("upper-bound-nanos"),
+	}
 	return &r
 }
 
@@ -174,6 +191,10 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) error {
 					log.Infof("healthy cluster offset: %s", offsetInterval)
 				}
 			}
+
+			r.metrics.ClusterOffsetLowerBound.Update(int64(offsetInterval.lowerbound))
+			r.metrics.ClusterOffsetUpperBound.Update(int64(offsetInterval.upperbound))
+
 			r.mu.Lock()
 			r.mu.lastMonitoredAt = r.clock.PhysicalTime()
 			r.mu.Unlock()
@@ -289,4 +310,10 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 		endpoints = append(endpoints, lowpoint, highpoint)
 	}
 	return endpoints
+}
+
+// Registry returns a registry with the metrics tracked by this server, which can be used to
+// access its stats or be added to another registry.
+func (r *RemoteClockMonitor) Registry() *metric.Registry {
+	return r.registry
 }
