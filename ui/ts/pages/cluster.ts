@@ -335,7 +335,7 @@ module AdminViews {
           ]);
         }
 
-        return m(".page", [
+        return m(".page.cluster", [
           m.component(Components.Topbar, {titleImage: m("img", {src: "assets/CockroachDB.png"}), updated: mostRecentlyUpdated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           primaryContent,
