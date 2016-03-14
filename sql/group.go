@@ -226,6 +226,14 @@ func (n *groupNode) Values() parser.DTuple {
 	return n.values.Values()
 }
 
+func (n *groupNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+	n.plan.MarkDebug(mode)
+}
+
 func (n *groupNode) DebugValues() debugValues {
 	if n.populated {
 		return n.values.DebugValues()
