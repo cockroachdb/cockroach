@@ -359,8 +359,9 @@ module AdminViews {
      */
     export module NodePage {
       import Status = Models.Proto.Status;
-      class Controller {
-        private static defaultTargets: NavigationBar.Target[] = [
+      export class Controller {
+        // used by the logs page as well
+        public static nodeTabs: NavigationBar.Target[] = [
           {
             view: "Overview",
             route: "",
@@ -368,6 +369,10 @@ module AdminViews {
           {
             view: "Graphs",
             route: "graph",
+          },
+          {
+            view: "Logs",
+            route: "logs",
           },
         ];
 
@@ -565,7 +570,7 @@ module AdminViews {
         public TargetSet(): NavigationBar.TargetSet {
           return {
             baseRoute: "/nodes/" + this._nodeId + "/",
-            targets: Utils.Prop(Controller.defaultTargets),
+            targets: Utils.Prop(Controller.nodeTabs),
             isActive: Controller.isActive,
           };
         }
