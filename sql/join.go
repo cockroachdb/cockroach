@@ -119,6 +119,16 @@ func (n *indexJoinNode) Values() parser.DTuple {
 	return n.table.Values()
 }
 
+func (n *indexJoinNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+	// Mark both the index and the table scan nodes as debug.
+	n.index.MarkDebug(mode)
+	n.table.MarkDebug(mode)
+}
+
 func (n *indexJoinNode) DebugValues() debugValues {
 	if n.explain != explainDebug {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
