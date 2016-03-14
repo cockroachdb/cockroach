@@ -93,6 +93,35 @@ func verifyStats(t *testing.T, s *storage.Store) {
 	}
 }
 
+func verifyRocksDBStats(t *testing.T, s *storage.Store) {
+	if err := s.ComputeMetrics(); err != nil {
+		t.Fatal(err)
+	}
+
+	testcases := []struct {
+		gaugeName string
+		min       int64
+	}{
+		{"rocksdb.block.cache.hits", 10},
+		{"rocksdb.block.cache.misses", 0},
+		{"rocksdb.block.cache.usage", 0},
+		{"rocksdb.block.cache.pinned-usage", 0},
+		{"rocksdb.bloom.filter.prefix.checked", 20},
+		{"rocksdb.bloom.filter.prefix.useful", 20},
+		{"rocksdb.memtable.hits", 0},
+		{"rocksdb.memtable.misses", 0},
+		{"rocksdb.memtable.total-size", 5000},
+		{"rocksdb.flushes", 1},
+		{"rocksdb.compactions", 0},
+		{"rocksdb.table-readers-mem-estimate", 50},
+	}
+	for _, tc := range testcases {
+		if a := getGauge(t, s, tc.gaugeName); a < tc.min {
+			t.Errorf("gauge %s = %d < min %d", tc.gaugeName, a, tc.min)
+		}
+	}
+}
+
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
@@ -100,6 +129,16 @@ func TestStoreMetrics(t *testing.T) {
 
 	store0 := mtc.stores[0]
 	store1 := mtc.stores[1]
+
+	// Flush RocksDB memtables, so that RocksDB begins using block-based tables.
+	// This is useful, because most of the stats we track don't apply to
+	// memtables.
+	if err := store0.Engine().Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store1.Engine().Flush(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, roachpb.Key("m"))
@@ -158,4 +197,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify all stats on store0 and store1 after range is removed.
 	verifyStats(t, store0)
 	verifyStats(t, store1)
+
+	verifyRocksDBStats(t, store0)
+	verifyRocksDBStats(t, store1)
 }
