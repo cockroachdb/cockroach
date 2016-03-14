@@ -287,3 +287,8 @@ query ITT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
 0 scan t@bc -
+
+query ITT
+EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
+----
+0 scan t@b_desc -

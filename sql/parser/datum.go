@@ -211,7 +211,11 @@ func (d DInt) Compare(other Datum) int {
 	}
 	v, ok := other.(DInt)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		cmp, ok := mixedTypeCompare(d, other)
+		if !ok {
+			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		}
+		return cmp
 	}
 	if d < v {
 		return -1
@@ -278,7 +282,11 @@ func (d DFloat) Compare(other Datum) int {
 	}
 	v, ok := other.(DFloat)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		cmp, ok := mixedTypeCompare(d, other)
+		if !ok {
+			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		}
+		return cmp
 	}
 	if d < v {
 		return -1
@@ -363,7 +371,11 @@ func (d *DDecimal) Compare(other Datum) int {
 	}
 	v, ok := other.(*DDecimal)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		cmp, ok := mixedTypeCompare(d, other)
+		if !ok {
+			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		}
+		return cmp
 	}
 	return d.Cmp(&v.Dec)
 }
@@ -1015,4 +1027,39 @@ func (DValArg) IsMin() bool {
 
 func (d DValArg) String() string {
 	return "$" + d.name
+}
+
+// Temporary workaround for #3633, allowing comparisons between
+// heterogeneous types.
+// TODO(andreimatei) Remove when type inference improves.
+func mixedTypeCompare(l, r Datum) (int, bool) {
+	lType := reflect.TypeOf(l)
+	rType := reflect.TypeOf(r)
+
+	// Check equality.
+	eqOp, ok := cmpOps[cmpArgs{EQ, lType, rType}]
+	if !ok {
+		return 0, false
+	}
+	eq, err := eqOp.fn(EvalContext{}, l, r)
+	if err != nil {
+		panic(err)
+	}
+	if eq {
+		return 0, true
+	}
+
+	// Check comparison.
+	ltOp, ok := cmpOps[cmpArgs{LT, lType, rType}]
+	if !ok {
+		return 0, false
+	}
+	lt, err := ltOp.fn(EvalContext{}, l, r)
+	if err != nil {
+		panic(err)
+	}
+	if lt {
+		return -1, true
+	}
+	return 1, true
 }
