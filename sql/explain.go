@@ -106,16 +106,6 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	switch t := plan.(type) {
 	case *selectNode:
 		t.explain = mode
-
-		if _, ok := t.table.node.(*indexJoinNode); ok {
-			// We will replace the indexJoinNode with the index node; we cannot
-			// process filter or render expressions (we don't have all the values).
-			// TODO(radu): this should go away once indexJoinNode properly
-			// implements explainDebug.
-			t.filter = nil
-			t.render = nil
-			t.qvals = nil
-		}
 		// Mark the from node as debug (and potentially replace it).
 		newNode, err := markDebug(t.table.node, mode)
 		t.table.node = newNode
@@ -136,6 +126,11 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		return t, err
 
 	case *limitNode:
+		t.explain = mode
+		_, err := markDebug(t.planNode, mode)
+		return t, err
+
+	case *distinctNode:
 		t.explain = mode
 		_, err := markDebug(t.planNode, mode)
 		return t, err
