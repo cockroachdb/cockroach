@@ -57,3 +57,11 @@ SELECT 'hello' SIMILAR TO v FROM kvString WHERE k SIMILAR TO 'like[1-2]'
 ----
 true
 false
+
+# Test mixed type tuple comparison.
+
+query II
+SELECT * FROM kv WHERE k IN (1, 5.0, 9)
+----
+1 2
+5 6
