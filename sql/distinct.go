@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -68,6 +69,15 @@ type distinctNode struct {
 	// prefixSeen value.
 	suffixSeen map[string]struct{}
 	pErr       *roachpb.Error
+	explain    explainMode
+	debugVals  debugValues
+}
+
+func (n *distinctNode) DebugValues() debugValues {
+	if n.explain != explainDebug {
+		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
+	}
+	return n.debugVals
 }
 
 func (n *distinctNode) Next() bool {
@@ -75,25 +85,20 @@ func (n *distinctNode) Next() bool {
 		return false
 	}
 	for n.planNode.Next() {
+		if n.explain == explainDebug {
+			n.debugVals = n.planNode.DebugValues()
+			if n.debugVals.output != debugValueRow {
+				// Let the non-row debug values pass through.
+				return true
+			}
+		}
 		// Detect duplicates
 		prefix, suffix := n.encodeValues(n.Values())
 		if n.pErr != nil {
 			return false
 		}
-		if bytes.Equal(prefix, n.prefixSeen) {
-			// The prefix of the row is the same as the last row; check
-			// to see if the suffix which is not ordered has been seen.
-			if suffix == nil {
-				// duplicate
-				continue
-			}
-			sKey := string(suffix)
-			if _, ok := n.suffixSeen[sKey]; ok {
-				// duplicate
-				continue
-			}
-			n.suffixSeen[sKey] = struct{}{}
-		} else {
+
+		if !bytes.Equal(prefix, n.prefixSeen) {
 			// The prefix of the row which is ordered differs from the last row;
 			// reset our seen set.
 			if len(n.suffixSeen) > 0 {
@@ -103,8 +108,25 @@ func (n *distinctNode) Next() bool {
 			if suffix != nil {
 				n.suffixSeen[string(suffix)] = struct{}{}
 			}
+			return true
 		}
-		return true
+
+		// The prefix of the row is the same as the last row; check
+		// to see if the suffix which is not ordered has been seen.
+		if suffix != nil {
+			sKey := string(suffix)
+			if _, ok := n.suffixSeen[sKey]; !ok {
+				n.suffixSeen[sKey] = struct{}{}
+				return true
+			}
+		}
+
+		// The row is a duplicate
+		if n.explain == explainDebug {
+			// Return as a filtered row.
+			n.debugVals.output = debugValueFiltered
+			return true
+		}
 	}
 	n.pErr = n.planNode.PErr()
 	return false
