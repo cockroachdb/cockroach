@@ -23,6 +23,7 @@ module AdminViews {
     import Table = Components.Table;
     import LogEntry = Models.Proto.LogEntry;
     import MithrilContext = _mithril.MithrilContext;
+    import NavigationBar = Components.NavigationBar;
 
     let entries: Models.Log.Entries;
     /**
@@ -56,8 +57,35 @@ module AdminViews {
 
         private static _queryEveryMS: number = 10000;
 
+        private static defaultTargets: NavigationBar.Target[] = [
+          {
+            view: "Overview",
+            route: "",
+          },
+          {
+            view: "Graphs",
+            route: "graph",
+          },
+          {
+            view: "Logs",
+            route: "logs",
+          },
+        ];
+
         public columns: Utils.Property<Table.TableColumn<LogEntry>[]> = Utils.Prop(Controller.comparisonColumns);
         private _interval: number;
+
+        private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
+          return t.route === "logs";
+        };
+
+        public TargetSet(): NavigationBar.TargetSet {
+          return {
+            baseRoute: "/nodes/" + m.route.param("node_id") + "/",
+            targets: Utils.Prop(Controller.defaultTargets),
+            isActive: Controller.isActive,
+          };
+        }
 
         onunload(): void {
           clearInterval(this._interval);
@@ -98,11 +126,18 @@ module AdminViews {
           count = 0;
         }
 
-        return m("div", [
+        // Page title.
+        let title: _mithril.MithrilVirtualElement = m("", [
+          m("a", {config: m.route, href: "/nodes"}, "Nodes"),
+          ": Node " + m.route.param("node_id") + ": Logs",
+        ]);
+
+        return m(".page", [
           m.component(Components.Topbar, {
-            title: "Node " + entries.nodeName() + " Log",
+            title: title,
             updated: Utils.Convert.MilliToNano(Date.now()),
           }),
+          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
           m(".section.logs", [
             m("form", [
               "Severity: ",

@@ -350,6 +350,10 @@ module AdminViews {
             view: "Graphs",
             route: "graph",
           },
+          {
+            view: "Logs",
+            route: "logs",
+          },
         ];
 
         private static _queryEveryMS: number = 10000;
