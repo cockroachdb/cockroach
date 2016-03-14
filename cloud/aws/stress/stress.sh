@@ -12,6 +12,9 @@ MAX_FAILS=1
 STRESS_FLAGS="-maxruns ${MAX_RUNS} -maxtime ${MAX_TIME} -maxfails ${MAX_FAILS} -stderr"
 TEST_FLAGS="-test.v"
 
+# Enable dumping of all goroutine stacks due to unrecovered panics.
+export GOTRACEBACK=all
+
 # takes the full path to the test binary.
 function run_one_test {
   test_binary=$1
