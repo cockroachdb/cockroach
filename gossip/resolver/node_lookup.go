@@ -19,11 +19,24 @@ package resolver
 import (
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// lookupTimeout is the timeout to use for node resolution lookups.
+var lookupTimeout = base.NetworkTimeout
+
+// SetLookupTimeout sets the node resolution lookup timeout.
+func SetLookupTimeout(t time.Duration) func() {
+	origLookupTimeout := lookupTimeout
+	lookupTimeout = t
+	return func() {
+		lookupTimeout = origLookupTimeout
+	}
+}
 
 // nodeLookupResolver implements Resolver.
 // It queries http(s)://<address>/_status/details/local and extracts the node's
@@ -52,7 +65,7 @@ func (nl *nodeLookupResolver) GetAddress() (net.Addr, error) {
 		}
 		nl.httpClient = &http.Client{
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
-			Timeout:   base.NetworkTimeout,
+			Timeout:   lookupTimeout,
 		}
 	}
 

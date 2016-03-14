@@ -57,6 +57,7 @@ func TestGossipInfoStore(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer resolver.SetLookupTimeout(time.Minute)()
 
 	// Set up an http server for testing the http load balancer.
 	i := 0
