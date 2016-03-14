@@ -339,6 +339,7 @@ module AdminViews {
      * NodePage show the details of a single node.
      */
     export module NodePage {
+      import Status = Models.Proto.Status;
       class Controller {
         private static defaultTargets: NavigationBar.Target[] = [
           {
@@ -490,88 +491,64 @@ module AdminViews {
 
         public RenderPrimaryStats(): MithrilElement {
           let nodeStats: Models.Proto.NodeStatus = nodeStatuses.GetStatus(this._nodeId);
+
+          interface CellInfo {
+            title: string;
+            valueFn: (s: Status) => string;
+          }
+
+          function StoreStatusGate(s: Status): StoreStatus {
+            if ((<StoreStatus>s).desc.store_id) {
+              return (<StoreStatus>s);
+            } else {
+              return null;
+            }
+          }
+
+          let values: CellInfo[] = [
+            {title: "Started At", valueFn: (s: Status): string => Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(s.started_at)))},
+            {title: "Updated At", valueFn: (s: Status): string => Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(s.updated_at)))},
+            {title: "Live Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s.stats.live_bytes)},
+            {title: "Key Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s.stats.key_bytes)},
+            {title: "Value Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s.stats.val_bytes)},
+            {title: "Intent Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s.stats.intent_bytes)},
+            {title: "Sys Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s.stats.sys_bytes)},
+            {title: "GC Bytes Age", valueFn: (s: Status): string => s.stats.gc_bytes_age.toString()},
+
+            {title: "Total Ranges", valueFn: (s: Status): string => s.range_count.toString()},
+            {title: "Leader Ranges", valueFn: (s: Status): string => s.leader_range_count.toString()},
+            {title: "Available", valueFn: (s: Status): string => Utils.Format.Percentage(s.available_range_count, s.leader_range_count)},
+            {title: "Fully Replicated", valueFn: (s: Status): string => Utils.Format.Percentage(s.replicated_range_count, s.leader_range_count)},
+            // Store Only
+            {title: "Available Capacity", valueFn: (s: Status): string => StoreStatusGate(s) ? Utils.Format.Bytes(StoreStatusGate(s).desc.capacity.available) : ""},
+            {title: "Total Capacity", valueFn: (s: Status): string => StoreStatusGate(s) ? Utils.Format.Bytes(StoreStatusGate(s).desc.capacity.capacity) : ""},
+          ];
+
+          function genCells(fn: (s: StoreStatus) => string): MithrilVirtualElement[] {
+            return _.map(nodeStats.store_ids, (id: number): MithrilVirtualElement => {
+              let storeStatus: StoreStatus = storeStatuses.GetStatus(id.toString());
+              return m("td.value", fn(storeStatus));
+            });
+          }
+
+          function genRow(info: CellInfo): MithrilVirtualElement {
+            return m("tr.stat", [
+              m("td.title", info.title),
+              m("td.value", info.valueFn(nodeStats)),
+            ].concat(genCells(info.valueFn)));
+          }
+
           if (nodeStats) {
             return m(".section.node-info", [
-              m(".header", m("h1", `Node ${this._nodeId}`)),
-              m("table.stats-table", m("tbody", [
-                m("tr.stat", [
-                  m("td.title", "Started At"),
-                  m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.started_at)))),
-                ]),
-                m("tr.stat", [
-                  m("td.title", "Last Updated At"),
-                  m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(nodeStats.updated_at)))),
-                ]),
-                m("tr.stat", [
-                  m("td.title", "Total Ranges"),
-                  m("td.value", nodeStats.range_count),
-                ]),
-                m("tr.stat", [
-                  m("td.title", "Total Live Bytes"),
-                  m("td.value", Utils.Format.Bytes(nodeStats.stats.live_bytes)),
-                ]),
-                m("tr.stat", [
-                  m("td.title", "Leader Ranges"),
-                  m("td.value", nodeStats.leader_range_count),
-                ]),
-                m("tr.stat", [
-                  m("td.title", "Available"),
-                  m("td.value", Utils.Format.Percentage(nodeStats.available_range_count, nodeStats.leader_range_count)),
-                ]),
-                m("tr.stat", [
-                  m("td.title", "Fully Replicated"),
-                  m("td.value", Utils.Format.Percentage(nodeStats.replicated_range_count, nodeStats.leader_range_count)),
-                ]),
-              ])),
-            ]
-              .concat(_.map(nodeStats.store_ids, (id: number): MithrilVirtualElement => {
-              let storeStatus: StoreStatus = storeStatuses.GetStatus(id.toString());
-              if (storeStatus) {
-                return m(".section.store-info", [
-                  m(".header", m("h1", `Store ${id}`)),
-                  m("table.stats-table", m("tbody", [
-                    m("tr.stat", [
-                      m("td.title", "Started At"),
-                      m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStatus.started_at)))),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Last Updated At"),
-                      m("td.value", Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(storeStatus.updated_at)))),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Total Ranges"),
-                      m("td.value", storeStatus.range_count),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Total Live Bytes"),
-                      m("td.value", Utils.Format.Bytes(storeStatus.stats.live_bytes)),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Leader Ranges"),
-                      m("td.value", storeStatus.leader_range_count),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Available"),
-                      m("td.value", Utils.Format.Percentage(storeStatus.available_range_count, storeStatus.leader_range_count)),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Fully Replicated"),
-                      m("td.value", Utils.Format.Percentage(storeStatus.replicated_range_count, storeStatus.leader_range_count)),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Available Capacity"),
-                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.available)),
-                    ]),
-                    m("tr.stat", [
-                      m("td.title", "Total Capacity"),
-                      m("td.value", Utils.Format.Bytes(storeStatus.desc.capacity.capacity)),
-                    ]),
-                  ])),
-                ]);
-              }
-              return m(".primary-stats");
-            }))
-            );
+              m("table.stats-table", [
+                m("thead",
+                  m("tr.stat", [
+                    m("td.title", ""),
+                    m("th.value", `Node ${this._nodeId}`),
+                  ].concat(_.map(nodeStats.store_ids, (id: number): MithrilVirtualElement => m("th.value", `Store ${id}`))))),
+                m("tbody", _.map(values, genRow)),
+              ]),
+            ]);
           }
           return m(".primary-stats");
         }
@@ -626,10 +603,10 @@ module AdminViews {
         let detail: string = m.route.param("detail");
 
         // Page title.
-        let title: string = "Nodes: Node " + ctrl.GetNodeId();
-        if (detail === "graph") {
-          title += ": Graphs";
-        }
+        let title: MithrilVirtualElement = m("", [
+          m("a", {config: m.route, href: "/nodes"}, "Nodes"),
+          ": Node " + ctrl.GetNodeId() + (detail === "graph" ? ": Graphs" : ""),
+        ]);
 
         // Primary content
         let primaryContent: MithrilElement;
