@@ -468,6 +468,8 @@ func (*CheckConsistencyResponse) ProtoMessage()    {}
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 type BeginTransactionRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	// How often to heartbeat in ns.
+	HeartbeatInterval *int64 `protobuf:"varint,2,opt,name=heartbeat_interval" json:"heartbeat_interval,omitempty"`
 }
 
 func (m *BeginTransactionRequest) Reset()         { *m = BeginTransactionRequest{} }
@@ -1049,6 +1051,8 @@ type Header struct {
 	// fully-initialized transaction with txn ID, priority, initial
 	// timestamp, and maximum timestamp.
 	Txn *Transaction `protobuf:"bytes,5,opt,name=txn" json:"txn,omitempty"`
+	// How often to heartbeat in ns.
+	HeartbeatInterval *int64 `protobuf:"varint,9,opt,name=heartbeat_interval" json:"heartbeat_interval,omitempty"`
 	// read_consistency specifies the consistency for read
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
@@ -1902,6 +1906,11 @@ func (m *BeginTransactionRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n25
+	if m.HeartbeatInterval != nil {
+		data[i] = 0x10
+		i++
+		i = encodeVarintApi(data, i, uint64(*m.HeartbeatInterval))
+	}
 	return i, nil
 }
 
@@ -3621,6 +3630,11 @@ func (m *Header) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x40
 	i++
 	i = encodeVarintApi(data, i, uint64(m.MaxScanResults))
+	if m.HeartbeatInterval != nil {
+		data[i] = 0x48
+		i++
+		i = encodeVarintApi(data, i, uint64(*m.HeartbeatInterval))
+	}
 	return i, nil
 }
 
@@ -3970,6 +3984,9 @@ func (m *BeginTransactionRequest) Size() (n int) {
 	_ = l
 	l = m.Span.Size()
 	n += 1 + l + sovApi(uint64(l))
+	if m.HeartbeatInterval != nil {
+		n += 1 + sovApi(uint64(*m.HeartbeatInterval))
+	}
 	return n
 }
 
@@ -4542,6 +4559,9 @@ func (m *Header) Size() (n int) {
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.MaxScanResults))
+	if m.HeartbeatInterval != nil {
+		n += 1 + sovApi(uint64(*m.HeartbeatInterval))
+	}
 	return n
 }
 
@@ -6822,6 +6842,26 @@ func (m *BeginTransactionRequest) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatInterval", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.HeartbeatInterval = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])
@@ -12295,6 +12335,26 @@ func (m *Header) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatInterval", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.HeartbeatInterval = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipApi(data[iNdEx:])

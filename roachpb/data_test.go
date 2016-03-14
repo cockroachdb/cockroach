@@ -459,6 +459,7 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 }
 
+var hbInterval = int64(1)
 var ts = makeTS(10, 11)
 var nonZeroTxn = Transaction{
 	TxnMeta: TxnMeta{
@@ -471,6 +472,7 @@ var nonZeroTxn = Transaction{
 	Name:               "name",
 	Priority:           957356782,
 	Status:             COMMITTED,
+	HeartbeatInterval:  &hbInterval,
 	LastHeartbeat:      &Timestamp{1, 2},
 	OrigTimestamp:      makeTS(30, 31),
 	MaxTimestamp:       makeTS(40, 41),
@@ -514,6 +516,7 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
+		"HeartbeatInterval",
 		"Intents.EndKey",
 		"Intents.Key",
 		"TxnMeta.ID",

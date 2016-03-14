@@ -259,6 +259,9 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // initializeTxn initialize a Txn using the session defaults.
 func (e *Executor) initializeTxn(txn *client.Txn, s *Session) {
 	txn.Proto.Isolation = s.DefaultIsolationLevel
+	if s.TransactionTimeout != nil {
+		txn.Proto.HeartbeatInterval = s.TransactionTimeout
+	}
 }
 
 // newTxn creates a new Txn and initializes it using the session defaults.

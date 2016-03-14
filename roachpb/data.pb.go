@@ -410,6 +410,8 @@ type Transaction struct {
 	Name     string            `protobuf:"bytes,2,opt,name=name" json:"name"`
 	Priority int32             `protobuf:"varint,3,opt,name=priority" json:"priority"`
 	Status   TransactionStatus `protobuf:"varint,4,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
+	// How often to heartbeat in ns.
+	HeartbeatInterval *int64 `protobuf:"varint,12,opt,name=heartbeat_interval" json:"heartbeat_interval,omitempty"`
 	// The last heartbeat timestamp.
 	LastHeartbeat *Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat" json:"last_heartbeat,omitempty"`
 	// The original timestamp at which the transaction started. For serializable
@@ -1007,6 +1009,11 @@ func (m *Transaction) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
+	if m.HeartbeatInterval != nil {
+		data[i] = 0x60
+		i++
+		i = encodeVarintData(data, i, uint64(*m.HeartbeatInterval))
+	}
 	return i, nil
 }
 
@@ -1321,6 +1328,9 @@ func (m *Transaction) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovData(uint64(l))
 		}
+	}
+	if m.HeartbeatInterval != nil {
+		n += 1 + sovData(uint64(*m.HeartbeatInterval))
 	}
 	return n
 }
@@ -3129,6 +3139,26 @@ func (m *Transaction) Unmarshal(data []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HeartbeatInterval", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowData
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.HeartbeatInterval = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipData(data[iNdEx:])

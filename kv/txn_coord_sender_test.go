@@ -256,9 +256,10 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer teardownHeartbeats(s.Sender)
 
 	// Set heartbeat interval to 1ms for testing.
-	s.Sender.heartbeatInterval = 1 * time.Millisecond
+	heartbeatInterval := (1 * time.Millisecond).Nanoseconds()
 
 	initialTxn := client.NewTxn(*s.DB)
+	initialTxn.Proto.HeartbeatInterval = &heartbeatInterval
 	if err := initialTxn.Put(roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
@@ -459,9 +460,10 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	defer s.Stop()
 
 	// Set heartbeat interval to 1ms for testing.
-	s.Sender.heartbeatInterval = 1 * time.Millisecond
+	heartbeatInterval := (1 * time.Millisecond).Nanoseconds()
 
 	txn := client.NewTxn(*s.DB)
+	txn.Proto.HeartbeatInterval = &heartbeatInterval
 	key := roachpb.Key("a")
 	if pErr := txn.Put(key, []byte("value")); pErr != nil {
 		t.Fatal(pErr)
@@ -878,7 +880,7 @@ func TestTxnAbandonCount(t *testing.T) {
 	// Test abandoned transaction by making the client timeout ridiculously short. We also set
 	// the sender to heartbeat very frequently, because the heartbeat detects and tears down
 	// abandoned transactions.
-	sender.heartbeatInterval = 2 * time.Millisecond
+	heartbeatInterval := (1 * time.Millisecond).Nanoseconds()
 	sender.clientTimeout = 1 * time.Millisecond
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		key := []byte("key-abandon")
@@ -891,7 +893,7 @@ func TestTxnAbandonCount(t *testing.T) {
 			return pErr
 		}
 
-		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))
+		manual.Increment(int64(sender.clientTimeout) + heartbeatInterval*2)
 
 		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
 

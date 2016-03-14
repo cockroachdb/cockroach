@@ -200,6 +200,8 @@ message CheckConsistencyResponse {
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 message BeginTransactionRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // How often to heartbeat in ns.
+  optional int64 heartbeat_interval = 2;
 }
 
 // A BeginTransactionResponse is the return value from the BeginTransaction() method.
@@ -667,6 +669,8 @@ message Header {
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
   optional Transaction txn = 5;
+  // How often to heartbeat in ns.
+  optional int64 heartbeat_interval = 9;
   // read_consistency specifies the consistency for read
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.

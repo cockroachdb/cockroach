@@ -61,6 +61,13 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		default:
 			return nil, roachpb.NewUErrorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
+	case `INACTIVITY_TIMEOUT`:
+		s, err := p.getIntervalVal(name, n.Values)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		nanos := s.Nanoseconds()
+		p.session.TransactionTimeout = &nanos
 
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
@@ -85,6 +92,25 @@ func (p *planner) getStringVal(name string, values parser.Exprs) (string, error)
 			name, values[0], val.Type())
 	}
 	return string(s), nil
+}
+
+func (p *planner) getIntervalVal(name string, values parser.Exprs) (time.Duration, error) {
+	if len(values) != 1 {
+		return 0, fmt.Errorf("%s: requires a single interval value", name)
+	}
+	// TODO(dan): It doesn't looks like it's currently possible to specify an
+	// interval in a SET expr. Consider allowing it and removing this hack.
+	c := &parser.CastExpr{Expr: values[0], Type: &parser.IntervalType{}}
+	val, err := c.Eval(p.evalCtx)
+	if err != nil {
+		return 0, err
+	}
+	s, ok := val.(parser.DInterval)
+	if !ok {
+		return 0, fmt.Errorf("%s: requires a single interval value: %s is a %s",
+			name, values[0], val.Type())
+	}
+	return s.Duration, nil
 }
 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
