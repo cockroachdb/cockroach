@@ -1589,16 +1589,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			resolveIntents, pErrPush := s.intentResolver.maybePushTransactions(ctx, *wiErr, args, h, pushType)
-			if len(resolveIntents) > 0 {
-				if resErr := s.intentResolver.resolveIntents(ctx, rng, resolveIntents, false /* !wait */, true /* poison */); resErr != nil {
-					// When resolving asynchronously, errors should not
-					// usually be returned here, although there are some cases
-					// when they may be (especially when a test cluster is in
-					// the process of shutting down).
-					log.Warningf("asynchronous resolveIntents failed: %s", resErr)
-				}
-			}
+			pErrPush := s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
 			// Preserve the error index.
 			oldIndex := pErr.Index
 			pErr = pErrPush
