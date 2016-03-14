@@ -135,6 +135,11 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 		_, err = markDebug(t.table, mode)
 		return t, err
 
+	case *limitNode:
+		t.explain = mode
+		_, err := markDebug(t.planNode, mode)
+		return t, err
+
 	case *sortNode:
 		// Replace the sort node with the node it wraps.
 		return markDebug(t.plan, mode)
@@ -150,6 +155,7 @@ func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
 	case *valuesNode:
 		// valuesNode supports DebugValues without any explicit enablement.
 		return t, nil
+
 	case *returningNode:
 		// returningNode supports DebugValues on the underlying valuesNode.
 		return &t.valuesNode, nil

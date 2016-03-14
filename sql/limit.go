@@ -83,23 +83,53 @@ func (p *planner) limit(limit *parser.Limit, plan planNode) (planNode, error) {
 
 type limitNode struct {
 	planNode
-	count          int64
-	offset         int64
-	rowIndex       int64
-	outputRowIndex int64
+	count     int64
+	offset    int64
+	rowIndex  int64
+	explain   explainMode
+	debugVals debugValues
+}
+
+func (n *limitNode) DebugValues() debugValues {
+	if n.explain != explainDebug {
+		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
+	}
+	return n.debugVals
 }
 
 func (n *limitNode) Next() bool {
-	if n.outputRowIndex >= n.count {
+	// n.rowIndex is the 0-based index of the next row.
+	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
+	if n.rowIndex >= n.offset && (n.rowIndex-n.offset) >= n.count {
 		return false
 	}
 
-	for n.rowIndex < n.offset && n.planNode.Next() {
-		n.rowIndex++
-	}
+	for {
+		if !n.planNode.Next() {
+			return false
+		}
 
-	n.outputRowIndex++
-	return n.planNode.Next()
+		if n.explain == explainDebug {
+			n.debugVals = n.planNode.DebugValues()
+			if n.debugVals.output != debugValueRow {
+				// Let the non-row debug values pass through.
+				return true
+			}
+		}
+
+		n.rowIndex++
+		if n.rowIndex > n.offset {
+			// Row within limits, return it.
+			return true
+		}
+
+		if n.explain == explainDebug {
+			// Return as a filtered row.
+			n.debugVals.output = debugValueFiltered
+			return true
+		}
+		// Fetch the next row.
+	}
 }
 
 func (n *limitNode) ExplainPlan() (string, string, []planNode) {
