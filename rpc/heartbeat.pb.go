@@ -60,6 +60,8 @@ type PingRequest struct {
 	Ping string `protobuf:"bytes,1,opt,name=ping" json:"ping"`
 	// The last offset the client measured with the server.
 	Offset RemoteOffset `protobuf:"bytes,2,opt,name=offset" json:"offset"`
+	// The address of the client.
+	Addr string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
 }
 
 func (m *PingRequest) Reset()         { *m = PingRequest{} }
@@ -198,6 +200,10 @@ func (m *PingRequest) MarshalTo(data []byte) (int, error) {
 		return 0, err
 	}
 	i += n1
+	data[i] = 0x1a
+	i++
+	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
+	i += copy(data[i:], m.Addr)
 	return i, nil
 }
 
@@ -268,6 +274,8 @@ func (m *PingRequest) Size() (n int) {
 	l = len(m.Ping)
 	n += 1 + l + sovHeartbeat(uint64(l))
 	l = m.Offset.Size()
+	n += 1 + l + sovHeartbeat(uint64(l))
+	l = len(m.Addr)
 	n += 1 + l + sovHeartbeat(uint64(l))
 	return n
 }
@@ -488,6 +496,35 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if err := m.Offset.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Addr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHeartbeat
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHeartbeat
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Addr = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

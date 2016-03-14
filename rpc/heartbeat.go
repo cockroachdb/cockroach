@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc/peer"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -66,9 +65,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	if peer, ok := peer.FromContext(ctx); ok {
-		hs.remoteClockMonitor.UpdateOffset(peer.Addr.String(), serverOffset)
-	}
+	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
 	return &PingResponse{
 		Pong:       args.Ping,
 		ServerTime: hs.clock.PhysicalNow(),

@@ -172,7 +172,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 }
 
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
-	var request PingRequest
+	request := PingRequest{Addr: ctx.localAddr}
 	heartbeatClient := NewHeartbeatClient(cc)
 
 	var heartbeatTimer util.Timer
