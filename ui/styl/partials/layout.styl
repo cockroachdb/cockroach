@@ -32,7 +32,6 @@ $subnav-background  = $secondary-gray-3
 html
 body
   height 100%
-  min-width 1480px
   background-color $secondary-gray-4
 
 #root
@@ -260,12 +259,14 @@ a.toggle
   &.healthy
     color $main-green
 
-.charts h2
-  clear both
-  padding-top 15px
+.charts
+  max-width 1480px
+  h2
+    clear both
+    padding-top 15px
 
-.charts h2:first-child
-  padding-top 0
+    &:first-child
+      padding-top 0
 
 .banner
   width 100%
