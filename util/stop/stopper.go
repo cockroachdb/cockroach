@@ -19,12 +19,33 @@ package stop
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util/caller"
 )
+
+var trackedStoppers = new(struct {
+	sync.Mutex
+	stoppers []*Stopper
+})
+
+func handleDebug(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	trackedStoppers.Lock()
+	defer trackedStoppers.Unlock()
+	for _, s := range trackedStoppers.stoppers {
+		s.mu.Lock()
+		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.numTasks, s.runningTasksLocked())
+		s.mu.Unlock()
+	}
+}
+
+func init() {
+	http.Handle("/debug/stopper", http.HandlerFunc(handleDebug))
+}
 
 // Closer is an interface for objects to attach to the stopper to
 // be closed once the stopper completes.
@@ -86,6 +107,9 @@ func NewStopper() *Stopper {
 		tasks:   map[taskKey]int{},
 	}
 	s.drain = sync.NewCond(&s.mu)
+	trackedStoppers.Lock()
+	trackedStoppers.stoppers = append(trackedStoppers.stoppers, s)
+	trackedStoppers.Unlock()
 	return s
 }
 
