@@ -60,6 +60,7 @@ module Components {
           } else {
             this.chart = nv.models.lineChart();
           }
+
           this.chart
             .x((d: Models.Proto.Datapoint) => new Date(Utils.Convert.NanoToMilli(d && d.timestamp_nanos)))
             .y((d: Models.Proto.Datapoint) => d && d.value)
@@ -67,7 +68,7 @@ module Components {
             .useInteractiveGuideline(true)
             .showLegend(true)
             .showYAxis(true)
-            .showXAxis(true)
+            .showXAxis(vm.axis.xAxis())
             .xScale(d3.time.scale())
             // chart margins are set to
             .margin(CHART_MARGINS);
@@ -115,7 +116,9 @@ module Components {
           let shouldRender: boolean = !context.epoch || context.epoch < this.vm.query.result.Epoch();
 
           if (shouldRender) {
-            this.chart.showLegend(this.vm.axis.selectors().length > 1 && this.vm.axis.selectors().length <= MAX_LEGEND_SERIES);
+            this.chart.showLegend(
+              _.isBoolean(this.vm.axis.legend()) ? this.vm.axis.legend() :
+              this.vm.axis.selectors().length > 1 && this.vm.axis.selectors().length <= MAX_LEGEND_SERIES);
             let formattedData: any[] = [];
             // The result() property will be empty if an error
             // occurred. For now, we will just display the "No Data"
