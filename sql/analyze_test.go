@@ -359,6 +359,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IS NULL AND a = 1`, `false`, true},
 		{`a = 1 AND a IS NOT NULL`, `a = 1`, true},
 		{`a IS NOT NULL AND a = 1`, `a = 1`, true},
+		{`a = 1 AND a = 1.0`, `a = 1`, true},
 
 		{`a != 1 AND a = 1`, `false`, true},
 		{`a != 1 AND a = 2`, `a = 2`, true},
@@ -382,6 +383,8 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IS NULL AND a != 1`, `false`, true},
 		{`a != 1 AND a IS NOT NULL`, `a != 1 AND a IS NOT NULL`, true},
 		{`a IS NOT NULL AND a != 1`, `a IS NOT NULL AND a != 1`, true},
+		{`a != 1 AND a = 1.0`, `false`, true},
+		{`a != 1 AND a != 1.0`, `a != 1`, true},
 
 		{`a > 1 AND a = 1`, `false`, true},
 		{`a > 1 AND a = 2`, `a = 2`, true},
@@ -409,6 +412,8 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IS NULL AND a > 1`, `false`, true},
 		{`a > 1 AND a IS NOT NULL`, `a > 1`, true},
 		{`a IS NOT NULL AND a > 1`, `a > 1`, true},
+		{`a > 1.0 AND a = 2`, `a = 2`, true},
+		{`a > 1 AND a = 2.0`, `a = 2.0`, true},
 
 		{`a >= 1 AND a = 1`, `a = 1`, true},
 		{`a >= 1 AND a = 2`, `a = 2`, true},
@@ -524,8 +529,9 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		}
 
 		if _, ok := expr2.(*parser.AndExpr); !ok {
-			// The result was not an AND expression. Verify that the analysis is
-			// commutative.
+			// The result was not an AND expression. Re-parse to re-resolve QNames
+			// and verify that the analysis is commutative.
+			expr1, _ = parseAndNormalizeExpr(t, d.expr)
 			andExpr := expr1.(*parser.AndExpr)
 			andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
 			expr3, equiv := simplifyExpr(andExpr)
@@ -595,6 +601,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 1 OR a IN (1)`, `a IN (1)`},
 		{`a = 1 OR a IN (2)`, `a IN (1, 2)`},
 		{`a = 2 OR a IN (1)`, `a IN (1, 2)`},
+		{`a = 1 OR a = 1.0`, `a = 1`},
 
 		{`a != 1 OR a = 1`, `a IS NOT NULL`},
 		{`a != 1 OR a = 2`, `a != 1`},
@@ -614,6 +621,8 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a != 1 OR a <= 1`, `a IS NOT NULL`},
 		{`a != 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a != 2 OR a <= 1`, `a != 2`},
+		{`a != 1 OR a = 1.0`, `a IS NOT NULL`},
+		{`a != 1 OR a != 1.0`, `a != 1`},
 
 		{`a > 1 OR a = 1`, `a >= 1`},
 		{`a > 1 OR a = 2`, `a > 1`},
@@ -636,6 +645,8 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a > 1 OR a IN (1)`, `a >= 1`},
 		{`a > 1 OR a IN (2)`, `a > 1`},
 		{`a > 2 OR a IN (1)`, `a > 2 OR a IN (1)`},
+		{`a > 1.0 OR a = 1`, `a >= 1`},
+		{`a > 1 OR a = 1.0`, `a >= 1`},
 
 		{`a >= 1 OR a = 1`, `a >= 1`},
 		{`a >= 1 OR a = 2`, `a >= 1`},
@@ -719,8 +730,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		}
 
 		if _, ok := expr2.(*parser.OrExpr); !ok {
-			// The result was not an OR expression. Verify that the analysis is
-			// commutative.
+			// The result was not an OR expression. Re-parse to re-resolve QNames
+			// and verify that the analysis is commutative.
+			expr1, _ = parseAndNormalizeExpr(t, d.expr)
 			orExpr := expr1.(*parser.OrExpr)
 			orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
 			expr3, equiv := simplifyExpr(orExpr)

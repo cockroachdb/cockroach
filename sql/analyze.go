@@ -316,29 +316,47 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 	}
 
 	if reflect.TypeOf(lcmp.Right) != reflect.TypeOf(rcmp.Right) {
+		allowComp := false
 		switch lcmp.Operator {
-		case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
+		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			switch rcmp.Operator {
-			case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE:
-				return parser.DBool(false), nil, true
+			case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+				// Break, permitting heterogeneous comparison.
+				allowComp = true
 			}
 		}
-		if lcmp.Operator == parser.Is && lcmp.Right == parser.DNull {
-			// a IS NULL AND a <cmp> x
-			return parser.DBool(false), nil, true
+		if !allowComp {
+			if lcmp.Operator == parser.Is && lcmp.Right == parser.DNull {
+				// a IS NULL AND a <cmp> x
+				return parser.DBool(false), nil, true
+			}
+			if rcmp.Operator == parser.Is && rcmp.Right == parser.DNull {
+				// a <cmp> x AND a IS NULL
+				return parser.DBool(false), nil, true
+			}
+			// Note that "a IS NULL and a IS NULL" cannot happen here because
+			// "reflect.TypeOf(NULL) == reflect.TypeOf(NULL)".
+			return left, right, true
 		}
-		if rcmp.Operator == parser.Is && rcmp.Right == parser.DNull {
-			// a <cmp> x AND a IS NULL
-			return parser.DBool(false), nil, true
-		}
-		// Note that "a IS NULL and a IS NULL" cannot happen here because
-		// "reflect.TypeOf(NULL) == reflect.TypeOf(NULL)".
-		return left, right, true
 	}
 
 	ldatum := lcmp.Right.(parser.Datum)
 	rdatum := rcmp.Right.(parser.Datum)
 	cmp := ldatum.Compare(rdatum)
+
+	// Determine which expression to use when either expression (left or right)
+	// is valid as a return value but their types are different. The reason
+	// to prefer a comparison between a column value and a datum of the same
+	// type is that it makes index constraint construction easier.
+	either := lcmp
+	if !ldatum.TypeEqual(rdatum) {
+		switch ta := lcmp.Left.(type) {
+		case *qvalue:
+			if ta.datum.TypeEqual(rdatum) {
+				either = rcmp
+			}
+		}
+	}
 
 	// TODO(pmattis): Figure out how to generate this logic.
 	switch lcmp.Operator {
@@ -348,7 +366,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			// a = x AND a = y
 			if cmp == 0 {
 				// x = y
-				return left, nil, true
+				return either, nil, true
 			}
 			return parser.DBool(false), nil, true
 		case parser.NE:
@@ -387,7 +405,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			// a != x AND a != y
 			if cmp == 0 {
 				// x = y
-				return left, nil, true
+				return either, nil, true
 			}
 			return left, right, true
 		case parser.GT:
@@ -403,7 +421,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return &parser.ComparisonExpr{
 					Operator: parser.GT,
 					Left:     rcmp.Left,
-					Right:    rcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x != y
@@ -415,7 +433,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return &parser.ComparisonExpr{
 					Operator: parser.LT,
 					Left:     rcmp.Left,
-					Right:    rcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x != y
@@ -470,7 +488,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return &parser.ComparisonExpr{
 					Operator: parser.GT,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x != y
@@ -501,7 +519,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return &parser.ComparisonExpr{
 					Operator: parser.EQ,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x > y
@@ -556,7 +574,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return &parser.ComparisonExpr{
 					Operator: parser.LT,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x != y
@@ -578,7 +596,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return &parser.ComparisonExpr{
 					Operator: parser.EQ,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x < y
@@ -797,14 +815,39 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 	}
 
 	if reflect.TypeOf(lcmp.Right) != reflect.TypeOf(rcmp.Right) {
-		// If the types of the left and right datums are different, no
-		// simplification is possible.
-		return left, right, true
+		allowComp := false
+		switch lcmp.Operator {
+		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+			switch rcmp.Operator {
+			case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+				// Break, permitting heterogeneous comparison.
+				allowComp = true
+			}
+		}
+		if !allowComp {
+			// If the types of the left and right datums are different, no
+			// simplification is possible.
+			return left, right, true
+		}
 	}
 
 	ldatum := lcmp.Right.(parser.Datum)
 	rdatum := rcmp.Right.(parser.Datum)
 	cmp := ldatum.Compare(rdatum)
+
+	// Determine which expression to use when either expression (left or right)
+	// is valid as a return value but their types are different. The reason
+	// to prefer a comparison between a column value and a datum of the same
+	// type is that it makes index constraint construction easier.
+	either := lcmp
+	if !ldatum.TypeEqual(rdatum) {
+		switch ta := lcmp.Left.(type) {
+		case *qvalue:
+			if ta.datum.TypeEqual(rdatum) {
+				either = rcmp
+			}
+		}
+	}
 
 	// TODO(pmattis): Figure out how to generate this logic.
 	switch lcmp.Operator {
@@ -814,7 +857,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a = x OR a = y
 			if cmp == 0 {
 				// x = y
-				return left, nil, true
+				return either, nil, true
 			} else if cmp == 1 {
 				// x > y
 				ldatum, rdatum = rdatum, ldatum
@@ -840,7 +883,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return &parser.ComparisonExpr{
 					Operator: parser.GE,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			return left, right, true
@@ -860,7 +903,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return &parser.ComparisonExpr{
 					Operator: parser.LE,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			return left, right, true
@@ -887,7 +930,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a != x OR a != y
 			if cmp == 0 {
 				// x = y
-				return left, nil, true
+				return either, nil, true
 			}
 			// x != y
 			return makeIsNotNull(lcmp.Left), nil, true
@@ -936,7 +979,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return &parser.ComparisonExpr{
 					Operator: parser.GE,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			}
 			// x > y
@@ -962,7 +1005,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return &parser.ComparisonExpr{
 					Operator: parser.NE,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			} else if cmp == -1 {
 				return makeIsNotNull(lcmp.Left), nil, true
@@ -1032,7 +1075,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return &parser.ComparisonExpr{
 					Operator: parser.LE,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			} else if cmp == 1 {
 				// x > y
@@ -1053,7 +1096,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return &parser.ComparisonExpr{
 					Operator: parser.NE,
 					Left:     lcmp.Left,
-					Right:    lcmp.Right,
+					Right:    either.Right,
 				}, nil, true
 			} else if cmp == 1 {
 				// x > y
