@@ -122,7 +122,7 @@ EXPLAIN (DEBUG) VALUES (1, 2, 3), (4, 5, 6) ORDER BY 1 DESC
 1 1 (1, 2, 3) ROW
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a;
+EXPLAIN (DEBUG) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a
 ----
 0 0 (1, 2, 3) ROW
 1 1 (4, 5, 6) ROW
@@ -147,9 +147,30 @@ EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub
 0  /abc/primary/2/'two'    NULL  ROW
 
 query ITTT
-EXPLAIN (DEBUG) SELECT DISTINCT * FROM (VALUES (1, 2, 3), (4, 5, 6), (1, 2, 3), (1, 2, 4)) AS a;
+EXPLAIN (DEBUG) SELECT DISTINCT * FROM (VALUES (1, 2, 3), (4, 5, 6), (1, 2, 3), (1, 2, 4)) AS a
 ----
 0 0 (1, 2, 3) ROW
 1 1 (4, 5, 6) ROW
 2 2 (1, 2, 3) FILTERED
 3 3 (1, 2, 4) ROW
+
+statement ok
+CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b))
+
+statement ok
+INSERT INTO ab VALUES (1, 4), (1, 5), (2, 1), (2, 2), (2, 6), (3, 9)
+
+# Note: the output from GROUP BY is in random order; the example is constructed so
+# those rows are identical.
+query ITTT
+EXPLAIN (DEBUG) SELECT SUM(b) FROM ab GROUP BY a
+----
+0  /ab/primary/1/4  NULL  BUFFERED  
+1  /ab/primary/1/5  NULL  BUFFERED  
+2  /ab/primary/2/1  NULL  BUFFERED  
+3  /ab/primary/2/2  NULL  BUFFERED  
+4  /ab/primary/2/6  NULL  BUFFERED  
+5  /ab/primary/3/9  NULL  BUFFERED  
+0  0                (9)   ROW       
+1  1                (9)   ROW       
+2  2                (9)   ROW       
