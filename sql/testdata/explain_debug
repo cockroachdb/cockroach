@@ -25,6 +25,28 @@ EXPLAIN (DEBUG) SELECT * FROM abc
 2  /abc/primary/3/'three'  NULL  ROW
 
 query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc LIMIT 2
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   ROW
+1  /abc/primary/2/'two'    NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc OFFSET 2
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   FILTERED
+1  /abc/primary/2/'two'    NULL  FILTERED
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM abc LIMIT 1 OFFSET 1
+----
+0  /abc/primary/1/'one'    NULL  PARTIAL
+0  /abc/primary/1/'one'/c  1.1   FILTERED
+1  /abc/primary/2/'two'    NULL  ROW
+
+query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
 ----
 0  /abc/primary/2/'two'  NULL  ROW
@@ -71,13 +93,20 @@ EXPLAIN (DEBUG) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS a;
 1 1 (4, 5, 6) ROW
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a = 2;
+EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a = 2
 ----
 0  /abc/primary/1/'one'    NULL  FILTERED
 1  /abc/primary/2/'two'    NULL  ROW
 2  /abc/primary/3/'three'  NULL  FILTERED
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub;
+EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc) AS sub WHERE a > 1 OFFSET 1
+----
+0  /abc/primary/1/'one'    NULL  FILTERED
+1  /abc/primary/2/'two'    NULL  FILTERED
+2  /abc/primary/3/'three'  NULL  ROW
+
+query ITTT
+EXPLAIN (DEBUG) SELECT * FROM (SELECT * FROM abc WHERE a = 2) AS sub
 ----
 0  /abc/primary/2/'two'    NULL  ROW
