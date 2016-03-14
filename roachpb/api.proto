@@ -45,14 +45,6 @@ enum ReadConsistencyType {
 
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
-  // timestamp specifies time at which read or write actually was
-  // performed. In the case of both reads and writes, if the timestamp
-  // supplied to the request was 0, the wall time of the node
-  // servicing the request will be set here. Additionally, in the case
-  // of writes, this value may be increased from the timestamp passed
-  // with the Span if the key being written was either read
-  // or written more recently.
-  optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
@@ -699,6 +691,10 @@ message BatchResponse {
   message Header {
     // error is non-nil if an error occurred.
     optional Error error = 1;
+    // timestamp is set only for non-transactional responses and denotes the
+    // highest timestamp at which a command from the batch executed. At the
+    // time of writing, it is used solely for informational purposes and tests.
+    optional Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.

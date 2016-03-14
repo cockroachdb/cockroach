@@ -59,6 +59,8 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 }
 
 // SendWrapped is identical to SendWrappedAt with a zero header.
+// TODO(tschottdorf): should move this to testutils and merge with other helpers
+// which are used, for example, in `storage`.
 func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, *roachpb.Error) {
 	return SendWrappedWith(sender, ctx, roachpb.Header{}, args)
 }

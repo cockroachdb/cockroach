@@ -232,10 +232,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
-		// The Put ts may have been pushed by tsCache,
-		// so make sure we see their values in our Scan.
-		delTS = reply.(*roachpb.PutResponse).Timestamp
-		reply, err = client.SendWrappedWith(tds, nil, roachpb.Header{Timestamp: delTS}, scan)
+		reply, err = client.SendWrapped(tds, nil, scan)
 		if err != nil {
 			t.Fatal(err)
 		}

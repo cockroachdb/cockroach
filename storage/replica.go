@@ -1632,16 +1632,23 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 
 		header := ba.Header
 
-		// TODO(tschottdorf): Special exception because of pending
-		// self-overlap discussion.
+		// TODO(tschottdorf): should be able to drop the next TODO; we don't
+		// actually push to the timestamp of the request any more.
 		// TODO(tschottdorf): currently treating PushTxn specially. Otherwise
 		// conflict resolution would break because a batch full of pushes of
 		// the same Txn for different intents will push the pushee in
 		// iteration, bumping up its priority. Unfortunately PushTxn is flagged
 		// as a write command. Interim solution.
 		// Note that being in a txn implies no fiddling.
+		// This part of the "hack" is complemented by one in the Store which
+		// moved the batch timestamp forward (len(ba.Requests)-1), so we write
+		// the commands into the logical past.
+		// For example, for a batch with three commands, the Store added two
+		// logical ticks to the original timestamp, and here we'll execute
+		// the first request without these ticks, the second with one tick,
+		// and the third with both ticks added.
 		if fiddleWithTimestamps && args.Method() != roachpb.PushTxn {
-			header.Timestamp = ba.Timestamp.Add(0, int32(index))
+			header.Timestamp = ba.Timestamp.Add(0, int32(1-len(ba.Requests)+index))
 		}
 
 		reply, curIntents, pErr := r.executeCmd(batch, ms, header, remScanResults, args)
@@ -1668,7 +1675,6 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		}
 
 		// Add the response to the batch, updating the timestamp.
-		reply.Header().Timestamp.Forward(header.Timestamp)
 		br.Add(reply)
 		if isTxn {
 			if txn := reply.Header().Txn; txn != nil {
@@ -1676,8 +1682,8 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			}
 		}
 	}
-	// If transactional, send out the final transaction entry with the reply.
 	if isTxn {
+		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = ba.Txn
 		br.Txn.Timestamp.Forward(ba.Timestamp)
 		// If this is the beginning of the write portion of a transaction,
@@ -1688,6 +1694,9 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 		if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
 			br.Txn.Writing = true
 		}
+	} else {
+		// When non-transactional, use the timestamp field.
+		br.Timestamp.Forward(ba.Timestamp)
 	}
 	return br, intents, nil
 }

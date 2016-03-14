@@ -132,9 +132,6 @@ type combinable interface {
 // to merge their headers.
 func (rh *ResponseHeader) combine(otherRH *ResponseHeader) error {
 	if rh != nil && otherRH != nil {
-		if ts := otherRH.Timestamp; rh.Timestamp.Less(ts) {
-			rh.Timestamp = ts
-		}
 		if rh.Txn != nil && otherRH.Txn == nil {
 			rh.Txn = nil
 		}
