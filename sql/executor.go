@@ -727,9 +727,9 @@ func runTxnAttempt(
 	return pErr
 }
 
-// execStmtsInCurrentTransaction consumes a prefix of stmts, namely the
-// statements belonging to a single SQL transaction. It executes in the
-// planner's transaction, which is assumed to exist.
+// execStmtsInCurrentTxn consumes a prefix of stmts, namely the
+// statements belonging to a single SQL transaction. It executes in
+// the planner's transaction, which is assumed to exist.
 //
 // COMMIT/ROLLBACK statements can end the current transaction. If that happens,
 // this method returns, and the remaining statements are returned.
