@@ -655,6 +655,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		s.replicateQueue.Close()
 		s.replicaGCQueue.Close()
 		s.raftLogQueue.Close()
+		s.replicaConsistencyQueue.Close()
 	}))
 
 	if s.Ident.NodeID == 0 {
