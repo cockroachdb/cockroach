@@ -289,13 +289,6 @@ func setAppliedIndex(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.Ra
 		nil /* txn */)
 }
 
-// loadLastIndex retrieves the last index from storage.
-func (r *Replica) loadLastIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.loadLastIndexLocked()
-}
-
 // loadLastIndexLocked retrieves the last index from storage.
 // loadLastIndexLocked requires that the replica lock is held.
 func (r *Replica) loadLastIndexLocked() (uint64, error) {

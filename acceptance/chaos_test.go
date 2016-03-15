@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -44,9 +43,8 @@ var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 
 type testClient struct {
 	sync.RWMutex
-	db      *sql.DB
-	stopper *stop.Stopper
-	count   uint64
+	db    *sql.DB
+	count uint64
 }
 
 type testState struct {
