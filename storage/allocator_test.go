@@ -1069,6 +1069,35 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	}
 }
 
+// TestAllocatorError ensures that the correctly formatted error message is
+// returned from an allocatorError.
+func TestAllocatorError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	attribute := roachpb.Attributes{Attrs: []string{"one"}}
+	attributes := roachpb.Attributes{Attrs: []string{"one", "two"}}
+
+	testCases := []struct {
+		ae       allocatorError
+		expected string
+	}{
+		{allocatorError{attribute, false, 1}, "0 of 1 store with all attributes matching [one]"},
+		{allocatorError{attribute, true, 1}, "0 of 1 store with an attribute matching [one]"},
+		{allocatorError{attribute, false, 2}, "0 of 2 stores with all attributes matching [one]"},
+		{allocatorError{attribute, true, 2}, "0 of 2 stores with an attribute matching [one]"},
+		{allocatorError{attributes, false, 1}, "0 of 1 store with all attributes matching [one,two]"},
+		{allocatorError{attributes, true, 1}, "0 of 1 store with an attribute matching [one,two]"},
+		{allocatorError{attributes, false, 2}, "0 of 2 stores with all attributes matching [one,two]"},
+		{allocatorError{attributes, true, 2}, "0 of 2 stores with an attribute matching [one,two]"},
+	}
+
+	for i, testCase := range testCases {
+		if actual := testCase.ae.Error(); testCase.expected != actual {
+			t.Errorf("%d: actual error message \"%s\" does not match expected \"%s\"", i, actual, testCase.expected)
+		}
+	}
+}
+
 type testStore struct {
 	roachpb.StoreDescriptor
 }

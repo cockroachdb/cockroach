@@ -199,9 +199,13 @@ func TestStorePoolDies(t *testing.T) {
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.
-func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int) error {
+func verifyStoreList(sp *StorePool, requiredAttrs []string, expected []int, expectedAliveStoreCount int) error {
 	var actual []int
-	sl := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
+	sl, aliveStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
+	if aliveStoreCount != expectedAliveStoreCount {
+		return fmt.Errorf("expected AliveStoreCount %d does not match actual %d", expectedAliveStoreCount,
+			aliveStoreCount)
+	}
 	for _, store := range sl.stores {
 		actual = append(actual, int(store.StoreID))
 	}
@@ -223,7 +227,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
+	if sl, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
@@ -266,7 +270,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
 		int(deadStore.StoreID),
-	}); err != nil {
+	}, 5); err != nil {
 		t.Error(err)
 	}
 
@@ -278,7 +282,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	if err := verifyStoreList(sp, required, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
-	}); err != nil {
+	}, 4); err != nil {
 		t.Error(err)
 	}
 }
