@@ -26,7 +26,7 @@ import (
 )
 
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
-var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
+var numAccounts int
 
 // runBenchmarkBank mirrors the SQL performed by examples/sql_bank, but
 // structured as a benchmark for easier usage of the Go performance analysis
@@ -48,11 +48,11 @@ CREATE TABLE IF NOT EXISTS bench.bank (
 
 		var placeholders bytes.Buffer
 		var values []interface{}
-		for i := 0; i < *numAccounts; i++ {
+		for i := 0; i < numAccounts; i++ {
 			if i > 0 {
 				placeholders.WriteString(", ")
 			}
-			fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
+			fmt.Fprintf(&placeholders, "($%d, 10000)", i+1)
 			values = append(values, i)
 		}
 		stmt := `INSERT INTO bench.bank (id, balance) VALUES ` + placeholders.String()
@@ -62,12 +62,13 @@ CREATE TABLE IF NOT EXISTS bench.bank (
 	}
 
 	b.ResetTimer()
+	b.SetParallelism(4)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			from := rand.Intn(*numAccounts)
-			to := rand.Intn(*numAccounts - 1)
-			if from == to {
-				to = *numAccounts - 1
+			from := rand.Intn(numAccounts)
+			to := from
+			for to == from {
+				to = rand.Intn(numAccounts)
 			}
 
 			amount := rand.Intn(*maxTransfer)
@@ -84,10 +85,62 @@ UPDATE bench.bank
 	b.StopTimer()
 }
 
-func BenchmarkBank_Cockroach(b *testing.B) {
+func BenchmarkBank2_Cockroach(b *testing.B) {
+	numAccounts = 2
 	benchmarkCockroach(b, runBenchmarkBank)
 }
 
-func BenchmarkBank_Postgres(b *testing.B) {
+func BenchmarkBank2_Postgres(b *testing.B) {
+	numAccounts = 2
+	benchmarkPostgres(b, runBenchmarkBank)
+}
+
+func BenchmarkBank4_Cockroach(b *testing.B) {
+	numAccounts = 4
+	benchmarkCockroach(b, runBenchmarkBank)
+}
+
+func BenchmarkBank4_Postgres(b *testing.B) {
+	numAccounts = 4
+	benchmarkPostgres(b, runBenchmarkBank)
+}
+
+func BenchmarkBank8_Cockroach(b *testing.B) {
+	numAccounts = 8
+	benchmarkCockroach(b, runBenchmarkBank)
+}
+
+func BenchmarkBank8_Postgres(b *testing.B) {
+	numAccounts = 8
+	benchmarkPostgres(b, runBenchmarkBank)
+}
+
+func BenchmarkBank16_Cockroach(b *testing.B) {
+	numAccounts = 16
+	benchmarkCockroach(b, runBenchmarkBank)
+}
+
+func BenchmarkBank16_Postgres(b *testing.B) {
+	numAccounts = 16
+	benchmarkPostgres(b, runBenchmarkBank)
+}
+
+func BenchmarkBank32_Cockroach(b *testing.B) {
+	numAccounts = 32
+	benchmarkCockroach(b, runBenchmarkBank)
+}
+
+func BenchmarkBank32_Postgres(b *testing.B) {
+	numAccounts = 32
+	benchmarkPostgres(b, runBenchmarkBank)
+}
+
+func BenchmarkBank64_Cockroach(b *testing.B) {
+	numAccounts = 64
+	benchmarkCockroach(b, runBenchmarkBank)
+}
+
+func BenchmarkBank64_Postgres(b *testing.B) {
+	numAccounts = 64
 	benchmarkPostgres(b, runBenchmarkBank)
 }

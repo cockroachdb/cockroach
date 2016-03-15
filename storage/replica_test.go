@@ -2818,6 +2818,70 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	}
 }
 
+// TestPushTxnVerifySerializableRestart simulates a transaction which
+// is started at t=0, fails serializable commit due to a read at a key
+// being written at t=1, is then restarted at the updated timestamp,
+// but before the txn can be retried, it's pushed to t=2, an even
+// higher timestamp. The test verifies that the serializable commit
+// fails yet again.
+func TestPushTxnVerifySerializableRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := roachpb.Key("a")
+	pushee := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	pushee.Priority = 1
+	pusher.Priority = 2 // pusher will win
+
+	// Read from the key to increment the timestamp cache.
+	gArgs := getArgs(key)
+	if _, pErr := client.SendWrapped(tc.rng, tc.rng.context(), &gArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Begin the pushee's transaction & write to key.
+	btArgs, btH := beginTxnArgs(key, pushee)
+	put := putArgs(key, []byte("foo"))
+	resp, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	pushee.Update(resp.Header().Txn)
+
+	// Try to end the pushee's transaction; should get a retry failure.
+	etArgs, h := endTxnArgs(pushee, true /* commit */)
+	pushee.Sequence++
+	_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &etArgs)
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+		t.Fatalf("expected retry error; got %s", pErr)
+	}
+	pusheeCopy := *pushee
+	pushee.Restart(1, 1, pusher.Timestamp)
+
+	// Next push pushee to advance timestamp of txn record.
+	pusher.Timestamp = tc.rng.store.Clock().Now()
+	args := pushTxnArgs(pusher, &pusheeCopy, roachpb.PUSH_TIMESTAMP)
+	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Try to end pushed transaction at restart timestamp, which is
+	// earlier than its now-pushed timestamp. Should fail.
+	var ba roachpb.BatchRequest
+	pushee.Sequence++
+	ba.Header.Txn = pushee
+	ba.Add(&btArgs)
+	ba.Add(&put)
+	ba.Add(&etArgs)
+	_, pErr = tc.Sender().Send(tc.rng.context(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+		t.Fatalf("expected retry error; got %s", pErr)
+	}
+}
+
 // TestRangeResolveIntentRange verifies resolving a range of intents.
 func TestRangeResolveIntentRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
