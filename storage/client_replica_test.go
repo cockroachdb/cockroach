@@ -323,7 +323,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	// Init test ranges:

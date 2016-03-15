@@ -76,20 +76,21 @@ func rg1(s *storage.Store) client.Sender {
 
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
-func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper) {
+func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 	sCtx := storage.TestStoreContext()
 	return createTestStoreWithContext(t, &sCtx)
 }
 
 func createTestStoreWithContext(t testing.TB, sCtx *storage.StoreContext) (
-	*storage.Store, *stop.Stopper) {
+	*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 
 	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(123)
 	store := createTestStoreWithEngine(t,
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
-		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
+		hlc.NewClock(manual.UnixNano),
 		true, sCtx, stopper)
-	return store, stopper
+	return store, stopper, manual
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
@@ -985,8 +986,8 @@ func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.M
 	return nil
 }
 
-func verifyRecomputedStats(eng engine.Engine, d *roachpb.RangeDescriptor, expMS engine.MVCCStats) error {
-	if ms, err := storage.ComputeStatsForRange(d, eng, 0); err != nil {
+func verifyRecomputedStats(eng engine.Engine, d *roachpb.RangeDescriptor, expMS engine.MVCCStats, nowNanos int64) error {
+	if ms, err := storage.ComputeStatsForRange(d, eng, nowNanos); err != nil {
 		return err
 	} else if expMS != ms {
 		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
