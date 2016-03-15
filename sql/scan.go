@@ -55,8 +55,6 @@ type scanNode struct {
 	spans            []span
 	isSecondaryIndex bool
 	reverse          bool
-	columns          []ResultColumn
-	originalCols     []ResultColumn // copy of `columns` before additions (e.g. by sort or group)
 	columnIDs        []ColumnID
 	// The direction with which the corresponding column was encoded.
 	columnDirs       []encoding.Direction

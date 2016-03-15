@@ -1255,16 +1255,6 @@ func stringBuiltin3(f func(string, string, string) (Datum, error), returnType fu
 	}
 }
 
-func stringBuiltin4(f func(string, string, string, string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
-	return builtin{
-		types:      argTypes{stringType, stringType, stringType, stringType},
-		returnType: returnType,
-		fn: func(_ EvalContext, args DTuple) (Datum, error) {
-			return f(string(args[0].(DString)), string(args[1].(DString)), string(args[2].(DString)), string(args[3].(DString)))
-		},
-	}
-}
-
 func bytesBuiltin1(f func(string) (Datum, error), returnType func(MapArgs, DTuple) (Datum, error)) builtin {
 	return builtin{
 		types:      argTypes{bytesType},

@@ -75,7 +75,6 @@ func TestSendAndReceive(t *testing.T) {
 	// is store 1.
 	const numServers = 3
 	const storesPerServer = 2
-	const numStores = numServers * storesPerServer
 	nextNodeID := roachpb.NodeID(2)
 	nextStoreID := roachpb.StoreID(2)
 

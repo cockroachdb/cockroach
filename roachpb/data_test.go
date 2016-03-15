@@ -459,7 +459,6 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 }
 
-var ts = makeTS(10, 11)
 var nonZeroTxn = Transaction{
 	TxnMeta: TxnMeta{
 		Isolation: SNAPSHOT,

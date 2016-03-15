@@ -551,25 +551,6 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	return nil
 }
 
-// filterRow checks to see if the current row matches the filter (i.e. the where-clause). Assumes
-// the qvals have been populated with the current row. May set n.pErr if an error occurs during
-// expression evaluation.
-func (s *selectNode) filterRow() bool {
-	if s.filter == nil {
-		return true
-	}
-
-	var d parser.Datum
-	var err error
-	d, err = s.filter.Eval(s.planner.evalCtx)
-	s.pErr = roachpb.NewError(err)
-	if s.pErr != nil {
-		return false
-	}
-
-	return d != parser.DNull && bool(d.(parser.DBool))
-}
-
 // renderRow renders the row by evaluating the render expressions. Assumes the qvals have been
 // populated with the current row. May set n.pErr if an error occurs during expression evaluation.
 func (s *selectNode) renderRow() {

@@ -43,16 +43,6 @@ func newNode(nodeID roachpb.NodeID, gossip *gossip.Gossip) *Node {
 	return node
 }
 
-// getStoreIDs returns the list of storeIDs from the stores contained on the
-// node.
-func (n *Node) getStoreIDs() []roachpb.StoreID {
-	var storeIDs []roachpb.StoreID
-	for storeID := range n.stores {
-		storeIDs = append(storeIDs, storeID)
-	}
-	return storeIDs
-}
-
 // getNextStoreID gets the store ID that should be used when adding a new store
 // to the node.
 func (n *Node) getNextStoreID() roachpb.StoreID {

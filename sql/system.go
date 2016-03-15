@@ -188,8 +188,3 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 func isSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
 }
-
-// isSystemID returns true if this ID is for a system object.
-func isSystemID(id ID) bool {
-	return id > 0 && id <= keys.MaxReservedDescID
-}
