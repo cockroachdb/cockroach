@@ -54,7 +54,9 @@ func SendWrappedWith(sender Sender, ctx context.Context, h roachpb.Header, args 
 		return nil, pErr
 	}
 	unwrappedReply := br.Responses[0].GetInner()
-	unwrappedReply.Header().Txn = br.Txn
+	header := unwrappedReply.Header()
+	header.Txn = br.Txn
+	unwrappedReply.SetHeader(header)
 	return unwrappedReply, nil
 }
 

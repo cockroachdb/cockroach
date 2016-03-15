@@ -17,12 +17,15 @@
 package kv
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 var emptySpan = roachpb.Span{}
+var noopRequest = roachpb.NoopRequest{}
 
 // truncate restricts all contained requests to the given key range
 // and returns a new BatchRequest.
@@ -35,7 +38,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		if _, ok := args.(*roachpb.NoopRequest); ok {
 			return true, emptySpan, nil
 		}
-		header := *args.Header()
+		header := args.Header()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
@@ -83,21 +86,21 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		if !hasRequest {
 			// We omit this one, i.e. replace it with a Noop.
 			numNoop++
-			nReq := roachpb.RequestUnion{}
-			if !nReq.SetValue(&roachpb.NoopRequest{}) {
-				panic("RequestUnion excludes NoopRequest")
+			union := roachpb.RequestUnion{}
+			if !union.SetInner(&noopRequest) {
+				panic(fmt.Sprintf("%T excludes %T", union, noopRequest))
 			}
-			ba.Requests[pos] = nReq
+			ba.Requests[pos] = union
 		} else {
 			// Keep the old one. If we must adjust the header, must copy.
 			// TODO(tschottdorf): this could wind up cloning big chunks of data.
 			// Can optimize by creating a new Request manually, but with the old
 			// data.
-			if newHeader.Equal(*origRequests[pos].GetInner().Header()) {
+			if newHeader.Equal(origRequests[pos].GetInner().Header()) {
 				ba.Requests[pos] = origRequests[pos]
 			} else {
 				ba.Requests[pos] = *util.CloneProto(&origRequests[pos]).(*roachpb.RequestUnion)
-				*ba.Requests[pos].GetInner().Header() = newHeader
+				ba.Requests[pos].GetInner().SetHeader(newHeader)
 			}
 		}
 		if err != nil {

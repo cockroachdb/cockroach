@@ -778,14 +778,18 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					if _, ok := br.Responses[i].GetInner().(*roachpb.NoopResponse); !ok {
 						continue
 					}
-					resp := roachpb.ResponseUnion{}
+					union := roachpb.ResponseUnion{}
+					var reply roachpb.Response
 					if _, ok := req.GetInner().(*roachpb.ScanRequest); ok {
-						resp.SetValue(&roachpb.ScanResponse{})
+						reply = &roachpb.ScanResponse{}
 					} else {
 						_ = req.GetInner().(*roachpb.ReverseScanRequest)
-						resp.SetValue(&roachpb.ReverseScanResponse{})
+						reply = &roachpb.ReverseScanResponse{}
 					}
-					br.Responses[i] = resp
+					if !union.SetInner(reply) {
+						panic(fmt.Sprintf("%T excludes %T", union, reply))
+					}
+					br.Responses[i] = union
 				}
 				return br, nil, false
 			}
@@ -840,8 +844,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					// it out (we've copied the requests slice above, so this
 					// is kosher).
 					ba.Requests[i].Reset() // necessary (no one-of?)
-					if !ba.Requests[i].SetValue(&roachpb.NoopRequest{}) {
-						panic("RequestUnion excludes NoopRequest")
+					if union := &ba.Requests[i]; !union.SetInner(&noopRequest) {
+						panic(fmt.Sprintf("%T excludes %T", union, noopRequest))
 					}
 					continue
 				}

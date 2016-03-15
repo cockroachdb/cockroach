@@ -163,8 +163,8 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 func (ba *BatchRequest) Add(requests ...Request) {
 	for _, args := range requests {
 		union := RequestUnion{}
-		if !union.SetValue(args) {
-			panic(fmt.Sprintf("unable to add %T to batch request", args))
+		if !union.SetInner(args) {
+			panic(fmt.Sprintf("%T excludes %T", union, args))
 		}
 		ba.Requests = append(ba.Requests, union)
 	}
@@ -173,9 +173,8 @@ func (ba *BatchRequest) Add(requests ...Request) {
 // Add adds a response to the batch response.
 func (br *BatchResponse) Add(reply Response) {
 	union := ResponseUnion{}
-	if !union.SetValue(reply) {
-		// TODO(tschottdorf) evaluate whether this should return an error.
-		panic(fmt.Sprintf("unable to add %T to batch response", reply))
+	if !union.SetInner(reply) {
+		panic(fmt.Sprintf("%T excludes %T", union, reply))
 	}
 	br.Responses = append(br.Responses, union)
 }

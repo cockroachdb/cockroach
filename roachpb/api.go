@@ -104,7 +104,9 @@ func IsRange(args Request) bool {
 type Request interface {
 	proto.Message
 	// Header returns the request header.
-	Header() *Span
+	Header() Span
+	// SetHeader sets the request header.
+	SetHeader(Span)
 	// Method returns the request method.
 	Method() Method
 	createReply() Response
@@ -115,7 +117,9 @@ type Request interface {
 type Response interface {
 	proto.Message
 	// Header returns the response header.
-	Header() *ResponseHeader
+	Header() ResponseHeader
+	// SetHeader sets the response header.
+	SetHeader(ResponseHeader)
 	// Verify verifies response integrity, as applicable.
 	Verify(req Request) error
 }
@@ -130,11 +134,9 @@ type combinable interface {
 
 // combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
-func (rh *ResponseHeader) combine(otherRH *ResponseHeader) error {
-	if rh != nil && otherRH != nil {
-		if rh.Txn != nil && otherRH.Txn == nil {
-			rh.Txn = nil
-		}
+func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
+	if rh.Txn != nil && otherRH.Txn == nil {
+		rh.Txn = nil
 	}
 	return nil
 }
@@ -144,7 +146,7 @@ func (sr *ScanResponse) combine(c combinable) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
-		if err := sr.Header().combine(otherSR.Header()); err != nil {
+		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
 	}
@@ -156,7 +158,7 @@ func (sr *ReverseScanResponse) combine(c combinable) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
-		if err := sr.Header().combine(otherSR.Header()); err != nil {
+		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
 	}
@@ -168,7 +170,7 @@ func (dr *DeleteRangeResponse) combine(c combinable) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
 		dr.Keys = append(dr.Keys, otherDR.Keys...)
-		if err := dr.Header().combine(otherDR.Header()); err != nil {
+		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
 			return err
 		}
 	}
@@ -179,7 +181,7 @@ func (dr *DeleteRangeResponse) combine(c combinable) error {
 func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
-		if err := rr.Header().combine(otherRR.Header()); err != nil {
+		if err := rr.ResponseHeader.combine(otherRR.Header()); err != nil {
 			return err
 		}
 	}
@@ -190,22 +192,44 @@ func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 func (cc *CheckConsistencyResponse) combine(c combinable) error {
 	if cc != nil {
 		otherCC := c.(*CheckConsistencyResponse)
-		if err := cc.Header().combine(otherCC.Header()); err != nil {
+		if err := cc.ResponseHeader.combine(otherCC.Header()); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Header implements the Request interface for RequestHeader.
-func (rh *Span) Header() *Span {
+// Header implements the Request interface.
+func (rh Span) Header() Span {
 	return rh
 }
 
+// SetHeader implements the Request interface.
+func (rh *Span) SetHeader(other Span) {
+	*rh = other
+}
+
+// Header implements the Request interface.
+func (*NoopRequest) Header() Span { return Span{} }
+
+// SetHeader implements the Request interface.
+func (*NoopRequest) SetHeader(_ Span) {}
+
+// SetHeader implements the Response interface.
+func (rh *ResponseHeader) SetHeader(other ResponseHeader) {
+	*rh = other
+}
+
 // Header implements the Response interface for ResponseHeader.
-func (rh *ResponseHeader) Header() *ResponseHeader {
+func (rh ResponseHeader) Header() ResponseHeader {
 	return rh
 }
+
+// Header implements the Response interface.
+func (*NoopResponse) Header() ResponseHeader { return ResponseHeader{} }
+
+// SetHeader implements the Response interface.
+func (*NoopResponse) SetHeader(_ ResponseHeader) {}
 
 // Verify implements the Response interface for ResopnseHeader with a
 // default noop. Individual response types should override this method
@@ -242,6 +266,11 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 	return nil
 }
 
+// Verify implements the Response interface.
+func (*NoopResponse) Verify(_ Request) error {
+	return nil
+}
+
 // GetInner returns the Request contained in the union.
 func (ru RequestUnion) GetInner() Request {
 	return ru.GetValue().(Request)
@@ -250,6 +279,16 @@ func (ru RequestUnion) GetInner() Request {
 // GetInner returns the Response contained in the union.
 func (ru ResponseUnion) GetInner() Response {
 	return ru.GetValue().(Response)
+}
+
+// SetInner sets the Request contained in the union.
+func (ru *RequestUnion) SetInner(args Request) bool {
+	return ru.SetValue(args)
+}
+
+// SetInner sets the Response contained in the union.
+func (ru *ResponseUnion) SetInner(reply Response) bool {
+	return ru.SetValue(reply)
 }
 
 // Bounded is implemented by request types which have a bounded number of

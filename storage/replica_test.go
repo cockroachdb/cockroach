@@ -822,7 +822,9 @@ func maybeWrapWithBeginTransaction(sender client.Sender, ctx context.Context, he
 		return nil, pErr
 	}
 	unwrappedReply := br.Responses[1].GetInner()
-	unwrappedReply.Header().Txn = br.Txn
+	unwrappedHeader := unwrappedReply.Header()
+	unwrappedHeader.Txn = br.Txn
+	unwrappedReply.SetHeader(unwrappedHeader)
 	return unwrappedReply, nil
 
 }
@@ -1504,7 +1506,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Resolve the intent.
 	rArgs := &roachpb.ResolveIntentRequest{
-		Span:      *pArgs.Header(),
+		Span:      pArgs.Header(),
 		IntentTxn: txn.TxnMeta,
 		Status:    roachpb.COMMITTED,
 	}

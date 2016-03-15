@@ -18,6 +18,7 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -25,7 +26,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -33,7 +33,7 @@ import (
 var (
 	testKey     = roachpb.Key("a")
 	testTS      = roachpb.Timestamp{WallTime: 1, Logical: 1}
-	testPutResp = &roachpb.PutResponse{}
+	testPutResp = roachpb.PutResponse{}
 )
 
 func newDB(sender Sender) *DB {
@@ -71,8 +71,9 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 		for i, req := range ba.Requests {
 			args := req.GetInner()
 			if _, ok := args.(*roachpb.PutRequest); ok {
-				if !br.Responses[i].SetValue(util.CloneProto(testPutResp).(roachpb.Response)) {
-					panic("failed to set put response")
+				testPutRespCopy := testPutResp
+				if union := &br.Responses[i]; !union.SetInner(&testPutRespCopy) {
+					panic(fmt.Sprintf("%T excludes %T", union, testPutRespCopy))
 				}
 			}
 			if roachpb.IsTransactionWrite(args) {
