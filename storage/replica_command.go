@@ -1699,8 +1699,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 	}
 
 	// Compute stats for updated range.
-	now := r.store.Clock().Timestamp()
-	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, now.WallTime)
+	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, origStats.LastUpdateNanos)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
@@ -1975,8 +1974,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, ms *engine.MVCCStats, merge 
 	defer iter.Close()
 	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.StartKey))
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.EndKey))
-	now := r.store.Clock().Timestamp()
-	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, now.WallTime)
+	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, mergedMs.LastUpdateNanos)
 	if err != nil {
 		return util.Errorf("unable to compute subsumed range's local stats: %s", err)
 	}
