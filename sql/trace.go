@@ -139,4 +139,4 @@ func (*explainTraceNode) DebugValues() debugValues {
 	panic("debug mode not implemented in explainTraceNode")
 }
 
-func (*explainTraceNode) SetLimitHint(_ int64) {}
+func (*explainTraceNode) SetLimitHint(_ int64, _ bool) {}

@@ -75,7 +75,7 @@ func (p *planner) limit(limit *parser.Limit, plan planNode) (planNode, error) {
 	}
 
 	if count != math.MaxInt64 {
-		plan.SetLimitHint(offset + count)
+		plan.SetLimitHint(offset+count, true)
 	}
 
 	return &limitNode{planNode: plan, count: count, offset: offset}, nil
@@ -151,4 +151,4 @@ func (n *limitNode) ExplainPlan() (string, string, []planNode) {
 	return "limit", fmt.Sprintf("count: %s, offset: %d", count, n.offset), []planNode{n.planNode}
 }
 
-func (*limitNode) SetLimitHint(_ int64) {}
+func (*limitNode) SetLimitHint(_ int64, _ bool) {}

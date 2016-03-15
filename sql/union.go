@@ -154,9 +154,9 @@ func (n *unionNode) Values() parser.DTuple {
 		return nil
 	}
 }
-func (n *unionNode) SetLimitHint(numRows int64) {
-	n.right.SetLimitHint(numRows)
-	n.left.SetLimitHint(numRows)
+func (n *unionNode) SetLimitHint(numRows int64, soft bool) {
+	n.right.SetLimitHint(numRows, true)
+	n.left.SetLimitHint(numRows, true)
 }
 
 func (n *unionNode) ExplainPlan() (name, description string, children []planNode) {

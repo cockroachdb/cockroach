@@ -153,8 +153,11 @@ func (s *selectNode) ExplainPlan() (name, description string, children []planNod
 	return s.table.node.ExplainPlan()
 }
 
-func (s *selectNode) SetLimitHint(numRows int64) {
-	s.table.node.SetLimitHint(numRows)
+func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
+	if s.filter != nil {
+		soft = true
+	}
+	s.table.node.SetLimitHint(numRows, soft)
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.

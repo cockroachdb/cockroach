@@ -112,7 +112,9 @@ func (n *scanNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *scanNode) SetLimitHint(numRows int64) {
+func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
+	// TODO(radu): maybe make the limitHint higher if soft is true or there is
+	// no filter? (#5267)
 	n.limitHint = numRows
 }
 

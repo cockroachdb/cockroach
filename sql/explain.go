@@ -230,4 +230,4 @@ func (*explainDebugNode) DebugValues() debugValues {
 	panic("debug mode not implemented in explainDebugNode")
 }
 
-func (*explainDebugNode) SetLimitHint(_ int64) {}
+func (*explainDebugNode) SetLimitHint(_ int64, _ bool) {}
