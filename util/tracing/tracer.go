@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/util/caller"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
@@ -89,6 +90,19 @@ var newTracer = func() opentracing.Tracer {
 // endpoint.
 func NewTracer() opentracing.Tracer {
 	return newTracer()
+}
+
+// EnsureContext checks whether the given context.Context contains a Span. If
+// not, it creates one using the provided Tracer and wraps it in the returned
+// Span. The returned closure must be called after the request has been fully
+// processed.
+func EnsureContext(ctx context.Context, tracer opentracing.Tracer) (context.Context, func()) {
+	_, _, funcName := caller.Lookup(1)
+	if opentracing.SpanFromContext(ctx) == nil {
+		sp := tracer.StartSpan(funcName)
+		return opentracing.ContextWithSpan(ctx, sp), sp.Finish
+	}
+	return ctx, func() {}
 }
 
 // SpanFromContext returns the Span obtained from the context or, if none is
