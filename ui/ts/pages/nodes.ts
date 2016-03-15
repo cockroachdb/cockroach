@@ -630,7 +630,7 @@ module AdminViews {
         return m(".page", [
           m.component(Components.Topbar, {title: title, updated: updated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-          m(".section", primaryContent),
+          m(".section.node", primaryContent),
         ]);
       }
     }
