@@ -60,7 +60,6 @@ const (
 type Parser struct {
 	scanner          scanner
 	parserImpl       sqlParserImpl
-	argVisitor       argVisitor
 	normalizeVisitor normalizeVisitor
 }
 

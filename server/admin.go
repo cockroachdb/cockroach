@@ -92,14 +92,6 @@ var (
 		"check your CockroachDB logs for more details.")
 )
 
-// An actionHandler is an interface which provides Get, Put & Delete
-// to satisfy administrative REST APIs.
-type actionHandler interface {
-	Put(path string, body []byte, r *http.Request) error
-	Get(path string, r *http.Request) (body []byte, contentType string, err error)
-	Delete(path string, r *http.Request) error
-}
-
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {

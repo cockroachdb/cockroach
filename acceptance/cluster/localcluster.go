@@ -68,12 +68,6 @@ var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
 // keyLen is the length (in bits) of the generated CA and node certs.
 const keyLen = 1024
 
-func prettyJSON(v interface{}) string {
-	pretty, err := json.MarshalIndent(v, "", "  ")
-	maybePanic(err)
-	return string(pretty)
-}
-
 func defaultBinary() string {
 	gopath := filepath.SplitList(os.Getenv("GOPATH"))
 	if len(gopath) == 0 {

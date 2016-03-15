@@ -21,7 +21,6 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // HTTPClient is an http.Client configured for querying a cluster. We need to
@@ -35,15 +34,3 @@ var HTTPClient = http.Client{
 			InsecureSkipVerify: true,
 		},
 	}}
-
-// getJSON is a convenience wrapper around cockroach/util.GetJSON(), which retrieves
-// an URL specified by the parameters and unmarshals the result into the supplied
-// interface.
-func getJSON(tls bool, hostport, path string, v interface{}) error {
-	scheme := "https"
-	if !tls {
-		scheme = "http"
-	}
-
-	return util.GetJSON(&HTTPClient, scheme, hostport, path, v)
-}

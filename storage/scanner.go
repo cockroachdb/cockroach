@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -56,13 +55,6 @@ type replicaSet interface {
 	// EstimatedCount returns the number of replicas estimated to remain
 	// in the iteration. This value does not need to be exact.
 	EstimatedCount() int
-}
-
-// A storeStats holds statistics over the entire store. Stats is an
-// aggregation of MVCC stats across all replicas in the store.
-type storeStats struct {
-	RangeCount int
-	MVCC       engine.MVCCStats
 }
 
 // A replicaScanner iterates over replicas at a measured pace in order to

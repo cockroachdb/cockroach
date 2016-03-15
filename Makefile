@@ -233,6 +233,12 @@ check:
 	@echo "goimports"
 	@! goimports -l . | grep -vF 'No Exceptions'
 
+.PHONY: unused
+unused:
+# The -fields option generates false-positives for embedded mutex and
+# related types. See https://github.com/dominikh/go-unused/issues/18.
+	-unused -fields ./... | grep -v -E '(\.pb\.go:|/C:|_string.go:|parser/(yacc|sql.y)|_cgo|Mutex)'
+
 .PHONY: clean
 clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
