@@ -548,21 +548,26 @@ func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Directio
 		return nil, util.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
 			len(directions), len(valTypes))
 	}
+	var tmp []byte
+	if len(valTypes) > 1 {
+		tmp = make([]byte, 0, 64)
+	}
 	for j := range valTypes {
 		direction := encoding.Ascending
 		if directions != nil {
 			direction = directions[j]
 		}
 		var err error
-		vals[j], key, err = decodeTableKey(valTypes[j], key, direction)
+		vals[j], key, err = decodeTableKey(valTypes[j], key, direction, tmp)
 		if err != nil {
 			return nil, err
 		}
+		tmp = tmp[:0]
 	}
 	return key, nil
 }
 
-func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
+func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction, tmp []byte) (
 	parser.Datum, []byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, nil, util.Errorf("invalid direction: %d", dir)
@@ -593,17 +598,17 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 	case parser.DFloat:
 		var f float64
 		if dir == encoding.Ascending {
-			rkey, f, err = encoding.DecodeFloatAscending(key, nil)
+			rkey, f, err = encoding.DecodeFloatAscending(key, tmp)
 		} else {
-			rkey, f, err = encoding.DecodeFloatDescending(key, nil)
+			rkey, f, err = encoding.DecodeFloatDescending(key, tmp)
 		}
 		return parser.DFloat(f), rkey, err
 	case *parser.DDecimal:
 		var d *inf.Dec
 		if dir == encoding.Ascending {
-			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
+			rkey, d, err = encoding.DecodeDecimalAscending(key, tmp)
 		} else {
-			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
+			rkey, d, err = encoding.DecodeDecimalDescending(key, tmp)
 		}
 		dd := &parser.DDecimal{}
 		dd.Set(d)
@@ -611,17 +616,17 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 	case parser.DString:
 		var r string
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeStringAscending(key, nil)
+			rkey, r, err = encoding.DecodeStringAscending(key, tmp)
 		} else {
-			rkey, r, err = encoding.DecodeStringDescending(key, nil)
+			rkey, r, err = encoding.DecodeStringDescending(key, tmp)
 		}
 		return parser.DString(r), rkey, err
 	case parser.DBytes:
 		var r []byte
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
+			rkey, r, err = encoding.DecodeBytesAscending(key, tmp)
 		} else {
-			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
+			rkey, r, err = encoding.DecodeBytesDescending(key, tmp)
 		}
 		return parser.DBytes(r), rkey, err
 	case parser.DDate:
