@@ -16,11 +16,7 @@
 
 package cluster
 
-import (
-	"bytes"
-	"fmt"
-	"time"
-)
+import "time"
 
 const (
 	// DefaultStall is the default value for stall detection time.
@@ -34,9 +30,7 @@ const (
 func DefaultConfigs() []TestConfig {
 	return []TestConfig{
 		{
-			Name:     "3x1",
-			Duration: DefaultDuration,
-			Stall:    DefaultStall,
+			Name: "3x1",
 			Nodes: []NodeConfig{
 				{
 					Count:  3,
@@ -45,9 +39,7 @@ func DefaultConfigs() []TestConfig {
 			},
 		},
 		{
-			Name:     "5x1",
-			Duration: DefaultDuration,
-			Stall:    DefaultStall,
+			Name: "5x1",
 			Nodes: []NodeConfig{
 				{
 					Count:  5,
@@ -56,9 +48,7 @@ func DefaultConfigs() []TestConfig {
 			},
 		},
 		{
-			Name:     "7x1",
-			Duration: DefaultDuration,
-			Stall:    DefaultStall,
+			Name: "7x1",
 			Nodes: []NodeConfig{
 				{
 					Count:  7,
@@ -66,38 +56,57 @@ func DefaultConfigs() []TestConfig {
 				},
 			},
 		},
+		{
+			Name: "3x2",
+			Nodes: []NodeConfig{
+				{
+					Count:  3,
+					Stores: []StoreConfig{{Count: 2}},
+				},
+			},
+		},
+		{
+			Name: "1:1L,1:1M,1:1S",
+			Nodes: []NodeConfig{
+				{
+					Count: 1,
+					Stores: []StoreConfig{{
+						Count:     1,
+						MaxRanges: 10,
+					}},
+				},
+				{
+					Count: 1,
+					Stores: []StoreConfig{{
+						Count:     1,
+						MaxRanges: 20,
+					}},
+				},
+				{
+					Count: 1,
+					Stores: []StoreConfig{{
+						Count:     1,
+						MaxRanges: 30,
+					}},
+				},
+			},
+		},
+		{
+			Name: "1x1,1x2,1x3",
+			Nodes: []NodeConfig{
+				{
+					Count:  1,
+					Stores: []StoreConfig{{Count: 1}},
+				},
+				{
+					Count:  1,
+					Stores: []StoreConfig{{Count: 2}},
+				},
+				{
+					Count:  1,
+					Stores: []StoreConfig{{Count: 3}},
+				},
+			},
+		},
 	}
-}
-
-// PrettyString creates a human readable string depicting the test and cluster
-// setup designed for output while running tests.
-func (tc TestConfig) PrettyString() string {
-	var nodeCount int
-	var storeCount int
-	var buffer bytes.Buffer
-
-	buffer.WriteString(fmt.Sprintf("Cluster Setup: %s\nDuration: %s, Stall: %s\n", tc.Name, tc.Duration, tc.Stall))
-	for _, nc := range tc.Nodes {
-		for i := 0; i < int(nc.Count); i++ {
-			buffer.WriteString(fmt.Sprintf("Node %d - ", nodeCount))
-			nodeCount++
-			var tmpStoreCount int
-			for _, sc := range nc.Stores {
-				for j := 0; j < int(sc.Count); j++ {
-					if tmpStoreCount > 0 {
-						buffer.WriteString(", ")
-					}
-					// TODO(bram): #4561 Add store details (size) here when
-					// they are available.
-					buffer.WriteString(fmt.Sprintf("Store %d", tmpStoreCount))
-					tmpStoreCount++
-					storeCount++
-				}
-			}
-			buffer.WriteString("\n")
-		}
-	}
-	buffer.WriteString(fmt.Sprintf("Total Nodes Count:%d, Total Store Count:%d\n", nodeCount, storeCount))
-
-	return buffer.String()
 }
