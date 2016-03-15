@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
@@ -355,7 +356,12 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(true, 2).Results(2),
 			base.Params(false, 2).Results(3),
 		},
-		// TODO(mjibson): test date/time types
+		"SELECT $1::timestamp, $2::date": {
+			base.Params("2001-01-02 03:04:05", "2006-07-08").Results(
+				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
+				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+			),
+		},
 
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
 			base.Params(1).Results(1),

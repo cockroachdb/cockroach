@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/pq"
 	"github.com/cockroachdb/pq/oid"
 )
 
@@ -412,7 +413,31 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, fmt.Errorf("unsupported bytea format code: %d", code)
 		}
-	// TODO(mjibson): implement date/time types
+	case oid.T_timestamp:
+		switch code {
+		case formatText:
+			ts, err := pq.ParseTimestamp(nil, string(b))
+			if err != nil {
+				return d, fmt.Errorf("could not parse string %q as timestamp", b)
+			}
+			d = parser.DTimestamp{Time: ts}
+			log.Infof("Returning %s\n", d)
+		case formatBinary:
+			return d, fmt.Errorf("unsupported timestamp format code: %d", code)
+		}
+	case oid.T_date:
+		switch code {
+		case formatText:
+			ts, err := pq.ParseTimestamp(nil, string(b))
+			if err != nil {
+				return d, fmt.Errorf("could not parse string %q as date", b)
+			}
+			daysSinceEpoch := ts.Unix() / secondsInDay
+			d = parser.DDate(daysSinceEpoch)
+			log.Infof("Returning %s\n", d)
+		case formatBinary:
+			return d, fmt.Errorf("unsupported date format code: %d", code)
+		}
 	default:
 		return d, fmt.Errorf("unsupported OID: %v", id)
 	}
