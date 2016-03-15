@@ -494,7 +494,7 @@ RetryLoop:
 		}
 	}
 	if txn != nil {
-		// TODO(andrei): don't do Cleanup() on retriable errors here.
+		// TODO(andrei): don't do Cleanup() on retryable errors here.
 		// Let the sql executor do it.
 		txn.Cleanup(pErr)
 	}

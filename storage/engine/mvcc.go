@@ -897,7 +897,6 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
-
 			if txn == nil || !roachpb.TxnIDEqual(meta.Txn.ID, txn.ID) {
 				// The current Put operation does not come from the same
 				// transaction.

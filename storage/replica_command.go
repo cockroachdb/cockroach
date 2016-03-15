@@ -315,15 +315,16 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
 		return reply, err
 	} else if ok {
-		reply.Txn = &txn
 		// Check whether someone has come in ahead and already aborted the
 		// txn.
 		if txn.Status == roachpb.ABORTED {
 			return reply, roachpb.NewTransactionAbortedError()
 		} else if txn.Status == roachpb.PENDING && h.Txn.Epoch > txn.Epoch {
 			// On a transaction retry there will be an extant txn record but
-			// this run should have an upgraded epoch. This is a pass
-			// through to set the new transaction record.
+			// this run should have an upgraded epoch. The extant txn record
+			// may have been pushed or otherwise, updated, so update this
+			// command's txn and rewrite the record.
+			h.Txn.Update(&txn)
 		} else {
 			return reply, roachpb.NewTransactionStatusError("non-aborted transaction exists already")
 		}
