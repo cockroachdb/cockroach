@@ -66,7 +66,7 @@ func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	if _, _, err := createSplitRanges(store); err != nil {
@@ -94,7 +94,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
@@ -172,7 +172,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	content := roachpb.Key("testing!")
@@ -299,7 +299,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	// Merge last range.
@@ -365,7 +365,7 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, manual := createTestStore(t)
 	defer stopper.Stop()
 
 	// Split the range.
@@ -390,12 +390,15 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, aDesc, msA); err != nil {
+	if err := verifyRecomputedStats(snap, aDesc, msA, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range A's stats before split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, bDesc, msB); err != nil {
+	if err := verifyRecomputedStats(snap, bDesc, msB, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range B's stats before split: %v", err)
 	}
+
+	// Increment the clock.
+	manual.Increment(100)
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(roachpb.KeyMin)
@@ -413,7 +416,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, rngMerged.Desc(), msMerged); err != nil {
+	if err := verifyRecomputedStats(snap, rngMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }
@@ -421,7 +424,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	defer tracing.Disable()()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(b)
+	store, stopper, _ := createTestStore(b)
 	defer stopper.Stop()
 
 	// Perform initial split of ranges.

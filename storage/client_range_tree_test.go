@@ -177,7 +177,7 @@ func verifyProperty5(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testN
 func TestSetupRangeTree(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()
 
@@ -196,7 +196,7 @@ func TestSetupRangeTree(t *testing.T) {
 func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 	db := store.DB()
 

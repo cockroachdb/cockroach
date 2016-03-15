@@ -520,13 +520,13 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 
 		if err := func() error {
 			if ct.GetSplitTrigger() != nil {
-				if err := r.splitTrigger(batch, ms, ct.SplitTrigger); err != nil {
+				if err := r.splitTrigger(batch, ms, ct.SplitTrigger, ts); err != nil {
 					return err
 				}
 				*ms = engine.MVCCStats{} // clear stats, as split recomputed.
 			}
 			if ct.GetMergeTrigger() != nil {
-				if err := r.mergeTrigger(batch, ms, ct.MergeTrigger); err != nil {
+				if err := r.mergeTrigger(batch, ms, ct.MergeTrigger, ts); err != nil {
 					return err
 				}
 				*ms = engine.MVCCStats{} // clear stats, as merge recomputed.
@@ -1675,7 +1675,7 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 // transaction. It copies the sequence cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
-func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split *roachpb.SplitTrigger) error {
+func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split *roachpb.SplitTrigger, ts roachpb.Timestamp) error {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := r.store.Tracer().StartSpan("split")
@@ -1699,7 +1699,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 	}
 
 	// Compute stats for updated range.
-	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, origStats.LastUpdateNanos)
+	leftMs, err := ComputeStatsForRange(&split.UpdatedDesc, batch, ts.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
@@ -1925,7 +1925,7 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
-func (r *Replica) mergeTrigger(batch engine.Engine, ms *engine.MVCCStats, merge *roachpb.MergeTrigger) error {
+func (r *Replica) mergeTrigger(batch engine.Engine, ms *engine.MVCCStats, merge *roachpb.MergeTrigger, ts roachpb.Timestamp) error {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.UpdatedDesc.StartKey) {
 		return util.Errorf("range and updated range start keys do not match: %s != %s",
@@ -1974,7 +1974,7 @@ func (r *Replica) mergeTrigger(batch engine.Engine, ms *engine.MVCCStats, merge 
 	defer iter.Close()
 	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.StartKey))
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.EndKey))
-	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, mergedMs.LastUpdateNanos)
+	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute subsumed range's local stats: %s", err)
 	}

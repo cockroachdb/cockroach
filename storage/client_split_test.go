@@ -58,7 +58,7 @@ func adminSplitArgs(key, splitKey roachpb.Key) roachpb.AdminSplitRequest {
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	for _, key := range []roachpb.Key{
@@ -81,7 +81,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	key := keys.MakeNonColumnKey(append([]byte(nil), keys.UserTableDataMin...))
@@ -132,7 +132,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 func TestStoreRangeSplitInsideRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	// Manually create some the column keys corresponding to the table:
@@ -187,7 +187,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	args := adminSplitArgs(roachpb.KeyMin, []byte("a"))
@@ -211,7 +211,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 func TestStoreRangeSplitConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	splitKey := roachpb.Key("a")
@@ -254,7 +254,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
@@ -393,7 +393,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 func TestStoreRangeSplitStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(t)
+	store, stopper, manual := createTestStore(t)
 	defer stopper.Stop()
 
 	// Split the range after the last table data key.
@@ -407,7 +407,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	rng := store.LookupReplica(keyPrefix, nil)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
-	if err := verifyRangeStats(store.Engine(), rng.RangeID, engine.MVCCStats{}); err != nil {
+	if err := verifyRangeStats(store.Engine(), rng.RangeID, engine.MVCCStats{LastUpdateNanos: manual.UnixNano()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -421,9 +421,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err := engine.MVCCGetRangeStats(snap, rng.RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyRecomputedStats(snap, rng.Desc(), ms); err != nil {
+	if err := verifyRecomputedStats(snap, rng.Desc(), ms, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
+
+	// Increment the clock.
+	manual.Increment(100)
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
 	midKey := append([]byte(nil), keyPrefix...)
@@ -459,15 +462,25 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
 	ms.SysBytes, ms.SysCount = 0, 0
+	ms.LastUpdateNanos = 0
 	if expMS != ms {
 		t.Errorf("expected left and right ranges to equal original: %+v + %+v != %+v", msLeft, msRight, ms)
 	}
 
+	// Stats should both have the new timestamp.
+	now := manual.UnixNano()
+	if lTs := msLeft.LastUpdateNanos; lTs != now {
+		t.Errorf("expected left range stats to have new timestamp, want %d, got %d", now, lTs)
+	}
+	if rTs := msRight.LastUpdateNanos; rTs != now {
+		t.Errorf("expected right range stats to have new timestamp, want %d, got %d", now, rTs)
+	}
+
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, rng.Desc(), msLeft); err != nil {
+	if err := verifyRecomputedStats(snap, rng.Desc(), msLeft, now); err != nil {
 		t.Fatalf("failed to verify left range's stats after split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, rngRight.Desc(), msRight); err != nil {
+	if err := verifyRecomputedStats(snap, rngRight.Desc(), msRight, now); err != nil {
 		t.Fatalf("failed to verify right range's stats after split: %v", err)
 	}
 }
@@ -509,7 +522,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
@@ -564,7 +577,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // split.
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
@@ -598,7 +611,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 // the SystemConfig span.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, stopper := createTestStore(t)
+	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
 	schema := sql.MakeMetadataSchema()
@@ -924,7 +937,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 			}
 			return nil
 		}
-	store, stopper := createTestStoreWithContext(t, &sCtx)
+	store, stopper, _ := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
 
 	now := store.Clock().Now()
@@ -1015,7 +1028,7 @@ func TestLeaderAfterSplit(t *testing.T) {
 func BenchmarkStoreRangeSplit(b *testing.B) {
 	defer tracing.Disable()()
 	defer config.TestingDisableTableSplits()()
-	store, stopper := createTestStore(b)
+	store, stopper, _ := createTestStore(b)
 	defer stopper.Stop()
 
 	// Perform initial split of ranges.
