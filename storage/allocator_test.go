@@ -1055,6 +1055,20 @@ func TestAllocatorComputeAction(t *testing.T) {
 	}
 }
 
+// TestAllocatorComputeActionNoStorePool verifies that
+// ComputeAction returns AllocatorNoop when storePool is nil.
+func TestAllocatorComputeActionNoStorePool(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	a := MakeAllocator(nil /* storePool */, AllocatorOptions{})
+	action, priority := a.ComputeAction(config.ZoneConfig{}, nil)
+	if action != AllocatorNoop {
+		t.Errorf("expected AllocatorNoop, but got %v", action)
+	}
+	if priority != 0 {
+		t.Errorf("expected priority 0, but got %f", priority)
+	}
+}
+
 type testStore struct {
 	roachpb.StoreDescriptor
 }
