@@ -18,11 +18,11 @@ package storage_test
 
 import (
 	"math/rand"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -131,26 +131,23 @@ func TestSendAndReceive(t *testing.T) {
 	for fromStoreID, fromNodeID := range storeNodes {
 		for toStoreID, toNodeID := range storeNodes {
 			req := &storage.RaftMessageRequest{
-				GroupID: 0,
 				Message: raftpb.Message{
 					Type: raftpb.MsgHeartbeat,
 					From: uint64(fromStoreID),
 					To:   uint64(toStoreID),
 				},
 				FromReplica: roachpb.ReplicaDescriptor{
-					NodeID:    fromNodeID,
-					StoreID:   fromStoreID,
-					ReplicaID: 0,
+					NodeID:  fromNodeID,
+					StoreID: fromStoreID,
 				},
 				ToReplica: roachpb.ReplicaDescriptor{
-					NodeID:    toNodeID,
-					StoreID:   toStoreID,
-					ReplicaID: 0,
+					NodeID:  toNodeID,
+					StoreID: toStoreID,
 				},
 			}
 
 			if err := transports[fromNodeID].Send(req); err != nil {
-				t.Errorf("Unable to send message from %d to %d: %s", fromNodeID, toNodeID, err)
+				t.Errorf("unable to send %s from %d to %d: %s", req.Message.Type, fromNodeID, toNodeID, err)
 			}
 		}
 	}
@@ -164,8 +161,7 @@ func TestSendAndReceive(t *testing.T) {
 			select {
 			case req := <-channels[toStoreID].ch:
 				if req.Message.To != uint64(toStoreID) {
-					t.Errorf("invalid message received on channel %d: %+v",
-						toStoreID, req)
+					t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatal("timed out waiting for message")
@@ -174,7 +170,7 @@ func TestSendAndReceive(t *testing.T) {
 
 		select {
 		case req := <-channels[toStoreID].ch:
-			t.Errorf("got unexpected message %+v on channel %d", req, toStoreID)
+			t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 		default:
 		}
 	}
@@ -183,7 +179,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Send a message from replica 2 (on store 3, node 2) to replica 1 (on store 5, node 3)
 	fromStoreID := roachpb.StoreID(3)
 	toStoreID := roachpb.StoreID(5)
-	req := &storage.RaftMessageRequest{
+	expReq := &storage.RaftMessageRequest{
 		GroupID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
@@ -201,22 +197,16 @@ func TestSendAndReceive(t *testing.T) {
 			ReplicaID: replicaIDs[toStoreID],
 		},
 	}
-	if err := transports[storeNodes[fromStoreID]].Send(req); err != nil {
-		t.Errorf("Unable to send message from %d to %d: %s", fromStoreID, toStoreID, err)
+	if err := transports[storeNodes[fromStoreID]].Send(expReq); err != nil {
+		t.Errorf("unable to send message from %d to %d: %s", fromStoreID, toStoreID, err)
 	}
-	select {
-	case req2 := <-channels[toStoreID].ch:
-		if !reflect.DeepEqual(req, req2) {
-			t.Errorf("got unexpected message %+v", req2)
-		}
-
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for message")
+	if req := <-channels[toStoreID].ch; !proto.Equal(req, expReq) {
+		t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 	}
 
 	select {
 	case req := <-channels[toStoreID].ch:
-		t.Errorf("got unexpected message %+v on channel %d", req, toStoreID)
+		t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 	default:
 	}
 }
