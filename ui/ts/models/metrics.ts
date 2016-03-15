@@ -258,6 +258,18 @@ module Models {
        */
       xAxis: Utils.ChainProperty<boolean, Axis> = Utils.ChainProp(this, true);
 
+      /**
+       *  yLow forces the the yAxis to extend down to the specified value, even if the min data value is higher
+       *  The default is 0 but to disable the behavior yLow can be set to null
+       */
+      yLow: Utils.ChainProperty<number, Axis> = Utils.ChainProp(this, 0);
+
+      /**
+       *  yHigh forces the yaxis to extend up to the specified value, even if the max data value is lower
+       *  The default is 1 but to disable the behavior yHigh can be set to null
+       */
+      yHigh: Utils.ChainProperty<number, Axis> = Utils.ChainProp(this, 1);
+
       // Stores the hard-coded title if one is set.
       private _title: string;
 

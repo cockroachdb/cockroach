@@ -117,12 +117,12 @@ module AdminViews {
             });
           let fmt: (v: number) => string = d3.format(".1f");
           this._addChartSmall(Metrics.NewAxis.apply(this, latencySelectors)
-          .format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
-          .title("Query Time")
-          .label("Milliseconds")
-          .range([0]));
+            .format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
+            .title("Query Time")
+            .label("Milliseconds")
+          );
 
-          // TODO: load instead of CPU
+          // TODO: should we use load instead of CPU?
           // TODO: range should take into account # of cpus
           this._addChartSmall(
             Metrics.NewAxis(
@@ -133,6 +133,7 @@ module AdminViews {
             ).format(d3.format(".2%")).title("CPU").stacked(true)
           );
 
+          // TODO: get total/average memory from all machines
           this._addChartSmall(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
@@ -140,12 +141,11 @@ module AdminViews {
             ).format(Utils.Format.Bytes).title("Memory")
           );
 
-          // TODO: add QPS on another axis
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Connections")
-              ).format(d3.format("d")).title("Connections").range([0])
+              ).format(d3.format("d")).title("Connections")
           );
 
           this._addChart(
