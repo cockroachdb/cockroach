@@ -690,8 +690,9 @@ func PeekType(b []byte) Type {
 // values in the provided byte slice, separated by a provided separator.
 func PrettyPrintValue(b []byte, sep string) string {
 	var buf bytes.Buffer
+	tmp := make([]byte, 0, 64)
 	for len(b) > 0 {
-		bb, s, err := prettyPrintFirstValue(b)
+		bb, s, err := prettyPrintFirstValue(b, tmp)
 		if err != nil {
 			fmt.Fprintf(&buf, "%s<%v>", sep, err)
 		} else {
@@ -705,7 +706,7 @@ func PrettyPrintValue(b []byte, sep string) string {
 // prettyPrintFirstValue returns a string representation of the first decodable
 // value in the provided byte slice, along with the remaining byte slice
 // after decoding.
-func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
+func prettyPrintFirstValue(b, tmp []byte) ([]byte, string, error) {
 	var err error
 	switch PeekType(b) {
 	case Null:
@@ -734,21 +735,21 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		// Decode both floats and decimals as decimals to avoid
 		// overflow.
 		var d *inf.Dec
-		b, d, err = DecodeDecimalAscending(b, nil)
+		b, d, err = DecodeDecimalAscending(b, tmp)
 		if err != nil {
 			return b, "", err
 		}
 		return b, d.String(), nil
 	case Bytes:
 		var s string
-		b, s, err = DecodeStringAscending(b, nil)
+		b, s, err = DecodeStringAscending(b, tmp)
 		if err != nil {
 			return b, "", err
 		}
 		return b, strconv.Quote(s), nil
 	case BytesDesc:
 		var s string
-		b, s, err = DecodeStringDescending(b, nil)
+		b, s, err = DecodeStringDescending(b, tmp)
 		if err != nil {
 			return b, "", err
 		}
