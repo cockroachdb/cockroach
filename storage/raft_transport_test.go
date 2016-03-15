@@ -121,18 +121,29 @@ func TestSendAndReceive(t *testing.T) {
 
 			storeNodes[storeID] = nodeID
 
-			channel := newChannelServer(10, 0)
+			channel := newChannelServer(20, 0)
 			transport.Listen(storeID, channel.RaftMessage)
 			channels[storeID] = channel
 		}
 	}
 
-	// Heartbeat messages: Each store sends one message to each store.
-	for fromStoreID, fromNodeID := range storeNodes {
-		for toStoreID, toNodeID := range storeNodes {
-			req := &storage.RaftMessageRequest{
+	messageTypes := []raftpb.MessageType{
+		raftpb.MsgSnap,
+		raftpb.MsgHeartbeat,
+	}
+
+	messageTypeCounts := make(map[roachpb.StoreID]map[raftpb.MessageType]int)
+
+	// Each store sends one snapshot and one heartbeat to each store, including
+	// itself.
+	for toStoreID, toNodeID := range storeNodes {
+		if _, ok := messageTypeCounts[toStoreID]; !ok {
+			messageTypeCounts[toStoreID] = make(map[raftpb.MessageType]int)
+		}
+
+		for fromStoreID, fromNodeID := range storeNodes {
+			baseReq := storage.RaftMessageRequest{
 				Message: raftpb.Message{
-					Type: raftpb.MsgHeartbeat,
 					From: uint64(fromStoreID),
 					To:   uint64(toStoreID),
 				},
@@ -146,8 +157,14 @@ func TestSendAndReceive(t *testing.T) {
 				},
 			}
 
-			if err := transports[fromNodeID].Send(req); err != nil {
-				t.Errorf("unable to send %s from %d to %d: %s", req.Message.Type, fromNodeID, toNodeID, err)
+			for _, messageType := range messageTypes {
+				req := baseReq
+				req.Message.Type = messageType
+
+				if err := transports[fromNodeID].Send(&req); err != nil {
+					t.Errorf("unable to send %s from %d to %d: %s", req.Message.Type, fromNodeID, toNodeID, err)
+				}
+				messageTypeCounts[toStoreID][req.Message.Type]++
 			}
 		}
 	}
@@ -157,22 +174,43 @@ func TestSendAndReceive(t *testing.T) {
 	// transports, so we just verify that the right number of messages
 	// end up in each channel.
 	for toStoreID := range storeNodes {
-		for range storeNodes {
-			select {
-			case req := <-channels[toStoreID].ch:
-				if req.Message.To != uint64(toStoreID) {
-					t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
+		func() {
+			for len(messageTypeCounts[toStoreID]) > 0 {
+				select {
+				case req := <-channels[toStoreID].ch:
+					if req.Message.To != uint64(toStoreID) {
+						t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
+					}
+
+					if typeCounts, ok := messageTypeCounts[toStoreID]; ok {
+						if _, ok := typeCounts[req.Message.Type]; ok {
+							typeCounts[req.Message.Type]--
+							if typeCounts[req.Message.Type] == 0 {
+								delete(typeCounts, req.Message.Type)
+							}
+						} else {
+							t.Errorf("expected %v to have key %v, but it did not", typeCounts, req.Message.Type)
+						}
+					} else {
+						t.Errorf("expected %v to have key %v, but it did not", messageTypeCounts, toStoreID)
+					}
+				case <-time.After(100 * time.Millisecond):
+					return
 				}
-			case <-time.After(5 * time.Second):
-				t.Fatal("timed out waiting for message")
 			}
-		}
+
+			delete(messageTypeCounts, toStoreID)
+		}()
 
 		select {
 		case req := <-channels[toStoreID].ch:
 			t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
-		default:
+		case <-time.After(100 * time.Millisecond):
 		}
+	}
+
+	if len(messageTypeCounts) > 0 {
+		t.Errorf("remaining messages expected: %v", messageTypeCounts)
 	}
 
 	// Real raft messages have different node/store/replica IDs.
