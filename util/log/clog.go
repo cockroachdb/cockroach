@@ -961,13 +961,6 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 // on disk I/O. The flushDaemon will block instead.
 const bufferSize = 256 * 1024
 
-// removeFiles clears all the log files.
-func (l *loggingT) removeFiles() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.removeFilesLocked()
-}
-
 func (l *loggingT) removeFilesLocked() error {
 	for s := FatalLog; s >= InfoLog; s-- {
 		if sb, ok := l.file[s].(*syncBuffer); ok {

@@ -69,14 +69,6 @@ type testSender struct {
 	store *Store
 }
 
-type requestUnion interface {
-	GetValue() interface{}
-}
-
-type responseAdder interface {
-	Add(reply roachpb.Response)
-}
-
 func (s *Store) testSender() client.Sender {
 	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 		if ba.RangeID == 0 {

@@ -697,17 +697,6 @@ func (g *Gossip) hasOutgoing(nodeID roachpb.NodeID) bool {
 	return g.outgoing.hasNode(nodeID)
 }
 
-// filterExtant removes any nodes from the supplied nodeSet which
-// are already connected to this node, either via outgoing or incoming
-// client connections.
-func (g *Gossip) filterExtant(nodes nodeSet) nodeSet {
-	return nodes.filter(func(a roachpb.NodeID) bool {
-		return !g.outgoing.hasNode(a)
-	}).filter(func(a roachpb.NodeID) bool {
-		return !g.incoming.hasNode(a)
-	})
-}
-
 // getNextBootstrapAddress returns the next available bootstrap
 // address by consulting the first non-exhausted resolver from the
 // slice supplied to the constructor or set using setBootstrap().

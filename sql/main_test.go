@@ -147,11 +147,6 @@ type testServer struct {
 	cleanupFns []func()
 }
 
-func setupTestServer(t *testing.T) *testServer {
-	ctx, _ := createTestServerContext()
-	return setupTestServerWithContext(t, ctx)
-}
-
 func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters

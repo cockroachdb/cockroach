@@ -14,6 +14,7 @@ cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
+cmd honnef.co/go/unused/cmd/unused
 github.com/Sirupsen/logrus 219c8cb75c258c552e999735be6df753ffc7afdc
 github.com/VividCortex/ewma c34099b489e4ac33ca8d8c5f9d29d6eeaf69f2ed
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
@@ -70,9 +71,10 @@ github.com/spf13/pflag 7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7
 github.com/tebeka/go2xunit 304a3dad367b395460778a969d87101b778b322f
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 golang.org/x/crypto 5dc8cb4b8a8eb076cbb5a06bc3b8682c15bdbbd3
-golang.org/x/net 08f168e593b5aab61849054b77981de812666697
+golang.org/x/net 3e5cd1ed149001198e582f9d3f5bfd564cde2896
 golang.org/x/text a71fd10341b064c10f4a81ceac72bcf70f26ea34
-golang.org/x/tools 2336c53cf04073efa9df218532d1fba3967d883b
-google.golang.org/grpc fea7689493da00c4590150b3534c256a962259d3
+golang.org/x/tools 48737e9c89cc5c10ef1a821ebe9ae2d01adb7f17
+google.golang.org/grpc 986912c9070a060e59e0f28ac7c87f89f72b9388
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
+honnef.co/go/unused 15fa1da06ea10734192ed051dd43c1b9d29306e5
