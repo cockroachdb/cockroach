@@ -118,7 +118,7 @@ module AdminViews {
           let fmt: (v: number) => string = d3.format(".1f");
           this._addChartSmall(Metrics.NewAxis.apply(this, latencySelectors)
           .format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
-          .title("Query Time (ms)")
+          .title("Query Time")
           .label("Milliseconds")
           .range([0]));
 
@@ -130,14 +130,14 @@ module AdminViews {
                 .title("CPU User %"),
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
                 .title("CPU Sys %")
-            ).format(d3.format(".2%")).title("Load").stacked(true)
+            ).format(d3.format(".2%")).title("CPU").stacked(true)
           );
 
           this._addChartSmall(
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
-                .title("Memory allocated")
-            ).format(Utils.Format.Bytes).title("Memory Usage")
+                .title("Memory")
+            ).format(Utils.Format.Bytes).title("Memory")
           );
 
           // TODO: add QPS on another axis
