@@ -54,6 +54,10 @@ const (
 	// TODO(tschottdorf): need to enforce at all times that this is much
 	// larger than the heartbeat interval used by the coordinator.
 	txnCleanupThreshold = time.Hour
+
+	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
+	// or intent byte age larger than the threshold queues the replica for GC.
+	considerThreshold = 10
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -111,10 +115,10 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	intentScore := repl.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
 	// Compute priority.
-	if gcScore >= 1 {
+	if gcScore >= considerThreshold {
 		priority += gcScore
 	}
-	if intentScore >= 1 {
+	if intentScore >= considerThreshold {
 		priority += intentScore
 	}
 	shouldQ = priority > 0

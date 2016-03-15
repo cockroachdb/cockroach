@@ -609,7 +609,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 	// Add consistency check scanner.
-	s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+	s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
 	s.replicaConsistencyQueue = newReplicaConsistencyQueue(s.ctx.Gossip)
 	s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 

@@ -70,7 +70,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	bc := int64(gcByteCountNormalization)
 	ttl := int64(policy.TTLSeconds)
 
-	now := makeTS(iaN, 0) // at time of stats object
+	now := makeTS(considerThreshold*iaN, 0) // at time of stats object
 
 	testCases := []struct {
 		gcBytes     int64
@@ -106,13 +106,13 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		// Queues solely because of gc'able bytes.
 		{bc, 5 * bc * ttl, 10 * ia, 0, now, true, 5},
 		// A contribution of 1 from gc, 10/5 from intents.
-		{bc, bc * ttl, 5, 10 * ia, now, true, 1 + 2},
+		{bc, bc * ttl, 5, 10 * ia, now, true, (1 + 2)},
 
 		// Some tests where the ages increase since we call shouldNow with
 		// a later timestamp.
 
 		// One normalized unit of unaged gc'able bytes at time zero.
-		{ttl * bc, 0, 0, 0, roachpb.ZeroTimestamp, true, float64(now.WallTime) / 1E9},
+		{ttl * bc, 0, 0, 0, roachpb.ZeroTimestamp, true, float64(now.WallTime) / (1E9 * considerThreshold)},
 
 		// 2 intents aging from zero to now (which is exactly the intent age
 		// normalization).
@@ -129,8 +129,8 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		stats := engine.MVCCStats{
 			KeyBytes:        test.gcBytes,
 			IntentCount:     test.intentCount,
-			IntentAge:       test.intentAge,
-			GCBytesAge:      test.gcBytesAge,
+			IntentAge:       test.intentAge * considerThreshold,
+			GCBytesAge:      test.gcBytesAge * considerThreshold,
 			LastUpdateNanos: test.now.WallTime,
 		}
 		if err := tc.rng.stats.SetMVCCStats(tc.rng.store.Engine(), stats); err != nil {
@@ -140,8 +140,8 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
-		if math.Abs(priority-test.priority) > 0.00001 {
-			t.Errorf("%d: priority expected %f; got %f", i, test.priority, priority)
+		if scaledExpPri := test.priority * considerThreshold; math.Abs(priority-scaledExpPri) > 0.00001 {
+			t.Errorf("%d: priority expected %f; got %f", i, scaledExpPri, priority)
 		}
 	}
 }
