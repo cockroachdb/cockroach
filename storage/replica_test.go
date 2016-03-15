@@ -3333,11 +3333,11 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	var origSeen, newSeen bool
 
 	for !(origSeen && newSeen) {
-		clonedRLArgs := util.CloneProto(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := *rlArgs
 
 		reply, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, clonedRLArgs)
+		}, &clonedRLArgs)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -3428,11 +3428,11 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan without intents.
 	for _, c := range testCases {
-		clonedRLArgs := util.CloneProto(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := *rlArgs
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
 		reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, clonedRLArgs)
+		}, &clonedRLArgs)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -3457,11 +3457,11 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 
 	// Test ReverseScan with intents.
 	for _, c := range testCases {
-		clonedRLArgs := util.CloneProto(rlArgs).(*roachpb.RangeLookupRequest)
+		clonedRLArgs := *rlArgs
 		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
 		reply, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
-		}, clonedRLArgs)
+		}, &clonedRLArgs)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}

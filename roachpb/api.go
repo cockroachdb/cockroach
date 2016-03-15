@@ -109,6 +109,8 @@ type Request interface {
 	SetHeader(Span)
 	// Method returns the request method.
 	Method() Method
+	// ShallowCopy returns a shallow copy of the receiver.
+	ShallowCopy() Request
 	createReply() Response
 	flags() int
 }
@@ -309,13 +311,13 @@ func (sr *ScanRequest) SetBound(bound int64) {
 }
 
 // GetBound returns the MaxResults field in ReverseScanRequest.
-func (sr *ReverseScanRequest) GetBound() int64 {
-	return sr.MaxResults
+func (rsr *ReverseScanRequest) GetBound() int64 {
+	return rsr.MaxResults
 }
 
 // SetBound sets the MaxResults field in ReverseScanRequest.
-func (sr *ReverseScanRequest) SetBound(bound int64) {
-	sr.MaxResults = bound
+func (rsr *ReverseScanRequest) SetBound(bound int64) {
+	rsr.MaxResults = bound
 }
 
 // Countable is implemented by response types which have a number of
@@ -408,6 +410,156 @@ func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
 func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
+
+// ShallowCopy implements the Request interface.
+func (gr *GetRequest) ShallowCopy() Request {
+	shallowCopy := *gr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (pr *PutRequest) ShallowCopy() Request {
+	shallowCopy := *pr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (cpr *ConditionalPutRequest) ShallowCopy() Request {
+	shallowCopy := *cpr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (ir *IncrementRequest) ShallowCopy() Request {
+	shallowCopy := *ir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (dr *DeleteRequest) ShallowCopy() Request {
+	shallowCopy := *dr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (drr *DeleteRangeRequest) ShallowCopy() Request {
+	shallowCopy := *drr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (sr *ScanRequest) ShallowCopy() Request {
+	shallowCopy := *sr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (rsr *ReverseScanRequest) ShallowCopy() Request {
+	shallowCopy := *rsr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (ccr *CheckConsistencyRequest) ShallowCopy() Request {
+	shallowCopy := *ccr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (btr *BeginTransactionRequest) ShallowCopy() Request {
+	shallowCopy := *btr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (etr *EndTransactionRequest) ShallowCopy() Request {
+	shallowCopy := *etr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (asr *AdminSplitRequest) ShallowCopy() Request {
+	shallowCopy := *asr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (amr *AdminMergeRequest) ShallowCopy() Request {
+	shallowCopy := *amr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (htr *HeartbeatTxnRequest) ShallowCopy() Request {
+	shallowCopy := *htr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (gcr *GCRequest) ShallowCopy() Request {
+	shallowCopy := *gcr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (ptr *PushTxnRequest) ShallowCopy() Request {
+	shallowCopy := *ptr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (rlr *RangeLookupRequest) ShallowCopy() Request {
+	shallowCopy := *rlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (rir *ResolveIntentRequest) ShallowCopy() Request {
+	shallowCopy := *rir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (rirr *ResolveIntentRangeRequest) ShallowCopy() Request {
+	shallowCopy := *rirr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (nr *NoopRequest) ShallowCopy() Request {
+	shallowCopy := *nr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (mr *MergeRequest) ShallowCopy() Request {
+	shallowCopy := *mr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (tlr *TruncateLogRequest) ShallowCopy() Request {
+	shallowCopy := *tlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (llr *LeaderLeaseRequest) ShallowCopy() Request {
+	shallowCopy := *llr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
+	shallowCopy := *ccr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (vcr *VerifyChecksumRequest) ShallowCopy() Request {
+	shallowCopy := *vcr
+	return &shallowCopy
+}
 
 func (*GetRequest) createReply() Response                { return &GetResponse{} }
 func (*PutRequest) createReply() Response                { return &PutResponse{} }
