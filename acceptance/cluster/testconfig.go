@@ -44,7 +44,6 @@ func DefaultConfigs() []TestConfig {
 				},
 			},
 		},
-		/*  TODO(bram): #4445 skipping these test cases until is resolved.
 		{
 			Name:     "5x1",
 			Duration: DefaultDuration,
@@ -57,7 +56,7 @@ func DefaultConfigs() []TestConfig {
 			},
 		},
 		{
-			Name: "7x1",
+			Name:     "7x1",
 			Duration: DefaultDuration,
 			Stall:    DefaultStall,
 			Nodes: []NodeConfig{
@@ -66,7 +65,7 @@ func DefaultConfigs() []TestConfig {
 					Stores: []StoreConfig{{Count: 1}},
 				},
 			},
-		},*/
+		},
 	}
 }
 
