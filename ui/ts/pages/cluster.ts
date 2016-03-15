@@ -316,7 +316,7 @@ module AdminViews {
         if (detail === "events") {
           primaryContent = m(".section.table", m.component(Components.Events, 10));
         } else  {
-          primaryContent = m(".section.charts", [
+          primaryContent = m(".section.overview", [
             ctrl.RenderGraphsSmall(),
             ctrl.RenderGraphs(),
           ]);
