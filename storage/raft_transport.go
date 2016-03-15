@@ -179,18 +179,22 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 		}
 		return
 	}
-	client := NewMultiRaftClient(conn)
+
+	makeStream := func(ctx context.Context) (MultiRaft_RaftMessageClient, error) {
+		client := NewMultiRaftClient(conn)
+		if log.V(1) {
+			log.Infof("establishing Raft transport stream to node %d at %s", nodeID, addr)
+		}
+		return client.RaftMessage(ctx)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if log.V(1) {
-		log.Infof("establishing Raft transport stream to node %d at %s", nodeID, addr)
-	}
-	stream, err := client.RaftMessage(ctx)
+	stream, err := makeStream(ctx)
 	if err != nil {
 		if log.V(1) {
 			log.Errorf("failed to establish Raft transport stream to node %d at %s: %s", nodeID, addr, err)
 		}
-		return
 	}
 
 	errCh := make(chan error, 1)
@@ -225,9 +229,25 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
-			if err := stream.Send(req); err != nil {
-				log.Error(err)
-				return
+			if len(req.Message.Snapshot.Data) > 0 {
+				go func() {
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					stream, err := makeStream(ctx)
+					if err != nil {
+						if log.V(1) {
+							log.Errorf("failed to establish Raft transport stream to node %d at %s: %s", nodeID, addr, err)
+						}
+					}
+					if err := stream.Send(req); err != nil {
+						log.Error(err)
+					}
+				}()
+			} else {
+				if err := stream.Send(req); err != nil {
+					log.Error(err)
+					return
+				}
 			}
 		}
 	}
