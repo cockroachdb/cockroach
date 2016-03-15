@@ -166,6 +166,13 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder.AddStore(store2)
 	recorder.NodeStarted(nodeDesc, 50)
 
+	// Ensure the metric system's view of time does not advance during this test
+	// as the test expects time to not advance too far which would age the actual
+	// data (e.g. in histogram's) unexpectedly.
+	defer metric.TestingSetNow(func() time.Time {
+		return time.Unix(0, manual.UnixNano()).UTC()
+	})()
+
 	// Create a flat array of registries, along with metadata for each, to help
 	// generate expected results.
 	regList := []struct {

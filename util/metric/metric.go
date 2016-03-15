@@ -80,6 +80,16 @@ var _ periodic = &Rate{}
 
 var now = timeutil.Now
 
+// TestingSetNow changes the clock used by the metric system. For use by
+// testing to precisely control the clock.
+func TestingSetNow(f func() time.Time) func() {
+	origNow := now
+	now = f
+	return func() {
+		now = origNow
+	}
+}
+
 func maybeTick(m periodic) {
 	for m.nextTick().Before(now()) {
 		m.tick()
