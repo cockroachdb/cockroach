@@ -40,8 +40,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	roachClient "github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -64,6 +66,8 @@ var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if i
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
+
+var maxRangeBytes = int64(config.DefaultZoneConfig().RangeMaxBytes)
 
 // keyLen is the length (in bits) of the generated CA and node certs.
 const keyLen = 1024
@@ -265,7 +269,9 @@ func (l *LocalCluster) createNetwork() {
 // create the volumes container that keeps all of the volumes used by
 // the cluster.
 func (l *LocalCluster) initCluster() {
-	log.Infof("Initializing Cluster:\n%s", l.config.PrettyString())
+	configJSON, err := json.Marshal(l.config)
+	maybePanic(err)
+	log.Infof("Initializing Cluster %s:\n%s", l.config.Name, configJSON)
 	l.panicOnStop()
 
 	// Create the temporary certs directory in the current working
@@ -274,7 +280,6 @@ func (l *LocalCluster) initCluster() {
 	// bound has a parent directory that exists in the boot2docker VM
 	// then that directory is bound into the container. In particular,
 	// that means that binds of /tmp and /var will be problematic.
-	var err error
 	l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
 	maybePanic(err)
 
@@ -424,8 +429,13 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--host=" + node.nodeStr,
 		"--alsologtostderr=INFO",
 	}
+
 	for _, store := range node.stores {
-		cmd = append(cmd, fmt.Sprintf("--store=%s", store.dataStr))
+		storeSpec := server.StoreSpec{
+			Path:        store.dataStr,
+			SizeInBytes: int64(store.config.MaxRanges) * maxRangeBytes,
+		}
+		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
 	// Append --join flag for all nodes except first.
 	if node.index > 0 {
