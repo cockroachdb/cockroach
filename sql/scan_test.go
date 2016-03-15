@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-// genRanges generates ordered, non-overlaping ranges with values in [0 and valRange).
-func genRanges(num int, valRange int) [][2]int {
+// genAs returns num random distinct ordered values in [0, valRange).
+func genValues(num, valRange int) []int {
 	// Generate num _distinct_ values. We do this by generating a partial permutation.
 	perm := make([]int, valRange)
 	for i := 0; i < valRange; i++ {
@@ -46,42 +46,51 @@ func genRanges(num int, valRange int) [][2]int {
 	perm = perm[:num]
 	// Sort the values. These distinct values will be the starts of our ranges.
 	sort.Ints(perm)
-	res := make([][2]int, num)
-	for i := 0; i < num; i++ {
-		res[i][0] = perm[i]
-		next := valRange
-		if i < num-1 {
-			next = perm[i+1]
-		}
-		// Pick a random end in the range [perm[i], next).
-		res[i][1] = perm[i] + rand.Int()%(next-perm[i])
-	}
-	return res
+	return perm
 }
 
-func testScanBatchQuery(t *testing.T, db *sql.DB, numRanges int, numRows int, reverse bool) {
-	ranges := genRanges(numRanges, numRows)
-	expected := []int(nil)
+// testScanBatchQuery runs a query of the form
+//  SELECT a,B FROM test.scan WHERE a IN (1,5,3..) AND b >= 5 AND b <= 10
+// numSpans controls the number of possible values for a.
+func testScanBatchQuery(t *testing.T, db *sql.DB, numSpans, numAs, numBs int, reverse bool) {
+	// Generate numSpans values for A
+	aVals := genValues(numSpans, numAs)
+
+	// Generate a random range for B
+	bStart := rand.Int() % numBs
+	bEnd := bStart + rand.Int()%(numBs-bStart)
+
+	var expected [][2]int
+	for _, a := range aVals {
+		for b := bStart; b <= bEnd; b++ {
+			expected = append(expected, [2]int{a, b})
+		}
+	}
+
+	if len(aVals) == 0 {
+		// No filter on a.
+		for a := 0; a < numAs; a++ {
+			for b := bStart; b <= bEnd; b++ {
+				expected = append(expected, [2]int{a, b})
+			}
+		}
+	}
+
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT k FROM test.scan`)
-	for i, r := range ranges {
+	buf.WriteString(fmt.Sprintf("SELECT a,b FROM test.scan WHERE b >= %d AND b <= %d", bStart, bEnd))
+	for i, a := range aVals {
 		if i == 0 {
-			buf.WriteString(" WHERE ")
+			buf.WriteString(fmt.Sprintf(" AND a IN (%d", a))
 		} else {
-			buf.WriteString(" OR ")
-		}
-		buf.WriteString(fmt.Sprintf(`(k >= %d AND k <= %d)`, r[0], r[1]))
-		for j := r[0]; j <= r[1]; j++ {
-			expected = append(expected, j)
+			buf.WriteString(fmt.Sprintf(",%d", a))
 		}
 	}
-	if len(ranges) == 0 {
-		for j := 0; j < numRows; j++ {
-			expected = append(expected, j)
-		}
+	if len(aVals) > 0 {
+		buf.WriteString(")")
 	}
+
 	if reverse {
-		buf.WriteString(" ORDER BY k DESC")
+		buf.WriteString(" ORDER BY a DESC, b DESC")
 		for i, j := 0, len(expected)-1; i < j; i, j = i+1, j-1 {
 			expected[i], expected[j] = expected[j], expected[i]
 		}
@@ -95,13 +104,14 @@ func testScanBatchQuery(t *testing.T, db *sql.DB, numRanges int, numRows int, re
 		if n >= len(expected) {
 			t.Fatalf("too many rows (expected %d)", len(expected))
 		}
-		var val int
-		err = rows.Scan(&val)
+		var a, b int
+		err = rows.Scan(&a, &b)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if val != expected[n] {
-			t.Errorf("row %d: invalid value %d (expected %d)", n, val, expected[n])
+		if a != expected[n][0] || b != expected[n][1] {
+			t.Errorf("row %d: invalid values %d,%d (expected %d,%d)",
+				n, a, b, expected[n][0], expected[n][1])
 		}
 		n++
 	}
@@ -140,26 +150,29 @@ func TestScanBatches(t *testing.T) {
 	restore := csql.SetKVBatchSize(10)
 	defer restore()
 
-	numRows := 100
+	numAs := 5
+	numBs := 20
 
 	if _, err := db.Exec(`DROP TABLE IF EXISTS test.scan`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE test.scan (k INT PRIMARY KEY, v STRING)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE test.scan (a INT, b INT, v STRING, PRIMARY KEY (a, b))`); err != nil {
 		t.Fatal(err)
 	}
 
 	var buf bytes.Buffer
 	buf.WriteString(`INSERT INTO test.scan VALUES `)
-	for i := 0; i < numRows; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		if i%2 == 0 {
-			fmt.Fprintf(&buf, "(%d, 'str%d')", i, i)
-		} else {
-			// Every other row doesn't get the string value (to have NULLs).
-			fmt.Fprintf(&buf, "(%d, NULL)", i)
+	for a := 0; a < numAs; a++ {
+		for b := 0; b < numBs; b++ {
+			if a+b > 0 {
+				buf.WriteString(", ")
+			}
+			if (a+b)%2 == 0 {
+				fmt.Fprintf(&buf, "(%d, %d, 'str%d%d')", a, b, a, b)
+			} else {
+				// Every other row doesn't get the string value (to have NULLs).
+				fmt.Fprintf(&buf, "(%d, %d, NULL)", a, b)
+			}
 		}
 	}
 	if _, err := db.Exec(buf.String()); err != nil {
@@ -167,15 +180,15 @@ func TestScanBatches(t *testing.T) {
 	}
 
 	// The table will have one key for the even rows, and two keys for the odd rows.
-	batchSizes := []int{1, 2, 3, 5, 10, 13, 100, 3*numRows/2 - 1, 3 * numRows / 2, 3*numRows/2 + 1}
-	// We can test with at most one one span for now (see kvFetcher.fetch)
-	numSpanValues := []int{0, 1}
+	numKeys := 3 * numAs * numBs / 2
+	batchSizes := []int{1, 2, 3, 5, 10, 13, 100, numKeys - 1, numKeys, numKeys + 1}
+	numSpanValues := []int{0, 1, 2, 3}
 
 	for _, batch := range batchSizes {
 		csql.SetKVBatchSize(batch)
 		for _, numSpans := range numSpanValues {
-			testScanBatchQuery(t, db, numSpans, numRows, false)
-			testScanBatchQuery(t, db, numSpans, numRows, true)
+			testScanBatchQuery(t, db, numSpans, numAs, numBs, false)
+			testScanBatchQuery(t, db, numSpans, numAs, numBs, true)
 		}
 	}
 
