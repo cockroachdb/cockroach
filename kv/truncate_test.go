@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func TestTruncate(t *testing.T) {
@@ -92,8 +92,9 @@ func TestTruncate(t *testing.T) {
 		goldenOriginal := roachpb.BatchRequest{}
 		for _, ks := range test.keys {
 			if len(ks[1]) > 0 {
-				goldenOriginal.Add(&roachpb.ScanRequest{
-					Span: roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
+				goldenOriginal.Add(&roachpb.ResolveIntentRangeRequest{
+					Span:      roachpb.Span{Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1])},
+					IntentTxn: roachpb.TxnMeta{ID: uuid.NewV4()},
 				})
 			} else {
 				goldenOriginal.Add(&roachpb.GetRequest{
@@ -102,7 +103,10 @@ func TestTruncate(t *testing.T) {
 			}
 		}
 
-		original := *util.CloneProto(&goldenOriginal).(*roachpb.BatchRequest)
+		original := roachpb.BatchRequest{Requests: make([]roachpb.RequestUnion, len(goldenOriginal.Requests))}
+		for i, request := range goldenOriginal.Requests {
+			original.Requests[i].SetValue(request.GetInner().ShallowCopy())
+		}
 
 		desc := &roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),

@@ -93,14 +93,14 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			ba.Requests[pos] = union
 		} else {
 			// Keep the old one. If we must adjust the header, must copy.
-			// TODO(tschottdorf): this could wind up cloning big chunks of data.
-			// Can optimize by creating a new Request manually, but with the old
-			// data.
-			if newHeader.Equal(origRequests[pos].GetInner().Header()) {
+			if inner := origRequests[pos].GetInner(); newHeader.Equal(inner.Header()) {
 				ba.Requests[pos] = origRequests[pos]
 			} else {
-				ba.Requests[pos] = *util.CloneProto(&origRequests[pos]).(*roachpb.RequestUnion)
-				ba.Requests[pos].GetInner().SetHeader(newHeader)
+				shallowCopy := inner.ShallowCopy()
+				shallowCopy.SetHeader(newHeader)
+				if union := &ba.Requests[pos]; !union.SetInner(shallowCopy) {
+					panic(fmt.Sprintf("%T excludes %T", union, shallowCopy))
+				}
 			}
 		}
 		if err != nil {
