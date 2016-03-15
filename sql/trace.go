@@ -60,12 +60,14 @@ func (n *explainTraceNode) Next() bool {
 		var vals debugValues
 		if !n.plan.Next() {
 			n.exhausted = true
+			sp := opentracing.SpanFromContext(n.txn.Context)
 			if pErr := n.PErr(); pErr != nil {
-				n.txn.Trace.LogEvent(pErr.GoError().Error())
+				sp.LogEvent(pErr.GoError().Error())
 			}
-			n.txn.Trace.LogEvent("tracing completed")
-			n.txn.Trace.Finish()
-			n.txn.Trace = nil
+			sp.LogEvent("tracing completed")
+			sp.Finish()
+			sp = nil
+			n.txn.Context = opentracing.ContextWithSpan(n.txn.Context, nil)
 		} else {
 			vals = n.plan.DebugValues()
 		}

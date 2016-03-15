@@ -450,7 +450,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}()
 	}
 	if br.Txn.Status != roachpb.PENDING {
-		tc.cleanupTxn(sp, *br.Txn)
+		tc.cleanupTxn(ctx, *br.Txn)
 	}
 	return br, nil
 }
@@ -506,8 +506,9 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 // cleanupTxn is called when a transaction ends. The transaction record is
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
-func (tc *TxnCoordSender) cleanupTxn(trace opentracing.Span, txn roachpb.Transaction) {
-	trace.LogEvent("coordinator stops")
+func (tc *TxnCoordSender) cleanupTxn(ctx context.Context, txn roachpb.Transaction) {
+	// TODO(tschottdorf): re-instantiate
+	// trace.LogEvent("coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[*txn.ID]
@@ -563,15 +564,16 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	}()
 
 	var closer <-chan struct{}
-	var sp opentracing.Span
+	// TODO(tschottdorf): this should join to the trace of the request
+	// which starts this goroutine.
+	sp := tc.tracer.StartSpan(opHeartbeatLoop)
+	defer sp.Finish()
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+
 	{
 		tc.Lock()
 		txnMeta := tc.txns[txnID] // do not leak to outer scope
 		closer = txnMeta.txnEnd
-		// TODO(tschottdorf): this should join to the trace of the request
-		// which starts this goroutine.
-		sp = tc.tracer.StartSpan(opHeartbeatLoop)
-		defer sp.Finish()
 		tc.Unlock()
 	}
 	if closer == nil {
@@ -579,12 +581,11 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 		// goroutine gets a chance to start.
 		return
 	}
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
 		case <-tickChan:
-			if !tc.heartbeat(txnID, sp, ctx) {
+			if !tc.heartbeat(ctx, txnID) {
 				return
 			}
 		case <-closer:
@@ -597,7 +598,7 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	}
 }
 
-func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx context.Context) bool {
+func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	tc.Lock()
 	proceed := true
 	txnMeta := tc.txns[txnID]
@@ -658,7 +659,8 @@ func (tc *TxnCoordSender) heartbeat(txnID uuid.UUID, trace opentracing.Span, ctx
 	hb.Key = txn.Key
 	ba.Add(hb)
 
-	trace.LogEvent("heartbeat")
+	// TODO(tschottdorf): re-instantiate
+	// trace.LogEvent("heartbeat")
 	_, err := tc.wrapped.Send(ctx, ba)
 	// If the transaction is not in pending state, then we can stop
 	// the heartbeat. It's either aborted or committed, and we resolve
@@ -707,7 +709,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
-		defer tc.cleanupTxn(sp, *pErr.GetTxn())
+		defer tc.cleanupTxn(ctx, *pErr.GetTxn())
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:
@@ -727,7 +729,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Priority = pErr.GetTxn().Priority
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
-		defer tc.cleanupTxn(sp, *newTxn)
+		defer tc.cleanupTxn(ctx, *newTxn)
 	case *roachpb.TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.

@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // newNodeTestContext returns a rpc.Context for testing.
@@ -71,9 +69,7 @@ func TestInvalidAddrLength(t *testing.T) {
 
 	// The provided replicas is nil, so its length will be always less than the
 	// specified response number
-	sp := tracing.NewTracer().StartSpan("node test")
-	defer sp.Finish()
-	opts := SendOptions{Trace: sp}
+	opts := SendOptions{Context: context.Background()}
 	ret, err := send(opts, nil, roachpb.BatchRequest{}, nil)
 
 	// the expected return is nil and SendError
@@ -94,14 +90,11 @@ func TestSendToOneClient(t *testing.T) {
 	s, ln := newTestServer(t, ctx)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	sp := tracing.NewTracer().StartSpan("node test")
-	defer sp.Finish()
-
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
-		Trace:           sp,
+		Context:         context.Background(),
 	}
 	reply, err := sendBatch(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
@@ -150,14 +143,11 @@ func TestRetryableError(t *testing.T) {
 	// Wait until the client becomes unhealthy.
 	waitForConnState(grpc.TransientFailure)
 
-	sp := tracing.NewTracer().StartSpan("node test")
-	defer sp.Finish()
-
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Millisecond,
 		Timeout:         100 * time.Millisecond,
-		Trace:           sp,
+		Context:         context.Background(),
 	}
 	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err != nil {
 		retryErr, ok := err.(retry.Retryable)
@@ -183,18 +173,15 @@ func TestUnretryableError(t *testing.T) {
 	nodeContext := newNodeTestContext(nil, stopper)
 	_, ln := newTestServer(t, nodeContext)
 
-	sp := tracing.NewTracer().StartSpan("node test")
-	defer sp.Finish()
-
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 1 * time.Second,
 		Timeout:         10 * time.Second,
-		Trace:           sp,
+		Context:         context.Background(),
 	}
 
 	sendOneFn = func(_ batchClient, _ time.Duration,
-		_ *rpc.Context, _ opentracing.Span, done chan batchCall) {
+		_ *rpc.Context, done chan batchCall) {
 		done <- batchCall{
 			reply: &roachpb.BatchResponse{},
 			err:   errors.New("unretryable"),
@@ -231,14 +218,11 @@ func TestClientNotReady(t *testing.T) {
 	}
 	defer ln.Close()
 
-	sp := tracing.NewTracer().StartSpan("node test")
-	defer sp.Finish()
-
 	opts := SendOptions{
 		Ordering:        orderStable,
 		SendNextTimeout: 100 * time.Nanosecond,
 		Timeout:         100 * time.Nanosecond,
-		Trace:           sp,
+		Context:         context.Background(),
 	}
 
 	// Send RPC to an address where no server is running.
@@ -349,19 +333,16 @@ func TestComplexScenarios(t *testing.T) {
 			serverAddrs = append(serverAddrs, ln.Addr())
 		}
 
-		sp := tracing.NewTracer().StartSpan("node test")
-		defer sp.Finish()
-
 		opts := SendOptions{
 			Ordering:        orderStable,
 			SendNextTimeout: 1 * time.Second,
 			Timeout:         10 * time.Second,
-			Trace:           sp,
+			Context:         context.Background(),
 		}
 
 		// Mock sendOne.
 		sendOneFn = func(client batchClient, _ time.Duration,
-			_ *rpc.Context, _ opentracing.Span, done chan batchCall) {
+			_ *rpc.Context, done chan batchCall) {
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {
 				if serverAddr.String() == client.remoteAddr {

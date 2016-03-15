@@ -23,7 +23,6 @@ import (
 	"os"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -49,6 +48,7 @@ const (
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
+	context.Context // must not be nil
 	// Ordering indicates how the available endpoints are ordered when
 	// deciding which to send to (if there are more than one).
 	Ordering orderingPolicy
@@ -58,8 +58,6 @@ type SendOptions struct {
 	// Timeout is the maximum duration of an RPC before failure.
 	// 0 for no timeout.
 	Timeout time.Duration
-	// Information about the request is added to this trace. Must not be nil.
-	Trace opentracing.Span
 }
 
 // An rpcError indicates a failure to send the RPC. rpcErrors are
@@ -105,7 +103,6 @@ type batchCall struct {
 // the available endpoints less the number of required replies.
 func send(opts SendOptions, replicas ReplicaSlice,
 	args roachpb.BatchRequest, rpcContext *rpc.Context) (*roachpb.BatchResponse, error) {
-	sp := opts.Trace // must not be nil
 
 	if len(replicas) < 1 {
 		return nil, roachpb.NewSendError(
@@ -160,7 +157,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, rpcContext, sp, done)
+	sendOneFn(orderedClients[0], opts.Timeout, rpcContext, done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -175,8 +172,8 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
-				sp.LogEvent("timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, rpcContext, sp, done)
+				log.Trace(opts.Context, "timeout, trying next peer")
+				sendOneFn(orderedClients[0], opts.Timeout, rpcContext, done)
 				orderedClients = orderedClients[1:]
 			}
 
@@ -210,8 +207,8 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			}
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
-				sp.LogEvent("error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, rpcContext, sp, done)
+				log.Trace(opts.Context, "error, trying next peer")
+				sendOneFn(orderedClients[0], opts.Timeout, rpcContext, done)
 				orderedClients = orderedClients[1:]
 			}
 		}
@@ -232,12 +229,11 @@ var sendOneFn = sendOne
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
 func sendOne(client batchClient, timeout time.Duration,
-	rpcContext *rpc.Context, trace opentracing.Span, done chan batchCall) {
+	rpcContext *rpc.Context, done chan batchCall) {
 	addr := client.remoteAddr
 	if log.V(2) {
 		log.Infof("sending request to %s: %+v", addr, client.args)
 	}
-	trace.LogEvent(fmt.Sprintf("sending to %s", addr))
 
 	// TODO(tamird/tschottdorf): pass this in from DistSender.
 	ctx := context.TODO()

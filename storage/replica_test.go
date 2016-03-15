@@ -481,9 +481,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 
 	{
-		sp := tc.rng.store.Tracer().StartSpan("test")
-		defer sp.Finish()
-		pErr := tc.rng.redirectOnOrAcquireLeaderLease(sp, tc.rng.context())
+		pErr := tc.rng.redirectOnOrAcquireLeaderLease(tc.rng.context())
 		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaderError); !ok || lErr == nil {
 			t.Fatalf("wanted NotLeaderError, got %s", pErr)
 		}
@@ -510,9 +508,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	rng.mu.Unlock()
 
 	{
-		sp := tc.rng.store.Tracer().StartSpan("test")
-		defer sp.Finish()
-		if _, ok := rng.redirectOnOrAcquireLeaderLease(sp, tc.rng.context()).GetDetail().(*roachpb.NotLeaderError); !ok {
+		if _, ok := rng.redirectOnOrAcquireLeaderLease(tc.rng.context()).GetDetail().(*roachpb.NotLeaderError); !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaderError{}, err)
 		}
 	}

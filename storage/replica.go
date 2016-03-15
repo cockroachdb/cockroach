@@ -32,7 +32,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -501,7 +500,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Replica) redirectOnOrAcquireLeaderLease(trace opentracing.Span, ctx context.Context) *roachpb.Error {
+func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.Error {
 	// Loop until the lease is held or the replica ascertains the actual
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
@@ -515,8 +514,10 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(trace opentracing.Span, ctx con
 			return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 		}
 
+		// TODO(tschottdorf): reinstante
+		// trace.LogEvent(fmt.Sprintf("request leader lease (attempt #%d)", attempt))
+
 		// Otherwise, no active lease: Request renewal if a renewal is not already pending.
-		trace.LogEvent(fmt.Sprintf("request leader lease (attempt #%d)", attempt))
 		llChan := r.requestLeaderLease(timestamp)
 
 		// Wait for the leader lease to finish, or the context to expire.
@@ -854,7 +855,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 	sp.SetOperationName(reflect.TypeOf(args).String())
 
 	// Admin commands always require the leader lease.
-	if pErr := r.redirectOnOrAcquireLeaderLease(sp, ctx); pErr != nil {
+	if pErr := r.redirectOnOrAcquireLeaderLease(ctx); pErr != nil {
 		return nil, pErr
 	}
 
@@ -895,7 +896,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 
 	// If the read is consistent, the read requires the leader lease.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		if pErr = r.redirectOnOrAcquireLeaderLease(sp, ctx); pErr != nil {
+		if pErr = r.redirectOnOrAcquireLeaderLease(ctx); pErr != nil {
 			return nil, pErr
 		}
 	}
@@ -970,7 +971,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	}()
 
 	// This replica must have leader lease to process a write.
-	if pErr = r.redirectOnOrAcquireLeaderLease(sp, ctx); pErr != nil {
+	if pErr = r.redirectOnOrAcquireLeaderLease(ctx); pErr != nil {
 		return nil, pErr
 	}
 
@@ -1710,9 +1711,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 	var pErr *roachpb.Error
 	if !r.store.Stopper().RunTask(func() {
 		// Check for or obtain the lease, if none active.
-		sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-		defer cleanupSp()
-		pErr = r.redirectOnOrAcquireLeaderLease(sp, ctx)
+		pErr = r.redirectOnOrAcquireLeaderLease(ctx)
 		hasLease = pErr == nil
 		if pErr != nil {
 			switch e := pErr.GetDetail().(type) {
