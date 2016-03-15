@@ -191,6 +191,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// values. Intents older than the intent age threshold are sent for
 	// resolution and values after the MVCC metadata, and possible
 	// intent, are sent for garbage collection.
+	var intentCount int
 	processKeysAndValues := func() {
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
@@ -210,6 +211,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 							TxnMeta: *meta.Txn,
 						}
 						txnMap[txnID] = txn
+						intentCount++
 						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
@@ -253,6 +255,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
+	log.Infof("gc queue: assembled %d transactions from %d old intents; found %d gc'able keys", len(txnMap), intentCount, len(gcArgs.Keys))
 
 	txnKeys, err := processTransactionTable(repl, txnMap, txnExp)
 	if err != nil {
@@ -268,6 +271,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
+	log.Infof("gc queue: pushing %d txns", len(txnMap))
 	for _, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
 			continue
@@ -286,6 +290,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 			}
 		}
 	}
+	log.Infof("gc queue: resolving %d intents", len(intents))
 
 	if pErr := repl.store.intentResolver.resolveIntents(repl.context(), repl, intents,
 		true /* wait */, false /* !poison */); pErr != nil {
@@ -294,7 +299,10 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Deal with any leftover sequence cache keys. There shouldn't be many of
 	// them.
-	gcArgs.Keys = append(gcArgs.Keys, processSequenceCache(repl, now, txnExp, txnMap)...)
+	leftoverSeqCacheKeys := processSequenceCache(repl, now, txnExp, txnMap)
+	log.Infof("gc queue: collected %d leftover sequence cache keys", leftoverSeqCacheKeys)
+	gcArgs.Keys = append(gcArgs.Keys, leftoverSeqCacheKeys...)
+	log.Infof("gc queue: sending gc request for %d keys", len(gcArgs.Keys))
 
 	var ba roachpb.BatchRequest
 	// Technically not needed since we're talking directly to the Range.
@@ -318,7 +326,11 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 	snap := r.store.Engine().NewSnapshot()
 	defer snap.Close()
 
+	var numResolveAttempts, numQueuedPushes int
 	var gcKeys []roachpb.GCRequest_GCKey
+	defer func() {
+		log.Infof("gc queue: attempted to resolve %d intents of %d gc'able transactions; queued %d txns for push", numResolveAttempts, len(gcKeys), numQueuedPushes)
+	}()
 	handleOne := func(kv roachpb.KeyValue) error {
 		var txn roachpb.Transaction
 		if err := kv.Value.GetProto(&txn); err != nil {
@@ -342,6 +354,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 			// TODO(tschottdorf): refactor so that we can GC PENDING entries
 			// in the same cycle, but keeping the calls to pushTxn in a central
 			// location (keeping it easy to batch them up in the future).
+			numQueuedPushes++
 			txnMap[txnID] = &txn
 			return nil
 		case roachpb.ABORTED:
@@ -351,6 +364,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 			// Note: Most aborted transaction weren't aborted by their client,
 			// but instead by the coordinator - those will not have any intents
 			// persisted, though they still might exist in the system.
+			numResolveAttempts += len(txn.Intents)
 			if err := r.store.intentResolver.resolveIntents(r.context(), r,
 				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
@@ -358,6 +372,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 		case roachpb.COMMITTED:
 			// It's committed, so it doesn't need a push but we can only
 			// GC it after its intents are resolved.
+			numResolveAttempts += len(txn.Intents)
 			if err := r.store.intentResolver.resolveIntents(r.context(), r,
 				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
