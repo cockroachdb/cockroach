@@ -98,6 +98,13 @@ func (n *scanNode) Values() parser.DTuple {
 	return n.row
 }
 
+func (n *scanNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+}
+
 func (n *scanNode) DebugValues() debugValues {
 	if n.explain != explainDebug {
 		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))

@@ -131,6 +131,10 @@ func (n *explainTraceNode) Values() parser.DTuple {
 	return n.rows[0]
 }
 
+func (*explainTraceNode) MarkDebug(_ explainMode) {
+	panic("debug mode not implemented in explainDebugNode")
+}
+
 func (*explainTraceNode) DebugValues() debugValues {
 	panic("debug mode not implemented in explainTraceNode")
 }

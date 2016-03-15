@@ -70,10 +70,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 	}
 	switch mode {
 	case explainDebug:
-		plan, err = markDebug(plan, mode)
-		if err != nil {
-			return nil, roachpb.NewUErrorf("%v: %s", err, n)
-		}
+		plan.MarkDebug(mode)
+
 		// Wrap the plan in an explainDebugNode.
 		return &explainDebugNode{plan}, nil
 
@@ -88,10 +86,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 		return v, nil
 
 	case explainTrace:
-		plan, err = markDebug(plan, explainDebug)
-		if err != nil {
-			return nil, roachpb.NewUErrorf("%v: %s", err, n)
-		}
+		plan.MarkDebug(explainDebug)
 		return (&sortNode{
 			ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
 			columns:  traceColumns,
@@ -99,63 +94,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 
 	default:
 		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
-	}
-}
-
-func markDebug(plan planNode, mode explainMode) (planNode, *roachpb.Error) {
-	switch t := plan.(type) {
-	case *selectNode:
-		t.explain = mode
-
-		if _, ok := t.table.node.(*indexJoinNode); ok {
-			// We will replace the indexJoinNode with the index node; we cannot
-			// process filter or render expressions (we don't have all the values).
-			// TODO(radu): this should go away once indexJoinNode properly
-			// implements explainDebug.
-			t.filter = nil
-			t.render = nil
-			t.qvals = nil
-		}
-		// Mark the from node as debug (and potentially replace it).
-		newNode, err := markDebug(t.table.node, mode)
-		t.table.node = newNode
-		return t, err
-
-	case *scanNode:
-		t.explain = mode
-		return t, nil
-
-	case *indexJoinNode:
-		t.explain = mode
-		// Mark both the index and the table scan nodes as debug.
-		_, err := markDebug(t.index, mode)
-		if err != nil {
-			return t, err
-		}
-		_, err = markDebug(t.table, mode)
-		return t, err
-
-	case *sortNode:
-		// Replace the sort node with the node it wraps.
-		return markDebug(t.plan, mode)
-
-	case *groupNode:
-		// Replace the group node with the node it wraps.
-		return markDebug(t.plan, mode)
-
-	case *emptyNode:
-		// emptyNode supports DebugValues without any explicit enablement.
-		return t, nil
-
-	case *valuesNode:
-		// valuesNode supports DebugValues without any explicit enablement.
-		return t, nil
-	case *returningNode:
-		// returningNode supports DebugValues on the underlying valuesNode.
-		return &t.valuesNode, nil
-
-	default:
-		return nil, roachpb.NewErrorf("TODO(pmattis): unimplemented %T", plan)
 	}
 }
 
@@ -183,6 +121,10 @@ const (
 	// The debug values refer to a full result row but the row was filtered out.
 	debugValueFiltered
 
+	// The debug value refers to a full result row that has been stored in a buffer
+	// and will be emitted later.
+	debugValueBuffered
+
 	// The debug values refer to a full result row.
 	debugValueRow
 )
@@ -194,6 +136,9 @@ func (t debugValueType) String() string {
 
 	case debugValueFiltered:
 		return "FILTERED"
+
+	case debugValueBuffered:
+		return "BUFFERED"
 
 	case debugValueRow:
 		return "ROW"
@@ -275,6 +220,10 @@ func (n *explainDebugNode) Values() parser.DTuple {
 		parser.DString(vals.value),
 		parser.DString(vals.output.String()),
 	}
+}
+
+func (*explainDebugNode) MarkDebug(_ explainMode) {
+	panic("debug mode not implemented in explainDebugNode")
 }
 
 func (*explainDebugNode) DebugValues() debugValues {

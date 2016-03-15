@@ -209,6 +209,8 @@ type groupNode struct {
 
 	desiredOrdering columnOrdering
 	pErr            *roachpb.Error
+
+	explain explainMode
 }
 
 func (n *groupNode) Columns() []ResultColumn {
@@ -224,54 +226,83 @@ func (n *groupNode) Values() parser.DTuple {
 	return n.values.Values()
 }
 
-func (*groupNode) DebugValues() debugValues {
-	// TODO(radu)
-	panic("debug mode not implemented in groupNode")
+func (n *groupNode) MarkDebug(mode explainMode) {
+	if mode != explainDebug {
+		panic(fmt.Sprintf("unknown debug mode %d", mode))
+	}
+	n.explain = mode
+	n.plan.MarkDebug(mode)
+}
+
+func (n *groupNode) DebugValues() debugValues {
+	if n.populated {
+		return n.values.DebugValues()
+	}
+
+	// We are emitting a "buffered" row.
+	vals := n.plan.DebugValues()
+	if vals.output == debugValueRow {
+		vals.output = debugValueBuffered
+	}
+	return vals
 }
 
 func (n *groupNode) Next() bool {
-	if !n.populated && n.pErr == nil {
-		n.computeAggregates()
-	}
+	var scratch []byte
+
 	if n.pErr != nil {
 		return false
 	}
-	return n.values.Next()
-}
 
-func (n *groupNode) computeAggregates() {
-	var scratch []byte
+	for !n.populated {
+		if !n.plan.Next() {
+			n.pErr = n.plan.PErr()
+			if n.pErr != nil {
+				return false
+			}
+			n.computeAggregates()
+			n.populated = true
+			break
+		}
+		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
+			// Pass through non-row debug values.
+			return true
+		}
 
-	// Loop over the rows passing the values into the corresponding aggregation
-	// functions.
-	for n.plan.Next() {
+		// Add row to bucket.
+
 		values := n.plan.Values()
 		aggregatedValues, groupedValues := values[:len(n.funcs)], values[len(n.funcs):]
 
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
 		encoded, err := encodeDTuple(scratch, groupedValues)
-		n.pErr = roachpb.NewError(err)
-		if n.pErr != nil {
-			return
+		if err != nil {
+			n.pErr = roachpb.NewError(err)
+			return false
 		}
 
 		n.buckets[string(encoded)] = struct{}{}
 
 		// Feed the aggregateFuncs for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
-			if n.pErr = roachpb.NewError(n.funcs[i].add(encoded, value)); n.pErr != nil {
-				return
+			if err := n.funcs[i].add(encoded, value); err != nil {
+				n.pErr = roachpb.NewError(err)
+				return false
 			}
 		}
 		scratch = encoded[:0]
+
+		if n.explain == explainDebug {
+			// Emit a "buffered" row.
+			return true
+		}
 	}
 
-	n.pErr = n.plan.PErr()
-	if n.pErr != nil {
-		return
-	}
+	return n.values.Next()
+}
 
+func (n *groupNode) computeAggregates() {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}

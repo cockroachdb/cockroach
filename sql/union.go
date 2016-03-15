@@ -163,6 +163,11 @@ func (n *unionNode) ExplainPlan() (name, description string, children []planNode
 	return "union", "-", []planNode{n.left, n.right}
 }
 
+func (n *unionNode) MarkDebug(mode explainMode) {
+	// TODO(radu): implement proper debug support (#4110)
+	panic("debug mode not implemented")
+}
+
 func (n *unionNode) DebugValues() debugValues {
 	switch {
 	case !n.rightDone:
