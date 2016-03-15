@@ -225,9 +225,26 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
-			if err := stream.Send(req); err != nil {
-				log.Error(err)
-				return
+			if len(req.Message.Snapshot.Data) > 0 {
+				go func() {
+					err := func() error {
+						ctx, cancel := context.WithCancel(context.Background())
+						defer cancel()
+						stream, err := client.RaftMessage(ctx)
+						if err != nil {
+							return err
+						}
+						return stream.Send(req)
+					}()
+					if err != nil && log.V(1) {
+						log.Errorf("failed to send Raft snapshot to node %d at %s: %s", nodeID, addr, err)
+					}
+				}()
+			} else {
+				if err := stream.Send(req); err != nil {
+					log.Error(err)
+					return
+				}
 			}
 		}
 	}
