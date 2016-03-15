@@ -321,9 +321,15 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		args := tc.args
-		args.Header().Key = roachpb.Key("a")
+		{
+			header := args.Header()
+			header.Key = roachpb.Key("a")
+			args.SetHeader(header)
+		}
 		if roachpb.IsRange(args) {
-			args.Header().EndKey = roachpb.Key("b")
+			header := args.Header()
+			header.EndKey = args.Header().Key.Next()
+			args.SetHeader(header)
 		}
 		consistency := roachpb.CONSISTENT
 		if !tc.consistent {

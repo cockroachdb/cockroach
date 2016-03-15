@@ -458,14 +458,10 @@ message ResolveIntentRangeRequest {
 }
 
 // A NoopResponse is the return value from a no-op operation.
-message NoopResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
+message NoopResponse {}
 
 // A NoopRequest is a no-op.
-message NoopRequest {
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
+message NoopRequest {}
 
 // A ResolveIntentRangeResponse is the return value from the
 // ResolveIntent() method.
@@ -538,7 +534,7 @@ message ComputeChecksumRequest {
   optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
-} 
+}
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
 message ComputeChecksumResponse {
@@ -557,7 +553,7 @@ message VerifyChecksumRequest {
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional bytes checksum = 4;
-} 
+}
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
 message VerifyChecksumResponse {

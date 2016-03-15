@@ -4216,24 +4216,12 @@ class NoopResponse : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.ResponseHeader header = 1;
-  bool has_header() const;
-  void clear_header();
-  static const int kHeaderFieldNumber = 1;
-  const ::cockroach::roachpb::ResponseHeader& header() const;
-  ::cockroach::roachpb::ResponseHeader* mutable_header();
-  ::cockroach::roachpb::ResponseHeader* release_header();
-  void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.NoopResponse)
  private:
-  inline void set_has_header();
-  inline void clear_has_header();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::ResponseHeader* header_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -4307,24 +4295,12 @@ class NoopRequest : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Span header = 1;
-  bool has_header() const;
-  void clear_header();
-  static const int kHeaderFieldNumber = 1;
-  const ::cockroach::roachpb::Span& header() const;
-  ::cockroach::roachpb::Span* mutable_header();
-  ::cockroach::roachpb::Span* release_header();
-  void set_allocated_header(::cockroach::roachpb::Span* header);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.NoopRequest)
  private:
-  inline void set_has_header();
-  inline void clear_has_header();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::cockroach::roachpb::Span* header_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -9903,95 +9879,9 @@ inline void ResolveIntentRangeRequest::set_poison(bool value) {
 
 // NoopResponse
 
-// optional .cockroach.roachpb.ResponseHeader header = 1;
-inline bool NoopResponse::has_header() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void NoopResponse::set_has_header() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void NoopResponse::clear_has_header() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void NoopResponse::clear_header() {
-  if (header_ != NULL) header_->::cockroach::roachpb::ResponseHeader::Clear();
-  clear_has_header();
-}
-inline const ::cockroach::roachpb::ResponseHeader& NoopResponse::header() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.NoopResponse.header)
-  return header_ != NULL ? *header_ : *default_instance_->header_;
-}
-inline ::cockroach::roachpb::ResponseHeader* NoopResponse::mutable_header() {
-  set_has_header();
-  if (header_ == NULL) {
-    header_ = new ::cockroach::roachpb::ResponseHeader;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NoopResponse.header)
-  return header_;
-}
-inline ::cockroach::roachpb::ResponseHeader* NoopResponse::release_header() {
-  clear_has_header();
-  ::cockroach::roachpb::ResponseHeader* temp = header_;
-  header_ = NULL;
-  return temp;
-}
-inline void NoopResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
-  delete header_;
-  header_ = header;
-  if (header) {
-    set_has_header();
-  } else {
-    clear_has_header();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NoopResponse.header)
-}
-
 // -------------------------------------------------------------------
 
 // NoopRequest
-
-// optional .cockroach.roachpb.Span header = 1;
-inline bool NoopRequest::has_header() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void NoopRequest::set_has_header() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void NoopRequest::clear_has_header() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void NoopRequest::clear_header() {
-  if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
-  clear_has_header();
-}
-inline const ::cockroach::roachpb::Span& NoopRequest::header() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.NoopRequest.header)
-  return header_ != NULL ? *header_ : *default_instance_->header_;
-}
-inline ::cockroach::roachpb::Span* NoopRequest::mutable_header() {
-  set_has_header();
-  if (header_ == NULL) {
-    header_ = new ::cockroach::roachpb::Span;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NoopRequest.header)
-  return header_;
-}
-inline ::cockroach::roachpb::Span* NoopRequest::release_header() {
-  clear_has_header();
-  ::cockroach::roachpb::Span* temp = header_;
-  header_ = NULL;
-  return temp;
-}
-inline void NoopRequest::set_allocated_header(::cockroach::roachpb::Span* header) {
-  delete header_;
-  header_ = header;
-  if (header) {
-    set_has_header();
-  } else {
-    clear_has_header();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NoopRequest.header)
-}
 
 // -------------------------------------------------------------------
 

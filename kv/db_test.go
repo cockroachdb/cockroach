@@ -181,9 +181,15 @@ func TestKVDBInternalMethods(t *testing.T) {
 	// Verify internal methods experience bad request errors.
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	for i, args := range testCases {
-		args.Header().Key = roachpb.Key("a")
+		{
+			header := args.Header()
+			header.Key = roachpb.Key("a")
+			args.SetHeader(header)
+		}
 		if roachpb.IsRange(args) {
-			args.Header().EndKey = args.Header().Key.Next()
+			header := args.Header()
+			header.EndKey = args.Header().Key.Next()
+			args.SetHeader(header)
 		}
 		b := &client.Batch{}
 		b.InternalAddRequest(args)
