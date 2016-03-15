@@ -1712,10 +1712,7 @@ func (s *Store) enqueueRaftMessage(req *RaftMessageRequest) error {
 func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
-		s.mu.Lock()
-		canApply := s.canApplySnapshotLocked(req.GroupID, req.Message.Snapshot)
-		s.mu.Unlock()
-		if !canApply {
+		if !s.canApplySnapshot(req.GroupID, req.Message.Snapshot) {
 			// If the storage cannot accept the snapshot, drop it before
 			// passing it to RawNode.Step, since our error handling
 			// options past that point are limited.
@@ -1933,8 +1930,9 @@ func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica ro
 // canApplySnapshot returns true if the snapshot can be applied to
 // this store's replica (i.e. it is not from an older incarnation of
 // the replica).
-// canApplySnapshot requires that the store lock is held.
-func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
+func (s *Store) canApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if r, ok := s.mu.replicas[rangeID]; ok && r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
