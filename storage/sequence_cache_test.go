@@ -65,20 +65,20 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
-	if seq, _, readErr := sc.Get(e, testTxnID, nil); seq > 0 {
+	if seq, _, readErr := sc.Get(engine.NoSpan, e, testTxnID, nil); seq > 0 {
 		t.Errorf("expected no response for id %s", testTxnID)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error: %s", readErr)
 	}
 	// Cache the test response.
 	const seq = 123
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(engine.NoSpan, e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit := func(expSeq, expEpo uint32) {
 		var entry roachpb.SequenceCacheEntry
-		if actEpo, actSeq, readErr := sc.Get(e, testTxnID, &entry); readErr != nil {
+		if actEpo, actSeq, readErr := sc.Get(engine.NoSpan, e, testTxnID, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
 		} else if (expSeq > 0 || actSeq > 0) && expSeq != actSeq {
 			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actSeq, expSeq)
@@ -98,18 +98,18 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	}
 	tryHit(0, 0)
 
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(engine.NoSpan, e, nil, testTxnID, testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	tryHit(2*seq, testTxnEpoch)
 
-	if err := sc.Put(e, nil, testTxnID, 2*testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(engine.NoSpan, e, nil, testTxnID, 2*testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit(2*seq, 2*testTxnEpoch)
 
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch-1, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := sc.Put(engine.NoSpan, e, nil, testTxnID, testTxnEpoch-1, 2*seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -123,13 +123,13 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Put value for test response.
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
+	if err := sc.Put(engine.NoSpan, e, nil, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := sc.Put(e, nil, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
+	if err := sc.Put(engine.NoSpan, e, nil, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, _, readErr := sc.Get(e, nil, nil); readErr != errEmptyTxnID {
+	if _, _, readErr := sc.Get(engine.NoSpan, e, nil, nil); readErr != errEmptyTxnID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -144,7 +144,7 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 123
 	// Store an increment with new value one in the first cache.
-	if err := rc1.Put(e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := rc1.Put(engine.NoSpan, e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -156,7 +156,7 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 	for _, cache := range []*SequenceCache{rc1, rc2} {
 		var entry roachpb.SequenceCacheEntry
 		// Get should return 1 for both caches.
-		if _, actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+		if _, actSeq, readErr := cache.Get(engine.NoSpan, e, testTxnID, &entry); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
 		} else if actSeq != seq {
 			t.Fatalf("unxpected cache miss")
@@ -176,7 +176,7 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 321
 	// Store an increment with new value one in the first cache.
-	if err := rc1.Put(e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
+	if err := rc1.Put(engine.NoSpan, e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -190,7 +190,7 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	// Get should hit both caches.
 	for i, cache := range []*SequenceCache{rc1, rc2} {
 		var entry roachpb.SequenceCacheEntry
-		if _, actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+		if _, actSeq, readErr := cache.Get(engine.NoSpan, e, testTxnID, &entry); readErr != nil {
 			t.Fatalf("%d: unxpected read error: %s", i, readErr)
 		} else if actSeq != seq {
 			t.Errorf("%d: unexpected cache miss: wanted %d, got %d", i, seq, actSeq)

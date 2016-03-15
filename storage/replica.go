@@ -231,18 +231,21 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.checksumNotify = map[uuid.UUID]chan []byte{}
 	r.setDescWithoutProcessUpdateLocked(desc)
 
+	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), r.context())
+	defer cleanupSp()
+
 	var err error
-	r.mu.lastIndex, err = r.loadLastIndexLocked()
+	r.mu.lastIndex, err = r.loadLastIndexLocked(sp)
 	if err != nil {
 		return err
 	}
 
-	r.mu.appliedIndex, err = r.loadAppliedIndexLocked(r.store.Engine())
+	r.mu.appliedIndex, err = r.loadAppliedIndexLocked(sp, r.store.Engine())
 	if err != nil {
 		return err
 	}
 
-	r.mu.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
+	r.mu.leaderLease, err = loadLeaderLease(sp, r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
@@ -379,9 +382,9 @@ func (r *Replica) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, roachpb.RKeyMin)
 }
 
-func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
+func loadLeaderLease(sp opentracing.Span, eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	if _, err := engine.MVCCGetProto(eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
+	if _, err := engine.MVCCGetProto(sp, eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil
@@ -653,36 +656,36 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 
 // getLastReplicaGCTimestamp reads the timestamp at which the replica was
 // last checked for garbage collection.
-func (r *Replica) getLastReplicaGCTimestamp() (roachpb.Timestamp, error) {
+func (r *Replica) getLastReplicaGCTimestamp(sp opentracing.Span) (roachpb.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(sp, r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return roachpb.ZeroTimestamp, err
 	}
 	return timestamp, nil
 }
 
-func (r *Replica) setLastReplicaGCTimestamp(timestamp roachpb.Timestamp) error {
+func (r *Replica) setLastReplicaGCTimestamp(sp opentracing.Span, timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(sp, r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
 // getLastVerificationTimestamp reads the timestamp at which the replica's
 // data was last verified.
-func (r *Replica) getLastVerificationTimestamp() (roachpb.Timestamp, error) {
+func (r *Replica) getLastVerificationTimestamp(sp opentracing.Span) (roachpb.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
 	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(sp, r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return roachpb.ZeroTimestamp, err
 	}
 	return timestamp, nil
 }
 
-func (r *Replica) setLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
+func (r *Replica) setLastVerificationTimestamp(sp opentracing.Span, timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(sp, r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
 // RaftStatus returns the current raft status of the replica.
@@ -903,11 +906,12 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
-	sp.LogEvent("command queue")
 	endCmdsFunc := r.beginCmds(&ba)
+	sp.LogEvent("left command queue")
 
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
+	sp.LogEvent("acquired read lock")
 
 	// Guarantee we remove the commands from the command queue. It is
 	// important that this is inside the readOnlyCmdMu lock so that the
@@ -921,15 +925,19 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
 	var intents []intentsWithArg
-	br, intents, pErr = r.executeBatch(r.store.Engine(), nil, ba)
+	br, intents, pErr = r.executeBatch(ctx, r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
 		// Checking the sequence cache on reads makes sure that when our
 		// transaction has already been aborted, we don't experience anomalous
 		// conditions as described in #2231.
-		pErr = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
+		pErr = r.checkSequenceCache(sp, r.store.Engine(), *ba.Txn)
 	}
-	r.store.intentResolver.processIntentsAsync(r, intents)
+	if len(intents) > 0 {
+		r.store.intentResolver.processIntentsAsync(r, intents)
+		// Capture backpressure which can occur in processIntentsAsync.
+		sp.LogEvent("triggered asynchronous intent resolution")
+	}
 	return br, pErr
 }
 
@@ -961,8 +969,8 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
-	sp.LogEvent("command queue")
 	endCmdsFunc := r.beginCmds(&ba)
+	sp.LogEvent("left command queue")
 
 	// Guarantee we remove the commands from the command queue. This is
 	// wrapped to delay pErr evaluation to its value when returning.
@@ -1389,6 +1397,9 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 		log.Fatalc(ctx, "raft command index is <= 0")
 	}
 
+	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
+	defer cleanupSp()
+
 	// If we have an out of order index, there's corruption. No sense in trying
 	// to update anything or run the command. Simply return a corruption error.
 	r.mu.Lock()
@@ -1405,7 +1416,7 @@ func (r *Replica) applyRaftCommand(ctx context.Context, index uint64, originRepl
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
-	if err := setAppliedIndex(batch, &ms, r.RangeID, index); err != nil {
+	if err := setAppliedIndex(sp, batch, &ms, r.RangeID, index); err != nil {
 		log.Fatalc(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
@@ -1456,6 +1467,9 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
+	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
+	defer cleanupSp()
+
 	// Check the sequence for this batch. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this). On a cache hit, the transaction is instructed to
@@ -1463,7 +1477,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// anomalies when we know that the transaction has been aborted or pushed,
 	// but it itself does not.
 	if ba.Txn != nil && ba.IsTransactionWrite() {
-		if err := r.checkSequenceCache(btch, *ba.Txn); err != nil {
+		if err := r.checkSequenceCache(sp, btch, *ba.Txn); err != nil {
 			return btch, nil, nil, err
 		}
 	}
@@ -1499,7 +1513,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// Execute the commands. If this returns without an error, the batch must
 	// be committed (EndTransaction with a CommitTrigger may unlock
 	// readOnlyCmdMu via a batch.Defer).
-	br, intents, err := r.executeBatch(btch, ms, ba)
+	br, intents, err := r.executeBatch(ctx, btch, ms, ba)
 
 	// Regardless of error, add result to the sequence cache if this is
 	// a write method. This must be done as part of the execution of
@@ -1527,7 +1541,7 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 			// of why that is ok.
 			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
 			if (!isEndTxn && ba.IsTransactionWrite()) || err != nil {
-				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
+				if putErr := r.sequence.Put(sp, btch, ms, ba.Txn.ID, ba.Txn.Epoch,
 					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, err); putErr != nil {
 					// TODO(tschottdorf): ReplicaCorruptionError.
 					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
@@ -1544,12 +1558,12 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 // replay violation or if the transaction has been aborted, transaction retry
 // or transaction abort error is returned, respectively.
 // checkSequenceCache locks the replica.
-func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
+func (r *Replica) checkSequenceCache(sp opentracing.Span, b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	var entry roachpb.SequenceCacheEntry
-	epoch, sequence, readErr := r.sequence.Get(b, txn.ID, &entry)
+	epoch, sequence, readErr := r.sequence.Get(sp, b, txn.ID, &entry)
 	if readErr != nil {
 		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr))
 	}
@@ -1585,7 +1599,7 @@ type intentsWithArg struct {
 	intents []roachpb.Intent
 }
 
-func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+func (r *Replica) executeBatch(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := &roachpb.BatchResponse{}
 	var intents []intentsWithArg
 	// If transactional, we use ba.Txn for each individual command and
@@ -1650,7 +1664,7 @@ func (r *Replica) executeBatch(batch engine.Engine, ms *engine.MVCCStats, ba roa
 			header.Timestamp = ba.Timestamp.Add(0, int32(1-len(ba.Requests)+index))
 		}
 
-		reply, curIntents, pErr := r.executeCmd(batch, ms, header, remScanResults, args)
+		reply, curIntents, pErr := r.executeCmd(ctx, batch, ms, header, remScanResults, args)
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
@@ -1876,7 +1890,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
-	br, intents, pErr := r.executeBatch(r.store.Engine(), nil, ba)
+	br, intents, pErr := r.executeBatch(context.Background(), r.store.Engine(), nil, ba)
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}

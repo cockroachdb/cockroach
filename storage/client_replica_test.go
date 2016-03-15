@@ -70,7 +70,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
+			val, _, err := engine.MVCCGet(engine.NoSpan, eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
 			if err != nil {
 				return err
 			}
@@ -147,7 +147,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	if now := clock.Now(); now.WallTime != int64(190*time.Millisecond) {
 		t.Errorf("expected clock to advance to 190ms; got %s", now)
 	}
-	val, _, err := engine.MVCCGet(mtc.engines[0], roachpb.Key("a"), clock.Now(), true, nil)
+	val, _, err := engine.MVCCGet(engine.NoSpan, mtc.engines[0], roachpb.Key("a"), clock.Now(), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -296,7 +296,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// Verify that the last verification timestamp was updated as whole range was scanned.
-	if _, err := tc.rng.getLastVerificationTimestamp(); err != nil {
+	if _, err := tc.rng.getLastVerificationTimestamp(engine.NoSpan); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -376,12 +376,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(test.heartbeatTS)}
 		txns[strKey] = *txn
 		key := keys.TransactionKey(baseKey, txn.ID)
-		if err := engine.MVCCPutProto(tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
+		if err := engine.MVCCPutProto(engine.NoSpan, tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
 			t.Fatal(err)
 		}
 		seqTS := txn.Timestamp
 		seqTS.Forward(*txn.LastHeartbeat)
-		if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, epo, 2*epo, txn.Key, seqTS, nil /* err */); err != nil {
+		if err := tc.rng.sequence.Put(engine.NoSpan, tc.engine, nil, txn.ID, epo, 2*epo, txn.Key, seqTS, nil /* err */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -401,7 +401,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(tc.engine, key, roachpb.ZeroTimestamp, true, nil, txn)
+			ok, err := engine.MVCCGetProto(engine.NoSpan, tc.engine, key, roachpb.ZeroTimestamp, true, nil, txn)
 			if err != nil {
 				return err
 			}
@@ -420,7 +420,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
 					strKey, expIntents, resolved[strKey])
 			}
-			if kvs, err := tc.rng.sequence.GetAllTransactionID(tc.store.Engine(), txns[strKey].ID); err != nil {
+			if kvs, err := tc.rng.sequence.GetAllTransactionID(engine.NoSpan, tc.store.Engine(), txns[strKey].ID); err != nil {
 				t.Fatal(err)
 			} else if (len(kvs) != 0) == sp.expSeqGC {
 				return fmt.Errorf("%s: expected sequence cache gc: %t, found %+v", strKey, sp.expSeqGC, kvs)

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 const (
@@ -72,7 +73,10 @@ func (*replicaGCQueue) acceptsUnsplitRanges() bool {
 // check must have occurred more than ReplicaGCQueueInactivityThreshold
 // in the past.
 func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica, _ config.SystemConfig) (bool, float64) {
-	lastCheck, err := rng.getLastReplicaGCTimestamp()
+	sp, cleanupSp := tracing.SpanFromContext(opReplica, rng.store.Tracer(), rng.context())
+	defer cleanupSp()
+
+	lastCheck, err := rng.getLastReplicaGCTimestamp(sp)
 	if err != nil {
 		log.Errorf("could not read last replica GC timestamp: %s", err)
 		return false, 0
@@ -89,6 +93,9 @@ func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica, _ config
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ config.SystemConfig) error {
+	sp, cleanupSp := tracing.SpanFromContext(opReplica, rng.store.Tracer(), rng.context())
+	defer cleanupSp()
+
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
 	// StartKey (and avoid rng.GetReplica() for the same reason).
@@ -150,7 +157,7 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ config.S
 	} else {
 		// This range is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
-		if err := rng.setLastReplicaGCTimestamp(now); err != nil {
+		if err := rng.setLastReplicaGCTimestamp(sp, now); err != nil {
 			return err
 		}
 	}

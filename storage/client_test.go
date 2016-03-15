@@ -801,7 +801,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	results := make([]int64, len(m.engines))
 	for i, eng := range m.engines {
-		val, _, err := engine.MVCCGet(eng, key, m.clock.Now(), true, nil)
+		val, _, err := engine.MVCCGet(engine.NoSpan, eng, key, m.clock.Now(), true, nil)
 		if err != nil {
 			log.Errorf("engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
@@ -974,7 +974,7 @@ func TestSortRangeDescByAge(t *testing.T) {
 
 func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats) error {
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, eng, rangeID, &ms); err != nil {
 		return err
 	}
 	// Clear system counts as these are expected to vary.

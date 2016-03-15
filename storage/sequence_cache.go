@@ -22,6 +22,7 @@ import (
 	"math"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -92,7 +93,7 @@ func (sc *SequenceCache) ClearData(e engine.Engine) error {
 // The latest entry is that with the highest epoch (and then, highest
 // sequence). On a miss, zero is returned for both. If an entry is found and a
 // SequenceCacheEntry is provided, it is populated from the found value.
-func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, dest *roachpb.SequenceCacheEntry) (uint32, uint32, error) {
+func (sc *SequenceCache) Get(sp opentracing.Span, e engine.Engine, txnID *uuid.UUID, dest *roachpb.SequenceCacheEntry) (uint32, uint32, error) {
 	if txnID == nil {
 		return 0, 0, errEmptyTxnID
 	}
@@ -103,7 +104,7 @@ func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, dest *roachpb.Se
 	// we just scan and check via a simple prefix check whether we read a
 	// key for "our" cache id.
 	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
-	kvs, _, err := engine.MVCCScan(e, prefix, sc.max, 1, /* num */
+	kvs, _, err := engine.MVCCScan(sp, e, prefix, sc.max, 1, /* num */
 		roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
 	if err != nil || len(kvs) == 0 || !bytes.HasPrefix(kvs[0].Key, prefix) {
 		return 0, 0, err
@@ -124,9 +125,9 @@ func (sc *SequenceCache) Get(e engine.Engine, txnID *uuid.UUID, dest *roachpb.Se
 
 // GetAllTransactionID returns all the key-value pairs for the given transaction ID from
 // the engine.
-func (sc *SequenceCache) GetAllTransactionID(e engine.Engine, txnID *uuid.UUID) ([]roachpb.KeyValue, error) {
+func (sc *SequenceCache) GetAllTransactionID(sp opentracing.Span, e engine.Engine, txnID *uuid.UUID) ([]roachpb.KeyValue, error) {
 	prefix := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
-	kvs, _, err := engine.MVCCScan(e, prefix, prefix.PrefixEnd(), 0, /* max */
+	kvs, _, err := engine.MVCCScan(sp, e, prefix, prefix.PrefixEnd(), 0, /* max */
 		roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */)
 	return kvs, err
 }
@@ -134,8 +135,8 @@ func (sc *SequenceCache) GetAllTransactionID(e engine.Engine, txnID *uuid.UUID) 
 // Iterate walks through the sequence cache, invoking the given callback for
 // each unmarshaled entry with the key, the transaction ID and the decoded
 // entry.
-func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, *uuid.UUID, roachpb.SequenceCacheEntry)) {
-	_, _ = engine.MVCCIterate(e, sc.min, sc.max, roachpb.ZeroTimestamp,
+func (sc *SequenceCache) Iterate(sp opentracing.Span, e engine.Engine, f func([]byte, *uuid.UUID, roachpb.SequenceCacheEntry)) {
+	_, _ = engine.MVCCIterate(sp, e, sc.min, sc.max, roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.SequenceCacheEntry
@@ -213,14 +214,14 @@ func (sc *SequenceCache) CopyFrom(e engine.Engine, ms *engine.MVCCStats, originR
 }
 
 // Del removes all sequence cache entries for the given transaction.
-func (sc *SequenceCache) Del(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID) error {
+func (sc *SequenceCache) Del(sp opentracing.Span, e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID) error {
 	startKey := keys.SequenceCacheKeyPrefix(sc.rangeID, txnID)
-	_, err := engine.MVCCDeleteRange(e, ms, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */, false /*returnKeys*/)
+	_, err := engine.MVCCDeleteRange(sp, e, ms, startKey, startKey.PrefixEnd(), 0 /* max */, roachpb.ZeroTimestamp, nil /* txn */, false /*returnKeys*/)
 	return err
 }
 
 // Put writes a sequence number for the specified transaction ID.
-func (sc *SequenceCache) Put(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, pErr *roachpb.Error) error {
+func (sc *SequenceCache) Put(sp opentracing.Span, e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, pErr *roachpb.Error) error {
 	if seq <= 0 || txnID == nil {
 		return errEmptyTxnID
 	}
@@ -231,7 +232,7 @@ func (sc *SequenceCache) Put(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.
 	// Write the response value to the engine.
 	key := keys.SequenceCacheKey(sc.rangeID, txnID, epoch, seq)
 	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS}
-	return engine.MVCCPutProto(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
+	return engine.MVCCPutProto(sp, e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
 }
 
 // Responses with write-too-old, write-intent and not leader errors

@@ -98,7 +98,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer stopper.Stop()
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
-		if _, err := engine.MVCCIterate(store.Engine(), roachpb.KeyMin, roachpb.KeyMax, roachpb.ZeroTimestamp, true, nil, false, f); err != nil {
+		if _, err := engine.MVCCIterate(engine.NoSpan, store.Engine(), roachpb.KeyMin, roachpb.KeyMax, roachpb.ZeroTimestamp, true, nil, false, f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -222,7 +222,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(aDesc.StartKey), keys.RangeDescriptorKey(bDesc.StartKey)} {
-		if _, _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(engine.NoSpan, store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -382,10 +382,10 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	var msA, msB engine.MVCCStats
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	if err := engine.MVCCGetRangeStats(snap, aDesc.RangeID, &msA); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, snap, aDesc.RangeID, &msA); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.MVCCGetRangeStats(snap, bDesc.RangeID, &msB); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, snap, bDesc.RangeID, &msB); err != nil {
 		t.Fatal(err)
 	}
 
@@ -408,7 +408,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
 	var msMerged engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(snap, rngMerged.RangeID, &msMerged); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, snap, rngMerged.RangeID, &msMerged); err != nil {
 		t.Fatal(err)
 	}
 

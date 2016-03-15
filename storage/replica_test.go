@@ -602,7 +602,7 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
-	if err := engine.MVCCPut(tc.engine, nil, key, roachpb.MinTimestamp, val, nil); err != nil {
+	if err := engine.MVCCPut(engine.NoSpan, tc.engine, nil, key, roachpb.MinTimestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1553,7 +1553,7 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	// the last byte of which isn't \x00); add an extra byte of garbage.
 	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
 	garbageKey = append(garbageKey, '\x00', '!')
-	err := engine.MVCCPut(tc.engine, nil, garbageKey, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
+	err := engine.MVCCPut(engine.NoSpan, tc.engine, nil, garbageKey, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1579,7 +1579,7 @@ func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = uint32(1 + i)
-		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, roachpb.NewError(pastError))
+		_ = tc.rng.sequence.Put(engine.NoSpan, tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, roachpb.NewError(pastError))
 
 		args := incrementArgs(key, 1)
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
@@ -1637,7 +1637,7 @@ func TestRangeSequenceCacheOnlyWithIntent(t *testing.T) {
 
 	txn := newTransaction("test", []byte("test"), 10, roachpb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 100
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, nil); err != nil {
+	if err := tc.rng.sequence.Put(engine.NoSpan, tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2005,7 +2005,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
 		txnKey := keys.TransactionKey(test.key, txn.ID)
-		if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
+		if err := engine.MVCCPutProto(engine.NoSpan, tc.rng.store.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
 			nil, &existTxn); err != nil {
 			t.Fatal(err)
 		}
@@ -2074,7 +2074,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := engine.MVCCGetProto(tc.rng.store.Engine(), txnKey, roachpb.ZeroTimestamp,
+		ok, err := engine.MVCCGetProto(engine.NoSpan, tc.rng.store.Engine(), txnKey, roachpb.ZeroTimestamp,
 			true /* consistent */, nil /* txn */, &readTxn)
 		if err != nil {
 			t.Fatal(err)
@@ -2173,19 +2173,19 @@ func TestEndTransactionDirectGC(t *testing.T) {
 	rightRng, txn := setupResolutionTest(t, tc, key, splitKey)
 
 	util.SucceedsSoon(t, func() error {
-		if gr, _, err := tc.rng.Get(tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
+		if gr, _, err := tc.rng.Get(engine.NoSpan, tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
 			return err
 		} else if gr.Value != nil {
 			return util.Errorf("txn entry still there: %+v", gr)
 		}
 
 		var entry roachpb.SequenceCacheEntry
-		if _, seq, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if _, seq, err := tc.rng.sequence.Get(engine.NoSpan, tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		} else if seq > 0 {
 			return util.Errorf("sequence cache still populated: %v", entry)
 		}
-		if _, seq, err := rightRng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if _, seq, err := rightRng.sequence.Get(engine.NoSpan, tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		} else if seq == 0 {
 			t.Fatalf("right-hand side with external intent had its sequence cache cleared")
@@ -2259,7 +2259,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			}
 
 			var entry roachpb.SequenceCacheEntry
-			if seq, _, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+			if seq, _, err := tc.rng.sequence.Get(engine.NoSpan, tc.engine, txn.ID, &entry); err != nil {
 				t.Fatal(err)
 			} else if seq > 0 {
 				t.Fatalf("commit=%t: sequence cache still populated: %v", commit, entry)
@@ -2430,11 +2430,11 @@ func TestSequenceCacheError(t *testing.T) {
 	// to trigger TransactionRetryError.
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(engine.NoSpan, tc.engine, nil, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	pErr := tc.rng.checkSequenceCache(tc.engine, txn)
+	pErr := tc.rng.checkSequenceCache(engine.NoSpan, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
@@ -2446,11 +2446,11 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	// Poison the sequence cache to trigger TransactionAbortedError.
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(engine.NoSpan, tc.engine, nil, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	pErr = tc.rng.checkSequenceCache(tc.engine, txn)
+	pErr = tc.rng.checkSequenceCache(engine.NoSpan, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
@@ -2862,7 +2862,7 @@ func TestRangeResolveIntentRange(t *testing.T) {
 
 func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.MVCCStats, t *testing.T) {
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(eng, rangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, eng, rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expMS, ms) {
@@ -3672,7 +3672,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// Create a transaction. We don't write a txn record, so pushing this will
 	// succeed and abort the intent we write here.
 	txn := newTransaction("test", []byte("a"), 1, roachpb.SERIALIZABLE, rng.store.Clock())
-	if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
+	if err := engine.MVCCPut(engine.NoSpan, rng.store.Engine(), &engine.MVCCStats{},
 		keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -3684,7 +3684,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// In the loop, wait until the intent is aborted. Then write a "real" value
 	// there and verify that we can now load the data as expected.
 	util.SucceedsSoon(t, func() error {
-		if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
+		if err := engine.MVCCPut(engine.NoSpan, rng.store.Engine(), &engine.MVCCStats{},
 			keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {
 			return err
 		}
@@ -3826,7 +3826,7 @@ func TestEntries(t *testing.T) {
 	rng.mu.Unlock()
 
 	// Case 16: add a gap to the indexes.
-	if err := engine.MVCCDelete(tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), roachpb.ZeroTimestamp,
+	if err := engine.MVCCDelete(engine.NoSpan, tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), roachpb.ZeroTimestamp,
 		nil); err != nil {
 		t.Fatal(err)
 	}
@@ -4057,7 +4057,7 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 		ChecksumID: id,
 		Version:    replicaChecksumVersion,
 	}
-	_, err := rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	_, err := rng.ComputeChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4071,7 +4071,7 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 			Version:    replicaChecksumVersion,
 			Checksum:   checksum,
 		}
-		_, err := rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+		_, err := rng.VerifyChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, verifyArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4120,7 +4120,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	args := roachpb.ComputeChecksumRequest{
 		ChecksumID: id,
 	}
-	_, err := rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	_, err := rng.ComputeChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4136,7 +4136,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 			Version:    10000001,
 			Checksum:   []byte("bad checksum"),
 		}
-		_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+		_, err = rng.VerifyChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, verifyArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4145,7 +4145,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		}
 		// Setting the correct version results in a panic.
 		verifyArgs.Version = replicaChecksumVersion
-		_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+		_, err = rng.VerifyChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, verifyArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4162,7 +4162,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		ChecksumID: id,
 		Version:    23343434,
 	}
-	_, err = rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
+	_, err = rng.ComputeChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4171,7 +4171,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		ChecksumID: id,
 		Checksum:   []byte("bad checksum"),
 	}
-	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	_, err = rng.VerifyChecksum(engine.NoSpan, nil, nil, roachpb.Header{}, verifyArgs)
 	if err != nil {
 		t.Fatal(err)
 	}

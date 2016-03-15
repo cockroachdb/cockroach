@@ -291,7 +291,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Get the original stats for key and value bytes.
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, store.Engine(), rangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	keyBytes, valBytes := ms.KeyBytes, ms.ValBytes
@@ -304,7 +304,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(keys.Addr(splitKey))} {
-		if _, _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(engine.NoSpan, store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -362,11 +362,11 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
 	var left, right engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &left); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, store.Engine(), rangeID, &left); err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	if err := engine.MVCCGetRangeStats(store.Engine(), newRng.RangeID, &right); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, store.Engine(), newRng.RangeID, &right); err != nil {
 		t.Fatal(err)
 	}
 	rKeyBytes, rValBytes := right.KeyBytes, right.ValBytes
@@ -418,7 +418,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(snap, rng.RangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, snap, rng.RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyRecomputedStats(snap, rng.Desc(), ms); err != nil {
@@ -439,11 +439,11 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
 	var msLeft, msRight engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(snap, rng.RangeID, &msLeft); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, snap, rng.RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupReplica(midKey, nil)
-	if err := engine.MVCCGetRangeStats(snap, rngRight.RangeID, &msRight); err != nil {
+	if err := engine.MVCCGetRangeStats(engine.NoSpan, snap, rngRight.RangeID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -478,7 +478,7 @@ func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key
 	src := rand.New(rand.NewSource(0))
 	for {
 		var ms engine.MVCCStats
-		if err := engine.MVCCGetRangeStats(store.Engine(), rangeID, &ms); err != nil {
+		if err := engine.MVCCGetRangeStats(engine.NoSpan, store.Engine(), rangeID, &ms); err != nil {
 			t.Fatal(err)
 		}
 		keyBytes, valBytes := ms.KeyBytes, ms.ValBytes

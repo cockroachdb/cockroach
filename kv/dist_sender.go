@@ -574,13 +574,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			sp.LogEvent("meta descriptor lookup")
 			var evictDesc func()
 			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
 
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if pErr != nil {
+				sp.LogEvent("range descriptor lookup failed: " + pErr.String())
 				if pErr.Retryable {
 					if log.V(1) {
 						log.Warning(pErr)
@@ -588,6 +588,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					continue
 				}
 				break
+			} else {
+				sp.LogEvent("looked up range descriptor")
 			}
 
 			if needAnother && br == nil {

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -147,6 +149,9 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) error {
 
+	sp, cleanupSp := tracing.SpanFromContext("gc queue", repl.store.Tracer(), repl.context())
+	defer cleanupSp()
+
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
 	iter := newReplicaDataIterator(desc, snap, true /* replicatedOnly */)
@@ -250,7 +255,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 
-	txnKeys, err := processTransactionTable(repl, txnMap, txnExp)
+	txnKeys, err := processTransactionTable(sp, repl, txnMap, txnExp)
 	if err != nil {
 		return err
 	}
@@ -290,7 +295,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Deal with any leftover sequence cache keys. There shouldn't be many of
 	// them.
-	gcArgs.Keys = append(gcArgs.Keys, processSequenceCache(repl, now, txnExp, txnMap)...)
+	gcArgs.Keys = append(gcArgs.Keys, processSequenceCache(sp, repl, now, txnExp, txnMap)...)
 
 	var ba roachpb.BatchRequest
 	// Technically not needed since we're talking directly to the Range.
@@ -310,7 +315,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 // aborted, and in the second case we may have to resolve the intents success-
 // fully before GCing the entry. The transaction records which can be gc'ed are
 // returned separately and are not added to txnMap nor intentSpanMap.
-func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
+func processTransactionTable(sp opentracing.Span, r *Replica, txnMap map[uuid.UUID]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
 	snap := r.store.Engine().NewSnapshot()
 	defer snap.Close()
 
@@ -371,7 +376,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 	startKey := keys.TransactionKey(roachpb.KeyMin, uuid.EmptyUUID)
 	endKey := keys.TransactionKey(roachpb.KeyMax, uuid.EmptyUUID)
 
-	_, err := engine.MVCCIterate(snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+	_, err := engine.MVCCIterate(sp, snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 		return false, handleOne(kv)
 	})
 	return gcKeys, err
@@ -381,13 +386,13 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 // pushing the transactions (in cleanup mode) for those entries which appear
 // to be old enough. In case the transaction indicates that it's terminated,
 // the sequence cache keys are included in the result.
-func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns map[uuid.UUID]*roachpb.Transaction) []roachpb.GCRequest_GCKey {
+func processSequenceCache(sp opentracing.Span, r *Replica, now, cutoff roachpb.Timestamp, prevTxns map[uuid.UUID]*roachpb.Transaction) []roachpb.GCRequest_GCKey {
 	snap := r.store.Engine().NewSnapshot()
 	defer snap.Close()
 
 	txns := make(map[uuid.UUID]*roachpb.Transaction)
 	idToKeys := make(map[uuid.UUID][]roachpb.GCRequest_GCKey)
-	r.sequence.Iterate(snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.SequenceCacheEntry) {
+	r.sequence.Iterate(sp, snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.SequenceCacheEntry) {
 		txnID := *txnIDPtr
 		// If we've pushed this Txn previously, attempt cleanup (in case the
 		// push was successful). Initiate new pushes only for newly discovered

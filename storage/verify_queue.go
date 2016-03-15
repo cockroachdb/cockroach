@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -68,7 +69,7 @@ func (*verifyQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 	_ config.SystemConfig) (shouldQ bool, priority float64) {
 
 	// Get last verification timestamp.
-	lastVerify, err := rng.getLastVerificationTimestamp()
+	lastVerify, err := rng.getLastVerificationTimestamp(engine.NoSpan)
 	if err != nil {
 		log.Errorf("unable to fetch last verification timestamp: %s", err)
 		return
@@ -105,7 +106,7 @@ func (*verifyQueue) process(now roachpb.Timestamp, rng *Replica,
 	}
 
 	// Store current timestamp as last verification for this range.
-	return rng.setLastVerificationTimestamp(now)
+	return rng.setLastVerificationTimestamp(engine.NoSpan, now)
 }
 
 // timer returns the duration of intervals between successive range

@@ -670,6 +670,8 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		// back with the response. This is more expensive, but then again,
 		// those are individual requests traced by users, so they can be.
 		if sp.BaggageItem(tracing.Snowball) != "" {
+			sp.LogEvent("delegating to snowball tracing")
+			sp.Finish()
 			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {

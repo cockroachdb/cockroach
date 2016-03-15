@@ -214,12 +214,12 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	futureTS := s.Clock.Now()
 	futureTS.WallTime += offsetNS
 	val := roachpb.MakeValueFromBytes(valSlow)
-	if err := engine.MVCCPut(s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
+	if err := engine.MVCCPut(engine.NoSpan, s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
 		t.Fatal(err)
 	}
 	futureTS.WallTime += offsetNS
 	val.SetBytes(valFast)
-	if err := engine.MVCCPut(s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
+	if err := engine.MVCCPut(engine.NoSpan, s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
