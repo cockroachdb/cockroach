@@ -379,6 +379,9 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a != 1 AND a <= 1`, `a < 1`, true},
 		{`a != 1 AND a <= 2`, `a <= 2`, false},
 		{`a != 2 AND a <= 1`, `a <= 1`, true},
+		{`a != 1 AND a IN (1)`, `false`, true},
+		{`a != 1 AND a IN (2)`, `a IN (2)`, true},
+		{`a != 1 AND a IN (1, 2)`, `a IN (2)`, true},
 		{`a != 1 AND a IS NULL`, `false`, true},
 		{`a IS NULL AND a != 1`, `false`, true},
 		{`a != 1 AND a IS NOT NULL`, `a != 1 AND a IS NOT NULL`, true},
@@ -498,7 +501,6 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 
 		{`a IN (1) AND a IN (1)`, `a IN (1)`, true},
 		{`a IN (1) AND a IN (2)`, `false`, true},
-		{`a IN (2) AND a IN (1)`, `false`, true},
 		{`a IN (1) AND a IN (1, 2, 3, 4, 5)`, `a IN (1)`, true},
 		{`a IN (2, 4) AND a IN (1, 2, 3, 4, 5)`, `a IN (2, 4)`, true},
 		{`a IN (4, 2) AND a IN (5, 4, 3, 2, 1)`, `a IN (2, 4)`, true},
@@ -509,6 +511,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 
 		{`a IS NULL AND a IS NULL`, `a IS NULL`, true},
 		{`a IS NOT NULL AND a IS NOT NULL`, `a IS NOT NULL`, true},
+		{`a IS NULL AND a IS NOT NULL`, `false`, true},
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
@@ -621,6 +624,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a != 1 OR a <= 1`, `a IS NOT NULL`},
 		{`a != 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a != 2 OR a <= 1`, `a != 2`},
+		{`a != 1 OR a IN (1)`, `a IS NOT NULL`},
+		{`a != 1 OR a IN (2)`, `a != 1`},
+		{`a != 2 OR a IN (1, 2)`, `a IS NOT NULL`},
 		{`a != 1 OR a = 1.0`, `a IS NOT NULL`},
 		{`a != 1 OR a != 1.0`, `a != 1`},
 
@@ -713,6 +719,16 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a <= 1 OR a IN (1)`, `a <= 1`},
 		{`a <= 1 OR a IN (2)`, `a <= 1 OR a IN (2)`},
 		{`a <= 2 OR a IN (1)`, `a <= 2`},
+
+		{`a IN (1) OR a IN (1)`, `a IN (1)`},
+		{`a IN (1) OR a IN (2)`, `a IN (1, 2)`},
+		{`a IN (1) OR a IN (1, 2, 3, 4, 5)`, `a IN (1, 2, 3, 4, 5)`},
+		{`a IN (4, 2) OR a IN (5, 4, 3, 2, 1)`, `a IN (1, 2, 3, 4, 5)`},
+		{`a IN (1) OR a IS NULL`, `a IN (1) OR a IS NULL`},
+
+		{`a IS NULL OR a IS NULL`, `a IS NULL`},
+		{`a IS NOT NULL OR a IS NOT NULL`, `a IS NOT NULL`},
+		{`a IS NULL OR a IS NOT NULL`, `true`},
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
