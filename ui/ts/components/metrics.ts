@@ -129,10 +129,28 @@ module Components {
               // Iterate through each selector on the axis,
               // allowing each to select the necessary data from
               // the result.
+
+              let maxY: number = -Infinity;
+              let minY: number = Infinity;
+
+              let maxX: number = -Infinity;
+              let minX: number = Infinity;
+
               this.vm.axis.selectors().forEach((s: Models.Metrics.Select.Selector) => {
                 let key: string = Models.Metrics.QueryInfoKey(s.request());
                 let result: Models.Proto.QueryResult = qresult.get(key);
                 if (result) {
+                  // find max/min
+                  let localMaxY: number = _.maxBy(result.datapoints, "value").value;
+                  let localMinY: number = _.minBy(result.datapoints, "value").value;
+                  maxY = Math.max(maxY, localMaxY);
+                  minY = Math.min(minY, localMinY);
+
+                  let localMaxX: number = _.maxBy(result.datapoints, "timestamp_nanos").timestamp_nanos;
+                  let localMinX: number = _.minBy(result.datapoints, "timestamp_nanos").timestamp_nanos;
+                  maxX = Math.max(maxX, localMaxX);
+                  minX = Math.min(minX, localMinX);
+
                   formattedData.push({
                     values: result.datapoints,
                     key: s.title(),
@@ -142,7 +160,24 @@ module Components {
                   });
                 }
               });
+
+              let yAxisMin: number =  _.isNumber(this.vm.axis.yLow()) ? Math.min(minY, this.vm.axis.yLow()) : minY;
+              let yAxisMax: number =  _.isNumber(this.vm.axis.yHigh()) ? Math.max(maxY, this.vm.axis.yHigh()) : maxY;
+
+              // we only set the domain explicitly if yLow or yHigh are set
+              if (_.isNumber(this.vm.axis.yLow()) || _.isNumber(this.vm.axis.yHigh())) {
+                this.chart.yDomain([yAxisMin, yAxisMax]);
+              }
+
+              // always set the tick values to the lowest axis value, the highest axis value, and one value in between
+              this.chart.yAxis.tickValues(_.uniq([yAxisMin, (yAxisMin + yAxisMax) / 2, yAxisMax]));
+              this.chart.xAxis.tickValues(_.uniq([
+                new Date(Utils.Convert.NanoToMilli(minX)),
+                new Date(Utils.Convert.NanoToMilli((minX + maxX) / 2)),
+                new Date(Utils.Convert.NanoToMilli(maxX)),
+              ]));
             }
+
             d3.select(element)
               .datum(formattedData)
               .transition().duration(500)
