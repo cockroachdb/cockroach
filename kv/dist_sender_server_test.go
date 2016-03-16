@@ -301,6 +301,11 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		t.Errorf("expected key %q; got %q", keys[0], key)
 	}
 
+	// We need to recreate the DistSender because the last read will
+	// have pushed its clock forward.
+	clock = hlc.NewClock(manual.UnixNano)
+	ds = kv.NewDistSender(&kv.DistSenderContext{Clock: clock, RPCContext: s.RPCContext()}, s.Gossip())
+
 	// ReverseScan.
 	rsa := roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0).(*roachpb.ReverseScanRequest)
 	reply, pErr = client.SendWrappedWith(ds, nil, roachpb.Header{
