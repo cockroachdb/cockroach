@@ -769,6 +769,8 @@ func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
 	return ctx.txnTimestamp
 }
 
+// SetTxnTimestamp associates the EvalContext to a specified
+// timestamp.
 func (ctx *EvalContext) SetTxnTimestamp(ts roachpb.Timestamp) {
 	ctx.txnTimestamp = ts
 }
