@@ -586,16 +586,27 @@ func BenchmarkScan1000Limit100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkScan(b, db, 1000, 100) })
 }
 
+<<<<<<< Updated upstream
 // runBenchmarkScanFilter benchmarks scanning (w/filter) from a table containing count1 * count2 rows.
 func runBenchmarkScanFilter(b *testing.B, db *sql.DB, count1, count2 int, limit int, filter string) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.scan2`); err != nil {
 		b.Fatal(err)
 	}
 	if _, err := db.Exec(`CREATE TABLE bench.scan2 (a INT, b INT, PRIMARY KEY (a, b))`); err != nil {
+=======
+// runBenchmarkSort benchmarks scanning a table containing count rows and sorting
+// the results.
+func runBenchmarkSort(b *testing.B, db *sql.DB, count int, limit int, distinct bool) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.scan`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE bench.scan (k INT PRIMARY KEY, v INT, w INT)`); err != nil {
+>>>>>>> Stashed changes
 		b.Fatal(err)
 	}
 
 	var buf bytes.Buffer
+<<<<<<< Updated upstream
 	buf.WriteString(`INSERT INTO bench.scan2 VALUES `)
 	for i := 0; i < count1; i++ {
 		for j := 0; j < count2; j++ {
@@ -682,6 +693,9 @@ func runBenchmarkOrderBy(b *testing.B, db *sql.DB, count int, limit int, distinc
 
 	var buf bytes.Buffer
 	buf.WriteString(`INSERT INTO bench.sort VALUES `)
+=======
+	buf.WriteString(`INSERT INTO bench.scan VALUES `)
+>>>>>>> Stashed changes
 	for i := 0; i < count; i++ {
 		if i > 0 {
 			buf.WriteString(", ")
@@ -698,7 +712,11 @@ func runBenchmarkOrderBy(b *testing.B, db *sql.DB, count int, limit int, distinc
 		if distinct {
 			dist = `DISTINCT `
 		}
+<<<<<<< Updated upstream
 		query := fmt.Sprintf(`SELECT %sv FROM bench.sort`, dist)
+=======
+		query := fmt.Sprintf(`SELECT %sv FROM bench.scan`, dist)
+>>>>>>> Stashed changes
 		if limit != 0 {
 			query = fmt.Sprintf(`%s ORDER BY v DESC, w ASC, k DESC LIMIT %d`, query, limit)
 		}
@@ -724,12 +742,17 @@ func runBenchmarkOrderBy(b *testing.B, db *sql.DB, count int, limit int, distinc
 	}
 	b.StopTimer()
 
+<<<<<<< Updated upstream
 	if _, err := db.Exec(`DROP TABLE bench.sort`); err != nil {
+=======
+	if _, err := db.Exec(`DROP TABLE bench.scan`); err != nil {
+>>>>>>> Stashed changes
 		b.Fatal(err)
 	}
 }
 
 func BenchmarkSort100000Limit10_Cockroach(b *testing.B) {
+<<<<<<< Updated upstream
 	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
 }
 
@@ -743,4 +766,11 @@ func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
 
 func BenchmarkSort100000Limit10Distinct_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
+=======
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkSort(b, db, 100000, 10, false) })
+}
+
+func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkSort(b, db, 100000, 10, true) })
+>>>>>>> Stashed changes
 }
