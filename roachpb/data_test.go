@@ -292,6 +292,12 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	if err := v.Verify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
 	}
+	// Test ClearChecksum and reinitialization of checksum.
+	v.ClearChecksum()
+	v.InitChecksum(k)
+	if err := v.Verify(k); err != nil {
+		t.Error(err)
+	}
 }
 
 func TestSetGetChecked(t *testing.T) {
