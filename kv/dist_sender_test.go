@@ -383,11 +383,11 @@ func TestOwnNodeCertain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	act := make(map[roachpb.NodeID]roachpb.Timestamp)
+	var act []roachpb.Transaction_ObservedTimestamp
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		for k, v := range ba.Txn.ObservedTimestamps {
-			act[k] = v
+		for _, v := range ba.Txn.ObservedTimestamps {
+			act = append(act, v)
 		}
 		return ba.CreateReply(), nil
 	}
@@ -409,8 +409,8 @@ func TestOwnNodeCertain(t *testing.T) {
 	}, put); err != nil {
 		t.Fatalf("put encountered error: %s", err)
 	}
-	exp := map[roachpb.NodeID]roachpb.Timestamp{
-		expNodeID: expTS,
+	exp := []roachpb.Transaction_ObservedTimestamp{
+		{NodeID: expNodeID, Timestamp: expTS},
 	}
 	if !reflect.DeepEqual(exp, act) {
 		t.Fatalf("wanted %v, got %v", exp, act)
