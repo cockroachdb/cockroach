@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/termie/go-shutil"
@@ -755,4 +756,80 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 			b.Closed(),
 		)
 	}()
+}
+
+func BenchmarkIterOnBatch10(b *testing.B) {
+	benchmarkIterOnBatch(b, 10)
+}
+
+func BenchmarkIterOnBatch100(b *testing.B) {
+	benchmarkIterOnBatch(b, 100)
+}
+
+func BenchmarkIterOnBatch1000(b *testing.B) {
+	benchmarkIterOnBatch(b, 1000)
+}
+
+func BenchmarkIterOnBatch10000(b *testing.B) {
+	benchmarkIterOnBatch(b, 10000)
+}
+
+func makeKey(i int) MVCCKey {
+	return MakeMVCCMetadataKey(roachpb.Key(strconv.Itoa(i)))
+}
+
+func benchmarkIterOnBatch(b *testing.B, writes int) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	engine := createTestEngine(stopper)
+
+	// Additional keys to write to base beyond what will be deleted / seeked to.
+	// Adding lots of extra keys makes seek much faster.
+	extra, err := strconv.Atoi(os.Getenv("EXTRA"))
+	if err != nil {
+		extra = 0
+	}
+
+	// Move the region of deleted and seeked keys up into middle of written base keys.
+	// moving this up to 50 or 100 makes seek much faster.
+	// with extra=500, changing this from 50 to 150, seek is 4.5x faster.
+	offset, err := strconv.Atoi(os.Getenv("OFFSET"))
+	if err != nil {
+		offset = 0
+	}
+
+	for i := 0; i < writes+extra; i++ {
+		if err := engine.Put(makeKey(i), []byte(strconv.Itoa(i))); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	batch := engine.NewBatch()
+	defer batch.Close()
+
+	// shuffling the order of these doesn't change anything.
+	for i := 0; i < writes; i++ {
+		if err := batch.Clear(makeKey(i + offset)); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	if os.Getenv("FLUSH_BATCH") == "1" {
+		if err := batch.Commit(); err != nil {
+			b.Fatal(err)
+		} else {
+			batch = engine.NewBatch()
+		}
+	}
+
+	iter := batch.NewIterator(nil)
+	defer iter.Close()
+	r := rand.New(rand.NewSource(5))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		iter.Seek(makeKey(r.Intn(writes) + offset))
+	}
 }
