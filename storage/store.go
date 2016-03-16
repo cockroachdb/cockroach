@@ -1555,11 +1555,13 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 				}
 				txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 				pErr.SetTxn(txn)
+				pErr.Now = now
 			} else {
 				if br.Txn == nil {
 					br.Txn = &roachpb.Transaction{}
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+				br.Now = now
 			}
 		}()
 
@@ -1607,7 +1609,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			return nil, pErr
 		}
 
-		var br *roachpb.BatchResponse
 		br, pErr = rng.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil

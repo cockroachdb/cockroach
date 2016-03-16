@@ -71,6 +71,11 @@ type Context struct {
 	}
 }
 
+// UpdateClock synchronizes the local clock with the supplied timestamp.
+func (c *Context) UpdateClock(ts roachpb.Timestamp) {
+	c.localClock.Update(ts)
+}
+
 // NewContext creates an rpc Context with the supplied values.
 func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	var ctx *Context

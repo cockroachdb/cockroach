@@ -2576,6 +2576,15 @@ class Error : public ::google::protobuf::Message {
   ::cockroach::roachpb::ErrPosition* release_index();
   void set_allocated_index(::cockroach::roachpb::ErrPosition* index);
 
+  // optional .cockroach.roachpb.Timestamp now = 8;
+  bool has_now() const;
+  void clear_now();
+  static const int kNowFieldNumber = 8;
+  const ::cockroach::roachpb::Timestamp& now() const;
+  ::cockroach::roachpb::Timestamp* mutable_now();
+  ::cockroach::roachpb::Timestamp* release_now();
+  void set_allocated_now(::cockroach::roachpb::Timestamp* now);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Error)
  private:
   inline void set_has_message();
@@ -2592,6 +2601,8 @@ class Error : public ::google::protobuf::Message {
   inline void clear_has_detail();
   inline void set_has_index();
   inline void clear_has_index();
+  inline void set_has_now();
+  inline void clear_has_now();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -2602,6 +2613,7 @@ class Error : public ::google::protobuf::Message {
   ::cockroach::roachpb::Transaction* unexposed_txn_;
   ::cockroach::roachpb::ErrorDetail* detail_;
   ::cockroach::roachpb::ErrPosition* index_;
+  ::cockroach::roachpb::Timestamp* now_;
   ::google::protobuf::int32 origin_node_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
@@ -4831,6 +4843,49 @@ inline void Error::set_allocated_index(::cockroach::roachpb::ErrPosition* index)
     clear_has_index();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.index)
+}
+
+// optional .cockroach.roachpb.Timestamp now = 8;
+inline bool Error::has_now() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void Error::set_has_now() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void Error::clear_has_now() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void Error::clear_now() {
+  if (now_ != NULL) now_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_now();
+}
+inline const ::cockroach::roachpb::Timestamp& Error::now() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Error.now)
+  return now_ != NULL ? *now_ : *default_instance_->now_;
+}
+inline ::cockroach::roachpb::Timestamp* Error::mutable_now() {
+  set_has_now();
+  if (now_ == NULL) {
+    now_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Error.now)
+  return now_;
+}
+inline ::cockroach::roachpb::Timestamp* Error::release_now() {
+  clear_has_now();
+  ::cockroach::roachpb::Timestamp* temp = now_;
+  now_ = NULL;
+  return temp;
+}
+inline void Error::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
+  delete now_;
+  now_ = now;
+  if (now) {
+    set_has_now();
+  } else {
+    clear_has_now();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Error.now)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
