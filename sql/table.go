@@ -593,9 +593,9 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 	case parser.DFloat:
 		var f float64
 		if dir == encoding.Ascending {
-			rkey, f, err = encoding.DecodeFloatAscending(key, nil)
+			rkey, f, err = encoding.DecodeFloatAscending(key)
 		} else {
-			rkey, f, err = encoding.DecodeFloatDescending(key, nil)
+			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		return parser.DFloat(f), rkey, err
 	case *parser.DDecimal:

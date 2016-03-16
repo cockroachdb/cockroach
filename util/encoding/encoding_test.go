@@ -369,18 +369,6 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "Float, no terminator",
-			buf:     []byte{floatPosLarge},
-			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeFloatAscending(b, nil); return err },
-		},
-		{
-			name:    "FloatDescending, no terminator",
-			buf:     []byte{floatPosLarge},
-			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeFloatDescending(b, nil); return err },
-		},
-		{
 			name:    "Decimal, no terminator",
 			buf:     []byte{floatPosLarge},
 			pattern: "did not find terminator",

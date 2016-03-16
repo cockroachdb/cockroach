@@ -12,10 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// An ordered key encoding scheme for numbers (both integers and floats) based
-// on sqlite4's key encoding:
-// http://sqlite.org/src4/doc/trunk/www/key_encoding.wiki
-//
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
@@ -32,37 +28,38 @@ import (
 )
 
 // EncodeFloatAscending returns the resulting byte slice with the encoded float64
-// appended to b.
+// appended to b. The encoded format for a float64 value f is, for positive f, the
+// encoding of the 64 bits (in IEEE 754 format) re-interpreted as an int64 and
+// encoded using EncodeUint64Ascending. For negative f, we keep the sign bit and
+// invert all other bits, encoding this value using EncodeUint64Descending. This
+// approach was inspired by in github.com/google/orderedcode/orderedcode.go.
 //
-// Values are classified as large, medium, or small according to the value of
-// E. If E is 11 or more, the value is large. For E between 0 and 10, the value
-// is medium. For E less than zero, the value is small.
-//
-// Large positive values are encoded as a single byte 0x22 followed by E as a
-// varint and then M. Medium positive values are a single byte of 0x17+E
-// followed by M. Small positive values are encoded as a single byte 0x16
-// followed by the ones-complement of the varint for -E followed by M.
-//
-// Small negative values are encoded as a single byte 0x14 followed by -E as a
-// varint and then the ones-complement of M. Medium negative values are encoded
-// as a byte 0x13-E followed by the ones-complement of M. Large negative values
-// consist of the single byte 0x08 followed by the ones-complement of the
-// varint encoding of E followed by the ones-complement of M.
+// One of five single-byte prefix tags are appended to the front of the encoding.
+// These tags enforce logical ordering of keys for both ascending and descending
+// encoding directions. The tags split the encoded floats into five categories:
+// - NaN for an ascending encoding direction
+// - Negative valued floats
+// - Zero (positive and negative)
+// - Positive valued floats
+// - NaN for a descending encoding direction
+// This ordering ensures that NaNs are always sorted first in either encoding
+// direction, and that after them a logical ordering is followed.
 func EncodeFloatAscending(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
 	switch {
 	case math.IsNaN(f):
 		return append(b, floatNaN)
-	case math.IsInf(f, 1):
-		return append(b, floatInfinity)
-	case math.IsInf(f, -1):
-		return append(b, floatNegativeInfinity)
 	case f == 0:
 		return append(b, floatZero)
 	}
-	// TODO(nvanbenschoten) Switch to a base-256 mantissa.
-	e, m := floatMandE(f, b[len(b):])
-	return encodeMandE(b, f < 0, e, m)
+	i := int64(math.Float64bits(f))
+	if i < 0 {
+		i = math.MinInt64 - i
+		b = append(b, floatNegSmall)
+		return EncodeUint64Descending(b, uint64(-i))
+	}
+	b = append(b, floatPosSmall)
+	return EncodeUint64Ascending(b, uint64(i))
 }
 
 // EncodeFloatDescending is the descending version of EncodeFloatAscending.
@@ -75,56 +72,37 @@ func EncodeFloatDescending(b []byte, f float64) []byte {
 
 // DecodeFloatAscending returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
-func DecodeFloatAscending(buf []byte, tmp []byte) ([]byte, float64, error) {
-	// Handle the simplistic cases first.
+func DecodeFloatAscending(buf []byte) ([]byte, float64, error) {
+	if PeekType(buf) != Float {
+		return buf, 0, util.Errorf("did not find marker")
+	}
 	switch buf[0] {
 	case floatNaN, floatNaNDesc:
 		return buf[1:], math.NaN(), nil
-	case floatInfinity:
-		return buf[1:], math.Inf(1), nil
-	case floatNegativeInfinity:
-		return buf[1:], math.Inf(-1), nil
+	case floatNegSmall:
+		r, i, err := DecodeUint64Descending(buf[1:])
+		if err != nil {
+			return r, 0, err
+		}
+		iNeg := -int64(i)
+		iNeg = math.MinInt64 - iNeg
+		return r, math.Float64frombits(uint64(iNeg)), nil
 	case floatZero:
 		return buf[1:], 0, nil
-	}
-	tmp = tmp[len(tmp):cap(tmp)]
-	idx := bytes.IndexByte(buf, floatTerminator)
-	if idx == -1 {
-		return nil, 0, util.Errorf("did not find terminator %#x in buffer %#x", floatTerminator, buf)
-	}
-	switch {
-	case buf[0] == floatNegLarge:
-		// Negative large.
-		e, m, tmp2 := decodeLargeNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp2), nil
-	case buf[0] > floatNegLarge && buf[0] <= floatNegMedium:
-		// Negative medium.
-		e, m, tmp2 := decodeMediumNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp2), nil
-	case buf[0] == floatNegSmall:
-		// Negative small.
-		e, m, tmp2 := decodeSmallNumber(true, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(true, e, m, tmp2), nil
-	case buf[0] == floatPosLarge:
-		// Positive large.
-		e, m, tmp2 := decodeLargeNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp2), nil
-	case buf[0] >= floatPosMedium && buf[0] < floatPosLarge:
-		// Positive medium.
-		e, m, tmp2 := decodeMediumNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp2), nil
-	case buf[0] == floatPosSmall:
-		// Positive small.
-		e, m, tmp2 := decodeSmallNumber(false, buf[:idx+1], tmp)
-		return buf[idx+1:], makeFloatFromMandE(false, e, m, tmp2), nil
+	case floatPosSmall:
+		r, i, err := DecodeUint64Ascending(buf[1:])
+		if err != nil {
+			return r, 0, err
+		}
+		return r, math.Float64frombits(i), nil
 	default:
 		return nil, 0, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
 }
 
 // DecodeFloatDescending decodes floats encoded with EncodeFloatDescending.
-func DecodeFloatDescending(buf []byte, tmp []byte) ([]byte, float64, error) {
-	b, r, err := DecodeFloatAscending(buf, tmp)
+func DecodeFloatDescending(buf []byte) ([]byte, float64, error) {
+	b, r, err := DecodeFloatAscending(buf)
 	return b, -r, err
 }
 
