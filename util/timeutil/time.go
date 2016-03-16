@@ -18,15 +18,25 @@ package timeutil
 
 import (
 	"os"
+	"strconv"
+	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const offsetEnvKey = "COCKROACH_SIMULATED_OFFSET"
+const disableMonotonicCheckEnvKey = "COCKROACH_DISABLE_CHECK_MONOTONIC_TIME"
 
 var (
 	nowFunc = time.Now
 
 	offset time.Duration
+
+	monotonicityCheckEnabled bool
+	tmu                      sync.Mutex
+	lastTime                 time.Time
+	monotonicityErrorsCount  int32
 )
 
 func initFakeTime() {
@@ -36,12 +46,22 @@ func initFakeTime() {
 			panic(err)
 		}
 	}
-	if offset == 0 {
-		nowFunc = time.Now
-	} else {
+	if offset != 0 {
 		nowFunc = func() time.Time {
 			return time.Now().Add(offset)
 		}
+	}
+}
+
+func initMonotonicTimeCheck() {
+	monotonicityCheckEnabled = true
+	if checkStr := os.Getenv(disableMonotonicCheckEnvKey); checkStr != "" {
+		var disableCheck bool
+		var err error
+		if disableCheck, err = strconv.ParseBool(checkStr); err != nil {
+			panic(err)
+		}
+		monotonicityCheckEnabled = !disableCheck
 	}
 }
 
@@ -50,6 +70,19 @@ func initFakeTime() {
 // tag - if built with that tag, the clock offset is parsed from the
 // "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
 // which supports quasi-human values like "1h" or "1m".
+// Additionally, the time is checked to be monotonic (no backward
+// jumps in time) unless COCKROACH_DISABLE_CHECK_MONOTONIC_TIME is set
+// to true.
 func Now() time.Time {
+	if monotonicityCheckEnabled {
+		tmu.Lock()
+		defer tmu.Unlock()
+		newTime := nowFunc()
+		if !lastTime.IsZero() && newTime.Before(lastTime) {
+			log.Warningf("backward time jump detected: previously %s, now %s (offset %s)", lastTime, newTime, newTime.Sub(lastTime))
+			monotonicityErrorsCount++
+		}
+		lastTime = newTime
+	}
 	return nowFunc()
 }
