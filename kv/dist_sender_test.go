@@ -948,6 +948,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	val := roachpb.MakeValueFromString("val")
 	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("a")), val).(*roachpb.PutRequest))
+	val = roachpb.MakeValueFromString("val")
 	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("b")), val).(*roachpb.PutRequest))
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
@@ -1051,8 +1052,8 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	val := roachpb.MakeValueFromString("val")
 	ba.Add(roachpb.NewPut(roachpb.Key("a"), val).(*roachpb.PutRequest))
+	val = roachpb.MakeValueFromString("val")
 	ba.Add(roachpb.NewPut(roachpb.Key("b"), val).(*roachpb.PutRequest))
-
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1161,6 +1162,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		ba.Txn = &roachpb.Transaction{Name: "test"}
 		val := roachpb.MakeValueFromString("val")
 		ba.Add(roachpb.NewPut(roachpb.Key(test.put1), val).(*roachpb.PutRequest))
+		val = roachpb.MakeValueFromString("val")
 		ba.Add(roachpb.NewPut(roachpb.Key(test.put2), val).(*roachpb.PutRequest))
 		ba.Add(&roachpb.EndTransactionRequest{Span: roachpb.Span{Key: test.et}})
 
