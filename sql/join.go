@@ -213,9 +213,9 @@ func (n *indexJoinNode) ExplainPlan() (name, description string, children []plan
 	return "index-join", "", []planNode{n.index, n.table}
 }
 
-func (n *indexJoinNode) SetLimitHint(numRows int64) {
+func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	if numRows < joinBatchSize {
 		numRows = joinBatchSize
 	}
-	n.index.SetLimitHint(numRows)
+	n.index.SetLimitHint(numRows, soft)
 }

@@ -229,10 +229,10 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 	return name, description, []planNode{n.plan}
 }
 
-func (n *sortNode) SetLimitHint(numRows int64) {
+func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	// The limit is only useful to the wrapped node if we don't need to sort.
 	if !n.needSort {
-		n.plan.SetLimitHint(numRows)
+		n.plan.SetLimitHint(numRows, soft)
 	}
 }
 
