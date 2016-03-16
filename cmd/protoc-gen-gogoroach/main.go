@@ -47,6 +47,7 @@ func main() {
 
 		vanity.TurnOnMarshalerAll,
 		vanity.TurnOnUnmarshalerAll,
+		vanity.TurnOnStable_MarshalerAll,
 		vanity.TurnOnSizerAll,
 
 		// Enabling these causes `String() string` on Enums to be inlined.
