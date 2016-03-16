@@ -191,6 +191,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	// values. Intents older than the intent age threshold are sent for
 	// resolution and values after the MVCC metadata, and possible
 	// intent, are sent for garbage collection.
+	var intentCount int
 	processKeysAndValues := func() {
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
@@ -210,6 +211,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 							TxnMeta: *meta.Txn,
 						}
 						txnMap[txnID] = txn
+						intentCount++
 						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
@@ -253,8 +255,9 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
+	gcq.eventLog.Infof(true, "assembled %d transactions from %d old intents; found %d gc'able keys", len(txnMap), intentCount, len(gcArgs.Keys))
 
-	txnKeys, err := processTransactionTable(repl, txnMap, txnExp)
+	txnKeys, err := gcq.processTransactionTable(repl, txnMap, txnExp)
 	if err != nil {
 		return err
 	}
@@ -268,12 +271,13 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
+	gcq.eventLog.Infof(true, "pushing %d txns", len(txnMap))
 	for _, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
 			continue
 		}
 		wg.Add(1)
-		go pushTxn(repl, now, txn, roachpb.PUSH_ABORT, &wg)
+		go gcq.pushTxn(repl, now, txn, roachpb.PUSH_ABORT, &wg)
 	}
 	wg.Wait()
 
@@ -286,6 +290,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 			}
 		}
 	}
+	gcq.eventLog.Infof(true, "resolving %d intents", len(intents))
 
 	if pErr := repl.store.intentResolver.resolveIntents(repl.context(), repl, intents,
 		true /* wait */, false /* !poison */); pErr != nil {
@@ -294,7 +299,10 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 
 	// Deal with any leftover sequence cache keys. There shouldn't be many of
 	// them.
-	gcArgs.Keys = append(gcArgs.Keys, processSequenceCache(repl, now, txnExp, txnMap)...)
+	leftoverSeqCacheKeys := gcq.processSequenceCache(repl, now, txnExp, txnMap)
+	gcq.eventLog.Infof(true, "collected %d leftover sequence cache keys", leftoverSeqCacheKeys)
+	gcArgs.Keys = append(gcArgs.Keys, leftoverSeqCacheKeys...)
+	gcq.eventLog.Infof(true, "sending gc request for %d keys", len(gcArgs.Keys))
 
 	var ba roachpb.BatchRequest
 	// Technically not needed since we're talking directly to the Range.
@@ -314,11 +322,15 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 // aborted, and in the second case we may have to resolve the intents success-
 // fully before GCing the entry. The transaction records which can be gc'ed are
 // returned separately and are not added to txnMap nor intentSpanMap.
-func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
+func (gcq *gcQueue) processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transaction, cutoff roachpb.Timestamp) ([]roachpb.GCRequest_GCKey, error) {
 	snap := r.store.Engine().NewSnapshot()
 	defer snap.Close()
 
+	var numResolveAttempts, numQueuedPushes int
 	var gcKeys []roachpb.GCRequest_GCKey
+	defer func() {
+		gcq.eventLog.Infof(true, "attempted to resolve %d intents of %d gc'able transactions; queued %d txns for push", numResolveAttempts, len(gcKeys), numQueuedPushes)
+	}()
 	handleOne := func(kv roachpb.KeyValue) error {
 		var txn roachpb.Transaction
 		if err := kv.Value.GetProto(&txn); err != nil {
@@ -342,6 +354,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 			// TODO(tschottdorf): refactor so that we can GC PENDING entries
 			// in the same cycle, but keeping the calls to pushTxn in a central
 			// location (keeping it easy to batch them up in the future).
+			numQueuedPushes++
 			txnMap[txnID] = &txn
 			return nil
 		case roachpb.ABORTED:
@@ -351,6 +364,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 			// Note: Most aborted transaction weren't aborted by their client,
 			// but instead by the coordinator - those will not have any intents
 			// persisted, though they still might exist in the system.
+			numResolveAttempts += len(txn.Intents)
 			if err := r.store.intentResolver.resolveIntents(r.context(), r,
 				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
@@ -358,6 +372,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 		case roachpb.COMMITTED:
 			// It's committed, so it doesn't need a push but we can only
 			// GC it after its intents are resolved.
+			numResolveAttempts += len(txn.Intents)
 			if err := r.store.intentResolver.resolveIntents(r.context(), r,
 				roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */); err != nil {
 				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
@@ -385,7 +400,7 @@ func processTransactionTable(r *Replica, txnMap map[uuid.UUID]*roachpb.Transacti
 // pushing the transactions (in cleanup mode) for those entries which appear
 // to be old enough. In case the transaction indicates that it's terminated,
 // the sequence cache keys are included in the result.
-func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns map[uuid.UUID]*roachpb.Transaction) []roachpb.GCRequest_GCKey {
+func (gcq *gcQueue) processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns map[uuid.UUID]*roachpb.Transaction) []roachpb.GCRequest_GCKey {
 	snap := r.store.Engine().NewSnapshot()
 	defer snap.Close()
 
@@ -420,7 +435,7 @@ func processSequenceCache(r *Replica, now, cutoff roachpb.Timestamp, prevTxns ma
 		// of a heartbeat, then we're free to remove the sequence cache entry.
 		// In the most likely case, there isn't even an entry (which will
 		// be apparent by a zero timestamp and nil last heartbeat).
-		go pushTxn(r, now, txn, roachpb.PUSH_TOUCH, &wg)
+		go gcq.pushTxn(r, now, txn, roachpb.PUSH_TOUCH, &wg)
 	}
 	wg.Wait()
 
@@ -454,11 +469,11 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
+func (gcq *gcQueue) pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
 	typ roachpb.PushTxnType, wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 	if log.V(1) {
-		log.Infof("pushing txn %s ts=%s", txn, txn.OrigTimestamp)
+		gcq.eventLog.Infof(true, "pushing txn %s ts=%s", txn, txn.OrigTimestamp)
 	}
 
 	// Attempt to push the transaction which created the intent.
