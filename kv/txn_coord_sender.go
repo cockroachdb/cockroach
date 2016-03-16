@@ -331,15 +331,17 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
 		txnID := *ba.Txn.ID
-		// Verify that if this Transaction is not read-only, we have it on
-		// file. If not, refuse writes - the client must have issued a write on
-		// another coordinator previously.
-		if ba.Txn.Writing && ba.IsTransactionWrite() {
+		// Verify that if this Transaction is not read-only, we have it on file.
+		// If not, refuse further operations - the transaction was aborted due
+		// to a timeout or the client must have issued a write on another
+		// coordinator previously.
+		if ba.Txn.Writing {
 			tc.Lock()
 			_, ok := tc.txns[txnID]
 			tc.Unlock()
 			if !ok {
-				return nil, roachpb.NewErrorf("transaction must not write on multiple coordinators")
+				return nil,
+					roachpb.NewErrorf("writing transaction is gone or ran on multiple coordinators")
 			}
 		}
 
