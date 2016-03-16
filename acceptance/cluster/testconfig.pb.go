@@ -36,7 +36,8 @@ const _ = proto.GoGoProtoPackageIsVersion1
 
 // StoreConfig holds the configuration of a collection of similar stores.
 type StoreConfig struct {
-	Count int32 `protobuf:"varint,1,opt,name=count" json:"count"`
+	Count     int32 `protobuf:"varint,1,opt,name=count" json:"count"`
+	MaxRanges int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
 }
 
 func (m *StoreConfig) Reset()                    { *m = StoreConfig{} }
@@ -94,6 +95,9 @@ func (m *StoreConfig) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x8
 	i++
 	i = encodeVarintTestconfig(data, i, uint64(m.Count))
+	data[i] = 0x10
+	i++
+	i = encodeVarintTestconfig(data, i, uint64(m.MaxRanges))
 	return i, nil
 }
 
@@ -201,6 +205,7 @@ func (m *StoreConfig) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovTestconfig(uint64(m.Count))
+	n += 1 + sovTestconfig(uint64(m.MaxRanges))
 	return n
 }
 
@@ -290,6 +295,25 @@ func (m *StoreConfig) Unmarshal(data []byte) error {
 				b := data[iNdEx]
 				iNdEx++
 				m.Count |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxRanges", wireType)
+			}
+			m.MaxRanges = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTestconfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.MaxRanges |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

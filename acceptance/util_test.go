@@ -54,6 +54,7 @@ var flagLogDir = flag.String("l", "", "the directory to store log files, relativ
 var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
 	"cluster configurations for each test. This overrides the nodes, stores, stall and duration flags and will run "+
 	"the test against a collection of pre-specified cluster configurations.")
+var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
@@ -109,17 +110,50 @@ func readConfigFromFlags() cluster.TestConfig {
 }
 
 // getConfigs returns a list of test configs based on the passed in flags.
-func getConfigs() []cluster.TestConfig {
-	if *flagTestConfigs {
-		return cluster.DefaultConfigs()
+func getConfigs(t *testing.T) []cluster.TestConfig {
+	// If a config not supplied, just read the flags.
+	if flagConfig == nil && flagTestConfigs == nil {
+		return []cluster.TestConfig{readConfigFromFlags()}
 	}
-	return []cluster.TestConfig{readConfigFromFlags()}
+
+	var configs []cluster.TestConfig
+	if *flagTestConfigs {
+		configs = append(configs, cluster.DefaultConfigs()...)
+	}
+
+	if flagConfig != nil && len(*flagConfig) > 0 {
+		// Read the passed in config from the command line.
+		var config cluster.TestConfig
+		if err := json.Unmarshal([]byte(*flagConfig), &config); err != nil {
+			t.Error(err)
+		}
+		configs = append(configs, config)
+	}
+
+	// Override duration and stall values in all configs if the flags are set.
+	for i := 0; i < len(configs); i++ {
+		// Override values.
+		if flagDuration != nil && *flagDuration != cluster.DefaultDuration {
+			configs[i].Duration = *flagDuration
+		}
+		if flagStall != nil && *flagStall != cluster.DefaultStall {
+			configs[i].Stall = *flagStall
+		}
+		// Set missing defaults.
+		if configs[i].Duration == 0 {
+			configs[i].Duration = cluster.DefaultDuration
+		}
+		if configs[i].Stall == 0 {
+			configs[i].Stall = cluster.DefaultStall
+		}
+	}
+	return configs
 }
 
 // runTestOnConfigs retrieves the full list of test configurations and runs the
 // passed in test against each on serially.
 func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
-	cfgs := getConfigs()
+	cfgs := getConfigs(t)
 	for _, cfg := range cfgs {
 		func() {
 			cluster := StartCluster(t, cfg)
