@@ -35,6 +35,7 @@ TESTFLAGS    :=
 STRESSFLAGS  := -stderr -maxfails 1
 DUPLFLAGS    := -t 100
 BUILDMODE    := install
+CURRENTDIR   := $(realpath .)
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
 # This ensures that we get the versions pinned in the GLOCKFILE.
@@ -156,12 +157,12 @@ coverage:
 .PHONY: stress
 stress:
 	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o stress.test
-	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	cd $(PKG) && stress $(STRESSFLAGS) $(CURRENTDIR)/stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
 stressrace:
 	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
-	stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	cd $(PKG) && stress $(STRESSFLAGS) $(CURENTDIR)/stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: acceptance
 acceptance:
