@@ -473,7 +473,7 @@ var nonZeroTxn = Transaction{
 	LastHeartbeat:      &Timestamp{1, 2},
 	OrigTimestamp:      makeTS(30, 31),
 	MaxTimestamp:       makeTS(40, 41),
-	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
+	ObservedTimestamps: []Transaction_ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	Writing:            true,
 	Sequence:           123,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
