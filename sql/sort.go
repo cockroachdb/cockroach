@@ -17,8 +17,8 @@
 package sql
 
 import (
+	"container/heap"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -157,6 +157,18 @@ func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
 	}
 }
 
+type sortMode int
+
+const (
+	// Used when all values need to be sorted.
+	sortAll sortMode = iota
+	// Used when exactly k values need to be sorted.
+	sortK
+	// Used when an unknown number of values need to be sorted, but that
+	// most likely not all values need to be sorted.
+	sortStream
+)
+
 type sortNode struct {
 	plan     planNode
 	columns  []ResultColumn
@@ -164,7 +176,10 @@ type sortNode struct {
 	needSort bool
 	pErr     *roachpb.Error
 	explain  explainMode
-	values   valuesNode
+
+	sortingMode sortMode
+	limitHint   int64
+	curValues   parser.DTuple
 }
 
 func (n *sortNode) Columns() []ResultColumn {
@@ -181,8 +196,7 @@ func (n *sortNode) Ordering() orderingInfo {
 func (n *sortNode) Values() parser.DTuple {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
-	v := n.plan.Values()
-	return v[:len(n.columns)]
+	return n.curValues[:len(n.columns)]
 }
 
 func (n *sortNode) MarkDebug(mode explainMode) {
@@ -230,9 +244,16 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 }
 
 func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
-	// The limit is only useful to the wrapped node if we don't need to sort.
 	if !n.needSort {
+		// The limit is only useful to the wrapped node if we don't need to sort.
 		n.plan.SetLimitHint(numRows, soft)
+	} else {
+		n.limitHint = numRows
+		if soft {
+			n.sortingMode = sortStream
+		} else {
+			n.sortingMode = sortK
+		}
 	}
 }
 
@@ -270,51 +291,103 @@ func (n *sortNode) Next() bool {
 	if n.pErr != nil {
 		return false
 	}
+	if n.needSort {
+		n.needSort = false
+		if !n.initValues() {
+			return false
+		}
+	}
+	switch n.sortingMode {
+	case sortStream:
+		v := n.plan.(*valuesNode)
+		if v.Len() == 0 {
+			return false
+		}
+		n.curValues = v.PopValues()
+		return true
+	default:
+		res := n.plan.Next()
+		if res {
+			n.curValues = n.plan.Values()
+		}
+		return res
+	}
+}
 
+func (n *sortNode) initValues() bool {
 	// TODO(pmattis): If the result set is large, we might need to perform the
 	// sort on disk.
-
-	for n.needSort {
-		if v, ok := n.plan.(*valuesNode); ok {
-			// The plan we wrap is already a values node. Just sort it.
-			v.ordering = n.ordering
-			sort.Sort(v)
-			n.needSort = false
-			break
+	var v *valuesNode
+	if x, ok := n.plan.(*valuesNode); ok {
+		v = x
+		v.ordering = n.ordering
+		n.sortingMode = sortAll
+		v.SortAll()
+	} else {
+		v = &valuesNode{ordering: n.ordering}
+		initValuesNode(v, n.plan, n.sortingMode, n.limitHint)
+		n.pErr = n.plan.PErr()
+		if n.pErr != nil {
+			return false
 		}
+	}
+	n.plan = v
+	return true
+}
 
+func initValuesNode(vNode *valuesNode, source planNode, sortingMode sortMode, limitHint int64) {
+	copyAll := func() {
 		// TODO(andrei): If we're scanning an index with a prefix matching an
 		// ordering prefix, we should only accumulate values for equal fields
 		// in this prefix, then sort the accumulated chunk and output.
-		if !n.plan.Next() {
-			n.pErr = n.plan.PErr()
-			if n.pErr != nil {
-				return false
-			}
-
-			n.values.ordering = n.ordering
-			sort.Sort(&n.values)
-			// Replace the plan with the sorted values node.
-			n.plan = &n.values
-			n.needSort = false
-			break
-		}
-
-		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
-			// Pass through non-row debug values.
-			return true
-		}
-
-		values := n.plan.Values()
-		valuesCopy := make(parser.DTuple, len(values))
-		copy(valuesCopy, values)
-		n.values.rows = append(n.values.rows, valuesCopy)
-
-		if n.explain == explainDebug {
-			// Emit a "buffered" row.
-			return true
+		for source.Next() {
+			values := source.Values()
+			valuesCopy := make(parser.DTuple, len(values))
+			copy(valuesCopy, values)
+			vNode.rows = append(vNode.rows, valuesCopy)
 		}
 	}
 
-	return n.plan.Next()
+	switch sortingMode {
+	case sortAll:
+		copyAll()
+		vNode.SortAll()
+	case sortK:
+		vNode.InitMaxHeap()
+
+		var topOfHeap parser.DTuple
+		for source.Next() {
+			values := source.Values()
+
+			switch {
+			case int64(vNode.Len()) < limitHint:
+				valuesCopy := make(parser.DTuple, len(values))
+				copy(valuesCopy, values)
+
+				vNode.PushValues(valuesCopy)
+				if topOfHeap == nil || vNode.ValuesLess(topOfHeap, valuesCopy) {
+					topOfHeap = valuesCopy
+				}
+			case vNode.ValuesLess(values, topOfHeap):
+				valuesCopy := make(parser.DTuple, len(values))
+				copy(valuesCopy, values)
+
+				vNode.rows[0] = valuesCopy
+				heap.Fix(vNode, 0)
+				topOfHeap = vNode.rows[0]
+			}
+		}
+
+		// Pop all values in the heap, resulting in the inverted ordering
+		// being sorted in reverse. Therefore, the slice is ordered correctly
+		// in-place.
+		origLen := vNode.Len()
+		for vNode.Len() > 0 {
+			heap.Pop(vNode)
+		}
+		vNode.rows = vNode.rows[:origLen]
+	case sortStream:
+		copyAll()
+		vNode.InitMinHeap()
+	}
 }
