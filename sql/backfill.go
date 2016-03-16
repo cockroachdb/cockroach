@@ -66,15 +66,18 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, mutationID MutationID) *roachpb.Error {
+// backfillBatch runs the backfill for all the mutations that match the ID
+// of the first mutation.
+func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
+	// Mutations are applied in a FIFO order. Only apply the first set
+	// of mutations.
+	mutationID := tableDesc.Mutations[0].MutationID
 	// Collect the elements that are part of the mutation.
-	for _, m := range oldTableDesc.Mutations {
+	for _, m := range tableDesc.Mutations {
 		if m.MutationID != mutationID {
-			// Mutations are applied in a FIFO order. Only apply the first set of
-			// mutations if they have the mutation ID we're looking for.
 			break
 		}
 		switch m.Direction {
@@ -109,7 +112,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 	// a SQL UPDATE of a column in mutations will fail.
 	if len(droppedColumnDescs) > 0 {
 		// Run a scan across the table using the primary key.
-		start := roachpb.Key(MakeIndexKeyPrefix(oldTableDesc.ID, oldTableDesc.PrimaryIndex.ID))
+		start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
 		// Use a different batch to perform the scan.
 		batch := &client.Batch{}
 		batch.Scan(start, start.PrefixEnd(), 0)
@@ -138,7 +141,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 	}
 
 	for _, indexDescriptor := range droppedIndexDescs {
-		indexPrefix := MakeIndexKeyPrefix(oldTableDesc.ID, indexDescriptor.ID)
+		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, indexDescriptor.ID)
 
 		// Delete the index.
 		indexStartKey := roachpb.Key(indexPrefix)
@@ -160,14 +163,14 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 		scan := &scanNode{
 			planner: p,
 			txn:     p.txn,
-			desc:    *oldTableDesc,
+			desc:    *tableDesc,
 		}
 		scan.initDescDefaults()
 		rows := p.selectIndex(&selectNode{}, scan, nil, false)
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.
-		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, oldTableDesc)
+		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
 		if err != nil {
 			return roachpb.NewError(err)
 		}
@@ -177,7 +180,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc *TableDescriptor, 
 
 			for _, newIndexDesc := range newIndexDescs {
 				secondaryIndexEntries, err := encodeSecondaryIndexes(
-					oldTableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
+					tableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
 				if err != nil {
 					return roachpb.NewError(err)
 				}
