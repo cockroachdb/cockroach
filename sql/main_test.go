@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func init() {
@@ -192,4 +194,9 @@ func cleanupTestServer(s *testServer) {
 func cleanup(s *testServer, db *sql.DB) {
 	_ = db.Close()
 	cleanupTestServer(s)
+}
+
+func TestMain(m *testing.M) {
+	randutil.SeedForTests()
+	os.Exit(m.Run())
 }
