@@ -1541,12 +1541,12 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	// this point in (absolute) time.
 	now := s.ctx.Clock.Update(ba.Timestamp)
 
-	if ba.Txn != nil {
-		// We're in a Txn, so we can reduce uncertainty restarts by attaching
-		// the above timestamp to the returned response or error. The caller
-		// can use it to shorten its uncertainty interval when it comes back to
-		// this node.
-		defer func() {
+	defer func() {
+		if ba.Txn != nil {
+			// We're in a Txn, so we can reduce uncertainty restarts by attaching
+			// the above timestamp to the returned response or error. The caller
+			// can use it to shorten its uncertainty interval when it comes back to
+			// this node.
 			if pErr != nil {
 				pErr.OriginNode = ba.Replica.NodeID
 				txn := pErr.GetTxn()
@@ -1561,8 +1561,16 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 			}
-		}()
+		}
 
+		if pErr != nil {
+			pErr.Now = now
+		} else {
+			br.Now = now
+		}
+	}()
+
+	if ba.Txn != nil {
 		// We make our transaction aware that no other operation that causally
 		// precedes it could have started after `now`. This is important: If we
 		// wind up pushing a value, it will be in our immediate future, and not
@@ -1607,7 +1615,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			return nil, pErr
 		}
 
-		var br *roachpb.BatchResponse
 		br, pErr = rng.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
