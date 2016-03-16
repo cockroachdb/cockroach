@@ -303,8 +303,11 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	// Start new or pick up active trace and embed its trace metadata into
 	// header for use by RPC recipients. From here on, there's always an active
 	// Trace, though its overhead is small unless it's sampled.
-	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
-	defer cleanupSp()
+	sp := opentracing.SpanFromContext(ctx)
+	if sp == nil {
+		sp = tc.tracer.StartSpan(opTxnCoordSender)
+		defer sp.Finish()
+	}
 	// TODO(tschottdorf): To get rid of the spurious alloc below we need to
 	// implement the carrier interface on ba.Header or make Span non-nullable,
 	// both of which force all of ba on the Heap. It's already there, so may
@@ -397,7 +400,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			}
 			if log.V(1) {
 				for _, intent := range et.IntentSpans {
-					sp.LogEvent(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
+					log.Trace(ctx, fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
 				}
 			}
 		}
@@ -416,7 +419,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 
 		if pErr = tc.updateState(ctx, ba, br, pErr); pErr != nil {
-			sp.LogEvent(fmt.Sprintf("error: %s", pErr))
+			log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
 			return nil, pErr
 		}
 	}
@@ -507,8 +510,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxn(ctx context.Context, txn roachpb.Transaction) {
-	// TODO(tschottdorf): re-instantiate
-	// trace.LogEvent("coordinator stops")
+	log.Trace(ctx, "coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[*txn.ID]
@@ -659,8 +661,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	hb.Key = txn.Key
 	ba.Add(hb)
 
-	// TODO(tschottdorf): re-instantiate
-	// trace.LogEvent("heartbeat")
+	log.Trace(ctx, "heartbeat")
 	_, err := tc.wrapped.Send(ctx, ba)
 	// If the transaction is not in pending state, then we can stop
 	// the heartbeat. It's either aborted or committed, and we resolve
@@ -685,9 +686,6 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
-	defer cleanupSp()
-
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	if pErr == nil {
@@ -800,7 +798,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 			// we expect it to be committed/aborted at some point in the
 			// future.
 			if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
-				sp.LogEvent("coordinator spawns")
+				log.Trace(ctx, "coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
 					keys:             interval.NewRangeTree(),
