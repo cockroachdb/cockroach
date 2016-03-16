@@ -288,10 +288,10 @@ func (t Timestamp) GoTime() time.Time {
 }
 
 const (
-	checksumUnitialized = 0
-	checksumSize        = 4
-	tagPos              = checksumSize
-	headerSize          = tagPos + 1
+	checksumUninitialized = 0
+	checksumSize          = 4
+	tagPos                = checksumSize
+	headerSize            = tagPos + 1
 )
 
 func (v Value) checksum() uint32 {
@@ -321,11 +321,11 @@ func (v *Value) InitChecksum(key []byte) {
 	if v.RawBytes == nil {
 		return
 	}
-	// TODO(peter): Is this guard to avoid re-initializing the checksum if it is
-	// already initialized necessary? Is this a safety or a performance concern?
-	if v.checksum() == checksumUnitialized {
-		v.setChecksum(v.computeChecksum(key))
+	// Should be uninitialized.
+	if v.checksum() != checksumUninitialized {
+		panic(fmt.Sprintf("initialized checksum = %x", v.checksum()))
 	}
+	v.setChecksum(v.computeChecksum(key))
 }
 
 // ClearChecksum clears the checksum value.
@@ -558,10 +558,10 @@ func (v Value) computeChecksum(key []byte) uint32 {
 	sum := crc.Sum32()
 	crc.Reset()
 	crc32Pool.Put(crc)
-	// We reserved the value 0 (checksumUnitialized) to indicate that a checksum
+	// We reserved the value 0 (checksumUninitialized) to indicate that a checksum
 	// has not been initialized. This reservation is accomplished by folding a
 	// computed checksum of 0 to the value 1.
-	if sum == checksumUnitialized {
+	if sum == checksumUninitialized {
 		return 1
 	}
 	return sum
