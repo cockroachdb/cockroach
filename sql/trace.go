@@ -62,7 +62,7 @@ func (n *explainTraceNode) Next() bool {
 			n.exhausted = true
 			sp := opentracing.SpanFromContext(n.txn.Context)
 			if pErr := n.PErr(); pErr != nil {
-				sp.LogEvent(pErr.GoError().Error())
+				sp.LogEvent(pErr.String())
 			}
 			sp.LogEvent("tracing completed")
 			sp.Finish()
