@@ -527,6 +527,9 @@ func TestTransactionClone(t *testing.T) {
 	if !reflect.DeepEqual(expFields, fields) {
 		t.Fatalf("%s != %s", expFields, fields)
 	}
+	if !reflect.DeepEqual(nonZeroTxn, txn) {
+		t.Fatalf("e = %v, v = %v", nonZeroTxn, txn)
+	}
 }
 
 // checkVal verifies if a value is close to an expected value, within a fraction (e.g. if
