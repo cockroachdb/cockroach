@@ -54,7 +54,17 @@ func checkCounter(t *testing.T, s *storage.Store, key string, e int64) {
 	}
 }
 
-func verifyStats(t *testing.T, s *storage.Store) {
+func verifyStats(t *testing.T, mtc *multiTestContext, storeIdx int) {
+	// Get the current store at storeIdx.
+	s := mtc.stores[storeIdx]
+	// Stop the store at the given index, while keeping the the reference to the
+	// store object. Method ComputeMVCCStatsTest() still works on a stopped
+	// store (it needs only the engine, which is still open), and the most
+	// recent stats are still available on the stopped store object; however, no
+	// further information can be committed to the store while it is stopped,
+	// preventing any races during verification.
+	mtc.stopStore(storeIdx)
+
 	// Compute real total MVCC statistics from store.
 	realStats, err := s.ComputeMVCCStatsTest()
 	if err != nil {
@@ -91,6 +101,9 @@ func verifyStats(t *testing.T, s *storage.Store) {
 		t.Log(util.ErrorfSkipFrames(1, "verifyStats failed, aborting test."))
 		t.FailNow()
 	}
+
+	// Restart the store at the provided index.
+	mtc.restartStore(storeIdx)
 }
 
 func verifyRocksDBStats(t *testing.T, s *storage.Store) {
@@ -127,37 +140,34 @@ func TestStoreMetrics(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	store0 := mtc.stores[0]
-	store1 := mtc.stores[1]
-
 	// Flush RocksDB memtables, so that RocksDB begins using block-based tables.
 	// This is useful, because most of the stats we track don't apply to
 	// memtables.
-	if err := store0.Engine().Flush(); err != nil {
+	if err := mtc.stores[0].Engine().Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store1.Engine().Flush(); err != nil {
+	if err := mtc.stores[1].Engine().Flush(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.KeyMin, roachpb.Key("m"))
-	if _, err := client.SendWrapped(rg1(store0), nil, &splitArgs); err != nil {
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify range count is as expected
-	checkCounter(t, store0, "ranges", 2)
+	checkCounter(t, mtc.stores[0], "ranges", 2)
 
 	// Verify all stats on store0 after split.
-	verifyStats(t, store0)
+	verifyStats(t, mtc, 0)
 
 	// Replicate the "right" range to the other stores.
-	replica := store0.LookupReplica(roachpb.RKey("z"), nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
 	// Verify stats on store1 after replication.
-	verifyStats(t, store1)
+	verifyStats(t, mtc, 1)
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
@@ -167,8 +177,8 @@ func TestStoreMetrics(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
 
 	// Verify all stats on store 0 and 1 after addition.
-	verifyStats(t, store0)
-	verifyStats(t, store1)
+	verifyStats(t, mtc, 0)
+	verifyStats(t, mtc, 1)
 
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
@@ -181,7 +191,8 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify stats after sequence cache addition.
-	verifyStats(t, store0)
+	verifyStats(t, mtc, 0)
+	checkCounter(t, mtc.stores[0], "ranges", 2)
 
 	// Unreplicate range from the first store.
 	mtc.unreplicateRange(replica.RangeID, 0)
@@ -191,13 +202,13 @@ func TestStoreMetrics(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.
-	checkCounter(t, store0, "ranges", 1)
-	checkCounter(t, store1, "ranges", 1)
+	checkCounter(t, mtc.stores[0], "ranges", 1)
+	checkCounter(t, mtc.stores[1], "ranges", 1)
 
 	// Verify all stats on store0 and store1 after range is removed.
-	verifyStats(t, store0)
-	verifyStats(t, store1)
+	verifyStats(t, mtc, 0)
+	verifyStats(t, mtc, 1)
 
-	verifyRocksDBStats(t, store0)
-	verifyRocksDBStats(t, store1)
+	verifyRocksDBStats(t, mtc.stores[0])
+	verifyRocksDBStats(t, mtc.stores[1])
 }
