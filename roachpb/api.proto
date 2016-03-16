@@ -698,6 +698,9 @@ message BatchResponse {
     // collected_spans is a binary representation of the trace spans
     // generated during the execution of this request.
     repeated bytes collected_spans = 4;
+    // now is the current time at the node sending the response,
+    // which can be used by the receiver to update its local HLC.
+    optional Timestamp now = 5 [(gogoproto.nullable) = false];
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
