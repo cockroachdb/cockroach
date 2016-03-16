@@ -749,6 +749,10 @@ func TestLogic(t *testing.T) {
 		paths = append(paths, match...)
 	}
 
+	if len(paths) == 0 {
+		t.Fatalf("No testfiles found (globs: %v)", globs)
+	}
+
 	total := 0
 	for _, p := range paths {
 		if testing.Verbose() || log.V(1) {
