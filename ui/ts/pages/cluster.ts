@@ -144,7 +144,6 @@ module AdminViews {
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
-                .nonNegativeRate()
                 .title("Connections")
               ).format(d3.format("d")).title("Connections").range([0])
           );
