@@ -304,28 +304,43 @@ type planNode interface {
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
 	Columns() []ResultColumn
+
 	// The indexes of the columns the output is ordered by.
 	Ordering() orderingInfo
+
 	// Values returns the values at the current row. The result is only valid
 	// until the next call to Next().
 	Values() parser.DTuple
-	// DebugValues returns a set of debug values, valid until the next call to Next(). This is only
-	// available for nodes that have been put in a special "explainDebug" mode (using
-	// MarkDebug). When the output field in the result is debugValueRow, a set of values is
-	// also available through Values().
+
+	// DebugValues returns a set of debug values, valid until the next call to
+	// Next(). This is only available for nodes that have been put in a special
+	// "explainDebug" mode (using MarkDebug). When the output field in the
+	// result is debugValueRow, a set of values is also available through
+	// Values().
 	DebugValues() debugValues
+
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
 	Next() bool
+
 	// PErr returns the error, if any, encountered during iteration.
 	PErr() *roachpb.Error
+
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan() (name, description string, children []planNode)
-	// SetLimitHint tells this node to optimize things under the assumption that we will only need
-	// the first `numRows` rows. This is only a hint; the node must still be able to produce all
-	// results if requested.
-	SetLimitHint(numRows int64)
-	// MarkDebug puts the node in a special debugging mode, which allows DebugValues to be used.
+
+	// SetLimitHint tells this node to optimize things under the assumption that
+	// we will only need the first `numRows` rows.
+	//
+	// If soft is true, this is a "soft" limit and is only a hint; the node must
+	// still be able to produce all results if requested.
+	//
+	// If soft is false, this is a "hard" limit and is a promise that Next will
+	// never be called more than numRows times.
+	SetLimitHint(numRows int64, soft bool)
+
+	// MarkDebug puts the node in a special debugging mode, which allows
+	// DebugValues to be used.
 	MarkDebug(mode explainMode)
 }
 
@@ -377,4 +392,4 @@ func (e *emptyNode) Next() bool {
 	return r
 }
 
-func (*emptyNode) SetLimitHint(_ int64) {}
+func (*emptyNode) SetLimitHint(_ int64, _ bool) {}

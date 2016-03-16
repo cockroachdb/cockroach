@@ -358,7 +358,7 @@ func (n *groupNode) ExplainPlan() (name, description string, children []planNode
 	return name, description, []planNode{n.plan}
 }
 
-func (*groupNode) SetLimitHint(_ int64) {}
+func (*groupNode) SetLimitHint(_ int64, _ bool) {}
 
 // wrap the supplied planNode with the groupNode if grouping/aggregation is required.
 func (n *groupNode) wrap(plan planNode) planNode {
