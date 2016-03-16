@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 )
 
+// savedError silences the linter from complaining when detectReplayLocks wants
+// to return an error as the first (as opposed to the last) return value.
 type savedError error
 
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
