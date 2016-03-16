@@ -28,9 +28,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/docker/engine-api/client"
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
+	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
 
@@ -134,14 +138,6 @@ func (c *Container) Remove() error {
 		RemoveVolumes: true,
 		Force:         true,
 	})
-
-	if os.Getenv("CIRCLECI") == "true" {
-		// HACK: Removal of docker containers on circleci reports the error:
-		// "Driver btrfs failed to remove root filesystem". So if we're running on
-		// circleci, just ignore the error, the containers are still removed.
-		return nil
-	}
-	return err
 }
 
 // Kill stops a running container, without removing it.
@@ -269,4 +265,156 @@ func (c *Container) Addr(port nat.Port) *net.TCPAddr {
 		IP:   dockerIP(),
 		Port: portNum,
 	}
+}
+
+// retryDockerClient proxies the Docker client api and retries problematic
+// calls.
+//
+// Sometimes calls to the Docker client, on circleci in particular, will hang
+// indefinitely and non-deterministically. This leads to flaky tests. To avoid
+// this, we wrap some of them in a timeout and retry loop.
+type retryDockerClient struct {
+	*client.Client
+	attempts int
+	timeout  time.Duration
+}
+
+func (cli retryDockerClient) containerCreateMaybeRemoveExisting(
+	ctx context.Context, config *container.Config, hostConfig *container.HostConfig,
+	networkingConfig *network.NetworkingConfig, containerName string,
+) (types.ContainerCreateResponse, error) {
+	response, err := cli.Client.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
+	if err != nil && strings.Contains(err.Error(), `already in use`) {
+		log.Infof("Already had a container named %s", containerName)
+		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{All: true})
+		if cerr != nil {
+			return types.ContainerCreateResponse{}, err
+		}
+		cn := "/" + containerName
+		for _, c := range containers {
+			for _, n := range c.Names {
+				if n == cn {
+					log.Infof("Trying to remove %s", c.ID)
+					roptions := types.ContainerRemoveOptions{
+						ContainerID:   c.ID,
+						RemoveVolumes: true,
+						Force:         true,
+					}
+					if rerr := cli.ContainerRemove(ctx, roptions); rerr != nil {
+						return types.ContainerCreateResponse{}, err
+					}
+					return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
+				}
+			}
+		}
+		return types.ContainerCreateResponse{}, err
+	}
+	return response, err
+}
+
+type dockerCmd func(ctx context.Context) error
+type dockerCmdWithRet func(ctx context.Context) (interface{}, error)
+
+func (cli retryDockerClient) maybeRetry(ctx context.Context, name string, closure dockerCmd) error {
+	for i := 0; i < cli.attempts; i++ {
+		t := cli.timeout
+		timeoutCtx, _ := context.WithTimeout(ctx, t)
+		err := closure(timeoutCtx)
+		if ctxErr := timeoutCtx.Err(); ctxErr != nil {
+			if ctxErr == context.DeadlineExceeded {
+				log.Infof("Attempt %d/%d of %s timed out", i, cli.attempts, name)
+				continue
+			} else {
+				return ctxErr
+			}
+		} else {
+			return err
+		}
+	}
+	panic(fmt.Errorf("exceeded %d tries of %s with a %s timeout", cli.attempts, name, cli.timeout))
+}
+
+func (cli retryDockerClient) maybeRetryWithRet(
+	ctx context.Context, name string, closure dockerCmdWithRet,
+) (interface{}, error) {
+	for i := 0; i < cli.attempts; i++ {
+		t := cli.timeout
+		timeoutCtx, _ := context.WithTimeout(ctx, t)
+		ret, err := closure(timeoutCtx)
+		if ctxErr := timeoutCtx.Err(); ctxErr != nil {
+			if ctxErr == context.DeadlineExceeded {
+				log.Infof("Attempt %d/%d of %s timed out", i, cli.attempts, name)
+				continue
+			} else {
+				return nil, ctxErr
+			}
+		} else {
+			return ret, err
+		}
+	}
+	panic(fmt.Errorf("exceeded %d tries of %s with a %s timeout", cli.attempts, name, cli.timeout))
+}
+
+func (cli retryDockerClient) ContainerCreate(
+	ctx context.Context, config *container.Config, hostConfig *container.HostConfig,
+	networkingConfig *network.NetworkingConfig, containerName string,
+) (types.ContainerCreateResponse, error) {
+	ret, err := cli.maybeRetryWithRet(ctx, "ContainerStart", func(ctx context.Context) (interface{}, error) {
+		return cli.containerCreateMaybeRemoveExisting(ctx, config, hostConfig, networkingConfig, containerName)
+	})
+	if err != nil {
+		return types.ContainerCreateResponse{}, err
+	}
+	return ret.(types.ContainerCreateResponse), nil
+}
+
+func (cli retryDockerClient) ContainerStart(ctx context.Context, containerID string) error {
+	return cli.maybeRetry(ctx, "ContainerStart", func(ctx context.Context) error {
+		return cli.Client.ContainerStart(ctx, containerID)
+	})
+}
+
+func (cli retryDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
+	err := cli.maybeRetry(ctx, "ContainerRemove", func(ctx context.Context) error {
+		return cli.Client.ContainerRemove(ctx, options)
+	})
+	if err != nil && strings.Contains(err.Error(), `No such container`) {
+		return nil
+	}
+
+	if os.Getenv("CIRCLECI") == "true" {
+		// HACK: Removal of docker containers on circleci reports the error:
+		// "Driver btrfs failed to remove root filesystem". So if we're running on
+		// circleci, just ignore the error, the containers are still removed.
+		return nil
+	}
+	return err
+}
+
+func (cli retryDockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
+	return cli.maybeRetry(ctx, "ContainerKill", func(ctx context.Context) error {
+		return cli.Client.ContainerKill(ctx, containerID, signal)
+	})
+}
+
+func (cli retryDockerClient) ImagePull(
+	ctx context.Context, options types.ImagePullOptions, privilegeFunc client.RequestPrivilegeFunc,
+) (io.ReadCloser, error) {
+	ret, err := cli.maybeRetryWithRet(ctx, "ImagePull", func(ctx context.Context) (interface{}, error) {
+		return cli.Client.ImagePull(ctx, options, privilegeFunc)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ret.(io.ReadCloser), nil
+}
+
+func (cli retryDockerClient) ContainerWait(ctx context.Context, containerID string) (int, error) {
+	ret, err := cli.maybeRetryWithRet(ctx, "ContainerWait", func(ctx context.Context) (interface{}, error) {
+		return cli.Client.ContainerWait(ctx, containerID)
+	})
+	if err != nil {
+		return 0, err
+	}
+	return ret.(int), nil
 }
