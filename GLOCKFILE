@@ -39,7 +39,7 @@ github.com/elastic/gosigar a19182d1f557de49dc3cef0eefa688ae6a3316d9
 github.com/elazarl/go-bindata-assetfs 57eb5e1fc594ad4b0b1dbea7b286d299e0cb43c2
 github.com/gengo/grpc-gateway 6a84588ee708fe6dae875dda157230fd2071e526
 github.com/go-sql-driver/mysql 66312f7fe2678aa0f5ec770f96702f4c4ec5aa8e
-github.com/gogo/protobuf 5dbe2a9482b48e988cadb27b8e06448688fc2f25
+github.com/gogo/protobuf d5d4941acc4490628827091cafee2168f8c4bc67
 github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 github.com/golang/lint 32a87160691b3c96046c0c678fe57c5bef761456
 github.com/golang/protobuf 99511271042a09d1e01baea8781caa5210fec66e
