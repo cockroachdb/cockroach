@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -87,7 +88,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		sp := tracer.StartSpan("node")
 		defer sp.Finish()
 		ctx := opentracing.ContextWithSpan(context.Background(), sp)
-		sp.LogEvent(args.String())
+		log.Trace(ctx, args.String())
 		br, pErr := ltc.stores.Send(ctx, args)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
@@ -97,7 +98,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 		}
 		br.Error = pErr
 		if pErr != nil {
-			sp.LogEvent("error: " + pErr.String())
+			log.Trace(ctx, "error: "+pErr.String())
 		}
 		return br, nil
 	}

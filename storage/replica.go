@@ -32,6 +32,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -73,8 +74,6 @@ const (
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
-
-	opReplica = "replica"
 )
 
 // CommandFilter may be used in tests through the StorageTestingMocker to
@@ -514,8 +513,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 			return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 		}
 
-		// TODO(tschottdorf): reinstante
-		// trace.LogEvent(fmt.Sprintf("request leader lease (attempt #%d)", attempt))
+		log.Trace(ctx, fmt.Sprintf("request leader lease (attempt #%d)", attempt))
 
 		// Otherwise, no active lease: Request renewal if a renewal is not already pending.
 		llChan := r.requestLeaderLease(timestamp)
@@ -704,18 +702,19 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		return nil, roachpb.NewError(err)
 	}
 
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
+	ctx, cleanup := tracing.EnsureContext(ctx, r.store.Tracer())
+	defer cleanup()
+
 	// Differentiate between admin, read-only and write.
 	var pErr *roachpb.Error
 	if ba.IsAdmin() {
-		sp.LogEvent("admin path")
+		log.Trace(ctx, "admin path")
 		br, pErr = r.addAdminCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
-		sp.LogEvent("read-only path")
+		log.Trace(ctx, "read-only path")
 		br, pErr = r.addReadOnlyCmd(ctx, ba)
 	} else if ba.IsWrite() {
-		sp.LogEvent("read-write path")
+		log.Trace(ctx, "read-write path")
 		br, pErr = r.addWriteCmd(ctx, ba, nil)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
@@ -732,7 +731,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	}
 	// TODO(tschottdorf): assert nil reply on error.
 	if pErr != nil {
-		sp.LogEvent(fmt.Sprintf("error: %s", pErr))
+		log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
 		return nil, pErr
 	}
 	return br, nil
@@ -849,10 +848,9 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
 	}
 
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
-
-	sp.SetOperationName(reflect.TypeOf(args).String())
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		sp.SetOperationName(reflect.TypeOf(args).String())
+	}
 
 	// Admin commands always require the leader lease.
 	if pErr := r.redirectOnOrAcquireLeaderLease(ctx); pErr != nil {
@@ -891,9 +889,6 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
-
 	// If the read is consistent, the read requires the leader lease.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		if pErr = r.redirectOnOrAcquireLeaderLease(ctx); pErr != nil {
@@ -903,7 +898,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
-	sp.LogEvent("command queue")
+	log.Trace(ctx, "command queue")
 	endCmdsFunc := r.beginCmds(&ba)
 
 	r.readOnlyCmdMu.RLock()
@@ -953,15 +948,12 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 	// early returns do not skip this.
 	defer signal()
 
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
-
 	// Add the write to the command queue to gate subsequent overlapping
 	// commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
-	sp.LogEvent("command queue")
+	log.Trace(ctx, "command queue")
 	endCmdsFunc := r.beginCmds(&ba)
 
 	// Guarantee we remove the commands from the command queue. This is
@@ -1019,7 +1011,7 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 		}
 	}()
 
-	sp.LogEvent("raft")
+	log.Trace(ctx, "raft")
 
 	pendingCmd, err := r.proposeRaftCommand(ctx, ba)
 
@@ -1360,10 +1352,7 @@ func (r *Replica) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd roach
 		ctx = r.context()
 	}
 
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
-
-	sp.LogEvent("applying batch")
+	log.Trace(ctx, "applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
