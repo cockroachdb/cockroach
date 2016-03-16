@@ -302,6 +302,10 @@ func TestBaseQueueProcess(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Ensure the test queue is not blocked on a stray call to
+	// testQueueImpl.timer().
+	close(testQueue.blocker)
 }
 
 // TestBaseQueueAddRemove adds then removes a range; ensure range is
