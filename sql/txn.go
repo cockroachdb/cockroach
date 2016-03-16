@@ -81,10 +81,22 @@ func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
 	case parser.UnspecifiedUserPriority:
 		return nil
 	case parser.Low:
+		if p.execCtx.TestingMocker.FixTxnPriority {
+			p.txn.InternalSetPriority(1)
+			return nil
+		}
 		return p.txn.SetUserPriority(roachpb.LowUserPriority)
 	case parser.Normal:
+		if p.execCtx.TestingMocker.FixTxnPriority {
+			p.txn.InternalSetPriority(10000)
+			return nil
+		}
 		return p.txn.SetUserPriority(roachpb.NormalUserPriority)
 	case parser.High:
+		if p.execCtx.TestingMocker.FixTxnPriority {
+			p.txn.InternalSetPriority(1000000000)
+			return nil
+		}
 		return p.txn.SetUserPriority(roachpb.HighUserPriority)
 	default:
 		return util.Errorf("unknown user priority: %s", userPriority)
