@@ -616,7 +616,10 @@ func (t Transaction) Clone() Transaction {
 	}
 	mt := t.ObservedTimestamps
 	if mt != nil {
-		t.ObservedTimestamps = append([]Transaction_ObservedTimestamp(nil), mt...)
+		t.ObservedTimestamps = make(map[NodeID]Timestamp)
+		for k, v := range mt {
+			t.ObservedTimestamps[k] = v
+		}
 	}
 	// Note that we're not cloning the span keys under the assumption that the
 	// keys themselves are not mutable.
@@ -779,8 +782,8 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// Absorb the collected clock uncertainty information.
-	for _, v := range o.ObservedTimestamps {
-		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
+	for k, v := range o.ObservedTimestamps {
+		t.UpdateObservedTimestamp(k, v)
 	}
 	t.UpgradePriority(o.Priority)
 	// We can't assert against regression here since it can actually happen
@@ -833,15 +836,12 @@ func (t *Transaction) ResetObservedTimestamps() {
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
-	for i, v := range t.ObservedTimestamps {
-		if v.NodeID == nodeID {
-			if maxTS.Less(v.Timestamp) {
-				t.ObservedTimestamps[i].Timestamp = maxTS
-			}
-			return
-		}
+	if t.ObservedTimestamps == nil {
+		t.ObservedTimestamps = make(map[NodeID]Timestamp)
 	}
-	t.ObservedTimestamps = append(t.ObservedTimestamps, Transaction_ObservedTimestamp{NodeID: nodeID, Timestamp: maxTS})
+	if ts, ok := t.ObservedTimestamps[nodeID]; !ok || maxTS.Less(ts) {
+		t.ObservedTimestamps[nodeID] = maxTS
+	}
 }
 
 // GetObservedTimestamp returns the lowest HLC timestamp recorded from the
@@ -849,12 +849,8 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 // no observation about the requested node was found. Otherwise, MaxTimestamp
 // can be lowered to the returned timestamp when reading from nodeID.
 func (t Transaction) GetObservedTimestamp(nodeID NodeID) (Timestamp, bool) {
-	for _, v := range t.ObservedTimestamps {
-		if v.NodeID == nodeID {
-			return v.Timestamp, true
-		}
-	}
-	return Timestamp{}, false
+	ts, ok := t.ObservedTimestamps[nodeID]
+	return ts, ok
 }
 
 var _ fmt.Stringer = &Lease{}
