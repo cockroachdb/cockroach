@@ -187,6 +187,15 @@ func send(opts SendOptions, replicas ReplicaSlice,
 					log.Infof("successful reply: %+v", call.reply)
 				}
 
+				// If the reply contains a timestamp, update the local HLC with it.
+				if call.reply != nil {
+					if call.reply.Error.Now != roachpb.ZeroTimestamp {
+						rpcContext.UpdateClock(call.reply.Error.Now)
+					} else if call.reply.Now != roachpb.ZeroTimestamp {
+						rpcContext.UpdateClock(call.reply.Now)
+					}
+				}
+
 				return call.reply, nil
 			}
 
