@@ -12,6 +12,12 @@ INSERT INTO t VALUES (1)
 statement ok
 GRANT ALL ON t TO testuser
 
+# The following commands hardcode priority values for the levels. Without them,
+# the probabilstic generation of priority values results in occasional priority
+# inversion.
+txn-priority LOW  = 100
+txn-priority HIGH = 1000000000
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY LOW
 

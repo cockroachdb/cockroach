@@ -17,10 +17,31 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
+
+var deterministicPriorities = make(map[parser.UserPriority]int32)
+
+// SetDeterministicPriority allows hardcoding priority values for SQL
+// transaction priorities to avoid the randomness in priority generation.
+// Subsequent transactions with the given priority level will alwys have the
+// given priority value.
+// Returns a function that removes the deterministic priority for this level.
+func SetDeterministicPriority(level parser.UserPriority, priorityValue int32) func() {
+	switch level {
+	case parser.Low:
+	case parser.Normal:
+	case parser.High:
+	default:
+		panic(fmt.Sprintf("bad priority level %s", level))
+	}
+	deterministicPriorities[level] = priorityValue
+	return func() { delete(deterministicPriorities, level) }
+}
 
 // BeginTransaction starts a new transaction.
 func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
@@ -77,6 +98,11 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 }
 
 func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
+	if priVal, ok := deterministicPriorities[userPriority]; ok {
+		p.txn.InternalSetPriority(priVal)
+		return nil
+	}
+
 	switch userPriority {
 	case parser.UnspecifiedUserPriority:
 		return nil

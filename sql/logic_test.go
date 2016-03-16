@@ -41,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -213,6 +215,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	if db, ok := t.clients[user]; ok {
 		t.db = db
+		t.user = user
 
 		if err := t.db.QueryRow("SHOW DATABASE").Scan(&outDBName); err != nil {
 			t.Fatal(err)
@@ -484,6 +487,38 @@ func (t *logicTest) processTestFile(path string) {
 				t.Fatalf("no trace active")
 			}
 			t.traceStop()
+
+		case "txn-priority":
+			// The txn-priority clause causes future transactions that use the
+			// given priority level to always have the given priority value
+			// (replacing the probabilistic generation). The format is:
+			//    txn-priority <priority level> = <priority value>
+			// Example:
+			//    txn-priority HIGH = 1000000000
+			// The value must be positive and must fit in an int32. The change
+			// stays in effect for the duration of that particular test file.
+			if len(fields) != 4 || fields[2] != "=" {
+				t.Fatalf("expected 'txn-priority <priority level> = <priority value>' "+
+					"found: %v", fields)
+			}
+			var level parser.UserPriority
+			switch str := fields[1]; str {
+			case "LOW":
+				level = parser.Low
+			case "NORMAL":
+				level = parser.Normal
+			case "HIGH":
+				level = parser.High
+			default:
+				t.Fatalf("unknown priority level %s", str)
+			}
+
+			priVal, err := strconv.ParseInt(fields[3], 10, 32)
+			if err != nil || priVal < 0 {
+				t.Fatalf("error parsing priority value: %d %s", priVal, err)
+			}
+			fmt.Printf("Setting deterministic priority (level %s value %d)\n", level, int32(priVal))
+			defer csql.SetDeterministicPriority(level, int32(priVal))()
 
 		default:
 			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)
