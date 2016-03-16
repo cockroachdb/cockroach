@@ -564,3 +564,44 @@ func TestRestartStatement(t *testing.T) {
 		t.Fatal("expected to fail here. err: ", err)
 	}
 }
+
+// TestNonRetriableError checks that a non-retriable error (e.g. duplicate key)
+// doesn't leave the txn in a restartable state.
+func TestNonRetriableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	server, sqlDB, _ := setup(t)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	var tx *sql.Tx
+	var err error
+	if tx, err = sqlDB.Begin(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("RETRY INTENT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test')"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test');")
+	if !testutils.IsError(err, "duplicate key value") {
+		t.Errorf("expected duplicate key error. Got: %s", err)
+	}
+	if _, err := tx.Exec("RESTART TRANSACTION"); !testutils.IsError(
+		err, "current transaction is aborted, commands ignored until end of "+
+			"transaction block; RETRY INTENT has not been used or a "+
+			"non-retriable error was encountered.") {
+		t.Fatal(err)
+	}
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
