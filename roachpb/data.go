@@ -834,7 +834,8 @@ func (t *Transaction) ResetObservedTimestamps() {
 
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
-// nodeID, the lowest timestamp prevails.
+// nodeID, the lowest timestamp prevails. UpdateObservedTimestamp guarantees
+// that observations are sorted in increasing order of NodeID.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 	for i, v := range t.ObservedTimestamps {
 		if v.NodeID == nodeID {
@@ -843,7 +844,13 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 			}
 			return
 		}
+		if v.NodeID > nodeID {
+			// Insert a new entry at index i.
+			t.ObservedTimestamps = append(t.ObservedTimestamps[:i], append([]Transaction_ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}, t.ObservedTimestamps[i:]...)...)
+			return
+		}
 	}
+	// nodeID is the largest NodeID.
 	t.ObservedTimestamps = append(t.ObservedTimestamps, Transaction_ObservedTimestamp{NodeID: nodeID, Timestamp: maxTS})
 }
 
@@ -851,11 +858,15 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 // given node's clock during the transaction. The returned boolean is false if
 // no observation about the requested node was found. Otherwise, MaxTimestamp
 // can be lowered to the returned timestamp when reading from nodeID.
+// This method assumes ObservedTimestamps are sorted by NodeID, which is only
+// guaranteed when it is unmarshalled from an existing protobuf where entries
+// are ordered, and new entries are added using UpdateObservedTimestamp().
 func (t Transaction) GetObservedTimestamp(nodeID NodeID) (Timestamp, bool) {
-	for _, v := range t.ObservedTimestamps {
-		if v.NodeID == nodeID {
-			return v.Timestamp, true
-		}
+	idx := sort.Search(len(t.ObservedTimestamps), func(i int) bool {
+		return t.ObservedTimestamps[i].NodeID >= nodeID
+	})
+	if idx < len(t.ObservedTimestamps) && t.ObservedTimestamps[idx].NodeID == nodeID {
+		return t.ObservedTimestamps[idx].Timestamp, true
 	}
 	return Timestamp{}, false
 }

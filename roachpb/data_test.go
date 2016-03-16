@@ -443,6 +443,16 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.ObservedTimestamps)
 		}
 	}
+	// Marshalling has no effect on sort order.
+	p, err := txn.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	txn = Transaction{}
+	if err := txn.Unmarshal(p); err != nil {
+		t.Fatal(err)
+	}
+	// Check that all is in order.
 	for _, m := range ids {
 		checkID := NodeID(m)
 		exp := timestamps[checkID]
