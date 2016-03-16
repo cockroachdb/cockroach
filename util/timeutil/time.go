@@ -18,15 +18,23 @@ package timeutil
 
 import (
 	"os"
+	"strconv"
+	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const offsetEnvKey = "COCKROACH_SIMULATED_OFFSET"
+const checkMonotonicEnvKey = "COCKROACH_DISABLE_CHECK_MONOTONIC_TIME"
 
 var (
 	nowFunc = time.Now
 
 	offset time.Duration
+
+	tmu      sync.Mutex
+	lastTime time.Time
 )
 
 func initFakeTime() {
@@ -36,20 +44,48 @@ func initFakeTime() {
 			panic(err)
 		}
 	}
-	if offset == 0 {
-		nowFunc = time.Now
-	} else {
+	if offset != 0 {
+		prevFunc := nowFunc
 		nowFunc = func() time.Time {
-			return time.Now().Add(offset)
+			return prevFunc().Add(offset)
 		}
 	}
 }
 
-// Now returns the current local time with an optional offset specified by the
-// environment. The offset functionality is guarded by the  "clockoffset" build
-// tag - if built with that tag, the clock offset is parsed from the
-// "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
-// which supports quasi-human values like "1h" or "1m".
+func initMonotonicTimeCheck() {
+	doCheck := true
+	if checkStr := os.Getenv(checkMonotonicEnvKey); checkStr != "" {
+		var disableCheck bool
+		var err error
+		if disableCheck, err = strconv.ParseBool(checkStr); err != nil {
+			panic(err)
+		}
+		doCheck = !disableCheck
+	}
+	if doCheck {
+		lastTime = nowFunc()
+		prevFunc := nowFunc
+		nowFunc = func() time.Time {
+			tmu.Lock()
+			defer tmu.Unlock()
+			newTime := prevFunc()
+			if newTime.Before(lastTime) {
+				log.Warningf("backward time jump detected: previously %s, now %s (offset %s)", lastTime, newTime, newTime.Sub(lastTime))
+			}
+			lastTime = newTime
+			return newTime
+		}
+	}
+}
+
+// Now returns the current local time, with optional tweaks specified by the environment:
+// - clock offsets. This is guarded by the  "clockoffset" build
+//   tag - if built with that tag, the clock offset is parsed from the
+//   "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
+//   which supports quasi-human values like "1h" or "1m".
+// - time monotonicity. Unless the
+//   "COCKROACH_DISABLE_CHECK_MONOTONIC_TIME" environment variable is
+//   set to true, the clock is checked for monotonicity.
 func Now() time.Time {
 	return nowFunc()
 }
