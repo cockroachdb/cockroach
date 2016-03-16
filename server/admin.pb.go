@@ -45,22 +45,28 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+const _ = proto.GoGoProtoPackageIsVersion1
+
 // DatabasesRequest requests a list of databases.
 type DatabasesRequest struct {
 }
 
-func (m *DatabasesRequest) Reset()         { *m = DatabasesRequest{} }
-func (m *DatabasesRequest) String() string { return proto.CompactTextString(m) }
-func (*DatabasesRequest) ProtoMessage()    {}
+func (m *DatabasesRequest) Reset()                    { *m = DatabasesRequest{} }
+func (m *DatabasesRequest) String() string            { return proto.CompactTextString(m) }
+func (*DatabasesRequest) ProtoMessage()               {}
+func (*DatabasesRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{0} }
 
 // DatabasesResponse contains a list of databases.
 type DatabasesResponse struct {
 	Databases []string `protobuf:"bytes,1,rep,name=databases" json:"databases,omitempty"`
 }
 
-func (m *DatabasesResponse) Reset()         { *m = DatabasesResponse{} }
-func (m *DatabasesResponse) String() string { return proto.CompactTextString(m) }
-func (*DatabasesResponse) ProtoMessage()    {}
+func (m *DatabasesResponse) Reset()                    { *m = DatabasesResponse{} }
+func (m *DatabasesResponse) String() string            { return proto.CompactTextString(m) }
+func (*DatabasesResponse) ProtoMessage()               {}
+func (*DatabasesResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{1} }
 
 // DatabaseDetailsRequest requests detailed information about the specified
 // database
@@ -69,9 +75,10 @@ type DatabaseDetailsRequest struct {
 	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 }
 
-func (m *DatabaseDetailsRequest) Reset()         { *m = DatabaseDetailsRequest{} }
-func (m *DatabaseDetailsRequest) String() string { return proto.CompactTextString(m) }
-func (*DatabaseDetailsRequest) ProtoMessage()    {}
+func (m *DatabaseDetailsRequest) Reset()                    { *m = DatabaseDetailsRequest{} }
+func (m *DatabaseDetailsRequest) String() string            { return proto.CompactTextString(m) }
+func (*DatabaseDetailsRequest) ProtoMessage()               {}
+func (*DatabaseDetailsRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{2} }
 
 // DatabaseDetailsResponse contains grant information and table names for a
 // database.
@@ -80,12 +87,13 @@ type DatabaseDetailsResponse struct {
 	Grants []*DatabaseDetailsResponse_Grant `protobuf:"bytes,1,rep,name=grants" json:"grants,omitempty"`
 	// table_names contains the names of all tables (SHOW TABLES) in this
 	// database.
-	TableNames []string `protobuf:"bytes,2,rep,name=table_names" json:"table_names,omitempty"`
+	TableNames []string `protobuf:"bytes,2,rep,name=table_names,json=tableNames" json:"table_names,omitempty"`
 }
 
-func (m *DatabaseDetailsResponse) Reset()         { *m = DatabaseDetailsResponse{} }
-func (m *DatabaseDetailsResponse) String() string { return proto.CompactTextString(m) }
-func (*DatabaseDetailsResponse) ProtoMessage()    {}
+func (m *DatabaseDetailsResponse) Reset()                    { *m = DatabaseDetailsResponse{} }
+func (m *DatabaseDetailsResponse) String() string            { return proto.CompactTextString(m) }
+func (*DatabaseDetailsResponse) ProtoMessage()               {}
+func (*DatabaseDetailsResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{3} }
 
 type DatabaseDetailsResponse_Grant struct {
 	// user is the user that this grant applies to.
@@ -97,6 +105,9 @@ type DatabaseDetailsResponse_Grant struct {
 func (m *DatabaseDetailsResponse_Grant) Reset()         { *m = DatabaseDetailsResponse_Grant{} }
 func (m *DatabaseDetailsResponse_Grant) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDetailsResponse_Grant) ProtoMessage()    {}
+func (*DatabaseDetailsResponse_Grant) Descriptor() ([]byte, []int) {
+	return fileDescriptorAdmin, []int{3, 0}
+}
 
 // TableDetailsRequest is a request for detailed information about a table.
 type TableDetailsRequest struct {
@@ -106,9 +117,10 @@ type TableDetailsRequest struct {
 	Table string `protobuf:"bytes,2,opt,name=table,proto3" json:"table,omitempty"`
 }
 
-func (m *TableDetailsRequest) Reset()         { *m = TableDetailsRequest{} }
-func (m *TableDetailsRequest) String() string { return proto.CompactTextString(m) }
-func (*TableDetailsRequest) ProtoMessage()    {}
+func (m *TableDetailsRequest) Reset()                    { *m = TableDetailsRequest{} }
+func (m *TableDetailsRequest) String() string            { return proto.CompactTextString(m) }
+func (*TableDetailsRequest) ProtoMessage()               {}
+func (*TableDetailsRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{4} }
 
 // TableDetailsResponse contains grants, column names, and indexes for
 // a table.
@@ -118,9 +130,10 @@ type TableDetailsResponse struct {
 	Indexes []*TableDetailsResponse_Index  `protobuf:"bytes,3,rep,name=indexes" json:"indexes,omitempty"`
 }
 
-func (m *TableDetailsResponse) Reset()         { *m = TableDetailsResponse{} }
-func (m *TableDetailsResponse) String() string { return proto.CompactTextString(m) }
-func (*TableDetailsResponse) ProtoMessage()    {}
+func (m *TableDetailsResponse) Reset()                    { *m = TableDetailsResponse{} }
+func (m *TableDetailsResponse) String() string            { return proto.CompactTextString(m) }
+func (*TableDetailsResponse) ProtoMessage()               {}
+func (*TableDetailsResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{5} }
 
 // Grant is an entry from SHOW GRANTS.
 type TableDetailsResponse_Grant struct {
@@ -133,6 +146,9 @@ type TableDetailsResponse_Grant struct {
 func (m *TableDetailsResponse_Grant) Reset()         { *m = TableDetailsResponse_Grant{} }
 func (m *TableDetailsResponse_Grant) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse_Grant) ProtoMessage()    {}
+func (*TableDetailsResponse_Grant) Descriptor() ([]byte, []int) {
+	return fileDescriptorAdmin, []int{5, 0}
+}
 
 type TableDetailsResponse_Column struct {
 	// name is the name of the column.
@@ -148,6 +164,9 @@ type TableDetailsResponse_Column struct {
 func (m *TableDetailsResponse_Column) Reset()         { *m = TableDetailsResponse_Column{} }
 func (m *TableDetailsResponse_Column) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse_Column) ProtoMessage()    {}
+func (*TableDetailsResponse_Column) Descriptor() ([]byte, []int) {
+	return fileDescriptorAdmin, []int{5, 1}
+}
 
 type TableDetailsResponse_Index struct {
 	// name is the name of this index.
@@ -167,14 +186,18 @@ type TableDetailsResponse_Index struct {
 func (m *TableDetailsResponse_Index) Reset()         { *m = TableDetailsResponse_Index{} }
 func (m *TableDetailsResponse_Index) String() string { return proto.CompactTextString(m) }
 func (*TableDetailsResponse_Index) ProtoMessage()    {}
+func (*TableDetailsResponse_Index) Descriptor() ([]byte, []int) {
+	return fileDescriptorAdmin, []int{5, 2}
+}
 
 // UsersRequest requests a list of users.
 type UsersRequest struct {
 }
 
-func (m *UsersRequest) Reset()         { *m = UsersRequest{} }
-func (m *UsersRequest) String() string { return proto.CompactTextString(m) }
-func (*UsersRequest) ProtoMessage()    {}
+func (m *UsersRequest) Reset()                    { *m = UsersRequest{} }
+func (m *UsersRequest) String() string            { return proto.CompactTextString(m) }
+func (*UsersRequest) ProtoMessage()               {}
+func (*UsersRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{6} }
 
 // UsersResponse returns a list of users.
 type UsersResponse struct {
@@ -182,29 +205,32 @@ type UsersResponse struct {
 	Users []*UsersResponse_User `protobuf:"bytes,1,rep,name=users" json:"users,omitempty"`
 }
 
-func (m *UsersResponse) Reset()         { *m = UsersResponse{} }
-func (m *UsersResponse) String() string { return proto.CompactTextString(m) }
-func (*UsersResponse) ProtoMessage()    {}
+func (m *UsersResponse) Reset()                    { *m = UsersResponse{} }
+func (m *UsersResponse) String() string            { return proto.CompactTextString(m) }
+func (*UsersResponse) ProtoMessage()               {}
+func (*UsersResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{7} }
 
 // User is a CockroachDB user.
 type UsersResponse_User struct {
 	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
 }
 
-func (m *UsersResponse_User) Reset()         { *m = UsersResponse_User{} }
-func (m *UsersResponse_User) String() string { return proto.CompactTextString(m) }
-func (*UsersResponse_User) ProtoMessage()    {}
+func (m *UsersResponse_User) Reset()                    { *m = UsersResponse_User{} }
+func (m *UsersResponse_User) String() string            { return proto.CompactTextString(m) }
+func (*UsersResponse_User) ProtoMessage()               {}
+func (*UsersResponse_User) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{7, 0} }
 
 // EventsRequest is a request for event log entries, optionally filtered
 // by the specified event type and/or target_id.
 type EventsRequest struct {
 	Type     string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	TargetId int64  `protobuf:"varint,2,opt,name=target_id,proto3" json:"target_id,omitempty"`
+	TargetId int64  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 }
 
-func (m *EventsRequest) Reset()         { *m = EventsRequest{} }
-func (m *EventsRequest) String() string { return proto.CompactTextString(m) }
-func (*EventsRequest) ProtoMessage()    {}
+func (m *EventsRequest) Reset()                    { *m = EventsRequest{} }
+func (m *EventsRequest) String() string            { return proto.CompactTextString(m) }
+func (*EventsRequest) ProtoMessage()               {}
+func (*EventsRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{8} }
 
 // EventsResponse contains a set of event log entries. This is always limited
 // to the latest N entries (N is enforced in the associated endpoint).
@@ -212,29 +238,31 @@ type EventsResponse struct {
 	Events []*EventsResponse_Event `protobuf:"bytes,1,rep,name=events" json:"events,omitempty"`
 }
 
-func (m *EventsResponse) Reset()         { *m = EventsResponse{} }
-func (m *EventsResponse) String() string { return proto.CompactTextString(m) }
-func (*EventsResponse) ProtoMessage()    {}
+func (m *EventsResponse) Reset()                    { *m = EventsResponse{} }
+func (m *EventsResponse) String() string            { return proto.CompactTextString(m) }
+func (*EventsResponse) ProtoMessage()               {}
+func (*EventsResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{9} }
 
 type EventsResponse_Event struct {
 	// timestamp is the time at which the event occurred.
 	Timestamp *EventsResponse_Event_Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp,omitempty"`
 	// event_type is the type of the event (e.g. "create_table", "drop_table".
-	EventType string `protobuf:"bytes,2,opt,name=event_type,proto3" json:"event_type,omitempty"`
+	EventType string `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
 	// target_id is the target for this event.
-	TargetID int64 `protobuf:"varint,3,opt,name=target_id,proto3" json:"target_id,omitempty"`
+	TargetID int64 `protobuf:"varint,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 	// reporting_id is the reporting ID for this event.
-	ReportingID int64 `protobuf:"varint,4,opt,name=reporting_id,proto3" json:"reporting_id,omitempty"`
+	ReportingID int64 `protobuf:"varint,4,opt,name=reporting_id,json=reportingId,proto3" json:"reporting_id,omitempty"`
 	// info has more detailed information for the event. The contents vary
 	// depending on the vent.
 	Info string `protobuf:"bytes,5,opt,name=info,proto3" json:"info,omitempty"`
 	// unique_id is a unique identifier for this event.
-	UniqueID []byte `protobuf:"bytes,6,opt,name=unique_id,proto3" json:"unique_id,omitempty"`
+	UniqueID []byte `protobuf:"bytes,6,opt,name=unique_id,json=uniqueId,proto3" json:"unique_id,omitempty"`
 }
 
-func (m *EventsResponse_Event) Reset()         { *m = EventsResponse_Event{} }
-func (m *EventsResponse_Event) String() string { return proto.CompactTextString(m) }
-func (*EventsResponse_Event) ProtoMessage()    {}
+func (m *EventsResponse_Event) Reset()                    { *m = EventsResponse_Event{} }
+func (m *EventsResponse_Event) String() string            { return proto.CompactTextString(m) }
+func (*EventsResponse_Event) ProtoMessage()               {}
+func (*EventsResponse_Event) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{9, 0} }
 
 // Timestamp is embedded in each place it's used, because proto3 defines a
 // built-in Timestamp message that we can't use, because gogoprotobuf
@@ -251,6 +279,9 @@ type EventsResponse_Event_Timestamp struct {
 func (m *EventsResponse_Event_Timestamp) Reset()         { *m = EventsResponse_Event_Timestamp{} }
 func (m *EventsResponse_Event_Timestamp) String() string { return proto.CompactTextString(m) }
 func (*EventsResponse_Event_Timestamp) ProtoMessage()    {}
+func (*EventsResponse_Event_Timestamp) Descriptor() ([]byte, []int) {
+	return fileDescriptorAdmin, []int{9, 0, 0}
+}
 
 // SetUIDataRequest stores a value in the system.ui table with the given key
 // and value.
@@ -261,17 +292,19 @@ type SetUIDataRequest struct {
 	Value []byte `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 }
 
-func (m *SetUIDataRequest) Reset()         { *m = SetUIDataRequest{} }
-func (m *SetUIDataRequest) String() string { return proto.CompactTextString(m) }
-func (*SetUIDataRequest) ProtoMessage()    {}
+func (m *SetUIDataRequest) Reset()                    { *m = SetUIDataRequest{} }
+func (m *SetUIDataRequest) String() string            { return proto.CompactTextString(m) }
+func (*SetUIDataRequest) ProtoMessage()               {}
+func (*SetUIDataRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{10} }
 
 // SetUIDataResponse is currently an empty response.
 type SetUIDataResponse struct {
 }
 
-func (m *SetUIDataResponse) Reset()         { *m = SetUIDataResponse{} }
-func (m *SetUIDataResponse) String() string { return proto.CompactTextString(m) }
-func (*SetUIDataResponse) ProtoMessage()    {}
+func (m *SetUIDataResponse) Reset()                    { *m = SetUIDataResponse{} }
+func (m *SetUIDataResponse) String() string            { return proto.CompactTextString(m) }
+func (*SetUIDataResponse) ProtoMessage()               {}
+func (*SetUIDataResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{11} }
 
 // GETUIDataRequest requests the value of the given key from the system.ui
 // table.
@@ -279,9 +312,10 @@ type GetUIDataRequest struct {
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 }
 
-func (m *GetUIDataRequest) Reset()         { *m = GetUIDataRequest{} }
-func (m *GetUIDataRequest) String() string { return proto.CompactTextString(m) }
-func (*GetUIDataRequest) ProtoMessage()    {}
+func (m *GetUIDataRequest) Reset()                    { *m = GetUIDataRequest{} }
+func (m *GetUIDataRequest) String() string            { return proto.CompactTextString(m) }
+func (*GetUIDataRequest) ProtoMessage()               {}
+func (*GetUIDataRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{12} }
 
 // GetUIDataResponse contains the requested value and the time at which
 // the value was last updated.
@@ -289,12 +323,13 @@ type GetUIDataResponse struct {
 	// value is the value of the requested key.
 	Value []byte `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	// last_updated is the time at which the value was last updated.
-	LastUpdated *GetUIDataResponse_Timestamp `protobuf:"bytes,2,opt,name=last_updated" json:"last_updated,omitempty"`
+	LastUpdated *GetUIDataResponse_Timestamp `protobuf:"bytes,2,opt,name=last_updated,json=lastUpdated" json:"last_updated,omitempty"`
 }
 
-func (m *GetUIDataResponse) Reset()         { *m = GetUIDataResponse{} }
-func (m *GetUIDataResponse) String() string { return proto.CompactTextString(m) }
-func (*GetUIDataResponse) ProtoMessage()    {}
+func (m *GetUIDataResponse) Reset()                    { *m = GetUIDataResponse{} }
+func (m *GetUIDataResponse) String() string            { return proto.CompactTextString(m) }
+func (*GetUIDataResponse) ProtoMessage()               {}
+func (*GetUIDataResponse) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{13} }
 
 // Timestamp is embedded in each place it's used, because proto3 defines a
 // built-in Timestamp message that we can't use, because gogoprotobuf doesn't
@@ -310,6 +345,9 @@ type GetUIDataResponse_Timestamp struct {
 func (m *GetUIDataResponse_Timestamp) Reset()         { *m = GetUIDataResponse_Timestamp{} }
 func (m *GetUIDataResponse_Timestamp) String() string { return proto.CompactTextString(m) }
 func (*GetUIDataResponse_Timestamp) ProtoMessage()    {}
+func (*GetUIDataResponse_Timestamp) Descriptor() ([]byte, []int) {
+	return fileDescriptorAdmin, []int{13, 0}
+}
 
 func init() {
 	proto.RegisterType((*DatabasesRequest)(nil), "cockroach.server.DatabasesRequest")
@@ -4066,3 +4104,72 @@ var (
 	ErrInvalidLengthAdmin = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowAdmin   = fmt.Errorf("proto: integer overflow")
 )
+
+var fileDescriptorAdmin = []byte{
+	// 1032 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xa4, 0x56, 0x4f, 0x6f, 0x1b, 0x55,
+	0x10, 0xef, 0xc6, 0x7f, 0x62, 0x8f, 0x9d, 0xd6, 0x79, 0x89, 0x82, 0x59, 0x8c, 0x5d, 0x1e, 0xa5,
+	0xb4, 0x08, 0xbc, 0x8d, 0x41, 0x1c, 0x82, 0x84, 0xa0, 0x04, 0xac, 0x5c, 0x2a, 0xb4, 0x24, 0x12,
+	0xe2, 0x62, 0x6d, 0xec, 0x17, 0xb3, 0xea, 0x66, 0xd7, 0x5d, 0xaf, 0x2d, 0x2a, 0xd4, 0x0b, 0x5f,
+	0x00, 0x24, 0xc4, 0x85, 0x8f, 0xc0, 0x81, 0xcf, 0xc0, 0x8d, 0x1e, 0x91, 0x90, 0x38, 0x22, 0x28,
+	0x7c, 0x10, 0xde, 0xcc, 0x7b, 0x6f, 0xbd, 0xb1, 0x9d, 0xd8, 0xc0, 0xc1, 0xca, 0x9b, 0xd9, 0xf9,
+	0xcd, 0x6f, 0x66, 0xde, 0xcc, 0x9b, 0x40, 0xa3, 0x1f, 0xf5, 0x1f, 0xc6, 0x91, 0xd7, 0xff, 0xdc,
+	0x19, 0x8b, 0x78, 0x2a, 0x62, 0xc7, 0x1b, 0x9c, 0xfb, 0x61, 0x7b, 0x14, 0x47, 0x49, 0xc4, 0x6a,
+	0xe9, 0xd7, 0xb6, 0xfa, 0x6a, 0x37, 0x86, 0x51, 0x34, 0x0c, 0x84, 0xe3, 0x8d, 0x7c, 0xc7, 0x0b,
+	0xc3, 0x28, 0xf1, 0x12, 0x3f, 0x0a, 0xc7, 0xca, 0xde, 0xde, 0x1d, 0x46, 0xc3, 0x88, 0x8e, 0x0e,
+	0x9e, 0x94, 0x96, 0x33, 0xa8, 0x1d, 0x7a, 0x89, 0x77, 0xea, 0x8d, 0xc5, 0xd8, 0x15, 0x8f, 0x26,
+	0x62, 0x9c, 0xf0, 0x7d, 0xd8, 0xce, 0xe8, 0xc6, 0x23, 0xe9, 0x43, 0xb0, 0x06, 0x94, 0x07, 0x46,
+	0x59, 0xb7, 0x6e, 0xe6, 0xee, 0x94, 0xdd, 0x99, 0x82, 0xbf, 0x05, 0x7b, 0x06, 0x72, 0x28, 0x12,
+	0xcf, 0x0f, 0x8c, 0x33, 0x66, 0x43, 0xc9, 0x98, 0x49, 0x98, 0x25, 0x61, 0xa9, 0xcc, 0x7f, 0xb2,
+	0xe0, 0xb9, 0x05, 0x98, 0xe6, 0xeb, 0x42, 0x71, 0x18, 0x7b, 0x61, 0xa2, 0xc8, 0x2a, 0x1d, 0xa7,
+	0x3d, 0x9f, 0x6f, 0xfb, 0x12, 0x68, 0xbb, 0x8b, 0x38, 0x57, 0xc3, 0x59, 0x0b, 0x2a, 0xd2, 0x2c,
+	0x10, 0xbd, 0xd0, 0x3b, 0x97, 0xa1, 0x6f, 0x50, 0xe8, 0x40, 0xaa, 0x07, 0xa8, 0xb1, 0xdf, 0x81,
+	0x02, 0x21, 0x18, 0x83, 0xfc, 0x44, 0xba, 0xd6, 0x61, 0xd2, 0x99, 0x35, 0x01, 0x46, 0xb1, 0x3f,
+	0xf5, 0x03, 0x31, 0x9c, 0x81, 0x67, 0x1a, 0xde, 0x85, 0x9d, 0x63, 0x74, 0xb5, 0x7e, 0xd6, 0x6c,
+	0x17, 0x0a, 0xc4, 0x2e, 0xbd, 0xe1, 0x07, 0x25, 0xf0, 0x1f, 0xf2, 0xb0, 0x7b, 0xd1, 0x93, 0x2e,
+	0xc4, 0xe1, 0x5c, 0x21, 0x5e, 0x5f, 0x2c, 0xc4, 0x32, 0xdc, 0x5c, 0x15, 0xba, 0xb0, 0xd9, 0x8f,
+	0x82, 0xc9, 0x79, 0xa8, 0x92, 0xa8, 0x74, 0xde, 0x58, 0xd3, 0xcd, 0x07, 0x84, 0x72, 0x0d, 0x9a,
+	0x7d, 0x04, 0x9b, 0x7e, 0x38, 0x10, 0x5f, 0xc8, 0x6a, 0xe4, 0xfe, 0x55, 0x3c, 0x47, 0x88, 0x72,
+	0x0d, 0xf8, 0x7f, 0x55, 0xdd, 0x3e, 0x83, 0xa2, 0x8a, 0x0b, 0xd1, 0x78, 0xaf, 0x06, 0x8d, 0x67,
+	0xd4, 0x25, 0x8f, 0x47, 0xa6, 0xbe, 0x74, 0xc6, 0x0b, 0x09, 0x27, 0x41, 0x40, 0x75, 0xcf, 0x49,
+	0x7d, 0xc9, 0x4d, 0x65, 0x56, 0x87, 0xcd, 0x81, 0x38, 0xf3, 0x26, 0x41, 0x52, 0xcf, 0x13, 0xc4,
+	0x88, 0xf6, 0x77, 0x16, 0x14, 0x28, 0xee, 0xa5, 0x3c, 0x7b, 0x50, 0x9c, 0x84, 0xbe, 0xbc, 0x70,
+	0x62, 0x2a, 0xb9, 0x5a, 0x62, 0x35, 0xc8, 0x8d, 0xc5, 0x23, 0xa2, 0xc9, 0xb9, 0x78, 0x44, 0x4b,
+	0x55, 0x3f, 0x4d, 0xa0, 0x25, 0x1a, 0x2a, 0x3f, 0x16, 0x7d, 0x9c, 0xd3, 0x7a, 0x81, 0x3e, 0xcd,
+	0x14, 0x18, 0xd7, 0x38, 0x89, 0x62, 0x3f, 0x1c, 0xd6, 0x8b, 0x44, 0x60, 0x44, 0x7e, 0x1d, 0xaa,
+	0x27, 0xb2, 0x4e, 0xe9, 0xc4, 0x46, 0xb0, 0xa5, 0x65, 0xdd, 0x34, 0x07, 0x50, 0xc0, 0x42, 0x9a,
+	0x9e, 0xb9, 0xb5, 0x78, 0x47, 0x17, 0xec, 0x49, 0x72, 0x15, 0xc4, 0xe6, 0x90, 0x47, 0x11, 0x4b,
+	0x86, 0x8a, 0x4c, 0xda, 0xa9, 0xcc, 0xdf, 0x83, 0xad, 0x0f, 0xa7, 0x42, 0x36, 0x96, 0x69, 0x78,
+	0x53, 0x73, 0x2b, 0x53, 0xf3, 0x17, 0xa0, 0x9c, 0x78, 0xf1, 0x50, 0x24, 0x3d, 0x7f, 0x40, 0x25,
+	0xca, 0xb9, 0x25, 0xa5, 0x38, 0x1a, 0xf0, 0xef, 0x73, 0x70, 0xdd, 0xb8, 0xd0, 0x41, 0xbf, 0x0b,
+	0x45, 0x41, 0x1a, 0x1d, 0xf5, 0xed, 0xc5, 0xa8, 0x2f, 0x22, 0x94, 0xe8, 0x6a, 0x94, 0xfd, 0xf3,
+	0x06, 0x14, 0x48, 0xc3, 0x1e, 0x48, 0x66, 0x5f, 0xce, 0x76, 0xe2, 0x9d, 0x8f, 0x28, 0xa4, 0x4a,
+	0xe7, 0xde, 0x7a, 0xce, 0xda, 0xc7, 0x06, 0xe7, 0xce, 0x5c, 0xb0, 0x17, 0x01, 0x88, 0xa3, 0x97,
+	0xe9, 0xab, 0x32, 0x69, 0x8e, 0x31, 0xd1, 0xbb, 0xd9, 0x44, 0xe9, 0xda, 0xef, 0x57, 0x9f, 0xfd,
+	0xde, 0x2a, 0x1d, 0xab, 0x64, 0x0f, 0x67, 0x69, 0xb3, 0x0e, 0x54, 0x63, 0x31, 0x8a, 0xe2, 0x44,
+	0x5e, 0x23, 0x5a, 0xe7, 0xc9, 0xfa, 0x86, 0xb4, 0xae, 0xb8, 0x46, 0x2f, 0x01, 0x95, 0xd4, 0x48,
+	0x62, 0x64, 0x6d, 0xfd, 0xf0, 0x2c, 0xd2, 0x0d, 0x42, 0x67, 0xa4, 0x54, 0xdd, 0x86, 0x4e, 0xb0,
+	0x3b, 0xaa, 0x8a, 0xf2, 0x84, 0x94, 0x48, 0xa9, 0x3e, 0x1f, 0x0d, 0xec, 0x7d, 0x28, 0xa7, 0x49,
+	0xa9, 0xde, 0xec, 0x53, 0x4d, 0xa8, 0x37, 0xfb, 0xd4, 0xd9, 0xa8, 0xc2, 0xac, 0xb6, 0x5c, 0x3a,
+	0xf3, 0x03, 0xa8, 0x7d, 0x22, 0x92, 0x93, 0x23, 0x7c, 0x61, 0xcd, 0x0d, 0x4b, 0xe4, 0x43, 0xf1,
+	0x58, 0x5f, 0x30, 0x1e, 0xf1, 0x21, 0x9b, 0x7a, 0x81, 0x6e, 0xff, 0xaa, 0xab, 0x04, 0xbe, 0x03,
+	0xdb, 0x19, 0xac, 0xaa, 0x2d, 0xbf, 0x05, 0xb5, 0xee, 0x4a, 0x87, 0xfc, 0x47, 0x0b, 0xb6, 0xbb,
+	0xf3, 0xd8, 0x19, 0x8d, 0x95, 0xa1, 0x61, 0x1f, 0x43, 0x35, 0xf0, 0xc6, 0x49, 0x6f, 0x32, 0x92,
+	0x0f, 0xab, 0x50, 0xfd, 0xb5, 0xf4, 0x55, 0x5b, 0x70, 0x98, 0xb9, 0xe2, 0x0a, 0xba, 0x38, 0x51,
+	0x1e, 0xfe, 0x43, 0x9d, 0x3a, 0xbf, 0x15, 0xa1, 0xf0, 0x3e, 0xee, 0x64, 0x76, 0x0a, 0x05, 0x9a,
+	0x28, 0xd6, 0xbc, 0x74, 0xd4, 0x28, 0x6b, 0xbb, 0xb5, 0x62, 0x14, 0x79, 0xfd, 0xab, 0x5f, 0xff,
+	0xfe, 0x76, 0x83, 0xb1, 0x9a, 0xd3, 0xa3, 0x75, 0xef, 0x4c, 0xf7, 0x1d, 0x1a, 0x4c, 0x16, 0x43,
+	0x39, 0xdd, 0xcb, 0x8c, 0x5f, 0xbe, 0x0f, 0x53, 0xae, 0x97, 0xaf, 0xb4, 0xd1, 0x7c, 0x0d, 0xe2,
+	0xdb, 0x63, 0xbb, 0x19, 0xbe, 0x74, 0xb1, 0xb3, 0xaf, 0x2d, 0xb8, 0x31, 0xb7, 0x67, 0xd9, 0x9d,
+	0x35, 0x56, 0xb1, 0x0a, 0xe0, 0xee, 0xda, 0x4b, 0x9b, 0xbf, 0x4a, 0x61, 0xbc, 0xc4, 0x5a, 0xcb,
+	0xc2, 0x70, 0xbe, 0x34, 0xc7, 0x27, 0x4c, 0xbe, 0xc9, 0xd5, 0xec, 0x82, 0x61, 0xaf, 0xac, 0x5a,
+	0x40, 0x2a, 0x96, 0xdb, 0xeb, 0xed, 0x29, 0xfe, 0x36, 0x05, 0x72, 0x8f, 0xb5, 0x57, 0x04, 0xe2,
+	0xd0, 0xde, 0x96, 0x1a, 0xfa, 0xfb, 0x84, 0xc9, 0x9d, 0xa4, 0x1e, 0x14, 0xd6, 0xba, 0xfc, 0xa9,
+	0x51, 0xa1, 0xdc, 0x5c, 0xf5, 0x16, 0xf1, 0xe7, 0x29, 0x88, 0x1d, 0xb6, 0x9d, 0x09, 0x42, 0xbd,
+	0x72, 0xd8, 0x05, 0xe9, 0x7c, 0x2d, 0xeb, 0x82, 0xf9, 0xc1, 0x5d, 0xd6, 0x05, 0x8b, 0x03, 0xaa,
+	0xbb, 0x80, 0x67, 0x09, 0x27, 0x3e, 0x26, 0x7b, 0x60, 0xbd, 0xc6, 0x22, 0x28, 0x77, 0xaf, 0xe2,
+	0xec, 0xae, 0xc1, 0xb9, 0x30, 0x87, 0x4b, 0x93, 0x54, 0x9c, 0xf7, 0x1b, 0x4f, 0xff, 0x6c, 0x5e,
+	0x7b, 0xfa, 0xac, 0x69, 0xfd, 0x22, 0x7f, 0x7f, 0xc8, 0xdf, 0x37, 0x7f, 0x35, 0xaf, 0x7d, 0x56,
+	0x54, 0xae, 0x3e, 0xb5, 0x4e, 0x8b, 0xf4, 0xdf, 0xeb, 0x9b, 0xff, 0x04, 0x00, 0x00, 0xff, 0xff,
+	0x49, 0x7a, 0x07, 0xe3, 0x23, 0x0b, 0x00, 0x00,
+}

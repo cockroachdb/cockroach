@@ -40,7 +40,7 @@ foo1 foo2 c
 query III colnames
 SELECT * FROM abc AS foo (foo1, foo2, foo3)
 ----
-foo1 foo2 foo3 
+foo1 foo2 foo3
 1 2 3
 4 5 6
 
@@ -73,7 +73,7 @@ foo1 foo2 c
 4 5 6
 
 
-# Verify we can't resolve columns using overriden table or colum names.
+# Verify we can't resolve columns using overridden table or colum names.
 
 query error qualified name "abc.foo1" not found
 SELECT abc.foo1 FROM abc AS foo (foo1)

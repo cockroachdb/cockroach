@@ -147,6 +147,10 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+const _ = proto.GoGoProtoPackageIsVersion1
+
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
 type ReadConsistencyType int32
@@ -193,6 +197,7 @@ func (x *ReadConsistencyType) UnmarshalJSON(data []byte) error {
 	*x = ReadConsistencyType(value)
 	return nil
 }
+func (ReadConsistencyType) EnumDescriptor() ([]byte, []int) { return fileDescriptorApi, []int{0} }
 
 // TxnPushType determines what action to take when pushing a transaction.
 type PushTxnType int32
@@ -234,6 +239,7 @@ func (x *PushTxnType) UnmarshalJSON(data []byte) error {
 	*x = PushTxnType(value)
 	return nil
 }
+func (PushTxnType) EnumDescriptor() ([]byte, []int) { return fileDescriptorApi, []int{1} }
 
 // ResponseHeader is returned with every storage node response.
 type ResponseHeader struct {
@@ -243,18 +249,20 @@ type ResponseHeader struct {
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 }
 
-func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
-func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
-func (*ResponseHeader) ProtoMessage()    {}
+func (m *ResponseHeader) Reset()                    { *m = ResponseHeader{} }
+func (m *ResponseHeader) String() string            { return proto.CompactTextString(m) }
+func (*ResponseHeader) ProtoMessage()               {}
+func (*ResponseHeader) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{0} }
 
 // A GetRequest is the argument for the Get() method.
 type GetRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *GetRequest) Reset()         { *m = GetRequest{} }
-func (m *GetRequest) String() string { return proto.CompactTextString(m) }
-func (*GetRequest) ProtoMessage()    {}
+func (m *GetRequest) Reset()                    { *m = GetRequest{} }
+func (m *GetRequest) String() string            { return proto.CompactTextString(m) }
+func (*GetRequest) ProtoMessage()               {}
+func (*GetRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{1} }
 
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
@@ -263,9 +271,10 @@ type GetResponse struct {
 	Value          *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 }
 
-func (m *GetResponse) Reset()         { *m = GetResponse{} }
-func (m *GetResponse) String() string { return proto.CompactTextString(m) }
-func (*GetResponse) ProtoMessage()    {}
+func (m *GetResponse) Reset()                    { *m = GetResponse{} }
+func (m *GetResponse) String() string            { return proto.CompactTextString(m) }
+func (*GetResponse) ProtoMessage()               {}
+func (*GetResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{2} }
 
 // A PutRequest is the argument to the Put() method.
 type PutRequest struct {
@@ -273,18 +282,20 @@ type PutRequest struct {
 	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
-func (m *PutRequest) Reset()         { *m = PutRequest{} }
-func (m *PutRequest) String() string { return proto.CompactTextString(m) }
-func (*PutRequest) ProtoMessage()    {}
+func (m *PutRequest) Reset()                    { *m = PutRequest{} }
+func (m *PutRequest) String() string            { return proto.CompactTextString(m) }
+func (*PutRequest) ProtoMessage()               {}
+func (*PutRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{3} }
 
 // A PutResponse is the return value from the Put() method.
 type PutResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *PutResponse) Reset()         { *m = PutResponse{} }
-func (m *PutResponse) String() string { return proto.CompactTextString(m) }
-func (*PutResponse) ProtoMessage()    {}
+func (m *PutResponse) Reset()                    { *m = PutResponse{} }
+func (m *PutResponse) String() string            { return proto.CompactTextString(m) }
+func (*PutResponse) ProtoMessage()               {}
+func (*PutResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{4} }
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
 //
@@ -299,12 +310,13 @@ type ConditionalPutRequest struct {
 	// Set exp_value.bytes empty to test for non-existence. Specify as nil
 	// to indicate there should be no existing entry. This is different
 	// from the expectation that the value exists but is empty.
-	ExpValue *Value `protobuf:"bytes,3,opt,name=exp_value" json:"exp_value,omitempty"`
+	ExpValue *Value `protobuf:"bytes,3,opt,name=exp_value,json=expValue" json:"exp_value,omitempty"`
 }
 
-func (m *ConditionalPutRequest) Reset()         { *m = ConditionalPutRequest{} }
-func (m *ConditionalPutRequest) String() string { return proto.CompactTextString(m) }
-func (*ConditionalPutRequest) ProtoMessage()    {}
+func (m *ConditionalPutRequest) Reset()                    { *m = ConditionalPutRequest{} }
+func (m *ConditionalPutRequest) String() string            { return proto.CompactTextString(m) }
+func (*ConditionalPutRequest) ProtoMessage()               {}
+func (*ConditionalPutRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{5} }
 
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
@@ -312,9 +324,10 @@ type ConditionalPutResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *ConditionalPutResponse) Reset()         { *m = ConditionalPutResponse{} }
-func (m *ConditionalPutResponse) String() string { return proto.CompactTextString(m) }
-func (*ConditionalPutResponse) ProtoMessage()    {}
+func (m *ConditionalPutResponse) Reset()                    { *m = ConditionalPutResponse{} }
+func (m *ConditionalPutResponse) String() string            { return proto.CompactTextString(m) }
+func (*ConditionalPutResponse) ProtoMessage()               {}
+func (*ConditionalPutResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{6} }
 
 // An IncrementRequest is the argument to the Increment() method. It
 // increments the value for key, and returns the new value. If no
@@ -327,39 +340,43 @@ type IncrementRequest struct {
 	Increment int64 `protobuf:"varint,2,opt,name=increment" json:"increment"`
 }
 
-func (m *IncrementRequest) Reset()         { *m = IncrementRequest{} }
-func (m *IncrementRequest) String() string { return proto.CompactTextString(m) }
-func (*IncrementRequest) ProtoMessage()    {}
+func (m *IncrementRequest) Reset()                    { *m = IncrementRequest{} }
+func (m *IncrementRequest) String() string            { return proto.CompactTextString(m) }
+func (*IncrementRequest) ProtoMessage()               {}
+func (*IncrementRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{7} }
 
 // An IncrementResponse is the return value from the Increment
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
 type IncrementResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	NewValue       int64 `protobuf:"varint,2,opt,name=new_value" json:"new_value"`
+	NewValue       int64 `protobuf:"varint,2,opt,name=new_value,json=newValue" json:"new_value"`
 }
 
-func (m *IncrementResponse) Reset()         { *m = IncrementResponse{} }
-func (m *IncrementResponse) String() string { return proto.CompactTextString(m) }
-func (*IncrementResponse) ProtoMessage()    {}
+func (m *IncrementResponse) Reset()                    { *m = IncrementResponse{} }
+func (m *IncrementResponse) String() string            { return proto.CompactTextString(m) }
+func (*IncrementResponse) ProtoMessage()               {}
+func (*IncrementResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{8} }
 
 // A DeleteRequest is the argument to the Delete() method.
 type DeleteRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *DeleteRequest) Reset()         { *m = DeleteRequest{} }
-func (m *DeleteRequest) String() string { return proto.CompactTextString(m) }
-func (*DeleteRequest) ProtoMessage()    {}
+func (m *DeleteRequest) Reset()                    { *m = DeleteRequest{} }
+func (m *DeleteRequest) String() string            { return proto.CompactTextString(m) }
+func (*DeleteRequest) ProtoMessage()               {}
+func (*DeleteRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{9} }
 
 // A DeleteResponse is the return value from the Delete() method.
 type DeleteResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *DeleteResponse) Reset()         { *m = DeleteResponse{} }
-func (m *DeleteResponse) String() string { return proto.CompactTextString(m) }
-func (*DeleteResponse) ProtoMessage()    {}
+func (m *DeleteResponse) Reset()                    { *m = DeleteResponse{} }
+func (m *DeleteResponse) String() string            { return proto.CompactTextString(m) }
+func (*DeleteResponse) ProtoMessage()               {}
+func (*DeleteResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{10} }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
@@ -367,13 +384,14 @@ type DeleteRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, *all* entries between key (inclusive) and end_key
 	// (exclusive) are deleted. Must be >= 0.
-	MaxEntriesToDelete int64 `protobuf:"varint,2,opt,name=max_entries_to_delete" json:"max_entries_to_delete"`
-	ReturnKeys         bool  `protobuf:"varint,3,opt,name=return_keys" json:"return_keys"`
+	MaxEntriesToDelete int64 `protobuf:"varint,2,opt,name=max_entries_to_delete,json=maxEntriesToDelete" json:"max_entries_to_delete"`
+	ReturnKeys         bool  `protobuf:"varint,3,opt,name=return_keys,json=returnKeys" json:"return_keys"`
 }
 
-func (m *DeleteRangeRequest) Reset()         { *m = DeleteRangeRequest{} }
-func (m *DeleteRangeRequest) String() string { return proto.CompactTextString(m) }
-func (*DeleteRangeRequest) ProtoMessage()    {}
+func (m *DeleteRangeRequest) Reset()                    { *m = DeleteRangeRequest{} }
+func (m *DeleteRangeRequest) String() string            { return proto.CompactTextString(m) }
+func (*DeleteRangeRequest) ProtoMessage()               {}
+func (*DeleteRangeRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{11} }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
@@ -383,9 +401,10 @@ type DeleteRangeResponse struct {
 	Keys []Key `protobuf:"bytes,2,rep,name=keys,casttype=Key" json:"keys,omitempty"`
 }
 
-func (m *DeleteRangeResponse) Reset()         { *m = DeleteRangeResponse{} }
-func (m *DeleteRangeResponse) String() string { return proto.CompactTextString(m) }
-func (*DeleteRangeResponse) ProtoMessage()    {}
+func (m *DeleteRangeResponse) Reset()                    { *m = DeleteRangeResponse{} }
+func (m *DeleteRangeResponse) String() string            { return proto.CompactTextString(m) }
+func (*DeleteRangeResponse) ProtoMessage()               {}
+func (*DeleteRangeResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{12} }
 
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
@@ -393,12 +412,13 @@ func (*DeleteRangeResponse) ProtoMessage()    {}
 type ScanRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
-	MaxResults int64 `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
+	MaxResults int64 `protobuf:"varint,2,opt,name=max_results,json=maxResults" json:"max_results"`
 }
 
-func (m *ScanRequest) Reset()         { *m = ScanRequest{} }
-func (m *ScanRequest) String() string { return proto.CompactTextString(m) }
-func (*ScanRequest) ProtoMessage()    {}
+func (m *ScanRequest) Reset()                    { *m = ScanRequest{} }
+func (m *ScanRequest) String() string            { return proto.CompactTextString(m) }
+func (*ScanRequest) ProtoMessage()               {}
+func (*ScanRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{13} }
 
 // A ScanResponse is the return value from the Scan() method.
 type ScanResponse struct {
@@ -407,9 +427,10 @@ type ScanResponse struct {
 	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
 }
 
-func (m *ScanResponse) Reset()         { *m = ScanResponse{} }
-func (m *ScanResponse) String() string { return proto.CompactTextString(m) }
-func (*ScanResponse) ProtoMessage()    {}
+func (m *ScanResponse) Reset()                    { *m = ScanResponse{} }
+func (m *ScanResponse) String() string            { return proto.CompactTextString(m) }
+func (*ScanResponse) ProtoMessage()               {}
+func (*ScanResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{14} }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
@@ -417,12 +438,13 @@ func (*ScanResponse) ProtoMessage()    {}
 type ReverseScanRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// If 0, there is no limit on the number of retrieved entries. Must be >= 0.
-	MaxResults int64 `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
+	MaxResults int64 `protobuf:"varint,2,opt,name=max_results,json=maxResults" json:"max_results"`
 }
 
-func (m *ReverseScanRequest) Reset()         { *m = ReverseScanRequest{} }
-func (m *ReverseScanRequest) String() string { return proto.CompactTextString(m) }
-func (*ReverseScanRequest) ProtoMessage()    {}
+func (m *ReverseScanRequest) Reset()                    { *m = ReverseScanRequest{} }
+func (m *ReverseScanRequest) String() string            { return proto.CompactTextString(m) }
+func (*ReverseScanRequest) ProtoMessage()               {}
+func (*ReverseScanRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{15} }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
 type ReverseScanResponse struct {
@@ -431,9 +453,10 @@ type ReverseScanResponse struct {
 	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows" json:"rows"`
 }
 
-func (m *ReverseScanResponse) Reset()         { *m = ReverseScanResponse{} }
-func (m *ReverseScanResponse) String() string { return proto.CompactTextString(m) }
-func (*ReverseScanResponse) ProtoMessage()    {}
+func (m *ReverseScanResponse) Reset()                    { *m = ReverseScanResponse{} }
+func (m *ReverseScanResponse) String() string            { return proto.CompactTextString(m) }
+func (*ReverseScanResponse) ProtoMessage()               {}
+func (*ReverseScanResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{16} }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
 // It specifies the start and end keys for a span of ranges to which a consistency
@@ -443,9 +466,10 @@ type CheckConsistencyRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *CheckConsistencyRequest) Reset()         { *m = CheckConsistencyRequest{} }
-func (m *CheckConsistencyRequest) String() string { return proto.CompactTextString(m) }
-func (*CheckConsistencyRequest) ProtoMessage()    {}
+func (m *CheckConsistencyRequest) Reset()                    { *m = CheckConsistencyRequest{} }
+func (m *CheckConsistencyRequest) String() string            { return proto.CompactTextString(m) }
+func (*CheckConsistencyRequest) ProtoMessage()               {}
+func (*CheckConsistencyRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{17} }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
 // If a replica finds itself to be inconsistent with its leader it will panic.
@@ -453,27 +477,30 @@ type CheckConsistencyResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *CheckConsistencyResponse) Reset()         { *m = CheckConsistencyResponse{} }
-func (m *CheckConsistencyResponse) String() string { return proto.CompactTextString(m) }
-func (*CheckConsistencyResponse) ProtoMessage()    {}
+func (m *CheckConsistencyResponse) Reset()                    { *m = CheckConsistencyResponse{} }
+func (m *CheckConsistencyResponse) String() string            { return proto.CompactTextString(m) }
+func (*CheckConsistencyResponse) ProtoMessage()               {}
+func (*CheckConsistencyResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{18} }
 
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 type BeginTransactionRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *BeginTransactionRequest) Reset()         { *m = BeginTransactionRequest{} }
-func (m *BeginTransactionRequest) String() string { return proto.CompactTextString(m) }
-func (*BeginTransactionRequest) ProtoMessage()    {}
+func (m *BeginTransactionRequest) Reset()                    { *m = BeginTransactionRequest{} }
+func (m *BeginTransactionRequest) String() string            { return proto.CompactTextString(m) }
+func (*BeginTransactionRequest) ProtoMessage()               {}
+func (*BeginTransactionRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{19} }
 
 // A BeginTransactionResponse is the return value from the BeginTransaction() method.
 type BeginTransactionResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *BeginTransactionResponse) Reset()         { *m = BeginTransactionResponse{} }
-func (m *BeginTransactionResponse) String() string { return proto.CompactTextString(m) }
-func (*BeginTransactionResponse) ProtoMessage()    {}
+func (m *BeginTransactionResponse) Reset()                    { *m = BeginTransactionResponse{} }
+func (m *BeginTransactionResponse) String() string            { return proto.CompactTextString(m) }
+func (*BeginTransactionResponse) ProtoMessage()               {}
+func (*BeginTransactionResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{20} }
 
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
 // specifies whether to commit or roll back an extant transaction.
@@ -486,14 +513,15 @@ type EndTransactionRequest struct {
 	// Optional commit triggers. Note that commit triggers are for
 	// internal use only and will cause an error if requested through the
 	// external-facing KV API.
-	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,4,opt,name=internal_commit_trigger" json:"internal_commit_trigger,omitempty"`
+	InternalCommitTrigger *InternalCommitTrigger `protobuf:"bytes,4,opt,name=internal_commit_trigger,json=internalCommitTrigger" json:"internal_commit_trigger,omitempty"`
 	// List of intents written by the transaction.
-	IntentSpans []Span `protobuf:"bytes,5,rep,name=intent_spans" json:"intent_spans"`
+	IntentSpans []Span `protobuf:"bytes,5,rep,name=intent_spans,json=intentSpans" json:"intent_spans"`
 }
 
-func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
-func (m *EndTransactionRequest) String() string { return proto.CompactTextString(m) }
-func (*EndTransactionRequest) ProtoMessage()    {}
+func (m *EndTransactionRequest) Reset()                    { *m = EndTransactionRequest{} }
+func (m *EndTransactionRequest) String() string            { return proto.CompactTextString(m) }
+func (*EndTransactionRequest) ProtoMessage()               {}
+func (*EndTransactionRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{21} }
 
 // An EndTransactionResponse is the return value from the
 // EndTransaction() method. The final transaction record is returned
@@ -508,14 +536,15 @@ func (*EndTransactionRequest) ProtoMessage()    {}
 type EndTransactionResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Remaining time (ns).
-	CommitWait int64 `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
+	CommitWait int64 `protobuf:"varint,2,opt,name=commit_wait,json=commitWait" json:"commit_wait"`
 	// List of intents resolved by EndTransaction call.
 	Resolved []Key `protobuf:"bytes,3,rep,name=resolved,casttype=Key" json:"resolved,omitempty"`
 }
 
-func (m *EndTransactionResponse) Reset()         { *m = EndTransactionResponse{} }
-func (m *EndTransactionResponse) String() string { return proto.CompactTextString(m) }
-func (*EndTransactionResponse) ProtoMessage()    {}
+func (m *EndTransactionResponse) Reset()                    { *m = EndTransactionResponse{} }
+func (m *EndTransactionResponse) String() string            { return proto.CompactTextString(m) }
+func (*EndTransactionResponse) ProtoMessage()               {}
+func (*EndTransactionResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{22} }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
 // existing range which contains header.key is split by
@@ -539,12 +568,13 @@ func (*EndTransactionResponse) ProtoMessage()    {}
 // recomputed).
 type AdminSplitRequest struct {
 	Span     `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	SplitKey Key `protobuf:"bytes,2,opt,name=split_key,casttype=Key" json:"split_key,omitempty"`
+	SplitKey Key `protobuf:"bytes,2,opt,name=split_key,json=splitKey,casttype=Key" json:"split_key,omitempty"`
 }
 
-func (m *AdminSplitRequest) Reset()         { *m = AdminSplitRequest{} }
-func (m *AdminSplitRequest) String() string { return proto.CompactTextString(m) }
-func (*AdminSplitRequest) ProtoMessage()    {}
+func (m *AdminSplitRequest) Reset()                    { *m = AdminSplitRequest{} }
+func (m *AdminSplitRequest) String() string            { return proto.CompactTextString(m) }
+func (*AdminSplitRequest) ProtoMessage()               {}
+func (*AdminSplitRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{23} }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
@@ -552,9 +582,10 @@ type AdminSplitResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *AdminSplitResponse) Reset()         { *m = AdminSplitResponse{} }
-func (m *AdminSplitResponse) String() string { return proto.CompactTextString(m) }
-func (*AdminSplitResponse) ProtoMessage()    {}
+func (m *AdminSplitResponse) Reset()                    { *m = AdminSplitResponse{} }
+func (m *AdminSplitResponse) String() string            { return proto.CompactTextString(m) }
+func (*AdminSplitResponse) ProtoMessage()               {}
+func (*AdminSplitResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{24} }
 
 // An AdminMergeRequest is the argument to the AdminMerge() method. A
 // merge is performed by calling AdminMerge on the left-hand range of
@@ -569,9 +600,10 @@ type AdminMergeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *AdminMergeRequest) Reset()         { *m = AdminMergeRequest{} }
-func (m *AdminMergeRequest) String() string { return proto.CompactTextString(m) }
-func (*AdminMergeRequest) ProtoMessage()    {}
+func (m *AdminMergeRequest) Reset()                    { *m = AdminMergeRequest{} }
+func (m *AdminMergeRequest) String() string            { return proto.CompactTextString(m) }
+func (*AdminMergeRequest) ProtoMessage()               {}
+func (*AdminMergeRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{25} }
 
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
@@ -579,9 +611,10 @@ type AdminMergeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *AdminMergeResponse) Reset()         { *m = AdminMergeResponse{} }
-func (m *AdminMergeResponse) String() string { return proto.CompactTextString(m) }
-func (*AdminMergeResponse) ProtoMessage()    {}
+func (m *AdminMergeResponse) Reset()                    { *m = AdminMergeResponse{} }
+func (m *AdminMergeResponse) String() string            { return proto.CompactTextString(m) }
+func (*AdminMergeResponse) ProtoMessage()               {}
+func (*AdminMergeResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{26} }
 
 // A RangeLookupRequest is arguments to the RangeLookup() method. A
 // forward lookup request returns a range containing the requested
@@ -596,20 +629,21 @@ func (*AdminMergeResponse) ProtoMessage()    {}
 // direction as lookup (forward v.s. reverse).
 type RangeLookupRequest struct {
 	Span      `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	MaxRanges int32 `protobuf:"varint,2,opt,name=max_ranges" json:"max_ranges"`
+	MaxRanges int32 `protobuf:"varint,2,opt,name=max_ranges,json=maxRanges" json:"max_ranges"`
 	// consider_intents indicates whether or not intents encountered
 	// while looking up the range info should randomly be returned
 	// to the caller. This is intended to be used when retrying due
 	// to range addressing errors.
-	ConsiderIntents bool `protobuf:"varint,3,opt,name=consider_intents" json:"consider_intents"`
+	ConsiderIntents bool `protobuf:"varint,3,opt,name=consider_intents,json=considerIntents" json:"consider_intents"`
 	// Use a reverse scan to pre-fill the range descriptor cache instead
 	// of an ascending scan.
 	Reverse bool `protobuf:"varint,4,opt,name=reverse" json:"reverse"`
 }
 
-func (m *RangeLookupRequest) Reset()         { *m = RangeLookupRequest{} }
-func (m *RangeLookupRequest) String() string { return proto.CompactTextString(m) }
-func (*RangeLookupRequest) ProtoMessage()    {}
+func (m *RangeLookupRequest) Reset()                    { *m = RangeLookupRequest{} }
+func (m *RangeLookupRequest) String() string            { return proto.CompactTextString(m) }
+func (*RangeLookupRequest) ProtoMessage()               {}
+func (*RangeLookupRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{27} }
 
 // A RangeLookupResponse is the return value from the RangeLookup()
 // method. It returns metadata for the range containing the requested
@@ -621,9 +655,10 @@ type RangeLookupResponse struct {
 	Ranges         []RangeDescriptor `protobuf:"bytes,2,rep,name=ranges" json:"ranges"`
 }
 
-func (m *RangeLookupResponse) Reset()         { *m = RangeLookupResponse{} }
-func (m *RangeLookupResponse) String() string { return proto.CompactTextString(m) }
-func (*RangeLookupResponse) ProtoMessage()    {}
+func (m *RangeLookupResponse) Reset()                    { *m = RangeLookupResponse{} }
+func (m *RangeLookupResponse) String() string            { return proto.CompactTextString(m) }
+func (*RangeLookupResponse) ProtoMessage()               {}
+func (*RangeLookupResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{28} }
 
 // A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
 // method. It's sent by transaction coordinators to let the system
@@ -635,9 +670,10 @@ type HeartbeatTxnRequest struct {
 	Now  Timestamp `protobuf:"bytes,2,opt,name=now" json:"now"`
 }
 
-func (m *HeartbeatTxnRequest) Reset()         { *m = HeartbeatTxnRequest{} }
-func (m *HeartbeatTxnRequest) String() string { return proto.CompactTextString(m) }
-func (*HeartbeatTxnRequest) ProtoMessage()    {}
+func (m *HeartbeatTxnRequest) Reset()                    { *m = HeartbeatTxnRequest{} }
+func (m *HeartbeatTxnRequest) String() string            { return proto.CompactTextString(m) }
+func (*HeartbeatTxnRequest) ProtoMessage()               {}
+func (*HeartbeatTxnRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{29} }
 
 // A HeartbeatTxnResponse is the return value from the HeartbeatTxn()
 // method. It returns the transaction info in the response header. The
@@ -647,9 +683,10 @@ type HeartbeatTxnResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *HeartbeatTxnResponse) Reset()         { *m = HeartbeatTxnResponse{} }
-func (m *HeartbeatTxnResponse) String() string { return proto.CompactTextString(m) }
-func (*HeartbeatTxnResponse) ProtoMessage()    {}
+func (m *HeartbeatTxnResponse) Reset()                    { *m = HeartbeatTxnResponse{} }
+func (m *HeartbeatTxnResponse) String() string            { return proto.CompactTextString(m) }
+func (*HeartbeatTxnResponse) ProtoMessage()               {}
+func (*HeartbeatTxnResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{30} }
 
 // A GCRequest is arguments to the GC() method. It's sent by range
 // leaders after scanning range data to find expired MVCC values.
@@ -658,27 +695,30 @@ type GCRequest struct {
 	Keys []GCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
 }
 
-func (m *GCRequest) Reset()         { *m = GCRequest{} }
-func (m *GCRequest) String() string { return proto.CompactTextString(m) }
-func (*GCRequest) ProtoMessage()    {}
+func (m *GCRequest) Reset()                    { *m = GCRequest{} }
+func (m *GCRequest) String() string            { return proto.CompactTextString(m) }
+func (*GCRequest) ProtoMessage()               {}
+func (*GCRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{31} }
 
 type GCRequest_GCKey struct {
 	Key       Key       `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
-func (m *GCRequest_GCKey) Reset()         { *m = GCRequest_GCKey{} }
-func (m *GCRequest_GCKey) String() string { return proto.CompactTextString(m) }
-func (*GCRequest_GCKey) ProtoMessage()    {}
+func (m *GCRequest_GCKey) Reset()                    { *m = GCRequest_GCKey{} }
+func (m *GCRequest_GCKey) String() string            { return proto.CompactTextString(m) }
+func (*GCRequest_GCKey) ProtoMessage()               {}
+func (*GCRequest_GCKey) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{31, 0} }
 
 // A GCResponse is the return value from the GC() method.
 type GCResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *GCResponse) Reset()         { *m = GCResponse{} }
-func (m *GCResponse) String() string { return proto.CompactTextString(m) }
-func (*GCResponse) ProtoMessage()    {}
+func (m *GCResponse) Reset()                    { *m = GCResponse{} }
+func (m *GCResponse) String() string            { return proto.CompactTextString(m) }
+func (*GCResponse) ProtoMessage()               {}
+func (*GCResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{32} }
 
 // A PushTxnRequest is arguments to the PushTxn() method. It's sent by
 // readers or writers which have encountered an "intent" laid down by
@@ -699,16 +739,16 @@ type PushTxnRequest struct {
 	// Transaction which encountered the intent, if applicable. For a
 	// non-transactional operation, pusher_txn will be nil. Used to
 	// compare priorities and timestamps if priorities are equal.
-	PusherTxn Transaction `protobuf:"bytes,2,opt,name=pusher_txn" json:"pusher_txn"`
+	PusherTxn Transaction `protobuf:"bytes,2,opt,name=pusher_txn,json=pusherTxn" json:"pusher_txn"`
 	// Transaction to be pushed, as specified at the intent which led to
 	// the push transaction request. Note that this may not be the most
 	// up-to-date value of the transaction record, but will be set or
 	// merged as appropriate.
-	PusheeTxn TxnMeta `protobuf:"bytes,3,opt,name=pushee_txn" json:"pushee_txn"`
+	PusheeTxn TxnMeta `protobuf:"bytes,3,opt,name=pushee_txn,json=pusheeTxn" json:"pushee_txn"`
 	// PushTo is the timestamp just after which PusheeTxn is attempted to be
 	// pushed. During conflict resolution, it should be set to the timestamp
 	// of the its conflicting write.
-	PushTo Timestamp `protobuf:"bytes,4,opt,name=push_to" json:"push_to"`
+	PushTo Timestamp `protobuf:"bytes,4,opt,name=push_to,json=pushTo" json:"push_to"`
 	// Now holds the timestamp used to compare the last heartbeat of the pushee
 	// against. This is necessary since the request header's timestamp does not
 	// necessarily advance with the node clock across retries and hence cannot
@@ -719,12 +759,13 @@ type PushTxnRequest struct {
 	// that pushee_txn be aborted if possible. Inconsistent readers set
 	// this to PUSH_TOUCH to determine whether the pushee can be aborted
 	// due to inactivity (based on the now field).
-	PushType PushTxnType `protobuf:"varint,6,opt,name=push_type,enum=cockroach.roachpb.PushTxnType" json:"push_type"`
+	PushType PushTxnType `protobuf:"varint,6,opt,name=push_type,json=pushType,enum=cockroach.roachpb.PushTxnType" json:"push_type"`
 }
 
-func (m *PushTxnRequest) Reset()         { *m = PushTxnRequest{} }
-func (m *PushTxnRequest) String() string { return proto.CompactTextString(m) }
-func (*PushTxnRequest) ProtoMessage()    {}
+func (m *PushTxnRequest) Reset()                    { *m = PushTxnRequest{} }
+func (m *PushTxnRequest) String() string            { return proto.CompactTextString(m) }
+func (*PushTxnRequest) ProtoMessage()               {}
+func (*PushTxnRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{33} }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It
 // returns success and the resulting state of PusheeTxn if the
@@ -737,12 +778,13 @@ type PushTxnResponse struct {
 	// the current value of the transaction.
 	// TODO(tschottdorf): Maybe this can be a TxnMeta instead; probably requires
 	// factoring out the new Priority.
-	PusheeTxn Transaction `protobuf:"bytes,2,opt,name=pushee_txn" json:"pushee_txn"`
+	PusheeTxn Transaction `protobuf:"bytes,2,opt,name=pushee_txn,json=pusheeTxn" json:"pushee_txn"`
 }
 
-func (m *PushTxnResponse) Reset()         { *m = PushTxnResponse{} }
-func (m *PushTxnResponse) String() string { return proto.CompactTextString(m) }
-func (*PushTxnResponse) ProtoMessage()    {}
+func (m *PushTxnResponse) Reset()                    { *m = PushTxnResponse{} }
+func (m *PushTxnResponse) String() string            { return proto.CompactTextString(m) }
+func (*PushTxnResponse) ProtoMessage()               {}
+func (*PushTxnResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{34} }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()
 // method. It is sent by transaction coordinators after success
@@ -751,7 +793,7 @@ func (*PushTxnResponse) ProtoMessage()    {}
 type ResolveIntentRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intent is being resolved.
-	IntentTxn TxnMeta `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	IntentTxn TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn" json:"intent_txn"`
 	// The status of the transaction.
 	Status TransactionStatus `protobuf:"varint,3,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// Optionally poison the sequence cache for the transaction the intent's
@@ -759,9 +801,10 @@ type ResolveIntentRequest struct {
 	Poison bool `protobuf:"varint,4,opt,name=poison" json:"poison"`
 }
 
-func (m *ResolveIntentRequest) Reset()         { *m = ResolveIntentRequest{} }
-func (m *ResolveIntentRequest) String() string { return proto.CompactTextString(m) }
-func (*ResolveIntentRequest) ProtoMessage()    {}
+func (m *ResolveIntentRequest) Reset()                    { *m = ResolveIntentRequest{} }
+func (m *ResolveIntentRequest) String() string            { return proto.CompactTextString(m) }
+func (*ResolveIntentRequest) ProtoMessage()               {}
+func (*ResolveIntentRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{35} }
 
 // A ResolveIntentResponse is the return value from the
 // ResolveIntent() method.
@@ -769,9 +812,10 @@ type ResolveIntentResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *ResolveIntentResponse) Reset()         { *m = ResolveIntentResponse{} }
-func (m *ResolveIntentResponse) String() string { return proto.CompactTextString(m) }
-func (*ResolveIntentResponse) ProtoMessage()    {}
+func (m *ResolveIntentResponse) Reset()                    { *m = ResolveIntentResponse{} }
+func (m *ResolveIntentResponse) String() string            { return proto.CompactTextString(m) }
+func (*ResolveIntentResponse) ProtoMessage()               {}
+func (*ResolveIntentResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{36} }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
 // It is sent by transaction coordinators after success calling PushTxn to
@@ -780,7 +824,7 @@ func (*ResolveIntentResponse) ProtoMessage()    {}
 type ResolveIntentRangeRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The transaction whose intents are being resolved.
-	IntentTxn TxnMeta `protobuf:"bytes,2,opt,name=intent_txn" json:"intent_txn"`
+	IntentTxn TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn" json:"intent_txn"`
 	// The status of the transaction.
 	Status TransactionStatus `protobuf:"varint,3,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
 	// Optionally poison the sequence cache for the transaction on all ranges
@@ -788,25 +832,28 @@ type ResolveIntentRangeRequest struct {
 	Poison bool `protobuf:"varint,4,opt,name=poison" json:"poison"`
 }
 
-func (m *ResolveIntentRangeRequest) Reset()         { *m = ResolveIntentRangeRequest{} }
-func (m *ResolveIntentRangeRequest) String() string { return proto.CompactTextString(m) }
-func (*ResolveIntentRangeRequest) ProtoMessage()    {}
+func (m *ResolveIntentRangeRequest) Reset()                    { *m = ResolveIntentRangeRequest{} }
+func (m *ResolveIntentRangeRequest) String() string            { return proto.CompactTextString(m) }
+func (*ResolveIntentRangeRequest) ProtoMessage()               {}
+func (*ResolveIntentRangeRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{37} }
 
 // A NoopResponse is the return value from a no-op operation.
 type NoopResponse struct {
 }
 
-func (m *NoopResponse) Reset()         { *m = NoopResponse{} }
-func (m *NoopResponse) String() string { return proto.CompactTextString(m) }
-func (*NoopResponse) ProtoMessage()    {}
+func (m *NoopResponse) Reset()                    { *m = NoopResponse{} }
+func (m *NoopResponse) String() string            { return proto.CompactTextString(m) }
+func (*NoopResponse) ProtoMessage()               {}
+func (*NoopResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{38} }
 
 // A NoopRequest is a no-op.
 type NoopRequest struct {
 }
 
-func (m *NoopRequest) Reset()         { *m = NoopRequest{} }
-func (m *NoopRequest) String() string { return proto.CompactTextString(m) }
-func (*NoopRequest) ProtoMessage()    {}
+func (m *NoopRequest) Reset()                    { *m = NoopRequest{} }
+func (m *NoopRequest) String() string            { return proto.CompactTextString(m) }
+func (*NoopRequest) ProtoMessage()               {}
+func (*NoopRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{39} }
 
 // A ResolveIntentRangeResponse is the return value from the
 // ResolveIntent() method.
@@ -814,9 +861,10 @@ type ResolveIntentRangeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *ResolveIntentRangeResponse) Reset()         { *m = ResolveIntentRangeResponse{} }
-func (m *ResolveIntentRangeResponse) String() string { return proto.CompactTextString(m) }
-func (*ResolveIntentRangeResponse) ProtoMessage()    {}
+func (m *ResolveIntentRangeResponse) Reset()                    { *m = ResolveIntentRangeResponse{} }
+func (m *ResolveIntentRangeResponse) String() string            { return proto.CompactTextString(m) }
+func (*ResolveIntentRangeResponse) ProtoMessage()               {}
+func (*ResolveIntentRangeResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{40} }
 
 // A MergeRequest contains arguments to the Merge() method. It
 // specifies a key and a value which should be merged into the
@@ -826,18 +874,20 @@ type MergeRequest struct {
 	Value Value `protobuf:"bytes,2,opt,name=value" json:"value"`
 }
 
-func (m *MergeRequest) Reset()         { *m = MergeRequest{} }
-func (m *MergeRequest) String() string { return proto.CompactTextString(m) }
-func (*MergeRequest) ProtoMessage()    {}
+func (m *MergeRequest) Reset()                    { *m = MergeRequest{} }
+func (m *MergeRequest) String() string            { return proto.CompactTextString(m) }
+func (*MergeRequest) ProtoMessage()               {}
+func (*MergeRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{41} }
 
 // MergeResponse is the response to a Merge() operation.
 type MergeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *MergeResponse) Reset()         { *m = MergeResponse{} }
-func (m *MergeResponse) String() string { return proto.CompactTextString(m) }
-func (*MergeResponse) ProtoMessage()    {}
+func (m *MergeResponse) Reset()                    { *m = MergeResponse{} }
+func (m *MergeResponse) String() string            { return proto.CompactTextString(m) }
+func (*MergeResponse) ProtoMessage()               {}
+func (*MergeResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{42} }
 
 // TruncateLogRequest is used to remove a prefix of the raft log. While there
 // is no requirement for correctness that the raft log truncation be synchronized across
@@ -852,21 +902,23 @@ type TruncateLogRequest struct {
 	// The header specifies a span, start and end keys, but not the range id
 	// itself. The range may have changed from the one specified in the header
 	// in the case of a merge.
-	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,json=rangeId,casttype=RangeID" json:"range_id"`
 }
 
-func (m *TruncateLogRequest) Reset()         { *m = TruncateLogRequest{} }
-func (m *TruncateLogRequest) String() string { return proto.CompactTextString(m) }
-func (*TruncateLogRequest) ProtoMessage()    {}
+func (m *TruncateLogRequest) Reset()                    { *m = TruncateLogRequest{} }
+func (m *TruncateLogRequest) String() string            { return proto.CompactTextString(m) }
+func (*TruncateLogRequest) ProtoMessage()               {}
+func (*TruncateLogRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{43} }
 
 // TruncateLogResponse is the response to a TruncateLog() operation.
 type TruncateLogResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *TruncateLogResponse) Reset()         { *m = TruncateLogResponse{} }
-func (m *TruncateLogResponse) String() string { return proto.CompactTextString(m) }
-func (*TruncateLogResponse) ProtoMessage()    {}
+func (m *TruncateLogResponse) Reset()                    { *m = TruncateLogResponse{} }
+func (m *TruncateLogResponse) String() string            { return proto.CompactTextString(m) }
+func (*TruncateLogResponse) ProtoMessage()               {}
+func (*TruncateLogResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{44} }
 
 // A LeaderLeaseRequest is arguments to the LeaderLease()
 // method. It is sent by the store on behalf of one of its ranges upon receipt
@@ -876,9 +928,10 @@ type LeaderLeaseRequest struct {
 	Lease Lease `protobuf:"bytes,2,opt,name=lease" json:"lease"`
 }
 
-func (m *LeaderLeaseRequest) Reset()         { *m = LeaderLeaseRequest{} }
-func (m *LeaderLeaseRequest) String() string { return proto.CompactTextString(m) }
-func (*LeaderLeaseRequest) ProtoMessage()    {}
+func (m *LeaderLeaseRequest) Reset()                    { *m = LeaderLeaseRequest{} }
+func (m *LeaderLeaseRequest) String() string            { return proto.CompactTextString(m) }
+func (*LeaderLeaseRequest) ProtoMessage()               {}
+func (*LeaderLeaseRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{45} }
 
 // A LeaderLeaseResponse is the response to a LeaderLease()
 // operation.
@@ -886,9 +939,10 @@ type LeaderLeaseResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *LeaderLeaseResponse) Reset()         { *m = LeaderLeaseResponse{} }
-func (m *LeaderLeaseResponse) String() string { return proto.CompactTextString(m) }
-func (*LeaderLeaseResponse) ProtoMessage()    {}
+func (m *LeaderLeaseResponse) Reset()                    { *m = LeaderLeaseResponse{} }
+func (m *LeaderLeaseResponse) String() string            { return proto.CompactTextString(m) }
+func (*LeaderLeaseResponse) ProtoMessage()               {}
+func (*LeaderLeaseResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{46} }
 
 // A ComputeChecksumRequest is arguments to the ComputeChecksum() method, to
 // start computing the checksum for the specified range at the snapshot for
@@ -901,21 +955,23 @@ type ComputeChecksumRequest struct {
 	// consistent checksumming method across replicas.
 	Version uint32 `protobuf:"varint,2,opt,name=version" json:"version"`
 	// A unique identifier to match a future VerifyChecksumRequest with this request.
-	ChecksumID github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,3,opt,name=checksum_id,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"checksum_id"`
+	ChecksumID github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,3,opt,name=checksum_id,json=checksumId,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"checksum_id"`
 }
 
-func (m *ComputeChecksumRequest) Reset()         { *m = ComputeChecksumRequest{} }
-func (m *ComputeChecksumRequest) String() string { return proto.CompactTextString(m) }
-func (*ComputeChecksumRequest) ProtoMessage()    {}
+func (m *ComputeChecksumRequest) Reset()                    { *m = ComputeChecksumRequest{} }
+func (m *ComputeChecksumRequest) String() string            { return proto.CompactTextString(m) }
+func (*ComputeChecksumRequest) ProtoMessage()               {}
+func (*ComputeChecksumRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{47} }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
 type ComputeChecksumResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *ComputeChecksumResponse) Reset()         { *m = ComputeChecksumResponse{} }
-func (m *ComputeChecksumResponse) String() string { return proto.CompactTextString(m) }
-func (*ComputeChecksumResponse) ProtoMessage()    {}
+func (m *ComputeChecksumResponse) Reset()                    { *m = ComputeChecksumResponse{} }
+func (m *ComputeChecksumResponse) String() string            { return proto.CompactTextString(m) }
+func (*ComputeChecksumResponse) ProtoMessage()               {}
+func (*ComputeChecksumResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{48} }
 
 // A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
 // verify the checksum computed on the leader against the one requested
@@ -925,90 +981,94 @@ type VerifyChecksumRequest struct {
 	// The version used to pick the checksum method. It allows us to use a
 	// consistent checksumming method across replicas.
 	Version    uint32                                          `protobuf:"varint,2,opt,name=version" json:"version"`
-	ChecksumID github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,3,opt,name=checksum_id,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"checksum_id"`
+	ChecksumID github_com_cockroachdb_cockroach_util_uuid.UUID `protobuf:"bytes,3,opt,name=checksum_id,json=checksumId,customtype=github.com/cockroachdb/cockroach/util/uuid.UUID" json:"checksum_id"`
 	Checksum   []byte                                          `protobuf:"bytes,4,opt,name=checksum" json:"checksum,omitempty"`
 }
 
-func (m *VerifyChecksumRequest) Reset()         { *m = VerifyChecksumRequest{} }
-func (m *VerifyChecksumRequest) String() string { return proto.CompactTextString(m) }
-func (*VerifyChecksumRequest) ProtoMessage()    {}
+func (m *VerifyChecksumRequest) Reset()                    { *m = VerifyChecksumRequest{} }
+func (m *VerifyChecksumRequest) String() string            { return proto.CompactTextString(m) }
+func (*VerifyChecksumRequest) ProtoMessage()               {}
+func (*VerifyChecksumRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{49} }
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
 type VerifyChecksumResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
 
-func (m *VerifyChecksumResponse) Reset()         { *m = VerifyChecksumResponse{} }
-func (m *VerifyChecksumResponse) String() string { return proto.CompactTextString(m) }
-func (*VerifyChecksumResponse) ProtoMessage()    {}
+func (m *VerifyChecksumResponse) Reset()                    { *m = VerifyChecksumResponse{} }
+func (m *VerifyChecksumResponse) String() string            { return proto.CompactTextString(m) }
+func (*VerifyChecksumResponse) ProtoMessage()               {}
+func (*VerifyChecksumResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{50} }
 
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 type RequestUnion struct {
 	Get                *GetRequest                `protobuf:"bytes,1,opt,name=get" json:"get,omitempty"`
 	Put                *PutRequest                `protobuf:"bytes,2,opt,name=put" json:"put,omitempty"`
-	ConditionalPut     *ConditionalPutRequest     `protobuf:"bytes,3,opt,name=conditional_put" json:"conditional_put,omitempty"`
+	ConditionalPut     *ConditionalPutRequest     `protobuf:"bytes,3,opt,name=conditional_put,json=conditionalPut" json:"conditional_put,omitempty"`
 	Increment          *IncrementRequest          `protobuf:"bytes,4,opt,name=increment" json:"increment,omitempty"`
 	Delete             *DeleteRequest             `protobuf:"bytes,5,opt,name=delete" json:"delete,omitempty"`
-	DeleteRange        *DeleteRangeRequest        `protobuf:"bytes,6,opt,name=delete_range" json:"delete_range,omitempty"`
+	DeleteRange        *DeleteRangeRequest        `protobuf:"bytes,6,opt,name=delete_range,json=deleteRange" json:"delete_range,omitempty"`
 	Scan               *ScanRequest               `protobuf:"bytes,7,opt,name=scan" json:"scan,omitempty"`
-	BeginTransaction   *BeginTransactionRequest   `protobuf:"bytes,8,opt,name=begin_transaction" json:"begin_transaction,omitempty"`
-	EndTransaction     *EndTransactionRequest     `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	AdminSplit         *AdminSplitRequest         `protobuf:"bytes,10,opt,name=admin_split" json:"admin_split,omitempty"`
-	AdminMerge         *AdminMergeRequest         `protobuf:"bytes,11,opt,name=admin_merge" json:"admin_merge,omitempty"`
-	HeartbeatTxn       *HeartbeatTxnRequest       `protobuf:"bytes,12,opt,name=heartbeat_txn" json:"heartbeat_txn,omitempty"`
+	BeginTransaction   *BeginTransactionRequest   `protobuf:"bytes,8,opt,name=begin_transaction,json=beginTransaction" json:"begin_transaction,omitempty"`
+	EndTransaction     *EndTransactionRequest     `protobuf:"bytes,9,opt,name=end_transaction,json=endTransaction" json:"end_transaction,omitempty"`
+	AdminSplit         *AdminSplitRequest         `protobuf:"bytes,10,opt,name=admin_split,json=adminSplit" json:"admin_split,omitempty"`
+	AdminMerge         *AdminMergeRequest         `protobuf:"bytes,11,opt,name=admin_merge,json=adminMerge" json:"admin_merge,omitempty"`
+	HeartbeatTxn       *HeartbeatTxnRequest       `protobuf:"bytes,12,opt,name=heartbeat_txn,json=heartbeatTxn" json:"heartbeat_txn,omitempty"`
 	Gc                 *GCRequest                 `protobuf:"bytes,13,opt,name=gc" json:"gc,omitempty"`
-	PushTxn            *PushTxnRequest            `protobuf:"bytes,14,opt,name=push_txn" json:"push_txn,omitempty"`
-	RangeLookup        *RangeLookupRequest        `protobuf:"bytes,15,opt,name=range_lookup" json:"range_lookup,omitempty"`
-	ResolveIntent      *ResolveIntentRequest      `protobuf:"bytes,16,opt,name=resolve_intent" json:"resolve_intent,omitempty"`
-	ResolveIntentRange *ResolveIntentRangeRequest `protobuf:"bytes,17,opt,name=resolve_intent_range" json:"resolve_intent_range,omitempty"`
+	PushTxn            *PushTxnRequest            `protobuf:"bytes,14,opt,name=push_txn,json=pushTxn" json:"push_txn,omitempty"`
+	RangeLookup        *RangeLookupRequest        `protobuf:"bytes,15,opt,name=range_lookup,json=rangeLookup" json:"range_lookup,omitempty"`
+	ResolveIntent      *ResolveIntentRequest      `protobuf:"bytes,16,opt,name=resolve_intent,json=resolveIntent" json:"resolve_intent,omitempty"`
+	ResolveIntentRange *ResolveIntentRangeRequest `protobuf:"bytes,17,opt,name=resolve_intent_range,json=resolveIntentRange" json:"resolve_intent_range,omitempty"`
 	Merge              *MergeRequest              `protobuf:"bytes,18,opt,name=merge" json:"merge,omitempty"`
-	TruncateLog        *TruncateLogRequest        `protobuf:"bytes,19,opt,name=truncate_log" json:"truncate_log,omitempty"`
-	LeaderLease        *LeaderLeaseRequest        `protobuf:"bytes,20,opt,name=leader_lease" json:"leader_lease,omitempty"`
-	ReverseScan        *ReverseScanRequest        `protobuf:"bytes,21,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
-	ComputeChecksum    *ComputeChecksumRequest    `protobuf:"bytes,22,opt,name=compute_checksum" json:"compute_checksum,omitempty"`
-	VerifyChecksum     *VerifyChecksumRequest     `protobuf:"bytes,23,opt,name=verify_checksum" json:"verify_checksum,omitempty"`
-	CheckConsistency   *CheckConsistencyRequest   `protobuf:"bytes,24,opt,name=check_consistency" json:"check_consistency,omitempty"`
+	TruncateLog        *TruncateLogRequest        `protobuf:"bytes,19,opt,name=truncate_log,json=truncateLog" json:"truncate_log,omitempty"`
+	LeaderLease        *LeaderLeaseRequest        `protobuf:"bytes,20,opt,name=leader_lease,json=leaderLease" json:"leader_lease,omitempty"`
+	ReverseScan        *ReverseScanRequest        `protobuf:"bytes,21,opt,name=reverse_scan,json=reverseScan" json:"reverse_scan,omitempty"`
+	ComputeChecksum    *ComputeChecksumRequest    `protobuf:"bytes,22,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
+	VerifyChecksum     *VerifyChecksumRequest     `protobuf:"bytes,23,opt,name=verify_checksum,json=verifyChecksum" json:"verify_checksum,omitempty"`
+	CheckConsistency   *CheckConsistencyRequest   `protobuf:"bytes,24,opt,name=check_consistency,json=checkConsistency" json:"check_consistency,omitempty"`
 	Noop               *NoopRequest               `protobuf:"bytes,25,opt,name=noop" json:"noop,omitempty"`
 }
 
-func (m *RequestUnion) Reset()         { *m = RequestUnion{} }
-func (m *RequestUnion) String() string { return proto.CompactTextString(m) }
-func (*RequestUnion) ProtoMessage()    {}
+func (m *RequestUnion) Reset()                    { *m = RequestUnion{} }
+func (m *RequestUnion) String() string            { return proto.CompactTextString(m) }
+func (*RequestUnion) ProtoMessage()               {}
+func (*RequestUnion) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{51} }
 
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
 type ResponseUnion struct {
 	Get                *GetResponse                `protobuf:"bytes,1,opt,name=get" json:"get,omitempty"`
 	Put                *PutResponse                `protobuf:"bytes,2,opt,name=put" json:"put,omitempty"`
-	ConditionalPut     *ConditionalPutResponse     `protobuf:"bytes,3,opt,name=conditional_put" json:"conditional_put,omitempty"`
+	ConditionalPut     *ConditionalPutResponse     `protobuf:"bytes,3,opt,name=conditional_put,json=conditionalPut" json:"conditional_put,omitempty"`
 	Increment          *IncrementResponse          `protobuf:"bytes,4,opt,name=increment" json:"increment,omitempty"`
 	Delete             *DeleteResponse             `protobuf:"bytes,5,opt,name=delete" json:"delete,omitempty"`
-	DeleteRange        *DeleteRangeResponse        `protobuf:"bytes,6,opt,name=delete_range" json:"delete_range,omitempty"`
+	DeleteRange        *DeleteRangeResponse        `protobuf:"bytes,6,opt,name=delete_range,json=deleteRange" json:"delete_range,omitempty"`
 	Scan               *ScanResponse               `protobuf:"bytes,7,opt,name=scan" json:"scan,omitempty"`
-	BeginTransaction   *BeginTransactionResponse   `protobuf:"bytes,8,opt,name=begin_transaction" json:"begin_transaction,omitempty"`
-	EndTransaction     *EndTransactionResponse     `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	AdminSplit         *AdminSplitResponse         `protobuf:"bytes,10,opt,name=admin_split" json:"admin_split,omitempty"`
-	AdminMerge         *AdminMergeResponse         `protobuf:"bytes,11,opt,name=admin_merge" json:"admin_merge,omitempty"`
-	HeartbeatTxn       *HeartbeatTxnResponse       `protobuf:"bytes,12,opt,name=heartbeat_txn" json:"heartbeat_txn,omitempty"`
+	BeginTransaction   *BeginTransactionResponse   `protobuf:"bytes,8,opt,name=begin_transaction,json=beginTransaction" json:"begin_transaction,omitempty"`
+	EndTransaction     *EndTransactionResponse     `protobuf:"bytes,9,opt,name=end_transaction,json=endTransaction" json:"end_transaction,omitempty"`
+	AdminSplit         *AdminSplitResponse         `protobuf:"bytes,10,opt,name=admin_split,json=adminSplit" json:"admin_split,omitempty"`
+	AdminMerge         *AdminMergeResponse         `protobuf:"bytes,11,opt,name=admin_merge,json=adminMerge" json:"admin_merge,omitempty"`
+	HeartbeatTxn       *HeartbeatTxnResponse       `protobuf:"bytes,12,opt,name=heartbeat_txn,json=heartbeatTxn" json:"heartbeat_txn,omitempty"`
 	Gc                 *GCResponse                 `protobuf:"bytes,13,opt,name=gc" json:"gc,omitempty"`
-	PushTxn            *PushTxnResponse            `protobuf:"bytes,14,opt,name=push_txn" json:"push_txn,omitempty"`
-	RangeLookup        *RangeLookupResponse        `protobuf:"bytes,15,opt,name=range_lookup" json:"range_lookup,omitempty"`
-	ResolveIntent      *ResolveIntentResponse      `protobuf:"bytes,16,opt,name=resolve_intent" json:"resolve_intent,omitempty"`
-	ResolveIntentRange *ResolveIntentRangeResponse `protobuf:"bytes,17,opt,name=resolve_intent_range" json:"resolve_intent_range,omitempty"`
+	PushTxn            *PushTxnResponse            `protobuf:"bytes,14,opt,name=push_txn,json=pushTxn" json:"push_txn,omitempty"`
+	RangeLookup        *RangeLookupResponse        `protobuf:"bytes,15,opt,name=range_lookup,json=rangeLookup" json:"range_lookup,omitempty"`
+	ResolveIntent      *ResolveIntentResponse      `protobuf:"bytes,16,opt,name=resolve_intent,json=resolveIntent" json:"resolve_intent,omitempty"`
+	ResolveIntentRange *ResolveIntentRangeResponse `protobuf:"bytes,17,opt,name=resolve_intent_range,json=resolveIntentRange" json:"resolve_intent_range,omitempty"`
 	Merge              *MergeResponse              `protobuf:"bytes,18,opt,name=merge" json:"merge,omitempty"`
-	TruncateLog        *TruncateLogResponse        `protobuf:"bytes,19,opt,name=truncate_log" json:"truncate_log,omitempty"`
-	LeaderLease        *LeaderLeaseResponse        `protobuf:"bytes,20,opt,name=leader_lease" json:"leader_lease,omitempty"`
-	ReverseScan        *ReverseScanResponse        `protobuf:"bytes,21,opt,name=reverse_scan" json:"reverse_scan,omitempty"`
-	ComputeChecksum    *ComputeChecksumResponse    `protobuf:"bytes,22,opt,name=compute_checksum" json:"compute_checksum,omitempty"`
-	VerifyChecksum     *VerifyChecksumResponse     `protobuf:"bytes,23,opt,name=verify_checksum" json:"verify_checksum,omitempty"`
-	CheckConsistency   *CheckConsistencyResponse   `protobuf:"bytes,24,opt,name=check_consistency" json:"check_consistency,omitempty"`
+	TruncateLog        *TruncateLogResponse        `protobuf:"bytes,19,opt,name=truncate_log,json=truncateLog" json:"truncate_log,omitempty"`
+	LeaderLease        *LeaderLeaseResponse        `protobuf:"bytes,20,opt,name=leader_lease,json=leaderLease" json:"leader_lease,omitempty"`
+	ReverseScan        *ReverseScanResponse        `protobuf:"bytes,21,opt,name=reverse_scan,json=reverseScan" json:"reverse_scan,omitempty"`
+	ComputeChecksum    *ComputeChecksumResponse    `protobuf:"bytes,22,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
+	VerifyChecksum     *VerifyChecksumResponse     `protobuf:"bytes,23,opt,name=verify_checksum,json=verifyChecksum" json:"verify_checksum,omitempty"`
+	CheckConsistency   *CheckConsistencyResponse   `protobuf:"bytes,24,opt,name=check_consistency,json=checkConsistency" json:"check_consistency,omitempty"`
 	Noop               *NoopResponse               `protobuf:"bytes,25,opt,name=noop" json:"noop,omitempty"`
 }
 
-func (m *ResponseUnion) Reset()         { *m = ResponseUnion{} }
-func (m *ResponseUnion) String() string { return proto.CompactTextString(m) }
-func (*ResponseUnion) ProtoMessage()    {}
+func (m *ResponseUnion) Reset()                    { *m = ResponseUnion{} }
+func (m *ResponseUnion) String() string            { return proto.CompactTextString(m) }
+func (*ResponseUnion) ProtoMessage()               {}
+func (*ResponseUnion) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{52} }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
@@ -1022,7 +1082,7 @@ type Header struct {
 	// range_id specifies the ID of the Raft consensus group which the key
 	// range belongs to. This is used by the receiving node to route the
 	// request to the correct range.
-	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	RangeID RangeID `protobuf:"varint,3,opt,name=range_id,json=rangeId,casttype=RangeID" json:"range_id"`
 	// user_priority allows any command's priority to be biased from the
 	// default random priority. It specifies a multiple. If set to 0.5,
 	// the chosen priority will be 1/2x as likely to beat any default
@@ -1032,7 +1092,7 @@ type Header struct {
 	// priority is treated the same as 1. This value is ignored if txn
 	// is specified. The min and max user priorities are set via
 	// MinUserPriority and MaxUserPriority in data.go.
-	UserPriority UserPriority `protobuf:"fixed64,4,opt,name=user_priority,casttype=UserPriority" json:"user_priority"`
+	UserPriority UserPriority `protobuf:"fixed64,4,opt,name=user_priority,json=userPriority,casttype=UserPriority" json:"user_priority"`
 	// txn is set non-nil if a transaction is underway. To start a txn,
 	// the first request should set this field to non-nil with name and
 	// isolation level set as desired. The response will contain the
@@ -1042,17 +1102,18 @@ type Header struct {
 	// read_consistency specifies the consistency for read
 	// operations. The default is CONSISTENT. This value is ignored for
 	// write operations.
-	ReadConsistency ReadConsistencyType `protobuf:"varint,6,opt,name=read_consistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
+	ReadConsistency ReadConsistencyType `protobuf:"varint,6,opt,name=read_consistency,json=readConsistency,enum=cockroach.roachpb.ReadConsistencyType" json:"read_consistency"`
 	// trace, if set, is the active span of an OpenTracing distributed trace.
 	Trace *cockroach_util_tracing.Span `protobuf:"bytes,7,opt,name=trace" json:"trace,omitempty"`
 	// if set to a non-zero value, limits the total number of results for
 	// Scan/ReverseScan requests in the batch.
-	MaxScanResults int64 `protobuf:"varint,8,opt,name=max_scan_results" json:"max_scan_results"`
+	MaxScanResults int64 `protobuf:"varint,8,opt,name=max_scan_results,json=maxScanResults" json:"max_scan_results"`
 }
 
-func (m *Header) Reset()         { *m = Header{} }
-func (m *Header) String() string { return proto.CompactTextString(m) }
-func (*Header) ProtoMessage()    {}
+func (m *Header) Reset()                    { *m = Header{} }
+func (m *Header) String() string            { return proto.CompactTextString(m) }
+func (*Header) ProtoMessage()               {}
+func (*Header) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{53} }
 
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
@@ -1062,8 +1123,9 @@ type BatchRequest struct {
 	Requests []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`
 }
 
-func (m *BatchRequest) Reset()      { *m = BatchRequest{} }
-func (*BatchRequest) ProtoMessage() {}
+func (m *BatchRequest) Reset()                    { *m = BatchRequest{} }
+func (*BatchRequest) ProtoMessage()               {}
+func (*BatchRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{54} }
 
 // A BatchResponse contains one or more responses, one per request
 // corresponding to the requests in the matching BatchRequest. The
@@ -1074,8 +1136,9 @@ type BatchResponse struct {
 	Responses            []ResponseUnion `protobuf:"bytes,2,rep,name=responses" json:"responses"`
 }
 
-func (m *BatchResponse) Reset()      { *m = BatchResponse{} }
-func (*BatchResponse) ProtoMessage() {}
+func (m *BatchResponse) Reset()                    { *m = BatchResponse{} }
+func (*BatchResponse) ProtoMessage()               {}
+func (*BatchResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{55} }
 
 type BatchResponse_Header struct {
 	// error is non-nil if an error occurred.
@@ -1083,19 +1146,20 @@ type BatchResponse_Header struct {
 	// timestamp is set only for non-transactional responses and denotes the
 	// highest timestamp at which a command from the batch executed. At the
 	// time of writing, it is used solely for informational purposes and tests.
-	Timestamp Timestamp `protobuf:"bytes,2,opt,name=Timestamp" json:"Timestamp"`
+	Timestamp Timestamp `protobuf:"bytes,2,opt,name=Timestamp,json=timestamp" json:"Timestamp"`
 	// txn is non-nil if the request specified a non-nil
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 	// collected_spans is a binary representation of the trace spans
 	// generated during the execution of this request.
-	CollectedSpans [][]byte `protobuf:"bytes,4,rep,name=collected_spans" json:"collected_spans,omitempty"`
+	CollectedSpans [][]byte `protobuf:"bytes,4,rep,name=collected_spans,json=collectedSpans" json:"collected_spans,omitempty"`
 }
 
-func (m *BatchResponse_Header) Reset()         { *m = BatchResponse_Header{} }
-func (m *BatchResponse_Header) String() string { return proto.CompactTextString(m) }
-func (*BatchResponse_Header) ProtoMessage()    {}
+func (m *BatchResponse_Header) Reset()                    { *m = BatchResponse_Header{} }
+func (m *BatchResponse_Header) String() string            { return proto.CompactTextString(m) }
+func (*BatchResponse_Header) ProtoMessage()               {}
+func (*BatchResponse_Header) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{55, 0} }
 
 func init() {
 	proto.RegisterType((*ResponseHeader)(nil), "cockroach.roachpb.ResponseHeader")
@@ -12701,3 +12765,176 @@ var (
 	ErrInvalidLengthApi = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowApi   = fmt.Errorf("proto: integer overflow")
 )
+
+var fileDescriptorApi = []byte{
+	// 2701 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xdc, 0x5a, 0xcd, 0x6f, 0x1c, 0x49,
+	0x15, 0x77, 0x7b, 0x66, 0xec, 0xf1, 0x9b, 0x8f, 0x38, 0x15, 0x3b, 0x99, 0x38, 0x89, 0xc7, 0xe9,
+	0x24, 0xce, 0xc7, 0xee, 0xda, 0x91, 0x97, 0x85, 0xfd, 0x00, 0xb1, 0x19, 0xdb, 0x9b, 0x0c, 0x9b,
+	0x38, 0xd9, 0xf6, 0x78, 0x37, 0x2c, 0xb0, 0x4d, 0xbb, 0xa7, 0x76, 0xdc, 0xca, 0x4c, 0xf7, 0x6c,
+	0x77, 0x8f, 0xe3, 0x08, 0x21, 0x24, 0x24, 0x3e, 0xc4, 0x09, 0x24, 0x84, 0x90, 0xe0, 0xb0, 0x82,
+	0x13, 0x27, 0xfe, 0x04, 0x4e, 0x48, 0x39, 0xa1, 0xbd, 0x70, 0x01, 0xc9, 0x82, 0xe5, 0xc6, 0x0d,
+	0x09, 0x21, 0xb1, 0x42, 0x88, 0xfa, 0x9c, 0xe9, 0x9e, 0xee, 0xf6, 0x4c, 0x42, 0x2f, 0x1f, 0x7b,
+	0xb0, 0xd5, 0x53, 0xf5, 0xde, 0xaf, 0xaa, 0xde, 0xab, 0xaa, 0xdf, 0xab, 0x57, 0x05, 0x67, 0x4c,
+	0xc7, 0x7c, 0xe0, 0x3a, 0x86, 0xb9, 0xb7, 0xca, 0xfe, 0x77, 0x77, 0x57, 0x8d, 0xae, 0xb5, 0xd2,
+	0x75, 0x1d, 0xdf, 0x41, 0xc7, 0xfb, 0x95, 0x2b, 0xa2, 0x72, 0x61, 0x29, 0x2a, 0xdf, 0xc1, 0xbe,
+	0xd1, 0x34, 0x7c, 0x83, 0x2b, 0x2d, 0x9c, 0x8d, 0x4a, 0x04, 0x6a, 0x17, 0xa3, 0xb5, 0xd8, 0x75,
+	0x1d, 0xd7, 0x13, 0xf5, 0xe7, 0x07, 0xf5, 0x3d, 0xdf, 0x6a, 0xaf, 0xfa, 0xae, 0x61, 0x5a, 0x76,
+	0x6b, 0xd5, 0xeb, 0x1a, 0xb6, 0x10, 0x99, 0x6b, 0x39, 0x2d, 0x87, 0x7d, 0xae, 0xd2, 0x2f, 0x5e,
+	0xaa, 0xd6, 0xa0, 0xac, 0x61, 0xaf, 0xeb, 0xd8, 0x1e, 0xbe, 0x85, 0x8d, 0x26, 0x76, 0xd1, 0x75,
+	0xc8, 0xf8, 0x07, 0x76, 0x25, 0xb3, 0xa4, 0x5c, 0x29, 0xac, 0x2d, 0xae, 0x44, 0xc6, 0xb2, 0xd2,
+	0x70, 0x0d, 0xdb, 0x33, 0x4c, 0xdf, 0x72, 0x6c, 0x8d, 0x8a, 0xaa, 0x37, 0x01, 0x6e, 0x62, 0x5f,
+	0xc3, 0xef, 0xf5, 0xb0, 0xe7, 0xa3, 0x97, 0x60, 0x6a, 0x8f, 0x21, 0x55, 0x14, 0x06, 0x71, 0x2a,
+	0x06, 0x62, 0x9b, 0x74, 0xab, 0x96, 0x7f, 0x7c, 0x58, 0x9d, 0xf8, 0xe0, 0xb0, 0xaa, 0x68, 0x42,
+	0x41, 0xfd, 0xa6, 0x02, 0x05, 0x86, 0xc4, 0x3b, 0x84, 0xd6, 0x87, 0xa0, 0xce, 0xc7, 0x40, 0x85,
+	0x7b, 0x1f, 0x05, 0x45, 0x2b, 0x90, 0xdb, 0x37, 0xda, 0x3d, 0x5c, 0x99, 0x64, 0x18, 0x95, 0x18,
+	0x8c, 0x37, 0x69, 0xbd, 0xc6, 0xc5, 0xd4, 0xaf, 0x03, 0xdc, 0xeb, 0xa5, 0x30, 0x1a, 0xf4, 0xa9,
+	0x31, 0x1b, 0xae, 0x65, 0xa9, 0xaa, 0x6c, 0x5e, 0x83, 0x02, 0x6b, 0x3e, 0x45, 0x13, 0xa8, 0xbf,
+	0x52, 0x60, 0x7e, 0xdd, 0xb1, 0x9b, 0x16, 0xf5, 0x99, 0xd1, 0xfe, 0x2f, 0x0e, 0x0f, 0xbd, 0x00,
+	0x33, 0xf8, 0xa0, 0xab, 0x73, 0xcd, 0xcc, 0x08, 0x8f, 0xe4, 0x89, 0x28, 0xfb, 0x52, 0xbf, 0x02,
+	0x27, 0x87, 0x07, 0x90, 0xa6, 0x81, 0xde, 0x83, 0xd9, 0xba, 0x6d, 0xba, 0xb8, 0x83, 0xed, 0x34,
+	0x4c, 0xa3, 0xc2, 0x8c, 0x25, 0xe1, 0x98, 0x79, 0x32, 0xc2, 0x08, 0x83, 0x62, 0xf5, 0x6b, 0x70,
+	0x3c, 0xd0, 0x64, 0x9a, 0x13, 0xfe, 0x3c, 0xcc, 0xd8, 0xf8, 0xa1, 0x3e, 0x70, 0x8e, 0x6c, 0x3d,
+	0x4f, 0x8a, 0xb9, 0x39, 0xbf, 0x00, 0xa5, 0x0d, 0xdc, 0xc6, 0x3e, 0x4e, 0x61, 0xd1, 0xee, 0x40,
+	0x59, 0x62, 0xa5, 0xe9, 0x92, 0x5f, 0x2a, 0x80, 0x04, 0xae, 0x61, 0xb7, 0x52, 0xe8, 0x28, 0xfa,
+	0x0c, 0xcc, 0x77, 0x8c, 0x03, 0x9d, 0xd8, 0xdb, 0xb5, 0xb0, 0xa7, 0xfb, 0x8e, 0xde, 0x64, 0xf8,
+	0x21, 0x1b, 0x21, 0x22, 0xb2, 0xc9, 0x25, 0x1a, 0x0e, 0x6f, 0x1f, 0x5d, 0x82, 0x82, 0x8b, 0xfd,
+	0x9e, 0x6b, 0xeb, 0x0f, 0xf0, 0x23, 0x8f, 0xcd, 0xda, 0xbc, 0x10, 0x07, 0x5e, 0xf1, 0x3a, 0x29,
+	0x57, 0x1f, 0xc2, 0x89, 0x50, 0x87, 0xd3, 0xf4, 0xe9, 0x19, 0xc8, 0xb2, 0xb6, 0x27, 0x97, 0x32,
+	0x57, 0x8a, 0xb5, 0xe9, 0x8f, 0x0e, 0xab, 0x19, 0xd2, 0xa6, 0xc6, 0x0a, 0x55, 0x07, 0x0a, 0xdb,
+	0xa6, 0x61, 0xa7, 0x60, 0x22, 0x32, 0x52, 0x6a, 0x22, 0x17, 0x7b, 0xbd, 0xb6, 0xef, 0x85, 0x0c,
+	0x03, 0xa4, 0x42, 0xe3, 0xe5, 0xea, 0xf7, 0x14, 0x28, 0xf2, 0x16, 0xd3, 0x1c, 0xe3, 0x0b, 0x90,
+	0x75, 0x9d, 0x87, 0x7c, 0x8c, 0x85, 0xb5, 0x33, 0x31, 0x10, 0x64, 0xc8, 0xc1, 0x2d, 0x85, 0x89,
+	0xab, 0xfb, 0x80, 0x34, 0xbc, 0x8f, 0x5d, 0x0f, 0xff, 0x67, 0x8d, 0xf0, 0x03, 0x05, 0x4e, 0x84,
+	0x1a, 0xfe, 0x1f, 0xb0, 0x45, 0x03, 0x4e, 0xad, 0xef, 0x61, 0xf3, 0x01, 0xd9, 0x2b, 0x3d, 0xcb,
+	0xf3, 0xb1, 0x6d, 0x3e, 0x4a, 0x61, 0x85, 0xeb, 0x50, 0x89, 0xa2, 0xa6, 0xb9, 0xd6, 0x49, 0xb7,
+	0x6b, 0xb8, 0x65, 0xd9, 0xc1, 0xc8, 0x22, 0x95, 0x6e, 0x47, 0x51, 0xd3, 0xec, 0xf6, 0x6f, 0x26,
+	0x61, 0x7e, 0xd3, 0x6e, 0xa6, 0xda, 0x6b, 0x74, 0x16, 0xa6, 0x4c, 0xa7, 0xd3, 0xb1, 0x38, 0x71,
+	0xc8, 0x7d, 0x46, 0x94, 0xa1, 0x17, 0x21, 0xdf, 0x24, 0x72, 0x6d, 0xcb, 0x96, 0xec, 0x79, 0x36,
+	0x2e, 0x42, 0xb3, 0x3a, 0xa4, 0x17, 0x46, 0xa7, 0xab, 0xf5, 0xa5, 0xd1, 0x57, 0xe1, 0x94, 0x65,
+	0xfb, 0xd8, 0x25, 0xf4, 0xa9, 0x73, 0x30, 0x9d, 0xec, 0x72, 0xad, 0x16, 0xe9, 0x63, 0x96, 0x01,
+	0x5d, 0x89, 0x01, 0xaa, 0x0b, 0x8d, 0x75, 0xa6, 0xd0, 0xe0, 0xf2, 0xda, 0xbc, 0x15, 0x57, 0x8c,
+	0x5e, 0x85, 0x22, 0xad, 0xb0, 0x7d, 0x9d, 0x46, 0x9d, 0x5e, 0x25, 0xc7, 0xe6, 0x6e, 0xe2, 0xd0,
+	0xf9, 0xc0, 0x0a, 0x5c, 0x85, 0x96, 0x78, 0xea, 0x2f, 0x14, 0x38, 0x39, 0x6c, 0xd0, 0x34, 0x57,
+	0x15, 0x59, 0xd9, 0x62, 0xe8, 0x0f, 0x0d, 0x2b, 0xcc, 0xcc, 0xc0, 0x2b, 0xde, 0x22, 0xe5, 0xe8,
+	0x02, 0xe4, 0xc9, 0xe2, 0x77, 0xda, 0xfb, 0xb8, 0x49, 0x8c, 0x1c, 0xda, 0x70, 0xfb, 0x15, 0xaa,
+	0x0f, 0xc7, 0x6f, 0x34, 0x3b, 0x96, 0xbd, 0xdd, 0x6d, 0x5b, 0x69, 0xc4, 0x0c, 0x17, 0x61, 0xc6,
+	0xa3, 0x50, 0x94, 0x63, 0x58, 0xcf, 0x82, 0xad, 0xb2, 0x1a, 0xf2, 0xa5, 0x7e, 0x11, 0x50, 0xb0,
+	0xd5, 0x34, 0x67, 0xf3, 0x96, 0x18, 0xd0, 0x1d, 0xec, 0xa6, 0x41, 0xb7, 0xfd, 0xae, 0x0a, 0xbc,
+	0x34, 0xbb, 0xfa, 0x6b, 0x12, 0x1b, 0x30, 0x92, 0xbd, 0xed, 0x38, 0x0f, 0x7a, 0xdd, 0x14, 0xac,
+	0x7f, 0x01, 0x80, 0xed, 0xf9, 0x14, 0x94, 0x6f, 0xf9, 0x39, 0x19, 0xb2, 0xd1, 0x2d, 0x9f, 0x15,
+	0xa3, 0x55, 0x98, 0x35, 0xe9, 0x16, 0x48, 0x14, 0x74, 0x3e, 0x6d, 0xc3, 0xc1, 0xc0, 0x31, 0x59,
+	0x5b, 0xe7, 0x95, 0x68, 0x11, 0xa6, 0x5d, 0xce, 0x10, 0x6c, 0x8d, 0x49, 0x39, 0x59, 0xa8, 0xfe,
+	0x94, 0x52, 0x48, 0x70, 0x1c, 0x69, 0x4e, 0xf6, 0x57, 0x61, 0xaa, 0x3f, 0x1c, 0xba, 0x10, 0xd5,
+	0x38, 0x10, 0x2a, 0xb0, 0x81, 0x3d, 0xd3, 0xb5, 0xba, 0xbe, 0xe3, 0xca, 0xcd, 0x86, 0xeb, 0xa9,
+	0xdf, 0x26, 0xdd, 0x23, 0xf0, 0xae, 0xbf, 0x8b, 0x0d, 0xbf, 0x71, 0x60, 0xa7, 0x72, 0x68, 0xc8,
+	0xd8, 0xce, 0x43, 0x71, 0x64, 0x38, 0x72, 0xeb, 0x12, 0x7d, 0xa1, 0xe2, 0xea, 0x97, 0x60, 0x2e,
+	0xdc, 0x8f, 0x34, 0x27, 0xd3, 0x9f, 0x15, 0x98, 0xb9, 0xb9, 0x9e, 0xc2, 0xd8, 0x3e, 0x2b, 0x62,
+	0xb4, 0x4c, 0xa2, 0xb9, 0xfb, 0xcd, 0x90, 0x2f, 0xb2, 0x9a, 0x25, 0x75, 0x53, 0xad, 0x85, 0x26,
+	0xe4, 0x58, 0x21, 0x3a, 0x0d, 0x19, 0xba, 0x05, 0x28, 0xe1, 0x2d, 0x80, 0x96, 0x11, 0x97, 0xce,
+	0xf8, 0xd2, 0x3e, 0x4f, 0x60, 0xc3, 0x81, 0x92, 0xfa, 0x06, 0x39, 0xaa, 0xaf, 0xa7, 0x6b, 0xbf,
+	0xef, 0x64, 0xa0, 0x7c, 0xaf, 0xe7, 0xed, 0xa5, 0x33, 0x41, 0xd6, 0x01, 0xba, 0x04, 0x8c, 0xac,
+	0x30, 0x9a, 0x84, 0x98, 0x1c, 0x27, 0x09, 0x21, 0x47, 0xc9, 0xf5, 0x48, 0x37, 0xd0, 0xe7, 0x05,
+	0x08, 0xd6, 0x07, 0x99, 0x8c, 0x85, 0x38, 0x90, 0x03, 0xb2, 0x3b, 0xf9, 0x46, 0x08, 0x00, 0x53,
+	0x80, 0x57, 0x60, 0x9a, 0xfe, 0x20, 0x67, 0x04, 0x41, 0x8e, 0xe3, 0x98, 0x79, 0x8a, 0xaa, 0x34,
+	0x1c, 0x39, 0xc7, 0x73, 0x4f, 0x34, 0xc7, 0xd1, 0x0d, 0x98, 0xe1, 0x4d, 0x3e, 0xea, 0xe2, 0xca,
+	0x14, 0xd1, 0x2d, 0xc7, 0x8e, 0x5b, 0x58, 0xba, 0x41, 0xa4, 0xe4, 0xa9, 0x8e, 0x35, 0x4b, 0x7e,
+	0xab, 0x3f, 0x51, 0xe0, 0x58, 0xdf, 0x13, 0x69, 0x6e, 0x25, 0xeb, 0x21, 0x7b, 0x3e, 0xb9, 0x53,
+	0xa8, 0x4d, 0xd5, 0xbf, 0x2a, 0x30, 0xa7, 0x71, 0xf6, 0xe4, 0xfb, 0x63, 0x0a, 0xb3, 0x85, 0x38,
+	0x5a, 0x84, 0x1c, 0x83, 0x8e, 0x8d, 0xe1, 0x68, 0xae, 0x43, 0x1d, 0x5d, 0x83, 0x29, 0xe2, 0x09,
+	0xbf, 0xc7, 0x37, 0xf2, 0xf2, 0xda, 0xc5, 0xa3, 0x47, 0xb5, 0xcd, 0x64, 0xa5, 0xbf, 0xb9, 0x26,
+	0x8d, 0xd8, 0xba, 0x8e, 0xe5, 0x39, 0x76, 0x68, 0x93, 0x17, 0x65, 0xea, 0x97, 0x61, 0x7e, 0x68,
+	0xd4, 0x69, 0x2e, 0xbe, 0xbf, 0x2b, 0x70, 0x3a, 0x0c, 0x9f, 0xd2, 0x61, 0xf9, 0xff, 0xc0, 0xb2,
+	0x65, 0x28, 0x6e, 0x39, 0x4e, 0x9f, 0x35, 0xd5, 0x12, 0x14, 0xf8, 0x6f, 0x36, 0x78, 0xd5, 0x80,
+	0x85, 0x38, 0xcb, 0xa4, 0x69, 0xfd, 0x6f, 0x40, 0x31, 0xa5, 0x68, 0xe9, 0x29, 0x93, 0x85, 0x0d,
+	0x28, 0x7d, 0x0c, 0xe1, 0xd5, 0xcf, 0x48, 0x78, 0xd5, 0x70, 0x7b, 0xb6, 0x69, 0xf8, 0x24, 0x32,
+	0x69, 0xa5, 0x30, 0xba, 0x05, 0xc8, 0x59, 0x76, 0x13, 0x1f, 0xb0, 0xd1, 0x65, 0xe5, 0x18, 0x58,
+	0x11, 0x39, 0xea, 0xe6, 0x59, 0xbc, 0xa1, 0x5b, 0x4d, 0x36, 0x55, 0x32, 0xb5, 0x05, 0x5a, 0xfd,
+	0xe1, 0x61, 0x75, 0x9a, 0xb9, 0xac, 0xbe, 0xf1, 0xd1, 0xe0, 0x93, 0xc4, 0x4e, 0xec, 0xa3, 0xa9,
+	0xbe, 0x0d, 0x27, 0x42, 0x7d, 0x4c, 0xd3, 0x00, 0xdf, 0x22, 0x06, 0xb8, 0xcd, 0x3e, 0xc9, 0x7f,
+	0x2f, 0x25, 0xf7, 0xb6, 0x29, 0xd4, 0x11, 0xee, 0x65, 0x4d, 0x49, 0xd3, 0x30, 0x61, 0x3a, 0xc6,
+	0x50, 0x37, 0xd2, 0x1c, 0xe3, 0xef, 0x15, 0x9a, 0x52, 0xed, 0x74, 0x7b, 0x3e, 0x66, 0x87, 0x7b,
+	0xaf, 0xd7, 0x49, 0x61, 0x9c, 0x24, 0xe2, 0xa5, 0xa1, 0x2d, 0x59, 0xd0, 0x6c, 0xa4, 0x25, 0x19,
+	0xf1, 0x8a, 0x42, 0xf4, 0x2e, 0x39, 0x81, 0x89, 0xd6, 0xa4, 0xbf, 0x8b, 0xb5, 0x4d, 0x2a, 0xf3,
+	0xbb, 0xc3, 0xea, 0x6a, 0xcb, 0xf2, 0xf7, 0x7a, 0xbb, 0xa4, 0xb5, 0xce, 0x6a, 0xbf, 0xc5, 0xe6,
+	0xee, 0xea, 0xd0, 0xdd, 0x46, 0xaf, 0x67, 0x35, 0x57, 0x76, 0x76, 0xea, 0x1b, 0x64, 0x8a, 0x80,
+	0xec, 0x3b, 0x99, 0x1a, 0x20, 0x91, 0xc9, 0xec, 0x78, 0x07, 0x4e, 0x45, 0x06, 0x97, 0xa6, 0xf5,
+	0xfe, 0xa6, 0xc0, 0xfc, 0x9b, 0xd8, 0xb5, 0xde, 0x7d, 0xf4, 0xc9, 0x33, 0x1e, 0x59, 0xad, 0x79,
+	0xf9, 0x8b, 0x6d, 0xbc, 0x45, 0xad, 0xff, 0x9b, 0x26, 0xe2, 0x87, 0xc7, 0x9d, 0xa6, 0x5d, 0xff,
+	0x51, 0x82, 0xa2, 0xb0, 0xe4, 0x8e, 0x4d, 0xc7, 0xbc, 0x0a, 0x99, 0x16, 0xf6, 0x05, 0xe4, 0xb9,
+	0xb8, 0x98, 0xba, 0x7f, 0xf3, 0xa4, 0x51, 0x49, 0xaa, 0x40, 0xdc, 0x2e, 0xd6, 0xd9, 0xb9, 0xd8,
+	0x08, 0x6a, 0xa0, 0x40, 0x24, 0xd1, 0x1b, 0x40, 0xcf, 0x6d, 0xf2, 0x6a, 0x41, 0xa7, 0xca, 0x99,
+	0xc4, 0x84, 0x48, 0xec, 0x2d, 0x8a, 0x56, 0x36, 0x43, 0xc5, 0x34, 0x96, 0x1b, 0xe4, 0xff, 0x79,
+	0x00, 0x79, 0x21, 0x36, 0xbb, 0x12, 0xbe, 0x72, 0x08, 0x5c, 0x0f, 0xa0, 0x17, 0x61, 0x4a, 0x64,
+	0xa7, 0x79, 0x1c, 0xb9, 0x14, 0xa3, 0x1f, 0x4a, 0xe1, 0x6b, 0x42, 0x1e, 0xdd, 0x82, 0x22, 0xff,
+	0xe2, 0xa7, 0x59, 0x16, 0x4b, 0x16, 0xd6, 0x2e, 0x25, 0xeb, 0x07, 0x22, 0x06, 0xad, 0xd0, 0x1c,
+	0x94, 0xa1, 0x35, 0xc8, 0x7a, 0xa6, 0x61, 0x57, 0xa6, 0x13, 0x03, 0xbe, 0x40, 0xc6, 0x55, 0x63,
+	0xb2, 0xe8, 0x2d, 0x38, 0xbe, 0x4b, 0x93, 0x6e, 0xba, 0x3f, 0xe0, 0xf6, 0x4a, 0x9e, 0x01, 0x5c,
+	0x8b, 0x01, 0x48, 0x48, 0xfb, 0x69, 0xb3, 0xbb, 0x43, 0x15, 0xd4, 0x4d, 0xd8, 0x6e, 0x86, 0x60,
+	0x67, 0x12, 0xdd, 0x14, 0x9b, 0x95, 0xd3, 0xca, 0x38, 0x54, 0x8c, 0x36, 0xa1, 0x60, 0xd0, 0x0c,
+	0x85, 0xce, 0xd2, 0x2b, 0x15, 0x60, 0x70, 0x71, 0x71, 0x4a, 0x24, 0xd1, 0xa3, 0x81, 0xd1, 0x2f,
+	0x1a, 0xc0, 0x74, 0x28, 0x15, 0x57, 0x0a, 0x47, 0xc3, 0x04, 0x03, 0x06, 0x01, 0xc3, 0x8a, 0xd0,
+	0xeb, 0x50, 0xda, 0x93, 0x87, 0x5c, 0x16, 0x74, 0x15, 0x19, 0xd0, 0x72, 0x0c, 0x50, 0xcc, 0xa1,
+	0x5c, 0x2b, 0xee, 0x05, 0x0a, 0xd1, 0xb3, 0x30, 0xd9, 0x32, 0x2b, 0xa5, 0xc4, 0x23, 0x48, 0xff,
+	0x24, 0xaa, 0x11, 0x39, 0x72, 0x72, 0xcd, 0xf3, 0xb3, 0x07, 0x69, 0xb5, 0x9c, 0xb8, 0x78, 0xc3,
+	0x87, 0x3c, 0x8d, 0x9d, 0x90, 0x68, 0x5b, 0x64, 0xc2, 0x71, 0x02, 0x6f, 0xb3, 0x2c, 0x46, 0xe5,
+	0x58, 0xe2, 0x84, 0x8b, 0xe6, 0x6c, 0xb4, 0x82, 0x3b, 0x28, 0x43, 0x5b, 0x50, 0x16, 0xf9, 0x35,
+	0x91, 0x5f, 0xa9, 0xcc, 0x32, 0xac, 0xcb, 0xf1, 0x5b, 0x49, 0xe4, 0x28, 0xa1, 0x95, 0xdc, 0x60,
+	0x29, 0x7a, 0x07, 0xe6, 0xc2, 0x78, 0x62, 0x49, 0x1c, 0x67, 0xa8, 0xcf, 0x8e, 0x44, 0x0d, 0xae,
+	0x0c, 0xe4, 0x46, 0xaa, 0x48, 0xe8, 0x92, 0xe3, 0x3e, 0x47, 0x0c, 0xb0, 0x1a, 0x03, 0x18, 0x72,
+	0x37, 0x97, 0xa6, 0x06, 0xf3, 0x45, 0xe8, 0x42, 0x6c, 0xd6, 0xaa, 0x9c, 0x48, 0x34, 0x58, 0x34,
+	0x0a, 0xd3, 0x0a, 0xfe, 0xa0, 0x8c, 0x22, 0xb5, 0xd9, 0xc6, 0xa9, 0xf3, 0xe8, 0x62, 0x2e, 0x11,
+	0x29, 0x1a, 0xce, 0x68, 0x85, 0xf6, 0xa0, 0x8c, 0x39, 0x91, 0x67, 0xa5, 0x74, 0xb6, 0xe6, 0xe7,
+	0x93, 0x9d, 0x18, 0xb9, 0x6c, 0x21, 0x4e, 0x1c, 0x94, 0xa1, 0x06, 0xcd, 0x92, 0x31, 0xea, 0xd5,
+	0xfb, 0x2c, 0x72, 0x92, 0xa1, 0x5d, 0x8d, 0xdd, 0x50, 0xe3, 0x42, 0x10, 0x9a, 0x4a, 0x0b, 0x95,
+	0xd3, 0xe5, 0xbf, 0xcf, 0x78, 0x67, 0x00, 0x7a, 0x2a, 0x71, 0xf9, 0xc7, 0x32, 0xb3, 0x56, 0xde,
+	0x0f, 0x15, 0xd3, 0xad, 0x8a, 0x61, 0xe9, 0xe6, 0xe0, 0x5e, 0xa3, 0x52, 0x49, 0xdc, 0xaa, 0x12,
+	0x2e, 0x56, 0xb4, 0x59, 0x73, 0xa8, 0x82, 0xee, 0x9b, 0x36, 0x39, 0x88, 0x54, 0x4e, 0x27, 0xee,
+	0x9b, 0x81, 0x73, 0x8a, 0xc6, 0x64, 0x5f, 0xce, 0x3e, 0x7e, 0xbf, 0xaa, 0xa8, 0x3f, 0x2a, 0x43,
+	0x49, 0x72, 0x24, 0xe7, 0xbf, 0xeb, 0x41, 0xfe, 0x5b, 0x4c, 0xe2, 0x3f, 0xae, 0xc1, 0x09, 0xf0,
+	0x7a, 0x90, 0x00, 0x17, 0x93, 0x08, 0x50, 0x6a, 0x50, 0x06, 0xd4, 0x92, 0x18, 0xf0, 0xea, 0x18,
+	0x0c, 0x28, 0x80, 0x86, 0x29, 0xb0, 0x16, 0xa5, 0xc0, 0x8b, 0x47, 0x53, 0xa0, 0x00, 0x0a, 0x70,
+	0xe0, 0x4b, 0x43, 0x1c, 0x78, 0xfe, 0x08, 0x0e, 0x14, 0xda, 0x92, 0x04, 0xeb, 0xb1, 0x24, 0xb8,
+	0x3c, 0x8a, 0x04, 0x05, 0x4a, 0x88, 0x05, 0x9f, 0x0f, 0xb1, 0x60, 0x35, 0x91, 0x05, 0x85, 0x2e,
+	0xa7, 0xc1, 0xfb, 0xc9, 0x34, 0xf8, 0xcc, 0x58, 0x34, 0x28, 0xd0, 0xa2, 0x3c, 0xa8, 0x25, 0xf1,
+	0xe0, 0xd5, 0x31, 0x78, 0x50, 0x3a, 0x6b, 0x88, 0x08, 0x5f, 0x8b, 0x23, 0xc2, 0x4b, 0x23, 0x88,
+	0x50, 0x60, 0x05, 0x99, 0xf0, 0xb5, 0x38, 0x26, 0xbc, 0x34, 0x82, 0x09, 0x43, 0x38, 0x9c, 0x0a,
+	0x6f, 0xc7, 0x53, 0xe1, 0xe5, 0x91, 0x54, 0x28, 0xb0, 0xc2, 0x5c, 0xf8, 0x5c, 0x80, 0x0b, 0xcf,
+	0x25, 0x70, 0xa1, 0x50, 0xa4, 0x64, 0xf8, 0xb9, 0x08, 0x19, 0xaa, 0x47, 0x91, 0xa1, 0xd0, 0xec,
+	0xb3, 0x61, 0x3d, 0x96, 0x0d, 0x97, 0x47, 0xb1, 0xa1, 0x9c, 0x79, 0x41, 0x3a, 0xbc, 0x9b, 0x40,
+	0x87, 0x57, 0x46, 0xd3, 0xa1, 0x80, 0x1b, 0xe2, 0x43, 0xfd, 0x48, 0x3e, 0x7c, 0x6e, 0x4c, 0x3e,
+	0x14, 0xd8, 0x71, 0x84, 0xf8, 0xe9, 0x30, 0x21, 0x2e, 0x25, 0x13, 0xa2, 0x00, 0x11, 0x8c, 0x58,
+	0x8f, 0x65, 0xc4, 0xe5, 0x51, 0x8c, 0x28, 0x8d, 0x16, 0xa4, 0xc4, 0x7a, 0x2c, 0x25, 0x2e, 0x8f,
+	0xa2, 0x44, 0x09, 0x15, 0xe4, 0xc4, 0x7a, 0x2c, 0x27, 0x2e, 0x8f, 0xe2, 0xc4, 0xbe, 0x2b, 0x03,
+	0xa4, 0xb8, 0x93, 0x48, 0x8a, 0xd7, 0xc6, 0x21, 0x45, 0x01, 0x19, 0x61, 0x45, 0x2d, 0x89, 0x15,
+	0xaf, 0x8e, 0xc1, 0x8a, 0x72, 0x33, 0x18, 0xa2, 0xc5, 0xfb, 0xc9, 0xb4, 0xf8, 0xcc, 0x58, 0xb4,
+	0x28, 0xb7, 0xae, 0x08, 0x2f, 0x3e, 0x1f, 0xe2, 0xc5, 0x6a, 0x22, 0x2f, 0xca, 0x9d, 0x34, 0x40,
+	0x8c, 0x7f, 0xc9, 0xc0, 0xd4, 0x2d, 0x79, 0xaf, 0x15, 0xb8, 0x04, 0x51, 0x9e, 0xe2, 0x12, 0x04,
+	0x6d, 0xd0, 0x6b, 0x39, 0xb2, 0x61, 0x99, 0x86, 0x60, 0xc9, 0x8b, 0xb1, 0x2e, 0x65, 0x12, 0x91,
+	0xcb, 0x31, 0xa9, 0xfa, 0x94, 0x79, 0x2b, 0x42, 0x6a, 0xa5, 0x9e, 0x47, 0x66, 0x67, 0xd7, 0xb5,
+	0x1c, 0xd7, 0xf2, 0x1f, 0x31, 0x72, 0x54, 0x6a, 0x73, 0x54, 0x97, 0x28, 0x14, 0x77, 0x48, 0xe5,
+	0x3d, 0x51, 0xa7, 0x15, 0x7b, 0x81, 0x5f, 0xf2, 0x65, 0x66, 0x6e, 0xec, 0x97, 0x99, 0x24, 0xc4,
+	0x99, 0x75, 0x89, 0xd5, 0x42, 0xae, 0xe4, 0x77, 0x0b, 0xf1, 0xb3, 0xd8, 0x68, 0x06, 0xfc, 0x15,
+	0xb8, 0x63, 0x38, 0xe6, 0x86, 0xab, 0x48, 0x88, 0x93, 0xa3, 0x4f, 0x4c, 0xb1, 0x60, 0xc5, 0xa0,
+	0x03, 0x68, 0x9a, 0x61, 0x45, 0xbc, 0x3f, 0x65, 0x99, 0x0e, 0x8d, 0x8b, 0xa2, 0x15, 0x98, 0xa5,
+	0x77, 0xac, 0x74, 0x29, 0xf5, 0x1f, 0xd7, 0xe4, 0x03, 0x57, 0xf0, 0x65, 0x52, 0x2b, 0x56, 0x10,
+	0x7b, 0x60, 0xf3, 0x43, 0x05, 0x8a, 0x35, 0xc3, 0x37, 0xf7, 0x64, 0x6a, 0xe5, 0x95, 0xa1, 0x0c,
+	0xc3, 0xe9, 0x78, 0x3e, 0x88, 0xbf, 0xc3, 0xb8, 0x41, 0x2f, 0xf5, 0x19, 0x8e, 0xbc, 0x10, 0xad,
+	0xc6, 0x9a, 0x60, 0x90, 0x7b, 0x90, 0xf7, 0x2b, 0x52, 0xed, 0xe5, 0xec, 0x8f, 0xdf, 0xaf, 0x4e,
+	0xa8, 0xff, 0x9c, 0x84, 0x92, 0xe8, 0x96, 0xc8, 0x7c, 0xd4, 0x87, 0xfa, 0x15, 0xc7, 0x53, 0x21,
+	0x8d, 0xe4, 0x5e, 0x6e, 0xc0, 0x8c, 0x2b, 0x84, 0x64, 0x37, 0x97, 0x8e, 0xc8, 0xa3, 0x04, 0xfb,
+	0x39, 0x50, 0x5c, 0xf8, 0xad, 0xd2, 0x5f, 0x2d, 0x2b, 0x90, 0x63, 0x0f, 0x85, 0x45, 0xd7, 0xe2,
+	0x12, 0x8f, 0x9b, 0xb4, 0x5e, 0xe3, 0x62, 0x74, 0x75, 0x35, 0xfe, 0xad, 0x2b, 0xc6, 0x27, 0x7f,
+	0x3f, 0x8c, 0x2e, 0xd3, 0xf8, 0xb3, 0xdd, 0xc6, 0xa6, 0x8f, 0x9b, 0xe2, 0xed, 0x48, 0x96, 0x3e,
+	0xbb, 0xa0, 0x41, 0xa5, 0x28, 0x66, 0xef, 0x43, 0xb8, 0x03, 0xae, 0xdd, 0xa6, 0xef, 0xae, 0x22,
+	0x33, 0x15, 0x95, 0x01, 0xd6, 0xef, 0x6e, 0x6d, 0xd7, 0xb7, 0x1b, 0x9b, 0x5b, 0x8d, 0xd9, 0x09,
+	0x54, 0x82, 0x19, 0xfa, 0x7b, 0x73, 0x6b, 0x7b, 0x67, 0x7b, 0x56, 0x41, 0xb3, 0x50, 0xac, 0x6f,
+	0x05, 0x04, 0x26, 0x17, 0xb2, 0xdf, 0xfd, 0xf9, 0xe2, 0xc4, 0xb5, 0x9b, 0xf4, 0xbd, 0x6d, 0xff,
+	0x4e, 0x0d, 0x21, 0x28, 0xdf, 0xdb, 0xd9, 0xbe, 0xa5, 0x37, 0xea, 0x77, 0x36, 0xb7, 0x1b, 0x37,
+	0xee, 0xdc, 0x23, 0x48, 0x04, 0x99, 0x95, 0xdd, 0xa8, 0xdd, 0xd5, 0x1a, 0x04, 0x4a, 0xfe, 0x6e,
+	0xdc, 0xdd, 0x59, 0xbf, 0x25, 0x81, 0xd6, 0xee, 0x43, 0x5e, 0x3e, 0x97, 0x21, 0x01, 0x4c, 0x8e,
+	0x39, 0x1c, 0x55, 0x93, 0xa7, 0x02, 0x9b, 0x54, 0x0b, 0x4b, 0xa3, 0xe6, 0x8a, 0xca, 0x90, 0x37,
+	0x0f, 0x3e, 0x0e, 0xe4, 0xda, 0xb9, 0xc7, 0x7f, 0x5c, 0x9c, 0x78, 0xfc, 0xe1, 0xa2, 0xf2, 0x01,
+	0xf9, 0xfb, 0x03, 0xf9, 0xfb, 0xfe, 0x9f, 0x16, 0x27, 0xde, 0x9e, 0x16, 0xe2, 0xf7, 0xb3, 0xff,
+	0x0a, 0x00, 0x00, 0xff, 0xff, 0x23, 0x48, 0xdb, 0x1e, 0xe8, 0x2e, 0x00, 0x00,
+}
