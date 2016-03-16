@@ -632,6 +632,75 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	}
 }
 
+// TestStoreAnnotateNow verifies that the Store sets Now on the batch responses.
+func TestStoreAnnotateNow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	badKey := []byte("a")
+	goodKey := []byte("b")
+	desc := roachpb.ReplicaDescriptor{
+		NodeID: 5,
+		// not relevant
+		StoreID:   1,
+		ReplicaID: 2,
+	}
+
+	testCases := []struct {
+		key   roachpb.Key
+		check func(*roachpb.BatchResponse, *roachpb.Error)
+	}{
+		{badKey,
+			func(_ *roachpb.BatchResponse, pErr *roachpb.Error) {
+				if pErr == nil {
+					t.Fatal("expected an error")
+				}
+				if pErr.Now == roachpb.ZeroTimestamp {
+					t.Fatal("timestamp not annotated on error")
+				}
+			}},
+		{goodKey,
+			func(pReply *roachpb.BatchResponse, pErr *roachpb.Error) {
+				if pErr != nil {
+					t.Fatal(pErr)
+				}
+				if pReply.Now == roachpb.ZeroTimestamp {
+					t.Fatal("timestamp not annotated on batch response")
+				}
+			}},
+	}
+
+	for _, useTxn := range []bool{false, true} {
+		for _, test := range testCases {
+			func() {
+				ctx := TestStoreContext()
+				ctx.TestingMocker.TestingCommandFilter =
+					func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+						if bytes.Equal(args.Header().Key, badKey) {
+							return fmt.Errorf("boom")
+						}
+						return nil
+					}
+				store, _, stopper := createTestStoreWithContext(t, &ctx)
+				defer stopper.Stop()
+				var txn *roachpb.Transaction
+				if useTxn {
+					txn := newTransaction("test", test.key, 1, roachpb.SERIALIZABLE, store.ctx.Clock)
+					txn.MaxTimestamp = roachpb.MaxTimestamp
+				}
+				pArgs := putArgs(test.key, []byte("value"))
+				ba := roachpb.BatchRequest{
+					Header: roachpb.Header{
+						Txn:     txn,
+						Replica: desc,
+					},
+				}
+				ba.Add(&pArgs)
+
+				test.check(store.testSender().Send(context.Background(), ba))
+			}()
+		}
+	}
+}
+
 func TestStoreExecuteNoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)

@@ -426,6 +426,14 @@ func (ds *DistSender) sendSingleRange(trace opentracing.Span, ba roachpb.BatchRe
 	if pErr != nil {
 		return nil, pErr
 	}
+
+	// If the reply contains a timestamp, update the local HLC with it.
+	if br.Error != nil && br.Error.Now != roachpb.ZeroTimestamp {
+		ds.clock.Update(br.Error.Now)
+	} else if br.Now != roachpb.ZeroTimestamp {
+		ds.clock.Update(br.Now)
+	}
+
 	// Untangle the error from the received response.
 	pErr = br.Error
 	br.Error = nil // scrub the response error

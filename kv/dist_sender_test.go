@@ -854,6 +854,57 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 }
 
+// TestClockUpdateOnResponse verifies that the DistSender picks up
+// the timestamp of the remote party embedded in responses.
+func TestClockUpdateOnResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	ctx := &DistSenderContext{
+		RangeDescriptorDB: mockRangeDescriptorDB(func(_ roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+
+	// Prepare the test function
+	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")).(*roachpb.PutRequest)
+	doCheck := func(testFn rpcSendFn, fakeTime roachpb.Timestamp) {
+		ds.rpcSend = testFn
+		_, err := client.SendWrapped(ds, nil, put)
+		if err != nil && err.String() != "boom" {
+			t.Fatal(err)
+		}
+		newTime := ds.clock.Now()
+		if newTime.Less(fakeTime) {
+			t.Fatalf("clock was not advanced to %s (found %s instead)", fakeTime, newTime)
+		}
+
+	}
+
+	// Test timestamp propagation on valid BatchResults.
+	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0)
+	doCheck(
+		func(_ SendOptions, _ ReplicaSlice,
+			args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+			rb := args.CreateReply()
+			rb.Now = fakeTime
+			return rb, nil
+		}, fakeTime)
+
+	// Test timestamp propagation on errors.
+	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0)
+	doCheck(
+		func(_ SendOptions, _ ReplicaSlice,
+			args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+			rb := args.CreateReply()
+			rb.Error = roachpb.NewError(errors.New("boom"))
+			rb.Error.Now = fakeTime
+			return rb, nil
+		}, fakeTime)
+}
+
 // TestTruncateWithSpanAndDescriptor verifies that a batch request is truncated with a
 // range span and the range of a descriptor found in cache.
 func TestTruncateWithSpanAndDescriptor(t *testing.T) {
