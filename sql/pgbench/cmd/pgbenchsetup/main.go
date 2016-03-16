@@ -23,9 +23,8 @@ import (
 	"net/url"
 	"os"
 
-	_ "github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/sql/pgbench"
+	_ "github.com/cockroachdb/pq"
 )
 
 var usage = func() {
