@@ -213,6 +213,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	if db, ok := t.clients[user]; ok {
 		t.db = db
+		t.user = user
 
 		if err := t.db.QueryRow("SHOW DATABASE").Scan(&outDBName); err != nil {
 			t.Fatal(err)
@@ -271,6 +272,8 @@ func (t *logicTest) processTestFile(path string) {
 	defer file.Close()
 
 	t.lastProgress = timeutil.Now()
+
+	testingMocker := &t.srv.Ctx.TestingMocker
 
 	repeat := 1
 	s := newLineScanner(file)
@@ -485,6 +488,19 @@ func (t *logicTest) processTestFile(path string) {
 			}
 			t.traceStop()
 
+		case "fix-txn-priorities":
+			// fix-txn-priorities causes future transactions to have hardcoded
+			// priority values (based on the priority level), (replacing the
+			// probabilistic generation).
+			// The change stays in effect for the duration of that particular
+			// test file.
+			if len(fields) != 1 {
+				t.Fatalf("fix-txn-priority takes no arguments, found: %v", fields[1:])
+			}
+			fmt.Println("Setting deterministic priorities.")
+
+			testingMocker.ExecutorTestingMocker.FixTxnPriority = true
+			defer func() { testingMocker.ExecutorTestingMocker.FixTxnPriority = false }()
 		default:
 			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)
 		}

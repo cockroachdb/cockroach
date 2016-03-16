@@ -96,7 +96,7 @@ func (t *parallelTest) processTestFile(path string, db *sql.DB, ch chan bool) {
 	}
 
 	// Set up a dummy logicTest structure to use that code.
-	l := &logicTest{T: t.T, db: db, user: security.RootUser}
+	l := &logicTest{T: t.T, srv: t.srv, db: db, user: security.RootUser}
 	l.processTestFile(path)
 }
 
