@@ -263,7 +263,13 @@ message Transaction {
   // is executing on, we can run the command with the map's timestamp as the
   // top boundary of our uncertainty interval, limiting (and often avoiding)
   // uncertainty restarts.
-  map<int32, Timestamp> observed_timestamps = 8 [(gogoproto.nullable) = false, (gogoproto.castkey) = "NodeID"];
+  message ObservedTimestamp {
+    optional int32 NodeID = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
+    optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  // Don't use an actual map to represent this because it
+  // doesn't marshal predictably.
+  repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
   // Writing is true if the transaction has previously executed a successful
   // write request, i.e. a request that may have left intents (across retries).
   optional bool Writing = 9 [(gogoproto.nullable) = false];
