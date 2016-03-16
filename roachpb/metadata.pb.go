@@ -24,56 +24,60 @@ type Attributes struct {
 	Attrs []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
 }
 
-func (m *Attributes) Reset()      { *m = Attributes{} }
-func (*Attributes) ProtoMessage() {}
+func (m *Attributes) Reset()                    { *m = Attributes{} }
+func (*Attributes) ProtoMessage()               {}
+func (*Attributes) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{0} }
 
 // ReplicaDescriptor describes a replica location by node ID
 // (corresponds to a host:port via lookup on gossip network) and store
 // ID (identifies the device).
 type ReplicaDescriptor struct {
-	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
-	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,casttype=StoreID" json:"store_id"`
+	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
+	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
 	// replica_id uniquely identifies a replica instance. If a range is removed from
 	// a store and then re-added to the same store, the new instance will have a
 	// higher replica_id.
-	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,casttype=ReplicaID" json:"replica_id"`
+	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,json=replicaId,casttype=ReplicaID" json:"replica_id"`
 }
 
-func (m *ReplicaDescriptor) Reset()         { *m = ReplicaDescriptor{} }
-func (m *ReplicaDescriptor) String() string { return proto.CompactTextString(m) }
-func (*ReplicaDescriptor) ProtoMessage()    {}
+func (m *ReplicaDescriptor) Reset()                    { *m = ReplicaDescriptor{} }
+func (m *ReplicaDescriptor) String() string            { return proto.CompactTextString(m) }
+func (*ReplicaDescriptor) ProtoMessage()               {}
+func (*ReplicaDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{1} }
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 type RangeDescriptor struct {
-	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,casttype=RangeID" json:"range_id"`
+	RangeID RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=RangeID" json:"range_id"`
 	// start_key is the first key which may be contained by this range.
-	StartKey RKey `protobuf:"bytes,2,opt,name=start_key,casttype=RKey" json:"start_key,omitempty"`
+	StartKey RKey `protobuf:"bytes,2,opt,name=start_key,json=startKey,casttype=RKey" json:"start_key,omitempty"`
 	// end_key marks the end of the range's possible keys.  EndKey itself is not
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
-	EndKey RKey `protobuf:"bytes,3,opt,name=end_key,casttype=RKey" json:"end_key,omitempty"`
+	EndKey RKey `protobuf:"bytes,3,opt,name=end_key,json=endKey,casttype=RKey" json:"end_key,omitempty"`
 	// replicas is the set of nodes/stores on which replicas of this
 	// range are stored, the ordering being arbitrary and subject to
 	// permutation.
 	Replicas []ReplicaDescriptor `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
 	// next_replica_id is a counter used to generate replica IDs.
-	NextReplicaID ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,casttype=ReplicaID" json:"next_replica_id"`
+	NextReplicaID ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,json=nextReplicaId,casttype=ReplicaID" json:"next_replica_id"`
 }
 
-func (m *RangeDescriptor) Reset()         { *m = RangeDescriptor{} }
-func (m *RangeDescriptor) String() string { return proto.CompactTextString(m) }
-func (*RangeDescriptor) ProtoMessage()    {}
+func (m *RangeDescriptor) Reset()                    { *m = RangeDescriptor{} }
+func (m *RangeDescriptor) String() string            { return proto.CompactTextString(m) }
+func (*RangeDescriptor) ProtoMessage()               {}
+func (*RangeDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{2} }
 
 // RangeTree holds the root node of the range tree.
 type RangeTree struct {
-	RootKey RKey `protobuf:"bytes,1,opt,name=root_key,casttype=RKey" json:"root_key,omitempty"`
+	RootKey RKey `protobuf:"bytes,1,opt,name=root_key,json=rootKey,casttype=RKey" json:"root_key,omitempty"`
 }
 
-func (m *RangeTree) Reset()         { *m = RangeTree{} }
-func (m *RangeTree) String() string { return proto.CompactTextString(m) }
-func (*RangeTree) ProtoMessage()    {}
+func (m *RangeTree) Reset()                    { *m = RangeTree{} }
+func (m *RangeTree) String() string            { return proto.CompactTextString(m) }
+func (*RangeTree) ProtoMessage()               {}
+func (*RangeTree) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{3} }
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 type RangeTreeNode struct {
@@ -81,49 +85,53 @@ type RangeTreeNode struct {
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
 	// If the parent key is null, this is the root node.
-	ParentKey RKey `protobuf:"bytes,3,opt,name=parent_key,casttype=RKey" json:"parent_key,omitempty"`
-	LeftKey   RKey `protobuf:"bytes,4,opt,name=left_key,casttype=RKey" json:"left_key,omitempty"`
-	RightKey  RKey `protobuf:"bytes,5,opt,name=right_key,casttype=RKey" json:"right_key,omitempty"`
+	ParentKey RKey `protobuf:"bytes,3,opt,name=parent_key,json=parentKey,casttype=RKey" json:"parent_key,omitempty"`
+	LeftKey   RKey `protobuf:"bytes,4,opt,name=left_key,json=leftKey,casttype=RKey" json:"left_key,omitempty"`
+	RightKey  RKey `protobuf:"bytes,5,opt,name=right_key,json=rightKey,casttype=RKey" json:"right_key,omitempty"`
 }
 
-func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
-func (m *RangeTreeNode) String() string { return proto.CompactTextString(m) }
-func (*RangeTreeNode) ProtoMessage()    {}
+func (m *RangeTreeNode) Reset()                    { *m = RangeTreeNode{} }
+func (m *RangeTreeNode) String() string            { return proto.CompactTextString(m) }
+func (*RangeTreeNode) ProtoMessage()               {}
+func (*RangeTreeNode) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{4} }
 
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
 	Capacity   int64 `protobuf:"varint,1,opt,name=capacity" json:"capacity"`
 	Available  int64 `protobuf:"varint,2,opt,name=available" json:"available"`
-	RangeCount int32 `protobuf:"varint,3,opt,name=range_count" json:"range_count"`
+	RangeCount int32 `protobuf:"varint,3,opt,name=range_count,json=rangeCount" json:"range_count"`
 }
 
-func (m *StoreCapacity) Reset()         { *m = StoreCapacity{} }
-func (m *StoreCapacity) String() string { return proto.CompactTextString(m) }
-func (*StoreCapacity) ProtoMessage()    {}
+func (m *StoreCapacity) Reset()                    { *m = StoreCapacity{} }
+func (m *StoreCapacity) String() string            { return proto.CompactTextString(m) }
+func (*StoreCapacity) ProtoMessage()               {}
+func (*StoreCapacity) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{5} }
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID  NodeID                        `protobuf:"varint,1,opt,name=node_id,casttype=NodeID" json:"node_id"`
+	NodeID  NodeID                        `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
 	Address cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=address" json:"address"`
 	Attrs   Attributes                    `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
 }
 
-func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
-func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
-func (*NodeDescriptor) ProtoMessage()    {}
+func (m *NodeDescriptor) Reset()                    { *m = NodeDescriptor{} }
+func (m *NodeDescriptor) String() string            { return proto.CompactTextString(m) }
+func (*NodeDescriptor) ProtoMessage()               {}
+func (*NodeDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{6} }
 
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
 type StoreDescriptor struct {
-	StoreID  StoreID        `protobuf:"varint,1,opt,name=store_id,casttype=StoreID" json:"store_id"`
+	StoreID  StoreID        `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
 	Attrs    Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
 	Node     NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
 	Capacity StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
 }
 
-func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
-func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
-func (*StoreDescriptor) ProtoMessage()    {}
+func (m *StoreDescriptor) Reset()                    { *m = StoreDescriptor{} }
+func (m *StoreDescriptor) String() string            { return proto.CompactTextString(m) }
+func (*StoreDescriptor) ProtoMessage()               {}
+func (*StoreDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{7} }
 
 func init() {
 	proto.RegisterType((*Attributes)(nil), "cockroach.roachpb.Attributes")
@@ -1716,3 +1724,51 @@ var (
 	ErrInvalidLengthMetadata = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowMetadata   = fmt.Errorf("proto: integer overflow")
 )
+
+var fileDescriptorMetadata = []byte{
+	// 690 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xa4, 0x54, 0x41, 0x6b, 0x13, 0x41,
+	0x14, 0xce, 0x36, 0x9b, 0x6e, 0x76, 0x6a, 0x2c, 0x1d, 0x14, 0x4a, 0xa0, 0x49, 0xba, 0x56, 0x2c,
+	0x28, 0x89, 0x16, 0x3c, 0x58, 0x51, 0x69, 0x5a, 0x84, 0x2a, 0xf4, 0xb0, 0x2a, 0x88, 0x97, 0x30,
+	0xd9, 0x9d, 0xa6, 0x4b, 0xb7, 0x3b, 0xcb, 0xec, 0xa4, 0x1a, 0xf0, 0xe8, 0x0f, 0xf0, 0xe8, 0xd1,
+	0x93, 0xbf, 0x42, 0x3c, 0xf7, 0xe8, 0x2f, 0x28, 0x5a, 0xff, 0x81, 0x47, 0x4f, 0xce, 0xbc, 0x99,
+	0xdd, 0xa4, 0x69, 0x04, 0xc5, 0x43, 0xc2, 0xdb, 0xf7, 0xbe, 0x6f, 0xf7, 0x7b, 0xdf, 0x7b, 0x33,
+	0xa8, 0x15, 0xb0, 0xe0, 0x90, 0x33, 0x12, 0x1c, 0x74, 0xe0, 0x3f, 0xed, 0x77, 0x8e, 0xa8, 0x20,
+	0x21, 0x11, 0xa4, 0x9d, 0x72, 0x26, 0x18, 0x5e, 0x2a, 0x10, 0x6d, 0x83, 0xa8, 0xaf, 0x8d, 0x49,
+	0x43, 0x11, 0xc5, 0x9d, 0x61, 0xc2, 0x69, 0xc6, 0xe2, 0x63, 0x1a, 0xf6, 0x48, 0x18, 0x72, 0x4d,
+	0xac, 0x5f, 0x19, 0xb0, 0x01, 0x83, 0xb0, 0xa3, 0x22, 0x9d, 0xf5, 0x1e, 0x21, 0xb4, 0x25, 0x04,
+	0x8f, 0xfa, 0x43, 0x41, 0x33, 0x7c, 0x13, 0x55, 0x88, 0x7c, 0xca, 0x96, 0xad, 0x56, 0x79, 0xdd,
+	0xed, 0x5e, 0xfd, 0x79, 0xda, 0x5c, 0x1a, 0x91, 0xa3, 0x78, 0xd3, 0x83, 0xf4, 0xad, 0xfd, 0x98,
+	0xbd, 0xf6, 0x7c, 0x8d, 0xd9, 0xb4, 0x3f, 0x7c, 0x6c, 0x96, 0xbc, 0xcf, 0x16, 0x5a, 0xf2, 0x69,
+	0x1a, 0x47, 0x01, 0xd9, 0xa1, 0x59, 0xc0, 0xa3, 0x54, 0x30, 0x8e, 0xef, 0x20, 0x27, 0x61, 0x21,
+	0xed, 0x45, 0xa1, 0x7c, 0x95, 0xb5, 0x5e, 0xe9, 0x2e, 0x9f, 0x9c, 0x36, 0x4b, 0x67, 0xa7, 0xcd,
+	0xf9, 0x3d, 0x99, 0xde, 0xdd, 0xf9, 0x55, 0x44, 0xfe, 0xbc, 0x02, 0xee, 0x86, 0xf8, 0x2e, 0xaa,
+	0x66, 0x92, 0x0a, 0x9c, 0x39, 0xe0, 0xd4, 0x0d, 0xc7, 0x79, 0xa6, 0xf2, 0x40, 0xca, 0x43, 0xdf,
+	0x01, 0xac, 0xa4, 0x3d, 0x40, 0x88, 0xeb, 0xcf, 0x2b, 0x62, 0x19, 0x88, 0x0d, 0x43, 0x74, 0x8d,
+	0x30, 0xa0, 0x8e, 0x1f, 0x7c, 0xd7, 0x30, 0x76, 0x43, 0xef, 0xd3, 0x1c, 0x5a, 0xf4, 0x49, 0x32,
+	0xa0, 0x13, 0xe2, 0xa5, 0x12, 0xae, 0x52, 0xb9, 0xfa, 0xf2, 0x58, 0x09, 0x40, 0xb5, 0x12, 0x13,
+	0xfa, 0x0e, 0x60, 0xa5, 0x92, 0xeb, 0xc8, 0xcd, 0x04, 0xe1, 0xa2, 0x77, 0x48, 0x47, 0xd0, 0xc1,
+	0xa5, 0x6e, 0x55, 0x02, 0x6d, 0xff, 0x29, 0x1d, 0xf9, 0x55, 0x28, 0xc9, 0x08, 0xaf, 0x22, 0x87,
+	0x26, 0x21, 0x80, 0xca, 0x53, 0xa0, 0x79, 0x59, 0x50, 0x90, 0xc7, 0x52, 0x80, 0x56, 0x98, 0x2d,
+	0xdb, 0x72, 0x12, 0x0b, 0x1b, 0x6b, 0xed, 0x0b, 0x63, 0x6f, 0x5f, 0x70, 0xbd, 0x6b, 0x2b, 0x99,
+	0x7e, 0xc1, 0xc5, 0x4f, 0xd0, 0x62, 0x42, 0xdf, 0x88, 0xde, 0x84, 0x41, 0x15, 0x30, 0xc8, 0x33,
+	0xfd, 0xd4, 0xf6, 0x64, 0xf9, 0x0f, 0x26, 0xd5, 0x92, 0x89, 0x5a, 0xe8, 0xdd, 0x46, 0x2e, 0x74,
+	0xfc, 0x9c, 0x53, 0x8a, 0xaf, 0x49, 0x81, 0x8c, 0xe9, 0x4e, 0xad, 0xa9, 0x26, 0x1c, 0x55, 0x91,
+	0x81, 0xda, 0x8c, 0x5a, 0x41, 0x51, 0xc3, 0xc6, 0x75, 0x54, 0x9e, 0xc5, 0x50, 0x49, 0x59, 0xab,
+	0xf4, 0x63, 0x12, 0x1c, 0x82, 0x73, 0x55, 0xd3, 0x8a, 0x4e, 0xe1, 0x1b, 0x08, 0xa5, 0x84, 0xd3,
+	0x44, 0xcc, 0x74, 0xcd, 0xd5, 0x35, 0x65, 0x9c, 0xd4, 0x15, 0xd3, 0x7d, 0x0d, 0xb3, 0xa7, 0x75,
+	0xa9, 0x8a, 0x02, 0xc9, 0x39, 0xf1, 0x68, 0x70, 0xa0, 0x51, 0x95, 0xe9, 0x39, 0x41, 0x49, 0xc9,
+	0x7f, 0x8b, 0x6a, 0xb0, 0x6c, 0xdb, 0x24, 0x25, 0x41, 0x24, 0x46, 0xb8, 0x85, 0xaa, 0x81, 0x89,
+	0xcd, 0x5a, 0x18, 0xbf, 0xf3, 0x2c, 0xf6, 0x90, 0x4b, 0x8e, 0x49, 0x14, 0x93, 0x7e, 0x4c, 0xa1,
+	0x8f, 0x1c, 0x32, 0x4e, 0xcb, 0xaf, 0x2f, 0xe8, 0xe5, 0x0a, 0xd8, 0x30, 0x11, 0x66, 0x61, 0x35,
+	0x0a, 0x41, 0x61, 0x5b, 0xe5, 0xbd, 0x2f, 0x16, 0xba, 0xac, 0x3c, 0xfb, 0xbf, 0x33, 0xf5, 0x10,
+	0x39, 0xea, 0x06, 0xa0, 0x59, 0x06, 0x72, 0x16, 0x36, 0x1a, 0x13, 0x7b, 0xa4, 0xee, 0x8a, 0xf6,
+	0x8b, 0xe2, 0xae, 0xd8, 0x92, 0x40, 0x23, 0x24, 0x27, 0xe1, 0x7b, 0xf9, 0x7d, 0x50, 0x06, 0xf6,
+	0xca, 0x8c, 0x2d, 0x1c, 0xdf, 0x1e, 0xf9, 0xcc, 0x80, 0xe1, 0xbd, 0x93, 0x07, 0x0b, 0xfc, 0x3b,
+	0x7f, 0xb0, 0x8a, 0x23, 0x6e, 0xfd, 0xfd, 0x11, 0x2f, 0x54, 0xcc, 0xfd, 0xab, 0x0a, 0x7c, 0x1f,
+	0xd9, 0xca, 0x0a, 0xa3, 0x7f, 0x75, 0x06, 0xf3, 0xbc, 0xc9, 0x86, 0x0d, 0x24, 0xdc, 0x9d, 0x18,
+	0xb8, 0x0d, 0x2f, 0x68, 0xcd, 0x78, 0xc1, 0xb9, 0x25, 0x99, 0x5e, 0x89, 0xee, 0xca, 0xc9, 0xf7,
+	0x46, 0xe9, 0xe4, 0xac, 0x61, 0x7d, 0x95, 0xbf, 0x6f, 0xf2, 0xf7, 0xfe, 0x47, 0xa3, 0xf4, 0xca,
+	0x31, 0xe4, 0x97, 0xd6, 0xef, 0x00, 0x00, 0x00, 0xff, 0xff, 0xaf, 0xcd, 0x67, 0x01, 0xf2, 0x05,
+	0x00, 0x00,
+}

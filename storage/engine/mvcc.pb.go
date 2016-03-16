@@ -28,6 +28,10 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+const _ = proto.GoGoProtoPackageIsVersion1
+
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
 	Txn *cockroach_roachpb1.TxnMeta `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
@@ -39,24 +43,25 @@ type MVCCMetadata struct {
 	// Is the most recent value a deletion tombstone?
 	Deleted bool `protobuf:"varint,3,opt,name=deleted" json:"deleted"`
 	// The size in bytes of the most recent encoded key.
-	KeyBytes int64 `protobuf:"varint,4,opt,name=key_bytes" json:"key_bytes"`
+	KeyBytes int64 `protobuf:"varint,4,opt,name=key_bytes,json=keyBytes" json:"key_bytes"`
 	// The size in bytes of the most recent versioned value.
-	ValBytes int64 `protobuf:"varint,5,opt,name=val_bytes" json:"val_bytes"`
+	ValBytes int64 `protobuf:"varint,5,opt,name=val_bytes,json=valBytes" json:"val_bytes"`
 	// Inline value, used for non-versioned values with zero
 	// timestamp. This provides an efficient short circuit of the normal
 	// MVCC metadata sentinel and subsequent version rows. If timestamp
 	// == (0, 0), then there is only a single MVCC metadata row with
 	// value inlined, and with empty timestamp, key_bytes, and
 	// val_bytes.
-	RawBytes []byte `protobuf:"bytes,6,opt,name=raw_bytes" json:"raw_bytes,omitempty"`
+	RawBytes []byte `protobuf:"bytes,6,opt,name=raw_bytes,json=rawBytes" json:"raw_bytes,omitempty"`
 	// This provides a measure of protection against replays caused by
 	// Raft duplicating merge commands.
-	MergeTimestamp *cockroach_roachpb1.Timestamp `protobuf:"bytes,7,opt,name=merge_timestamp" json:"merge_timestamp,omitempty"`
+	MergeTimestamp *cockroach_roachpb1.Timestamp `protobuf:"bytes,7,opt,name=merge_timestamp,json=mergeTimestamp" json:"merge_timestamp,omitempty"`
 }
 
-func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
-func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
-func (*MVCCMetadata) ProtoMessage()    {}
+func (m *MVCCMetadata) Reset()                    { *m = MVCCMetadata{} }
+func (m *MVCCMetadata) String() string            { return proto.CompactTextString(m) }
+func (*MVCCMetadata) ProtoMessage()               {}
+func (*MVCCMetadata) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{0} }
 
 // MVCCStats tracks byte and instance counts for various groups of keys,
 // values, or key-value pairs; see the field comments for details.
@@ -83,56 +88,57 @@ func (*MVCCMetadata) ProtoMessage()    {}
 type MVCCStats struct {
 	// last_update_nanos is a timestamp at which the ages were last
 	// updated. See the comment on MVCCStats.
-	LastUpdateNanos int64 `protobuf:"fixed64,1,opt,name=last_update_nanos" json:"last_update_nanos"`
+	LastUpdateNanos int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos" json:"last_update_nanos"`
 	// intent_age is the cumulative age of the tracked intents.
 	// See the comment on MVCCStats.
-	IntentAge int64 `protobuf:"fixed64,2,opt,name=intent_age" json:"intent_age"`
+	IntentAge int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge" json:"intent_age"`
 	// gc_bytes_age is the cumulative age of the non-live data (i.e.
 	// data included in key_bytes and val_bytes, but not live_bytes).
 	// See the comment on MVCCStats.
-	GCBytesAge int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age" json:"gc_bytes_age"`
+	GCBytesAge int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge" json:"gc_bytes_age"`
 	// live_bytes is the number of bytes stored in keys and values which can in
 	// principle be read by means of a Scan or Get, including intents but not
 	// deletion tombstones (or their intents). Note that the size of the meta kv
 	// pair (which could be explicit or implicit) is included in this.
 	// Only the meta kv pair counts for the actual length of the encoded key
 	// (regular pairs only count the timestamp suffix).
-	LiveBytes int64 `protobuf:"fixed64,4,opt,name=live_bytes" json:"live_bytes"`
+	LiveBytes int64 `protobuf:"fixed64,4,opt,name=live_bytes,json=liveBytes" json:"live_bytes"`
 	// live_count is the number of meta keys tracked under live_bytes.
-	LiveCount int64 `protobuf:"fixed64,5,opt,name=live_count" json:"live_count"`
+	LiveCount int64 `protobuf:"fixed64,5,opt,name=live_count,json=liveCount" json:"live_count"`
 	// key_bytes is the number of bytes stored in all non-system
 	// keys, including live, meta, old, and deleted keys.
 	// Only meta keys really account for the "full" key; value
 	// keys only for the timestamp suffix.
-	KeyBytes int64 `protobuf:"fixed64,6,opt,name=key_bytes" json:"key_bytes"`
+	KeyBytes int64 `protobuf:"fixed64,6,opt,name=key_bytes,json=keyBytes" json:"key_bytes"`
 	// key_count is the number of meta keys tracked under key_bytes.
-	KeyCount int64 `protobuf:"fixed64,7,opt,name=key_count" json:"key_count"`
+	KeyCount int64 `protobuf:"fixed64,7,opt,name=key_count,json=keyCount" json:"key_count"`
 	// value_bytes is the number of bytes in all non-system version
 	// values, including meta values.
-	ValBytes int64 `protobuf:"fixed64,8,opt,name=val_bytes" json:"val_bytes"`
+	ValBytes int64 `protobuf:"fixed64,8,opt,name=val_bytes,json=valBytes" json:"val_bytes"`
 	// val_count is the number of meta values tracked under val_bytes.
-	ValCount int64 `protobuf:"fixed64,9,opt,name=val_count" json:"val_count"`
+	ValCount int64 `protobuf:"fixed64,9,opt,name=val_count,json=valCount" json:"val_count"`
 	// intent_bytes is the number of bytes in intent key-value
 	// pairs (without their meta keys).
-	IntentBytes int64 `protobuf:"fixed64,10,opt,name=intent_bytes" json:"intent_bytes"`
+	IntentBytes int64 `protobuf:"fixed64,10,opt,name=intent_bytes,json=intentBytes" json:"intent_bytes"`
 	// intent_count is the number of keys tracked under intent_bytes.
 	// It is equal to the number of meta keys in the system with
 	// a non-empty Transaction proto.
-	IntentCount int64 `protobuf:"fixed64,11,opt,name=intent_count" json:"intent_count"`
+	IntentCount int64 `protobuf:"fixed64,11,opt,name=intent_count,json=intentCount" json:"intent_count"`
 	// sys_bytes is the number of bytes stored in system-local kv-pairs.
 	// This tracks the same quantity as (key_bytes + val_bytes), but
 	// for system-local metadata keys (which aren't counted in either
 	// key_bytes or val_bytes). Each of the keys falling into this group
 	// is documented in keys/constants.go under the localPrefix constant
 	// and is prefixed by either LocalRangeIDPrefix or LocalRangePrefix.
-	SysBytes int64 `protobuf:"fixed64,12,opt,name=sys_bytes" json:"sys_bytes"`
+	SysBytes int64 `protobuf:"fixed64,12,opt,name=sys_bytes,json=sysBytes" json:"sys_bytes"`
 	// sys_count is the number of meta keys tracked under sys_bytes.
-	SysCount int64 `protobuf:"fixed64,13,opt,name=sys_count" json:"sys_count"`
+	SysCount int64 `protobuf:"fixed64,13,opt,name=sys_count,json=sysCount" json:"sys_count"`
 }
 
-func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
-func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
-func (*MVCCStats) ProtoMessage()    {}
+func (m *MVCCStats) Reset()                    { *m = MVCCStats{} }
+func (m *MVCCStats) String() string            { return proto.CompactTextString(m) }
+func (*MVCCStats) ProtoMessage()               {}
+func (*MVCCStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{1} }
 
 func init() {
 	proto.RegisterType((*MVCCMetadata)(nil), "cockroach.storage.engine.MVCCMetadata")
@@ -953,3 +959,38 @@ var (
 	ErrInvalidLengthMvcc = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowMvcc   = fmt.Errorf("proto: integer overflow")
 )
+
+var fileDescriptorMvcc = []byte{
+	// 484 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x84, 0x93, 0xcf, 0x8e, 0xd3, 0x30,
+	0x10, 0xc6, 0xdb, 0x6d, 0x69, 0x9b, 0x69, 0x60, 0xc1, 0xe2, 0x10, 0x95, 0xaa, 0x0b, 0xbb, 0x07,
+	0x38, 0xa0, 0x04, 0x21, 0x1e, 0x00, 0x5a, 0x21, 0x4e, 0xcb, 0x21, 0xfc, 0x11, 0xe2, 0x12, 0x79,
+	0x53, 0x2b, 0x54, 0xdb, 0xda, 0x55, 0xec, 0x2d, 0xdb, 0x17, 0xe0, 0xcc, 0x63, 0xe5, 0xc8, 0x13,
+	0xac, 0xa0, 0xbc, 0x08, 0xb6, 0xc7, 0xf9, 0xd3, 0x82, 0xc4, 0x21, 0x95, 0xfb, 0xcd, 0x6f, 0xbe,
+	0x78, 0xbe, 0x51, 0xe0, 0x2c, 0x15, 0xe9, 0x65, 0x2e, 0x68, 0xfa, 0x25, 0x92, 0x4a, 0xe4, 0x34,
+	0x63, 0x11, 0xe3, 0xd9, 0x82, 0xb3, 0x68, 0xb5, 0x49, 0xd3, 0x70, 0x9d, 0x0b, 0x25, 0x48, 0x50,
+	0x41, 0xa1, 0x83, 0x42, 0x84, 0x46, 0xe3, 0xba, 0xdd, 0xfe, 0xae, 0x2f, 0xa2, 0x39, 0x55, 0x14,
+	0xfb, 0x46, 0xf7, 0x33, 0x91, 0x09, 0x7b, 0x8c, 0xcc, 0x09, 0xd5, 0xd3, 0xe2, 0x08, 0xfc, 0xf3,
+	0x8f, 0xb3, 0xd9, 0x39, 0x53, 0xd4, 0xc0, 0xe4, 0x29, 0x74, 0xd4, 0x35, 0x0f, 0xda, 0x0f, 0xdb,
+	0x4f, 0x86, 0xcf, 0x47, 0x61, 0xfd, 0x32, 0x67, 0x19, 0xbe, 0xbf, 0xe6, 0x06, 0x8e, 0x0d, 0x46,
+	0x5e, 0x82, 0xa7, 0x16, 0x2b, 0x26, 0x15, 0x5d, 0xad, 0x83, 0x23, 0xdb, 0x33, 0xfe, 0x57, 0x4f,
+	0xc9, 0x4c, 0xbb, 0xc5, 0xcd, 0x49, 0x2b, 0xae, 0x9b, 0xc8, 0x04, 0xfa, 0x73, 0xb6, 0x64, 0x8a,
+	0xcd, 0x83, 0x8e, 0xee, 0x1f, 0x38, 0xa2, 0x14, 0xc9, 0x23, 0xf0, 0x2e, 0xd9, 0x36, 0xb9, 0xd8,
+	0x2a, 0x26, 0x83, 0xae, 0x26, 0x3a, 0x8e, 0x18, 0x68, 0x79, 0x6a, 0x54, 0x83, 0x6c, 0xe8, 0xd2,
+	0x21, 0xb7, 0x9a, 0x88, 0x96, 0x11, 0x79, 0x00, 0x5e, 0x4e, 0xbf, 0x3a, 0xa4, 0xa7, 0x11, 0x3f,
+	0x1e, 0x68, 0x01, 0x8b, 0xaf, 0xe1, 0x78, 0xc5, 0xf2, 0x8c, 0x25, 0xf5, 0x28, 0xfd, 0xff, 0x8f,
+	0x12, 0xdf, 0xb1, 0x4d, 0xd5, 0xff, 0xd3, 0x6f, 0x5d, 0xf0, 0x4c, 0x94, 0xef, 0x14, 0x55, 0x92,
+	0x3c, 0x83, 0x7b, 0x4b, 0x2a, 0x55, 0x72, 0xb5, 0xd6, 0xb1, 0xb2, 0x84, 0x53, 0x2e, 0xa4, 0x4d,
+	0xf5, 0xae, 0xbb, 0xdc, 0xb1, 0x29, 0x7f, 0xb0, 0xd5, 0xb7, 0xa6, 0x48, 0xce, 0x00, 0x16, 0x5c,
+	0x31, 0xae, 0x12, 0xbd, 0x53, 0x1b, 0x66, 0x89, 0x7a, 0xa8, 0xbf, 0xca, 0x18, 0x79, 0x01, 0x7e,
+	0x96, 0xe2, 0x1c, 0x16, 0xeb, 0x58, 0x8c, 0x18, 0x6c, 0x77, 0x73, 0x02, 0x6f, 0x66, 0x76, 0x24,
+	0x4d, 0xc6, 0x90, 0xa5, 0xe5, 0xd9, 0x58, 0x2f, 0x17, 0x1b, 0xd6, 0x48, 0xb1, 0xb2, 0x36, 0x3a,
+	0xc6, 0x50, 0x42, 0xa9, 0xb8, 0xe2, 0xca, 0xe6, 0xb8, 0x07, 0xcd, 0x8c, 0xbc, 0xbf, 0x8e, 0x5e,
+	0x83, 0xd9, 0x5b, 0x87, 0x41, 0xd0, 0xa6, 0x7f, 0x80, 0x54, 0x2e, 0xf5, 0xc6, 0x06, 0x4d, 0xa4,
+	0xda, 0x98, 0x43, 0xd0, 0xc5, 0x3b, 0x40, 0xd0, 0xe5, 0x31, 0xf8, 0x2e, 0x30, 0x34, 0x82, 0x06,
+	0x35, 0xc4, 0x0a, 0x7a, 0xd5, 0x20, 0xda, 0x0d, 0xff, 0x06, 0xab, 0x7b, 0xc9, 0xad, 0x74, 0x76,
+	0x7e, 0xf3, 0xa5, 0x5a, 0xae, 0xee, 0x65, 0x10, 0x34, 0xba, 0x7d, 0x80, 0x58, 0x97, 0xe9, 0xb8,
+	0xf8, 0x35, 0x69, 0x15, 0xbb, 0x49, 0xfb, 0x87, 0x7e, 0x7e, 0xea, 0xe7, 0xfb, 0xef, 0x49, 0xeb,
+	0x73, 0x0f, 0xbf, 0xd2, 0x4f, 0xed, 0x3f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xac, 0xc1, 0xbb, 0x7a,
+	0xe7, 0x03, 0x00, 0x00,
+}
