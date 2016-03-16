@@ -1485,8 +1485,6 @@ func (s *Store) ReplicaCount() int {
 // a transaction set which should be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	ctx = s.Context(ctx)
-	sp, cleanupSp := tracing.SpanFromContext(opStore, s.Tracer(), ctx)
-	defer cleanupSp()
 
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
@@ -1577,9 +1575,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	}
 
 	if log.V(1) {
-		sp.LogEvent(fmt.Sprintf("executing %s", ba))
+		log.Trace(ctx, fmt.Sprintf("executing %s", ba))
 	} else {
-		sp.LogEvent(fmt.Sprintf("executing %d requests", len(ba.Requests)))
+		log.Trace(ctx, fmt.Sprintf("executing %d requests", len(ba.Requests)))
 	}
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
@@ -1588,7 +1586,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	next := func(r *retry.Retry) bool {
 		if r.CurrentAttempt() > 0 {
 			ba.SetNewRequest()
-			sp.LogEvent("backoff")
+			log.Trace(ctx, "backoff")
 		}
 		return r.Next()
 	}
@@ -1644,7 +1642,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteTooOldError:
-			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// Update request timestamp and retry immediately.
 			ba.Timestamp = t.ExistingTimestamp.Next()
 			r.Reset()
@@ -1653,7 +1651,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			}
 			continue
 		case *roachpb.WriteIntentError:
-			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {
@@ -1681,7 +1679,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
-	sp.LogEvent("store retry limit exceeded") // good to check for if tests fail
+	log.Trace(ctx, "store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {
 		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 	}

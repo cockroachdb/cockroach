@@ -689,7 +689,7 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		br, pErr = n.stores.Send(ctx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			sp.LogEvent(fmt.Sprintf("error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))

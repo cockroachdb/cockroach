@@ -161,9 +161,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		}
 	}
 
-	sp, cleanupSp := tracing.SpanFromContext(opStore, ir.store.Tracer(), ctx)
-	defer cleanupSp()
-	sp.LogEvent("intent resolution")
+	log.Trace(ctx, "intent resolution")
 
 	// Split intents into those we need to push and those which are good to
 	// resolve.
@@ -345,13 +343,10 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // intents again.
 func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
-
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, ir.store.Tracer(), ctx)
-	defer cleanupSp()
-
 	// We're doing async stuff below; those need new traces.
-	ctx = opentracing.ContextWithSpan(ctx, nil)
-	sp.LogEvent(fmt.Sprintf("resolving intents [wait=%t]", wait))
+	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
+	defer cleanup()
+	log.Trace(ctx, fmt.Sprintf("resolving intents [wait=%t]", wait))
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}

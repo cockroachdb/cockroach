@@ -397,7 +397,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			}
 			if log.V(1) {
 				for _, intent := range et.IntentSpans {
-					sp.LogEvent(fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
+					log.Trace(ctx, fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
 				}
 			}
 		}
@@ -416,7 +416,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 
 		if pErr = tc.updateState(ctx, ba, br, pErr); pErr != nil {
-			sp.LogEvent(fmt.Sprintf("error: %s", pErr))
+			log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
 			return nil, pErr
 		}
 	}
@@ -507,8 +507,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 // updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxn(ctx context.Context, txn roachpb.Transaction) {
-	// TODO(tschottdorf): re-instantiate
-	// trace.LogEvent("coordinator stops")
+	log.Trace(ctx, "coordinator stops")
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[*txn.ID]
@@ -659,8 +658,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	hb.Key = txn.Key
 	ba.Add(hb)
 
-	// TODO(tschottdorf): re-instantiate
-	// trace.LogEvent("heartbeat")
+	log.Trace(ctx, "heartbeat")
 	_, err := tc.wrapped.Send(ctx, ba)
 	// If the transaction is not in pending state, then we can stop
 	// the heartbeat. It's either aborted or committed, and we resolve
@@ -685,9 +683,6 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	sp, cleanupSp := tracing.SpanFromContext(opTxnCoordSender, tc.tracer, ctx)
-	defer cleanupSp()
-
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	if pErr == nil {
@@ -800,7 +795,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 			// we expect it to be committed/aborted at some point in the
 			// future.
 			if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
-				sp.LogEvent("coordinator spawns")
+				log.Trace(ctx, "coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
 					keys:             interval.NewRangeTree(),

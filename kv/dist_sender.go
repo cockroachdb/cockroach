@@ -549,8 +549,8 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
-	sp, cleanupSp := tracing.SpanFromContext(opDistSender, ds.Tracer, ctx)
-	defer cleanupSp()
+	ctx, cleanup := tracing.EnsureContext(ctx, ds.Tracer)
+	defer cleanup()
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
@@ -571,7 +571,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			sp.LogEvent("meta descriptor lookup")
+			log.Trace(ctx, "meta descriptor lookup")
 			var evictDesc func()
 			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
 
@@ -648,7 +648,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
-			sp.LogEvent(fmt.Sprintf("reply error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
 
 			// Error handling below.
 			// If retryable, allow retry. For range not found or range
@@ -873,7 +873,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// resulting in a duplicate scan.
 			rs.Key = next(ba, desc.EndKey)
 		}
-		sp.LogEvent("querying next range")
+		log.Trace(ctx, "querying next range")
 	}
 }
 
