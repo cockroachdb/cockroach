@@ -12,30 +12,27 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Tamir Duberstein (tamird@gmail.com)
+// Author: Raphael 'kena' Poss (knz@cockroachlabs.com)
 
 package timeutil
 
 import (
 	"os"
 	"testing"
-	"time"
 )
 
-func TestOffset(t *testing.T) {
-	for _, expectedOffset := range []time.Duration{-time.Hour, time.Hour} {
-		if err := os.Setenv(offsetEnvKey, expectedOffset.String()); err != nil {
-			t.Fatal(err)
-		}
+func TestMonotonicityCheck(t *testing.T) {
+	if err := os.Setenv(offsetEnvKey, "-1h"); err != nil {
+		t.Fatal(err)
+	}
 
-		initFakeTime()
+	firstTime := Now()
 
-		lowerBound := time.Now().Add(expectedOffset)
-		offsetTime := Now()
-		upperBound := time.Now().Add(expectedOffset)
+	initFakeTime()
 
-		if offsetTime.Before(lowerBound) || offsetTime.After(upperBound) {
-			t.Errorf("expected offset time %s to be in the interval\n[%s,%s]", offsetTime, lowerBound, upperBound)
-		}
+	secondTime := Now()
+
+	if monotonicityErrorsCount != 1 {
+		t.Errorf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
 	}
 }
