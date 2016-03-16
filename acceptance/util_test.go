@@ -33,13 +33,13 @@ import (
 
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
-	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
+	_ "github.com/cockroachdb/pq"
 )
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
