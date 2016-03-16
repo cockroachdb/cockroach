@@ -473,8 +473,15 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	if ba.Txn.ID == nil {
 		// Create transaction without a key. The key is set when a begin
 		// transaction request is received.
+
+		// The initial timestamp may be communicated by a higher layer.
+		// If so, use that. Otherwise make up a new one.
+		timestamp := ba.Txn.OrigTimestamp
+		if timestamp == roachpb.ZeroTimestamp {
+			timestamp = tc.clock.Now()
+		}
 		newTxn := roachpb.NewTransaction(ba.Txn.Name, nil, ba.UserPriority,
-			ba.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
+			ba.Txn.Isolation, timestamp, tc.clock.MaxOffset().Nanoseconds())
 		// Use existing priority as a minimum. This is used on transaction
 		// aborts to ratchet priority when creating successor transaction.
 		if newTxn.Priority < ba.Txn.Priority {
