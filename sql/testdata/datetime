@@ -141,11 +141,12 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP
+  v TIMESTAMP,
+  l INT
 )
 
 statement ok
-INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp())
+INSERT INTO kv (k,v,l) VALUES ('a', transaction_timestamp(), transaction_timestamp_unique())
 
 query T
 SELECT k FROM kv
@@ -153,7 +154,7 @@ SELECT k FROM kv
 a
 
 query T
-SELECT k FROM kv where v = transaction_timestamp()
+SELECT k FROM kv where v = transaction_timestamp() and l = transaction_timestamp_unique()
 ----
 a
 
@@ -166,28 +167,29 @@ COMMIT TRANSACTION
 # We use, SELECT * FROM kv, to insert delays of more than a nanosecond.
 statement ok
 BEGIN;
-INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('b', transaction_timestamp(), transaction_timestamp_unique());
 SELECT * FROM kv;
-INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('c', transaction_timestamp(), transaction_timestamp_unique());
 SELECT * FROM kv;
-INSERT INTO kv (k,v) VALUES ('d', current_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('d', current_timestamp(), transaction_timestamp_unique());
 SELECT * FROM kv;
-INSERT INTO kv (k,v) VALUES ('e', current_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('e', current_timestamp(), transaction_timestamp_unique());
 SELECT * FROM kv;
-INSERT INTO kv (k,v) VALUES ('f', now());
+INSERT INTO kv (k,v,l) VALUES ('f', now(), transaction_timestamp_unique());
 SELECT * FROM kv;
-INSERT INTO kv (k,v) VALUES ('g', now());
+INSERT INTO kv (k,v,l) VALUES ('g', now(), transaction_timestamp_unique());
 SELECT * FROM kv;
-INSERT INTO kv (k,v) VALUES ('h', statement_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('h', statement_timestamp(), 0);
 SELECT * FROM kv;
 COMMIT;
+SELECT * FROM kv;
 BEGIN;
 SELECT * FROM KV;
-INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('i', transaction_timestamp(), transaction_timestamp_unique());
 COMMIT;
 
 query I
-SELECT COUNT(DISTINCT v) FROM kv
+SELECT COUNT(DISTINCT (v,l)) FROM kv
 ----
 4
 
@@ -198,22 +200,22 @@ DELETE FROM kv
 
 statement ok
 BEGIN;
-INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('a', transaction_timestamp(), transaction_timestamp_unique());
 SELECT * FROM kv;
 
 statement ok
-INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('b', transaction_timestamp(), transaction_timestamp_unique());
 SELECT * FROM kv;
 COMMIT;
 
 statement ok
 BEGIN;
 SELECT * FROM KV;
-INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
+INSERT INTO kv (k,v,l) VALUES ('c', transaction_timestamp(), transaction_timestamp_unique());
 COMMIT;
 
 query I
-SELECT COUNT(DISTINCT v) FROM kv
+SELECT COUNT(DISTINCT (v,l)) FROM kv
 ----
 2
 
