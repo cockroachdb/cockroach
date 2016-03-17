@@ -114,6 +114,10 @@ message TableDetailsResponse {
   repeated Grant grants = 1;
   repeated Column columns = 2;
   repeated Index indexes = 3;
+
+  // range_count is the size of the table in ranges. This provides a rough
+  // estimate of the storage requirements for the table.
+  int64 range_count = 4;
 }
 
 // UsersRequest requests a list of users.

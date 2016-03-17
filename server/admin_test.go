@@ -358,6 +358,10 @@ CREATE TABLE test.tbl (
 			t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
 		}
 	}
+
+	if a, e := resp.RangeCount, int64(1); a != e {
+		t.Fatalf("# of ranges %d != expected %d", a, e)
+	}
 }
 
 func TestAdminAPIUsers(t *testing.T) {

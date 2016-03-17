@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // InternalExecutor can be used internally by cockroach to execute SQL
@@ -38,4 +39,22 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(txn *client.Txn, statem
 	p.user = security.RootUser
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, params...)
+}
+
+// GetTableID returns the table ID for the given table.
+func (ie InternalExecutor) GetTableID(user string, txn *client.Txn, dbName, tableName string) (ID, *roachpb.Error) {
+	// Lookup the table ID.
+	p := makePlanner()
+	p.setTxn(txn)
+	p.user = user
+	p.leaseMgr = ie.LeaseManager
+	qname := &parser.QualifiedName{Base: parser.Name(tableName)}
+	if err := qname.NormalizeTableName(dbName); err != nil {
+		return 0, roachpb.NewError(err)
+	}
+	tableID, pErr := p.getTableID(qname)
+	if pErr != nil {
+		return 0, pErr
+	}
+	return tableID, nil
 }

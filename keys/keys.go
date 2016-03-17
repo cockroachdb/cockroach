@@ -462,6 +462,15 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
+// MakeTableSpan returns a key span that encompasses all data for the SQL table
+// with the given ID, including any indices.
+func MakeTableSpan(tableID uint32) roachpb.Span {
+	tablePrefix := MakeTablePrefix(tableID)
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
+}
+
 // MakeColumnKey returns the key for the column in the given row.
 func MakeColumnKey(rowKey []byte, colID uint32) []byte {
 	key := append([]byte(nil), rowKey...)
