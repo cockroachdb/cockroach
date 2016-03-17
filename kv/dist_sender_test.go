@@ -521,6 +521,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		{true, true, false, false},   // retryable RPC error
 	}
 
+	const errString = "boom"
+
 	for i, tc := range testCases {
 		g, s := makeTestGossip(t)
 		defer s()
@@ -537,13 +539,13 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 			first = false
 			if tc.rpcError {
-				return nil, roachpb.NewSendError("boom", tc.retryable)
+				return nil, roachpb.NewSendError(errString, tc.retryable)
 			}
 			var err error
 			if tc.retryable {
 				err = &roachpb.RangeKeyMismatchError{}
 			} else {
-				err = errors.New("boom")
+				err = errors.New(errString)
 			}
 			reply := &roachpb.BatchResponse{}
 			reply.Error = roachpb.NewError(err)
@@ -561,7 +563,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, "boom") {
+		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, errString) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
