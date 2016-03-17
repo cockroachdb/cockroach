@@ -106,7 +106,6 @@ func (e *Error) String() string {
 
 type internalError Error
 
-// internalError implements error.
 func (e *internalError) Error() string {
 	return (*Error)(e).String()
 }

@@ -94,7 +94,7 @@ BEGIN
 query error syntax error at or near ","
 SELECT COUNT(*, 1) FROM kv
 
-statement error current transaction is aborted, commands ignored until end of transaction block
+statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
 statement ok
