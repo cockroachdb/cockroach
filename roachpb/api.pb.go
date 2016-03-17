@@ -104,9 +104,8 @@
 		ReplicaCorruptionError
 		LeaseVersionChangedError
 		DidntUpdateDescriptorError
-		SqlTransactionAbortedError
-		SqlTransactionCommittedError
 		ExistingSchemaChangeLeaseError
+		ErrorWithPGCode
 		ErrorDetail
 		ErrPosition
 		Error
