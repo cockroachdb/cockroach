@@ -1750,7 +1750,8 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
 	if err != nil {
-		return err
+		return util.Errorf("refusing incoming Raft message %s for group %d from %s to %s: %s",
+			req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
 	}
 	r.mu.Lock()
 	err = r.mu.raftGroup.Step(req.Message)
