@@ -1506,14 +1506,20 @@ func (r *Replica) applyRaftCommandInBatch(ctx context.Context, index uint64, ori
 	// to continue request idempotence, even if leadership changes.
 	if ba.IsWrite() {
 		if err != nil {
-			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
-			// roachpb.Response{With->Or}Error.
-			br = &roachpb.BatchResponse{}
-			// Otherwise, reset the batch to clear out partial execution and
-			// prepare for the failed sequence cache entry.
-			btch.Close()
-			btch = r.store.Engine().NewBatch()
-			*ms = engine.MVCCStats{}
+			// If the batch failed with a TransactionRetryError, any
+			// preceding mutations in the batch engine should still be
+			// applied so that intents are laid down in preparation for
+			// the retry.
+			if _, ok := err.GetDetail().(*roachpb.TransactionRetryError); !ok {
+				// TODO(tschottdorf): make `nil` acceptable. Corresponds to
+				// roachpb.Response{With->Or}Error.
+				br = &roachpb.BatchResponse{}
+				// Otherwise, reset the batch to clear out partial execution and
+				// prepare for the failed sequence cache entry.
+				btch.Close()
+				btch = r.store.Engine().NewBatch()
+				*ms = engine.MVCCStats{}
+			}
 		}
 
 		if ba.Txn != nil {
