@@ -955,12 +955,10 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			t.Fatal(err)
-			return roachpb.NewError(err)
 		}
 
 		if pErr := txn.Put(key, value); pErr != nil {
 			t.Fatal(pErr)
-			return pErr
 		}
 
 		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))

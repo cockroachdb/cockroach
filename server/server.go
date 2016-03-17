@@ -161,7 +161,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		Gossip:        s.gossip,
 		LeaseManager:  s.leaseMgr,
 		Clock:         s.clock,
-		TestingMocker: ctx.TestingMocker.ExecutorTestingMocker,
+		TestingMocker: &ctx.TestingMocker.ExecutorTestingMocker,
 	}
 
 	sqlRegistry := metric.NewRegistry()
