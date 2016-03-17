@@ -157,11 +157,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 	eCtx := sql.ExecutorContext{
-		DB:            s.db,
-		Gossip:        s.gossip,
-		LeaseManager:  s.leaseMgr,
-		Clock:         s.clock,
-		TestingMocker: &ctx.TestingMocker.ExecutorTestingMocker,
+		DB:           s.db,
+		Gossip:       s.gossip,
+		LeaseManager: s.leaseMgr,
+		Clock:        s.clock,
+		TestingKnobs: &ctx.TestingMocker.ExecutorTestingKnobs,
 	}
 
 	sqlRegistry := metric.NewRegistry()
