@@ -349,6 +349,23 @@ func (ds *DistSender) sendRPC(sp opentracing.Span, rangeID roachpb.RangeID, repl
 	return reply, nil
 }
 
+// CountRanges returns the number of ranges that encompass the given key span.
+func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
+	var count int64
+	for {
+		desc, needAnother, _, pErr := ds.getDescriptors(rs, false /*considerIntents*/, false /*useReverseScan*/)
+		if pErr != nil {
+			return -1, pErr
+		}
+		count++
+		if !needAnother {
+			break
+		}
+		rs.Key = desc.EndKey
+	}
+	return count, nil
+}
+
 // getDescriptors looks up the range descriptor to use for a query over the
 // key range span rs, with the given LookupOptions. The range descriptor
 // which contains the range in which the request should start its query is
