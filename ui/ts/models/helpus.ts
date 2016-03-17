@@ -47,6 +47,8 @@ module Models {
         } catch (e) {
           d.reject(e);
         }
+      }).catch((e: Error) => {
+        d.reject(e);
       });
       return d.promise;
     }

@@ -24,7 +24,7 @@ module Components {
       return m(".topbar", [
         (args.title && m("h2", args.title) || (args.titleImage)),
         m(".info-container", [
-          m(".health", [m("strong", "health:"), m.component(Components.Health, {})]),
+          m(".health", ["health:", m.component(Components.Health, {})]),
           m(".last-updated", [ m("strong", "Updated: "), ctrl.updatedStr ]),
         ]),
       ]);

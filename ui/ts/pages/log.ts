@@ -113,7 +113,7 @@ module AdminViews {
         // Page title.
         let title: _mithril.MithrilVirtualElement = m("", [
           m("a", {config: m.route, href: "/nodes"}, "Nodes"),
-          ": Node " + m.route.param("node_id") + ": Logs",
+          ": Node " + m.route.param("node_id"),
         ]);
 
         return m(".page", [

@@ -326,7 +326,7 @@ module AdminViews {
           return m(".page", [
             m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated}),
             m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-            m(".section.table", m(".stats-table", Components.Table.create(comparisonData))),
+            m(".section.table.node-overview", m(".stats-table", Components.Table.create(comparisonData))),
           ]);
         } else {
           return m(".page", [
@@ -512,43 +512,47 @@ module AdminViews {
 
           // genRow generates the virtual table row from a CellInfo object
           function genRow(info: CellInfo): MithrilVirtualElement {
-            return m("tr.stat", [
+            return m("tr", [
               m("td.title", info.title),              // First cell: the human readable title for the row
               m("td.value", info.valueFn(nodeStats)), // Second cell: the node value
             ].concat(genCells(info.valueFn)));        // Third and successive cells: the store values
           }
 
           if (nodeStats) {
-            return m(".section.node-info", [
-              m("table.stats-table", [
+            return m(".section.table", [
+              m(".stats-table", m("table", [
                 m("thead",
                   // header row
-                  m("tr.stat", [
-                    m("td.title", ""),
+                  m("tr", [
+                    m("th.title", ""),
                     m("th.value", `Node ${this._nodeId}`), // node name header cell
                     // add the name each store into this row by concatenating the generated cells onto this array
                   ].concat(_.map(nodeStats.store_ids, (id: number): MithrilVirtualElement => m("th.value", `Store ${id}`))))),
                 m("tbody", _.map(values, genRow)),
-              ]),
+              ])),
             ]);
           }
           return m(".primary-stats");
         }
 
         public RenderGraphs(): MithrilElement {
-          return m(".charts", [
-            m("h2", "Network Stats"),
-            this.networkAxes.map((axis: Metrics.Axis) => {
-              return m("", { style: "float:left" }, [
-                Components.Metrics.LineGraph.create(this.exec, axis),
+          return m("", [
+            m(".header", m("h2", "Network Stats")),
+            m(".charts", [
+              this.networkAxes.map((axis: Metrics.Axis) => {
+                return m("", {style: "float:left"}, [
+                  Components.Metrics.LineGraph.create(this.exec, axis),
                 ]);
-            }),
-            m("h2", "SQL Queries"),
-            this.sqlAxes.map((axis: Metrics.Axis) => {
-              return m("", { style: "float:left" }, [
-                Components.Metrics.LineGraph.create(this.exec, axis),
+              }),
+            ]),
+            m(".header", {style: "clear:both;"}, m("h2", "SQL Queries")),
+            m(".charts", [
+              this.sqlAxes.map((axis: Metrics.Axis) => {
+                return m("", {style: "float:left"}, [
+                  Components.Metrics.LineGraph.create(this.exec, axis),
                 ]);
-            }),
+              }),
+            ]),
           ]);
         }
 
@@ -587,7 +591,7 @@ module AdminViews {
         // Page title.
         let title: MithrilVirtualElement = m("", [
           m("a", {config: m.route, href: "/nodes"}, "Nodes"),
-          ": Node " + ctrl.GetNodeId() + (detail === "graph" ? ": Graphs" : ""),
+          ": Node " + ctrl.GetNodeId(),
         ]);
 
         // Primary content
@@ -604,7 +608,7 @@ module AdminViews {
         return m(".page", [
           m.component(Components.Topbar, {title: title, updated: updated}),
           m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-          m(".section.node", primaryContent),
+          detail === "graph" ? m(".section.node", primaryContent) : primaryContent,
         ]);
       }
     }

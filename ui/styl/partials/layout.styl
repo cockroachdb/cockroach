@@ -53,7 +53,7 @@ body
 .page.cluster
   min-width $chart-width
 
-.page.registration
+.page.help-us
   height 100%
   background-color white
 
@@ -70,12 +70,15 @@ body
     width 100%
 
   .nav + &
-    padding-top $top-bar-height + $subnav-height + 10px
+    padding-top "calc(%s + 3rem)" % ($top-bar-height + $subnav-height)
 
   &.table
     margin 0
     padding-left 0
     padding-right 0
+
+    .nav + &
+      padding-top $top-bar-height + $subnav-height
 
   h1
     font-family Lato-Medium
@@ -89,7 +92,7 @@ body
     width calc(100% + 40px)
     height 88px
     background-color $secondary-gray-4
-    margin -20px -20px 0 -20px
+    margin -20px -20px 0 -21px
     padding 40px 30px
     border-bottom 1px solid $secondary-gray-1
     h1
@@ -97,10 +100,12 @@ body
       line-height 19px
       padding 0
       margin 0
+    &:not(:first-child)
+      border-top 1px solid $secondary-gray-1
 
   .form
-    padding 40px 30px
-    width 440px
+    padding 40px 10px
+    width 600px
     font-size 13px
 
     hr
@@ -110,16 +115,14 @@ body
 input
   border-radius 5px
   border 1px solid $secondary-gray-1
-  padding 15px 20px
-  font-size 13px
-  font-family Lato-Bold
+  padding 15px
+  font-size 12px
+  font-family Lato-Medium
   margin-bottom 25px
 
-  &:placeholder-shown
-    font-style italic
-
   &:not([type=checkbox])
-    width 100%
+    width 47%
+    margin-right 3%
     height 40px
 
   &[type=checkbox]
@@ -137,7 +140,7 @@ input
 
 span.status
   position absolute
-  margin-left -55px
+  margin-left -65px
   margin-top 10px
   color $secondary-red-3
 
@@ -145,21 +148,32 @@ span.icon
   margin-top 10px
   color $secondary-red-4
   position absolute
-  margin-left 5px
+  margin-left -15px
 
 button
   width 100px
-  height 45px
+  height 40px
   border-radius 2px
   border 0
   background-color $secondary-blue
   color white
-  font-family Lato-Bold
-  font-size 16px
+  font-family Lato-Medium
+  font-size 14px
+  letter-spacing .25px
   margin-right 20px
+
+  &:hover
+    background-color $secondary-blue-2
 
   &.right
     float right
+    margin-right 3%
+
+  &.cancel
+    background-color $secondary-gray-12
+    color $secondary-gray-13
+    &:hover
+      background-color $secondary-gray-14
 
 .topbar
   padding 0 3rem 1rem
@@ -173,21 +187,28 @@ button
   z-index 1
 
   h2
-    font-size 3.6rem
+    font-size 3rem
     font-family Lato-Medium
     color $main-navy
     line-height $top-bar-height
     padding-top 0
     margin-top 0
     display inline-block
+    
+    a
+      text-decoration none
+      color $main-gray
 
   img
     position relative
     top 8px
 
   .health
-    font-variant small-caps
+    text-transform uppercase
     display block
+    font-size 11px
+    letter-spacing 1px
+    color $main-dark-gray
 
     span.health-icon
       display inline-block
@@ -197,7 +218,7 @@ button
 
     .icon-check-circle
       color $main-green
-    .icon-x
+    .icon-x, .icon-stop-sign
       color $secondary-red
     .icon-skull
       background-color $secondary-gray-11
@@ -206,27 +227,31 @@ button
     *
       display inline
 
-    .unreachable-text
+    .unreachable-text, .good
       position relative
-      top -3px
+      top -1.5px
       font-variant normal
-      font-family Lato-Medium
-      color $secondary-gray-2
+      font-family Lato-Heavy
+      color $secondary-red
+    .good
+      color $main-green
+
 
   .info-container
     display inline-block
     margin-left 25px
 
     .last-updated
-      font-size 1.1rem
-      font-family Lato-Medium
+      font-size 1rem
+      font-family Lato-Regular
       color $last-updated-color
+      letter-spacing .2px
     .health
-      font-family Lato-Bold
+      font-family Lato-Heavy
       div
-        margin-left 10px
+        margin-left 5px
         position relative
-        top 3px
+        top 1px
         span.refreshing-text
           color $secondary-gray-2
           font-variant none
@@ -265,8 +290,11 @@ a.toggle
     color $main-green
 
 .section.overview
+  padding-left 3rem
   .charts
     width $chart-width
+    &:first-child
+      margin-top 10px
 
 .section.node
   .charts
@@ -284,7 +312,7 @@ a.toggle
   height 73px
   background-color $secondary-blue
   transition height 1s
-  font-family Lato-Bold
+  font-family Lato-Medium
   font-size 13px
   text-align center
   line-height 73px
@@ -296,6 +324,8 @@ a.toggle
     background-color $secondary-gold
     height 33px
     text-shadow 1px 1px rgba(0, 0, 0, .24)
+    &:hover
+      background-color $secondary-gold-2
 
   .checkmark
     font-size 15px
@@ -308,8 +338,8 @@ a.toggle
 
   .close
     position absolute
-    top -27px
-    right 5px
+    top 0
+    right 3rem
 
 .modal-container
   z-index 10
@@ -330,18 +360,18 @@ a.toggle
 
   .modal
     position absolute
-    width 575px
-    height 790x
+    width 700px
+    height 620px
     background-color white
     top 20px
     z-index 20
     left 50%
-    margin-left -287.5px
+    margin-left -350px
     border 8px solid rgba(21, 31, 52, .4)
     box-shadow 0 2px 4px rgba(0, 0, 0, .5)
     border-radius 4px
     background-clip padding-box
-    padding 30px
+    padding 35px
     opacity 1
     transition height .4s ease-in, width .4s ease-in, opacity .2s ease-in, margin .4s ease-in
 
@@ -367,17 +397,24 @@ a.toggle
 
 
     h1
-      color $secondary-gold
+      color $main-green
       margin-bottom 5px
-      margin-top 35px
+      margin-top 0
       width 100%
       text-align left
       font-size 33px
+      font-family Lato-Regular
 
     .intro
       color $main-navy
-      margin 35px 15px
+      margin 15px 0 30px
       line-height 18px
+      font-family Lato-Regular
+      font-size 14px
+      line-height 2.25rem
+
+    .optin-text
+      margin -17px 20px 20px 28px
 
     .thanks
       margin 35px 52px
@@ -387,8 +424,8 @@ a.toggle
 
     .inputs
       background-color $secondary-gray-3
-      margin 0 -30px
-      padding 35px 35px
+      margin 0 -35px
+      padding 30px 30px 10px
       border-top 1px solid $secondary-gray-1
       border-bottom 1px solid $secondary-gray-1
 
@@ -399,10 +436,9 @@ a.toggle
       color $secondary-gray-9
 
     button
-      margin 35px 65px
+      margin 20px 0 35px 20px
       width auto
-      padding 10px
-      margin-left 81px
+      padding 10px 25px
 
 #content
   position relative
@@ -420,13 +456,14 @@ a.toggle
 
 .optin-text
   font-size 10px
-  margin -17px 35px 20px
+  margin -17px 28px 20px
+  line-height 1.8rem
 
 .event-table-container
     background-color white
   .table-header
     padding 15px
-    border-top 1px solid $secondary-gray-1
+    padding-left 3rem
     button, h1
       margin 0
       padding 0
@@ -442,10 +479,9 @@ a.toggle
       background-color white
       color $secondary-blue
 
+  // TODO: if we want the green border from the mock, we should inline the svg
   .icon-info-filled
     color $main-green
-    border-radius 100%
-    border 1px solid $secondary-green-1
     width 18px
     height 18px
     padding 0
@@ -482,3 +518,7 @@ a.toggle
       width 100px
       height 20px
       margin 5px
+
+table
+  td:first-child
+    padding-left 3rem
