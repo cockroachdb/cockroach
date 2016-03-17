@@ -222,6 +222,8 @@ module AdminViews {
             updated: Utils.Convert.MilliToNano(ctrl.updated()),
           }),
           m(".section",
+            m("h1", "Number of ranges"),
+            m(".num-ranges", ctrl.data().range_count),
             m(
               ".sql-table", [
                 m("h1", "Columns"),
