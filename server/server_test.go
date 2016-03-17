@@ -231,7 +231,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
+		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0)
 		reply, err = client.SendWrapped(tds, nil, scan)
 		if err != nil {
 			t.Fatal(err)
@@ -266,7 +266,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
-	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0).(*roachpb.ScanRequest)
+	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0)
 	txn := &roachpb.Transaction{Name: "MyTxn"}
 	reply, err = client.SendWrappedWith(tds, nil, roachpb.Header{Txn: txn}, scan)
 	if err != nil {

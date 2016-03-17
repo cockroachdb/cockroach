@@ -558,7 +558,8 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		ds := NewDistSender(ctx, g)
 		ds.updateLeaderCache(1, leader)
-		put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")).(*roachpb.PutRequest)
+		key := roachpb.Key("a")
+		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
 		if _, pErr := client.SendWrapped(ds, nil, put); pErr != nil && !testutils.IsPError(pErr, "boom") {
 			t.Errorf("put encountered unexpected error: %s", pErr)
@@ -566,7 +567,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(put.Key), false /* !inclusive */)
+		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */)
 		if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
@@ -810,7 +811,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10).(*roachpb.ScanRequest)
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 10)
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 		Txn: &roachpb.Transaction{},
@@ -947,9 +948,9 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	val := roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("a")), val).(*roachpb.PutRequest))
+	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("a")), val))
 	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("b")), val).(*roachpb.PutRequest))
+	ba.Add(roachpb.NewPut(keys.RangeTreeNodeKey(roachpb.RKey("b")), val))
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
@@ -1051,9 +1052,9 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	val := roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("a"), val).(*roachpb.PutRequest))
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), val))
 	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("b"), val).(*roachpb.PutRequest))
+	ba.Add(roachpb.NewPut(roachpb.Key("b"), val))
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1161,9 +1162,9 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Txn = &roachpb.Transaction{Name: "test"}
 		val := roachpb.MakeValueFromString("val")
-		ba.Add(roachpb.NewPut(roachpb.Key(test.put1), val).(*roachpb.PutRequest))
+		ba.Add(roachpb.NewPut(roachpb.Key(test.put1), val))
 		val = roachpb.MakeValueFromString("val")
-		ba.Add(roachpb.NewPut(roachpb.Key(test.put2), val).(*roachpb.PutRequest))
+		ba.Add(roachpb.NewPut(roachpb.Key(test.put2), val))
 		ba.Add(&roachpb.EndTransactionRequest{Span: roachpb.Span{Key: test.et}})
 
 		if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
