@@ -113,7 +113,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	// The earlier transaction loses.
 	// TODO(cdo): This is not exactly right and could take a while. Fix this when there's
 	// a better test to model this after.
-	if err := txn.Commit(); !testutils.IsError(err, "aborted") {
+	if err := txn.Commit(); !testutils.IsError(err, "aborted|timed out") {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
