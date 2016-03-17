@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -44,7 +45,7 @@ func TestHeartbeatReply(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 	}
 
 	request := &PingRequest{
@@ -70,12 +71,12 @@ func TestManualHeartbeat(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 		ready:              make(chan struct{}, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock),
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
 	}
 
 	request := &PingRequest{
