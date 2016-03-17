@@ -280,41 +280,37 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	// it does the read at its local clock and doesn't receive an
 	// OpRequiresTxnError. We set the local clock to the timestamp of
 	// just above the first key to verify it's used to read only key "a".
-	manual := hlc.NewManualClock(ts[0].WallTime + 1)
-	clock := hlc.NewClock(manual.UnixNano)
-	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock, RPCContext: s.RPCContext()}, s.Gossip())
+	for _, request := range []roachpb.Request{
+		roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0),
+		roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0),
+	} {
+		manual := hlc.NewManualClock(ts[0].WallTime + 1)
+		clock := hlc.NewClock(manual.UnixNano)
+		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock, RPCContext: s.RPCContext()}, s.Gossip())
 
-	// Scan.
-	sa := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), 0)
-	reply, pErr := client.SendWrappedWith(ds, nil, roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, sa)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	sr := reply.(*roachpb.ScanResponse)
+		reply, pErr := client.SendWrappedWith(ds, nil, roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, request)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	if l := len(sr.Rows); l != 1 {
-		t.Fatalf("expected 1 row; got %d", l)
-	}
-	if key := string(sr.Rows[0].Key); keys[0] != key {
-		t.Errorf("expected key %q; got %q", keys[0], key)
-	}
+		var rows []roachpb.KeyValue
+		switch r := reply.(type) {
+		case *roachpb.ScanResponse:
+			rows = r.Rows
+		case *roachpb.ReverseScanResponse:
+			rows = r.Rows
+		default:
+			t.Fatalf("unexpected response %T: %v", reply, reply)
+		}
 
-	// ReverseScan.
-	rsa := roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), 0)
-	reply, pErr = client.SendWrappedWith(ds, nil, roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, rsa)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	rsr := reply.(*roachpb.ReverseScanResponse)
-	if l := len(rsr.Rows); l != 1 {
-		t.Fatalf("expected 1 row; got %d", l)
-	}
-	if key := string(rsr.Rows[0].Key); keys[0] != key {
-		t.Errorf("expected key %q; got %q", keys[0], key)
+		if l := len(rows); l != 1 {
+			t.Fatalf("expected 1 row; got %d", l)
+		}
+		if key := string(rows[0].Key); keys[0] != key {
+			t.Errorf("expected key %q; got %q", keys[0], key)
+		}
 	}
 }
 
