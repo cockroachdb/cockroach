@@ -196,7 +196,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if p.prepareOnly {
+		if p.evalCtx.PrepareOnly {
 			continue
 		}
 
@@ -275,7 +275,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	if p.prepareOnly {
+	if p.evalCtx.PrepareOnly {
 		// Return the result column types.
 		return rh.getResults(), nil
 	}

@@ -290,6 +290,7 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 			ReCache:     e.reCache,
 			GetLocation: session.getLocation,
 			Args:        args,
+			PrepareOnly: true,
 		},
 		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
@@ -299,6 +300,11 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 
 	txn := e.newTxn(session)
 	planMaker.setTxn(txn)
+
+	// TODO(knz) Prepare really should not need timestamps
+	// as the functions should not be evaluated.
+	planMaker.evalCtx.StmtTimestamp.Time = time.Now()
+
 	plan, pErr := planMaker.prepare(stmt)
 	if pErr != nil {
 		return nil, pErr

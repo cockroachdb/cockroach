@@ -154,7 +154,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using marshalColumnValue. This step also verifies that the expression
 	// types match the column types.
-	if p.prepareOnly {
+	if p.evalCtx.PrepareOnly {
 		for i, target := range rows.(*selectNode).render[exprTargetIdx:] {
 			// DefaultVal doesn't implement TypeCheck
 			if _, ok := target.(parser.DefaultVal); ok {

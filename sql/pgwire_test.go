@@ -368,6 +368,16 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
+		"INSERT INTO d.ts VALUES(CURRENT_TIMESTAMP(), $1) RETURNING b": {
+			base.Params("2006-07-08").Results(
+				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+			),
+		},
+		"INSERT INTO d.ts VALUES(STATEMENT_TIMESTAMP(), $1) RETURNING b": {
+			base.Params("2006-07-08").Results(
+				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+			),
+		},
 
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
 			base.Params(1).Results(1),
