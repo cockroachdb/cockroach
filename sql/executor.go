@@ -290,7 +290,6 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 			ReCache:     e.reCache,
 			GetLocation: session.getLocation,
 			Args:        args,
-			PrepareOnly: true,
 		},
 		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,

@@ -749,18 +749,12 @@ type EvalContext struct {
 	ReCache      *RegexpCache
 	GetLocation  func() (*time.Location, error)
 	Args         MapArgs
-
-	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
-	// that is also able to save the plan to skip work during the exec step.
-	PrepareOnly bool
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
-	// TODO(knz) a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.stmtTimestamp.Time.IsZero() {
+	if ctx.stmtTimestamp.Time.IsZero() {
 		panic("zero statement timestamp in EvalContext")
 	}
 	return ctx.stmtTimestamp
@@ -769,9 +763,7 @@ func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
-	// TODO(knz) a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.txnTimestamp == roachpb.ZeroTimestamp {
+	if ctx.txnTimestamp == roachpb.ZeroTimestamp {
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return ctx.txnTimestamp

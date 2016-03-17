@@ -55,6 +55,12 @@ func (p *planner) limit(limit *parser.Limit, plan planNode) (planNode, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			if p.prepareOnly {
+				*datum.dst = datum.defaultVal
+				continue
+			}
+
 			dstDatum, err := normalized.Eval(p.evalCtx)
 			if err != nil {
 				return nil, err

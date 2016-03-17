@@ -61,7 +61,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 
-	if p.evalCtx.PrepareOnly {
+	if p.prepareOnly {
 		// Return the result column types.
 		return rh.getResults(), nil
 	}
