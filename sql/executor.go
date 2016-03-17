@@ -290,6 +290,7 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 			ReCache:     e.reCache,
 			GetLocation: session.getLocation,
 			Args:        args,
+			PrepareOnly: true,
 		},
 		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
@@ -760,7 +761,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
-		stmtTimestamp := parser.DTimestamp{Time: timeutil.Now()}
+		stmtTimestamp := e.ctx.Clock.Now()
 
 		var stmtStrBefore string
 		if e.ctx.TestingMocker.CheckStmtStringChange {
@@ -847,7 +848,7 @@ func (e *Executor) execStmtInOpenTxn(
 	stmt parser.Statement, planMaker *planner,
 	implicitTxn bool,
 	firstInTxn bool,
-	stmtTimestamp parser.DTimestamp,
+	stmtTimestamp roachpb.Timestamp,
 	txnState *txnState) (Result, *roachpb.Error) {
 	if txnState.state() != openTransaction {
 		panic("execStmtInOpenTxn called outside of an open txn")
@@ -856,7 +857,7 @@ func (e *Executor) execStmtInOpenTxn(
 		panic("execStmtInOpenTxn called with the a txn not set on the planner")
 	}
 
-	planMaker.evalCtx.StmtTimestamp = stmtTimestamp
+	planMaker.evalCtx.SetStmtTimestamp(stmtTimestamp)
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)

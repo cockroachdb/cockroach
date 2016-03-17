@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -40,10 +38,6 @@ type planner struct {
 	leaseMgr      *LeaseManager
 	systemConfig  config.SystemConfig
 	databaseCache *databaseCache
-
-	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
-	// that is also able to save the plan to skip work during the exec step.
-	prepareOnly bool
 
 	testingVerifyMetadata func(config.SystemConfig) error
 
@@ -69,7 +63,7 @@ func (p *planner) setTxn(txn *client.Txn) {
 		p.evalCtx.SetTxnTimestamp(txn.Proto.OrigTimestamp)
 	} else {
 		p.evalCtx.SetTxnTimestamp(roachpb.ZeroTimestamp)
-		p.evalCtx.StmtTimestamp.Time = time.Time{}
+		p.evalCtx.SetStmtTimestamp(roachpb.ZeroTimestamp)
 	}
 }
 
@@ -181,7 +175,6 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 }
 
 func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
-	p.prepareOnly = true
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(n, false)

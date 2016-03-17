@@ -741,7 +741,7 @@ type EvalContext struct {
 	NodeID roachpb.NodeID
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
-	StmtTimestamp DTimestamp
+	stmtTimestamp DTimestamp
 	// The transaction timestamp. Needs to stay table throughout the
 	// transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
@@ -749,29 +749,42 @@ type EvalContext struct {
 	ReCache      *RegexpCache
 	GetLocation  func() (*time.Location, error)
 	Args         MapArgs
+
+	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
+	// that is also able to save the plan to skip work during the exec step.
+	PrepareOnly bool
 }
 
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
-	if ctx.StmtTimestamp.Time.IsZero() {
+	// TODO(knz) a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.stmtTimestamp.Time.IsZero() {
 		panic("zero statement timestamp in EvalContext")
 	}
-	return ctx.StmtTimestamp
+	return ctx.stmtTimestamp
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
-	if ctx.txnTimestamp == roachpb.ZeroTimestamp {
+	// TODO(knz) a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.txnTimestamp == roachpb.ZeroTimestamp {
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return ctx.txnTimestamp
 }
 
-// SetTxnTimestamp sets the timestamp in the EvalContext.
+// SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts roachpb.Timestamp) {
 	ctx.txnTimestamp = ts
+}
+
+// SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
+func (ctx *EvalContext) SetStmtTimestamp(ts roachpb.Timestamp) {
+	ctx.stmtTimestamp.Time = ts.GoTime()
 }
 
 var defaultContext = EvalContext{

@@ -63,7 +63,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		return false, expr
 	}
 
-	if v.prepareOnly {
+	if v.evalCtx.PrepareOnly {
 		return false, expr
 	}
 
