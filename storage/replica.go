@@ -141,14 +141,14 @@ type pendingCmd struct {
 type cmdIDKey string
 
 type replicaChecksum struct {
-	// Set to true when the checksum computation is ready. The checksum
-	// can be nil indicating an error.
-	ok bool
 	// Computed checksum. This is set to nil on error.
 	checksum []byte
 	// GC this checksum after this timestamp. The timestamp is set when
 	// ok is set to true.
 	gcTimestamp time.Time
+	// This channel is closed after the checksum is computed, and is used
+	// as a notification.
+	notify chan struct{}
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -186,7 +186,6 @@ type Replica struct {
 		// proposeRaftCommandFn can be set to mock out the propose operation.
 		proposeRaftCommandFn func(cmdIDKey, *pendingCmd) error
 		checksums            map[uuid.UUID]replicaChecksum // computed checksum at a snapshot UUID.
-		checksumNotify       map[uuid.UUID]chan []byte     // notify of computed checksum.
 	}
 }
 
@@ -225,7 +224,6 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.mu.tsCache = NewTimestampCache(clock)
 	r.mu.pendingCmds = map[cmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
-	r.mu.checksumNotify = map[uuid.UUID]chan []byte{}
 	r.setDescWithoutProcessUpdateLocked(desc)
 
 	var err error
