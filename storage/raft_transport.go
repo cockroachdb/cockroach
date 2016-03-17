@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -225,9 +226,26 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
-			if err := stream.Send(req); err != nil {
-				log.Error(err)
-				return
+			if req.Message.Type == raftpb.MsgSnap {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				snapStream, err := client.RaftMessage(ctx)
+				if err != nil {
+					log.Error(err)
+					return
+				}
+				t.rpcContext.Stopper.RunAsyncTask(func() {
+					if err := snapStream.Send(req); err != nil {
+						log.Errorf("failed to send Raft snapshot to node %d at %s: %s", nodeID, addr, err)
+					} else if log.V(1) {
+						log.Infof("successfully sent a Raft snapshot to node %d at %s", nodeID, addr)
+					}
+				})
+			} else {
+				if err := stream.Send(req); err != nil {
+					log.Error(err)
+					return
+				}
 			}
 		}
 	}
