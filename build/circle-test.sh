@@ -119,26 +119,7 @@ export GOTRACEBACK=all
 # only a single container is running the tests (CIRCLE_NODE_INDEX ==
 # 1).
 
-if is_shard 2; then
-  # Run "make check" to verify coding guidelines.
-  echo "make check"
-  time ${builder} make check | tee "${outdir}/check.log"
-
-  # Verify that "go generate" was run.
-  echo "verifying generated files"
-  time ${builder} go generate ./...
-  time ${builder} /bin/bash -c '! git status --porcelain | read || (git status; git diff; exit 1)' | tee "${outdir}"/generate.log
-fi
-
 if is_shard 0; then
-  # Run "make test".
-  echo "make test"
-  time ${builder} make test \
-    TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2,tracer=2' | \
-    tr -d '\r' | tee "${outdir}/test.log" | \
-    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-    awk '{print "test:", $0}'
-
   # Run the acceptance tests (only on Linux). We can run the
   # acceptance tests on the Mac's, but circle-deps.sh only built the
   # acceptance tests for Linux.
@@ -149,23 +130,14 @@ if is_shard 0; then
     # Note that this test requires 2>&1 but the others don't because
     # this one runs outside the builder container (and inside the
     # container, something is already combining stdout and stderr).
-    time $(dirname $0)/../acceptance.test -nodes 3 -l ${outdir}/acceptance \
-      -test.v -test.timeout 5m \
-      --verbosity=1 --vmodule=monitor=2 2>&1 | \
-      tr -d '\r' | tee "${outdir}/acceptance.log" | \
-      grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-      awk '{print "acceptance:", $0}'
-  else
-    echo "skipping acceptance tests on $(uname): use 'make acceptance' instead"
+    for ((i=0;i<20;i++)); do
+	
+	time $(dirname $0)/../acceptance.test -nodes 3 -l ${outdir}/acceptance \
+	     -test.v -test.timeout 5m  \
+	     --verbosity=1 --vmodule=monitor=2 2>&1 | \
+	    tr -d '\r' | tee -a "${outdir}/acceptance.log" | \
+	    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
+	    awk '{print "acceptance:", $0}'
+    done
   fi
-fi
-
-if is_shard 1; then
-  # Run "make testrace".
-  echo "make testrace"
-  time ${builder} make testrace \
-    TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
-    tr -d '\r' | tee "${outdir}/testrace.log" | \
-    grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
-    awk '{print "race:", $0}'
 fi
