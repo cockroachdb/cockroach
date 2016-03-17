@@ -57,7 +57,11 @@ var normalize = unicode.SpecialCase{
 // NormalizeName normalizes to lowercase and Unicode Normalization Form C
 // (NFC).
 func NormalizeName(name string) string {
-	return norm.NFC.String(strings.Map(normalize.ToLower, name))
+	lower := strings.Map(normalize.ToLower, name)
+	if !norm.NFC.IsNormalString(lower) {
+		return norm.NFC.String(lower)
+	}
+	return lower
 }
 
 // equalName returns true iff the normalizations of a and b are equal.
