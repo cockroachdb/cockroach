@@ -44,6 +44,8 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
@@ -99,6 +101,7 @@ type adminServer struct {
 	stopper     *stop.Stopper // Used to shutdown the server
 	sqlExecutor *sql.Executor
 	*http.ServeMux
+	distSender *kv.DistSender
 
 	// Mux provided by grpc-gateway to handle HTTP/gRPC proxying.
 	gwMux *gwruntime.ServeMux
@@ -112,12 +115,13 @@ type adminServer struct {
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db *client.DB, stopper *stop.Stopper, sqlExecutor *sql.Executor) *adminServer {
+func newAdminServer(db *client.DB, stopper *stop.Stopper, sqlExecutor *sql.Executor, ds *kv.DistSender) *adminServer {
 	server := &adminServer{
 		db:          db,
 		stopper:     stopper,
 		sqlExecutor: sqlExecutor,
 		ServeMux:    http.NewServeMux(),
+		distSender:  ds,
 	}
 
 	// Register HTTP handlers.
@@ -340,8 +344,9 @@ func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) 
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
-	escQualTable := fmt.Sprintf("%s.%s", parser.Name(req.Database).String(),
-		parser.Name(req.Table).String())
+	escDbName := parser.Name(req.Database).String()
+	escTableName := parser.Name(req.Table).String()
+	escQualTable := fmt.Sprintf("%s.%s", escDbName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s",
 		escQualTable, escQualTable, escQualTable)
 	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
@@ -448,6 +453,29 @@ func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) 
 			grant.Privileges = strings.Split(privileges, ",")
 			resp.Grants = append(resp.Grants, &grant)
 		}
+	}
+
+	// Get the number of ranges in the table. We get the key span for the table
+	// data. Then, we count the number of ranges that make up that key span.
+	{
+		var iexecutor sql.InternalExecutor
+		var tableSpan roachpb.Span
+		if pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			var pErr *roachpb.Error
+			tableSpan, pErr = iexecutor.GetTableSpan(user, txn, escDbName, escTableName)
+			return pErr
+		}); pErr != nil {
+			return nil, s.serverError(pErr.GoError())
+		}
+		tableRSpan := roachpb.RSpan{
+			Key:    keys.Addr(tableSpan.Key),
+			EndKey: keys.Addr(tableSpan.EndKey),
+		}
+		rangeCount, pErr := s.distSender.CountRanges(tableRSpan)
+		if pErr != nil {
+			return nil, s.serverError(pErr.GoError())
+		}
+		resp.RangeCount = rangeCount
 	}
 
 	return &resp, nil

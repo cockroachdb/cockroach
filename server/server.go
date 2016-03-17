@@ -199,7 +199,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
-	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor)
+	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor, ds)
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx)
