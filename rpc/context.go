@@ -57,6 +57,7 @@ type Context struct {
 
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
+	HeartbeatCB       func()
 
 	localInternalServer roachpb.InternalServer
 	localAddr           string
@@ -87,7 +88,7 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 		ctx.localClock = hlc.NewClock(hlc.UnixNano)
 	}
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(clock)
+	ctx.RemoteClocks = newRemoteClockMonitor(clock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 
@@ -203,6 +204,10 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 		}
 		ctx.RemoteClocks.UpdateOffset(remoteAddr, request.Offset)
+
+		if cb := ctx.HeartbeatCB; cb != nil {
+			cb()
+		}
 
 		// Wait after the heartbeat so that the first iteration gets a wait-free
 		// heartbeat attempt.
