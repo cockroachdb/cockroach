@@ -1230,3 +1230,82 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		}
 	}
 }
+
+func TestCountRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	// Create a slice of fake descriptors.
+	const numDescriptors = 9
+	const firstKeyBoundary = 'a'
+	var descriptors [numDescriptors]roachpb.RangeDescriptor
+	for i := range descriptors {
+		startKey := roachpb.RKeyMin
+		if i > 0 {
+			startKey = roachpb.RKey(string(firstKeyBoundary + i - 1))
+		}
+		endKey := roachpb.RKeyMax
+		if i < len(descriptors)-1 {
+			endKey = roachpb.RKey(string(firstKeyBoundary + i))
+		}
+
+		descriptors[i] = roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(i + 1),
+			StartKey: startKey,
+			EndKey:   endKey,
+			Replicas: []roachpb.ReplicaDescriptor{
+				{
+					NodeID:  1,
+					StoreID: 1,
+				},
+			},
+		}
+	}
+
+	// Mock out descriptor DB and sender function.
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+		for _, desc := range descriptors {
+			if key.Less(desc.EndKey) {
+				return []roachpb.RangeDescriptor{desc}, nil
+			}
+		}
+		return []roachpb.RangeDescriptor{descriptors[len(descriptors)-1]}, nil
+	})
+	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+		return ba.CreateReply(), nil
+	}
+	ctx := &DistSenderContext{
+		RPCSend:           testFn,
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(ctx, g)
+
+	// Verify counted ranges.
+	keyIn := func(desc roachpb.RangeDescriptor) roachpb.RKey {
+		return roachpb.RKey(append(desc.StartKey, 'a'))
+	}
+	testcases := []struct {
+		key    roachpb.RKey
+		endKey roachpb.RKey
+		count  int64
+	}{
+		{roachpb.RKeyMin, roachpb.RKey(string(firstKeyBoundary)), 1},
+		{roachpb.RKeyMin, keyIn(descriptors[0]), 1},
+		{roachpb.RKeyMin, descriptors[len(descriptors)-1].StartKey, numDescriptors - 1},
+		{descriptors[0].EndKey, roachpb.RKeyMax, numDescriptors - 1},
+		// Everything from the min key to a key within the last range.
+		{roachpb.RKeyMin, keyIn(descriptors[len(descriptors)-1]), numDescriptors},
+		{roachpb.RKeyMin, roachpb.RKeyMax, numDescriptors},
+	}
+	for i, tc := range testcases {
+		count, pErr := ds.CountRanges(roachpb.RSpan{Key: tc.key, EndKey: tc.endKey})
+		if pErr != nil {
+			t.Fatalf("%d: %s", i, pErr)
+		}
+		if a, e := count, tc.count; a != e {
+			t.Errorf("%d: # of ranges %d != expected %d", i, a, e)
+		}
+	}
+}
