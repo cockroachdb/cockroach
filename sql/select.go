@@ -282,7 +282,7 @@ func (p *planner) initSelect(
 
 		// If we are only preparing, the filter expression can contain unexpanded subqueries which
 		// are not supported by splitFilter.
-		if !p.prepareOnly {
+		if !p.evalCtx.PrepareOnly {
 			// Compute a filter expression for the scan node.
 			convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
 				qval := expr.(*qvalue)
