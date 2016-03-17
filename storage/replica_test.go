@@ -1171,7 +1171,7 @@ func TestRangeCommandQueue(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, _ roachpb.Request, h roachpb.Header) error {
 			if h.UserPriority == 42 {
 				blockingStart <- struct{}{}
@@ -1288,7 +1288,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if put, ok := args.(*roachpb.PutRequest); ok {
 				putBytes, err := put.Value.GetBytes()
@@ -2070,7 +2070,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if args.Method() == roachpb.GC {
@@ -2165,7 +2165,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	tsc := TestStoreContext()
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 				return util.Errorf("boom")
@@ -2245,7 +2245,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
@@ -2314,7 +2314,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	var seen int32
 	key := roachpb.Key("zresolveme")
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if args.Method() == roachpb.ResolveIntent && args.Header().Key.Equal(key) {
 				atomic.StoreInt32(&seen, 1)
@@ -3298,7 +3298,7 @@ func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if args.Header().Key.Equal(roachpb.Key("boom")) {
 				return newReplicaCorruptionError()
@@ -4116,7 +4116,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			tsc := TestStoreContext()
 			if !cancelEarly {
-				tsc.TestingMocker.TestingCommandFilter =
+				tsc.TestingKnobs.TestingCommandFilter =
 					func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 						if !args.Header().Key.Equal(key) {
 							return nil
@@ -4238,7 +4238,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	}
 	// Set a callback for checksum mismatch panics.
 	var panicked bool
-	rng.store.ctx.TestingMocker.BadChecksumPanic = func() { panicked = true }
+	rng.store.ctx.TestingKnobs.BadChecksumPanic = func() { panicked = true }
 	select {
 	case <-notify:
 		// First test that sending a Verification request with a bad version and

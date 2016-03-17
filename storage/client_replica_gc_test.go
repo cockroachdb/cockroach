@@ -45,7 +45,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// waits for the first.
 	ctx := storage.TestStoreContext()
 	mtc.storeContext = &ctx
-	mtc.storeContext.TestingMocker.TestingCommandFilter =
+	mtc.storeContext.TestingKnobs.TestingCommandFilter =
 		func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			et, ok := args.(*roachpb.EndTransactionRequest)
 			if !ok || id != 2 {

@@ -365,11 +365,11 @@ type StoreContext struct {
 	// the range event log.
 	LogRangeEvents bool
 
-	TestingMocker StoreTestingMocker
+	TestingKnobs StoreTestingKnobs
 }
 
-// StoreTestingMocker is a part of the context used to control parts of the system.
-type StoreTestingMocker struct {
+// StoreTestingKnobs is a part of the context used to control parts of the system.
+type StoreTestingKnobs struct {
 	// A callback to be called when executing every replica command.
 	TestingCommandFilter CommandFilter
 	// A callback to be called instead of panicking due to a
@@ -1143,8 +1143,8 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 // Tracer accessor.
 func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
 
-// TestingMocker accessor.
-func (s *Store) TestingMocker() *StoreTestingMocker { return &s.ctx.TestingMocker }
+// TestingKnobs accessor.
+func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.ctx.TestingKnobs }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates new

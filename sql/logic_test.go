@@ -245,8 +245,8 @@ func (t *logicTest) setup() {
 	// MySQL or Postgres instance.
 	ctx := server.NewTestContext()
 	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingMocker.ExecutorTestingMocker.WaitForGossipUpdate = true
-	ctx.TestingMocker.ExecutorTestingMocker.CheckStmtStringChange = true
+	ctx.TestingKnobs.ExecutorTestingKnobs.WaitForGossipUpdate = true
+	ctx.TestingKnobs.ExecutorTestingKnobs.CheckStmtStringChange = true
 	t.srv = setupTestServerWithContext(t.T, ctx)
 
 	// db may change over the lifetime of this function, with intermediate
@@ -273,7 +273,7 @@ func (t *logicTest) processTestFile(path string) {
 
 	t.lastProgress = timeutil.Now()
 
-	testingMocker := &t.srv.Ctx.TestingMocker
+	testingKnobs := &t.srv.Ctx.TestingKnobs
 
 	repeat := 1
 	s := newLineScanner(file)
@@ -499,8 +499,8 @@ func (t *logicTest) processTestFile(path string) {
 			}
 			fmt.Println("Setting deterministic priorities.")
 
-			testingMocker.ExecutorTestingMocker.FixTxnPriority = true
-			defer func() { testingMocker.ExecutorTestingMocker.FixTxnPriority = false }()
+			testingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
+			defer func() { testingKnobs.ExecutorTestingKnobs.FixTxnPriority = false }()
 		default:
 			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)
 		}

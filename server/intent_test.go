@@ -78,7 +78,7 @@ func TestIntentResolution(t *testing.T) {
 			closer := make(chan struct{}, 2)
 			var done bool
 			ctx := NewTestContext()
-			ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter =
+			ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
 				func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 					mu.Lock()
 					defer mu.Unlock()

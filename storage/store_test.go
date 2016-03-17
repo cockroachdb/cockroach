@@ -610,7 +610,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		func() {
 			ctx := TestStoreContext()
-			ctx.TestingMocker.TestingCommandFilter =
+			ctx.TestingKnobs.TestingCommandFilter =
 				func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 					if bytes.Equal(args.Header().Key, badKey) {
 						return fmt.Errorf("boom")
@@ -672,7 +672,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 		for _, test := range testCases {
 			func() {
 				ctx := TestStoreContext()
-				ctx.TestingMocker.TestingCommandFilter =
+				ctx.TestingKnobs.TestingCommandFilter =
 					func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 						if bytes.Equal(args.Header().Key, badKey) {
 							return fmt.Errorf("boom")
@@ -1018,7 +1018,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	var store *Store
 	var stopper *stop.Stopper
 	ctx := TestStoreContext()
-	ctx.TestingMocker.TestingCommandFilter =
+	ctx.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			pr, ok := args.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
@@ -1491,7 +1491,7 @@ func TestStoreScanIntents(t *testing.T) {
 	var count int32
 	countPtr := &count
 
-	ctx.TestingMocker.TestingCommandFilter =
+	ctx.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if _, ok := args.(*roachpb.ScanRequest); ok {
 				atomic.AddInt32(countPtr, 1)
@@ -1608,7 +1608,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	var intercept atomic.Value
 	intercept.Store(true)
 	ctx := TestStoreContext()
-	ctx.TestingMocker.TestingCommandFilter =
+	ctx.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
 				return util.Errorf("error on purpose")

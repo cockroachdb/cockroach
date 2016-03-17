@@ -142,15 +142,15 @@ type Context struct {
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
 	TimeUntilStoreDead time.Duration
 
-	// TestingMocker is used for internal test mocking only.
-	TestingMocker TestingMocker
+	// TestingKnobs is used for internal test controls only.
+	TestingKnobs TestingKnobs
 }
 
-// TestingMocker is a struct containing facilities for mocking
-// or otherwise controlling various parts of the system.
-type TestingMocker struct {
-	StoreTestingMocker    storage.StoreTestingMocker
-	ExecutorTestingMocker sql.ExecutorTestingMocker
+// TestingKnobs is a contains facilities for controlling various parts of the
+// system for testing.
+type TestingKnobs struct {
+	StoreTestingKnobs    storage.StoreTestingKnobs
+	ExecutorTestingKnobs sql.ExecutorTestingKnobs
 }
 
 // GetTotalMemory returns either the total system memory or if possible the

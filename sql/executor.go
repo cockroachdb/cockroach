@@ -178,12 +178,12 @@ type ExecutorContext struct {
 	LeaseManager *LeaseManager
 	Clock        *hlc.Clock
 
-	TestingMocker *ExecutorTestingMocker
+	TestingKnobs *ExecutorTestingKnobs
 }
 
-// ExecutorTestingMocker is a part of the context used to control parts of the
+// ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
-type ExecutorTestingMocker struct {
+type ExecutorTestingKnobs struct {
 	// WaitForGossipUpdate causes metadata-mutating operations to wait
 	// for the new metadata to back-propagate through gossip.
 	WaitForGossipUpdate bool
@@ -556,7 +556,7 @@ func (e *Executor) execRequest(
 		return res
 	}
 
-	if e.ctx.TestingMocker.WaitForGossipUpdate {
+	if e.ctx.TestingKnobs.WaitForGossipUpdate {
 		// We might need to verify metadata. Lock the system config so that no
 		// gossip updates sneak in under us. The point is to be able to assert
 		// that the verify callback only succeeds after a gossip update.
@@ -657,7 +657,7 @@ func (e *Executor) execRequest(
 
 func (e *Executor) checkTestingWaitForGossipUpdateOrDie(
 	planMaker *planner, stmts parser.StatementList) {
-	if e.ctx.TestingMocker.WaitForGossipUpdate {
+	if e.ctx.TestingKnobs.WaitForGossipUpdate {
 		if verify := planMaker.testingVerifyMetadata; verify != nil {
 			// In the case of a multi-statement request, avoid reusing this
 			// callback.
@@ -771,7 +771,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		stmtTimestamp := e.ctx.Clock.Now()
 
 		var stmtStrBefore string
-		if e.ctx.TestingMocker.CheckStmtStringChange {
+		if e.ctx.TestingKnobs.CheckStmtStringChange {
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -783,7 +783,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
 				stmtTimestamp, txnState)
 		}
-		if e.ctx.TestingMocker.CheckStmtStringChange {
+		if e.ctx.TestingKnobs.CheckStmtStringChange {
 			after := stmt.String()
 			if after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
