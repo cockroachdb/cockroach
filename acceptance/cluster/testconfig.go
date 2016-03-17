@@ -18,12 +18,8 @@ package cluster
 
 import "time"
 
-const (
-	// DefaultStall is the default value for stall detection time.
-	DefaultStall = 2 * time.Minute
-	// DefaultDuration is the default duration for each individual test.
-	DefaultDuration = 5 * time.Second
-)
+// DefaultDuration is the default duration for each individual test.
+const DefaultDuration = 5 * time.Second
 
 // DefaultConfigs returns a list of standard tests to run against acceptance
 // tests.

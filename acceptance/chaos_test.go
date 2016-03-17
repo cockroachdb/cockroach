@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
+const stall = 2 * time.Minute
+
 var maxTransfer = flag.Int("max-transfer", 999, "Maximum amount to transfer in one transaction.")
 var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 
@@ -347,7 +349,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 	}
 	go chaosMonkey(&state, c, true, pickNodes)
 
-	waitClientsStop(num, &state, cfg.Stall)
+	waitClientsStop(num, &state, stall)
 
 	// Verify accounts.
 	verifyAccounts(t, &state.clients[0])
@@ -406,7 +408,7 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	}
 	go chaosMonkey(&state, c, false, pickNodes)
 
-	waitClientsStop(1, &state, cfg.Stall)
+	waitClientsStop(1, &state, stall)
 
 	// Verify accounts.
 	verifyAccounts(t, client)

@@ -38,8 +38,5 @@ message TestConfig {
   // Duration is the total time that the test should run for. Important for
   // tests such as TestPut that will run indefinitely.
   optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-  // Stall is the duration after which if no forward progress is made in a test,
-  // consider the test stalled.
-  optional int64 stall = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
 // TODO(bram): #4559 once defined, add in a collection of chaos agents here.
 }
