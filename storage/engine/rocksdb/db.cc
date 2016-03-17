@@ -1001,12 +1001,16 @@ DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta,
 // records.
 class BaseDeltaIterator : public rocksdb::Iterator {
  public:
-  BaseDeltaIterator(rocksdb::Iterator* base_iterator, rocksdb::WBWIIterator* delta_iterator)
+  BaseDeltaIterator(rocksdb::Iterator* base_iterator,
+                    rocksdb::WBWIIterator* delta_iterator,
+                    const rocksdb::Slice* upper_bound)
       : current_at_base_(true),
         equal_keys_(false),
+        done_(false),
         status_(rocksdb::Status::OK()),
         base_iterator_(base_iterator),
-        delta_iterator_(delta_iterator) {
+        delta_iterator_(delta_iterator),
+        upper_bound_(upper_bound) {
     merged_.data = NULL;
   }
 
@@ -1015,22 +1019,25 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
 
   bool Valid() const override {
-    return current_at_base_ ? BaseValid() : DeltaValid();
+    return !done_ && (current_at_base_ ? BaseValid() : DeltaValid());
   }
 
   void SeekToFirst() override {
+    done_ = false;
     base_iterator_->SeekToFirst();
     delta_iterator_->SeekToFirst();
     UpdateCurrent();
   }
 
   void SeekToLast() override {
+    done_ = false;
     base_iterator_->SeekToLast();
     delta_iterator_->SeekToLast();
     UpdateCurrent();
   }
 
   void Seek(const rocksdb::Slice& k) override {
+    done_ = false;
     base_iterator_->Seek(k);
     delta_iterator_->Seek(k);
     UpdateCurrent();
@@ -1147,11 +1154,31 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 
     return merged_.data == NULL;
   }
+
   void AdvanceBase() {
     base_iterator_->Next();
   }
-  bool BaseValid() const { return base_iterator_->Valid(); }
-  bool DeltaValid() const { return delta_iterator_->Valid(); }
+
+  // CheckUpperBound checks the specified key against the iteration
+  // upper-bound (if present), returning true if the key exceeds the
+  // upper-bound and false otherwise.
+  bool CheckUpperBound(const rocksdb::Slice key) {
+    if (upper_bound_ != NULL &&
+        kComparator.Compare(key, *upper_bound_) >= 0) {
+      done_ = true;
+      return true;
+    }
+    return false;
+  }
+
+  bool BaseValid() const {
+    return base_iterator_->Valid();
+  }
+
+  bool DeltaValid() const {
+    return delta_iterator_->Valid();
+  }
+
   void UpdateCurrent() {
     ClearMerged();
 
@@ -1160,7 +1187,10 @@ class BaseDeltaIterator : public rocksdb::Iterator {
       if (!BaseValid()) {
         // Base has finished.
         if (!DeltaValid()) {
-          // Finished
+          // Both base and delta have finished.
+          return;
+        }
+        if (CheckUpperBound(delta_iterator_->Entry().key)) {
           return;
         }
         if (!ProcessDelta()) {
@@ -1178,11 +1208,20 @@ class BaseDeltaIterator : public rocksdb::Iterator {
       }
 
       int compare = Compare();
-      if (compare > 0) {   // delta less than base
+      if (compare > 0) {
+        // Delta is greater than base.
+        if (CheckUpperBound(base_iterator_->key())) {
+          return;
+        }
         current_at_base_ = true;
         return;
       }
+      // Delta is less than or equal to base.
+      if (CheckUpperBound(delta_iterator_->Entry().key)) {
+        return;
+      }
       if (compare == 0) {
+        // Delta is equal to base.
         equal_keys_ = true;
       }
       if (!ProcessDelta()) {
@@ -1190,7 +1229,8 @@ class BaseDeltaIterator : public rocksdb::Iterator {
         return;
       }
 
-      // Delta is less advanced and is delete.
+      // Delta is less than or equal to base and is a deletion
+      // tombstone.
       AdvanceDelta();
       if (equal_keys_) {
         AdvanceBase();
@@ -1210,10 +1250,12 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 
   bool current_at_base_;
   bool equal_keys_;
+  bool done_;
   mutable rocksdb::Status status_;
   mutable DBString merged_;
   std::unique_ptr<rocksdb::Iterator> base_iterator_;
   std::unique_ptr<rocksdb::WBWIIterator> delta_iterator_;
+  const rocksdb::Slice* upper_bound_;
 };
 
 }  // namespace
@@ -1456,7 +1498,7 @@ DBIterator* DBBatch::NewIter(DBSlice prefix) {
   opts.total_order_seek = iter->upper_bound() == NULL;
   rocksdb::Iterator* base = rep->NewIterator(opts);
   rocksdb::WBWIIterator* delta = batch.NewIterator();
-  iter->rep.reset(new BaseDeltaIterator(base, delta));
+  iter->rep.reset(new BaseDeltaIterator(base, delta, opts.iterate_upper_bound));
   return iter;
 }
 
