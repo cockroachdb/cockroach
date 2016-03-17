@@ -213,6 +213,29 @@ suite("QueryCache", () => {
     assert.isNull(cache.error(), "error should be empty after result.");
   });
 
+  test("LastResult remains cached after error.", () => {
+    cache.refresh();
+    activePromise().resolve("resolved");
+    assert.isTrue(cache.hasData(), "cache should have value");
+    assert.equal(cache.result(), "resolved");
+    assert.equal(cache.lastResult(), "resolved");
+    assert.isNull(cache.error(), "error should be empty after result.");
+
+    cache.refresh();
+    activePromise().reject(new Error("error"));
+    assert.isTrue(cache.hasData(), "cache should have value");
+    assert.isNull(cache.result(), "result should be null after error");
+    assert.equal(cache.lastResult(), "resolved");
+    assert.deepEqual(cache.error(), new Error("error"));
+
+    cache.refresh();
+    activePromise().resolve("resolved again");
+    assert.isTrue(cache.hasData(), "cache should have value");
+    assert.equal(cache.result(), "resolved again");
+    assert.equal(cache.lastResult(), "resolved again");
+    assert.isNull(cache.error(), "error should be empty after result.");
+  });
+
   test("Cached value not overwritten until next promise resolved.", () => {
     cache.refresh();
     activePromise().resolve("resolved");

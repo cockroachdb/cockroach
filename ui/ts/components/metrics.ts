@@ -124,7 +124,7 @@ module Components {
             // occurred. For now, we will just display the "No Data"
             // message until we decided on the proper way to display
             // error messages.
-            let qresult: Models.Metrics.QueryInfoSet<Models.Proto.QueryResult> = this.vm.query.result();
+            let qresult: Models.Metrics.QueryInfoSet<Models.Proto.QueryResult> = this.vm.query.lastResult();
             if (qresult) {
               // Iterate through each selector on the axis,
               // allowing each to select the necessary data from
@@ -166,16 +166,24 @@ module Components {
 
       export function view(ctrl: Controller): _mithril.MithrilVirtualElement {
         let g: _mithril.MithrilVirtualElement = null;
+        let icon: _mithril.MithrilVirtualElement = m(".icon-info");
+        let warningClass = "";
         if (ctrl.hasData()) {
           g = m(".linegraph", m("svg.graph", { config: ctrl.drawGraph }));
+          if (ctrl.vm.query.error() != null) {
+            icon = m(".icon-warning", {
+              title: ctrl.vm.query.error(),
+            });
+            warningClass = " .viz-faded";
+          }
         } else {
           g = m("", "loading...");
         }
         return m(
-          ".visualization-wrapper",
+          ".visualization-wrapper" + warningClass,
           [
             // TODO: pass in and display info icon tooltip
-            m(".viz-top", m(".viz-info-icon", m(".icon-info"))),
+            m(".viz-top", m(".viz-info-icon", icon)),
             g,
             m(".viz-bottom", m(".viz-title", ctrl.vm.axis.title())),
           ]

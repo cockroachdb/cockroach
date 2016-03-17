@@ -1,5 +1,8 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../../typings/browser.d.ts"/>
 /// <reference path="../models/proto.ts" />
+/// <reference path="../util/format.ts" />
+/// <reference path="../util/http.ts" />
 
 module Models {
   "use strict";
@@ -30,17 +33,11 @@ module Models {
       events: ClusterEvent[];
     }
 
-    // Timeout after 2s
-    let xhrConfig = function(xhr: XMLHttpRequest): XMLHttpRequest {
-      xhr.timeout = 2000;
-      return xhr;
-    };
-
     // gets a list of databases
     export function databases(): MithrilPromise<DatabaseList> {
       return m.request<DatabaseList>({
         url: "/_admin/v1/databases",
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
       });
     }
 
@@ -48,7 +45,7 @@ module Models {
     export function database(database: string): MithrilPromise<Database> {
       return m.request<Database>({
         url: `/_admin/v1/databases/${database}`,
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
       });
     }
 
@@ -56,7 +53,7 @@ module Models {
     export function table(database: string, table: string): MithrilPromise<SQLTable> {
       return m.request<SQLTable>({
         url: `/_admin/v1/databases/${database}/tables/${table}`,
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
       });
     }
 
@@ -64,7 +61,7 @@ module Models {
     export function users(): MithrilPromise<Users> {
       return m.request<Users>({
         url: "/_admin/v1/users",
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
       });
     }
 
@@ -73,7 +70,7 @@ module Models {
     export function events(): MithrilPromise<ClusterEvents> {
       return m.request<UnparsedClusterEvents>({
         url: "/_admin/v1/events",
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
       }).then((response: UnparsedClusterEvents): ClusterEvents => {
         return {
           events: _.map<UnparsedClusterEvent, ClusterEvent>(response.events, (event: UnparsedClusterEvent): ClusterEvent => {
@@ -100,14 +97,14 @@ module Models {
     export function getUIData(key: string): MithrilPromise<GetUIDataResponse> {
       return m.request<GetUIDataResponse>({
         url: `/_admin/v1/uidata?key=${key}`,
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
       });
     }
 
     export function setUIData(key: string, value: string): MithrilPromise<any> {
       return m.request<UnparsedClusterEvents>({
         url: `/_admin/v1/uidata`,
-        config: xhrConfig,
+        config: Utils.Http.XHRConfig,
         method: "POST",
         data: {
           key: key,
