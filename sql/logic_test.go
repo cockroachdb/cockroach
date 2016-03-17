@@ -245,8 +245,8 @@ func (t *logicTest) setup() {
 	// MySQL or Postgres instance.
 	ctx := server.NewTestContext()
 	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingMocker.ExecutorTestingKnobs.WaitForGossipUpdate = true
-	ctx.TestingMocker.ExecutorTestingKnobs.CheckStmtStringChange = true
+	ctx.TestingKnobs.ExecutorTestingKnobs.WaitForGossipUpdate = true
+	ctx.TestingKnobs.ExecutorTestingKnobs.CheckStmtStringChange = true
 	t.srv = setupTestServerWithContext(t.T, ctx)
 
 	// db may change over the lifetime of this function, with intermediate
@@ -273,7 +273,7 @@ func (t *logicTest) processTestFile(path string) {
 
 	t.lastProgress = timeutil.Now()
 
-	testingMocker := &t.srv.Ctx.TestingMocker
+	testingKnobs := &t.srv.Ctx.TestingKnobs
 
 	repeat := 1
 	s := newLineScanner(file)

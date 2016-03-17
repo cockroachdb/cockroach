@@ -152,8 +152,8 @@ func (t *parallelTest) run(dir string) {
 func (t *parallelTest) setup() {
 	ctx := server.NewTestContext()
 	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingMocker.ExecutorTestingKnobs.WaitForGossipUpdate = true
-	ctx.TestingMocker.ExecutorTestingKnobs.CheckStmtStringChange = true
+	ctx.TestingKnobs.ExecutorTestingKnobs.WaitForGossipUpdate = true
+	ctx.TestingKnobs.ExecutorTestingKnobs.CheckStmtStringChange = true
 	t.srv = setupTestServerWithContext(t.T, ctx)
 }
 

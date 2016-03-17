@@ -505,7 +505,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	var numGets int32
 
 	ctx := server.NewTestContext()
-	ctx.TestingMocker.StoreTestingKnobs.TestingCommandFilter =
+	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if _, ok := args.(*roachpb.ConditionalPutRequest); ok && args.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {

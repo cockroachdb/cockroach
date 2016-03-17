@@ -161,7 +161,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		Gossip:       s.gossip,
 		LeaseManager: s.leaseMgr,
 		Clock:        s.clock,
-		TestingKnobs: &ctx.TestingMocker.ExecutorTestingKnobs,
+		TestingKnobs: &ctx.TestingKnobs.ExecutorTestingKnobs,
 	}
 
 	sqlRegistry := metric.NewRegistry()
@@ -188,7 +188,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 			AllowRebalance: true,
 			Mode:           storage.BalanceModeUsage,
 		},
-		TestingKnobs: ctx.TestingMocker.StoreTestingKnobs,
+		TestingKnobs: ctx.TestingKnobs.StoreTestingKnobs,
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
