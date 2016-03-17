@@ -1635,11 +1635,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			pErrPush := s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
+			pErr = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
 			// Preserve the error index.
-			oldIndex := pErr.Index
-			pErr = pErrPush
-			pErr.Index = oldIndex
+			pErr.Index = index
 		}
 
 		switch t := pErr.GetDetail().(type) {
