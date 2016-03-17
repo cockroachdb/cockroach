@@ -4053,8 +4053,6 @@ func TestReplicaCancelRaft(t *testing.T) {
 // verify the checksum for the range and returrn it.
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	id := uuid.MakeV4()
-	notify := make(chan []byte, 1)
-	rng.setChecksumNotify(id, notify)
 	args := roachpb.ComputeChecksumRequest{
 		ChecksumID: id,
 		Version:    replicaChecksumVersion,
@@ -4063,21 +4061,25 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+	notify := rng.getChecksumNotify(id)
 	select {
-	case checksum := <-notify:
-		if checksum == nil {
+	case c := <-notify:
+		// Put back the notification into the channel for re-notification
+		// during the verification step.
+		notify <- c
+		if c.checksum == nil {
 			t.Fatal("couldn't compute checksum")
 		}
 		verifyArgs := roachpb.VerifyChecksumRequest{
 			ChecksumID: id,
 			Version:    replicaChecksumVersion,
-			Checksum:   checksum,
+			Checksum:   c.checksum,
 		}
 		_, err := rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return checksum
+		return c.checksum
 	}
 }
 
@@ -4117,8 +4119,6 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// Verify that a bad version/checksum sent will result in an error.
 	id := uuid.MakeV4()
-	notify := make(chan []byte, 1)
-	rng.setChecksumNotify(id, notify)
 	args := roachpb.ComputeChecksumRequest{
 		ChecksumID: id,
 	}
@@ -4126,11 +4126,15 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	notify := rng.getChecksumNotify(id)
 	// Set a callback for checksum mismatch panics.
 	var panicked bool
 	rng.store.ctx.TestingMocker.BadChecksumPanic = func() { panicked = true }
 	select {
-	case <-notify:
+	case c := <-notify:
+		// Put back the notification into the channel for re-notification
+		// during the verification step.
+		notify <- c
 		// First test that sending a Verification request with a bad version and
 		// bad checksum will return without panicking because of a bad checksum.
 		verifyArgs := roachpb.VerifyChecksumRequest{
