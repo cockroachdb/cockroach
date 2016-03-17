@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -500,7 +502,7 @@ func areHistoriesSymmetric(txns []string) bool {
 	return true
 }
 
-func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB, t *testing.T) {
+func (hv *historyVerifier) run(ctx context.Context, isolations []roachpb.IsolationType, db *client.DB, t *testing.T) {
 	log.Infof("verifying all possible histories for the %q anomaly", hv.name)
 	priorities := make([]int32, len(hv.txns))
 	for i := 0; i < len(hv.txns); i++ {
@@ -515,7 +517,7 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 	for _, p := range enumPri {
 		for _, i := range enumIso {
 			for _, h := range enumHis {
-				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
+				if err := hv.runHistory(ctx, historyIdx, p, i, h, db, t); err != nil {
 					failures = append(failures, err)
 				}
 				historyIdx++
@@ -530,7 +532,7 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 	}
 }
 
-func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
+func (hv *historyVerifier) runHistory(ctx context.Context, historyIdx int, priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	plannedStr := historyString(cmds)
 	if log.V(1) {
@@ -549,7 +551,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	}
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
-			if pErr := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); pErr != nil {
+			if pErr := hv.runTxn(ctx, i, priorities[i-1], isolations[i-1], txnCmds, db, t); pErr != nil {
 				t.Errorf("(%s): unexpected failure running %s: %v", cmds, cmds[i], pErr)
 			}
 		}(i, txnCmds)
@@ -566,7 +568,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 		c.historyIdx = historyIdx
 		c.env = verifyEnv
 		c.init(nil)
-		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			fmtStr, pErr := c.execute(txn, t)
 			if pErr != nil {
 				return pErr
@@ -595,11 +597,11 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	return err
 }
 
-func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
+func (hv *historyVerifier) runTxn(ctx context.Context, txnIdx int, priority int32,
 	isolation roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) *roachpb.Error {
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
-	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName(txnName, 0)
 		if isolation == roachpb.SNAPSHOT {
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
@@ -656,7 +658,9 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 	s := createTestDB(t)
 	defer s.Stop()
 	defer setCorrectnessRetryOptions(s.stores)()
-	verifier.run(isolations, s.DB, t)
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+	verifier.run(ctx, isolations, s.DB, t)
 }
 
 // The following tests for concurrency anomalies include documentation

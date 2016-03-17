@@ -1610,7 +1610,7 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		log.Trace(ctx, "split closure begins")
 		defer log.Trace(ctx, "split closure ends")
 		// Create range descriptor for second half of split.
@@ -1845,7 +1845,7 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 		log.Infof("initiating a merge of %s into %s", rightRng, r)
 	}
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		log.Trace(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
@@ -2072,7 +2072,7 @@ func (r *Replica) ChangeReplicas(changeType roachpb.ReplicaChangeType, replica r
 		return err
 	}
 
-	pErr := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}

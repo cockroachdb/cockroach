@@ -98,7 +98,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	// Update SystemConfig to trigger gossip.
-	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
@@ -623,7 +623,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - descriptor IDs are used to determine split keys
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
-	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
 		txn.SetSystemConfigTrigger()
 		for i, kv := range initialSystemValues {
@@ -696,7 +696,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	numTotalValues := keys.MaxSystemConfigDescID + 5
 
 	// Write another, disjoint descriptor for a user table.
-	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.

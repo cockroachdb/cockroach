@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -49,7 +51,7 @@ func forceNewConfig(t *testing.T, s *testServer) config.SystemConfig {
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if pErr := s.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := s.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(configDescKey, configDesc)
 	}); pErr != nil {

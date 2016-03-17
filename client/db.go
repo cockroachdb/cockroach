@@ -385,8 +385,8 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error)
 // cause problems in the event it must be run more than once.
 //
 // If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
-	txn := NewTxn(*db)
+func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
+	txn := NewTxn(ctx, *db)
 	txn.SetDebugName("", 1)
 	pErr := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) *roachpb.Error {

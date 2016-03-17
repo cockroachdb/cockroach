@@ -148,7 +148,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
-		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 			if test.isolation == roachpb.SNAPSHOT {
 				if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 					return roachpb.NewError(err)
@@ -248,7 +248,7 @@ func TestClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return roachpb.NewError(err)
 			}
@@ -537,7 +537,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 			return txn.Run(b)
 		}); pErr == nil {
 			t.Error("unexpected success")
@@ -577,7 +577,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 				txn.SetDebugName(fmt.Sprintf("test-%d", i), 0)
 
 				// Retrieve the other key.

@@ -255,10 +255,10 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) *roachpb.Error {
 }
 
 // Databases is an endpoint that returns a list of databases.
-func (s *adminServer) Databases(_ context.Context, req *DatabasesRequest) (*DatabasesResponse, error) {
+func (s *adminServer) Databases(ctx context.Context, req *DatabasesRequest) (*DatabasesResponse, error) {
 	var session sql.Session
 	user := s.getUser(req)
-	r := s.sqlExecutor.ExecuteStatements(user, &session, "SHOW DATABASES;", nil)
+	r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, "SHOW DATABASES;", nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -277,7 +277,7 @@ func (s *adminServer) Databases(_ context.Context, req *DatabasesRequest) (*Data
 
 // DatabaseDetails is an endpoint that returns grants and a list of table names
 // for the specified database.
-func (s *adminServer) DatabaseDetails(_ context.Context, req *DatabaseDetailsRequest) (*DatabaseDetailsResponse, error) {
+func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsRequest) (*DatabaseDetailsResponse, error) {
 	var session sql.Session
 	user := s.getUser(req)
 
@@ -287,7 +287,7 @@ func (s *adminServer) DatabaseDetails(_ context.Context, req *DatabaseDetailsReq
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 	escDBName := parser.Name(req.Database).String()
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
-	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
+	r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, query, nil)
 	if pErr := s.firstNotFoundError(r.ResultList); pErr != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", pErr)
 	}
@@ -340,7 +340,7 @@ func (s *adminServer) DatabaseDetails(_ context.Context, req *DatabaseDetailsReq
 
 // TableDetails is an endpoint that returns columns, indices, and other
 // relevant details for the specified table.
-func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) (
+func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest) (
 	*TableDetailsResponse, error) {
 	var session sql.Session
 	user := s.getUser(req)
@@ -352,7 +352,7 @@ func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) 
 	escQualTable := fmt.Sprintf("%s.%s", escDbName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s",
 		escQualTable, escQualTable, escQualTable)
-	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
+	r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, query, nil)
 	if pErr := s.firstNotFoundError(r.ResultList); pErr != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", pErr)
 	}
@@ -463,7 +463,7 @@ func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) 
 	{
 		var iexecutor sql.InternalExecutor
 		var tableSpan roachpb.Span
-		if pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := s.db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			var pErr *roachpb.Error
 			tableSpan, pErr = iexecutor.GetTableSpan(user, txn, escDbName, escTableName)
 			return pErr
@@ -485,11 +485,11 @@ func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) 
 }
 
 // Users returns a list of users, stripped of any passwords.
-func (s *adminServer) Users(c context.Context, req *UsersRequest) (*UsersResponse, error) {
+func (s *adminServer) Users(ctx context.Context, req *UsersRequest) (*UsersResponse, error) {
 	var session sql.Session
 	user := s.getUser(req)
 	query := "SELECT username FROM system.users"
-	r := s.sqlExecutor.ExecuteStatements(user, &session, query, nil)
+	r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, query, nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -506,7 +506,7 @@ func (s *adminServer) Users(c context.Context, req *UsersRequest) (*UsersRespons
 //
 // type=STRING  returns events with this type (e.g. "create_table")
 // targetID=INT returns events for that have this targetID
-func (s *adminServer) Events(c context.Context, req *EventsRequest) (*EventsResponse, error) {
+func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsResponse, error) {
 	var session sql.Session
 	user := s.getUser(req)
 
@@ -526,7 +526,7 @@ func (s *adminServer) Events(c context.Context, req *EventsRequest) (*EventsResp
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r := s.sqlExecutor.ExecuteStatements(user, &session, q.String(), q.Params())
+	r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, q.String(), q.Params())
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -566,12 +566,13 @@ func (s *adminServer) Events(c context.Context, req *EventsRequest) (*EventsResp
 // getUIData returns the value and timestamp for the given UI key. Returns
 // errUIKeyNotFound if the key was not found.
 func (s *adminServer) getUIData(session *sql.Session, user, key string) ([]byte, GetUIDataResponse_Timestamp, error) {
+	ctx := context.TODO()
 	zeroTimestamp := GetUIDataResponse_Timestamp{}
 
 	// Query database.
 	query := "SELECT value, lastUpdated FROM system.ui WHERE key = $1"
 	params := []parser.Datum{parser.DString(key)}
-	r := s.sqlExecutor.ExecuteStatements(user, session, query, params)
+	r := s.sqlExecutor.ExecuteStatements(ctx, user, session, query, params)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, zeroTimestamp, s.serverError(err)
 	}
@@ -596,7 +597,7 @@ func (s *adminServer) getUIData(session *sql.Session, user, key string) ([]byte,
 }
 
 // SetUIData is an endpoint that sets the data associated with a key.
-func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetUIDataResponse, error) {
+func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*SetUIDataResponse, error) {
 	if len(req.Key) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "key cannot be empty")
 	}
@@ -605,7 +606,7 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 	user := s.getUser(req)
 
 	// Do an upsert of the key.
-	br := s.sqlExecutor.ExecuteStatements(user, &session, "BEGIN;", nil)
+	br := s.sqlExecutor.ExecuteStatements(ctx, user, &session, "BEGIN;", nil)
 	if err := s.checkQueryResults(br.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -626,7 +627,7 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 			parser.DString(req.Value), // $1
 			parser.DString(req.Key),   // $2
 		}
-		r := s.sqlExecutor.ExecuteStatements(user, &session, query, params)
+		r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, query, params)
 		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 			return nil, s.serverError(err)
 		}
@@ -639,7 +640,7 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 			parser.DString(req.Key),  // $1
 			parser.DBytes(req.Value), // $2
 		}
-		r := s.sqlExecutor.ExecuteStatements(user, &session, query, params)
+		r := s.sqlExecutor.ExecuteStatements(ctx, user, &session, query, params)
 		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 			return nil, s.serverError(err)
 		}

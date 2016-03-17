@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -235,7 +237,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := store.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 			epoch++
 
 			if epoch == 1 {

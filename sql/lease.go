@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -137,7 +139,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	// there is no harm in that as no other transaction will be attempting to
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
-	pErr = s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr = s.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
 		p.user = security.RootUser
@@ -157,7 +159,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
-	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
 		p.user = security.RootUser
@@ -233,7 +235,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := s.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 			desc := &Descriptor{}
 			descKey := MakeDescMetadataKey(tableID)
 
@@ -295,7 +297,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 // of a descriptor.
 func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, error) {
 	var count int
-	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
 		p.user = security.RootUser
@@ -663,7 +665,7 @@ func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorV
 	}
 	// Acquire and release a lease on the table at a version >= minVersion.
 	var lease *LeaseState
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		var pErr *roachpb.Error
 		// Acquire() can only acquire a lease at a version if it has
 		// already been acquired at that version, or that version

@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
@@ -234,7 +236,7 @@ func ExampleTxn_Commit() {
 	s, db := setup()
 	defer s.Stop()
 
-	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -290,7 +292,7 @@ func TestDebugName(t *testing.T) {
 	defer s.Stop()
 
 	file, _, _ := caller.Lookup(0)
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		if !strings.HasPrefix(txn.DebugName(), file+":") {
 			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
 		}
@@ -384,11 +386,11 @@ func TestNestedTransaction(t *testing.T) {
 	s, db := setup()
 	defer s.Stop()
 
-	pErr := db.Txn(func(txn1 *client.Txn) *roachpb.Error {
+	pErr := db.Txn(context.TODO(), func(txn1 *client.Txn) *roachpb.Error {
 		if pErr := txn1.Put("a", "1"); pErr != nil {
 			t.Fatalf("unexpected put error: %s", pErr)
 		}
-		iPErr := db.Txn(func(txn2 *client.Txn) *roachpb.Error {
+		iPErr := db.Txn(context.TODO(), func(txn2 *client.Txn) *roachpb.Error {
 			txnProto := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, roachpb.Timestamp{}, 0)
 			return roachpb.NewErrorWithTxn(util.Errorf("inner txn error"), txnProto)
 		})

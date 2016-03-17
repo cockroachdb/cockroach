@@ -19,6 +19,8 @@ package storage_test
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -139,6 +141,8 @@ func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	// Flush RocksDB memtables, so that RocksDB begins using block-based tables.
 	// This is useful, because most of the stats we track don't apply to
@@ -182,7 +186,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
-	if pErr := mtc.dbs[0].Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := mtc.dbs[0].Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		b := &client.Batch{}
 		b.CPut(dataKey, 7, 6)
 		return txn.Run(b)

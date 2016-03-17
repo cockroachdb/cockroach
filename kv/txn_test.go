@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -42,12 +44,14 @@ func TestTxnDBBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	value := []byte("value")
 
 	for _, commit := range []bool{true, false} {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
-		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation so non-transactional read can always push.
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return roachpb.NewError(err)
@@ -107,10 +111,12 @@ func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
 	s.Start(b)
 	defer s.Stop()
 	defer b.StopTimer()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	key := roachpb.Key("key")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		if tErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			b := txn.NewBatch()
 			b.Put(key, fmt.Sprintf("value-%d", i))
 			return txn.CommitInBatch(b)
@@ -151,6 +157,8 @@ func TestUncertaintyRestart(t *testing.T) {
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	s.Clock.SetMaxOffset(250 * time.Millisecond)
 
 	var key = roachpb.Key("a")
@@ -160,14 +168,14 @@ func TestUncertaintyRestart(t *testing.T) {
 	go func() {
 		defer close(done)
 		<-start
-		if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			return txn.Put(key, "hi")
 		}); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}()
 
-	if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		if txn.Proto.Epoch > 2 {
 			t.Fatal("expected only one restart")
 		}
@@ -199,6 +207,8 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	// Large offset so that any value in the future is an uncertain read.
 	// Also makes sure that the values we write in the future below don't
 	// actually wind up in the past.
@@ -224,7 +234,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	}
 
 	i := 0
-	if tErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+	if tErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
@@ -275,10 +285,12 @@ func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	keyA := "a"
 	keyB := "b"
-	pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return roachpb.NewError(err)
@@ -317,12 +329,14 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	ch := make(chan struct{})
 	go func() {
-		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return roachpb.NewError(err)
@@ -352,7 +366,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
-	pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return roachpb.NewError(err)
@@ -392,13 +406,15 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	keyA := roachpb.Key("a")
 	keyC := roachpb.Key("c")
 	splitKey := roachpb.Key("b")
 	ch := make(chan struct{})
 	go func() {
-		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 				return roachpb.NewError(err)
@@ -427,7 +443,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return roachpb.NewError(err)
@@ -483,13 +499,15 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	keyA := "a"
 	keyB := "b"
 	ch := make(chan struct{})
 	var count int
 	go func() {
-		pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+		pErr := s.DB.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			count++
 			// Use a low priority for the transaction so that it can be pushed.
 			txn.InternalSetPriority(1)

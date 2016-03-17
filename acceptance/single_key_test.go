@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -65,7 +67,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+				pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 					minExp := atomic.LoadInt64(&expected)
 					r, pErr := txn.Get(key)
 					if pErr != nil {

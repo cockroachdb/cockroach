@@ -21,6 +21,8 @@ import (
 	"math"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -53,7 +55,7 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		return pErr
 	}
 	*lease = l
-	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	return sc.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		// TODO(vivek): Use the original users privileges.
 		p := makePlanner()
 		p.user = security.RootUser
@@ -106,7 +108,7 @@ func (sc *SchemaChanger) createSchemaChangeLease() TableDescriptor_SchemaChangeL
 // an unexpired lease doesn't exist. It returns the lease.
 func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
 	var lease TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemConfigTrigger()
 		tableDesc, err := getTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -150,7 +152,7 @@ func (sc *SchemaChanger) findTableWithLease(txn *client.Txn, lease TableDescript
 // ReleaseLease the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) error {
-	pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := sc.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		tableDesc, pErr := sc.findTableWithLease(txn, lease)
 		if pErr != nil {
 			return pErr
@@ -165,7 +167,7 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) e
 // ExtendLease for the current leaser.
 func (sc *SchemaChanger) ExtendLease(existingLease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
 	var lease TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		tableDesc, err := sc.findTableWithLease(txn, existingLease)
 		if err != nil {
 			return err
@@ -383,7 +385,7 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 // is complete.
 func (sc *SchemaChanger) IsDone() (bool, error) {
 	var done bool
-	pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := sc.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		done = true
 		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
 		if pErr != nil {

@@ -99,7 +99,7 @@ necessary. An example of using transactions with parallel writes:
 		log.Fatal(err)
 	}
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(ctx, func(txn *client.Txn) error {
 		b := &client.Batch{}
 		for i := 0; i < 100; i++ {
 			key := fmt.Sprintf("testkey-%02d", i)

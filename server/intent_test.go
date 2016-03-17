@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
@@ -117,7 +119,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if pErr := s.db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)

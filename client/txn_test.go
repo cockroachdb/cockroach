@@ -120,6 +120,8 @@ func testPut() roachpb.BatchRequest {
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	makeTS := func(walltime int64, logical int32) roachpb.Timestamp {
 		return roachpb.ZeroTimestamp.Add(walltime, logical)
 	}
@@ -150,10 +152,10 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		return br, nil
 	}))
 
-	txn := NewTxn(*db)
+	txn := NewTxn(ctx, *db)
 
 	for testIdx = range testCases {
-		if _, pErr := txn.db.sender.Send(context.Background(), ba); pErr != nil {
+		if _, pErr := txn.db.sender.Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -162,12 +164,14 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 // TestTxnResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnResetTxnOnAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
 	}, nil))
 
-	txn := NewTxn(*db)
-	_, pErr := txn.db.sender.Send(context.Background(), testPut())
+	txn := NewTxn(ctx, *db)
+	_, pErr := txn.db.sender.Send(ctx, testPut())
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
@@ -185,7 +189,7 @@ func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 	db.userPriority = 101
-	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		if txn.db.userPriority != db.userPriority {
 			t.Errorf("expected txn user priority %f; got %f", db.userPriority, txn.db.userPriority)
 		}
@@ -205,7 +209,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}, nil))
-	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		_, pErr := txn.Get("a")
 		return pErr
 	}); pErr != nil {
@@ -228,7 +232,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 			calls = append(calls, ba.Methods()...)
 			return ba.CreateReply(), nil
 		}, nil))
-		if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+		if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 			b := txn.NewBatch()
 			if withGet {
 				b.Get("foo")
@@ -280,7 +284,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	}
 	for i, test := range testArgs {
 		calls = []roachpb.Method{}
-		if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+		if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 			return test.f(txn)
 		}); pErr != nil {
 			t.Errorf("%d: unexpected error on commit: %s", i, pErr)
@@ -301,7 +305,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}, nil))
-	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		if _, pErr := txn.Get("foo"); pErr != nil {
 			return pErr
 		}
@@ -324,7 +328,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 		pErr.SetErrorIndex(0)
 		return nil, pErr
 	}, nil))
-	pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		return txn.Put("a", "b")
 	})
 	// Verify that the original error type is preserved, but the error index is unset.
@@ -346,7 +350,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 		count++
 		return ba.CreateReply(), nil
 	}, nil))
-	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.Put("z", "adding a write exposed a bug in #1882")
 		return txn.CommitInBatch(b)
@@ -368,7 +372,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}, nil))
-	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		return roachpb.NewError(errors.New("foo"))
 	}); pErr == nil {
 		t.Error("expected error on abort")
@@ -390,7 +394,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			return ba.CreateReply(), nil
 		}, nil))
 		ok := false
-		if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+		if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 			if !ok {
 				if pErr := txn.Put("consider", "phlebas"); pErr != nil {
 					t.Fatal(pErr)
@@ -424,7 +428,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		return ba.CreateReply(), nil
 	}, nil))
 
-	if pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 		if pErr := txn.Put("a", "b"); pErr != nil {
 			return pErr
 		}
@@ -468,7 +472,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 			return ba.CreateReply(), nil
 		}, nil))
 		db.txnRetryOptions.InitialBackoff = 1 * time.Millisecond
-		pErr := db.Txn(func(txn *Txn) *roachpb.Error {
+		pErr := db.Txn(context.TODO(), func(txn *Txn) *roachpb.Error {
 			return txn.Put("a", "b")
 		})
 		if test.retry {
@@ -493,6 +497,8 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	testCases := []struct {
 		err   error
@@ -522,7 +528,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			return ba.CreateReply(), nil
 		}, nil))
 
-		txn := NewTxn(*db)
+		txn := NewTxn(ctx, *db)
 		if pErr := txn.Put("a", "b"); pErr != nil {
 			t.Fatalf("put failed: %s", pErr)
 		}
@@ -545,11 +551,13 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 // status updated correctly.
 func TestTransactionStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	db := NewDB(newTestSender(nil, nil))
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
-			txn := NewTxn(*db)
+			txn := NewTxn(ctx, *db)
 
 			if _, pErr := txn.Get("a"); pErr != nil {
 				t.Fatal(pErr)
@@ -580,8 +588,10 @@ func TestTransactionStatus(t *testing.T) {
 
 func TestCommitInBatchWithResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := NewDB(newTestSender(nil, nil))
-	txn := NewTxn(*db)
+	txn := NewTxn(ctx, *db)
 	b := &Batch{}
 	if _, pErr := txn.CommitInBatchWithResponse(b); pErr == nil {
 		t.Error("this batch should not be committed")
@@ -592,8 +602,10 @@ func TestCommitInBatchWithResponse(t *testing.T) {
 // Txn timestamp using client.TxnExecOptions.
 func TestTimestampSelectionInOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := newDB(newTestSender(nil, nil))
-	txn := NewTxn(*db)
+	txn := NewTxn(ctx, *db)
 
 	var execOpt TxnExecOptions
 	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
@@ -618,6 +630,8 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 // depending on the transaction priority.
 func TestSetPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	var expected roachpb.UserPriority
 
@@ -637,19 +651,19 @@ func TestSetPriority(t *testing.T) {
 
 	// Verify the normal priority setting path.
 	expected = roachpb.HighUserPriority
-	txn := NewTxn(*db)
+	txn := NewTxn(ctx, *db)
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.db.sender.Send(ctx, roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Verify the internal (fixed value) priority setting path.
 	expected = roachpb.UserPriority(-13)
-	txn = NewTxn(*db)
+	txn = NewTxn(ctx, *db)
 	txn.InternalSetPriority(13)
-	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.db.sender.Send(ctx, roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }

@@ -51,13 +51,13 @@ const (
 // keys (and key ranges) mutated as part of the transaction for
 // resolution upon transaction commit or abort.
 //
-// Importantly, more than a single coordinator may participate in
-// a transaction's execution. Client connections may be stateless
-// (as through HTTP) or suffer disconnection. In those cases, other
-// nodes may step in as coordinators. Each coordinator will continue
-// to heartbeat the same transaction until the timeoutDuration. The
-// hope is that all coordinators will see the eventual commit or
-// abort and resolve any keys written during their tenure.
+// Importantly, more than a single coordinator may participate in a
+// transaction's execution. Client connections may be stateless (as through
+// HTTP) or suffer disconnection. In those cases, other nodes may step in as
+// coordinators. Each coordinator will continue to heartbeat the same
+// transaction until the context is cancelled. The hope is that all coordinators
+// will see the eventual commit or abort and resolve any keys written during
+// their tenure.
 //
 // However, coordinators might fail or the transaction may go on long
 // enough using other coordinators that the original may garbage
@@ -82,11 +82,6 @@ type txnMetadata struct {
 	// Analogous to lastUpdateNanos, this is the wall time at which the
 	// transaction was instantiated.
 	firstUpdateNanos int64
-
-	// timeoutDuration is the time after which the transaction should be
-	// considered abandoned by the client. That is, when
-	// current_timestamp > lastUpdateTS + timeoutDuration.
-	timeoutDuration time.Duration
 
 	// txnEnd is closed when the transaction is aborted or committed,
 	// terminating the associated heartbeat instance.
@@ -123,14 +118,6 @@ func (tm *txnMetadata) setLastUpdate(nowNanos int64) {
 // recent client operation.
 func (tm *txnMetadata) getLastUpdate() int64 {
 	return atomic.LoadInt64(&tm.lastUpdateNanos)
-}
-
-// hasClientAbandonedCoord returns true if the transaction has not
-// been updated by the client adding a request within the allowed
-// timeout.
-func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
-	timeout := nowNanos - tm.timeoutDuration.Nanoseconds()
-	return tm.getLastUpdate() < timeout
 }
 
 // collectIntentSpans collects the spans of the intents to be resolved for the
@@ -197,7 +184,6 @@ type TxnCoordSender struct {
 	wrapped           client.Sender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
-	clientTimeout     time.Duration
 	sync.Mutex                                   // protects txns and txnStats
 	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
 	linearizable      bool                       // enables linearizable behaviour
@@ -218,7 +204,6 @@ func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable boo
 		wrapped:           wrapped,
 		clock:             clock,
 		heartbeatInterval: storage.DefaultHeartbeatInterval,
-		clientTimeout:     defaultClientTimeout,
 		txns:              map[uuid.UUID]*txnMetadata{},
 		linearizable:      linearizable,
 		tracer:            tracer,
@@ -559,7 +544,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (duration, restar
 // committed after attempting to resolve the intents. When the
 // heartbeat stops, the transaction is unregistered from the
 // coordinator,
-func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
+func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 	var tickChan <-chan time.Time
 	{
 		ticker := time.NewTicker(tc.heartbeatInterval)
@@ -578,7 +563,7 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	// which starts this goroutine.
 	sp := tc.tracer.StartSpan(opHeartbeatLoop)
 	defer sp.Finish()
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	{
 		tc.Lock()
@@ -595,41 +580,38 @@ func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	for {
 		select {
 		case <-tickChan:
-			if !tc.heartbeat(ctx, txnID) {
-				return
-			}
+			tc.heartbeat(ctx, txnID)
 		case <-closer:
 			// Transaction finished normally.
 			return
-
+		case <-ctx.Done():
+			if err := ctx.Err(); err != nil {
+				tc.clientHasAbandoned(ctx, txnID)
+			}
+			return
 		case <-tc.stopper.ShouldDrain():
 			return
 		}
 	}
 }
 
-func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
+func (tc *TxnCoordSender) clientHasAbandoned(ctx context.Context, txnID uuid.UUID) {
 	tc.Lock()
-	proceed := true
 	txnMeta := tc.txns[txnID]
 	var intentSpans []roachpb.Span
-	// Before we send a heartbeat, determine whether this transaction
-	// should be considered abandoned. If so, exit heartbeat.
-	if txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
-		// TODO(tschottdorf): should we be more proactive here?
-		// The client might be continuing the transaction
-		// through another coordinator, but in the most likely
-		// case it's just gone and the open transaction record
-		// could block concurrent operations.
-		if log.V(1) {
-			log.Infof("transaction %s abandoned; stopping heartbeat",
-				txnMeta.txn)
-		}
-		proceed = false
-		// Grab the intents here to avoid potential race.
-		intentSpans = collectIntentSpans(txnMeta.keys)
-		txnMeta.keys.Clear()
+
+	// TODO(tschottdorf): should we be more proactive here?
+	// The client might be continuing the transaction
+	// through another coordinator, but in the most likely
+	// case it's just gone and the open transaction record
+	// could block concurrent operations.
+	if log.V(1) {
+		log.Infof("transaction %s abandoned; stopping heartbeat", txnMeta.txn)
 	}
+	// Grab the intents here to avoid potential race.
+	intentSpans = collectIntentSpans(txnMeta.keys)
+	txnMeta.keys.Clear()
+
 	// txnMeta.txn is possibly replaced concurrently,
 	// so grab a copy before unlocking.
 	txn := txnMeta.txn.Clone()
@@ -638,30 +620,39 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &txn
 
-	if !proceed {
-		// Actively abort the transaction and its intents since we assume it's abandoned.
-		et := &roachpb.EndTransactionRequest{
-			Span: roachpb.Span{
-				Key: txn.Key,
-			},
-			Commit:      false,
-			IntentSpans: intentSpans,
-		}
-		ba.Add(et)
-		tc.stopper.RunAsyncTask(func() {
-			// Use the wrapped sender since the normal Sender
-			// does not allow clients to specify intents.
-			// TODO(tschottdorf): not using the existing context here since that
-			// leads to use-after-finish of the contained trace. Should fork off
-			// before the goroutine.
-			if _, pErr := tc.wrapped.Send(context.Background(), ba); pErr != nil {
-				if log.V(1) {
-					log.Warningf("abort due to inactivity failed for %s: %s ", txn, pErr)
-				}
-			}
-		})
-		return false
+	// Actively abort the transaction and its intents since we assume it's abandoned.
+	et := &roachpb.EndTransactionRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Commit:      false,
+		IntentSpans: intentSpans,
 	}
+	ba.Add(et)
+	tc.stopper.RunAsyncTask(func() {
+		// Use the wrapped sender since the normal Sender
+		// does not allow clients to specify intents.
+		// TODO(tschottdorf): not using the existing context here since that
+		// leads to use-after-finish of the contained trace. Should fork off
+		// before the goroutine.
+		if _, pErr := tc.wrapped.Send(context.Background(), ba); pErr != nil {
+			if log.V(1) {
+				log.Warningf("abort due to inactivity failed for %s: %s ", txn, pErr)
+			}
+		}
+	})
+}
+
+func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) {
+	tc.Lock()
+	txnMeta := tc.txns[txnID]
+	// txnMeta.txn is possibly replaced concurrently,
+	// so grab a copy before unlocking.
+	txn := txnMeta.txn.Clone()
+	tc.Unlock()
+
+	ba := roachpb.BatchRequest{}
+	ba.Txn = &txn
 
 	hb := &roachpb.HeartbeatTxnRequest{
 		Now: tc.clock.Now(),
@@ -686,7 +677,6 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// the client finds out. Furthermore, we could use this information
 	// to send TransactionAbortedErrors to the client so it can restart
 	// immediately instead of running until its EndTransaction.
-	return true
 }
 
 // updateState updates the transaction state in both the success and
@@ -812,13 +802,12 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 					keys:             interval.NewRangeTree(),
 					firstUpdateNanos: tc.clock.PhysicalNow(),
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
-					timeoutDuration:  tc.clientTimeout,
 					txnEnd:           make(chan struct{}),
 				}
 				tc.txns[txnID] = txnMeta
 
 				if !tc.stopper.RunAsyncTask(func() {
-					tc.heartbeatLoop(txnID)
+					tc.heartbeatLoop(ctx, txnID)
 				}) {
 					// The system is already draining and we can't start the
 					// heartbeat. We refuse new transactions for now because
@@ -863,7 +852,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
 	var br *roachpb.BatchResponse
-	pErr := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := tmpDB.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
 		b.MaxScanResults = ba.MaxScanResults

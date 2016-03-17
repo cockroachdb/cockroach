@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -199,7 +201,7 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 				}
 			}
 			var kv client.KeyValue
-			if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 				var pErr *roachpb.Error
 				kv, pErr = txn.Inc("count", 1)
 				return pErr

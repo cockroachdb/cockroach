@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -89,7 +91,7 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	pErr := t.server.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := t.server.DB().Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		var pErr *roachpb.Error
 		lease, pErr = t.node(nodeID).Acquire(txn, descID, version)
 		return pErr

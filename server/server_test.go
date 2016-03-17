@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -371,7 +373,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Now do it as part of a transaction, but without the trigger set.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		return txn.Put(key, valAt(1))
 	}); pErr != nil {
 		t.Fatal(pErr)
@@ -388,7 +390,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// This time mark the transaction as having a Gossip trigger.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
 	}); pErr != nil {

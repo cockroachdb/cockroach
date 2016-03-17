@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -208,12 +210,14 @@ func TestKVDBTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
 			return roachpb.NewError(err)

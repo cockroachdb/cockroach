@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -52,7 +54,7 @@ func setTestRetryOptions() func() {
 // transactions, each which writes up to 10 times to random keys with
 // random values. If not nil, txnChannel is written to non-blockingly
 // every time a new transaction starts.
-func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
+func startTestWriter(ctx context.Context, db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
 	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
 	defer func() {
@@ -67,7 +69,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+			pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -131,6 +133,8 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	// This channel shuts the whole apparatus down.
 	done := make(chan struct{})
@@ -145,7 +149,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		go startTestWriter(s.DB, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
+		go startTestWriter(ctx, s.DB, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
 	}
 
 	// Execute the consecutive splits.
@@ -174,6 +178,8 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	// Override default zone config.
 	cfg := config.DefaultZoneConfig()
 	cfg.RangeMaxBytes = 1 << 18
@@ -189,7 +195,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go startTestWriter(s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
+	go startTestWriter(ctx, s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
 
 	// Check that we split 5 times in allotted time.
 	util.SucceedsSoon(t, func() error {

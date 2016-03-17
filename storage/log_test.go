@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -144,7 +146,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := db.Txn(context.TODO(), func(txn *client.Txn) *roachpb.Error {
 			return store.LogReplicaChangeTest(txn, changeType, desc.Replicas[0], *desc)
 		}); pErr != nil {
 			t.Fatal(pErr)

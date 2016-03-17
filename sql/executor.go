@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -260,7 +262,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // Prepare returns the result types of the given statement. Args may be a
 // partially populated val args map. Prepare will populate the missing val
 // args. The column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(user string, query string, session *Session, args parser.MapArgs) (
+func (e *Executor) Prepare(ctx context.Context, user string, query string, session *Session, args parser.MapArgs) (
 	[]ResultColumn, *roachpb.Error) {
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -286,7 +288,7 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 		execCtx:       &e.ctx,
 	}
 
-	txn := client.NewTxn(*e.ctx.DB)
+	txn := client.NewTxn(ctx, *e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 
 	planMaker.setTxn(txn)
@@ -385,9 +387,9 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 }
 
 // reset creates a new Txn and initializes it using the session defaults.
-func (ts *txnState) reset(e *Executor, s *Session) {
+func (ts *txnState) reset(ctx context.Context, e *Executor, s *Session) {
 	*ts = txnState{}
-	ts.txn = client.NewTxn(*e.ctx.DB)
+	ts.txn = client.NewTxn(ctx, *e.ctx.DB)
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.tr = s.Trace
 }
@@ -434,7 +436,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor)
 // ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) ExecuteStatements(
-	user string, session *Session, stmts string,
+	ctx context.Context, user string, session *Session, stmts string,
 	params []parser.Datum) StatementResults {
 
 	planMaker := plannerPool.Get().(*planner)
@@ -458,7 +460,7 @@ func (e *Executor) ExecuteStatements(
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	planMaker.params = parameters(params)
-	res := e.execRequest(&session.TxnState, stmts, planMaker)
+	res := e.execRequest(ctx, &session.TxnState, stmts, planMaker)
 	return res
 }
 
@@ -480,7 +482,7 @@ func (e *Executor) ExecuteStatements(
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
 func (e *Executor) execRequest(
-	txnState *txnState, sql string, planMaker *planner) StatementResults {
+	ctx context.Context, txnState *txnState, sql string, planMaker *planner) StatementResults {
 	var res StatementResults
 	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
 	if err != nil {
@@ -538,7 +540,7 @@ func (e *Executor) execRequest(
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[0:1]
 			}
-			txnState.reset(e, planMaker.session)
+			txnState.reset(ctx, e, planMaker.session)
 			txnState.State = Open
 			txnState.autoRetry = true
 			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()

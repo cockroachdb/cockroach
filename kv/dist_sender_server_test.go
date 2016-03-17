@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -174,11 +176,13 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := setupMultipleRanges(t, s, "c", "d")
 
 	// Delete the keys within a transaction. The range [c,d) doesn't have
 	// any active requests.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b", false)
 		b.DelRange("e", "f", false)
@@ -194,6 +198,8 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := setupMultipleRanges(t, s, "b")
 
 	// Write keys before, at, and after the split key.
@@ -218,7 +224,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
 		b.DelRange("a", "d", false)
 		return txn.CommitInBatch(b)
@@ -463,6 +469,8 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := setupMultipleRanges(t, s, "b", "c")
 
 	// The requests in the transaction below will be chunked and
@@ -478,7 +486,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	//    same replica.
 	// 5) The command succeeds since the sequence cache has not yet been updated.
 	epoch := 0
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		epoch++
 		b := txn.NewBatch()
 		b.Put("a", "val")
@@ -499,14 +507,16 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 // verify that.
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	// Set up a filter to so that the first CPut operation will
 	// get a ReadWithinUncertaintyIntervalError.
 	targetKey := roachpb.Key("b")
 	var numGets int32
 
-	ctx := server.NewTestContext()
-	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
+	sctx := server.NewTestContext()
+	sctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
 		func(fArgs storageutils.FilterArgs) error {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
@@ -517,7 +527,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 			return nil
 		}
-	s := server.StartTestServerWithContext(t, ctx)
+	s := server.StartTestServerWithContext(t, sctx)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")
 
@@ -532,7 +542,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError and the txn will be
 	// retried.
 	epoch := 0
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
@@ -576,6 +586,8 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := server.StartTestServer(t)
 	defer s.Stop()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	db := setupMultipleRanges(t, s, "b")
 
 	waitForWriteIntent := make(chan struct{})
@@ -587,7 +599,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// Create a goroutine that creates a write intent and waits until
 	// another txn created in this test is restarted.
 	go func() {
-		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 			// Set high priority so that the intent will not be pushed.
 			txn.InternalSetPriority(highPriority)
 			log.Infof("Creating a write intent with high priority")
@@ -616,7 +628,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// iteration.
 	epoch := 0
 	var txnID *uuid.UUID
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if pErr := db.Txn(ctx, func(txn *client.Txn) *roachpb.Error {
 		// Set low priority so that a write from this txn will not push others.
 		txn.InternalSetPriority(lowPriority)
 
