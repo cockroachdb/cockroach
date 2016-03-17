@@ -735,7 +735,7 @@ func runTxnAttempt(
 // considered aborted and subsequent statements will be discarded (they will
 // not be executed, they will not be returned for future execution, they will
 // not generate results). Note that this also includes COMMIT/ROLLBACK
-// statements. Further note that SqlTransactionAbortedError is no exception -
+// statements. Further note that errTransactionAborted is no exception -
 // encountering it will discard subsequent statements. This means that, to
 // recover from an aborted txn, a COMMIT/ROLLBACK statement needs to be the
 // first one in stmts.
@@ -790,6 +790,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 					stmtStrBefore, after))
 			}
 		}
+		res.PErr = convertToSQLError(res.PErr)
 		results = append(results, res)
 		if pErr != nil {
 			// After an error happened, skip executing all the remaining statements
@@ -823,7 +824,7 @@ func (e *Executor) execStmtInAbortedTxn(
 		txnState.txn = nil
 		return result, nil
 	default:
-		pErr := roachpb.NewError(&roachpb.SqlTransactionAbortedError{})
+		pErr := sqlErrToPErr(errTransactionAborted{})
 		return Result{PErr: pErr}, pErr
 	}
 }
