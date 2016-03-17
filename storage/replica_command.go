@@ -1310,9 +1310,7 @@ func (r *Replica) LeaderLease(batch engine.Engine, ms *engine.MVCCStats, h roach
 func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
-	notifyChan := make(chan []byte, 1)
 	id := uuid.MakeV4()
-	r.setChecksumNotify(id, notifyChan)
 	// Send a ComputeChecksum to all the replicas of the range.
 	start := timeutil.Now()
 	{
@@ -1333,9 +1331,15 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 		}
 	}
 	// wait for local checksum and collect it.
-	checksum := <-notifyChan
+	notifyChan := r.getChecksumNotify(id)
+	if notifyChan == nil {
+		panic("checksum channel unavailable")
+	}
+	c := <-notifyChan
+	// Put c back in channel for re-notification during verification step.
+	notifyChan <- c
 
-	if checksum == nil {
+	if c.checksum == nil {
 		// Don't bother verifying the checksum.
 		return roachpb.CheckConsistencyResponse{}, roachpb.NewErrorf("unable to compute checksum for range [%v, %v]", key, endKey)
 	}
@@ -1357,7 +1361,7 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 			},
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
-			Checksum:   checksum,
+			Checksum:   c.checksum,
 		}
 		ba.Add(checkArgs)
 		_, pErr := r.Send(r.context(), ba)
@@ -1373,36 +1377,16 @@ const (
 	replicaChecksumGCInterval = time.Hour
 )
 
-// setChecksumNotify sets a notification channel on which the checksum
+// getChecksumNotify gets a notification channel on which the checksum
 // from the result of ComputeChecksum is sent.
-func (r *Replica) setChecksumNotify(id uuid.UUID, notify chan []byte) {
+func (r *Replica) getChecksumNotify(id uuid.UUID) chan replicaChecksum {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.mu.checksumNotify[id]; ok {
-		panic(fmt.Sprintf("id %v already exists", id))
+	c := r.mu.checksumNotify[id]
+	if c == nil {
+		panic(fmt.Sprintf("notification for id %v doesn't exists", id))
 	}
-	r.mu.checksumNotify[id] = notify
-	return
-}
-
-// computeChecksumDone adds the computed checksum, sets a deadline for GCing the
-// checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok {
-		c.ok = true
-		c.checksum = sha
-		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
-		r.mu.checksums[id] = c
-	} else {
-		panic("checksum has been GCed")
-	}
-	notify := r.mu.checksumNotify[id]
-	delete(r.mu.checksumNotify, id)
-	if notify != nil {
-		notify <- sha
-	}
+	return c
 }
 
 // ComputeChecksum starts the process of computing a checksum on the
@@ -1417,7 +1401,7 @@ func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h r
 	id := args.ChecksumID
 	now := timeutil.Now()
 	r.mu.Lock()
-	if _, ok := r.mu.checksums[id]; ok {
+	if _, ok := r.mu.checksumNotify[id]; ok {
 		// A previous attempt was made to compute the checksum.
 		r.mu.Unlock()
 		return roachpb.ComputeChecksumResponse{}, nil
@@ -1425,18 +1409,25 @@ func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h r
 
 	// GC old entries.
 	var oldEntries []uuid.UUID
-	for id, val := range r.mu.checksums {
-		// The timestamp is only valid when the checksum is set.
-		if val.checksum != nil && now.After(val.gcTimestamp) {
-			oldEntries = append(oldEntries, id)
+	for id, c := range r.mu.checksumNotify {
+		select {
+		case val := <-c:
+			// Put v back in the channel so it is picked up by the
+			// verification step.
+			c <- val
+			if now.After(val.gcTimestamp) {
+				oldEntries = append(oldEntries, id)
+			}
+
+		default:
 		}
 	}
 	for _, id := range oldEntries {
-		delete(r.mu.checksums, id)
+		delete(r.mu.checksumNotify, id)
 	}
 
-	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{}
+	notify := make(chan replicaChecksum, 1)
+	r.mu.checksumNotify[id] = notify
 	desc := *r.mu.desc
 	r.mu.Unlock()
 	snap := r.store.NewSnapshot()
@@ -1449,11 +1440,11 @@ func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h r
 			log.Error(err)
 			sha = nil
 		}
-		r.computeChecksumDone(id, sha)
+		notify <- replicaChecksum{checksum: sha, gcTimestamp: timeutil.Now().Add(replicaChecksumGCInterval)}
 	}) {
 		defer snap.Close()
 		// Set checksum to nil.
-		r.computeChecksumDone(id, nil)
+		notify <- replicaChecksum{checksum: nil, gcTimestamp: timeutil.Now().Add(replicaChecksumGCInterval)}
 	}
 	return roachpb.ComputeChecksumResponse{}, nil
 }
@@ -1492,23 +1483,6 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]by
 	return hasher.Sum(sha), nil
 }
 
-// maybeSetChecksumNotify may set a channel to receive a checksum
-// notification if the checksum is unavailable.
-func (r *Replica) maybeSetChecksumNotify(id uuid.UUID) chan []byte {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok && !c.ok {
-		// Checksum hasn't been computed yet; set notification.
-		if r.mu.checksumNotify[id] != nil {
-			panic("existing notification exists")
-		}
-		notify := make(chan []byte, 1)
-		r.mu.checksumNotify[id] = notify
-		return notify
-	}
-	return nil
-}
-
 // VerifyChecksum verifies the checksum that was computed through a
 // ComputeChecksum request.
 func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.VerifyChecksumRequest) (roachpb.VerifyChecksumResponse, error) {
@@ -1517,30 +1491,25 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 		return roachpb.VerifyChecksumResponse{}, nil
 	}
 	id := args.ChecksumID
-	notify := r.maybeSetChecksumNotify(id)
+	r.mu.Lock()
+	notify := r.mu.checksumNotify[id]
+	r.mu.Unlock()
 	if notify != nil {
 		now := timeutil.Now()
-		<-notify
+		c := <-notify
 		if log.V(1) {
 			log.Info("waited for compute checksum for %s", time.Since(now))
 		}
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok {
-		if c.ok {
-			if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-				if p := r.store.ctx.TestingMocker.BadChecksumPanic; p != nil {
-					p()
-				} else {
-					// TODO(.*): see #5051.
-					log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
-				}
+		if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
+			if p := r.store.ctx.TestingMocker.BadChecksumPanic; p != nil {
+				p()
+			} else {
+				// TODO(.*): see #5051.
+				log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
 			}
-		} else {
-			panic("received checksum notification but no checksum")
 		}
+	} else {
+		log.Errorf("checksum notification for %v has been GCed", id)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
 }
