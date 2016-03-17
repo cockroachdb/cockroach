@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type explainMode int
@@ -56,12 +57,14 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 	}
 
 	if mode == explainTrace {
-		var err error
-		if p.txn.Trace, err = tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
+		sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
 			p.txn.CollectedSpans = append(p.txn.CollectedSpans, sp)
-		}); err != nil {
+		})
+		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
+		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
+
 	}
 
 	plan, err := p.makePlan(n.Statement, autoCommit)

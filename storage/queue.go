@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -412,10 +413,11 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// order to be processed, check whether this replica has leader lease
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
-		span := repl.store.Tracer().StartSpan("queue")
-		defer span.Finish()
+		sp := repl.store.Tracer().StartSpan(bq.name)
+		ctx := opentracing.ContextWithSpan(repl.context(), sp)
+		defer sp.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLeaderLease(span, repl.context()); err != nil {
+		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {
 			bq.eventLog.Infof(log.V(3), "%s: could not acquire leader lease; skipping", repl)
 			return nil
 		}

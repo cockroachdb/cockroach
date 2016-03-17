@@ -30,10 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/tracing"
 )
-
-const opStores = "stores"
 
 // A Stores provides methods to access a collection of stores. There's
 // a visitor pattern and also an implementation of the client.Sender
@@ -152,8 +149,6 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		return nil, roachpb.NewError(err)
 	}
 
-	sp, cleanupSp := tracing.SpanFromContext(opStores, store.Tracer(), ctx)
-	defer cleanupSp()
 	if ba.Txn != nil {
 		// For calls that read data within a txn, we keep track of timestamps
 		// observed from the various participating nodes' HLC clocks. If we have
@@ -170,7 +165,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 			// The uncertainty window is [OrigTimestamp, maxTS), so if that window
 			// is empty, there won't be any uncertainty restarts.
 			if !ba.Txn.OrigTimestamp.Less(maxTS) {
-				sp.LogEvent("read has no clock uncertainty")
+				log.Trace(ctx, "read has no clock uncertainty")
 			}
 			shallowTxn.MaxTimestamp.Backward(maxTS)
 			ba.Txn = &shallowTxn

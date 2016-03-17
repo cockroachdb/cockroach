@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/util/caller"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
@@ -91,18 +92,17 @@ func NewTracer() opentracing.Tracer {
 	return newTracer()
 }
 
-// SpanFromContext returns the Span obtained from the context or, if none is
-// found, a new one started through the tracer. Callers should call (or defer)
-// the returned cleanup func as well to ensure that the span is Finish()ed, but
-// callers should *not* attempt to call Finish directly -- in the case where the
-// span was obtained from the context, it is not the caller's to Finish.
-func SpanFromContext(opName string, tracer opentracing.Tracer, ctx context.Context) (opentracing.Span, func()) {
-	sp := opentracing.SpanFromContext(ctx)
-	if sp == nil {
-		sp = tracer.StartSpan(opName)
-		return sp, sp.Finish
+// EnsureContext checks whether the given context.Context contains a Span. If
+// not, it creates one using the provided Tracer and wraps it in the returned
+// Span. The returned closure must be called after the request has been fully
+// processed.
+func EnsureContext(ctx context.Context, tracer opentracing.Tracer) (context.Context, func()) {
+	_, _, funcName := caller.Lookup(1)
+	if opentracing.SpanFromContext(ctx) == nil {
+		sp := tracer.StartSpan(funcName)
+		return opentracing.ContextWithSpan(ctx, sp), sp.Finish
 	}
-	return sp, func() {}
+	return ctx, func() {}
 }
 
 // Disable is for benchmarking use and causes all future tracers to deal in

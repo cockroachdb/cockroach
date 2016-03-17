@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	basictracer "github.com/opentracing/basictracer-go"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // DefaultTxnRetryOptions are the standard retry options used
@@ -53,10 +52,8 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		ba.UserPriority = ts.UserPriority
 	}
 
-	ctx = opentracing.ContextWithSpan(ctx, ts.Trace)
-
 	ba.SetNewRequest()
-	br, pErr := ts.wrapped.Send(ctx, ba)
+	br, pErr := ts.wrapped.Send(ts.Context, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))
 	}
@@ -103,7 +100,7 @@ type Txn struct {
 	wrapped        Sender
 	Proto          roachpb.Transaction
 	UserPriority   roachpb.UserPriority
-	Trace          opentracing.Span // can be nil
+	Context        context.Context // must not be nil
 	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
@@ -115,6 +112,7 @@ func NewTxn(db DB) *Txn {
 	txn := &Txn{
 		db:      db,
 		wrapped: db.sender,
+		Context: context.Background(),
 	}
 	txn.db.sender = (*txnSender)(txn)
 	return txn

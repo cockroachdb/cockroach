@@ -52,8 +52,6 @@ const (
 	defaultLeaderCacheSize = 1 << 16
 	// The default size of the range descriptor cache.
 	defaultRangeDescriptorCacheSize = 1 << 20
-
-	opDistSender = "distributed sender"
 )
 
 var defaultRPCRetryOptions = retry.Options{
@@ -233,11 +231,9 @@ func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescripto
 		Reverse:         useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
-	trace := ds.Tracer.StartSpan("range lookup")
-	defer trace.Finish()
 	// TODO(tschottdorf): Ideally we would use the trace of the request which
-	// caused this lookup instead of a new one.
-	br, err := ds.sendRPC(trace, desc.RangeID, replicas, orderRandom, ba)
+	// caused this lookup.
+	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
 		return nil, err
 	}
@@ -320,8 +316,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // must succeed. Returns an RPC error if the request could not be sent. Note
 // that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-// TODO(tschottdorf): should take a context instead of a Span.
-func (ds *DistSender) sendRPC(sp opentracing.Span, rangeID roachpb.RangeID, replicas ReplicaSlice,
+func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice,
 	order orderingPolicy, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(replicas) == 0 {
 		return nil, roachpb.NewError(noNodeAddrsAvailError{})
@@ -337,7 +332,7 @@ func (ds *DistSender) sendRPC(sp opentracing.Span, rangeID roachpb.RangeID, repl
 		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         base.NetworkTimeout,
-		Trace:           sp,
+		Context:         ctx,
 	}
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
@@ -390,8 +385,8 @@ func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useRever
 }
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
-func (ds *DistSender) sendSingleRange(trace opentracing.Span, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor) (*roachpb.BatchResponse, *roachpb.Error) {
-	trace.LogEvent(fmt.Sprintf("sending RPC to [%s, %s)", desc.StartKey, desc.EndKey))
+func (ds *DistSender) sendSingleRange(ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor) (*roachpb.BatchResponse, *roachpb.Error) {
+	log.Trace(ctx, fmt.Sprintf("sending RPC to [%s, %s)", desc.StartKey, desc.EndKey))
 
 	leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID))
 
@@ -422,7 +417,7 @@ func (ds *DistSender) sendSingleRange(trace opentracing.Span, ba roachpb.BatchRe
 	ba.SetNewRequest()
 
 	// TODO(tschottdorf): should serialize the trace here, not higher up.
-	br, pErr := ds.sendRPC(trace, desc.RangeID, replicas, order, ba)
+	br, pErr := ds.sendRPC(ctx, desc.RangeID, replicas, order, ba)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -560,8 +555,8 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
-	sp, cleanupSp := tracing.SpanFromContext(opDistSender, ds.Tracer, ctx)
-	defer cleanupSp()
+	ctx, cleanup := tracing.EnsureContext(ctx, ds.Tracer)
+	defer cleanup()
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
@@ -582,7 +577,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			sp.LogEvent("meta descriptor lookup")
+			log.Trace(ctx, "meta descriptor lookup")
 			var evictDesc func()
 			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
 
@@ -648,7 +643,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 				truncBA.MaxScanResults = ba.MaxScanResults
 
-				return ds.sendSingleRange(sp, truncBA, desc)
+				return ds.sendSingleRange(ctx, truncBA, desc)
 			}()
 			// If sending succeeded, break this loop.
 			if pErr == nil {
@@ -659,7 +654,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			if log.V(1) {
 				log.Warningf("failed to invoke %s: %s", ba, pErr)
 			}
-			sp.LogEvent(fmt.Sprintf("reply error: %T", pErr.GetDetail()))
+			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
 
 			// Error handling below.
 			// If retryable, allow retry. For range not found or range
@@ -884,7 +879,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// resulting in a duplicate scan.
 			rs.Key = next(ba, desc.EndKey)
 		}
-		sp.LogEvent("querying next range")
+		log.Trace(ctx, "querying next range")
 	}
 }
 

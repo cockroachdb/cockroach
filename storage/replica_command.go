@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
@@ -524,7 +523,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 
 		if err := func() error {
 			if ct.GetSplitTrigger() != nil {
-				if err := r.splitTrigger(batch, ms, ct.SplitTrigger, ts); err != nil {
+				if err := r.splitTrigger(r.context(), batch, ms, ct.SplitTrigger, ts); err != nil {
 					return err
 				}
 				*ms = engine.MVCCStats{} // clear stats, as split recomputed.
@@ -1562,13 +1561,11 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 // TODO(tschottdorf): should assert that split key is not a local key.
 func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor) (roachpb.AdminSplitResponse, *roachpb.Error) {
 	var reply roachpb.AdminSplitResponse
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
-	sp.LogEvent("split begins")
+	log.Trace(ctx, "split begins")
 	var splitKey roachpb.RKey
 	{
 		foundSplitKey := args.SplitKey
@@ -1604,7 +1601,7 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
 		return reply, roachpb.NewErrorf("range is already split at key %s", splitKey)
 	}
-	sp.LogEvent("found split key")
+	log.Trace(ctx, "found split key")
 
 	// Create new range descriptor with newly-allocated replica IDs and Range IDs.
 	newDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
@@ -1619,8 +1616,8 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
-		sp.LogEvent("split closure begins")
-		defer sp.LogEvent("split closure ends")
+		log.Trace(ctx, "split closure begins")
+		defer log.Trace(ctx, "split closure ends")
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
@@ -1666,7 +1663,7 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 				},
 			},
 		})
-		sp.LogEvent("attempting commit")
+		log.Trace(ctx, "attempting commit")
 		return txn.Run(b)
 	}); err != nil {
 		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
@@ -1679,7 +1676,7 @@ func (r *Replica) AdminSplit(ctx context.Context, args roachpb.AdminSplitRequest
 // transaction. It copies the sequence cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
-func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split *roachpb.SplitTrigger, ts roachpb.Timestamp) error {
+func (r *Replica) splitTrigger(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, split *roachpb.SplitTrigger, ts roachpb.Timestamp) error {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := r.store.Tracer().StartSpan("split")
@@ -1707,7 +1704,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
-	sp.LogEvent("computed stats for old range")
+	log.Trace(ctx, "computed stats for old range")
 	if err := r.stats.SetMVCCStats(batch, leftMs); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
@@ -1736,7 +1733,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
 	}
-	sp.LogEvent(fmt.Sprintf("copied sequence cache (%d entries)", seqCount))
+	log.Trace(ctx, fmt.Sprintf("copied sequence cache (%d entries)", seqCount))
 
 	// Add the new split replica to the store. This step atomically
 	// updates the EndKey of the updated replica and also adds the
@@ -1754,7 +1751,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 	if err = newRng.stats.SetMVCCStats(batch, rightMs); err != nil {
 		return util.Errorf("unable to write MVCC stats: %s", err)
 	}
-	sp.LogEvent("computed stats for new range")
+	log.Trace(ctx, "computed stats for new range")
 
 	// Copy the timestamp cache into the new range.
 	r.mu.Lock()
@@ -1762,7 +1759,7 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 	r.mu.tsCache.MergeInto(newRng.mu.tsCache, true /* clear */)
 	newRng.mu.Unlock()
 	r.mu.Unlock()
-	sp.LogEvent("copied timestamp cache")
+	log.Trace(ctx, "copied timestamp cache")
 
 	// Note: you must not use the trace inside of this defer since it may
 	// run after the trace has already completed.
@@ -1829,8 +1826,6 @@ func (r *Replica) splitTrigger(batch engine.Engine, ms *engine.MVCCStats, split 
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest, origLeftDesc *roachpb.RangeDescriptor) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
-	sp, cleanupSp := tracing.SpanFromContext(opReplica, r.store.Tracer(), ctx)
-	defer cleanupSp()
 
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
@@ -1856,7 +1851,7 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 	}
 
 	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
-		sp.LogEvent("merge closure begins")
+		log.Trace(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
 			b := &client.Batch{}
@@ -1866,7 +1861,7 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
-			sp.LogEvent("updating left descriptor")
+			log.Trace(ctx, "updating left descriptor")
 			if err := txn.Run(b); err != nil {
 				return err
 			}
@@ -1918,7 +1913,7 @@ func (r *Replica) AdminMerge(ctx context.Context, args roachpb.AdminMergeRequest
 				},
 			},
 		})
-		sp.LogEvent("attempting commit")
+		log.Trace(ctx, "attempting commit")
 		return txn.Run(b)
 	}); err != nil {
 		return reply, roachpb.NewErrorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
