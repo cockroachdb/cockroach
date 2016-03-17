@@ -86,11 +86,11 @@ module Models {
           });
       });
 
-      private _dataMap: Utils.ReadOnlyProperty<StoreStatusMap> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
+      private _dataMap: Utils.ReadOnlyProperty<StoreStatusMap> = Utils.Computed(this._data.lastResult, (list: Proto.StoreStatus[]) => {
         return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.store_id);
       });
 
-      private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.result, (list: Proto.StoreStatus[]) => {
+      private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.lastResult, (list: Proto.StoreStatus[]) => {
         let status: Proto.Status = {
           range_count: 0,
           updated_at: 0,
@@ -109,7 +109,7 @@ module Models {
       });
 
       constructor() {
-        this.allStatuses = this._data.result;
+        this.allStatuses = this._data.lastResult;
         this.totalStatus = this._totalStatus;
       }
 
@@ -119,6 +119,10 @@ module Models {
 
       public refresh(): void {
         this._data.refresh();
+      }
+
+      public error(): Error {
+        return this._data.error();
       }
     }
 
@@ -143,11 +147,11 @@ module Models {
           });
       });
 
-      private _dataMap: Utils.ReadOnlyProperty<NodeStatusMap> = Utils.Computed(this._data.result, (list: Proto.NodeStatus[]) => {
+      private _dataMap: Utils.ReadOnlyProperty<NodeStatusMap> = Utils.Computed(this._data.lastResult, (list: Proto.NodeStatus[]) => {
         return _.keyBy(list, (status: Proto.NodeStatus) => status.desc.node_id);
       });
 
-      private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.result, (list: Proto.NodeStatus[]) => {
+      private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.lastResult, (list: Proto.NodeStatus[]) => {
         let status: Proto.Status = {
           range_count: 0,
           updated_at: 0,
@@ -166,7 +170,7 @@ module Models {
       });
 
       constructor() {
-        this.allStatuses = this._data.result;
+        this.allStatuses = this._data.lastResult;
         this.totalStatus = this._totalStatus;
       }
 
@@ -176,6 +180,10 @@ module Models {
 
       public refresh(): void {
         this._data.refresh();
+      }
+
+      public error(): Error {
+        return this._data.error();
       }
     }
   }

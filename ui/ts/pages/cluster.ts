@@ -213,6 +213,10 @@ module AdminViews {
               axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, allStoreStats, totalStats, totalStoreStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
+              axis.warning = () => {
+                let warning: Error = nodeStatuses.error();
+                return warning && warning.toString();
+              };
               return m("", {style: "float:left"}, m.component(Visualizations.VisualizationWrapper, axis));
             }
           }));
@@ -234,6 +238,10 @@ module AdminViews {
               axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, allStoreStats, totalStats, totalStoreStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
+              axis.warning = () => {
+                let warning: Error = nodeStatuses.error();
+                return warning && warning.toString();
+              };
               return m(".small.half", {style: "float:left"},  m.component(Visualizations.VisualizationWrapper, axis));
             }
           }));

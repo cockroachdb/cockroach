@@ -1,5 +1,7 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../../typings/browser.d.ts"/>
 /// <reference path="../models/proto.ts" />
+/// <reference path="../util/format.ts" />
 
 module Models {
   "use strict";
@@ -32,7 +34,7 @@ module Models {
 
     // Timeout after 2s
     let xhrConfig = function(xhr: XMLHttpRequest): XMLHttpRequest {
-      xhr.timeout = 2000;
+      xhr.timeout = 10000;
       return xhr;
     };
 

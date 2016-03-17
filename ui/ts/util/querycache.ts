@@ -38,7 +38,14 @@ module Utils {
      */
     error: Utils.ReadOnlyProperty<Error>;
 
+    /**
+     * lastResult returns the result of most recent invocation of the underlying
+     * query which succeeded.
+     */
+    lastResult: Utils.ReadOnlyProperty<T>;
+
     private _result: Utils.Property<T> = Utils.Prop(<T> null);
+    private _lastResult: Utils.Property<T> = Utils.Prop(<T> null);
     private _error: Utils.Property<Error> = Utils.Prop(<Error> null);
     private _inFlight: boolean = false;
 
@@ -51,6 +58,7 @@ module Utils {
     constructor(private _query: () => promise<T>, dontRefresh?: boolean ) {
       this.result = this._result;
       this.error = this._error;
+      this.lastResult = this._lastResult;
       if (!dontRefresh) {
         this.refresh();
       }
@@ -71,9 +79,21 @@ module Utils {
         (obj: T): T => {
           this._error(null);
           this._inFlight = false;
+          this._lastResult(obj);
           return this._result(obj);
         },
         (err: Error): Error => {
+          // Null error occurs when xhr status is 0 - this can result from a
+          // timeout, a bad connection, who knows: it's difficult to extract
+          // information from the failed request, apparently. As a stop gap, we
+          // are going to fill in a generic "Connection to server failed."
+          // message here, since that seems to be a general description of this
+          // class of error. Development tools (such as chrome) can get more
+          // information inside of the network monitor, but that does not appear
+          // to be available to us inside of the code.
+          if (err === null) {
+            err = new Error("Connection to server failed.");
+          }
           this._result(null);
           this._inFlight = false;
           return this._error(err);
