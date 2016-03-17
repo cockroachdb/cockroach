@@ -145,16 +145,16 @@ func (s *Server) ServeConn(conn net.Conn) error {
 			}
 		}()
 		if errSSLRequired {
-			return v3conn.sendError(ErrSSLRequired)
+			return v3conn.sendInternalError(ErrSSLRequired)
 		}
 		if err := v3conn.parseOptions(buf.msg); err != nil {
-			return v3conn.sendError(err.Error())
+			return v3conn.sendInternalError(err.Error())
 		}
 		if tlsConn, ok := conn.(*tls.Conn); ok {
 			tlsState := tlsConn.ConnectionState()
 			authenticationHook, err := security.UserAuthHook(s.context.Insecure, &tlsState)
 			if err != nil {
-				return v3conn.sendError(err.Error())
+				return v3conn.sendInternalError(err.Error())
 			}
 			return v3conn.serve(authenticationHook)
 		}
