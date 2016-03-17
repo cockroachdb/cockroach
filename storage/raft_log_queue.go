@@ -97,7 +97,8 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	}
 
 	if oldestIndex < firstIndex {
-		return 0, 0, util.Errorf("raft log's oldest index is less than the first index for range %d", rangeID)
+		return 0, 0, util.Errorf("raft log's oldest index (%d) is less than the first index (%d) for range %d",
+			oldestIndex, firstIndex, rangeID)
 	}
 
 	// Return the number of truncatable indexes.
