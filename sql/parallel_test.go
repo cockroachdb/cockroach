@@ -160,9 +160,13 @@ func (t *parallelTest) setup() {
 func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	paths, err := filepath.Glob(*paralleltestdata)
+	glob := string(*paralleltestdata)
+	paths, err := filepath.Glob(glob)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("No testfiles found (glob: %s)", glob)
 	}
 	total := 0
 	for _, p := range paths {
