@@ -445,6 +445,8 @@ type TxnExecOptions struct {
 // can be set in this case.
 //
 // If an error is returned, the txn has been aborted.
+// TODO(andrei): Make Exec() return error; make fn return an error + a retriable
+// bit. There's no reason to propagate roachpb.Error (protos) above this point.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
 	fn func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
