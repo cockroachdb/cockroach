@@ -214,6 +214,7 @@ check:
 	@echo "vet"
 	@! $(GO) tool vet . 2>&1 | \
 	  grep -vE '^vet: cannot process directory .git' | \
+	  grep -vE '_m might be too small for shift of 32' | \
 	  grep -vE '^server/admin\..*\go:.+: constant [0-9]+ not a string in call to Errorf' \
 	  # To return proper HTTP error codes (e.g. 404 Not Found), we need to use \
 	  # grpc.Errorf, which has an error code as its first parameter. 'go vet' \

@@ -84,10 +84,10 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeFloatAscending(nil, float64(233.221112)))),
-			"/Table/42/233.221112"},
+			"/Table/42/2.33221112e+02"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeFloatDescending(nil, float64(-233.221112)))),
-			"/Table/42/233.221112"},
+			"/Table/42/2.33221112e+02"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeFloatAscending(nil, math.Inf(1)))),
 			"/Table/42/+Inf"},
@@ -134,7 +134,7 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey([]byte("")), "/Min"},
 		{Meta1KeyMax, "/Meta1/Max"},
 		{Meta2KeyMax, "/Meta2/Max"},
-		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x21, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:9999: unknown escape sequence: 0x0 0x2>"},
+		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x02})), "/Table/42/<util/encoding/encoding.go:9999: unknown escape sequence: 0x0 0x2>"},
 	}
 	for i, test := range testCases {
 		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)

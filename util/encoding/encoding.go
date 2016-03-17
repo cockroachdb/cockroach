@@ -37,20 +37,26 @@ const (
 	// it's used in keys used as span boundaries for index scans.
 	encodedNotNull = 0x01
 
-	floatNaN              = encodedNotNull + 1
-	floatNegativeInfinity = floatNaN + 1
-	floatNegLarge         = floatNegativeInfinity + 1
-	floatNegMedium        = floatNegLarge + 11
-	floatNegSmall         = floatNegMedium + 1
-	floatZero             = floatNegSmall + 1
-	floatPosSmall         = floatZero + 1
-	floatPosMedium        = floatPosSmall + 1
-	floatPosLarge         = floatPosMedium + 11
-	floatInfinity         = floatPosLarge + 1
-	floatNaNDesc          = floatInfinity + 1 // NaN encoded descendingly
-	floatTerminator       = 0x00
+	floatNaN     = encodedNotNull + 1
+	floatNeg     = floatNaN + 1
+	floatZero    = floatNeg + 1
+	floatPos     = floatZero + 1
+	floatNaNDesc = floatPos + 1 // NaN encoded descendingly
 
-	bytesMarker     byte = floatNaNDesc + 1
+	decimalNaN              = floatNaNDesc + 1
+	decimalNegativeInfinity = decimalNaN + 1
+	decimalNegValPosExp     = decimalNegativeInfinity + 1
+	decimalNegValZeroExp    = decimalNegValPosExp + 1
+	decimalNegValNegExp     = decimalNegValZeroExp + 1
+	decimalZero             = decimalNegValNegExp + 1
+	decimalPosValNegExp     = decimalZero + 1
+	decimalPosValZeroExp    = decimalPosValNegExp + 1
+	decimalPosValPosExp     = decimalPosValZeroExp + 1
+	decimalInfinity         = decimalPosValPosExp + 1
+	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
+	decimalTerminator       = 0x00
+
+	bytesMarker     byte = decimalNaNDesc + 1
 	timeMarker      byte = bytesMarker + 1
 	bytesDescMarker byte = timeMarker + 1
 	timeDescMarker  byte = bytesDescMarker + 1
@@ -654,6 +660,7 @@ const (
 	NotNull
 	Int
 	Float
+	Decimal
 	Bytes
 	BytesDesc // Bytes encoded descendingly
 	Time
@@ -681,6 +688,8 @@ func PeekType(b []byte) Type {
 			return Int
 		case m >= floatNaN && m <= floatNaNDesc:
 			return Float
+		case m >= decimalNaN && m <= decimalNaNDesc:
+			return Decimal
 		}
 	}
 	return Unknown
@@ -722,17 +731,13 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		}
 		return b, strconv.FormatInt(i, 10), nil
 	case Float:
-		// Handle float specific values separately.
-		switch b[0] {
-		case floatNaN, floatNaNDesc:
-			return b[1:], strconv.FormatFloat(math.NaN(), 'e', -1, 64), nil
-		case floatInfinity:
-			return b[1:], strconv.FormatFloat(math.Inf(1), 'e', -1, 64), nil
-		case floatNegativeInfinity:
-			return b[1:], strconv.FormatFloat(math.Inf(-1), 'e', -1, 64), nil
+		var f float64
+		b, f, err = DecodeFloatAscending(b)
+		if err != nil {
+			return b, "", err
 		}
-		// Decode both floats and decimals as decimals to avoid
-		// overflow.
+		return b, strconv.FormatFloat(f, 'e', -1, 64), nil
+	case Decimal:
 		var d *inf.Dec
 		b, d, err = DecodeDecimalAscending(b, nil)
 		if err != nil {
