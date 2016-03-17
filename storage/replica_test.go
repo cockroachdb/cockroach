@@ -4167,8 +4167,6 @@ func TestReplicaCancelRaft(t *testing.T) {
 // verify the checksum for the range and returrn it.
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	id := uuid.MakeV4()
-	notify := make(chan []byte, 1)
-	rng.setChecksumNotify(id, notify)
 	args := roachpb.ComputeChecksumRequest{
 		ChecksumID: id,
 		Version:    replicaChecksumVersion,
@@ -4177,22 +4175,20 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case checksum := <-notify:
-		if checksum == nil {
-			t.Fatal("couldn't compute checksum")
-		}
-		verifyArgs := roachpb.VerifyChecksumRequest{
-			ChecksumID: id,
-			Version:    replicaChecksumVersion,
-			Checksum:   checksum,
-		}
-		_, err := rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return checksum
+	c, err := rng.getChecksum(id)
+	if err != nil || c.checksum == nil {
+		t.Fatal("couldn't compute checksum")
 	}
+	verifyArgs := roachpb.VerifyChecksumRequest{
+		ChecksumID: id,
+		Version:    replicaChecksumVersion,
+		Checksum:   c.checksum,
+	}
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c.checksum
 }
 
 func TestComputeVerifyChecksum(t *testing.T) {
@@ -4231,8 +4227,6 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// Verify that a bad version/checksum sent will result in an error.
 	id := uuid.MakeV4()
-	notify := make(chan []byte, 1)
-	rng.setChecksumNotify(id, notify)
 	args := roachpb.ComputeChecksumRequest{
 		ChecksumID: id,
 	}
@@ -4243,33 +4237,31 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// Set a callback for checksum mismatch panics.
 	var panicked bool
 	rng.store.ctx.TestingMocker.BadChecksumPanic = func() { panicked = true }
-	select {
-	case <-notify:
-		// First test that sending a Verification request with a bad version and
-		// bad checksum will return without panicking because of a bad checksum.
-		verifyArgs := roachpb.VerifyChecksumRequest{
-			ChecksumID: id,
-			Version:    10000001,
-			Checksum:   []byte("bad checksum"),
-		}
-		_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if panicked {
-			t.Fatal("VerifyChecksum panicked")
-		}
-		// Setting the correct version results in a panic.
-		verifyArgs.Version = replicaChecksumVersion
-		_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !panicked {
-			t.Fatal("VerifyChecksum didn't panic")
-		}
-		panicked = false
+
+	// First test that sending a Verification request with a bad version and
+	// bad checksum will return without panicking because of a bad checksum.
+	verifyArgs := roachpb.VerifyChecksumRequest{
+		ChecksumID: id,
+		Version:    10000001,
+		Checksum:   []byte("bad checksum"),
 	}
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if panicked {
+		t.Fatal("VerifyChecksum panicked")
+	}
+	// Setting the correct version results in a panic.
+	verifyArgs.Version = replicaChecksumVersion
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !panicked {
+		t.Fatal("VerifyChecksum didn't panic")
+	}
+	panicked = false
 
 	id = uuid.MakeV4()
 	// send a ComputeChecksum with a bad version doesn't result in a
@@ -4283,7 +4275,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Sending a VerifyChecksum with a bad checksum is a noop.
-	verifyArgs := roachpb.VerifyChecksumRequest{
+	verifyArgs = roachpb.VerifyChecksumRequest{
 		ChecksumID: id,
 		Checksum:   []byte("bad checksum"),
 	}
