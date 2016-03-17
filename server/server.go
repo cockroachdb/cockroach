@@ -121,11 +121,11 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
 	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
-	stopper.RunWorker(func() {
-		if err := s.rpcContext.RemoteClocks.MonitorRemoteOffsets(stopper); err != nil {
+	s.rpcContext.HeartbeatCB = func() {
+		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(err)
 		}
-	})
+	}
 
 	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, stopper)
 	s.storePool = storage.NewStorePool(s.gossip, s.clock, ctx.TimeUntilStoreDead, stopper)
