@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 type remoteClockMetrics struct {
@@ -37,13 +36,12 @@ type remoteClockMetrics struct {
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
-	clock           *hlc.Clock
-	monitorInterval time.Duration
+	clock     *hlc.Clock
+	offsetTTL time.Duration
 
 	mu struct {
 		sync.Mutex
-		offsets         map[string]RemoteOffset
-		lastMonitoredAt time.Time
+		offsets map[string]RemoteOffset
 	}
 
 	metrics  remoteClockMetrics
@@ -99,11 +97,11 @@ func (l endpointList) Less(i, j int) bool {
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
-func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
+func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
-		clock:           clock,
-		monitorInterval: defaultHeartbeatInterval * 10,
-		registry:        metric.NewRegistry(),
+		clock:     clock,
+		offsetTTL: offsetTTL,
+		registry:  metric.NewRegistry(),
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
 	r.metrics = remoteClockMetrics{
@@ -115,20 +113,14 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 
 // UpdateOffset is a thread-safe way to update the remote clock measurements.
 //
-// It only updates the offset for addr if one the following three cases holds:
+// It only updates the offset for addr if one of the following cases holds:
 // 1. There is no prior offset for that address.
-// 2. The old offset for addr was measured before r.mu.lastMonitoredAt. We never
-// use values during monitoring that are older than r.mu.lastMonitoredAt.
+// 2. The old offset for addr was measured long enough ago to be considered
+// stale.
 // 3. The new offset's error is smaller than the old offset's error.
 //
-// The third case allows the monitor to use the most precise clock reading of
-// the remote addr during the next findOffsetInterval() invocation. We may
-// measure the remote clock several times before we next calculate the cluster
-// offset. When we do the measurement, we want to use the reading with the
-// smallest error. Because r.monitorInterval > heartbeatInterval, this gives us
-// several chances to accurately read the remote clock. Note that we don't want
-// r.monitorInterval to be too large, else we might end up relying on old
-// information.
+// UpdateOffset also immediately recomputes the cluster clock offset and
+// returns a non nil error if the offset exceeds the maximum offset.
 func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	emptyOffset := offset == RemoteOffset{}
 
@@ -141,7 +133,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 		if !emptyOffset {
 			r.mu.offsets[addr] = offset
 		}
-	} else if oldOffset.measuredAt().Before(r.mu.lastMonitoredAt) {
+	} else if isStale(oldOffset, r.offsetTTL, r.clock.PhysicalTime()) {
 		// We have a measurement but it's old - if the incoming measurement is not empty,
 		// set it, otherwise delete the old measurement.
 		if !emptyOffset {
@@ -162,53 +154,34 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	}
 }
 
-// MonitorRemoteOffsets periodically checks that the offset of this server's
-// clock from the true cluster time is within MaxOffset. If the offset exceeds
-// MaxOffset, then this method will trigger a fatal error, causing the node to
-// suicide.
-func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) error {
-	if log.V(1) {
-		log.Infof("monitoring cluster offset every %s", r.monitorInterval)
-	}
-	var monitorTimer util.Timer
-	defer monitorTimer.Stop()
-	for {
-		monitorTimer.Reset(r.monitorInterval)
-		select {
-		case <-stopper.ShouldStop():
-			return nil
-		case <-monitorTimer.C:
-			monitorTimer.Read = true
-			offsetInterval, err := r.findOffsetInterval()
-			// By the contract of the hlc, if the value is 0, then safety checking
-			// of the max offset is disabled. However we may still want to
-			// propagate the information to a status node.
-			// TODO(embark): once there is a framework for collecting timeseries
-			// data about the db, propagate the offset status to that.
-			if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
-				if err != nil {
-					return util.Errorf("clock offset could not be determined: %s", err)
-				}
+// VerifyClockOffset checks that the offset of this server's clock from the
+// true cluster time is within the maximum offset and returns a non-nil error
+// if the node's clock is deemed not dependable and the node should terminate.
+func (r *RemoteClockMonitor) VerifyClockOffset() error {
+	offsetInterval, err := r.findOffsetInterval()
+	// By the contract of the hlc, if the value is 0, then safety checking
+	// of the max offset is disabled. However we may still want to
+	// propagate the information to a status node.
+	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
+		if err != nil {
+			return util.Errorf("clock offset could not be determined: %s", err)
+		}
 
-				if !isHealthyOffsetInterval(offsetInterval, maxOffset) {
-					return util.Errorf(
-						"clock offset is in interval: %s, which indicates that the true offset is greater than the max offset: %s",
-						offsetInterval, maxOffset,
-					)
-				}
-				if log.V(1) {
-					log.Infof("healthy cluster offset: %s", offsetInterval)
-				}
-			}
-
-			r.metrics.clusterOffsetLowerBound.Update(int64(offsetInterval.lowerbound))
-			r.metrics.clusterOffsetUpperBound.Update(int64(offsetInterval.upperbound))
-
-			r.mu.Lock()
-			r.mu.lastMonitoredAt = r.clock.PhysicalTime()
-			r.mu.Unlock()
+		if !isHealthyOffsetInterval(offsetInterval, maxOffset) {
+			return util.Errorf(
+				"clock offset is in interval: %s, which indicates that the true offset is greater than the max offset: %s",
+				offsetInterval, maxOffset,
+			)
+		}
+		if log.V(1) {
+			log.Infof("healthy cluster offset: %s", offsetInterval)
 		}
 	}
+
+	r.metrics.clusterOffsetLowerBound.Update(int64(offsetInterval.lowerbound))
+	r.metrics.clusterOffsetUpperBound.Update(int64(offsetInterval.upperbound))
+
+	return nil
 }
 
 // isHealthyOffsetInterval returns true if the clusterOffsetInterval indicates
@@ -218,6 +191,10 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets(stopper *stop.Stopper) error {
 // the maxOffset.
 func isHealthyOffsetInterval(i clusterOffsetInterval, maxOffset time.Duration) bool {
 	return i.lowerbound <= maxOffset && i.upperbound >= -maxOffset
+}
+
+func isStale(offset RemoteOffset, ttl time.Duration, now time.Time) bool {
+	return offset.measuredAt().Add(ttl).Before(now)
 }
 
 // The routine that measures this node's probable offset from the rest of the
@@ -240,8 +217,7 @@ func (r *RemoteClockMonitor) findOffsetInterval() (clusterOffsetInterval, error)
 	endpoints := r.buildEndpointList()
 	numClocks := len(endpoints) / 2
 	if log.V(1) {
-		log.Infof("finding offset interval for monitor interval: %s, numOffsets %d",
-			r.monitorInterval, numClocks)
+		log.Infof("finding offset interval given %d measurements", numClocks)
 	}
 	if numClocks == 0 {
 		return clusterOffsetInterval{}, nil
@@ -292,10 +268,7 @@ func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 
 	endpoints := make(endpointList, 0, len(r.mu.offsets)*2)
 	for addr, offset := range r.mu.offsets {
-		// Remove anything that hasn't been updated since the last time offest
-		// was measured. This indicates that we no longer have a connection to
-		// that addr.
-		if offset.measuredAt().Before(r.mu.lastMonitoredAt) {
+		if isStale(offset, r.offsetTTL, r.clock.PhysicalTime()) {
 			delete(r.mu.offsets, addr)
 			continue
 		}
