@@ -47,13 +47,11 @@ var flagNodes = flag.Int("nodes", 3, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
 var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
-var flagStall = flag.Duration("stall", cluster.DefaultStall, "duration after which if no forward progress is made, consider "+
-	"the test stalled")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
 var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
-	"cluster configurations for each test. This overrides the nodes, stores, stall and duration flags and will run "+
-	"the test against a collection of pre-specified cluster configurations.")
+	"cluster configurations for each test. This overrides the nodes, stores and duration flags and will run the test "+
+	"against a collection of pre-specified cluster configurations.")
 var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
@@ -99,7 +97,6 @@ func readConfigFromFlags() cluster.TestConfig {
 	return cluster.TestConfig{
 		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
 		Duration: *flagDuration,
-		Stall:    *flagStall,
 		Nodes: []cluster.NodeConfig{
 			{
 				Count:  int32(*flagNodes),
@@ -130,21 +127,15 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 		configs = append(configs, config)
 	}
 
-	// Override duration and stall values in all configs if the flags are set.
+	// Override duration in all configs if the flags are set.
 	for i := 0; i < len(configs); i++ {
 		// Override values.
 		if flagDuration != nil && *flagDuration != cluster.DefaultDuration {
 			configs[i].Duration = *flagDuration
 		}
-		if flagStall != nil && *flagStall != cluster.DefaultStall {
-			configs[i].Stall = *flagStall
-		}
 		// Set missing defaults.
 		if configs[i].Duration == 0 {
 			configs[i].Duration = cluster.DefaultDuration
-		}
-		if configs[i].Stall == 0 {
-			configs[i].Stall = cluster.DefaultStall
 		}
 	}
 	return configs
