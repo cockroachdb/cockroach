@@ -51,6 +51,10 @@ type planner struct {
 	schemaChangeCallback func(schemaChanger SchemaChanger)
 
 	execCtx *ExecutorContext
+
+	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
+	// that is also able to save the plan to skip work during the exec step.
+	prepareOnly bool
 }
 
 func makePlanner() *planner {
@@ -177,6 +181,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 }
 
 func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
+	p.prepareOnly = true
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(n, false)
