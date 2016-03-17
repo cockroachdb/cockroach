@@ -168,7 +168,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
 		sCtx := storage.TestStoreContext()
-		sCtx.TestingMocker.TestingCommandFilter =
+		sCtx.TestingKnobs.TestingCommandFilter =
 			func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 				if _, ok := args.(*roachpb.IncrementRequest); ok && args.Header().Key.Equal(roachpb.Key("a")) {
 					numIncrements++
@@ -369,7 +369,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	ctx := storage.TestStoreContext()
 	mtc := &multiTestContext{}
 	mtc.storeContext = &ctx
-	mtc.storeContext.TestingMocker.TestingCommandFilter =
+	mtc.storeContext.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
 			if runFilter.Load().(bool) {
 				if et, ok := args.(*roachpb.EndTransactionRequest); ok && et.Commit {
@@ -1549,7 +1549,7 @@ func TestCheckInconsistent(t *testing.T) {
 	// The consistency check will panic on store 1. Let it panic only
 	// if the checksums match.
 	notify := make(chan struct{}, 1)
-	mtc.stores[1].TestingMocker().BadChecksumPanic = func() {
+	mtc.stores[1].TestingKnobs().BadChecksumPanic = func() {
 		notify <- struct{}{}
 	}
 	// Run consistency check.

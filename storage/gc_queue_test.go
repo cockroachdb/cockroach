@@ -342,7 +342,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreContext()
-	tsc.TestingMocker.TestingCommandFilter =
+	tsc.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
 			if resArgs, ok := req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)

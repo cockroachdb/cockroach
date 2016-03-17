@@ -921,7 +921,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 	getContinues := make(chan struct{})
 	var getStarted sync.WaitGroup
 	sCtx := storage.TestStoreContext()
-	sCtx.TestingMocker.TestingCommandFilter =
+	sCtx.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if et, ok := args.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()

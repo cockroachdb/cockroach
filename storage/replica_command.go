@@ -60,7 +60,7 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := r.store.ctx.TestingMocker.TestingCommandFilter; filter != nil {
+	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
 		err := filter(r.store.StoreID(), args, h)
 		if err != nil {
 			pErr := roachpb.NewErrorWithTxn(err, h.Txn)
@@ -1530,7 +1530,7 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 	if c, ok := r.mu.checksums[id]; ok {
 		if c.ok {
 			if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-				if p := r.store.ctx.TestingMocker.BadChecksumPanic; p != nil {
+				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 					p()
 				} else {
 					// TODO(.*): see #5051.

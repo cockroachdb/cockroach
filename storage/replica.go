@@ -76,7 +76,7 @@ const (
 	configGossipInterval = 1 * time.Minute
 )
 
-// CommandFilter may be used in tests through the StorageTestingMocker to
+// CommandFilter may be used in tests through the StorageTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
 // nil to continue with regular processing or non-nil to terminate processing
 // with the returned error. Note that in a multi-replica test this filter will

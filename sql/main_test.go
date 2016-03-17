@@ -153,7 +153,7 @@ func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger)
-	ctx.TestingMocker.StoreTestingMocker.TestingCommandFilter = cmdFilters.runFilters
+	ctx.TestingMocker.StoreTestingKnobs.TestingCommandFilter = cmdFilters.runFilters
 	return ctx, &cmdFilters
 }
 

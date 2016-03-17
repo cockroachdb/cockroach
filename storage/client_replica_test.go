@@ -193,7 +193,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext()
-	ctx.TestingMocker.TestingCommandFilter =
+	ctx.TestingKnobs.TestingCommandFilter =
 		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
 			if _, ok := args.(*roachpb.GetRequest); ok &&
 				args.Header().Key.Equal(roachpb.Key(key)) &&

@@ -149,7 +149,7 @@ type Context struct {
 // TestingMocker is a struct containing facilities for mocking
 // or otherwise controlling various parts of the system.
 type TestingMocker struct {
-	StoreTestingMocker   storage.StoreTestingMocker
+	StoreTestingKnobs    storage.StoreTestingKnobs
 	ExecutorTestingKnobs sql.ExecutorTestingKnobs
 }
 
