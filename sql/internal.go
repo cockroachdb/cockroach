@@ -18,8 +18,10 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 // InternalExecutor can be used internally by cockroach to execute SQL
@@ -38,4 +40,31 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(txn *client.Txn, statem
 	p.user = security.RootUser
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, params...)
+}
+
+// GetTableID returns the table ID for the given table.
+func (ie InternalExecutor) GetTableID(user string, txn *client.Txn, dbName, tableName string) (ID, *roachpb.Error) {
+	// Lookup the table ID.
+	p := makePlanner()
+	p.setTxn(txn)
+	p.user = user
+	p.leaseMgr = ie.LeaseManager
+	qname := &parser.QualifiedName{Base: parser.Name(tableName)}
+	if err := qname.NormalizeTableName(dbName); err != nil {
+		return 0, roachpb.NewError(err)
+	}
+	tableID, pErr := p.getTableID(qname)
+	if pErr != nil {
+		return 0, pErr
+	}
+	return tableID, nil
+}
+
+// MakeTableSpan returns a key span that encompasses all data for the SQL table
+// with the given ID, including any indices.
+func MakeTableSpan(tableID ID) roachpb.Span {
+	tablePrefix := keys.MakeTablePrefix(uint32(tableID))
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
 }
