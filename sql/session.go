@@ -19,6 +19,8 @@ package sql
 import (
 	"time"
 
+	"golang.org/x/net/trace"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -61,6 +63,7 @@ type Session struct {
 	Txn                   SessionTransaction
 	Timezone              isSessionTimezone
 	DefaultIsolationLevel roachpb.IsolationType
+	Trace                 trace.Trace
 }
 
 func (s *Session) getLocation() (*time.Location, error) {

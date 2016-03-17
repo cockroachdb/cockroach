@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 )
 
@@ -138,12 +137,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 
 	if version == version30 {
 		v3conn := makeV3Conn(conn, s.executor, s.metrics)
-		// This is better than always flushing on error.
-		defer func() {
-			if err := v3conn.wr.Flush(); err != nil {
-				log.Error(err)
-			}
-		}()
+		defer v3conn.finish()
 		if errSSLRequired {
 			return v3conn.sendError(ErrSSLRequired)
 		}
