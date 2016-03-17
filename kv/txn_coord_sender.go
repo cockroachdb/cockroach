@@ -322,7 +322,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		return nil, roachpb.NewError(err)
 	}
 	var startNS int64
-	ba.SetNewRequest()
 
 	// This is the earliest point at which the request has an ID (if
 	// applicable). Begin a Trace which follows this request.

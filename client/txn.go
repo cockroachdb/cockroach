@@ -55,7 +55,6 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 
 	ctx = opentracing.ContextWithSpan(ctx, ts.Trace)
 
-	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))

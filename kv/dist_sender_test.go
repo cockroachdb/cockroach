@@ -415,7 +415,6 @@ func TestOwnNodeCertain(t *testing.T) {
 	if !reflect.DeepEqual(exp, act) {
 		t.Fatalf("wanted %v, got %v", exp, act)
 	}
-
 }
 
 // TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
@@ -953,6 +952,72 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+// TestSequenceUpdate verifies txn sequence number is incremented
+// on successive commands.
+func TestSequenceUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+
+	}
+
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+		return []roachpb.RangeDescriptor{
+			roachpb.RangeDescriptor{
+				RangeID:  1,
+				StartKey: roachpb.RKeyMin,
+				EndKey:   roachpb.RKeyMax,
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						NodeID:  1,
+						StoreID: 1,
+					},
+				},
+			},
+		}, nil
+	})
+
+	var expSequence uint32
+	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+		expSequence++
+		if expSequence != ba.Txn.Sequence {
+			t.Errorf("expected sequence %d; got %d", expSequence, ba.Txn.Sequence)
+		}
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend:           testFn,
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(ctx, g)
+
+	// Send 5 puts and verify sequence number increase.
+	txn := &roachpb.Transaction{Name: "test"}
+	for i := 0; i < 5; i++ {
+		var ba roachpb.BatchRequest
+		ba.Txn = txn
+		ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
+		br, pErr := ds.Send(context.Background(), ba)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		txn = br.Txn
 	}
 }
 
