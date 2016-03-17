@@ -50,7 +50,9 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 	txnID := uuid.NewV4()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		ba.UserPriority = 1
+		if ba.UserPriority == 0 {
+			ba.UserPriority = 1
+		}
 		if ba.Txn != nil && ba.Txn.ID == nil {
 			ba.Txn.Key = txnKey
 			ba.Txn.ID = txnID
@@ -609,5 +611,45 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	// Check the timestamp was preserved.
 	if txn.Proto.OrigTimestamp != refTimestamp {
 		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	}
+}
+
+// TestSetPriority verifies that the batch UserPriority is correctly set
+// depending on the transaction priority.
+func TestSetPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var expected roachpb.UserPriority
+
+	db := NewDB(newTestSender(
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if ba.UserPriority != expected {
+				pErr := roachpb.NewErrorf("Priority not set correctly in the batch! "+
+					"(expected: %s, value: %s)", expected, ba.UserPriority)
+				return nil, pErr
+			}
+
+			br := &roachpb.BatchResponse{}
+			br.Txn = &roachpb.Transaction{}
+			br.Txn.Update(ba.Txn) // copy
+			return br, nil
+		}, nil))
+
+	// Verify the normal priority setting path.
+	expected = roachpb.HighUserPriority
+	txn := NewTxn(*db)
+	if err := txn.SetUserPriority(expected); err != nil {
+		t.Fatal(err)
+	}
+	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Verify the internal (fixed value) priority setting path.
+	expected = roachpb.UserPriority(-13)
+	txn = NewTxn(*db)
+	txn.InternalSetPriority(13)
+	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+		t.Fatal(pErr)
 	}
 }

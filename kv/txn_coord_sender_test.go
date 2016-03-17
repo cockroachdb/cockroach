@@ -648,17 +648,20 @@ func TestTxnMultipleCoord(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	for i, tc := range []struct {
+	testCases := []struct {
 		args    roachpb.Request
 		writing bool
 		ok      bool
 	}{
-		{roachpb.NewGet(roachpb.Key("a")), true, true},
+		{roachpb.NewGet(roachpb.Key("a")), true, false},
 		{roachpb.NewGet(roachpb.Key("a")), false, true},
 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), false, false}, // transactional write before begin
 		{roachpb.NewPut(roachpb.Key("a"), roachpb.Value{}), true, false},  // must have switched coordinators
-	} {
-		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
+	}
+
+	for i, tc := range testCases {
+		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE,
+			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
 		txn.Writing = tc.writing
 		reply, pErr := client.SendWrappedWith(s.Sender, nil, roachpb.Header{
 			Txn: txn,
@@ -926,8 +929,53 @@ func TestTxnAbandonCount(t *testing.T) {
 		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
 
 		return nil
-	}); !testutils.IsPError(pErr, "already committed or aborted") {
+	}); !testutils.IsPError(pErr, "writing transaction timed out") {
 		t.Fatalf("unexpected error: %s", pErr)
+	}
+}
+
+// TestTxnReadAfterAbandon checks the fix for the condition in issue #4787:
+// after a transaction is abandoned we do a read as part of that transaction
+// which should fail.
+func TestTxnReadAfterAbandon(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+	value := []byte("value")
+	db := client.NewDB(sender)
+
+	// Test abandoned transaction by making the client timeout ridiculously short. We also set
+	// the sender to heartbeat very frequently, because the heartbeat detects and tears down
+	// abandoned transactions.
+	sender.heartbeatInterval = 2 * time.Millisecond
+	sender.clientTimeout = 1 * time.Millisecond
+
+	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		key := []byte("key-abandon")
+
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			t.Fatal(err)
+		}
+
+		if pErr := txn.Put(key, value); pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))
+
+		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
+
+		_, pErr := txn.Get(key)
+		if pErr == nil {
+			t.Fatalf("Get succeeded on abandoned txn")
+		} else if !testutils.IsPError(pErr, "writing transaction timed out") {
+			t.Fatalf("unexpected error from Get on abandoned txn: %s", pErr)
+		}
+		return pErr
+	})
+
+	if pErr == nil {
+		t.Fatalf("abandoned txn didn't fail")
 	}
 }
 

@@ -178,10 +178,11 @@ type ExecutorContext struct {
 	LeaseManager *LeaseManager
 	Clock        *hlc.Clock
 
-	TestingMocker ExecutorTestingMocker
+	TestingMocker *ExecutorTestingMocker
 }
 
-// ExecutorTestingMocker is a part of the context used to control parts of the system.
+// ExecutorTestingMocker is a part of the context used to control parts of the
+// system during testing.
 type ExecutorTestingMocker struct {
 	// WaitForGossipUpdate causes metadata-mutating operations to wait
 	// for the new metadata to back-propagate through gossip.
@@ -190,6 +191,10 @@ type ExecutorTestingMocker struct {
 	// CheckStmtStringChange causes Executor.execStmtsInCurrentTxn to verify
 	// that executed statements are not modified during execution.
 	CheckStmtStringChange bool
+
+	// FixTxnPriority causes transaction priority values to be hardcoded (for
+	// each priority level) to avoid the randomness in the normal generation.
+	FixTxnPriority bool
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -296,6 +301,7 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 		systemConfig:  cfg,
 		databaseCache: cache,
 		session:       session,
+		execCtx:       &e.ctx,
 	}
 
 	txn := e.newTxn(session)
@@ -457,6 +463,7 @@ func (e *Executor) ExecuteStatements(
 		systemConfig:  cfg,
 		databaseCache: cache,
 		session:       session,
+		execCtx:       &e.ctx,
 	}
 
 	curTxnState := txnState{

@@ -49,6 +49,8 @@ type planner struct {
 	// Callback used when a node wants to schedule a SchemaChanger
 	// for execution at the end of the current transaction.
 	schemaChangeCallback func(schemaChanger SchemaChanger)
+
+	execCtx *ExecutorContext
 }
 
 func makePlanner() *planner {

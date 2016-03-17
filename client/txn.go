@@ -48,7 +48,9 @@ type txnSender Txn
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
-	if ts.UserPriority > 0 {
+	// For testing purposes, ts.UserPriority can be a negative value (see
+	// MakePriority).
+	if ts.UserPriority != 0 {
 		ba.UserPriority = ts.UserPriority
 	}
 
@@ -169,7 +171,7 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 func (txn *Txn) InternalSetPriority(priority int32) {
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.
-	txn.db.userPriority = roachpb.UserPriority(-priority)
+	txn.UserPriority = roachpb.UserPriority(-priority)
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
