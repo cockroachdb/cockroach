@@ -2,6 +2,6 @@
 # inadvertently reuse the previous results of the subquery during a retry, we might insert
 # duplicate values.
 
-repeat 50
+repeat 10
 statement ok
 INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
