@@ -245,15 +245,15 @@ func (l *LocalCluster) panicOnStop() {
 func (l *LocalCluster) createNetwork() {
 	l.panicOnStop()
 
-	nets, err := l.client.NetworkList(types.NetworkListOptions{})
+	nets, err := l.client.NetworkList(context.Background(), types.NetworkListOptions{})
 	maybePanic(err)
 	for _, net := range nets {
 		if net.Name == networkName {
-			maybePanic(l.client.NetworkRemove(net.ID))
+			maybePanic(l.client.NetworkRemove(context.Background(), net.ID))
 		}
 	}
 
-	resp, err := l.client.NetworkCreate(types.NetworkCreate{
+	resp, err := l.client.NetworkCreate(context.Background(), types.NetworkCreate{
 		Name:   networkName,
 		Driver: "bridge",
 		// Docker gets very confused if two networks have the same name.
@@ -679,7 +679,7 @@ func (l *LocalCluster) stop() {
 	l.Nodes = nil
 
 	if l.networkID != "" {
-		maybePanic(l.client.NetworkRemove(l.networkID))
+		maybePanic(l.client.NetworkRemove(context.Background(), l.networkID))
 		l.networkID = ""
 	}
 }
