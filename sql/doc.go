@@ -240,9 +240,5 @@ Our example query thus only scans two key-value pairs:
   /system.descriptor/primary/0/test    -> NULL
   /system.descriptor/primary/0/test/id -> <ID>
 
-API
-
-  TODO(pmattis): Describe sql/driver.{Request,Response}?
-
 */
 package sql
