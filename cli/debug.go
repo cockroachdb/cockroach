@@ -114,7 +114,8 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 	if err := value.GetProto(&desc); err != nil {
 		return false, err
 	}
-	fmt.Printf("Range descriptor with start key %s at time %s\n%s\n", startKey, kv.Key.Timestamp.GoTime(), &desc)
+	fmt.Printf("Range descriptor %s at time %s\n\tCovers: [%s, %s)\n\tRaw:%s\n\n",
+		startKey, kv.Key.Timestamp.GoTime(), desc.StartKey, desc.EndKey, &desc)
 	return false, nil
 }
 
