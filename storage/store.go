@@ -1979,22 +1979,6 @@ func raftEntryFormatter(data []byte) string {
 	return s
 }
 
-// GetStatus fetches the latest store status from the stored value on the cluster.
-// Returns nil if the scanner has not yet run. The scanner runs once every
-// ctx.ScanInterval.
-func (s *Store) GetStatus() (*StoreStatus, error) {
-	if s.scanner.Count() == 0 {
-		// The scanner hasn't completed a first run yet.
-		return nil, nil
-	}
-	key := keys.StoreStatusKey(int32(s.Ident.StoreID))
-	status := &StoreStatus{}
-	if pErr := s.db.GetProto(key, status); pErr != nil {
-		return nil, pErr.GoError()
-	}
-	return status, nil
-}
-
 // computeReplicationStatus counts a number of simple replication statistics for
 // the ranges in this store.
 // TODO(bram): #4564 It may be appropriate to compute these statistics while
