@@ -62,13 +62,14 @@ module Components {
     export function view(ctrl: HealthController): _mithril.MithrilVirtualElement {
       if (ctrl.healthy) {
         return m("div", [
+          m("span.good", "Good"),
           m("span.health-icon.icon-check-circle" + (ctrl.refreshing ? ".refreshing" : "")),
           // m("span.refreshing-text", ctrl.refreshing ? " Refreshing..." : ""),
         ]);
       } else {
         return m("div", [
-          m("span.health-icon.icon-x" + (ctrl.refreshing ? ".refreshing" : "")),
-          m("span.unreachable-text", " Can't reach node. "),
+          m("span.unreachable-text", "Can't reach node "),
+          m("span.health-icon.icon-stop-sign" + (ctrl.refreshing ? ".refreshing" : "")),
           // m("span.refreshing-text", ctrl.refreshing ? " Refreshing..." : ""),
         ]);
       }

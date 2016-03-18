@@ -1,3 +1,5 @@
 sql/parser/sql.go binary
 ui/embedded.go binary
 *.pdf binary
+*.woff binary
+*.woff2 binary

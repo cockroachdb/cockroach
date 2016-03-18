@@ -20,11 +20,6 @@ module Components {
         Models.Events.eventSingleton.setLimit(limit);
 
         return m(".event-table-container", [
-          m(".table-header", [
-            m("a", {config: m.route, href: "/nodes/events"}, m("button.right", "View All")),
-            m("h1", "Cluster Events"),
-            m("span"),
-          ]),
           m(".event-table", m("table", m("tbody", _.map(_.take(Models.Events.eventSingleton.normalizedRows, limit), function (row: NormalizedRow): MithrilVirtualElement {
             return m("tr", [
               m("td", m(".icon-info-filled")),

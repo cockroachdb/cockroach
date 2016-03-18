@@ -158,6 +158,10 @@ module AdminViews {
                   and get notified when new versions of CockroachDB are available.`),
                   m("form", ctrl.userData.bindForm(), [
                     m(".inputs", [
+                      m("input[name=firstname]", {placeholder: "First Name"}), m("span.status"),
+                      m("input[name=lastname]", {placeholder: "Last Name"}), m("span.status"),
+                      m("input[name=email][type=email][required=true]", {placeholder: "Email*"}), m("span.status"),
+                      m("input[name=company]", {placeholder: "Company (optional)"}), m("span.status"),
                       m("", [
                         m("input[type=checkbox][name=optin][required=true]", {id: "optin", checked: true}),
                         m("label", {for: "optin"}, "Share data with Cockroach Labs"),
@@ -169,17 +173,13 @@ module AdminViews {
                         the actual data that you store in your CockroachDB cluster.
                         Except as set out above, our `, m("a", {href: "/assets/privacyPolicy.html", target: "_blank"}, "Privacy Policy"), ` governs our collection
                         and use of information from users of our products and services.`, ]),
-                      m("input[name=email][type=email][required=true]", {placeholder: "Email"}), m("span.status"), m("span.icon"),
-                      m("input[name=firstname]", {placeholder: "First Name"}), m("span.status"), m("span.icon"),
-                      m("input[name=lastname]", {placeholder: "Last Name"}), m("span.status"), m("span.icon"),
-                      m("input[name=company]", {placeholder: "Company (optional)"}), m("span.status"), m("span.icon"),
                       m("", [
                         m("input[type=checkbox][name=updates]", {id: "updates"}),
                         m("label", {for: "updates"}, "Send me product and feature updates"),
                       ]),
                     ]),
-                    m("button", {onclick: ctrl.modalSubmit.bind(ctrl)}, "Submit"),
-                    m("button", {onclick: close}, "Cancel"),
+                    m("button.right", {onclick: ctrl.modalSubmit.bind(ctrl)}, "Submit"),
+                    m("button.right.cancel", {onclick: close}, "Cancel"),
                   ]),
                 ],
                 onclose: close,

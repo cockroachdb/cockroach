@@ -70,8 +70,7 @@ module AdminViews {
       }
 
       export function view(ctrl: HelpUsController): _mithril.MithrilVirtualElement {
-
-        return m(".page.registration", [
+        return m(".page.help-us", [
           m.component(Components.Topbar, {title: "Help Cockroach Labs", updated: Utils.Convert.MilliToNano(Date.now())}),
           m(".section", [
             m(".header", m("h1", "Usage Reporting")),
@@ -79,6 +78,10 @@ module AdminViews {
               m(".intro", ctrl.text()),
               m("hr"),
               m("form", ctrl.userData.bindForm(), [
+                m("input[name=firstname]", {placeholder: "First Name", value: ctrl.userData.attributes.firstname}), m("span.status"),
+                m("input[name=lastname]", {placeholder: "Last Name", value: ctrl.userData.attributes.lastname}), m("span.status"),
+                m("input[name=email][type=email][required=true]", {placeholder: "Email*", value: ctrl.userData.attributes.email}), m("span.status"),
+                m("input[name=company]", {placeholder: "Company", value: ctrl.userData.attributes.company}), m("span.status"),
                 m("", [
                   m("input[type=checkbox][name=optin]" + (ctrl.userData.savedAttributes.optin ? "" : "[required=true]"), {id: "optin", checked: ctrl.userData.attributes.optin}),
                   m("label", {for: "optin"}, "Share data with Cockroach Labs"),
@@ -90,16 +93,11 @@ module AdminViews {
                   the actual data that you store in your CockroachDB cluster.
                   Except as set out above, our `, m("a", {href: "/assets/privacyPolicy.html", target: "_blank"}, "Privacy Policy"), ` governs our collection
                   and use of information from users of our products and services.`, ]),
-                m("input[name=email][type=email][required=true]", {placeholder: "Email", value: ctrl.userData.attributes.email}), m("span.status"), m("span.icon"),
-                m("input[name=firstname]", {placeholder: "First Name", value: ctrl.userData.attributes.firstname}), m("span.status"), m("span.icon"),
-                m("input[name=lastname]", {placeholder: "Last Name", value: ctrl.userData.attributes.lastname}), m("span.status"), m("span.icon"),
-                m("input[name=company]", {placeholder: "Company (optional)", value: ctrl.userData.attributes.company}), m("span.status"), m("span.icon"),
                 m("", ctrl.userData.savedAttributes.updates ? [m(".email-message", "")] : [
                   m("input[type=checkbox][name=updates]", {id: "updates", checked: ctrl.userData.attributes.updates}),
                   m("label", {for: "updates"}, "Send me product and feature updates"),
                 ]),
-                m("hr"),
-                m("button", {onclick: ctrl.submit.bind(ctrl)}, "Submit"),
+                m("button.right", {onclick: ctrl.submit.bind(ctrl)}, "Submit"),
                 m(".saving" + (ctrl.saving ? ".no-animate" : ""),
                   {style: (ctrl.saving || ctrl.saveFailed ? "opacity: 1;" : "")},
                   (ctrl.saving ? "Saving..." : (!ctrl.saveFailed ? "Saved" : "Save Failed" ))),
