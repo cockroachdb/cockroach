@@ -32,9 +32,9 @@ module AdminViews {
     import NodeStatus = Models.Proto.NodeStatus;
     import Selector = Models.Metrics.Select.Selector;
     import MithrilComponent = _mithril.MithrilComponent;
+    import MetricNames = Models.Proto.MetricConstants;
 
     let nodeStatuses: Models.Status.Nodes = new Models.Status.Nodes();
-    let storeStatuses: Models.Status.Stores = new Models.Status.Stores();
 
     function _nodeMetric(metric: string): string {
       return "cr.node." + metric;
@@ -103,8 +103,8 @@ module AdminViews {
             title: "Capacity Used",
             visualizationArguments: {
               format: "0.1%",
-              dataFn: function (allStats: any, storeStats: Models.Proto.StoreStatus[], totalStats: any, totalStoreStats: Models.Proto.Status): { value: number; } {
-                return {value: totalStats.stats.live_bytes / _.sum(_.map(storeStats, (v: Models.Proto.StoreStatus): number => v.desc.capacity.capacity)) }; },
+              dataFn: function (allStats: Models.Proto.NodeStatus[], totalStats: Models.Proto.StatusMetrics): { value: number; } {
+                return {value: totalStats[MetricNames.liveBytes] / totalStats[MetricNames.capacity] }; },
               zoom: "50%",
             },
           });
@@ -204,13 +204,10 @@ module AdminViews {
               return m("", {style: "float:left"}, Components.Metrics.LineGraph.create(this.exec, axis));
             } else {
               let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
-              let allStoreStats: Models.Proto.StoreStatus[] = storeStatuses.allStatuses();
-
-              let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
-              let totalStoreStats: Models.Proto.StoreStatus = <Models.Proto.StoreStatus>storeStatuses.totalStatus();
+              let totalStats: Models.Proto.StatusMetrics = nodeStatuses.totalStatus();
 
               axis.title = axis.titleFn ? axis.titleFn(allStats) : axis.title;
-              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, allStoreStats, totalStats, totalStoreStats);
+              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
               axis.warning = () => {
@@ -229,13 +226,10 @@ module AdminViews {
               return m(".small.half", {style: "float:left"}, Components.Metrics.LineGraph.create(this.exec, axis));
             } else {
               let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
-              let allStoreStats: Models.Proto.StoreStatus[] = storeStatuses.allStatuses();
-
-              let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
-              let totalStoreStats: Models.Proto.StoreStatus = <Models.Proto.StoreStatus>storeStatuses.totalStatus();
+              let totalStats: Models.Proto.StatusMetrics = nodeStatuses.totalStatus();
 
               axis.title = axis.titleFn ? axis.titleFn(allStats) : axis.title;
-              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, allStoreStats, totalStats, totalStoreStats);
+              axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
               axis.warning = () => {
@@ -249,7 +243,7 @@ module AdminViews {
 
         public RenderPrimaryStats(): MithrilElement {
           let allStats: Models.Proto.NodeStatus[] = nodeStatuses.allStatuses();
-          let totalStats: Models.Proto.Status = nodeStatuses.totalStatus();
+          let totalStats: Models.Proto.StatusMetrics = nodeStatuses.totalStatus();
           if (allStats) {
             return m(
               ".primary-stats.half",
@@ -265,21 +259,21 @@ module AdminViews {
                   title: "Total Ranges",
                   visualizationArguments: {
                     format: ".0s",
-                    data: {value: totalStats.range_count},
+                    data: {value: totalStats[MetricNames.ranges]},
                   },
                 },
                 {
                   title: "Available",
                   visualizationArguments: {
                     format: "3%",
-                    data: {value: totalStats.available_range_count / totalStats.leader_range_count},
+                    data: {value: totalStats[MetricNames.availableRanges] / totalStats[MetricNames.leaderRanges]},
                   },
                 },
                 {
                   title: "Fully Replicated",
                   visualizationArguments: {
                     format: "3%",
-                    data: {value: totalStats.replicated_range_count / totalStats.leader_range_count},
+                    data: {value: totalStats[MetricNames.replicatedRanges] / totalStats[MetricNames.leaderRanges]},
                   },
                 },
               ].map(function (v: any): MithrilComponent<any> {
@@ -295,7 +289,6 @@ module AdminViews {
         private _refresh(): void {
           this.exec.refresh();
           nodeStatuses.refresh();
-          storeStatuses.refresh();
           Models.Events.eventSingleton.refresh();
         }
 

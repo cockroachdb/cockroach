@@ -55,10 +55,10 @@ module Models {
       count: number;
     }
 
-    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (Proto.Status)[]): BytesAndCount {
+    export function bytesAndCountReducer(byteAttr: string, countAttr: string, rows: (Proto.StatusMetrics)[]): BytesAndCount {
       return _.reduce(
         rows,
-        function (memo: BytesAndCount, row: (Proto.Status)): BytesAndCount {
+        function (memo: BytesAndCount, row: (Proto.StatusMetrics)): BytesAndCount {
           memo.bytes += <number>_.get(row, byteAttr);
           memo.count += <number>_.get(row, countAttr);
           return memo;
@@ -66,82 +66,32 @@ module Models {
         {bytes: 0, count: 0});
     }
 
-    export function sumReducer(attr: string, rows: (Proto.Status)[]): number {
+    export function sumReducer(attr: string, rows: (Proto.StatusMetrics)[]): number {
       return _.reduce(
         rows,
-        function (memo: number, row: (Proto.Status)): number {
+        function (memo: number, row: (Proto.StatusMetrics)): number {
           return memo + <number>_.get(row, attr);
         },
         0);
     }
 
-    export class Stores {
-      public allStatuses: Utils.ReadOnlyProperty<Proto.StoreStatus[]>;
-      public totalStatus: Utils.ReadOnlyProperty<Proto.Status>;
-
-      private _data: Utils.QueryCache<Proto.StoreStatus[]> = new Utils.QueryCache((): promise<Proto.StoreStatus[]> => {
-        return Utils.Http.Get("/_status/stores/")
-          .then((results: StoreStatusResponseSet) => {
-            return results.d;
-          });
-      });
-
-      private _dataMap: Utils.ReadOnlyProperty<StoreStatusMap> = Utils.Computed(this._data.lastResult, (list: Proto.StoreStatus[]) => {
-        return _.keyBy(list, (status: Proto.StoreStatus) => status.desc.store_id);
-      });
-
-      private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.lastResult, (list: Proto.StoreStatus[]) => {
-        let status: Proto.Status = {
-          range_count: 0,
-          updated_at: 0,
-          started_at: 0,
-          leader_range_count: 0,
-          replicated_range_count: 0,
-          available_range_count: 0,
-          stats: Proto.NewMVCCStats(),
-        };
-        if (list) {
-          list.forEach((storeStatus: Proto.StoreStatus) => {
-            Proto.AccumulateStatus(status, storeStatus);
-          });
-        }
-        return status;
-      });
-
-      constructor() {
-        this.allStatuses = this._data.lastResult;
-        this.totalStatus = this._totalStatus;
-      }
-
-      public GetStatus(storeId: string): Proto.StoreStatus {
-        return this._dataMap()[storeId];
-      }
-
-      public refresh(): void {
-        this._data.refresh();
-      }
-
-      public error(): Error {
-        return this._data.error();
-      }
-    }
-
     export class Nodes {
       public allStatuses: Utils.ReadOnlyProperty<Proto.NodeStatus[]>;
-      public totalStatus: Utils.ReadOnlyProperty<Proto.Status>;
+      public totalStatus: Utils.ReadOnlyProperty<Proto.StatusMetrics>;
 
       private _data: Utils.QueryCache<Proto.NodeStatus[]> = new Utils.QueryCache((): promise<Proto.NodeStatus[]> => {
         return Utils.Http.Get("/_status/nodes/")
           .then((results: NodeStatusResponseSet) => {
             let statuses = results.d;
             statuses.forEach((ns: Proto.NodeStatus) => {
-              // store_ids will be null if the associated node has no
+              // store_statuses will be null if the associated node has no
               // bootstrapped stores; this causes significant null-handling
               // problems in code. Convert "null" or "undefined" to an empty
-              // array.
-              if (!_.isArray(ns.store_ids)) {
-                ns.store_ids = [];
+              // object.
+              if (!_.isObject(ns.store_statuses)) {
+                ns.store_statuses = {};
               }
+              Models.Proto.RollupStoreMetrics(ns);
             });
             return statuses;
           });
@@ -151,22 +101,12 @@ module Models {
         return _.keyBy(list, (status: Proto.NodeStatus) => status.desc.node_id);
       });
 
-      private _totalStatus: Utils.ReadOnlyProperty<Proto.Status> = Utils.Computed(this._data.lastResult, (list: Proto.NodeStatus[]) => {
-        let status: Proto.Status = {
-          range_count: 0,
-          updated_at: 0,
-          started_at: 0,
-          leader_range_count: 0,
-          replicated_range_count: 0,
-          available_range_count: 0,
-          stats: Proto.NewMVCCStats(),
-        };
+      private _totalStatus: Utils.ReadOnlyProperty<Proto.StatusMetrics> = Utils.Computed(this._data.lastResult, (list: Proto.NodeStatus[]) => {
+        let totalStatus: Models.Proto.StatusMetrics = {};
         if (list) {
-          list.forEach((nodeStatus: Proto.NodeStatus) => {
-            Proto.AccumulateStatus(status, nodeStatus);
-          });
+          Models.Proto.AccumulateMetrics(totalStatus, ..._.map(list, (ns) => ns.metrics));
         }
-        return status;
+        return totalStatus;
       });
 
       constructor() {
