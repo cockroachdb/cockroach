@@ -30,11 +30,11 @@ type GarbageCollector struct {
 	policy     config.GCPolicy
 }
 
-// NewGarbageCollector allocates and returns a new GC, with expiration
+// MakeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
-func NewGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) *GarbageCollector {
+func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1E9
-	return &GarbageCollector{
+	return GarbageCollector{
 		expiration: roachpb.Timestamp{WallTime: now.WallTime - ttlNanos},
 		policy:     policy,
 	}
@@ -45,7 +45,7 @@ func NewGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) *Garbage
 // Returns the timestamp including, and after which, all values should
 // be garbage collected. If no values should be GC'd, returns
 // roachpb.ZeroTimestamp.
-func (gc *GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Timestamp {
+func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) roachpb.Timestamp {
 	if gc.policy.TTLSeconds <= 0 {
 		return roachpb.ZeroTimestamp
 	}
