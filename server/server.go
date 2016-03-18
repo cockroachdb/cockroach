@@ -324,6 +324,8 @@ func (s *Server) Start() error {
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
+	s.periodicallyCheckForUpdates()
+
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)
 

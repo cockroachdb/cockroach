@@ -185,6 +185,10 @@ var (
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 
+	// UpdateCheckPrefix is the key prefix for all update check times.
+	UpdateCheckPrefix      = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("update-")))
+	UpdateCheckCluster     = roachpb.Key(makeKey(UpdateCheckPrefix, roachpb.RKey("cluster")))
+
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MinInt64))
 	// TableDataMin is the end of the range of table data keys.

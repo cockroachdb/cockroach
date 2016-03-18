@@ -205,6 +205,8 @@ func (ts *TestServer) Start() error {
 // StartWithStopper is the same as Start, but allows passing a stopper
 // explicitly.
 func (ts *TestServer) StartWithStopper(stopper *stop.Stopper) error {
+	parsedUpdatesURL = nil // prevent tests from accidentally calling home
+
 	if ts.Ctx == nil {
 		ts.Ctx = NewTestContext()
 	}
