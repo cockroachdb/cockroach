@@ -171,6 +171,13 @@ message DidntUpdateDescriptorError {
 
 // An SqlTransactionAbortedError indicates that a current transaction is aborted.
 message SqlTransactionAbortedError {
+  // If not empty, this will be appended after the default error message.
+  optional string custom_msg = 1 [(gogoproto.nullable) = false];
+}
+
+// An SqlTransactionCommittedError indicates that a current transaction is already committed
+// (probably as a result of a RELEASE statement).
+message SqlTransactionCommittedError {
 }
 
 // An ExistingSchemaChangeLeaseError indicates that an outstanding
@@ -204,16 +211,20 @@ message ErrorDetail {
   optional ReplicaCorruptionError replica_corruption = 17;
   optional LeaseVersionChangedError lease_version_changed = 18;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
-  optional SqlTransactionAbortedError sql_tranasction_aborted = 20;
+  optional SqlTransactionAbortedError sql_transaction_aborted = 20;
   optional ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+  optional SqlTransactionCommittedError sql_transaction_committed = 22;
 }
 
 // TransactionRestart indicates how an error should be handled in a
 // transactional context.
 enum TransactionRestart {
-  // ABORT (the default) is for errors that are considered permanent
-  // and should abort the transaction.
-  ABORT = 0;
+  //  NONE (the default) is used for errors which have no effect on the
+  //  transaction state. That is, a transactional operation which receives such
+  //  an error is still PENDING and does not need to restart (at least not as a
+  //  result of the error). Examples are a CPut whose condition wasn't met, or
+  //  a spurious RPC error.
+  NONE = 0;
 
   // BACKOFF is for errors that can retried by restarting the transaction
   // after an exponential backoff.

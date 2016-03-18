@@ -1,4 +1,3 @@
-// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -245,6 +244,7 @@ func (u *sqlSymUnion) idxElem() IndexElem {
 func (u *sqlSymUnion) idxElems() IndexElemList {
     return u.val.(IndexElemList)
 }
+
 %}
 
 %union {
@@ -501,7 +501,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   HAVING HIGH HOUR
 
 %token <str>   IF IFNULL IN
-%token <str>   INDEX INDEXES INITIALLY
+%token <str>   INDEX INDEXES INITIALLY INTENT
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
@@ -527,7 +527,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   RENAME REPEATABLE
-%token <str>   RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
+%token <str>   RELEASE RESTRICT RESTART RETRY RETURNING REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT
 
 %token <str>   SEARCH SECOND SELECT
@@ -1650,10 +1650,23 @@ transaction_stmt:
   {
     $$.val = &RollbackTransaction{}
   }
+| RELEASE opt_transaction
+  {
+    $$.val = &ReleaseTransaction{}
+  }
+| RESTART opt_transaction
+  {
+    $$.val = &RestartTransaction{}
+  }
+| RETRY INTENT
+  {
+    $$.val = &RetryIntent{}
+  }
 
 opt_transaction:
   TRANSACTION {}
 | /* EMPTY */ {}
+
 
 opt_transaction_mode_list:
   transaction_iso_level
@@ -3864,6 +3877,7 @@ unreserved_keyword:
 | HOUR
 | INDEXES
 | INSERT
+| INTENT
 | ISOLATION
 | KEY
 | KEYS
@@ -3892,9 +3906,12 @@ unreserved_keyword:
 | READ
 | RECURSIVE
 | REF
+| RELEASE
 | RENAME
 | REPEATABLE
+| RESTART
 | RESTRICT
+| RETRY
 | REVOKE
 | ROLLBACK
 | ROLLUP

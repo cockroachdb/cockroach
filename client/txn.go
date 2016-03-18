@@ -45,6 +45,8 @@ var DefaultTxnRetryOptions = retry.Options{
 // method out of the Txn method set.
 type txnSender Txn
 
+// Send updates the transaction on error. Depending on the error type, the
+// transaction might be replaced by a new one.
 func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
@@ -88,7 +90,7 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		if pErr.GetTxn() != nil {
 			ts.Proto.Priority = pErr.GetTxn().Priority
 		}
-	} else if pErr.TransactionRestart != roachpb.TransactionRestart_ABORT {
+	} else if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
 		ts.Proto.Update(pErr.GetTxn())
 	}
 	return nil, pErr
@@ -338,18 +340,19 @@ func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
 	return txn.sendEndTxnReq(true /* commit */, deadline)
 }
 
-// Cleanup cleans up the transaction as appropriate based on err.
-func (txn *Txn) Cleanup(pErr *roachpb.Error) {
-	if pErr != nil {
-		if replyErr := txn.Rollback(); replyErr != nil {
-			log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, pErr)
-		}
+// CleanupOnError cleans up the transaction as a result of an error.
+func (txn *Txn) CleanupOnError(pErr *roachpb.Error) {
+	if pErr == nil {
+		panic("no error")
+	}
+	if replyErr := txn.Rollback(); replyErr != nil {
+		log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, pErr)
 	}
 }
 
 // CommitNoCleanup is the same as Commit but will not attempt to clean
-// up on failure. It is exposed only for use in txn_correctness_test.go
-// because those tests manipulate transaction state at a low level.
+// up on failure. This can be used when the caller is prepared to do proper
+// cleanup.
 func (txn *Txn) CommitNoCleanup() *roachpb.Error {
 	return txn.commit(nil)
 }
@@ -378,7 +381,9 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 // Commit sends an EndTransactionRequest with Commit=true.
 func (txn *Txn) Commit() *roachpb.Error {
 	pErr := txn.commit(nil)
-	txn.Cleanup(pErr)
+	if pErr != nil {
+		txn.CleanupOnError(pErr)
+	}
 	return pErr
 }
 
@@ -386,7 +391,9 @@ func (txn *Txn) Commit() *roachpb.Error {
 // Deadline=deadline.
 func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
 	pErr := txn.commit(&deadline)
-	txn.Cleanup(pErr)
+	if pErr != nil {
+		txn.CleanupOnError(pErr)
+	}
 	return pErr
 }
 
@@ -444,7 +451,10 @@ type TxnExecOptions struct {
 // that a ROLLBACK will reset the state. Neither opt.AutoRetry not opt.AutoCommit
 // can be set in this case.
 //
-// If an error is returned, the txn has been aborted.
+// When this method returns, txn might be in any state; Exec does not attempt
+// to clean up the transaction before returning an error. In case of
+// TransactionAbortedError, txn is reset to a fresh transaction, ready to be
+// used.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
 	fn func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
@@ -473,7 +483,7 @@ RetryLoop:
 		pErr = fn(txn, &opt)
 		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
 			// fn succeeded, but didn't commit.
-			pErr = txn.commit(nil)
+			pErr = txn.CommitNoCleanup()
 		}
 
 		if pErr == nil {
@@ -503,12 +513,6 @@ RetryLoop:
 			log.Infof("automatically retrying transaction: %s because of error: %s",
 				txn.DebugName(), pErr)
 		}
-	}
-
-	if txn != nil {
-		// TODO(andrei): don't do Cleanup() on retryable errors here.
-		// Let the sql executor do it.
-		txn.Cleanup(pErr)
 	}
 
 	if pErr != nil {
