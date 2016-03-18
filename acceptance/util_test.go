@@ -109,12 +109,13 @@ func readConfigFromFlags() cluster.TestConfig {
 // getConfigs returns a list of test configs based on the passed in flags.
 func getConfigs(t *testing.T) []cluster.TestConfig {
 	// If a config not supplied, just read the flags.
-	if flagConfig == nil && flagTestConfigs == nil {
+	if (flagConfig == nil || len(*flagConfig) == 0) &&
+		(flagTestConfigs == nil || !*flagTestConfigs) {
 		return []cluster.TestConfig{readConfigFromFlags()}
 	}
 
 	var configs []cluster.TestConfig
-	if *flagTestConfigs {
+	if flagTestConfigs != nil && *flagTestConfigs {
 		configs = append(configs, cluster.DefaultConfigs()...)
 	}
 
@@ -145,6 +146,9 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 // passed in test against each on serially.
 func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
 	cfgs := getConfigs(t)
+	if len(cfgs) == 0 {
+		t.Fatal("no config defined so most tests won't run")
+	}
 	for _, cfg := range cfgs {
 		func() {
 			cluster := StartCluster(t, cfg)
