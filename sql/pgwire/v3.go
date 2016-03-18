@@ -341,8 +341,8 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		// ValArgs are 1-indexed, pq.inTypes are 0-indexed.
 		i--
-		if len(pq.inTypes) <= i {
-			return c.sendError("internal error: leftover valargs")
+		if i < 0 || len(pq.inTypes) <= i {
+			return c.sendError(fmt.Sprintf("invalid parameter name: $%s", k))
 		}
 		// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
 		// to DummyInt), so we need to maintain the types sent by the client.

@@ -224,6 +224,8 @@ func TestPGPrepareFail(t *testing.T) {
 		"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END": "pq: cannot infer type for parameter $1",
 		"CREATE TABLE $1 (id INT)":                      "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
 		"UPDATE d.t SET s = i + $1":                     "pq: value type int doesn't match type STRING of column \"s\"",
+		"SELECT $0 > 0":                                 "pq: invalid parameter name: $0",
+		"SELECT $2 > 0":                                 "pq: invalid parameter name: $2",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
