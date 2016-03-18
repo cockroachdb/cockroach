@@ -51,7 +51,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	n := []byte("data")
 	d := []byte(nil)
 	testData := []struct {
-		gc       *GarbageCollector
+		gc       GarbageCollector
 		time     roachpb.Timestamp
 		keys     []MVCCKey
 		values   [][]byte
