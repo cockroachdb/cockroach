@@ -364,11 +364,14 @@ module AdminViews {
         private static _queryEveryMS: number = 10000;
 
         exec: Metrics.Executor;
-        private networkAxes: Metrics.Axis[] = [];
+        private activityAxes: Metrics.Axis[] = [];
         private sqlAxes: Metrics.Axis[] = [];
+        private systemAxes: Metrics.Axis[] = [];
+        private internalsAxes: Metrics.Axis[] = [];
         private _query: Metrics.Query;
         private _interval: number;
         private _nodeId: string;
+        private _storeIds: string[] = [];
 
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
           return ((m.route.param("detail") || "") === t.route);
@@ -380,85 +383,7 @@ module AdminViews {
 
         public constructor(nodeId: string) {
           this._nodeId = nodeId;
-          this._query = Metrics.NewQuery();
-
-          // Network stats.
-          this._addChart(
-            this.networkAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.conns"))
-                .sources([nodeId])
-                .title("Client Connections")
-            ).format(d3.format("d")).title("SQL Connections")
-          );
-          this._addChart(
-            this.networkAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Bytes In"),
-              Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Bytes Out")
-            ).format(Utils.Format.Bytes).title("SQL Traffic")
-          );
-
-          // Add SQL charts.
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.select.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Selects")
-            ).format(d3.format("d")).title("Reads")
-           );
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Updates"),
-              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Inserts"),
-              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Deletes")
-            ).format(d3.format("d")).title("Writes")
-          );
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Commits"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Rollbacks"),
-              Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("Aborts")
-            ).format(d3.format("d")).title("Transactions")
-          );
-          this._addChart(
-            this.sqlAxes,
-            Metrics.NewAxis(
-              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
-                .sources([nodeId])
-                .nonNegativeRate()
-                .title("DDL Statements")
-            ).format(d3.format("d")).title("Schema Changes")
-          );
-
+          this._initGraphs();
           this.exec = new Metrics.Executor(this._query);
           this._refresh();
           this._interval = window.setInterval(() => this._refresh(), Controller._queryEveryMS);
@@ -537,17 +462,27 @@ module AdminViews {
 
         public RenderGraphs(): MithrilElement {
           return m("", [
-            m(".header", m("h2", "Network Stats")),
             m(".charts", [
-              this.networkAxes.map((axis: Metrics.Axis) => {
+              m("h2", "Client Activity"),
+              this.activityAxes.map((axis: Metrics.Axis) => {
                 return m("", {style: "float:left"}, [
                   Components.Metrics.LineGraph.create(this.exec, axis),
                 ]);
               }),
-            ]),
-            m(".header", {style: "clear:both;"}, m("h2", "SQL Queries")),
-            m(".charts", [
+              m("h2", "SQL Queries"),
               this.sqlAxes.map((axis: Metrics.Axis) => {
+                return m("", {style: "float:left"}, [
+                  Components.Metrics.LineGraph.create(this.exec, axis),
+                ]);
+              }),
+              m("h2", "System Resources"),
+              this.systemAxes.map((axis: Metrics.Axis) => {
+                return m("", {style: "float:left"}, [
+                  Components.Metrics.LineGraph.create(this.exec, axis),
+                ]);
+              }),
+              m("h2", "Internals"),
+              this.internalsAxes.map((axis: Metrics.Axis) => {
                 return m("", {style: "float:left"}, [
                   Components.Metrics.LineGraph.create(this.exec, axis),
                 ]);
@@ -568,8 +503,245 @@ module AdminViews {
           return this._nodeId;
         }
 
+        private _initGraphs(): void {
+          this._query = Metrics.NewQuery();
+          this.activityAxes = [];
+          this.sqlAxes = [];
+          this.systemAxes = [];
+          this.internalsAxes = [];
+
+          // General activity stats.
+          this._addChart(
+            this.activityAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.conns"))
+                .sources([this._nodeId])
+                .title("Client Connections")
+            ).format(d3.format("d")).title("SQL Connections")
+          );
+          this._addChart(
+            this.activityAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Bytes In"),
+              Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Bytes Out")
+            ).format(Utils.Format.Bytes).title("SQL Traffic")
+          );
+          this._addChart(
+            this.activityAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.query.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Queries/sec")
+            ).format(d3.format("d")).title("Queries Per Second")
+          );
+
+          // Add SQL charts.
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.select.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Selects")
+            ).format(d3.format("d")).title("Reads")
+           );
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.update.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Updates"),
+              Metrics.Select.Avg(_nodeMetric("sql.insert.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Inserts"),
+              Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Deletes")
+            ).format(d3.format("d")).title("Writes")
+          );
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.txn.commit.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Commits"),
+              Metrics.Select.Avg(_nodeMetric("sql.txn.rollback.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Rollbacks"),
+              Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Aborts")
+            ).format(d3.format("d")).title("Transactions")
+          );
+          this._addChart(
+            this.sqlAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("DDL Statements")
+            ).format(d3.format("d")).title("Schema Changes")
+          );
+
+          // System resource graphs
+          this._addChart(
+            this.systemAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_sysMetric("cpu.user.percent"))
+                .sources([this._nodeId])
+                .title("CPU User %"),
+              Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
+                .sources([this._nodeId])
+                .title("CPU Sys %")
+            ).format(d3.format(".2%")).title("CPU Usage").stacked(true)
+          );
+          this._addChart(
+            this.systemAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_sysMetric("allocbytes"))
+                .sources([this._nodeId])
+                .title("Memory allocated")
+            ).format(Utils.Format.Bytes).title("Memory Allocated")
+          );
+          this._addChart(
+            this.systemAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_sysMetric("goroutines"))
+                .sources([this._nodeId])
+                .title("goroutine count")
+            ).format(d3.format("d")).title("goroutine Count")
+          );
+          this._addChart(
+            this.systemAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_sysMetric("cgocalls"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("cgo Calls")
+            ).format(d3.format("d")).title("cgo Calls")
+          );
+
+          // Graphs for internals, such as RocksDB
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("txn.commits-count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Commits"),
+              Metrics.Select.Avg(_nodeMetric("txn.aborts-count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Aborts"),
+              Metrics.Select.Avg(_nodeMetric("txn.abandons-count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Abandons")
+            ).format(d3.format(".1f"))
+            .title("Key/Value Transactions")
+            .label("transactions/sec")
+            .stacked(true)
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.usage"))
+                .sources(this._storeIds)
+                .title("Block Cache Size")
+            ).format(Utils.Format.Bytes).title("Block Cache Size")
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.hits"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Cache Hits"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.misses"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Cache Misses")
+            ).format(d3.format("d")).title("Block Cache Hits/Misses").stacked(true)
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_storeMetric("rocksdb.flushes"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Flushes"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.compactions"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Compactions")
+            ).format(d3.format("d")).title("Flushes and Compactions")
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_storeMetric("rocksdb.bloom.filter.prefix.checked"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Checked"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.bloom.filter.prefix.useful"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Useful")
+            ).format(d3.format("d")).title("Bloom Filter Prefix")
+          );
+          let fmt: (v: number) => string = d3.format(".1f");
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_nodeMetric("clock-offset.upper-bound-nanos"))
+                .sources([this._nodeId])
+                .title("Upper Bound"),
+              Metrics.Select.Avg(_nodeMetric("clock-offset.lower-bound-nanos"))
+                .sources([this._nodeId])
+                .title("Lower Bound")
+            ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
+            .title("Clock Offset")
+            .label("Milliseconds")
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_sysMetric("gc.pause.ns"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Time")
+            ).format(d3.format(",d")).title("Garbage Collection")
+            .label("Nanoseconds")
+          );
+        }
+
         private _refresh(): void {
           nodeStatuses.refresh();
+
+          // When our NodeStatus has been retrieved, update our store_ids so
+          // that graphs of store metrics retrieve the correct set of sources.
+          if (this._storeIds.length === 0) {
+            let nodeStatus: NodeStatus = nodeStatuses.GetStatus(this._nodeId);
+            if (nodeStatus) {
+              nodeStatus.store_ids.forEach((storeId: number) => {
+                this._storeIds.push(String(storeId));
+              });
+              this._initGraphs();
+            }
+          }
           storeStatuses.refresh();
           this.exec.refresh();
         }
