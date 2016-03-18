@@ -784,22 +784,7 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 
 	engine := createTestEngine(stopper)
 
-	// Additional keys to write to base beyond what will be deleted / seeked to.
-	// Adding lots of extra keys makes seek much faster.
-	extra, err := strconv.Atoi(os.Getenv("EXTRA"))
-	if err != nil {
-		extra = 0
-	}
-
-	// Move the region of deleted and seeked keys up into middle of written base keys.
-	// moving this up to 50 or 100 makes seek much faster.
-	// with extra=500, changing this from 50 to 150, seek is 4.5x faster.
-	offset, err := strconv.Atoi(os.Getenv("OFFSET"))
-	if err != nil {
-		offset = 0
-	}
-
-	for i := 0; i < writes+extra; i++ {
+	for i := 0; i < writes; i++ {
 		if err := engine.Put(makeKey(i), []byte(strconv.Itoa(i))); err != nil {
 			b.Fatal(err)
 		}
@@ -808,28 +793,19 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 	batch := engine.NewBatch()
 	defer batch.Close()
 
-	// shuffling the order of these doesn't change anything.
 	for i := 0; i < writes; i++ {
-		if err := batch.Clear(makeKey(i + offset)); err != nil {
+		if err := batch.Clear(makeKey(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
 
-	if os.Getenv("FLUSH_BATCH") == "1" {
-		if err := batch.Commit(); err != nil {
-			b.Fatal(err)
-		} else {
-			batch = engine.NewBatch()
-		}
-	}
-
-	iter := batch.NewIterator(nil)
-	defer iter.Close()
 	r := rand.New(rand.NewSource(5))
 
 	b.ResetTimer()
-
 	for i := 0; i < b.N; i++ {
-		iter.Seek(makeKey(r.Intn(writes) + offset))
+		key := makeKey(r.Intn(writes))
+		iter := batch.NewIterator(key.Key)
+		iter.Seek(key)
+		iter.Close()
 	}
 }
