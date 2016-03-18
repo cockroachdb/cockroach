@@ -1,4 +1,5 @@
 // source: models/proto.ts
+/// <reference path="../../typings/browser.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
@@ -15,72 +16,6 @@ module Models {
    * structures.
    */
   export module Proto {
-    /*****************************
-     * roachpb/data.proto
-     ****************************/
-
-    /**
-     * MVCCStats provides detailed information about currently stored data
-     * in the engine.
-     */
-    export interface MVCCStats {
-      live_bytes: number;
-      key_bytes: number;
-      val_bytes: number;
-      intent_bytes: number;
-      live_count: number;
-      key_count: number;
-      val_count: number;
-      intent_count: number;
-      intent_age: number;
-      gc_bytes_age: number;
-      sys_bytes: number;
-      sys_count: number;
-      last_update_nanos: number;
-    }
-
-    /**
-     * Create a new object which implements MVCCStats interface, with zero
-     * values.
-     */
-    export function NewMVCCStats(): MVCCStats {
-      return {
-        live_bytes: 0,
-        key_bytes: 0,
-        val_bytes: 0,
-        intent_bytes: 0,
-        live_count: 0,
-        key_count: 0,
-        val_count: 0,
-        intent_count: 0,
-        intent_age: 0,
-        gc_bytes_age: 0,
-        sys_bytes: 0,
-        sys_count: 0,
-        last_update_nanos: 0,
-      };
-    }
-
-    /**
-     * AccumulateMVCCStats accumulates values from a source MVCCStats into
-     * the values of a destination MVCCStats value.
-     */
-    export function AccumulateMVCCStats(dest: Proto.MVCCStats, src: Proto.MVCCStats): void {
-      dest.live_bytes += src.live_bytes;
-      dest.key_bytes += src.key_bytes;
-      dest.val_bytes += src.val_bytes;
-      dest.intent_bytes += src.intent_bytes;
-      dest.live_count += src.live_count;
-      dest.key_count += src.key_count;
-      dest.val_count += src.val_count;
-      dest.intent_count += src.intent_count;
-      dest.intent_age += src.intent_age;
-      dest.gc_bytes_age += src.gc_bytes_age;
-      dest.sys_bytes += src.sys_bytes;
-      dest.sys_count += src.sys_count;
-      dest.last_update_nanos = Math.max(dest.last_update_nanos, src.last_update_nanos);
-    }
-
     /*****************************
      * roachpb/metadata.proto
      ****************************/
@@ -128,62 +63,82 @@ module Models {
      ****************************/
 
     /**
+     * StatusMetrics is a string-keyed collection of metric values.
+     */
+    export interface StatusMetrics {
+      [metric: string]: number;
+    }
+
+    /**
+     * MetricConstants contains the name of several stats provided by
+     * CockroachDB.
+     */
+    export module MetricConstants {
+      export var ranges: string = "ranges";
+      export var leaderRanges: string = "ranges.leader";
+      export var replicatedRanges: string = "ranges.replicated";
+      export var availableRanges: string = "ranges.available";
+      export var liveBytes: string = "livebytes";
+      export var keyBytes: string = "keybytes";
+      export var valBytes: string = "valbytes";
+      export var intentBytes: string = "intentbytes";
+      export var liveCount: string = "livecount";
+      export var keyCount: string = "keycount";
+      export var valCount: string = "valcount";
+      export var intentCount: string = "intentcount";
+      export var intentAge: string = "intentage";
+      export var gcBytesAge: string = "gcbytesage";
+      export var lastUpdateNano: string = "lastupdatenanos";
+      export var capacity: string = "capacity";
+      export var availableCapacity: string = "capacity.available";
+      export var sysBytes: string = "sysbytes";
+      export var sysCount: string = "syscount";
+    }
+
+    /**
+     * StoreStatus describes the current status of a store. 
+     */
+    export interface StoreStatus {
+      desc: StoreDescriptor;
+      metrics: StatusMetrics;
+    }
+
+    /**
      * NodeStatus describes the high-level current status of a Node.
      */
     export interface NodeStatus {
       desc: NodeDescriptor;
-      store_ids: number[];
-      range_count: number;
       started_at: number;
       updated_at: number;
-      stats: MVCCStats;
-      leader_range_count: number;
-      replicated_range_count: number;
-      available_range_count: number;
-    }
-
-    /*****************************
-     * storage/status.proto
-     ****************************/
-
-    /**
-     * StoreStatus describes the high-level current status of a Store.
-     */
-    export interface StoreStatus {
-      desc: StoreDescriptor;
-      range_count: number;
-      started_at: number;
-      updated_at: number;
-      stats: MVCCStats;
-      leader_range_count: number;
-      replicated_range_count: number;
-      available_range_count: number;
+      metrics: StatusMetrics;
+      store_statuses: {[storeid: number]: StoreStatus};
     }
 
     /**
-     * Status is the common interface shared by NodeStatus and StoreStatus.
-     */
-    export interface Status {
-      range_count: number;
-      started_at: number;
-      updated_at: number;
-      stats: MVCCStats;
-      leader_range_count: number;
-      replicated_range_count: number;
-      available_range_count: number;
+     * AccumulateMetrics is a convenience function which accumulates the values
+     * in multiple metrics collections. Values from all provided StatusMetrics
+     * collections are accumulated into the first StatusMetrics collection
+     * passed.
+     * */
+    export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[]): void {
+      srcs.forEach((s: StatusMetrics) => {
+        _.forEach(s, (val: number, key: string) => {
+          if (_.isUndefined(dest[key])) {
+            dest[key] = val;
+          } else {
+            dest[key] += val;
+          }
+        });
+      });
     }
 
     /**
-     * AccumulateStauts accumulates values from a source status into
-     * the values of a destination status value.
+     * RollupStoreMetrics accumulates all store-level metrics into the top level
+     * metrics collection of the supplied NodeStatus object. This is convenient
+     * for all current usages of NodeStatus in the UI.
      */
-    export function AccumulateStatus(dest: Status, src: Status): void {
-      dest.range_count += src.range_count;
-      dest.leader_range_count += src.leader_range_count;
-      dest.replicated_range_count += src.replicated_range_count;
-      dest.available_range_count += src.available_range_count;
-      dest.updated_at = Math.max(dest.updated_at, src.updated_at);
-      AccumulateMVCCStats(dest.stats, src.stats);
+    export function RollupStoreMetrics(ns: NodeStatus): void {
+      AccumulateMetrics(ns.metrics, ..._.map(ns.store_statuses, (ss) => ss.metrics));
     }
 
     /*****************************
