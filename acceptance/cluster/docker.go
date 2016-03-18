@@ -109,7 +109,7 @@ func createContainer(l *LocalCluster, containerConfig container.Config, hostConf
 	// Disable DNS search under the host machine's domain. This can
 	// catch upstream wildcard DNS matching and result in odd behavior.
 	hostConfig.DNSSearch = []string{"."}
-	resp, err := l.client.ContainerCreate(&containerConfig, &hostConfig, nil, containerName)
+	resp, err := l.client.ContainerCreate(context.Background(), &containerConfig, &hostConfig, nil, containerName)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func maybePanic(err error) {
 // Remove removes the container from docker. It is an error to remove a running
 // container.
 func (c *Container) Remove() error {
-	err := c.cluster.client.ContainerRemove(types.ContainerRemoveOptions{
+	err := c.cluster.client.ContainerRemove(context.Background(), types.ContainerRemoveOptions{
 		ContainerID:   c.id,
 		RemoveVolumes: true,
 		Force:         true,
@@ -149,7 +149,7 @@ func (c *Container) Kill() error {
 	// Paused containers cannot be killed. Attempt to unpause it first
 	// (which might fail) before killing.
 	_ = c.Unpause()
-	if err := c.cluster.client.ContainerKill(c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
+	if err := c.cluster.client.ContainerKill(context.Background(), c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
 	c.cluster.expectEvent(c, eventDie)
@@ -160,17 +160,17 @@ func (c *Container) Kill() error {
 //
 // TODO(pmattis): Generalize the setting of parameters here.
 func (c *Container) Start() error {
-	return c.cluster.client.ContainerStart(c.id)
+	return c.cluster.client.ContainerStart(context.Background(), c.id)
 }
 
 // Pause pauses a running container.
 func (c *Container) Pause() error {
-	return c.cluster.client.ContainerPause(c.id)
+	return c.cluster.client.ContainerPause(context.Background(), c.id)
 }
 
 // Unpause resumes a paused container.
 func (c *Container) Unpause() error {
-	return c.cluster.client.ContainerUnpause(c.id)
+	return c.cluster.client.ContainerUnpause(context.Background(), c.id)
 }
 
 // Restart restarts a running container.
@@ -182,7 +182,7 @@ func (c *Container) Restart(timeoutSeconds int) error {
 	} else if ci.State.Running {
 		exp = append(exp, eventDie)
 	}
-	if err := c.cluster.client.ContainerRestart(c.id, timeoutSeconds); err != nil {
+	if err := c.cluster.client.ContainerRestart(context.Background(), c.id, timeoutSeconds); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, append(exp, eventRestart)...)
@@ -191,7 +191,7 @@ func (c *Container) Restart(timeoutSeconds int) error {
 
 // Stop a running container.
 func (c *Container) Stop(timeoutSeconds int) error {
-	if err := c.cluster.client.ContainerStop(c.id, timeoutSeconds); err != nil {
+	if err := c.cluster.client.ContainerStop(context.Background(), c.id, timeoutSeconds); err != nil {
 		return err
 	}
 	c.cluster.expectEvent(c, eventDie)
@@ -246,7 +246,7 @@ func (c *Container) Logs(w io.Writer) error {
 
 // Inspect retrieves detailed info about a container.
 func (c *Container) Inspect() (types.ContainerJSON, error) {
-	return c.cluster.client.ContainerInspect(c.id)
+	return c.cluster.client.ContainerInspect(context.Background(), c.id)
 }
 
 // Addr returns the TCP address to connect to.

@@ -31,7 +31,7 @@ github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
 github.com/codahale/hdrhistogram e88be87d51429689cef99043a54150d733265cd7
 github.com/coreos/etcd 5e6eb7e19d6385adfabb1f1caea03e732f9348ad
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
-github.com/docker/engine-api 9bab0d5b73872e53dfadfa055dcc519e57b09439
+github.com/docker/engine-api 68a7b6bebf8f57d559b7788a46c55045438747b9
 github.com/docker/go-connections f549a9393d05688dff0992ef3efd8bbe6c628aeb
 github.com/docker/go-units 5d2041e26a699eaca682e2ea41c8f891e1060444
 github.com/dustin/go-humanize 8929fe90cee4b2cb9deb468b51fb34eba64d1bf0
