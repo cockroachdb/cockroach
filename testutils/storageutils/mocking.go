@@ -25,10 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 )
 
-// savedError silences the linter from complaining when detectReplayLocks wants
-// to return an error as the first (as opposed to the last) return value.
-type savedError error
-
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
 type FilterArgs struct {
 	Ctx   context.Context
@@ -62,7 +58,7 @@ type ReplicaCommandFilter func(args FilterArgs) error
 // from Raft replays.
 type ReplayProtectionFilterWrapper struct {
 	sync.RWMutex
-	processedCommands map[raftCmdIDAndIndex]savedError
+	processedCommands map[raftCmdIDAndIndex]error
 	filter            ReplicaCommandFilter
 }
 
@@ -71,17 +67,10 @@ type ReplayProtectionFilterWrapper struct {
 func WrapFilterForReplayProtection(
 	filter ReplicaCommandFilter) ReplicaCommandFilter {
 	wrapper := ReplayProtectionFilterWrapper{
-		processedCommands: make(map[raftCmdIDAndIndex]savedError),
+		processedCommands: make(map[raftCmdIDAndIndex]error),
 		filter:            filter,
 	}
 	return wrapper.run
-}
-
-func (c *ReplayProtectionFilterWrapper) detectReplayLocked(
-	cmdID storagebase.CmdIDKey, index int) (savedError, bool) {
-	err, found := c.processedCommands[raftCmdIDAndIndex{cmdID, index}]
-	// We've detected a replay.
-	return err, found
 }
 
 // run executes the wrapped filter.
@@ -91,15 +80,17 @@ func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) error {
 	defer c.RUnlock()
 
 	if args.InRaftCmd() {
-		if err, found := c.detectReplayLocked(args.CmdID, args.Index); found {
-			return err.(error)
+		if err, found :=
+			c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}]; found {
+			// We've detected a replay.
+			return err
 		}
 	}
 
 	err := c.filter(args)
 
 	if args.InRaftCmd() {
-		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = savedError(err)
+		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = err
 	}
 
 	return err
