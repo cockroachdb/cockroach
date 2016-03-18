@@ -22,13 +22,17 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
 )
 
@@ -39,6 +43,14 @@ var debugKeysCmd = &cobra.Command{
 Pretty-prints all keys in a store.
 `,
 	RunE: runDebugKeys,
+}
+
+func parseRangeID(arg string) (roachpb.RangeID, error) {
+	rangeIDInt, err := strconv.ParseInt(arg, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return roachpb.RangeID(rangeIDInt), nil
 }
 
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (engine.Engine, error) {
@@ -177,11 +189,10 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rangeIDInt, err := strconv.ParseInt(args[1], 10, 64)
+	rangeID, err := parseRangeID(args[1])
 	if err != nil {
 		return err
 	}
-	rangeID := roachpb.RangeID(rangeIDInt)
 
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
@@ -196,6 +207,7 @@ var debugCmds = []*cobra.Command{
 	debugKeysCmd,
 	debugRangeDescriptorsCmd,
 	debugRaftLogCmd,
+	debugGCCmd,
 	kvCmd,
 	rangeCmd,
 }
@@ -211,6 +223,84 @@ process that has failed and cannot restart.
 	Run: func(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 	},
+}
+
+var debugGCCmd = &cobra.Command{
+	Use:   "estimate-gc [directory] [range id]",
+	Short: "find out what a GC run would do",
+	Long: `
+	Sets up (but does not run) a GC collection cycle, giving insight into how much work would be done.
+	Assumes all intent resolution and pushes succeed.
+`,
+	RunE: runDebugGCCmd,
+}
+
+func runDebugGCCmd(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	if len(args) != 1 {
+		return errors.New("required arguments: dir")
+	}
+
+	var rangeID roachpb.RangeID
+	if len(args) == 2 {
+		var err error
+		if rangeID, err = parseRangeID(args[1]); err != nil {
+			return err
+		}
+	}
+
+	db, err := openStore(cmd, args[0], stopper)
+	if err != nil {
+		return err
+	}
+
+	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
+	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
+
+	var descs []roachpb.RangeDescriptor
+
+	if _, err := engine.MVCCIterate(db, start, end, roachpb.MaxTimestamp,
+		false /* !consistent */, nil, /* txn */
+		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+			var desc roachpb.RangeDescriptor
+			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+			if err != nil {
+				return false, err
+			}
+			if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
+				return false, nil
+			}
+			if err := kv.Value.GetProto(&desc); err != nil {
+				return false, err
+			}
+			if desc.RangeID == rangeID || rangeID == 0 {
+				descs = append(descs, desc)
+			}
+			return desc.RangeID == rangeID, nil
+		}); err != nil {
+		return err
+	}
+
+	if len(descs) == 0 {
+		return fmt.Errorf("no range matching the criteria found")
+	}
+
+	for _, desc := range descs {
+		snap := db.NewSnapshot()
+		defer snap.Close()
+		_, info, err := storage.RunGC(&desc, snap, roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()},
+			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ roachpb.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType, wg *sync.WaitGroup) {
+				wg.Done()
+			}, func(_ []roachpb.Intent, _, _ bool) *roachpb.Error { return nil })
+		if err != nil {
+			return err
+		}
+		fmt.Printf("RangeID: %d [%s, %s):\n", desc.RangeID, desc.StartKey, desc.EndKey)
+		_, _ = pretty.Println(info)
+	}
+	return nil
 }
 
 func init() {
