@@ -2926,7 +2926,7 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	// pushed timestamp. This verifies that the BeginTransaction found
 	// the pushed record and propagated it.
 	if txn := pErr.GetTxn(); !txn.Timestamp.Equal(pusher.Timestamp.Next()) {
-		t.Errorf("expected batch response txn timestamp %s; got %s", pusher.Timestamp, txn.Timestamp)
+		t.Errorf("expected retry error txn timestamp %s; got %s", pusher.Timestamp, txn.Timestamp)
 	}
 }
 

@@ -54,7 +54,6 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 		ba.UserPriority = ts.UserPriority
 	}
 
-	ba.SetNewRequest()
 	br, pErr := ts.wrapped.Send(ts.Context, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))

@@ -408,14 +408,6 @@ func (ds *DistSender) sendSingleRange(ctx context.Context, ba roachpb.BatchReque
 		}
 	}
 
-	// Increase the sequence counter in the per-range loop (not
-	// outside) since we might hit the same range twice by
-	// accident. For example, we might send multiple requests to
-	// the same Replica if (1) the descriptor cache has post-split
-	// descriptors that are still write intents and (2) the split
-	// has not yet been completed.
-	ba.SetNewRequest()
-
 	// TODO(tschottdorf): should serialize the trace here, not higher up.
 	br, pErr := ds.sendRPC(ctx, desc.RangeID, replicas, order, ba)
 	if pErr != nil {
@@ -567,6 +559,18 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 	// Send the request to one range per iteration.
 	for {
+		// Increase the sequence counter only once before sending RPCs to
+		// the ranges involved in this chunk of the batch (as opposed to for
+		// each RPC individually). On RPC errors, there's no guarantee that
+		// the request hasn't made its way to the target regardless of the
+		// error; we'd like the second execution to be caught by the sequence
+		// cache if that happens. There is a small chance that that we address
+		// a range twice in this chunk (stale/suboptimal descriptors due to
+		// splits/merges) which leads to a transaction retry.
+		// TODO(tschottdorf): it's possible that if we don't evict from the
+		//   cache we could be in for a busy loop.
+		ba.SetNewRequest()
+
 		considerIntents := false
 		var curReply *roachpb.BatchResponse
 		var desc *roachpb.RangeDescriptor
