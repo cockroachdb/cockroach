@@ -8,5 +8,5 @@ COPY cockroach.sh cockroach /cockroach/
 # are resolved appropriately when passed as args.
 WORKDIR /cockroach/
 
-EXPOSE 26257
+EXPOSE 26257 8080
 ENTRYPOINT ["/cockroach/cockroach.sh"]
