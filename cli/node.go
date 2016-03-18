@@ -144,19 +144,26 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 		startedAt := time.Unix(0, nodeStatus.StartedAt)
 		startedAtStr := startedAt.Format(localTimeFormat)
 
+		metricVals := map[string]float64{}
+		for _, storeStatus := range nodeStatus.StoreStatuses {
+			for _, mtr := range storeStatus.Metrics {
+				metricVals[mtr.Name] += mtr.Value
+			}
+		}
+
 		rows = append(rows, []string{
 			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 			hostPort,
 			updatedAtStr,
 			startedAtStr,
-			strconv.FormatInt(int64(nodeStatus.Stats.LiveBytes), 10),
-			strconv.FormatInt(int64(nodeStatus.Stats.KeyBytes), 10),
-			strconv.FormatInt(int64(nodeStatus.Stats.ValBytes), 10),
-			strconv.FormatInt(int64(nodeStatus.Stats.IntentBytes), 10),
-			strconv.FormatInt(int64(nodeStatus.Stats.SysBytes), 10),
-			strconv.FormatInt(int64(nodeStatus.LeaderRangeCount), 10),
-			strconv.FormatInt(int64(nodeStatus.ReplicatedRangeCount), 10),
-			strconv.FormatInt(int64(nodeStatus.AvailableRangeCount), 10),
+			strconv.FormatInt(int64(metricVals["livebytes"]), 10),
+			strconv.FormatInt(int64(metricVals["keybytes"]), 10),
+			strconv.FormatInt(int64(metricVals["valbytes"]), 10),
+			strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
+			strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges.leader"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges.replicated"]), 10),
+			strconv.FormatInt(int64(metricVals["ranges.available"]), 10),
 		})
 	}
 	return rows

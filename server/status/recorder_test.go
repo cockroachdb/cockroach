@@ -27,7 +27,6 @@ import (
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -68,7 +67,7 @@ func (a byStoreID) Less(i, j int) bool {
 var _ sort.Interface = byStoreID{}
 
 // byStoreDescID is a slice of storage.StoreStatus
-type byStoreDescID []storage.StoreStatus
+type byStoreDescID []*StoreStatus
 
 // implement sort.Interface for byStoreDescID.
 func (a byStoreDescID) Len() int      { return len(a) }
@@ -78,6 +77,16 @@ func (a byStoreDescID) Less(i, j int) bool {
 }
 
 var _ sort.Interface = byStoreDescID{}
+
+// byStoreDescID is a slice of storage.StoreStatus
+type byMetricName []*MetricValue
+
+// implement sort.Interface for byStoreDescID.
+func (a byMetricName) Len() int      { return len(a) }
+func (a byMetricName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a byMetricName) Less(i, j int) bool {
+	return a[i].Name < a[j].Name
+}
 
 // fakeStore implements only the methods of store needed by MetricsRecorder to
 // interact with stores.
@@ -110,7 +119,9 @@ func (fs fakeStore) Registry() *metric.Registry {
 func TestMetricsRecorder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Fake descriptors and stats for status summaries.
+	// ========================================
+	// Construct a series of fake descriptors for use in test.
+	// ========================================
 	nodeDesc := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(1),
 	}
@@ -142,8 +153,10 @@ func TestMetricsRecorder(t *testing.T) {
 		LastUpdateNanos: 1 * 1E9,
 	}
 
-	// Create some registries and add them to the recorder (two at node-level,
-	// two at store-level).
+	// ========================================
+	// Create registries and add them to the recorder (two node-level, two
+	// store-level).
+	// ========================================
 	reg1 := metric.NewRegistry()
 	reg2 := metric.NewRegistry()
 	store1 := fakeStore{
@@ -173,36 +186,44 @@ func TestMetricsRecorder(t *testing.T) {
 		return time.Unix(0, manual.UnixNano()).UTC()
 	})()
 
-	// Create a flat array of registries, along with metadata for each, to help
-	// generate expected results.
+	// ========================================
+	// Generate Metrics Data & Expected Results
+	// ========================================
+
+	// Flatten the four registries into an array for ease of use.
 	regList := []struct {
 		reg    *metric.Registry
 		prefix string
 		source int64
+		isNode bool
 	}{
 		{
 			reg:    reg1,
-			prefix: "cr.node.one.",
+			prefix: "one.",
 			source: 1,
+			isNode: true,
 		},
 		{
 			reg:    reg2,
-			prefix: "cr.node.two.",
+			prefix: "two.",
 			source: 1,
+			isNode: true,
 		},
 		{
 			reg:    store1.registry,
-			prefix: "cr.store.",
+			prefix: "",
 			source: int64(store1.storeID),
+			isNode: false,
 		},
 		{
 			reg:    store2.registry,
-			prefix: "cr.store.",
+			prefix: "",
 			source: int64(store2.storeID),
+			isNode: false,
 		},
 	}
 
-	// Every registry will have the following metrics.
+	// Every registry will have a copy of the following metrics.
 	metricNames := []struct {
 		name string
 		typ  string
@@ -221,12 +242,22 @@ func TestMetricsRecorder(t *testing.T) {
 		{"ranges.available", "gauge", 1},
 	}
 
-	// Add the above metrics to each registry. At the same time, generate
-	// expected time series results.
+	// Add the metrics to each registry and set their values. At the same time,
+	// generate expected time series results and status summary metric values.
 	var expected []ts.TimeSeriesData
-	addExpected := func(prefix, name string, source, time, val int64) {
+	var expectedNodeSummaryMetrics []*MetricValue
+	var expectedStoreSummaryMetrics []*MetricValue
+	storeSummaryDone := false
+
+	// addExpected generates expected data for a single metric data point.
+	addExpected := func(prefix, name string, source, time, val int64, isNode bool) {
+		// Generate time series data.
+		tsPrefix := "cr.node."
+		if !isNode {
+			tsPrefix = "cr.store."
+		}
 		expect := ts.TimeSeriesData{
-			Name:   prefix + name,
+			Name:   tsPrefix + prefix + name,
 			Source: strconv.FormatInt(source, 10),
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
@@ -236,29 +267,40 @@ func TestMetricsRecorder(t *testing.T) {
 			},
 		}
 		expected = append(expected, expect)
+
+		// Generate status summary data.
+		metricValue := &MetricValue{
+			Name:  prefix + name,
+			Value: float64(val),
+		}
+		if isNode {
+			expectedNodeSummaryMetrics = append(expectedNodeSummaryMetrics, metricValue)
+		} else if !storeSummaryDone {
+			expectedStoreSummaryMetrics = append(expectedStoreSummaryMetrics, metricValue)
+		}
 	}
 
-	for _, data := range metricNames {
-		for _, reg := range regList {
+	for _, reg := range regList {
+		for _, data := range metricNames {
 			switch data.typ {
 			case "gauge":
 				reg.reg.Gauge(data.name).Update(data.val)
-				addExpected(reg.prefix, data.name, reg.source, 100, data.val)
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "counter":
 				reg.reg.Counter(data.name).Inc(data.val)
-				addExpected(reg.prefix, data.name, reg.source, 100, data.val)
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "rate":
 				reg.reg.Rates(data.name).Add(data.val)
-				addExpected(reg.prefix, data.name+"-count", reg.source, 100, data.val)
+				addExpected(reg.prefix, data.name+"-count", reg.source, 100, data.val, reg.isNode)
 				for _, scale := range metric.DefaultTimeScales {
 					// Rate data is subject to timing errors in tests. Zero out
 					// these values.
-					addExpected(reg.prefix, data.name+sep+scale.Name(), reg.source, 100, 0)
+					addExpected(reg.prefix, data.name+sep+scale.Name(), reg.source, 100, 0, reg.isNode)
 				}
 			case "histogram":
 				reg.reg.Histogram(data.name, time.Second, 1000, 2).RecordValue(data.val)
 				for _, q := range recordHistogramQuantiles {
-					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val)
+					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			case "latency":
 				reg.reg.Latency(data.name).RecordValue(data.val)
@@ -266,13 +308,24 @@ func TestMetricsRecorder(t *testing.T) {
 				// time scales).
 				for _, scale := range metric.DefaultTimeScales {
 					for _, q := range recordHistogramQuantiles {
-						addExpected(reg.prefix, data.name+sep+scale.Name()+q.suffix, reg.source, 100, data.val)
+						addExpected(reg.prefix, data.name+sep+scale.Name()+q.suffix, reg.source, 100, data.val, reg.isNode)
 					}
 				}
 			}
 		}
+		// Store summary metrics are the same for every store, and thus only
+		// need to be generated once.
+		if !reg.isNode {
+			storeSummaryDone = true
+		}
 	}
 
+	sort.Sort(byMetricName(expectedNodeSummaryMetrics))
+	sort.Sort(byMetricName(expectedStoreSummaryMetrics))
+
+	// ========================================
+	// Verify time series data
+	// ========================================
 	actual := recorder.GetTimeSeriesData()
 
 	// Zero-out timing-sensitive rate values from actual data.
@@ -294,64 +347,37 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
 	}
 
-	// **** STATUS SUMMARY TESTING
-	// Generate an expected node summary and two store summaries. The
-	// information here is relatively simple in our test.
+	// ========================================
+	// Verify node summary generation
+	// ========================================
 	expectedNodeSummary := &NodeStatus{
 		Desc:      nodeDesc,
 		StartedAt: 50,
 		UpdatedAt: 100,
-		StoreIDs: []roachpb.StoreID{
-			roachpb.StoreID(1),
-			roachpb.StoreID(2),
+		Metrics:   expectedNodeSummaryMetrics,
+		StoreStatuses: []*StoreStatus{
+			{
+				Desc:    storeDesc1,
+				Metrics: expectedStoreSummaryMetrics,
+			},
+			{
+				Desc:    storeDesc2,
+				Metrics: expectedStoreSummaryMetrics,
+			},
 		},
-		RangeCount:           2,
-		LeaderRangeCount:     2,
-		AvailableRangeCount:  2,
-		ReplicatedRangeCount: 2,
-	}
-	expectedStoreSummaries := []storage.StoreStatus{
-		{
-			Desc:                 storeDesc1,
-			NodeID:               roachpb.NodeID(1),
-			StartedAt:            50,
-			UpdatedAt:            100,
-			RangeCount:           1,
-			LeaderRangeCount:     1,
-			AvailableRangeCount:  1,
-			ReplicatedRangeCount: 1,
-			Stats:                stats,
-		},
-		{
-			Desc:                 storeDesc2,
-			NodeID:               roachpb.NodeID(1),
-			StartedAt:            50,
-			UpdatedAt:            100,
-			RangeCount:           1,
-			LeaderRangeCount:     1,
-			AvailableRangeCount:  1,
-			ReplicatedRangeCount: 1,
-			Stats:                stats,
-		},
-	}
-	for _, ss := range expectedStoreSummaries {
-		expectedNodeSummary.Stats.Add(ss.Stats)
 	}
 
-	nodeSummary, storeSummaries := recorder.GetStatusSummaries()
+	nodeSummary := recorder.GetStatusSummary()
 	if nodeSummary == nil {
 		t.Fatalf("recorder did not return nodeSummary.")
 	}
-	if storeSummaries == nil {
-		t.Fatalf("recorder did not return storeSummaries.")
-	}
 
-	sort.Sort(byStoreDescID(storeSummaries))
-	sort.Sort(byStoreID(nodeSummary.StoreIDs))
+	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))
+	sort.Sort(byMetricName(nodeSummary.Metrics))
+	for _, s := range nodeSummary.StoreStatuses {
+		sort.Sort(byMetricName(s.Metrics))
+	}
 	if a, e := nodeSummary, expectedNodeSummary; !reflect.DeepEqual(a, e) {
 		t.Errorf("recorder did not produce expected NodeSummary; diff:\n %v", pretty.Diff(e, a))
-	}
-	if a, e := storeSummaries, expectedStoreSummaries; !reflect.DeepEqual(a, e) {
-		t.Errorf("recorder did not produce expected StoreSummaries; diff:\n %v", pretty.Diff(e, a))
 	}
 }
