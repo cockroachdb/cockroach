@@ -145,6 +145,9 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 // passed in test against each on serially.
 func runTestOnConfigs(t *testing.T, testFunc func(*testing.T, cluster.Cluster, cluster.TestConfig)) {
 	cfgs := getConfigs(t)
+	if len(cfgs) == 0 {
+		t.Fatal("no config defined")
+	}
 	for _, cfg := range cfgs {
 		func() {
 			cluster := StartCluster(t, cfg)
