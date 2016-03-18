@@ -369,26 +369,14 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "Float, no terminator",
-			buf:     []byte{floatPosLarge},
-			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeFloatAscending(b, nil); return err },
-		},
-		{
-			name:    "FloatDescending, no terminator",
-			buf:     []byte{floatPosLarge},
-			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeFloatDescending(b, nil); return err },
-		},
-		{
 			name:    "Decimal, no terminator",
-			buf:     []byte{floatPosLarge},
+			buf:     []byte{decimalPosValPosExp},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
 		},
 		{
 			name:    "DecimalDescending, no terminator",
-			buf:     []byte{floatPosLarge},
+			buf:     []byte{decimalPosValPosExp},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
 		},
@@ -406,16 +394,16 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		value   []byte
 		encoded []byte
 	}{
-		{[]byte{0, 1, 'a'}, []byte{0x21, 0x00, 0xff, 1, 'a', 0x00, 0x01}},
-		{[]byte{0, 'a'}, []byte{0x21, 0x00, 0xff, 'a', 0x00, 0x01}},
-		{[]byte{0, 0xff, 'a'}, []byte{0x21, 0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
-		{[]byte{'a'}, []byte{0x21, 'a', 0x00, 0x01}},
-		{[]byte{'b'}, []byte{0x21, 'b', 0x00, 0x01}},
-		{[]byte{'b', 0}, []byte{0x21, 'b', 0x00, 0xff, 0x00, 0x01}},
-		{[]byte{'b', 0, 0}, []byte{0x21, 'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
-		{[]byte{'b', 0, 0, 'a'}, []byte{0x21, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
-		{[]byte{'b', 0xff}, []byte{0x21, 'b', 0xff, 0x00, 0x01}},
-		{[]byte("hello"), []byte{0x21, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
+		{[]byte{0, 1, 'a'}, []byte{0x12, 0x00, 0xff, 1, 'a', 0x00, 0x01}},
+		{[]byte{0, 'a'}, []byte{0x12, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{0, 0xff, 'a'}, []byte{0x12, 0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{'a'}, []byte{0x12, 'a', 0x00, 0x01}},
+		{[]byte{'b'}, []byte{0x12, 'b', 0x00, 0x01}},
+		{[]byte{'b', 0}, []byte{0x12, 'b', 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0}, []byte{0x12, 'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{0x12, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{'b', 0xff}, []byte{0x12, 'b', 0xff, 0x00, 0x01}},
+		{[]byte("hello"), []byte{0x12, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
 	}
 	for i, c := range testCases {
 		enc := EncodeBytesAscending(nil, c.value)
@@ -458,16 +446,16 @@ func TestEncodeDecodeBytesDescending(t *testing.T) {
 		value   []byte
 		encoded []byte
 	}{
-		{[]byte("hello"), []byte{0x23, ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
-		{[]byte{'b', 0xff}, []byte{0x23, ^byte('b'), 0x00, 0xff, 0xfe}},
-		{[]byte{'b', 0, 0, 'a'}, []byte{0x23, ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{'b', 0, 0}, []byte{0x23, ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
-		{[]byte{'b', 0}, []byte{0x23, ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
-		{[]byte{'b'}, []byte{0x23, ^byte('b'), 0xff, 0xfe}},
-		{[]byte{'a'}, []byte{0x23, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 0xff, 'a'}, []byte{0x23, 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 'a'}, []byte{0x23, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{[]byte{0, 1, 'a'}, []byte{0x23, 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
+		{[]byte("hello"), []byte{0x14, ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
+		{[]byte{'b', 0xff}, []byte{0x14, ^byte('b'), 0x00, 0xff, 0xfe}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{0x14, ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{'b', 0, 0}, []byte{0x14, ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
+		{[]byte{'b', 0}, []byte{0x14, ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
+		{[]byte{'b'}, []byte{0x14, ^byte('b'), 0xff, 0xfe}},
+		{[]byte{'a'}, []byte{0x14, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 0xff, 'a'}, []byte{0x14, 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 'a'}, []byte{0x14, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{[]byte{0, 1, 'a'}, []byte{0x14, 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
 	}
 	for i, c := range testCases {
 		enc := EncodeBytesDescending(nil, c.value)
@@ -510,16 +498,16 @@ func TestEncodeDecodeString(t *testing.T) {
 		value   string
 		encoded []byte
 	}{
-		{"\x00\x01a", []byte{0x21, 0x00, 0xff, 1, 'a', 0x00, 0x01}},
-		{"\x00a", []byte{0x21, 0x00, 0xff, 'a', 0x00, 0x01}},
-		{"\x00\xffa", []byte{0x21, 0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
-		{"a", []byte{0x21, 'a', 0x00, 0x01}},
-		{"b", []byte{0x21, 'b', 0x00, 0x01}},
-		{"b\x00", []byte{0x21, 'b', 0x00, 0xff, 0x00, 0x01}},
-		{"b\x00\x00", []byte{0x21, 'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
-		{"b\x00\x00a", []byte{0x21, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
-		{"b\xff", []byte{0x21, 'b', 0xff, 0x00, 0x01}},
-		{"hello", []byte{0x21, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
+		{"\x00\x01a", []byte{0x12, 0x00, 0xff, 1, 'a', 0x00, 0x01}},
+		{"\x00a", []byte{0x12, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{"\x00\xffa", []byte{0x12, 0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
+		{"a", []byte{0x12, 'a', 0x00, 0x01}},
+		{"b", []byte{0x12, 'b', 0x00, 0x01}},
+		{"b\x00", []byte{0x12, 'b', 0x00, 0xff, 0x00, 0x01}},
+		{"b\x00\x00", []byte{0x12, 'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
+		{"b\x00\x00a", []byte{0x12, 'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{"b\xff", []byte{0x12, 'b', 0xff, 0x00, 0x01}},
+		{"hello", []byte{0x12, 'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
 	}
 	for i, c := range testCases {
 		enc := EncodeStringAscending(nil, c.value)
@@ -562,16 +550,16 @@ func TestEncodeDecodeStringDescending(t *testing.T) {
 		value   string
 		encoded []byte
 	}{
-		{"hello", []byte{0x23, ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
-		{"b\xff", []byte{0x23, ^byte('b'), 0x00, 0xff, 0xfe}},
-		{"b\x00\x00a", []byte{0x23, ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"b\x00\x00", []byte{0x23, ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
-		{"b\x00", []byte{0x23, ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
-		{"b", []byte{0x23, ^byte('b'), 0xff, 0xfe}},
-		{"a", []byte{0x23, ^byte('a'), 0xff, 0xfe}},
-		{"\x00\xffa", []byte{0x23, 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"\x00a", []byte{0x23, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
-		{"\x00\x01a", []byte{0x23, 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
+		{"hello", []byte{0x14, ^byte('h'), ^byte('e'), ^byte('l'), ^byte('l'), ^byte('o'), 0xff, 0xfe}},
+		{"b\xff", []byte{0x14, ^byte('b'), 0x00, 0xff, 0xfe}},
+		{"b\x00\x00a", []byte{0x14, ^byte('b'), 0xff, 0x00, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{"b\x00\x00", []byte{0x14, ^byte('b'), 0xff, 0x00, 0xff, 0x00, 0xff, 0xfe}},
+		{"b\x00", []byte{0x14, ^byte('b'), 0xff, 0x00, 0xff, 0xfe}},
+		{"b", []byte{0x14, ^byte('b'), 0xff, 0xfe}},
+		{"a", []byte{0x14, ^byte('a'), 0xff, 0xfe}},
+		{"\x00\xffa", []byte{0x14, 0xff, 0x00, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{"\x00a", []byte{0x14, 0xff, 0x00, ^byte('a'), 0xff, 0xfe}},
+		{"\x00\x01a", []byte{0x14, 0xff, 0x00, 0xfe, ^byte('a'), 0xff, 0xfe}},
 	}
 	for i, c := range testCases {
 		enc := EncodeStringDescending(nil, c.value)
@@ -707,7 +695,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 
 		// Check that the encoding hasn't changed.
 		if dir == Ascending {
-			a, e := lastEncoded, []byte("\x22\xfa\x01 \xbc\x0e\xae\xf9\r\xf2\x8e\x80")
+			a, e := lastEncoded, []byte("\x13\xfa\x01 \xbc\x0e\xae\xf9\r\xf2\x8e\x80")
 			if !bytes.Equal(a, e) {
 				t.Errorf("encoding has changed:\nexpected [% x]\nactual   [% x]", e, a)
 			}
@@ -730,8 +718,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeUvarintDescending(nil, 0), Int},
 		{EncodeFloatAscending(nil, 0), Float},
 		{EncodeFloatDescending(nil, 0), Float},
-		{EncodeDecimalAscending(nil, inf.NewDec(0, 0)), Float},
-		{EncodeDecimalDescending(nil, inf.NewDec(0, 0)), Float},
+		{EncodeDecimalAscending(nil, inf.NewDec(0, 0)), Decimal},
+		{EncodeDecimalDescending(nil, inf.NewDec(0, 0)), Decimal},
 		{EncodeBytesAscending(nil, []byte("")), Bytes},
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
 		{EncodeTimeAscending(nil, timeutil.Now()), Time},
