@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -611,8 +612,8 @@ func TestStoreObservedTimestamp(t *testing.T) {
 		func() {
 			ctx := TestStoreContext()
 			ctx.TestingKnobs.TestingCommandFilter =
-				func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-					if bytes.Equal(args.Header().Key, badKey) {
+				func(filterArgs storageutils.FilterArgs) error {
+					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
 						return fmt.Errorf("boom")
 					}
 					return nil
@@ -673,8 +674,8 @@ func TestStoreAnnotateNow(t *testing.T) {
 			func() {
 				ctx := TestStoreContext()
 				ctx.TestingKnobs.TestingCommandFilter =
-					func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-						if bytes.Equal(args.Header().Key, badKey) {
+					func(filterArgs storageutils.FilterArgs) error {
+						if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
 							return fmt.Errorf("boom")
 						}
 						return nil
@@ -1019,8 +1020,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	var stopper *stop.Stopper
 	ctx := TestStoreContext()
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, h roachpb.Header) error {
-			pr, ok := args.(*roachpb.PushTxnRequest)
+		func(filterArgs storageutils.FilterArgs) error {
+			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
 				return nil
 			}
@@ -1492,8 +1493,8 @@ func TestStoreScanIntents(t *testing.T) {
 	countPtr := &count
 
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if _, ok := args.(*roachpb.ScanRequest); ok {
+		func(filterArgs storageutils.FilterArgs) error {
+			if _, ok := filterArgs.Req.(*roachpb.ScanRequest); ok {
 				atomic.AddInt32(countPtr, 1)
 			}
 			return nil
@@ -1609,8 +1610,9 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	intercept.Store(true)
 	ctx := TestStoreContext()
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if _, ok := args.(*roachpb.ResolveIntentRequest); ok && intercept.Load().(bool) {
+		func(filterArgs storageutils.FilterArgs) error {
+			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+			if ok && intercept.Load().(bool) {
 				return util.Errorf("error on purpose")
 			}
 			return nil

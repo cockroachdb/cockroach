@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -371,7 +372,9 @@ type StoreContext struct {
 // StoreTestingKnobs is a part of the context used to control parts of the system.
 type StoreTestingKnobs struct {
 	// A callback to be called when executing every replica command.
-	TestingCommandFilter CommandFilter
+	// If your filter is not idempotent, consider wrapping it in a
+	// ReplayProtectionFilterWrapper.
+	TestingCommandFilter storageutils.ReplicaCommandFilter
 	// A callback to be called instead of panicking due to a
 	// checksum mismatch in VerifyChecksum()
 	BadChecksumPanic func()

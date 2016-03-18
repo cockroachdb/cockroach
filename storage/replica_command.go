@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -47,7 +49,9 @@ import (
 // execution.  If an error is returned, any returned intents should still be resolved.
 // remScanResults is the number of scan results remaining for this batch (MaxInt64 for no
 // limit).
-func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, remScanResults int64,
+func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey,
+	index int, batch engine.Engine, ms *engine.MVCCStats,
+	h roachpb.Header, remScanResults int64,
 	args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
 	ts := h.Timestamp
 
@@ -61,7 +65,9 @@ func (r *Replica) executeCmd(batch engine.Engine, ms *engine.MVCCStats, h roachp
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
-		err := filter(r.store.StoreID(), args, h)
+		filterArgs := storageutils.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
+			Sid: r.store.StoreID(), Req: args, Hdr: h}
+		err := filter(filterArgs)
 		if err != nil {
 			pErr := roachpb.NewErrorWithTxn(err, h.Txn)
 			log.Infof("test injecting error: %s", pErr)

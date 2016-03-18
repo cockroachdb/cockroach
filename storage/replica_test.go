@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -500,7 +501,7 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 
 	rng.mu.Lock()
-	rng.mu.proposeRaftCommandFn = func(cmdIDKey, *pendingCmd) error {
+	rng.mu.proposeRaftCommandFn = func(*pendingCmd) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
@@ -1172,8 +1173,8 @@ func TestRangeCommandQueue(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, _ roachpb.Request, h roachpb.Header) error {
-			if h.UserPriority == 42 {
+		func(filterArgs storageutils.FilterArgs) error {
+			if filterArgs.Hdr.UserPriority == 42 {
 				blockingStart <- struct{}{}
 				<-blockingDone
 			}
@@ -1289,8 +1290,8 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if put, ok := args.(*roachpb.PutRequest); ok {
+		func(filterArgs storageutils.FilterArgs) error {
+			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
 				putBytes, err := put.Value.GetBytes()
 				if err != nil {
 					return err
@@ -2071,9 +2072,9 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
+		func(filterArgs storageutils.FilterArgs) error {
 			// Make sure the direct GC path doesn't interfere with this test.
-			if args.Method() == roachpb.GC {
+			if filterArgs.Req.Method() == roachpb.GC {
 				return util.Errorf("boom")
 			}
 			return nil
@@ -2166,8 +2167,9 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
+		func(filterArgs storageutils.FilterArgs) error {
+			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
+				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				return util.Errorf("boom")
 			}
 			return nil
@@ -2246,12 +2248,13 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	var count int64
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if args.Method() == roachpb.ResolveIntentRange && args.Header().Key.Equal(splitKey.AsRawKey()) {
+		func(filterArgs storageutils.FilterArgs) error {
+			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
+				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
 				return util.Errorf("boom")
-			} else if args.Method() == roachpb.GC {
-				t.Fatalf("unexpected GCRequest: %+v", args)
+			} else if filterArgs.Req.Method() == roachpb.GC {
+				t.Fatalf("unexpected GCRequest: %+v", filterArgs.Req)
 			}
 			return nil
 		}
@@ -2315,8 +2318,9 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	key := roachpb.Key("zresolveme")
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if args.Method() == roachpb.ResolveIntent && args.Header().Key.Equal(key) {
+		func(filterArgs storageutils.FilterArgs) error {
+			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
+				filterArgs.Req.Header().Key.Equal(key) {
 				atomic.StoreInt32(&seen, 1)
 			}
 			return nil
@@ -3299,8 +3303,8 @@ func TestReplicaCorruption(t *testing.T) {
 
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			if args.Header().Key.Equal(roachpb.Key("boom")) {
+		func(filterArgs storageutils.FilterArgs) error {
+			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
 				return newReplicaCorruptionError()
 			}
 			return nil
@@ -3641,7 +3645,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer tc.Stop()
 
 	// Mock proposeRaftCommand to return an roachpb.RaftGroupDeletedError.
-	proposeRaftCommandFn := func(cmdIDKey, *pendingCmd) error {
+	proposeRaftCommandFn := func(*pendingCmd) error {
 		return &roachpb.RaftGroupDeletedError{}
 	}
 	rng, err := NewReplica(testRangeDescriptor(), tc.store, 0)
@@ -4117,8 +4121,8 @@ func TestReplicaCancelRaft(t *testing.T) {
 			tsc := TestStoreContext()
 			if !cancelEarly {
 				tsc.TestingKnobs.TestingCommandFilter =
-					func(_ roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-						if !args.Header().Key.Equal(key) {
+					func(filterArgs storageutils.FilterArgs) error {
+						if !filterArgs.Req.Header().Key.Equal(key) {
 							return nil
 						}
 						cancel()
@@ -4132,7 +4136,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if cancelEarly {
 				cancel()
 				tc.rng.mu.Lock()
-				tc.rng.mu.proposeRaftCommandFn = func(cmdIDKey, *pendingCmd) error {
+				tc.rng.mu.proposeRaftCommandFn = func(*pendingCmd) error {
 					return nil
 				}
 				tc.rng.mu.Unlock()

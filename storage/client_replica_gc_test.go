@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -46,9 +47,9 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	ctx := storage.TestStoreContext()
 	mtc.storeContext = &ctx
 	mtc.storeContext.TestingKnobs.TestingCommandFilter =
-		func(id roachpb.StoreID, args roachpb.Request, _ roachpb.Header) error {
-			et, ok := args.(*roachpb.EndTransactionRequest)
-			if !ok || id != 2 {
+		func(filterArgs storageutils.FilterArgs) error {
+			et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest)
+			if !ok || filterArgs.Sid != 2 {
 				return nil
 			}
 			rct := et.InternalCommitTrigger.GetChangeReplicasTrigger()

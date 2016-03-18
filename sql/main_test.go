@@ -30,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
+
+//go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
@@ -43,24 +45,37 @@ func init() {
 // CommandFilters provides facilities for registering "TestingCommandFilters"
 // (i.e. functions to be run on every replica command).
 // CommandFilters is thread-safe.
+// CommandFilters also optionally does replay protection if filters need it.
 type CommandFilters struct {
 	sync.RWMutex
 	filters []struct {
-		id     int
-		filter storage.CommandFilter
+		id         int
+		idempotent bool
+		filter     storageutils.ReplicaCommandFilter
 	}
 	nextID int
+
+	numFiltersTrackingReplays int
+	replayProtection          storageutils.ReplicaCommandFilter
 }
 
 // runFilters executes the registered filters, stopping at the first one
 // that returns an error.
-func (c *CommandFilters) runFilters(
-	sid roachpb.StoreID, req roachpb.Request, hdr roachpb.Header) error {
+func (c *CommandFilters) runFilters(args storageutils.FilterArgs) error {
 
 	c.RLock()
 	defer c.RUnlock()
+
+	if c.replayProtection != nil {
+		return c.replayProtection(args)
+	} else {
+		return c.runFiltersInternal(args)
+	}
+}
+
+func (c *CommandFilters) runFiltersInternal(args storageutils.FilterArgs) error {
 	for _, f := range c.filters {
-		if err := f.filter(sid, req, hdr); err != nil {
+		if err := f.filter(args); err != nil {
 			return err
 		}
 	}
@@ -69,17 +84,31 @@ func (c *CommandFilters) runFilters(
 
 // AppendFilter registers a filter function to run after all the previously
 // registered filters.
+// idempotent specifies if this filter can be safely run multiple times on the
+// same command. If this property doesn't hold, CommandFilters will start
+// tracking commands for replay protection, which might be expensive.
 // Returns a closure that the client must run for doing cleanup when the
 // filter should be deregistered.
-func (c *CommandFilters) AppendFilter(filter storage.CommandFilter) func() {
+func (c *CommandFilters) AppendFilter(
+	filter storageutils.ReplicaCommandFilter, idempotent bool) func() {
+
 	c.Lock()
 	defer c.Unlock()
 	id := c.nextID
 	c.nextID++
 	c.filters = append(c.filters, struct {
-		id     int
-		filter storage.CommandFilter
-	}{id, filter})
+		id         int
+		idempotent bool
+		filter     storageutils.ReplicaCommandFilter
+	}{id, idempotent, filter})
+
+	if !idempotent {
+		if c.numFiltersTrackingReplays == 0 {
+			c.replayProtection =
+				storageutils.WrapFilterForReplayProtection(c.runFiltersInternal)
+		}
+		c.numFiltersTrackingReplays++
+	}
 
 	return func() {
 		c.removeFilter(id)
@@ -93,6 +122,12 @@ func (c *CommandFilters) removeFilter(id int) {
 	defer c.Unlock()
 	for i, f := range c.filters {
 		if f.id == id {
+			if !f.idempotent {
+				c.numFiltersTrackingReplays--
+				if c.numFiltersTrackingReplays == 0 {
+					c.replayProtection = nil
+				}
+			}
 			c.filters = append(c.filters[:i], c.filters[i+1:]...)
 			return
 		}
@@ -100,26 +135,24 @@ func (c *CommandFilters) removeFilter(id int) {
 	panic(fmt.Sprintf("failed to find filter with id: %d.", id))
 }
 
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(_ roachpb.StoreID, req roachpb.Request, _ roachpb.Header) error {
-	args, ok := req.(*roachpb.EndTransactionRequest)
+func checkEndTransactionTrigger(args storageutils.FilterArgs) error {
+	req, ok := args.Req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil
 	}
 
-	if !args.Commit {
+	if !req.Commit {
 		// This is a rollback: skip trigger verification.
 		return nil
 	}
 
-	modifiedSpanTrigger := args.InternalCommitTrigger.GetModifiedSpanTrigger()
+	modifiedSpanTrigger := req.InternalCommitTrigger.GetModifiedSpanTrigger()
 	modifiedSystemConfigSpan := modifiedSpanTrigger != nil && modifiedSpanTrigger.SystemConfigSpan
 
 	var hasSystemKey bool
-	for _, span := range args.IntentSpans {
+	for _, span := range req.IntentSpans {
 		addr := keys.Addr(span.Key)
 		if bytes.Compare(addr, keys.SystemConfigSpan.Key) >= 0 &&
 			bytes.Compare(addr, keys.SystemConfigSpan.EndKey) < 0 {
@@ -152,7 +185,7 @@ type testServer struct {
 func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters
-	cmdFilters.AppendFilter(checkEndTransactionTrigger)
+	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter = cmdFilters.runFilters
 	return ctx, &cmdFilters
 }
