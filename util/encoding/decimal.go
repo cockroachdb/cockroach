@@ -217,7 +217,7 @@ func decodeDecimal(buf []byte, invert bool, tmp []byte) ([]byte, *inf.Dec, error
 	if idx == -1 {
 		return nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
 	}
-	dec := inf.NewDec(0, 1)
+	dec := new(inf.Dec).SetScale(1)
 	switch {
 	case buf[0] == decimalNegValPosExp:
 		decodeDecimalValue(dec, true, false, buf[1:idx], tmp)
