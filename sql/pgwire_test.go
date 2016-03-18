@@ -266,6 +266,12 @@ func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var base preparedQueryTest
 	queryTests := map[string][]preparedQueryTest{
+		"SELECT $2 > 0": {
+			base.Params(1).Error(`pq: there is no parameter $2`),
+		},
+		"SELECT $0 > 0": {
+			base.Params(1).Error(`pq: there is no parameter $0`),
+		},
 		"SELECT $1 > 0": {
 			base.Params(1).Results(true),
 			base.Params("1").Results(true),
@@ -414,9 +420,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		for _, test := range tests {
 			if rows, err := queryFunc(test.params...); err != nil {
 				if test.error == "" {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
+					t.Errorf("%s: %v: unexpected error: %q", query, test.params, err)
 				} else if err.Error() != test.error {
-					t.Errorf("%s: %v: expected error: %s, got %s", query, test.params, test.error, err)
+					t.Errorf("%s: %v: expected error: %q, got %q", query, test.params, test.error, err)
 				}
 			} else {
 				defer rows.Close()
@@ -459,7 +465,16 @@ func TestPGPreparedQuery(t *testing.T) {
 
 	for query, tests := range queryTests {
 		if stmt, err := db.Prepare(query); err != nil {
-			t.Errorf("%s: prepare error: %s", query, err)
+			// Usually we expect Prepare to succeed and then some Execs to fail
+			// depending on args, but it is okay for Prepare to fail iff all the
+			// tests expect the error Prepare returns.
+			for _, test := range tests {
+				if test.error == "" {
+					t.Errorf("%q: prepare error: %q", query, err)
+				} else if test.error != err.Error() {
+					t.Errorf("%q: prepare error expected %q, got %q", query, test.error, err)
+				}
+			}
 		} else {
 			func() {
 				defer stmt.Close()
