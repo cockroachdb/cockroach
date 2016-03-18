@@ -340,6 +340,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
 		}
 		// ValArgs are 1-indexed, pq.inTypes are 0-indexed.
+		if i == 0 {
+			return c.sendError(fmt.Sprintf("invalid parameter name: $%s", k))
+		}
 		i--
 		if len(pq.inTypes) <= i {
 			return c.sendError("internal error: leftover valargs")
