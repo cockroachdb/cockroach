@@ -353,7 +353,6 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		portalNames: make(map[string]struct{}),
 		columns:     cols,
 	}
-	copy(pq.inTypes, inTypeHints)
 	for k, v := range args {
 		i, err := strconv.Atoi(k)
 		if err != nil {
@@ -367,6 +366,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		// Grow pq.inTypes to be at least as large as i.
 		for j := len(pq.inTypes); j <= i; j++ {
 			pq.inTypes = append(pq.inTypes, 0)
+			if j < len(inTypeHints) {
+				pq.inTypes[j] = inTypeHints[j]
+			}
 		}
 		// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
 		// to DummyInt), so we need to maintain the types sent by the client.
