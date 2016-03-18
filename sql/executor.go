@@ -481,7 +481,7 @@ func (e *Executor) ExecuteStatements(
 		planMaker.setTxn(curTxnState.txn)
 	}
 
-	session.Txn = Session_Transaction{}
+	session.Txn = SessionTransaction{}
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
