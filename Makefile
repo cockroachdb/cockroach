@@ -108,9 +108,12 @@ endif
 	for p in $(shell $(GO) list $(PKG)); do \
 	  NAME=$$(basename "$$p"); \
 	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
-		OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
+	  OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
 	  $(GO) test -v $(GOFLAGS) -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
-	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi \
+	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi; \
+	  if [ $${NAME} = "sql" ]; then \
+	     cp -r sql/testdata sql/partestdata "$(DIR)/$${PKGDIR}/" || exit 1; \
+	  fi \
 	done
 
 # Similar to "testrace", we want to cache the build before running the
