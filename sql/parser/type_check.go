@@ -94,7 +94,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 			return nil, err
 		}
 		if _, ok := dummyCond.(DValArg); ok {
-			return nil, fmt.Errorf("cannot infer type for parameter %s", dummyCond)
+			return nil, fmt.Errorf("could not determine data type of parameter %s", dummyCond)
 		}
 		condArgType = dummyCond
 	}
@@ -107,7 +107,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 			return nil, err
 		}
 		if _, ok := dummyVal.(DValArg); ok {
-			return nil, fmt.Errorf("cannot infer type for parameter %s", dummyVal)
+			return nil, fmt.Errorf("could not determine data type of parameter %s", dummyVal)
 		}
 	}
 
@@ -132,7 +132,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 			return nil, err
 		}
 		if _, ok := nextDummyVal.(DValArg); ok && dummyVal == DNull {
-			return nil, fmt.Errorf("cannot infer type for parameter %s", nextDummyVal)
+			return nil, fmt.Errorf("could not determine data type of parameter %s", nextDummyVal)
 		}
 		if set, err := args.SetInferredType(nextDummyVal, dummyVal); err != nil {
 			return nil, err

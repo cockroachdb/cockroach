@@ -329,7 +329,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	}
 	pq := preparedStatement{
 		query:       query,
-		inTypes:     make([]oid.Oid, len(args)),
+		inTypes:     make([]oid.Oid, 0, len(args)),
 		portalNames: make(map[string]struct{}),
 		columns:     cols,
 	}
@@ -337,12 +337,16 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	for k, v := range args {
 		i, err := strconv.Atoi(k)
 		if err != nil {
-			return c.sendError(fmt.Sprintf("non-integer parameter name: %s", k))
+			return c.sendError(fmt.Sprintf("non-integer parameter: %s", k))
 		}
 		// ValArgs are 1-indexed, pq.inTypes are 0-indexed.
 		i--
-		if len(pq.inTypes) <= i {
-			return c.sendError("internal error: leftover valargs")
+		if i < 0 {
+			return c.sendError(fmt.Sprintf("there is no parameter $%s", k))
+		}
+		// Grow pq.inTypes to be at least as large as i.
+		for j := len(pq.inTypes); j <= i; j++ {
+			pq.inTypes = append(pq.inTypes, 0)
 		}
 		// OID to Datum is not a 1-1 mapping (for example, int4 and int8 both map
 		// to DummyInt), so we need to maintain the types sent by the client.
@@ -354,6 +358,11 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 			return c.sendError(fmt.Sprintf("unknown datum type: %s", v.Type()))
 		}
 		pq.inTypes[i] = id
+	}
+	for i := range pq.inTypes {
+		if pq.inTypes[i] == 0 {
+			return c.sendError(fmt.Sprintf("could not determine data type of parameter $%d", i+1))
+		}
 	}
 	c.preparedStatements[name] = pq
 	c.writeBuf.initMsg(serverMsgParseComplete)
