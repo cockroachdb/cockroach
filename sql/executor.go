@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/trace"
+
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -62,6 +64,18 @@ func releasePlanner(p *planner) {
 	// Ensure future users don't clobber the session just used.
 	p.session = nil
 	plannerPool.Put(p)
+}
+
+type traceResult struct {
+	tag   string
+	count int
+}
+
+func (r *traceResult) String() string {
+	if r.count < 0 {
+		return r.tag
+	}
+	return fmt.Sprintf("%s %d", r.tag, r.count)
 }
 
 // Request is an SQL request to cockroach. A transaction can consist of multiple
@@ -422,6 +436,7 @@ type txnState struct {
 	aborted bool
 	// The schema change closures to run when this txn is done.
 	schemaChangers schemaChangerCollection
+	tr             trace.Trace
 }
 
 type transactionState int
@@ -469,6 +484,7 @@ func (e *Executor) ExecuteStatements(
 	curTxnState := txnState{
 		txn:     nil,
 		aborted: session.Txn.TxnAborted,
+		tr:      session.Trace,
 	}
 	if txnProto := session.Txn.Txn; txnProto != nil {
 		// A pending transaction is already present, resume it.
@@ -481,7 +497,7 @@ func (e *Executor) ExecuteStatements(
 		planMaker.setTxn(curTxnState.txn)
 	}
 
-	session.Txn = Session_Transaction{}
+	session.Txn = SessionTransaction{}
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
@@ -504,17 +520,6 @@ func (e *Executor) ExecuteStatements(
 	}
 
 	return res
-}
-
-// Execute the statement(s) in the given request and returns a response.
-// On error, the returned integer is an HTTP error code.
-func (e *Executor) Execute(args Request) (Response, int, error) {
-	defer func(start time.Time) {
-		e.latency.RecordValue(timeutil.Now().Sub(start).Nanoseconds())
-	}(timeutil.Now())
-	results := e.ExecuteStatements(
-		args.User, args.Session, args.SQL, args.Params)
-	return Response{Results: results, Session: args.Session}, 0, nil
 }
 
 // execRequest executes the request using the provided planner.
@@ -891,12 +896,28 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PErr: pErr}, pErr
 	}
 
+	if txnState.tr != nil {
+		// TODO(pmattis): Should "sensitive" be true here?
+		txnState.tr.LazyLog(stmt, false)
+	}
 	result, pErr := e.execStmt(stmt, planMaker, timeutil.Now(),
 		implicitTxn /* autoCommit */)
 	txnDone := planMaker.txn == nil
 	if pErr != nil {
+		if txnState.tr != nil {
+			txnState.tr.LazyPrintf("ERROR: %v", pErr)
+		}
 		result = Result{PErr: pErr}
 		txnState.aborted = true
+	} else if txnState.tr != nil {
+		tResult := &traceResult{tag: result.PGTag, count: -1}
+		switch result.Type {
+		case parser.RowsAffected:
+			tResult.count = result.RowsAffected
+		case parser.Rows:
+			tResult.count = len(result.Rows)
+		}
+		txnState.tr.LazyLog(tResult, false)
 	}
 	if txnDone {
 		txnState.aborted = false

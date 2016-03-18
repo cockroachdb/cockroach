@@ -19,32 +19,63 @@ package sql
 import (
 	"time"
 
+	"golang.org/x/net/trace"
+
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
+
+type isSessionTimezone interface {
+	isSessionTimezone()
+}
+
+// SessionLocation ...
+type SessionLocation struct {
+	Location string
+}
+
+// SessionOffset ...
+type SessionOffset struct {
+	Offset int64
+}
+
+func (*SessionLocation) isSessionTimezone() {}
+func (*SessionOffset) isSessionTimezone()   {}
+
+// SessionTransaction ...
+type SessionTransaction struct {
+	// If missing, it means we're not inside a (KV) txn.
+	Txn *roachpb.Transaction
+	// txnAborted is set once executing a statement returned an error from KV.
+	// While in this state, every subsequent statement must be rejected until a
+	// COMMIT/ROLLBACK is seen.
+	TxnAborted   bool
+	UserPriority roachpb.UserPriority
+	// Indicates that the transaction is mutating keys in the SystemConfig span.
+	MutatesSystemConfig bool
+}
+
+// Session ...
+type Session struct {
+	Database string
+	Syntax   int32
+	// Info about the open transaction (if any).
+	Txn                   SessionTransaction
+	Timezone              isSessionTimezone
+	DefaultIsolationLevel roachpb.IsolationType
+	Trace                 trace.Trace
+}
 
 func (s *Session) getLocation() (*time.Location, error) {
 	switch t := s.Timezone.(type) {
 	case nil:
 		return time.UTC, nil
-	case *Session_Location:
-		//TODO(vivek): Cache the location.
+	case *SessionLocation:
+		// TODO(vivek): Cache the location.
 		return time.LoadLocation(t.Location)
-	case *Session_Offset:
+	case *SessionOffset:
 		return time.FixedZone("", int(t.Offset)), nil
 	default:
 		return nil, util.Errorf("unhandled timezone variant type %T", t)
-	}
-}
-
-// GoTime returns the receiver as a time.Time.
-func (t Session_Timestamp) GoTime() time.Time {
-	return time.Unix(t.Sec, int64(t.Nsec))
-}
-
-// Timestamp converts a time.Time to a timestamp.
-func Timestamp(t time.Time) Session_Timestamp {
-	return Session_Timestamp{
-		Sec:  t.Unix(),
-		Nsec: uint32(t.Nanosecond()),
 	}
 }

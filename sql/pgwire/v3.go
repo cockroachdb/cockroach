@@ -24,6 +24,8 @@ import (
 	"reflect"
 	"strconv"
 
+	"golang.org/x/net/trace"
+
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -93,6 +95,7 @@ type preparedPortal struct {
 }
 
 type v3Conn struct {
+	conn     net.Conn
 	rd       *bufio.Reader
 	wr       *bufio.Writer
 	opts     opts
@@ -119,6 +122,7 @@ type opts struct {
 
 func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v3Conn {
 	return v3Conn{
+		conn:               conn,
 		rd:                 bufio.NewReader(conn),
 		wr:                 bufio.NewWriter(conn),
 		executor:           executor,
@@ -129,7 +133,23 @@ func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v
 	}
 }
 
+func (c *v3Conn) finish() {
+	// This is better than always flushing on error.
+	if err := c.wr.Flush(); err != nil {
+		log.Error(err)
+	}
+	_ = c.conn.Close()
+	if c.session.Trace != nil {
+		c.session.Trace.Finish()
+	}
+}
+
 func (c *v3Conn) parseOptions(data []byte) error {
+	defer func() {
+		c.session.Trace = trace.New("sql."+c.opts.user, c.conn.RemoteAddr().String())
+		c.session.Trace.SetMaxEvents(100)
+	}()
+
 	buf := readBuffer{msg: data}
 	for {
 		key, err := buf.getString()
