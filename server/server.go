@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -83,6 +84,8 @@ type Server struct {
 	sqlExecutor         *sql.Executor
 	leaseMgr            *sql.LeaseManager
 	schemaChangeManager *sql.SchemaChangeManager
+	parsedUpdatesURL    *url.URL
+	parsedReportingURL  *url.URL
 }
 
 // NewServer creates a Server from a server.Context.
@@ -346,6 +349,8 @@ func (s *Server) Start() error {
 	// has been assigned.
 	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
+
+	s.periodicallyCheckForUpdates()
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)
