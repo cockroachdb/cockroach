@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -58,6 +59,10 @@ const (
 	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
 	// or intent byte age larger than the threshold queues the replica for GC.
 	considerThreshold = 10
+
+	// gcQueueTaskLimit is the maximum number of goroutines that will be spawned
+	// by the GC queue.
+	gcQueueTaskLimit = 25
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -75,11 +80,16 @@ const (
 // single priority. If any task is overdue, shouldQueue returns true.
 type gcQueue struct {
 	baseQueue
+	sem     chan struct{} // Semaphore to limit async goroutines
+	stopper *stop.Stopper
 }
 
 // newGCQueue returns a new instance of gcQueue.
-func newGCQueue(gossip *gossip.Gossip) *gcQueue {
-	gcq := &gcQueue{}
+func newGCQueue(gossip *gossip.Gossip, stopper *stop.Stopper) *gcQueue {
+	gcq := &gcQueue{
+		sem:     make(chan struct{}, gcQueueTaskLimit),
+		stopper: stopper,
+	}
 	gcq.baseQueue = makeBaseQueue("gc", gcq, gossip, gcQueueMaxSize)
 	return gcq
 }
@@ -276,8 +286,14 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		if txn.Status != roachpb.PENDING {
 			continue
 		}
+		// Make a copy so we don't include the loop variable in the closure.
+		txnCopy := txn
 		wg.Add(1)
-		go gcq.pushTxn(repl, now, txn, roachpb.PUSH_ABORT, &wg)
+		if !gcq.stopper.RunLimitedAsyncTask(gcq.sem, func() {
+			gcq.pushTxn(repl, now, txnCopy, roachpb.PUSH_ABORT, &wg)
+		}) {
+			return util.Errorf("shutting down")
+		}
 	}
 	wg.Wait()
 
@@ -429,13 +445,19 @@ func (gcq *gcQueue) processSequenceCache(r *Replica, now, cutoff roachpb.Timesta
 	// so we should simply read those from a snapshot, and only push those which
 	// are PENDING.
 	for _, txn := range txns {
+		// Make a copy so we don't include the loop variable in the closure.
+		txnCopy := txn
 		// Check if the Txn is still alive. If this indicates that the Txn is
 		// aborted and old enough to guarantee that any running coordinator
 		// would have realized that the transaction wasn't running by means
 		// of a heartbeat, then we're free to remove the sequence cache entry.
 		// In the most likely case, there isn't even an entry (which will
 		// be apparent by a zero timestamp and nil last heartbeat).
-		go gcq.pushTxn(r, now, txn, roachpb.PUSH_TOUCH, &wg)
+		if !gcq.stopper.RunLimitedAsyncTask(gcq.sem, func() {
+			gcq.pushTxn(r, now, txnCopy, roachpb.PUSH_TOUCH, &wg)
+		}) {
+			return nil
+		}
 	}
 	wg.Wait()
 
