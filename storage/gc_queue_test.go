@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -363,6 +364,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	defer tc.Stop()
 	tc.manualClock.Set(int64(now))
 
+	outsideKey := tc.rng.Desc().EndKey.Next().AsRawKey()
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
 
 	txns := map[string]roachpb.Transaction{}
@@ -376,9 +378,11 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txn.Intents = testIntents
 		txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(test.heartbeatTS)}
 		txns[strKey] = *txn
-		key := keys.TransactionKey(baseKey, txn.ID)
-		if err := engine.MVCCPutProto(tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
-			t.Fatal(err)
+		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
+			key := keys.TransactionKey(addrKey, txn.ID)
+			if err := engine.MVCCPutProto(tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
+				t.Fatal(err)
+			}
 		}
 		seqTS := txn.Timestamp
 		seqTS.Forward(*txn.LastHeartbeat)
@@ -429,6 +433,21 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		}
 		return nil
 	})
+
+	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.EmptyUUID)
+	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.EmptyUUID)
+	var count int
+	if _, err := engine.MVCCIterate(tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, roachpb.ZeroTimestamp,
+		true, nil, false, func(roachpb.KeyValue) (bool, error) {
+			count++
+			return false, nil
+		}); err != nil {
+		t.Fatal(err)
+	}
+	if exp := len(testCases); exp != count {
+		t.Fatalf("expected the %d external transaction entries to remain untouched, "+
+			"but only %d are left", exp, count)
+	}
 }
 
 // TestGCQueueIntentResolution verifies intent resolution with many
