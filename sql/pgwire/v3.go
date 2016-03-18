@@ -582,7 +582,6 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
 	tracing.AnnotateTrace()
 	results := c.executor.ExecuteStatements(c.opts.user, &c.session, stmts, params)
-	response := sql.Response{Results: results, Session: &c.session}
 
 	tracing.AnnotateTrace()
 	if results.Empty {
@@ -590,7 +589,7 @@ func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCo
 		c.writeBuf.initMsg(serverMsgEmptyQuery)
 		return c.writeBuf.finishMsg(c.wr)
 	}
-	return c.sendResponse(response, formatCodes, sendDescription, limit)
+	return c.sendResponse(results.ResultList, formatCodes, sendDescription, limit)
 }
 
 func (c *v3Conn) sendCommandComplete(tag []byte) error {
@@ -634,11 +633,11 @@ func (c *v3Conn) sendError(errToSend string) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) sendResponse(resp sql.Response, formatCodes []formatCode, sendDescription bool, limit int32) error {
-	if len(resp.Results.ResultList) == 0 {
+func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int32) error {
+	if len(results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
-	for _, result := range resp.Results.ResultList {
+	for _, result := range results {
 		if result.PErr != nil {
 			if err := c.sendError(result.PErr.String()); err != nil {
 				return err

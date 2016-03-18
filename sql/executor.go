@@ -78,30 +78,6 @@ func (r *traceResult) String() string {
 	return fmt.Sprintf("%s %d", r.tag, r.count)
 }
 
-// Request is an SQL request to cockroach. A transaction can consist of multiple
-// requests.
-type Request struct {
-	// User is the originating user.
-	User string
-	// Session settings that were returned in the last response that
-	// contained them, being reflected back to the server.
-	// This Session will be updated as part of executing this request.
-	Session *Session
-	// SQL statement(s) to be serially executed by the server. Multiple
-	// statements are passed as a single string separated by semicolons.
-	SQL string
-	// Parameters referred to in the above SQL statement(s) using "?".
-	Params []parser.Datum
-}
-
-// Response is the reply to an SQL request to cockroach.
-type Response struct {
-	// Settings that should be reflected back in all subsequent requests.
-	// Immutable.
-	Session *Session
-	Results StatementResults
-}
-
 // ResultList represents a list of results for a list of SQL statements.
 // There is one result object per SQL statement in the request.
 type ResultList []Result
