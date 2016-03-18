@@ -154,15 +154,15 @@ func TestHttpQuery(t *testing.T) {
 				Datapoints: []*ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
-						Value:          10.0,
+						Value:          1.0,
 					},
 					{
 						TimestampNanos: 515 * 1e9,
-						Value:          50.0,
+						Value:          5.0,
 					},
 					{
 						TimestampNanos: 525 * 1e9,
-						Value:          50.0,
+						Value:          5.0,
 					},
 				},
 			},
