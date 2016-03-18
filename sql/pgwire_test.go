@@ -217,13 +217,15 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT $1":                                     "pq: could not determine data type of parameter $1",
 		"SELECT $1 + $1":                                "pq: unsupported binary operator: <parameter> + <parameter>",
 		"SELECT now() + $1":                             "pq: unsupported binary operator: <timestamp> + <parameter>",
-		"SELECT CASE $1 WHEN 1 THEN 1 END":              "pq: cannot infer type for parameter $1",
-		"SELECT CASE WHEN TRUE THEN $1 END":             "pq: cannot infer type for parameter $1",
-		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END":     "pq: cannot infer type for parameter $2",
-		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END":      "pq: cannot infer type for parameter $1",
-		"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END": "pq: cannot infer type for parameter $1",
+		"SELECT CASE $1 WHEN 1 THEN 1 END":              "pq: could not determine data type of parameter $1",
+		"SELECT CASE WHEN TRUE THEN $1 END":             "pq: could not determine data type of parameter $1",
+		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END":     "pq: could not determine data type of parameter $2",
+		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END":      "pq: could not determine data type of parameter $1",
+		"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END": "pq: could not determine data type of parameter $1",
 		"CREATE TABLE $1 (id INT)":                      "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
 		"UPDATE d.t SET s = i + $1":                     "pq: value type int doesn't match type STRING of column \"s\"",
+		"SELECT $0 > 0":                                 "pq: there is no parameter $0",
+		"SELECT $2 > 0":                                 "pq: could not determine data type of parameter $1",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
