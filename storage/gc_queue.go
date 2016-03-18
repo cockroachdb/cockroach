@@ -243,9 +243,7 @@ func processSequenceCache(snap engine.Engine, rangeID roachpb.RangeID, now, cuto
 	infoMu.Unlock()
 
 	var wg sync.WaitGroup
-	// TODO(tschottdorf): a lot of these transactions will be on our local range,
-	// so we should simply read those from a snapshot, and only push those which
-	// are PENDING.
+	// TODO(tschottdorf): use stopper.LimitedAsyncTask.
 	wg.Add(len(txns))
 	for _, txn := range txns {
 		if txn.Status != roachpb.PENDING {
@@ -425,7 +423,7 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 		}
 	}
 
-	gc := engine.NewGarbageCollector(now, policy)
+	gc := engine.MakeGarbageCollector(now, policy)
 
 	var gcKeys []roachpb.GCRequest_GCKey
 
