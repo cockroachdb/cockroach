@@ -598,7 +598,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 func (n *Node) writeSummaries() error {
 	var err error
 	n.stopper.RunTask(func() {
-		nodeStatus, storeStatuses := n.recorder.GetStatusSummaries()
+		nodeStatus := n.recorder.GetStatusSummary()
 		if nodeStatus != nil {
 			key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
 			if pErr := n.ctx.DB.Put(key, nodeStatus); pErr != nil {
@@ -611,21 +611,6 @@ func (n *Node) writeSummaries() error {
 					log.Errorf("error marshaling nodeStatus to json: %s", err)
 				}
 				log.Infof("node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
-			}
-		}
-
-		for _, ss := range storeStatuses {
-			key := keys.StoreStatusKey(int32(ss.Desc.StoreID))
-			if pErr := n.ctx.DB.Put(key, &ss); pErr != nil {
-				err = pErr.GoError()
-				return
-			}
-			if log.V(1) {
-				statusJSON, err := json.Marshal(&ss)
-				if err != nil {
-					log.Errorf("error marshaling storeStatus to json: %s", err)
-				}
-				log.Infof("store %d status: %s", ss.Desc.StoreID, statusJSON)
 			}
 		}
 	})

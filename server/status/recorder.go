@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
@@ -93,11 +92,11 @@ type MetricsRecorder struct {
 		clock           *hlc.Clock
 
 		// Counts to help optimize slice allocation.
-		lastDataCount    int
-		lastSummaryCount int
+		lastDataCount        int
+		lastSummaryCount     int
+		lastNodeMetricCount  int
+		lastStoreMetricCount int
 
-		// TODO(mrtracy): These are stored to support the current structure of
-		// status summaries. These should be removed as part of #4465.
 		startedAt int64
 		desc      roachpb.NodeDescriptor
 		stores    map[roachpb.StoreID]storeMetrics
@@ -129,7 +128,6 @@ func (mr *MetricsRecorder) AddNodeRegistry(prefixFmt string, registry *metric.Re
 // gathering some additional information which is present in store status
 // summaries.
 // Stores should only be added to the registry after they have been started.
-// TODO(mrtracy): Store references should not be necessary after #4465.
 func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -215,63 +213,42 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	return data
 }
 
-// GetStatusSummaries returns a status summary messages for the node, along with
-// a status summary for every individual store within the node.
-// TODO(mrtracy): The status summaries deserve a near-term, significant
-// overhaul. Their primary usage is as an indicator of the most recent metrics
-// of a node or store - they are essentially a "vertical" query of several
-// time series for a single node or store, returning only the most recent value
-// of each series. The structure should be modified to reflect that: there is no
-// reason for them to have a strict schema of fields. (Github Issue #4465)
-func (mr *MetricsRecorder) GetStatusSummaries() (*NodeStatus, []storage.StoreStatus) {
+// GetStatusSummary returns a status summary messages for the node. The summary
+// includes the recent values of metrics for both the node and all of its
+// component stores.
+func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
 	if mr.mu.nodeID == 0 {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.GetStatusSummaries called before NodeID allocation.")
+			log.Warning("MetricsRecorder.GetStatusSummary called before NodeID allocation.")
 		}
-		return nil, nil
+		return nil
 	}
 
 	now := mr.mu.clock.PhysicalNow()
 
 	// Generate an node status with no store data.
 	nodeStat := &NodeStatus{
-		Desc:      mr.mu.desc,
-		UpdatedAt: now,
-		StartedAt: mr.mu.startedAt,
-		StoreIDs:  make([]roachpb.StoreID, 0, mr.mu.lastSummaryCount),
+		Desc:          mr.mu.desc,
+		UpdatedAt:     now,
+		StartedAt:     mr.mu.startedAt,
+		StoreStatuses: make([]*StoreStatus, 0, mr.mu.lastSummaryCount),
+		Metrics:       make(map[string]float64, mr.mu.lastNodeMetricCount),
 	}
 
-	storeStats := make([]storage.StoreStatus, 0, mr.mu.lastSummaryCount)
-	// Generate status summaries for stores, while accumulating data into the
-	// NodeStatus.
+	eachRecordableValue(mr.nodeRegistry, func(name string, val float64) {
+		nodeStat.Metrics[name] = val
+	})
+
+	// Generate status summaries for stores.
 	for storeID, r := range mr.mu.storeRegistries {
-		nodeStat.StoreIDs = append(nodeStat.StoreIDs, storeID)
-
-		// Gather MVCCStats from the store directly.
-		stats := mr.mu.stores[storeID].MVCCStats()
-
-		// Gather updates from a few specific gauges.
-		// TODO(mrtracy): This is the worst hack present in supporting the
-		// current status summary format. It will be removed as part of #4465.
-		rangeCounter := r.GetCounter("ranges")
-		if rangeCounter == nil {
-			log.Errorf("Could not record status summaries: Store %d did not have 'ranges' counter in registry.", storeID)
-			return nil, nil
-		}
-		gaugeNames := []string{"ranges.leader", "ranges.replicated", "ranges.available"}
-		gauges := make(map[string]*metric.Gauge)
-		for _, name := range gaugeNames {
-			gauge := r.GetGauge(name)
-			if gauge == nil {
-				log.Errorf("Could not record status summaries: Store %d did not have '%s' gauge in registry.", storeID, name)
-				return nil, nil
-			}
-			gauges[name] = gauge
-		}
+		storeMetrics := make(map[string]float64, mr.mu.lastStoreMetricCount)
+		eachRecordableValue(r, func(name string, val float64) {
+			storeMetrics[name] = val
+		})
 
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor()
@@ -279,25 +256,17 @@ func (mr *MetricsRecorder) GetStatusSummaries() (*NodeStatus, []storage.StoreSta
 			log.Errorf("Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 		}
 
-		status := storage.StoreStatus{
-			Desc:                 *descriptor,
-			NodeID:               mr.mu.nodeID,
-			UpdatedAt:            now,
-			StartedAt:            mr.mu.startedAt,
-			Stats:                stats,
-			RangeCount:           int32(rangeCounter.Count()),
-			LeaderRangeCount:     int32(gauges[gaugeNames[0]].Value()),
-			ReplicatedRangeCount: int32(gauges[gaugeNames[1]].Value()),
-			AvailableRangeCount:  int32(gauges[gaugeNames[2]].Value()),
-		}
-		nodeStat.Stats.Add(stats)
-		nodeStat.RangeCount += status.RangeCount
-		nodeStat.LeaderRangeCount += status.LeaderRangeCount
-		nodeStat.ReplicatedRangeCount += status.ReplicatedRangeCount
-		nodeStat.AvailableRangeCount += status.AvailableRangeCount
-		storeStats = append(storeStats, status)
+		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, &StoreStatus{
+			Desc:    *descriptor,
+			Metrics: storeMetrics,
+		})
 	}
-	return nodeStat, storeStats
+	mr.mu.lastSummaryCount = len(nodeStat.StoreStatuses)
+	mr.mu.lastNodeMetricCount = len(nodeStat.Metrics)
+	if len(nodeStat.StoreStatuses) > 0 {
+		mr.mu.lastStoreMetricCount = len(nodeStat.StoreStatuses[0].Metrics)
+	}
+	return nodeStat
 }
 
 // registryRecorder is a helper class for recording time series datapoints
@@ -309,41 +278,56 @@ type registryRecorder struct {
 	timestampNanos int64
 }
 
+func extractValue(mtr interface{}) (float64, error) {
+	// TODO(tschottdorf|mrtracy): consider moving this switch to an interface
+	// implemented by the individual metric types.
+	switch mtr := mtr.(type) {
+	case float64:
+		return mtr, nil
+	case *metric.Rates:
+		return float64(mtr.Count()), nil
+	case *metric.Counter:
+		return float64(mtr.Count()), nil
+	case *metric.Gauge:
+		return float64(mtr.Value()), nil
+	default:
+		return 0, util.Errorf("cannot extract value for type %v", mtr)
+	}
+}
+
+// eachRecordableValue visits each metric in the registry, calling the supplied
+// function once for each recordable value represented by that metric. This is
+// useful to expand certain metric types (such as histograms) into multiple
+// recordable values.
+func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
+	reg.Each(func(name string, mtr interface{}) {
+		if histogram, ok := mtr.(*metric.Histogram); ok {
+			curr := histogram.Current()
+			for _, pt := range recordHistogramQuantiles {
+				fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
+			}
+		} else {
+			val, err := extractValue(mtr)
+			if err != nil {
+				log.Warningf(err.Error())
+				return
+			}
+			fn(name, val)
+		}
+	})
+}
+
 func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
-	rr.registry.Each(func(name string, m interface{}) {
-		data := ts.TimeSeriesData{
+	eachRecordableValue(rr.registry, func(name string, val float64) {
+		*dest = append(*dest, ts.TimeSeriesData{
 			Name:   fmt.Sprintf(rr.format, name),
 			Source: rr.source,
 			Datapoints: []*ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: rr.timestampNanos,
+					Value:          val,
 				},
 			},
-		}
-		// The method for extracting data differs based on the type of metric.
-		// TODO(tschottdorf): should make this based on interfaces.
-		switch mtr := m.(type) {
-		case float64:
-			data.Datapoints[0].Value = mtr
-		case *metric.Rates:
-			data.Datapoints[0].Value = float64(mtr.Count())
-		case *metric.Counter:
-			data.Datapoints[0].Value = float64(mtr.Count())
-		case *metric.Gauge:
-			data.Datapoints[0].Value = float64(mtr.Value())
-		case *metric.Histogram:
-			h := mtr.Current()
-			for _, pt := range recordHistogramQuantiles {
-				d := *util.CloneProto(&data).(*ts.TimeSeriesData)
-				d.Name += pt.suffix
-				d.Datapoints[0].Value = float64(h.ValueAtQuantile(pt.quantile))
-				*dest = append(*dest, d)
-			}
-			return
-		default:
-			log.Warningf("cannot serialize for time series: %T", mtr)
-			return
-		}
-		*dest = append(*dest, data)
+		})
 	})
 }
