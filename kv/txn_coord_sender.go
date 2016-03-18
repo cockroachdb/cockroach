@@ -328,7 +328,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		return nil, roachpb.NewError(err)
 	}
 	var startNS int64
-	ba.SetNewRequest()
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
