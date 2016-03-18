@@ -439,13 +439,9 @@ func (v *Value) SetTime(t time.Time) {
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *inf.Dec) error {
-	// TODO(nvanbenschoten) Deal with exponent normalization.
-	bb, err := dec.GobEncode()
-	if err != nil {
-		return fmt.Errorf("failed to Gob encode decimal %s: %v", dec, err)
-	}
-	v.RawBytes = make([]byte, headerSize+len(bb))
-	copy(v.RawBytes[headerSize:], bb)
+	decSize := encoding.UpperBoundDecimalSize(dec)
+	v.RawBytes = make([]byte, headerSize, headerSize+decSize)
+	v.RawBytes = encoding.EncodeDecimalAscending(v.RawBytes, dec)
 	v.setTag(ValueType_DECIMAL)
 	return nil
 }
@@ -523,9 +519,8 @@ func (v Value) GetDecimal() (*inf.Dec, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
 		return nil, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
-	dec := new(inf.Dec)
-	err := dec.GobDecode(v.dataBytes())
-	return dec, err
+	_, d, err := encoding.DecodeDecimalAscending(v.dataBytes(), nil)
+	return d, err
 }
 
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
