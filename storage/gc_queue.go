@@ -425,7 +425,7 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 		}
 	}
 
-	gc := engine.NewGarbageCollector(now, policy)
+	gc := engine.MakeGarbageCollector(now, policy)
 
 	var gcKeys []roachpb.GCRequest_GCKey
 

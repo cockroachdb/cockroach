@@ -30,9 +30,9 @@ type GarbageCollector struct {
 	policy     config.GCPolicy
 }
 
-// NewGarbageCollector allocates and returns a new GC, with expiration
+// MakeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
-func NewGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) GarbageCollector {
+func MakeGarbageCollector(now roachpb.Timestamp, policy config.GCPolicy) GarbageCollector {
 	ttlNanos := int64(policy.TTLSeconds) * 1E9
 	return GarbageCollector{
 		expiration: roachpb.Timestamp{WallTime: now.WallTime - ttlNanos},
