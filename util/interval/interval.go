@@ -684,7 +684,7 @@ func (n *Node) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) 
 // intervals' sort relationships, future tree operation behaviors are undefined.
 func (t *Tree) DoMatchingReverse(fn Operation, r Range) bool {
 	if t.Root != nil && t.Overlapper(r, t.Root.Range) {
-		return t.Root.doMatch(fn, r, t.Overlapper)
+		return t.Root.doMatchReverse(fn, r, t.Overlapper)
 	}
 	return false
 }
