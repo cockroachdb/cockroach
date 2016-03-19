@@ -320,9 +320,10 @@ func initFlags(ctx *Context) {
 	setUserCmd.Flags().StringVar(&password, "password", "", usage("password"))
 
 	clientCmds := []*cobra.Command{
-		sqlShellCmd, kvCmd, rangeCmd,
-		exterminateCmd, quitCmd, /* startCmd is covered above */
+		sqlShellCmd, exterminateCmd, quitCmd, /* startCmd is covered above */
 	}
+	clientCmds = append(clientCmds, kvCmds...)
+	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
@@ -343,7 +344,9 @@ func initFlags(ctx *Context) {
 	}
 
 	// Commands that need the cockroach port.
-	simpleCmds := []*cobra.Command{kvCmd, rangeCmd, exterminateCmd}
+	simpleCmds := []*cobra.Command{exterminateCmd}
+	simpleCmds = append(simpleCmds, kvCmds...)
+	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
 		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))

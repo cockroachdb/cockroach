@@ -304,12 +304,12 @@ func Example_insecure() {
 	}
 	defer c.stop()
 
-	c.Run("debug kv --insecure put a 1 b 2")
-	c.Run("debug kv --insecure scan")
+	c.Run("debug kv put --insecure a 1 b 2")
+	c.Run("debug kv scan --insecure")
 
 	// Output:
-	// debug kv --insecure put a 1 b 2
-	// debug kv --insecure scan
+	// debug kv put --insecure a 1 b 2
+	// debug kv scan --insecure
 	// "a"	"1"
 	// "b"	"2"
 	// 2 result(s)
