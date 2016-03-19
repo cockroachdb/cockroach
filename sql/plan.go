@@ -53,10 +53,6 @@ type planner struct {
 	params             parameters
 	subqueryVisitor    subqueryVisitor
 
-	// Callback used when a node wants to schedule a SchemaChanger
-	// for execution at the end of the current transaction.
-	schemaChangeCallback func(schemaChanger SchemaChanger)
-
 	execCtx *ExecutorContext
 }
 
@@ -75,7 +71,7 @@ func (p *planner) Finish() {
 	}
 }
 
-// resetForStatement prepares the planner for executing a new batch of
+// resetForBatch prepares the planner for executing a new batch of
 // statements.
 func (p *planner) resetForBatch(e *Executor, session *Session) {
 	// Update the systemConfig to a more recent copy, so that we can use tables
@@ -94,6 +90,7 @@ func (p *planner) resetForBatch(e *Executor, session *Session) {
 		ReCache:     e.reCache,
 		GetLocation: session.getLocation,
 	}
+	p.session.TxnState.schemaChangers.curGroupNum++
 }
 
 func (p *planner) blockConfigUpdatesMaybe(e *Executor) {
@@ -377,10 +374,7 @@ func (p *planner) notifySchemaChange(id ID, mutationID MutationID) {
 		cfg:        p.systemConfig,
 		leaseMgr:   p.leaseMgr,
 	}
-	if p.schemaChangeCallback == nil {
-		panic("Schema changer encountered on planner not configured with a schemaChangeCallback")
-	}
-	p.schemaChangeCallback(sc)
+	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }
 
 func (p *planner) releaseLeases() {

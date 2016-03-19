@@ -283,17 +283,22 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 }
 
 type schemaChangerCollection struct {
+	// A schemaChangerCollection accumulates schemaChangers from potentially
+	// multiple user requests, part of the same SQL transaction. We need to
+	// remember what group and index within the group each schemaChanger came
+	// from, so we can map failures back to the statement that produced them.
+	curGroupNum int
+
 	// The index of the current statement, relative to its group. For statements
-	// statements that have been received from the client in the same batch, the
+	// that have been received from the client in the same batch, the
 	// group consists of all statements in the same transaction.
 	curStatementIdx int
 	// schema change callbacks together with the index of the statement
 	// that enqueued it (within its group of statements).
-	// TODO(andrei): Schema changers enqueued in a txn are not restored
-	// if the txn is not COMMITTED in the same group of statements (#4428).
 	schemaChangers []struct {
-		idx int
-		sc  SchemaChanger
+		epoch int
+		idx   int
+		sc    SchemaChanger
 	}
 }
 
@@ -302,9 +307,10 @@ func (scc *schemaChangerCollection) queueSchemaChanger(
 	scc.schemaChangers = append(
 		scc.schemaChangers,
 		struct {
-			idx int
-			sc  SchemaChanger
-		}{scc.curStatementIdx, schemaChanger})
+			epoch int
+			idx   int
+			sc    SchemaChanger
+		}{scc.curGroupNum, scc.curStatementIdx, schemaChanger})
 }
 
 // execSchemaChanges releases schema leases and runs the queued
@@ -352,7 +358,12 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				// There's some sketchiness here: we assume there's a single result
 				// per statement and we clobber the result/error of the corresponding
 				// statement.
-				results[scEntry.idx] = Result{PErr: pErr}
+				// There's also another subtlety: we can only report results for
+				// statements in the current batch; we can modify the results of older
+				// statements.
+				if scEntry.epoch == scc.curGroupNum {
+					results[scEntry.idx] = Result{PErr: pErr}
+				}
 			}
 			break
 		}
@@ -567,11 +578,6 @@ func runTxnAttempt(
 	txnState.commitSeen = false
 
 	*results = nil
-	// (re)init the schemaChangers.
-	// TODO(andrei): figure out how to persist schema changers across
-	// different batches of statements in the same txn.
-	txnState.schemaChangers = schemaChangerCollection{}
-	planMaker.schemaChangeCallback = txnState.schemaChangers.queueSchemaChanger
 
 	planMaker.setTxn(txnState.txn)
 	var pErr *roachpb.Error
