@@ -17,8 +17,9 @@
 package sql
 
 import (
+	"container/heap"
 	"fmt"
-	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -161,10 +162,14 @@ type sortNode struct {
 	plan     planNode
 	columns  []ResultColumn
 	ordering columnOrdering
-	needSort bool
 	pErr     *roachpb.Error
-	explain  explainMode
-	values   valuesNode
+
+	needSort     bool
+	sortStrategy sortingStrategy
+	valueIter    valueIterator
+
+	explain   explainMode
+	debugVals debugValues
 }
 
 func (n *sortNode) Columns() []ResultColumn {
@@ -181,8 +186,7 @@ func (n *sortNode) Ordering() orderingInfo {
 func (n *sortNode) Values() parser.DTuple {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
-	v := n.plan.Values()
-	return v[:len(n.columns)]
+	return n.valueIter.Values()[:len(n.columns)]
 }
 
 func (n *sortNode) MarkDebug(mode explainMode) {
@@ -194,14 +198,10 @@ func (n *sortNode) MarkDebug(mode explainMode) {
 }
 
 func (n *sortNode) DebugValues() debugValues {
-	vals := n.plan.DebugValues()
-	// If needSort is true, we read a row and stored it in the values node.
-	// If needSort is false, we are reading either from an already sorted node, or from the values
-	// node we created.
-	if n.needSort && vals.output == debugValueRow {
-		vals.output = debugValueBuffered
+	if n.explain != explainDebug {
+		panic(fmt.Sprintf("node not in debug mode (mode %d)", n.explain))
 	}
-	return vals
+	return n.debugVals
 }
 
 func (n *sortNode) PErr() *roachpb.Error {
@@ -226,13 +226,27 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 	}
 	description = strings.Join(strs, ",")
 
+	switch ss := n.sortStrategy.(type) {
+	case *iterativeSortStrategy:
+		description = fmt.Sprintf("%s (iterative)", description)
+	case *sortTopKStrategy:
+		description = fmt.Sprintf("%s (top %d)", description, ss.topK)
+	}
+
 	return name, description, []planNode{n.plan}
 }
 
 func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
-	// The limit is only useful to the wrapped node if we don't need to sort.
 	if !n.needSort {
+		// The limit is only useful to the wrapped node if we don't need to sort.
 		n.plan.SetLimitHint(numRows, soft)
+	} else {
+		v := &valuesNode{ordering: n.ordering}
+		if soft {
+			n.sortStrategy = newIterativeSortStrategy(v)
+		} else {
+			n.sortStrategy = newSortTopKStrategy(v, numRows)
+		}
 	}
 }
 
@@ -271,16 +285,17 @@ func (n *sortNode) Next() bool {
 		return false
 	}
 
-	// TODO(pmattis): If the result set is large, we might need to perform the
-	// sort on disk.
-
 	for n.needSort {
 		if v, ok := n.plan.(*valuesNode); ok {
 			// The plan we wrap is already a values node. Just sort it.
 			v.ordering = n.ordering
-			sort.Sort(v)
+			n.sortStrategy = newSortAllStrategy(v)
+			n.sortStrategy.Finish()
 			n.needSort = false
 			break
+		} else if n.sortStrategy == nil {
+			v := &valuesNode{ordering: n.ordering}
+			n.sortStrategy = newSortAllStrategy(v)
 		}
 
 		// TODO(andrei): If we're scanning an index with a prefix matching an
@@ -292,29 +307,234 @@ func (n *sortNode) Next() bool {
 				return false
 			}
 
-			n.values.ordering = n.ordering
-			sort.Sort(&n.values)
-			// Replace the plan with the sorted values node.
-			n.plan = &n.values
+			n.sortStrategy.Finish()
+			n.valueIter = n.sortStrategy
 			n.needSort = false
 			break
 		}
 
-		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
-			// Pass through non-row debug values.
-			return true
+		if n.explain == explainDebug {
+			n.debugVals = n.plan.DebugValues()
+			if n.debugVals.output != debugValueRow {
+				// Pass through non-row debug values.
+				return true
+			}
 		}
 
 		values := n.plan.Values()
-		valuesCopy := make(parser.DTuple, len(values))
-		copy(valuesCopy, values)
-		n.values.rows = append(n.values.rows, valuesCopy)
+		n.sortStrategy.Add(values)
 
 		if n.explain == explainDebug {
 			// Emit a "buffered" row.
+			n.debugVals.output = debugValueBuffered
 			return true
 		}
 	}
 
-	return n.plan.Next()
+	if n.valueIter == nil {
+		n.valueIter = n.plan
+	}
+	if !n.valueIter.Next() {
+		if n.valueIter == n.plan {
+			n.pErr = n.plan.PErr()
+		}
+		return false
+	}
+	if n.explain == explainDebug {
+		n.debugVals = n.valueIter.DebugValues()
+	}
+	return true
 }
+
+// valueIterator provides iterative access to a value source's values and
+// debug values. It is a subset of the planNode interface, so all methods
+// should conform to the comments expressed in the planNode definition.
+type valueIterator interface {
+	Next() bool
+	Values() parser.DTuple
+	DebugValues() debugValues
+}
+
+type sortingStrategy interface {
+	valueIterator
+	// Add adds a single value to the sortingStrategy. It guarantees that
+	// if it decided to store the provided value, that it will make a deep
+	// copy of it.
+	Add(parser.DTuple)
+	// Finish terminates the sorting strategy, allowing for postprocessing
+	// after all values have been provided to the strategy. The method should
+	// not be called more than once, and should only be called after all Add
+	// calls have occurred.
+	Finish()
+}
+
+// sortAllStrategy reads in all values into the wrapped valuesNode and
+// uses sort.Sort to sort all values in-place. It has a worst-case time
+// complexity of O(n*log(n)) and a worst-case space complexity of O(n).
+//
+// The strategy is intended to be used when all values need to be sorted.
+type sortAllStrategy struct {
+	vNode *valuesNode
+}
+
+func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
+	return &sortAllStrategy{
+		vNode: vNode,
+	}
+}
+
+func (ss *sortAllStrategy) Add(values parser.DTuple) {
+	valuesCopy := make(parser.DTuple, len(values))
+	copy(valuesCopy, values)
+	ss.vNode.rows = append(ss.vNode.rows, valuesCopy)
+}
+
+func (ss *sortAllStrategy) Finish() {
+	ss.vNode.SortAll()
+}
+
+func (ss *sortAllStrategy) Next() bool {
+	return ss.vNode.Next()
+}
+
+func (ss *sortAllStrategy) Values() parser.DTuple {
+	return ss.vNode.Values()
+}
+
+func (ss *sortAllStrategy) DebugValues() debugValues {
+	return ss.vNode.DebugValues()
+}
+
+// iterativeSortStrategy reads in all values into the wrapped valuesNode
+// and turns the underlying slice into a min-heap. It then pops a value
+// off of the heap for each call to Next, meaning that it only needs to
+// sort the number of values needed, instead of the entire slice. If the
+// underlying value source provides n rows and the strategy produce only
+// k rows, it has a worst-case time complexity of O(n + k*log(n)) and a
+// worst-case space complexity of O(n).
+//
+// The strategy is intended to be used when an unknown number of values
+// need to be sorted, but that most likely not all values need to be sorted.
+type iterativeSortStrategy struct {
+	vNode      *valuesNode
+	lastVal    parser.DTuple
+	nextRowIdx int
+}
+
+func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
+	return &iterativeSortStrategy{
+		vNode: vNode,
+	}
+}
+
+func (ss *iterativeSortStrategy) Add(values parser.DTuple) {
+	valuesCopy := make(parser.DTuple, len(values))
+	copy(valuesCopy, values)
+	ss.vNode.rows = append(ss.vNode.rows, valuesCopy)
+}
+
+func (ss *iterativeSortStrategy) Finish() {
+	ss.vNode.InitMinHeap()
+}
+
+func (ss *iterativeSortStrategy) Next() bool {
+	if ss.vNode.Len() == 0 {
+		return false
+	}
+	ss.lastVal = ss.vNode.PopValues()
+	ss.nextRowIdx++
+	return true
+}
+
+func (ss *iterativeSortStrategy) Values() parser.DTuple {
+	return ss.lastVal
+}
+
+func (ss *iterativeSortStrategy) DebugValues() debugValues {
+	return debugValues{
+		rowIdx: ss.nextRowIdx - 1,
+		key:    strconv.Itoa(ss.nextRowIdx - 1),
+		value:  ss.lastVal.String(),
+		output: debugValueRow,
+	}
+}
+
+// sortTopKStrategy creates a max-heap in its wrapped valuesNode and keeps
+// this heap populated with only the top k values seen. It accomplishes this
+// by comparing new values (before the deep copy) with the top of the heap.
+// If the new value is less than the current top, the top will be replaced
+// and the heap will be fixed. If not, the new value is dropped. When finished,
+// all values in the heap are popped, sorting the values correctly in-place.
+// It has a worst-case time complexity of O(n*log(k)) and a worst-case space
+// complexity of O(k).
+//
+// The strategy is intended to be used when exactly k values need to be sorted,
+// where k is known before sorting begins.
+//
+// TODO(nvanbenschoten) There are better algorithms that can achieve a sorted
+// top k in a worst-case time complexity of O(n + k*log(k)) while maintaining
+// a worst-case space complexity of O(k). For instance, the top k can be found
+// in linear time, and then this can be sorted in linearithmic time.
+type sortTopKStrategy struct {
+	vNode *valuesNode
+	topK  int64
+}
+
+func newSortTopKStrategy(vNode *valuesNode, topK int64) sortingStrategy {
+	ss := &sortTopKStrategy{
+		vNode: vNode,
+		topK:  topK,
+	}
+	ss.vNode.InitMaxHeap()
+	return ss
+}
+
+func (ss *sortTopKStrategy) Add(values parser.DTuple) {
+	switch {
+	case int64(ss.vNode.Len()) < ss.topK:
+		// The first k values all go into the max-heap.
+		valuesCopy := make(parser.DTuple, len(values))
+		copy(valuesCopy, values)
+
+		ss.vNode.PushValues(valuesCopy)
+	case ss.vNode.ValuesLess(values, ss.vNode.rows[0]):
+		// Once the heap is full, only replace the top
+		// value if a new value is less than it. If so
+		// replace and fix the heap.
+		valuesCopy := make(parser.DTuple, len(values))
+		copy(valuesCopy, values)
+
+		ss.vNode.rows[0] = valuesCopy
+		heap.Fix(ss.vNode, 0)
+	}
+}
+
+func (ss *sortTopKStrategy) Finish() {
+	// Pop all values in the heap, resulting in the inverted ordering
+	// being sorted in reverse. Therefore, the slice is ordered correctly
+	// in-place.
+	origLen := ss.vNode.Len()
+	for ss.vNode.Len() > 0 {
+		heap.Pop(ss.vNode)
+	}
+	ss.vNode.rows = ss.vNode.rows[:origLen]
+}
+
+func (ss *sortTopKStrategy) Next() bool {
+	return ss.vNode.Next()
+}
+
+func (ss *sortTopKStrategy) Values() parser.DTuple {
+	return ss.vNode.Values()
+}
+
+func (ss *sortTopKStrategy) DebugValues() debugValues {
+	return ss.vNode.DebugValues()
+}
+
+// TODO(pmattis): If the result set is large, we might need to perform the
+// sort on disk. There is no point in doing this while we're buffering the
+// entire result set in memory. If/when we start streaming results back to
+// the client we should revisit.
+//
+// type onDiskSortStrategy struct{}

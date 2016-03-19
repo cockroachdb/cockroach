@@ -17,7 +17,9 @@
 package sql
 
 import (
+	"container/heap"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -83,7 +85,10 @@ type valuesNode struct {
 	columns  []ResultColumn
 	ordering columnOrdering
 	rows     []parser.DTuple
-	nextRow  int // The index of the next row.
+
+	nextRow       int           // The index of the next row.
+	invertSorting bool          // Inverts the sorting predicate.
+	tmpValues     parser.DTuple // Used to store temporary values.
 }
 
 func (n *valuesNode) Columns() []ResultColumn {
@@ -130,6 +135,12 @@ func (n *valuesNode) Less(i, j int) bool {
 	// be to construct a sort-key per row using encodeTableKey(). Using a
 	// sort-key approach would likely fit better with a disk-based sort.
 	ra, rb := n.rows[i], n.rows[j]
+	return n.invertSorting != n.ValuesLess(ra, rb)
+}
+
+// ValuesLess returns the comparison result between the two provided DTuples
+// in the context of the valuesNode ordering.
+func (n *valuesNode) ValuesLess(ra, rb parser.DTuple) bool {
 	for _, c := range n.ordering {
 		var da, db parser.Datum
 		if c.direction == encoding.Ascending {
@@ -154,6 +165,55 @@ func (n *valuesNode) Less(i, j int) bool {
 
 func (n *valuesNode) Swap(i, j int) {
 	n.rows[i], n.rows[j] = n.rows[j], n.rows[i]
+}
+
+var _ heap.Interface = (*valuesNode)(nil)
+
+// Push implements the heap.Interface interface.
+func (n *valuesNode) Push(x interface{}) {
+	n.rows = append(n.rows, n.tmpValues)
+}
+
+// PushValues pushes the given DTuple value into the heap representation
+// of the valuesNode.
+func (n *valuesNode) PushValues(values parser.DTuple) {
+	// Avoid passing slice through interface{} to avoid allocation.
+	n.tmpValues = values
+	heap.Push(n, nil)
+}
+
+// Pop implements the heap.Interface interface.
+func (n *valuesNode) Pop() interface{} {
+	idx := len(n.rows) - 1
+	// Returning a pointer to avoid an allocation when storing the slice in an interface{}.
+	x := &(n.rows)[idx]
+	n.rows = n.rows[:idx]
+	return x
+}
+
+// PopValues pops the top DTuple value off the heap representation
+// of the valuesNode.
+func (n *valuesNode) PopValues() parser.DTuple {
+	x := heap.Pop(n)
+	return *x.(*parser.DTuple)
+}
+
+// SortAll sorts all values in the valuesNode.rows slice.
+func (n *valuesNode) SortAll() {
+	n.invertSorting = false
+	sort.Sort(n)
+}
+
+// InitMaxHeap initializes the valuesNode.rows slice as a max-heap.
+func (n *valuesNode) InitMaxHeap() {
+	n.invertSorting = true
+	heap.Init(n)
+}
+
+// InitMaxHeap initializes the valuesNode.rows slice as a min-heap.
+func (n *valuesNode) InitMinHeap() {
+	n.invertSorting = false
+	heap.Init(n)
 }
 
 func (n *valuesNode) ExplainPlan() (name, description string, children []planNode) {

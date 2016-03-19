@@ -489,12 +489,13 @@ func runBenchmarkScan(b *testing.B, db *sql.DB, count int, limit int) {
 		b.Fatal(err)
 	}
 
+	query := `SELECT * FROM bench.scan`
+	if limit != 0 {
+		query = fmt.Sprintf(`%s LIMIT %d`, query, limit)
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		query := `SELECT * FROM bench.scan`
-		if limit != 0 {
-			query = fmt.Sprintf(`%s LIMIT %d`, query, limit)
-		}
 		rows, err := db.Query(query)
 		if err != nil {
 			b.Fatal(err)
@@ -609,12 +610,13 @@ func runBenchmarkScanFilter(b *testing.B, db *sql.DB, count1, count2 int, limit 
 		b.Fatal(err)
 	}
 
+	query := fmt.Sprintf(`SELECT * FROM bench.scan2 WHERE %s`, filter)
+	if limit != 0 {
+		query += fmt.Sprintf(` LIMIT %d`, limit)
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		query := fmt.Sprintf(`SELECT * FROM bench.scan2 WHERE %s`, filter)
-		if limit != 0 {
-			query += fmt.Sprintf(` LIMIT %d`, limit)
-		}
 		rows, err := db.Query(query)
 		if err != nil {
 			b.Fatal(err)
@@ -669,4 +671,79 @@ func BenchmarkScan10000FilterLimit50_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) {
 		runBenchmarkScanFilter(b, db, 10, 1000, 50, `a IN (1, 3, 5, 7) AND b < 10*a`)
 	})
+}
+
+// runBenchmarkOrderBy benchmarks scanning a table and sorting the results.
+func runBenchmarkOrderBy(b *testing.B, db *sql.DB, count int, limit int, distinct bool) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.sort`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE bench.sort (k INT PRIMARY KEY, v INT, w INT)`); err != nil {
+		b.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(`INSERT INTO bench.sort VALUES `)
+	for i := 0; i < count; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "(%d, %d, %d)", i, i%(count*4/limit), i%2)
+	}
+	if _, err := db.Exec(buf.String()); err != nil {
+		b.Fatal(err)
+	}
+
+	var dist string
+	if distinct {
+		dist = `DISTINCT `
+	}
+	query := fmt.Sprintf(`SELECT %sv FROM bench.sort`, dist)
+	if limit != 0 {
+		query = fmt.Sprintf(`%s ORDER BY v DESC, w ASC, k DESC LIMIT %d`, query, limit)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rows, err := db.Query(query)
+		if err != nil {
+			b.Fatal(err)
+		}
+		n := 0
+		for rows.Next() {
+			n++
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			b.Fatal(err)
+		}
+		expected := count
+		if limit != 0 {
+			expected = limit
+		}
+		if n != expected {
+			b.Fatalf("unexpected result count: %d (expected %d)", n, expected)
+		}
+	}
+	b.StopTimer()
+
+	if _, err := db.Exec(`DROP TABLE bench.sort`); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkSort100000Limit10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
+}
+
+func BenchmarkSort100000Limit10_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
+}
+
+func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
+}
+
+func BenchmarkSort100000Limit10Distinct_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
 }
