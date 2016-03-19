@@ -463,7 +463,7 @@ func (txn *Txn) Exec(
 	var pErr *roachpb.Error
 	var retryOptions retry.Options
 	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
-		panic("asked to retry  or commit a txn that is already aborted")
+		panic("asked to retry or commit a txn that is already aborted")
 	}
 
 	if txn != nil {

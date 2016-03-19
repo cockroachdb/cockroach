@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -42,6 +43,33 @@ type SessionOffset struct {
 func (*SessionLocation) isSessionTimezone() {}
 func (*SessionOffset) isSessionTimezone()   {}
 
+// Session contains the state of a SQL client connection.
+type Session struct {
+	Database string
+	Syntax   int32
+
+	// Info about the open transaction (if any).
+	TxnState txnState
+
+	Timezone              isSessionTimezone
+	DefaultIsolationLevel roachpb.IsolationType
+	Trace                 trace.Trace
+}
+
+func (s *Session) getLocation() (*time.Location, error) {
+	switch t := s.Timezone.(type) {
+	case nil:
+		return time.UTC, nil
+	case *SessionLocation:
+		// TODO(vivek): Cache the location.
+		return time.LoadLocation(t.Location)
+	case *SessionOffset:
+		return time.FixedZone("", int(t.Offset)), nil
+	default:
+		return nil, util.Errorf("unhandled timezone variant type %T", t)
+	}
+}
+
 // TxnStateEnum represents the state of a SQL txn.
 type TxnStateEnum int
 
@@ -62,39 +90,31 @@ const (
 	CommitWait
 )
 
-// SessionTransaction ...
-type SessionTransaction struct {
-	// If nil, it means we're not inside a (KV) txn.
-	Txn          *roachpb.Transaction
-	State        TxnStateEnum
-	retryIntent  bool
-	UserPriority roachpb.UserPriority
-	// Indicates that the transaction is mutating keys in the SystemConfig span.
-	MutatesSystemConfig bool
-}
+// txnState contains state associated with an ongoing SQL txn.
+// There may or may not be an open KV txn associated with the SQL txn.
+// For interactive transactions (open across batches of SQL commands sent by a
+// user), txnState is intended to be stored as part of a user Session.
+type txnState struct {
+	txn   *client.Txn
+	State TxnStateEnum
 
-// Session ...
-type Session struct {
-	Database string
-	Syntax   int32
-	// Info about the open transaction (if any).
-	// TODO(andrei): get rid of SessionTransaction; store the txnState directly.
-	Txn                   SessionTransaction
-	Timezone              isSessionTimezone
-	DefaultIsolationLevel roachpb.IsolationType
-	Trace                 trace.Trace
-}
+	// If set, the user declared the intention to retry the txn in case of retriable
+	// errors. The txn will enter a RestartWait state in case of such errors.
+	retryIntent bool
 
-func (s *Session) getLocation() (*time.Location, error) {
-	switch t := s.Timezone.(type) {
-	case nil:
-		return time.UTC, nil
-	case *SessionLocation:
-		// TODO(vivek): Cache the location.
-		return time.LoadLocation(t.Location)
-	case *SessionOffset:
-		return time.FixedZone("", int(t.Offset)), nil
-	default:
-		return nil, util.Errorf("unhandled timezone variant type %T", t)
-	}
+	// The transaction will be retried in case of retriable error. The retry will be
+	// automatic (done by Txn.Exec()). This field behaves the same as retryIntent,
+	// except it's reset in between client round trips.
+	autoRetry bool
+
+	// A COMMIT statement has been processed. Useful for allowing the txn to
+	// survive retriable errors if it will be auto-retried (BEGIN; ... COMMIT; in
+	// the same batch), but not if the error needs to be reported to the user.
+	commitSeen bool
+
+	// The schema change closures to run when this txn is done.
+	schemaChangers schemaChangerCollection
+	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
+	// passing the Session along everywhere the trace is needed.
+	tr trace.Trace
 }

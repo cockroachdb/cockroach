@@ -214,7 +214,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		if !c.doingExtendedQueryMessage {
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte
-			switch c.session.Txn.State {
+			switch c.session.TxnState.State {
 			case sql.Aborted:
 				txnStatus = 'E'
 			case sql.Open:
