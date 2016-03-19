@@ -17,7 +17,6 @@
 package encoding
 
 import (
-	"bytes"
 	"math/big"
 	"strconv"
 	"unsafe"
@@ -213,7 +212,16 @@ func decodeDecimal(buf []byte, invert bool, tmp []byte) ([]byte, *inf.Dec, error
 		return buf[1:], inf.NewDec(0, 0), nil
 	}
 
-	idx := bytes.IndexByte(buf, decimalTerminator)
+	// TODO(pmattis): bytes.IndexByte is inefficient for small slices. This is
+	// apparently fixed in go1.7. For now, we manually search for the terminator.
+	// idx := bytes.IndexByte(buf, decimalTerminator)
+	idx := -1
+	for i, b := range buf {
+		if b == decimalTerminator {
+			idx = i
+			break
+		}
+	}
 	if idx == -1 {
 		return nil, nil, util.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
 	}
