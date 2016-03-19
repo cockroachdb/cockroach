@@ -641,6 +641,29 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 }
 
+// TestTxnCoordIdempotentCleanup verifies that cleanupTxn is idempotent.
+func TestTxnCoordIdempotentCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDB(t)
+	defer s.Stop()
+	defer teardownHeartbeats(s.Sender)
+
+	txn := client.NewTxn(*s.DB)
+	ba := txn.NewBatch()
+	ba.Put(roachpb.Key("a"), []byte("value"))
+	if pErr := txn.Run(ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	s.Sender.cleanupTxn(context.Background(), txn.Proto)
+
+	ba = txn.NewBatch()
+	ba.InternalAddRequest(&roachpb.EndTransactionRequest{})
+	if pErr := txn.Run(ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
 // TestTxnMultipleCoord checks that a coordinator uses the Writing flag to
 // enforce that only one coordinator can be used for transactional writes.
 func TestTxnMultipleCoord(t *testing.T) {
