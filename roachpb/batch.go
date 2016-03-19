@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // IsAdmin returns true iff the BatchRequest contains an admin request.
@@ -268,6 +270,15 @@ func (ba BatchRequest) String() string {
 		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
 	}
 	return strings.Join(str, ", ")
+}
+
+// GetTxnID returns the transaction ID if this batch has a transaction
+// or else nil.
+func (ba BatchRequest) GetTxnID() *uuid.UUID {
+	if ba.Txn == nil {
+		return nil
+	}
+	return ba.Txn.ID
 }
 
 // TODO(marc): we should assert

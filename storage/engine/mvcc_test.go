@@ -65,6 +65,7 @@ var (
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")
 	value4       = roachpb.MakeValueFromString("testValue4")
+	value5       = roachpb.MakeValueFromString("testValue5")
 	valueEmpty   = roachpb.MakeValueFromString("")
 )
 
@@ -402,24 +403,43 @@ func TestMVCCIncrement(t *testing.T) {
 	}
 }
 
+// TestMVCCIncrementTxn verifies increment behavior within a txn.
+func TestMVCCIncrementTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	for i := 1; i <= 2; i++ {
+		newVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(0, 1), txn1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if newVal != int64(i) {
+			t.Errorf("expected new value of %d; got %d", i, newVal)
+		}
+	}
+}
+
 // TestMVCCIncrementOldTimestamp tests a case where MVCCIncrement is
 // called with an old timestamp. The test verifies that a value is
-// read with the same timestamp as we use to write a value.
+// read with the newer timestamp and a write too old error is returned.
 func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	// Write a non-integer value.
-	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	// Write an integer value.
+	val := roachpb.Value{}
+	val.SetInt(1)
+	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), val, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Override the non-integer value.
-	val := roachpb.Value{}
-	val.SetInt(1)
+	// Override value.
+	val.SetInt(2)
 	err = MVCCPut(engine, nil, testKey1, makeTS(3, 0), val, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -428,12 +448,14 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	// Attempt to increment a value with an older timestamp than
 	// the previous put. This will fail with type mismatch (not
 	// with WriteTooOldError).
-	_, err = MVCCIncrement(engine, nil, testKey1, makeTS(2, 0), nil, 1)
-	if err == nil {
-		t.Fatalf("unexpected success of increment")
+	incVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(2, 0), nil, 1)
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
+		t.Fatal("unexpected success")
+	} else if !wtoErr.ActualTimestamp.Equal(makeTS(3, 1)) {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 1), wtoErr.ActualTimestamp)
 	}
-	if !strings.Contains(err.Error(), "does not contain an integer value") {
-		t.Fatalf("unexpected error %s", err)
+	if incVal != 3 {
+		t.Fatalf("expected value=%d; got %d", 3, incVal)
 	}
 }
 
@@ -1435,6 +1457,108 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 }
 
+func TestMVCCConditionalPutWithTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
+
+	// Write value1.
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value1, nil, txn1); err != nil {
+		t.Fatal(err)
+	}
+	// Now, overwrite value1 with value2 from same txn; should see value1 as pre-existing value.
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value2, &value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+	// Writing value3 from a new epoch should see nil again.
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value3, nil, txn1e2); err != nil {
+		t.Fatal(err)
+	}
+	// Commit value3.
+	txn := makeTxn(*txn1e2Commit, makeTS(1, 0))
+	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+		t.Fatal(err)
+	}
+	// Write value4 with an old timestamp without txn...should get a write too old error.
+	err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value4, &value3, nil)
+	if err == nil {
+		t.Fatal("expected write too old error")
+	}
+	expTS := txn.Timestamp.Next()
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(expTS) {
+		t.Fatalf("expected wto error with actual timestamp = %s; got %s", expTS, wtoErr)
+	}
+}
+
+// TestMVCCConditionalPutWriteTooOld verifies the differing behavior
+// of conditional puts when writing with an older timestamp than the
+// existing write. If there's no transaction, the conditional put
+// should use the latest value. When there's a transaction, then it
+// should use the value at the specified timestamp.
+func TestMVCCConditionalPutWriteTooOld(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Write value1 @t=10ns.
+	if err := MVCCPut(engine, nil, testKey1, makeTS(10, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Try a non-transactional put @t=1ns with expectation of nil; should fail.
+	if err := MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value2, nil, nil); err == nil {
+		t.Fatal("expected error on conditional put")
+	}
+	// Now do a non-transactional put @t=1ns with expectation of value1; will succeed @t=10,1.
+	err := MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value2, &value1, nil)
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 1)) {
+		t.Fatalf("expected WriteTooOldError with actual time = 10,1; got %s", wtoErr)
+	}
+	// Try a transactional put @t=1ns with expectation of value2; should fail.
+	if err := MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value2, &value1, txn1); err == nil {
+		t.Fatal("expected error on conditional put")
+	}
+	// Now do a transactional put @t=1ns with expectation of nil; will succeed @t=10,2.
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value3, nil, txn1)
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 2)) {
+		t.Fatalf("expected WriteTooOldError with actual time = 10,2; got %s", wtoErr)
+	}
+}
+
+// TestMVCCIncrementWriteTooOld verifies the differing behavior of
+// increment when writing with an older timestamp. See comment on
+// TestMVCCConditionalPutWriteTooOld for more details.
+func TestMVCCIncrementWriteTooOld(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Start with an increment.
+	if val, err := MVCCIncrement(engine, nil, testKey1, makeTS(10, 0), nil, 1); val != 1 || err != nil {
+		t.Fatalf("expected val=1 (got %d): %s", val, err)
+	}
+	// Try a non-transactional increment @t=1ns.
+	val, err := MVCCIncrement(engine, nil, testKey1, makeTS(1, 0), nil, 1)
+	if val != 2 || err == nil {
+		t.Fatalf("expected val=2 (got %d) and nil error: %s", val, err)
+	}
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 1)) {
+		t.Fatalf("expected WriteTooOldError with actual time = 10,1; got %s", wtoErr)
+	}
+	// Try a transaction increment @t=1ns.
+	val, err = MVCCIncrement(engine, nil, testKey1, makeTS(1, 0), txn1, 1)
+	if val != 1 || err == nil {
+		t.Fatalf("expected val=1 (got %d) and nil error: %s", val, err)
+	}
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 2)) {
+		t.Fatalf("expected WriteTooOldError with actual time = 10,2; got %s", wtoErr)
+	}
+}
+
 // TestMVCCReverseScan verifies that MVCCReverseScan scans [start,
 // end) in descending order of keys.
 func TestMVCCReverseScan(t *testing.T) {
@@ -1513,6 +1637,39 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 }
 
+// TestMVCCResolveNewerIntent verifies that resolving a newer intent
+// than the committing transaction aborts the intent.
+func TestMVCCResolveNewerIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Write first value.
+	if err := MVCCPut(engine, nil, testKey1, txn1Commit.Timestamp, value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Now, put down an intent which should return a write too old error
+	// (but will still write the intent at tx1Commit.Timestmap+1.
+	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value2, txn1)
+	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+		t.Fatalf("expected write too old error; got %s", err)
+	}
+
+	// Resolve will succeed but should remove the intent.
+	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1Commit.TxnMeta, Status: txn1Commit.Status}); err != nil {
+		t.Fatal(err)
+	}
+
+	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 2), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(value1.RawBytes, value.RawBytes) {
+		t.Fatalf("expected value1 bytes; got %q", value.RawBytes)
+	}
+}
+
 // TestMVCCConditionalPutOldTimestamp tests a case where a conditional
 // put with an older timestamp happens after a put with a newer timestamp.
 //
@@ -1534,20 +1691,29 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Check nothing is written if the value doesn't match.
 	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(2, 0), value3, &value1, nil)
+	if err == nil {
+		t.Errorf("unexpected success on conditional put")
+	}
+	if _, ok := err.(*roachpb.ConditionFailedError); !ok {
+		t.Errorf("unexpected error on conditional put: %s", err)
+	}
+
+	// But if value does match the most recently written version, we'll get
+	// a write too old error but still write updated value.
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(2, 0), value3, &value2, nil)
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
 	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Errorf("unexpected error on conditional put: %s", err)
 	}
-
-	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(2, 0), value3, &value2, nil)
-	if err == nil {
-		t.Errorf("unexpected success on conditional put")
-	}
-	if _, ok := err.(*roachpb.ConditionFailedError); !ok {
-		t.Errorf("unexpected error on conditional put: %s", err)
+	// Verify new value was actually written at (3, 1).
+	value, _, err := MVCCGet(engine, testKey1, makeTS(3, 1), true, nil)
+	if err != nil || !value.Timestamp.Equal(makeTS(3, 1)) || !bytes.Equal(value3.RawBytes, value.RawBytes) {
+		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
+			err, value.Timestamp, makeTS(1, 1), value3.RawBytes, value.RawBytes)
 	}
 }
 
@@ -1656,16 +1822,34 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
-	// Now try writing an earlier intent--should get WriteTooOldError.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value2, txn2); err == nil {
-		t.Fatal("expected write too old error")
+	// Now try writing an earlier value without a txn--should get WriteTooOldError.
+	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value4, nil)
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
+		t.Fatal("unexpected success")
+	} else if !wtoErr.ActualTimestamp.Equal(makeTS(1, 1)) {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 1), wtoErr.ActualTimestamp)
 	}
-	// Ties also get WriteTooOldError.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn2); err == nil {
-		t.Fatal("expected write too old error")
+	// Verify value was actually written at (1, 1).
+	value, _, err := MVCCGet(engine, testKey1, makeTS(1, 1), true, nil)
+	if err != nil || !value.Timestamp.Equal(makeTS(1, 1)) || !bytes.Equal(value4.RawBytes, value.RawBytes) {
+		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
+			err, value.Timestamp, makeTS(1, 1), value4.RawBytes, value.RawBytes)
+	}
+	// Now write an intent with exactly the same timestamp--ties also get WriteTooOldError.
+	err = MVCCPut(engine, nil, testKey1, makeTS(1, 1), value5, txn2)
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
+		t.Fatal("unexpected success")
+	} else if !wtoErr.ActualTimestamp.Equal(makeTS(1, 2)) {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 2), wtoErr.ActualTimestamp)
+	}
+	// Verify intent value was actually written at (1, 2).
+	value, _, err = MVCCGet(engine, testKey1, makeTS(1, 2), true, txn2)
+	if err != nil || !value.Timestamp.Equal(makeTS(1, 2)) || !bytes.Equal(value5.RawBytes, value.RawBytes) {
+		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
+			err, value.Timestamp, makeTS(1, 2), value5.RawBytes, value.RawBytes)
 	}
 	// Attempt to read older timestamp; should fail.
-	value, _, err := MVCCGet(engine, testKey1, makeTS(0, 0), true, nil)
+	value, _, err = MVCCGet(engine, testKey1, makeTS(0, 0), true, nil)
 	if value != nil || err != nil {
 		t.Fatalf("expected value nil, err nil; got %+v, %v", value, err)
 	}

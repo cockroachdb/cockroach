@@ -349,7 +349,6 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 // must be the authoritative source of information.
 func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.EndTransactionRequest) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
 	var reply roachpb.EndTransactionResponse
-	ts := h.Timestamp // all we're going to use from the header.
 
 	if err := verifyTransaction(h, &args); err != nil {
 		return reply, nil, err
@@ -365,7 +364,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
 	}
 
-	if args.Deadline != nil && args.Deadline.Less(ts) {
+	if args.Deadline != nil && args.Deadline.Less(h.Timestamp) {
 		reply.Txn.Status = roachpb.ABORTED
 		// FIXME(#3037):
 		// If the deadline has lapsed, return all the intents for
@@ -414,15 +413,21 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		reply.Txn.Priority = h.Txn.Priority
 	}
 
-	// Take max of requested timestamp and possibly "pushed" txn
-	// record timestamp as the final commit timestamp.
-	// TODO(tschottdorf): shouldn't have to be done here.
-	reply.Txn.Timestamp.Forward(ts)
+	// Take max of supplied txn's timestamp and persisted txn's
+	// timestamp. It may have been "pushed" by another transaction.
+	// Note that we do not use the batch request timestamp, which for
+	// a transaction is always set to the txn's original timestamp.
+	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
 
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter. If the transaction deadline is set and has
 	// elapsed, abort.
 	if args.Commit {
+		// If we saw any WriteTooOldErrors, we must restart to avoid lost
+		// update anomalies.
+		if h.Txn.WriteTooOld {
+			return reply, nil, roachpb.NewTransactionRetryError()
+		}
 		// If the isolation level is SERIALIZABLE, return a transaction
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
@@ -529,13 +534,13 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 
 		if err := func() error {
 			if ct.GetSplitTrigger() != nil {
-				if err := r.splitTrigger(r.context(), batch, ms, ct.SplitTrigger, ts); err != nil {
+				if err := r.splitTrigger(r.context(), batch, ms, ct.SplitTrigger, reply.Txn.Timestamp); err != nil {
 					return err
 				}
 				*ms = engine.MVCCStats{} // clear stats, as split recomputed.
 			}
 			if ct.GetMergeTrigger() != nil {
-				if err := r.mergeTrigger(batch, ms, ct.MergeTrigger, ts); err != nil {
+				if err := r.mergeTrigger(batch, ms, ct.MergeTrigger, reply.Txn.Timestamp); err != nil {
 					return err
 				}
 				*ms = engine.MVCCStats{} // clear stats, as merge recomputed.
@@ -561,18 +566,19 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 		}
 	}
 
-	// If the transaction just ended (via a successful EndTransaction call),
-	// we can purge the local sequence cache state. Why? We are on the range to
-	// which the transaction is anchored, and replay protection isn't needed
-	// any more. When a transactional write gets replayed over its own resolved
-	// intent, the write will fail (WriteTooOldError), so the case which
-	// requires our attention is that of a yet unresolved intent. We're ok on
-	// this range; after all, we are resolving all local intents in this same
-	// batch. The only interesting replay here could be another lonely
-	// EndTransaction, which is fine either way (if we auto-gced our entry,
-	// that will fail due to missing BeginTransaction; otherwise, there's a
-	// non-pending entry here). BeginTransaction itself can't replay; it always
-	// comes in a batch with a write and will thus fail.
+	// If the transaction just ended (via a successful EndTransaction
+	// call), we can purge the local sequence cache state. Why? We are
+	// on the range to which the transaction is anchored, and replay
+	// protection isn't needed any more. When a transactional write gets
+	// replayed over its own resolved intent, the write will succeed but
+	// only as an intent with a newer timestamp (WriteTooOldError).
+	// However, it cannot be resolved by a replay of this EndTransaction
+	// call because the txn timestamp will be too old. If the replay
+	// included a BeginTransaction, the txn will have to be pushed by
+	// other readers or writers. If the replay didn't include a
+	// BeginTransaction, any push will immediately succeed as a missing
+	// txn record on push sets the transaction to aborted. In both
+	// cases, the txn will be GCd on the slow path.
 	return reply, externalIntents, r.clearSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
 }
 
@@ -955,19 +961,20 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	if err != nil {
 		return reply, err
 	}
-	// There are three cases in which there is no transaction entry, in
-	// decreasing likelihood:
-	// * the pushee is still active; it just hasn't committed, restarted,
-	//   aborted or heartbeat yet.
+	// There are three cases in which there is no transaction entry:
+	//
+	// * the pushee is still active but the BeginTransaction was delayed
+	//   for long enough that a concurrently written write intent to
+	//   range is now pushing the transaction.
 	// * the pushee resolved its intents synchronously on successful commit;
 	//   in this case, the transaction record of the pushee is also removed.
 	//   Note that in this case, the intent which prompted this PushTxn
 	//   doesn't exist any more.
 	// * the pushee timed out or was aborted and the intent not cleaned up,
-	//   but the transaction record garbage collected.
+	//   but the transaction record was garbage collected.
 	//
 	// We currently make no attempt at guessing which one it is, though we
-	// could (see #1939). Instead, a new entry is always written.
+	// could (see #1939). Instead, a new aborted entry is always written.
 	//
 	// TODO(tschottdorf): we should actually improve this when we
 	// garbage-collect aborted transactions, or we run the risk of a push

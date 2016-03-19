@@ -3911,6 +3911,18 @@ class ResolveIntentRequest : public ::google::protobuf::Message {
   bool poison() const;
   void set_poison(bool value);
 
+  // optional bytes resolver_id = 5;
+  bool has_resolver_id() const;
+  void clear_resolver_id();
+  static const int kResolverIdFieldNumber = 5;
+  const ::std::string& resolver_id() const;
+  void set_resolver_id(const ::std::string& value);
+  void set_resolver_id(const char* value);
+  void set_resolver_id(const void* value, size_t size);
+  ::std::string* mutable_resolver_id();
+  ::std::string* release_resolver_id();
+  void set_allocated_resolver_id(::std::string* resolver_id);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResolveIntentRequest)
  private:
   inline void set_has_header();
@@ -3921,6 +3933,8 @@ class ResolveIntentRequest : public ::google::protobuf::Message {
   inline void clear_has_status();
   inline void set_has_poison();
   inline void clear_has_poison();
+  inline void set_has_resolver_id();
+  inline void clear_has_resolver_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -3929,6 +3943,7 @@ class ResolveIntentRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::TxnMeta* intent_txn_;
   int status_;
   bool poison_;
+  ::google::protobuf::internal::ArenaStringPtr resolver_id_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -4125,6 +4140,18 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
   bool poison() const;
   void set_poison(bool value);
 
+  // optional bytes resolver_id = 5;
+  bool has_resolver_id() const;
+  void clear_resolver_id();
+  static const int kResolverIdFieldNumber = 5;
+  const ::std::string& resolver_id() const;
+  void set_resolver_id(const ::std::string& value);
+  void set_resolver_id(const char* value);
+  void set_resolver_id(const void* value, size_t size);
+  ::std::string* mutable_resolver_id();
+  ::std::string* release_resolver_id();
+  void set_allocated_resolver_id(::std::string* resolver_id);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResolveIntentRangeRequest)
  private:
   inline void set_has_header();
@@ -4135,6 +4162,8 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
   inline void clear_has_status();
   inline void set_has_poison();
   inline void clear_has_poison();
+  inline void set_has_resolver_id();
+  inline void clear_has_resolver_id();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -4143,6 +4172,7 @@ class ResolveIntentRangeRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::TxnMeta* intent_txn_;
   int status_;
   bool poison_;
+  ::google::protobuf::internal::ArenaStringPtr resolver_id_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -9701,6 +9731,59 @@ inline void ResolveIntentRequest::set_poison(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ResolveIntentRequest.poison)
 }
 
+// optional bytes resolver_id = 5;
+inline bool ResolveIntentRequest::has_resolver_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void ResolveIntentRequest::set_has_resolver_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void ResolveIntentRequest::clear_has_resolver_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void ResolveIntentRequest::clear_resolver_id() {
+  resolver_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_resolver_id();
+}
+inline const ::std::string& ResolveIntentRequest::resolver_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRequest.resolver_id)
+  return resolver_id_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ResolveIntentRequest::set_resolver_id(const ::std::string& value) {
+  set_has_resolver_id();
+  resolver_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResolveIntentRequest.resolver_id)
+}
+inline void ResolveIntentRequest::set_resolver_id(const char* value) {
+  set_has_resolver_id();
+  resolver_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ResolveIntentRequest.resolver_id)
+}
+inline void ResolveIntentRequest::set_resolver_id(const void* value, size_t size) {
+  set_has_resolver_id();
+  resolver_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ResolveIntentRequest.resolver_id)
+}
+inline ::std::string* ResolveIntentRequest::mutable_resolver_id() {
+  set_has_resolver_id();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRequest.resolver_id)
+  return resolver_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ResolveIntentRequest::release_resolver_id() {
+  clear_has_resolver_id();
+  return resolver_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ResolveIntentRequest::set_allocated_resolver_id(::std::string* resolver_id) {
+  if (resolver_id != NULL) {
+    set_has_resolver_id();
+  } else {
+    clear_has_resolver_id();
+  }
+  resolver_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), resolver_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResolveIntentRequest.resolver_id)
+}
+
 // -------------------------------------------------------------------
 
 // ResolveIntentResponse
@@ -9885,6 +9968,59 @@ inline void ResolveIntentRangeRequest::set_poison(bool value) {
   set_has_poison();
   poison_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ResolveIntentRangeRequest.poison)
+}
+
+// optional bytes resolver_id = 5;
+inline bool ResolveIntentRangeRequest::has_resolver_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void ResolveIntentRangeRequest::set_has_resolver_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void ResolveIntentRangeRequest::clear_has_resolver_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void ResolveIntentRangeRequest::clear_resolver_id() {
+  resolver_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_resolver_id();
+}
+inline const ::std::string& ResolveIntentRangeRequest::resolver_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResolveIntentRangeRequest.resolver_id)
+  return resolver_id_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ResolveIntentRangeRequest::set_resolver_id(const ::std::string& value) {
+  set_has_resolver_id();
+  resolver_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ResolveIntentRangeRequest.resolver_id)
+}
+inline void ResolveIntentRangeRequest::set_resolver_id(const char* value) {
+  set_has_resolver_id();
+  resolver_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ResolveIntentRangeRequest.resolver_id)
+}
+inline void ResolveIntentRangeRequest::set_resolver_id(const void* value, size_t size) {
+  set_has_resolver_id();
+  resolver_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ResolveIntentRangeRequest.resolver_id)
+}
+inline ::std::string* ResolveIntentRangeRequest::mutable_resolver_id() {
+  set_has_resolver_id();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResolveIntentRangeRequest.resolver_id)
+  return resolver_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ResolveIntentRangeRequest::release_resolver_id() {
+  clear_has_resolver_id();
+  return resolver_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ResolveIntentRangeRequest::set_allocated_resolver_id(::std::string* resolver_id) {
+  if (resolver_id != NULL) {
+    set_has_resolver_id();
+  } else {
+    clear_has_resolver_id();
+  }
+  resolver_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), resolver_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResolveIntentRangeRequest.resolver_id)
 }
 
 // -------------------------------------------------------------------

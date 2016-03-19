@@ -1009,6 +1009,15 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	})
 }
 
+// TestStoreLongTxnStarvation sets up a test which guarantees that
+// every time a txn writes, it get a write-too-old error by always
+// having a non-txnal write succeed before the txn can retry,
+// forcing endless retries for both serializable and snapshot txns.
+func TestStoreLongTxnStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(spencer): add implementation
+}
+
 // TestStoreResolveWriteIntent adds write intent and then verifies
 // that a put returns success and aborts intent's txn in the event the
 // pushee has lower priority. Otherwise, verifies that a
