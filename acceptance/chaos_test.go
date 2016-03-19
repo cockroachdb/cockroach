@@ -418,8 +418,7 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 	kvClient, kvStopper := c.NewClient(t, num-1)
 	defer kvStopper.Stop()
-	if pErr := kvClient.CheckConsistency(keys.TableDataMin, keys.TableDataMax); pErr != nil {
-		// TODO(.*): change back to t.Fatal after #5051.
-		log.Error(pErr)
+	if err := kvClient.CheckConsistency(keys.TableDataMin, keys.TableDataMax); err != nil {
+		log.Fatal(err)
 	}
 }
