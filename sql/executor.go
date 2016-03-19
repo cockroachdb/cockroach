@@ -55,19 +55,6 @@ var defaultRetryOpt = retry.Options{
 	Multiplier:     2,
 }
 
-// Release through releasePlanner().
-var plannerPool = sync.Pool{
-	New: func() interface{} {
-		return makePlanner()
-	},
-}
-
-func releasePlanner(p *planner) {
-	// Ensure future users don't clobber the session just used.
-	p.session = nil
-	plannerPool.Put(p)
-}
-
 type traceResult struct {
 	tag   string
 	count int
@@ -246,8 +233,9 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	e.systemConfigMu.Unlock()
 }
 
-// getSystemConfig returns a pointer to the latest system config. May be nil,
-// if the gossip callback has not run.
+// getSystemConfig returns a copy of the latest system config.
+// TODO(andrei): This can be uninitialized if the gossip callback has not run?
+// Is that OK?
 func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 	e.systemConfigMu.RLock()
 	cfg, cache := e.systemConfig, e.databaseCache
@@ -264,31 +252,21 @@ func (e *Executor) Prepare(user string, query string, session *Session, args par
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	planMaker := plannerPool.Get().(*planner)
-	defer releasePlanner(planMaker)
 
-	cfg, cache := e.getSystemConfig()
-	*planMaker = planner{
-		user: user,
-		evalCtx: parser.EvalContext{
-			NodeID:      e.nodeID,
-			ReCache:     e.reCache,
-			GetLocation: session.getLocation,
-			Args:        args,
-			PrepareOnly: true,
-		},
-		leaseMgr:      e.ctx.LeaseManager,
-		systemConfig:  cfg,
-		databaseCache: cache,
-		session:       session,
-		execCtx:       &e.ctx,
+	if session.planner == nil {
+		session.initPlanner(e, user)
 	}
+	session.planner.resetForBatch(e, session)
+	session.planner.evalCtx.Args = args
+	session.planner.evalCtx.PrepareOnly = true
 
+	// TODO(andrei): does the prepare phase really need a Txn?
 	txn := client.NewTxn(*e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
+	session.planner.setTxn(txn)
+	defer session.planner.setTxn(nil)
 
-	planMaker.setTxn(txn)
-	plan, pErr := planMaker.prepare(stmt)
+	plan, pErr := session.planner.prepare(stmt)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -382,82 +360,38 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	scc.schemaChangers = scc.schemaChangers[:0]
 }
 
-// reset creates a new Txn and initializes it using the session defaults.
-func (ts *txnState) reset(e *Executor, s *Session) {
-	*ts = txnState{}
-	ts.txn = client.NewTxn(*e.ctx.DB)
-	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
-	ts.tr = s.Trace
-}
-
-func (ts *txnState) willBeRetried() bool {
-	return ts.autoRetry || ts.retryIntent
-}
-
-func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
-	ts.State = state
-	ts.txn = nil
-}
-
-// updateStateAndCleanupOnErr updates txnState based on the type of error that we
-// received. If it's a retriable error and we're going to retry the txn,
-// then the state moves to RestartWait. Otherwise, the state moves to Aborted
-// and the KV txn is cleaned up.
-func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor) {
-	if pErr == nil {
-		panic("updateStateAndCleanupOnErr called with no error")
-	}
-	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE || !ts.willBeRetried() {
-		// We can't or don't want to retry this txn, so the txn is over.
-		e.txnAbortCount.Inc(1)
-		ts.txn.CleanupOnError(pErr)
-		ts.resetStateAndTxn(Aborted)
-	} else {
-		// If we got a retriable error, move the SQL txn to the RestartWait state.
-		// Note that TransactionAborted is also a retriable error, handled here;
-		// in this case cleanup for the txn has been done for us under the hood.
-		switch pErr.TransactionRestart {
-		case roachpb.TransactionRestart_BACKOFF:
-			// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
-			// the backoff hint to the client anyway. See #5249
-			fallthrough
-		case roachpb.TransactionRestart_IMMEDIATE:
-			ts.State = RestartWait
-		default:
-			panic(fmt.Sprintf("unexpected restart value: %s", pErr.TransactionRestart))
-		}
-	}
-}
-
 // ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) ExecuteStatements(
 	user string, session *Session, stmts string,
 	params []parser.Datum) StatementResults {
 
-	planMaker := plannerPool.Get().(*planner)
-	defer releasePlanner(planMaker)
-
-	cfg, cache := e.getSystemConfig()
-	*planMaker = planner{
-		user: user,
-		evalCtx: parser.EvalContext{
-			NodeID:      e.nodeID,
-			ReCache:     e.reCache,
-			GetLocation: session.getLocation,
-		},
-		leaseMgr:      e.ctx.LeaseManager,
-		systemConfig:  cfg,
-		databaseCache: cache,
-		session:       session,
-		execCtx:       &e.ctx,
+	if session.planner == nil {
+		session.initPlanner(e, user)
 	}
+	session.planner.resetForBatch(e, session)
+	session.planner.params = parameters(params)
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	planMaker.params = parameters(params)
-	res := e.execRequest(&session.TxnState, stmts, planMaker)
+	res := e.execRequest(session, stmts)
 	return res
+}
+
+// blockConfigUpdates blocks any gossip updates to the system config
+// until the unlock function returned is called. Useful in tests
+// which need to
+func (e *Executor) blockConfigUpdates() func() {
+	e.systemConfigCond.L.Lock()
+	return func() {
+		e.systemConfigCond.L.Unlock()
+	}
+}
+
+// waitForConfigUpdate blocks the caller until a new SystemConfig is received
+// via gossip. This can only be called after blockConfigUpdates().
+func (e *Executor) waitForConfigUpdate() {
+	e.systemConfigCond.Wait()
 }
 
 // execRequest executes the request using the provided planner.
@@ -477,10 +411,11 @@ func (e *Executor) ExecuteStatements(
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(
-	txnState *txnState, sql string, planMaker *planner) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 	var res StatementResults
-	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(planMaker.session.Syntax))
+	txnState := &session.TxnState
+	planMaker := session.planner
+	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
 	if err != nil {
 		pErr := roachpb.NewError(err)
 		// A parse error occurred: we can't determine if there were multiple
@@ -498,28 +433,14 @@ func (e *Executor) execRequest(
 		return res
 	}
 
-	if e.ctx.TestingKnobs.WaitForGossipUpdate {
-		// We might need to verify metadata. Lock the system config so that no
-		// gossip updates sneak in under us. The point is to be able to assert
-		// that the verify callback only succeeds after a gossip update.
-		//
-		// This lock does not change semantics. Even outside of tests, the
-		// planner is initialized with a static systemConfig, so locking
-		// the Executor's systemConfig cannot change the semantics of the
-		// SQL operation being performed under lock.
-		//
-		// The case of a multi-request transaction is not handled here,
-		// because those transactions outlive the verification callback.
-		// TODO(andrei): consider putting this callback on the Session, not
-		// on the executor, after Session is not a proto any more. Also, #4646.
-		e.systemConfigCond.L.Lock()
-		defer func() {
-			e.systemConfigCond.L.Unlock()
-		}()
-	}
-
 	for len(stmts) > 0 {
 		// Each iteration consumes a transaction's worth of statements.
+
+		// If the planMaker wants config updates to be blocked, then block them.
+		// The planMaker becomes responsible for unblocking them, either when we
+		// call checkTestingVerifyMetadataOrDie() below, or when the Session is
+		// finished.
+		planMaker.blockConfigUpdatesMaybe(e)
 
 		inTxn := txnState.State != NoTxn
 		var execOpt client.TxnExecOptions
@@ -536,7 +457,7 @@ func (e *Executor) execRequest(
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[0:1]
 			}
-			txnState.reset(e, planMaker.session)
+			txnState.reset(e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
 			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
@@ -594,7 +515,13 @@ func (e *Executor) execRequest(
 			// found).
 			txnState.schemaChangers.execSchemaChanges(e, planMaker, res.ResultList)
 			stmtsExecuted := stmts[0 : len(stmtsToExec)-len(remainingStmts)]
-			e.checkTestingWaitForGossipUpdateOrDie(planMaker, stmtsExecuted)
+			planMaker.checkTestingVerifyMetadataOrDie(
+				true /* waitForSuccess */, e, stmtsExecuted)
+		} else {
+			// We're still in a txn, so we only check that the verifyMetadata callback
+			// fails the first time it's run.
+			planMaker.checkTestingVerifyMetadataOrDie(
+				false /* waitForSuccess */, e, stmts)
 		}
 
 		// Figure out what statements to run on the next iteration.
@@ -609,26 +536,6 @@ func (e *Executor) execRequest(
 	}
 
 	return res
-}
-
-func (e *Executor) checkTestingWaitForGossipUpdateOrDie(
-	planMaker *planner, stmts parser.StatementList) {
-	if e.ctx.TestingKnobs.WaitForGossipUpdate {
-		if verify := planMaker.testingVerifyMetadata; verify != nil {
-			// In the case of a multi-statement request, avoid reusing this
-			// callback.
-			planMaker.testingVerifyMetadata = nil
-			first := true
-			for verify(e.systemConfig) != nil {
-				first = false
-				e.systemConfigCond.Wait()
-			}
-			if first {
-				panic(fmt.Sprintf(
-					"expected %q to require a gossip update, but it did not", stmts))
-			}
-		}
-	}
 }
 
 // If the plan is a returningNode we can just use the `rowCount`,

@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -39,7 +41,12 @@ type planner struct {
 	systemConfig  config.SystemConfig
 	databaseCache *databaseCache
 
-	testingVerifyMetadata func(config.SystemConfig) error
+	testingVerifyMetadataFn func(config.SystemConfig) error
+	verifyFnCheckedOnce     bool
+	// Cleanup function for unblocking system config updates on the executor.
+	// This is set if testingVerifyMetadata is set. If unblockConfigUpdates is
+	// set, the planner necessarily has to run it at some point.
+	unblockConfigUpdates func()
 
 	parser             parser.Parser
 	isAggregateVisitor isAggregateVisitor
@@ -51,6 +58,104 @@ type planner struct {
 	schemaChangeCallback func(schemaChanger SchemaChanger)
 
 	execCtx *ExecutorContext
+}
+
+func (p *planner) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
+	// Note that this can overwrite a previous callback that was waiting to be
+	// verified, which is not ideal.
+	p.testingVerifyMetadataFn = fn
+	p.verifyFnCheckedOnce = false
+}
+
+// Finish releases resources held by the planner.
+func (p *planner) Finish() {
+	if p.unblockConfigUpdates != nil {
+		p.unblockConfigUpdates()
+		p.unblockConfigUpdates = nil
+	}
+}
+
+// resetForStatement prepares the planner for executing a new batch of
+// statements.
+func (p *planner) resetForBatch(e *Executor, session *Session) {
+	// Update the systemConfig to a more recent copy, so that we can use tables
+	// that we created in previus batches of the same transaction.
+	cfg, cache := e.getSystemConfig()
+	p.systemConfig = cfg
+	p.databaseCache = cache
+
+	p.params = parameters{}
+
+	// The parser cannot be reused between batches.
+	p.parser = parser.Parser{}
+
+	p.evalCtx = parser.EvalContext{
+		NodeID:      e.nodeID,
+		ReCache:     e.reCache,
+		GetLocation: session.getLocation,
+	}
+}
+
+func (p *planner) blockConfigUpdatesMaybe(e *Executor) {
+	// We don't do anything if we've already blocked config updates.
+	if e.ctx.TestingKnobs.WaitForGossipUpdate &&
+		p.unblockConfigUpdates == nil {
+		// We might need to verify metadata (checkTestingVerifyMetadataOrDie).
+		// Lock the system config so that no
+		// gossip updates sneak in under us. The point is to be able to assert
+		// that the verify callback only succeeds after a gossip update.
+		//
+		// This lock does not change semantics. Even outside of tests, the
+		// planner is initialized with a static systemConfig, so locking
+		// the Executor's systemConfig cannot change the semantics of the
+		// SQL operation being performed under lock.
+		p.unblockConfigUpdates = e.blockConfigUpdates()
+	}
+}
+
+// checkTestingVerifyMetadataOrDie verifies the metadata callback, if one was
+// set.
+// If waitForSuccess is set, we run the callback repeatedly after every system
+// config update until it succeeds. Otherwise, we only run it at most once.
+// The verification process ensures that the first time a callback is verified
+// it fails (to check that the state before a config update doesn't pass).
+//
+// Gossip updates for the system config are assumed to be blocked when this is
+// called; they will be unblocked when this returns.
+func (p *planner) checkTestingVerifyMetadataOrDie(
+	waitForSuccess bool, e *Executor, stmts parser.StatementList) {
+	if !p.execCtx.TestingKnobs.WaitForGossipUpdate {
+		return
+	}
+	if p.unblockConfigUpdates == nil {
+		panic("config updates weren't blocked")
+	}
+
+	defer func() {
+		p.unblockConfigUpdates()
+		p.unblockConfigUpdates = nil
+	}()
+
+	if p.testingVerifyMetadataFn == nil {
+		return
+	}
+
+	if !p.verifyFnCheckedOnce {
+		if p.testingVerifyMetadataFn(e.systemConfig) == nil {
+			panic(fmt.Sprintf(
+				"expected %q (or the statements before them) to require a "+
+					"gossip update, but they did not", stmts))
+		}
+		p.verifyFnCheckedOnce = true
+	}
+	if !waitForSuccess {
+		return
+	}
+
+	for p.testingVerifyMetadataFn(e.systemConfig) != nil {
+		e.waitForConfigUpdate()
+	}
+	p.testingVerifyMetadataFn = nil
 }
 
 func makePlanner() *planner {

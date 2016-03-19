@@ -39,6 +39,8 @@ type scanner struct {
 	identQuote  int
 	stringQuote int
 	syntax      Syntax
+
+	initialized bool
 }
 
 func makeScanner(str string, syntax Syntax) scanner {
@@ -48,6 +50,10 @@ func makeScanner(str string, syntax Syntax) scanner {
 }
 
 func (s *scanner) init(str string, syntax Syntax) {
+	if s.initialized {
+		panic("scanner already initialized; a scanner cannot be reused.")
+	}
+	s.initialized = true
 	s.in = str
 	s.syntax = syntax
 	switch syntax {
