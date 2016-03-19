@@ -417,7 +417,7 @@ func TestTransactionString(t *testing.T) {
 		MaxTimestamp:  makeTS(40, 41),
 	}
 	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41`
+		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
@@ -481,6 +481,7 @@ var nonZeroTxn = Transaction{
 	MaxTimestamp:       makeTS(40, 41),
 	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
 	Writing:            true,
+	WriteTooOld:        true,
 	Sequence:           123,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 }

@@ -245,9 +245,9 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 	return result
 }
 
-// TestRangeContains verifies that the range uses Key.Address() in
+// TestReplicaContains verifies that the range uses Key.Address() in
 // order to properly resolve addresses for local keys.
-func TestRangeContains(t *testing.T) {
+func TestReplicaContains(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  1,
@@ -306,10 +306,10 @@ func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 	}
 }
 
-// TestRangeReadConsistency verifies behavior of the range under
+// TestReplicaReadConsistency verifies behavior of the range under
 // different read consistencies. Note that this unittest plays
 // fast and loose with granting leader leases.
-func TestRangeReadConsistency(t *testing.T) {
+func TestReplicaReadConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -426,7 +426,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	}
 }
 
-func TestRangeRangeBoundsChecking(t *testing.T) {
+func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -449,7 +449,7 @@ func hasLease(rng *Replica, timestamp roachpb.Timestamp) (bool, bool) {
 	return l.OwnedBy(rng.store.StoreID()), !l.Covers(timestamp)
 }
 
-func TestRangeLeaderLease(t *testing.T) {
+func TestReplicaLeaderLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -515,8 +515,8 @@ func TestRangeLeaderLease(t *testing.T) {
 	}
 }
 
-// TestRangeNotLeaderError verifies NotLeaderError when lease is rejected.
-func TestRangeNotLeaderError(t *testing.T) {
+// TestReplicaNotLeaderError verifies NotLeaderError when lease is rejected.
+func TestReplicaNotLeaderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -575,9 +575,9 @@ func TestRangeNotLeaderError(t *testing.T) {
 	}
 }
 
-// TestRangeGossipConfigsOnLease verifies that config info is gossiped
+// TestReplicaGossipConfigsOnLease verifies that config info is gossiped
 // upon acquisition of the leader lease.
-func TestRangeGossipConfigsOnLease(t *testing.T) {
+func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -658,11 +658,11 @@ func TestRangeGossipConfigsOnLease(t *testing.T) {
 	})
 }
 
-// TestRangeTSCacheLowWaterOnLease verifies that the low water mark is
-// set on the timestamp cache when the node is granted the leader
+// TestReplicaTSCacheLowWaterOnLease verifies that the low water mark
+// is set on the timestamp cache when the node is granted the leader
 // lease after not holding it and it is not set when the node is
 // granted the leader lease when it was the last holder.
-func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
+func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -728,11 +728,11 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 	}
 }
 
-// TestRangeLeaderLeaseRejectUnknownRaftNodeID ensures that a replica cannot
+// TestReplicaLeaderLeaseRejectUnknownRaftNodeID ensures that a replica cannot
 // obtain the leader lease if it is not part of the current range descriptor.
 // TODO(mrtracy): This should probably be tested in client_raft_test package,
 // using a real second store.
-func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
+func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -764,9 +764,9 @@ func TestRangeLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	}
 }
 
-// TestRangeGossipFirstRange verifies that the first range gossips its
+// TestReplicaGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
-func TestRangeGossipFirstRange(t *testing.T) {
+func TestReplicaGossipFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -791,8 +791,8 @@ func TestRangeGossipFirstRange(t *testing.T) {
 	}
 }
 
-// TestRangeGossipAllConfigs verifies that all config types are gossiped.
-func TestRangeGossipAllConfigs(t *testing.T) {
+// TestReplicaGossipAllConfigs verifies that all config types are gossiped.
+func TestReplicaGossipAllConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -826,9 +826,9 @@ func maybeWrapWithBeginTransaction(sender client.Sender, ctx context.Context, he
 
 }
 
-// TestRangeNoGossipConfig verifies that certain commands (e.g.,
+// TestReplicaNoGossipConfig verifies that certain commands (e.g.,
 // reads, writes in uncommitted transactions) do not trigger gossip.
-func TestRangeNoGossipConfig(t *testing.T) {
+func TestReplicaNoGossipConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -871,9 +871,9 @@ func TestRangeNoGossipConfig(t *testing.T) {
 	}
 }
 
-// TestRangeNoGossipFromNonLeader verifies that a non-leader replica
+// TestReplicaNoGossipFromNonLeader verifies that a non-leader replica
 // does not gossip configurations.
-func TestRangeNoGossipFromNonLeader(t *testing.T) {
+func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1110,9 +1110,9 @@ func TestAcquireLeaderLease(t *testing.T) {
 	}
 }
 
-// TestRangeUpdateTSCache verifies that reads and writes update the
+// TestReplicaUpdateTSCache verifies that reads and writes update the
 // timestamp cache.
-func TestRangeUpdateTSCache(t *testing.T) {
+func TestReplicaUpdateTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1130,11 +1130,17 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	}
 	// Set clock to time 2s for write.
 	t1 := 2 * time.Second
+	key := roachpb.Key([]byte("b"))
 	tc.manualClock.Set(t1.Nanoseconds())
-	pArgs := putArgs([]byte("b"), []byte("1"))
+	drArgs := roachpb.DeleteRangeRequest{
+		Span: roachpb.Span{
+			Key:    key,
+			EndKey: key.Next(),
+		},
+	}
 	ts = tc.clock.Now()
 
-	_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &pArgs)
+	_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &drArgs)
 
 	if pErr != nil {
 		t.Error(pErr)
@@ -1161,10 +1167,10 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	}
 }
 
-// TestRangeCommandQueue verifies that reads/writes must wait for
+// TestReplicaCommandQueue verifies that reads/writes must wait for
 // pending commands to complete through Raft before being executed on
 // range.
-func TestRangeCommandQueue(t *testing.T) {
+func TestReplicaCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Intercept commands with matching command IDs and block them.
 	blockingStart := make(chan struct{})
@@ -1279,9 +1285,9 @@ func TestRangeCommandQueue(t *testing.T) {
 	}
 }
 
-// TestRangeCommandQueueInconsistent verifies that inconsistent reads need
+// TestReplicaCommandQueueInconsistent verifies that inconsistent reads need
 // not wait for pending commands to complete through Raft.
-func TestRangeCommandQueueInconsistent(t *testing.T) {
+func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	key := roachpb.Key("key1")
 	blockingStart := make(chan struct{}, 1)
@@ -1363,9 +1369,9 @@ func SendWrapped(sender client.Sender, ctx context.Context, header roachpb.Heade
 	return br.Responses[0].GetInner(), br.BatchResponse_Header, pErr
 }
 
-// TestRangeUseTSCache verifies that write timestamps are upgraded
+// TestReplicaUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
-func TestRangeUseTSCache(t *testing.T) {
+func TestReplicaUseTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1391,9 +1397,9 @@ func TestRangeUseTSCache(t *testing.T) {
 	}
 }
 
-// TestRangeNoTSCacheInconsistent verifies that the timestamp cache
+// TestReplicaNoTSCacheInconsistent verifies that the timestamp cache
 // is not affected by inconsistent reads.
-func TestRangeNoTSCacheInconsistent(t *testing.T) {
+func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1423,10 +1429,10 @@ func TestRangeNoTSCacheInconsistent(t *testing.T) {
 	}
 }
 
-// TestRangeNoTSCacheUpdateOnFailure verifies that read and write
+// TestReplicaNoTSCacheUpdateOnFailure verifies that read and write
 // commands do not update the timestamp cache if they result in
 // failure.
-func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
+func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1467,10 +1473,10 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 	}
 }
 
-// TestRangeNoTimestampIncrementWithinTxn verifies that successive
+// TestReplicaNoTimestampIncrementWithinTxn verifies that successive
 // read and write commands within the same transaction do not cause
 // the write to receive an incremented timestamp.
-func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
+func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1526,10 +1532,18 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 }
 
-// TestRangeSequenceCacheReadError verifies that an error is returned to the
+// TestReplicaNoTimestampIncrementAfterPush verifies that a command
+// with a transaction which successfully pushes an intent doesn't
+// experience timestamp increase.
+func TestReplicaNoTimestampIncrementAfterPush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(spencer): add implementation
+}
+
+// TestReplicaSequenceCacheReadError verifies that an error is returned to the
 // client in the event that a sequence cache entry is found but is not
 // decodable.
-func TestRangeSequenceCacheReadError(t *testing.T) {
+func TestReplicaSequenceCacheReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1566,9 +1580,9 @@ func TestRangeSequenceCacheReadError(t *testing.T) {
 	}
 }
 
-// TestRangeSequenceCacheStoredError verifies that if a cached entry is present,
+// TestReplicaSequenceCacheStoredError verifies that if a cached entry is present,
 // a transaction restart error is returned.
-func TestRangeSequenceCacheStoredTxnRetryError(t *testing.T) {
+func TestReplicaSequenceCacheStoredTxnRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1668,10 +1682,10 @@ func TestTransactionRetryLeavesIntents(t *testing.T) {
 	}
 }
 
-// TestRangeSequenceCacheOnlyWithIntent verifies that a transactional command
+// TestReplicaSequenceCacheOnlyWithIntent verifies that a transactional command
 // which goes through Raft but is not a transactional write (i.e. does not
 // leave intents) passes the sequence cache unhindered.
-func TestRangeSequenceCacheOnlyWithIntent(t *testing.T) {
+func TestReplicaSequenceCacheOnlyWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1920,38 +1934,36 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		{false, roachpb.SNAPSHOT, false},
 	}
 	key := roachpb.Key("a")
-	for _, test := range testCases {
-		txn := newTransaction("test", key, 1, test.isolation, tc.clock)
-		_, btH := beginTxnArgs(key, txn)
-		put := putArgs(key, key)
+	for i, test := range testCases {
+		pushee := newTransaction("pushee", key, 1, test.isolation, tc.clock)
+		pusher := newTransaction("pusher", key, 1, roachpb.SERIALIZABLE, tc.clock)
+		pushee.Priority = 1
+		pusher.Priority = 2 // pusher will win
+		_, btH := beginTxnArgs(key, pushee)
+		put := putArgs(key, []byte("value"))
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
-		txn.Writing = true
-		// End the transaction with args timestamp moved forward in time.
-		args, h := endTxnArgs(txn, test.commit)
-		// TODO(tschottdorf): this test is pretty dirty. It should really
-		// write a txn entry and then try to commit that; the way it works
-		// now is by supplying its txn (which has its own timestamp) at
-		// another timestamp. This constrains changes we want to make on
-		// how timestamps work.
-		tc.manualClock.Set(1)
-		ts := tc.clock.Now()
-		h.Timestamp = ts
-		txn.Sequence++
 
-		resp, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args)
+		// Push pushee txn.
+		pushTxn := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)
+		pushTxn.Key = pusher.Key
+		if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &pushTxn); pErr != nil {
+			t.Error(pErr)
+		}
+
+		// End the transaction with args timestamp moved forward in time.
+		endTxn, h := endTxnArgs(pushee, test.commit)
+		pushee.Sequence++
+		resp, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &endTxn)
 
 		if test.expErr {
-			if pErr == nil {
-				t.Errorf("expected error")
-			}
 			if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-				t.Errorf("expected retry error; got %s", pErr)
+				t.Errorf("%d: expected retry error; got %s", i, pErr)
 			}
 		} else {
 			if pErr != nil {
-				t.Errorf("unexpected error: %s", pErr)
+				t.Errorf("%d: unexpected error: %s", i, pErr)
 			}
 			expStatus := roachpb.COMMITTED
 			if !test.commit {
@@ -1959,7 +1971,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 			}
 			reply := resp.(*roachpb.EndTransactionResponse)
 			if reply.Txn.Status != expStatus {
-				t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
+				t.Errorf("%d: expected transaction status to be %s; got %s", i, expStatus, reply.Txn.Status)
 			}
 		}
 		key = key.Next()
@@ -2061,6 +2073,21 @@ func TestEndTransactionWithErrors(t *testing.T) {
 			t.Errorf("expected error:\n%s\nto match:\n%s", pErr, test.expErrRegexp)
 		}
 	}
+}
+
+// TestReplayProtection verifies that transactional replays cannot
+// commit intents. The replay consist of an initial BeginTxn/Write
+// batch and ends with an EndTxn batch.
+func TestReplayProtection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(spencer): add implementation
+}
+
+// TestReplayProtectionWithAbandonedIntent verifies that transactional
+// replays cannot resurrect and commit an abandoned intent.
+func TestReplayProtectionWithAbandonedIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// TODO(spencer): add implementation
 }
 
 // TestEndTransactionGC verifies that a transaction record is immediately
@@ -2333,7 +2360,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey)
 	txn := newTransaction("name", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng,
+	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng, nil,
 		[]roachpb.Intent{{
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
@@ -2693,6 +2720,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		// Now, attempt to push the transaction with Now set to our current time.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
 		args.Now = roachpb.Timestamp{WallTime: test.currentTime}
+		args.PushTo = args.Now
 
 		reply, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &args)
 
@@ -2934,16 +2962,18 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	}
 }
 
-// TestRangeResolveIntentRange verifies resolving a range of intents.
-func TestRangeResolveIntentRange(t *testing.T) {
+// TestReplicaResolveIntentRange verifies resolving a range of intents.
+func TestReplicaResolveIntentRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
+	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")}
+	txn := newTransaction("test", keys[0], 1, roachpb.SERIALIZABLE, tc.clock)
+
 	// Put two values transactionally.
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
-	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
+	for _, key := range keys {
 		pArgs := putArgs(key, []byte("value1"))
 		txn.Sequence++
 		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
@@ -2987,12 +3017,12 @@ func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS engine.M
 	}
 }
 
-// TestRangeStatsComputation verifies that commands executed against a
+// TestReplicaStatsComputation verifies that commands executed against a
 // range update the range stat counters. The stat values are
 // empirically derived; we're really just testing that they increment
 // in the right ways, not the exact amounts. If the encodings change,
 // will need to update this test.
-func TestRangeStatsComputation(t *testing.T) {
+func TestReplicaStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
@@ -3018,12 +3048,13 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid, Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn := newTransaction("test", pArgs.Key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn.ID = uuid
 
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 92, KeyBytes: 28, ValBytes: 64, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 142, SysCount: 3, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 95, KeyBytes: 28, ValBytes: 67, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 145, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -3348,7 +3379,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	}
 }
 
-// TestRangeDanglingMetaIntent creates a dangling intent on a meta2
+// TestReplicaDanglingMetaIntent creates a dangling intent on a meta2
 // record and verifies that RangeLookup requests behave
 // appropriately. Normally, the old value and a write intent error
 // should be returned. If IgnoreIntents is specified, then a random
@@ -3356,7 +3387,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // TODO(tschottdorf): add a test in which there is a dangling intent on a
 // descriptor we would've otherwise discarded in a reverse scan; verify that
 // we don't erroneously return that descriptor (recently fixed bug) if the
-func TestRangeDanglingMetaIntent(t *testing.T) {
+func TestReplicaDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Test RangeLookup with Scan.
 	testRangeDanglingMetaIntent(t, false)
@@ -3467,9 +3498,9 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 }
 
-// TestRangeLookupUseReverseScan verifies the correctness of the results which are retrieved
+// TestReplicaLookupUseReverseScan verifies the correctness of the results which are retrieved
 // from RangeLookup by using ReverseScan.
-func TestRangeLookupUseReverseScan(t *testing.T) {
+func TestReplicaLookupUseReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -3503,7 +3534,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		{key: "h", expected: testRanges[1]},
 	}
 
-	txn := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn := newTransaction("test", roachpb.Key{}, 1, roachpb.SERIALIZABLE, tc.clock)
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
@@ -3564,7 +3595,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(intentRange.EndKey)), data)
-	txn2 := &roachpb.Transaction{TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4(), Timestamp: tc.clock.Now()}, Sequence: 1}
+	txn2 := newTransaction("test", roachpb.Key{}, 1, roachpb.SERIALIZABLE, tc.clock)
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn2}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3587,7 +3618,7 @@ func TestRangeLookupUseReverseScan(t *testing.T) {
 	}
 }
 
-func TestRangeLookup(t *testing.T) {
+func TestReplicaLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)

@@ -84,7 +84,12 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
 
 	resolveIntents, pushErr := ir.maybePushTransactions(ctx, wiErr.Intents, h, pushType, false)
-	if resErr := ir.resolveIntents(ctx, r, resolveIntents,
+
+	var resolverID *uuid.UUID
+	if h.Txn != nil {
+		resolverID = h.Txn.ID
+	}
+	if resErr := ir.resolveIntents(ctx, r, resolverID, resolveIntents,
 		false /* !wait */, true /* poison */); resErr != nil {
 		// When resolving without waiting, errors should not
 		// usually be returned here, although there are some cases
@@ -119,7 +124,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 	return roachpb.NewError(&wiErr)
 }
 
-// maybePushTransaction tries to push the conflicting transaction(s)
+// maybePushTransactions tries to push the conflicting transaction(s)
 // responsible for the given intents: either move its
 // timestamp forward on a read/write conflict, abort it on a
 // write/write conflict, or do nothing if the transaction is no longer
@@ -128,7 +133,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 // Returns a slice of intents which can now be resolved, and an error.
 // The returned intents should be resolved via
 // intentResolver.resolveIntents regardless of any error returned by
-// maybePushTransaction, but if the error is non-nil then some of the
+// maybePushTransactions, but if the error is non-nil then some of the
 // conflicting transactions may still be pending.
 //
 // If skipIfInFlight is true, then no PushTxns will be sent and no
@@ -241,7 +246,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 // processing via this method). The two cases are handled somewhat
 // differently and would be better served by different entry points,
 // but combining them simplifies the plumbing necessary in Replica.
-func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithArg) {
+func (ir *intentResolver) processIntentsAsync(r *Replica, resolverID *uuid.UUID, intents []intentsWithArg) {
 	if len(intents) == 0 {
 		return
 	}
@@ -261,7 +266,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				h := roachpb.Header{Timestamp: now}
 				resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
 					item.intents, h, roachpb.PUSH_TOUCH, true /* skipInFlight */)
-				if pErr := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
+				if pErr := ir.resolveIntents(ctxWithTimeout, r, resolverID, resolveIntents,
 					true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
 					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
 					return
@@ -278,7 +283,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 				// For EndTransaction, we know the transaction is finalized so
 				// we can skip the push and go straight to the resolve.
-				if pErr := ir.resolveIntents(ctxWithTimeout, r, item.intents,
+				if pErr := ir.resolveIntents(ctxWithTimeout, r, resolverID, item.intents,
 					true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
 					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
 					return
@@ -340,9 +345,11 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // soon as all local resolve commands have been **proposed** (not
 // executed). This ensures that if a waiting client retries
 // immediately after calling this function, it will not hit the same
-// intents again.
+// intents again. resolverID is optional and is used to populate
+// update the timestamp cache so a txn which pushed this intent's
+// txn in order to resolve it can avoid updating its timestamp.
 func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
-	intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
+	resolverID *uuid.UUID, intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
 	defer cleanup()
@@ -357,18 +364,20 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		{
 			if len(intent.EndKey) == 0 {
 				resolveArgs = &roachpb.ResolveIntentRequest{
-					Span:      intent.Span,
-					IntentTxn: intent.Txn,
-					Status:    intent.Status,
-					Poison:    poison,
+					Span:       intent.Span,
+					IntentTxn:  intent.Txn,
+					Status:     intent.Status,
+					Poison:     poison,
+					ResolverID: resolverID,
 				}
 				local = r.ContainsKey(intent.Key)
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
-					Span:      intent.Span,
-					IntentTxn: intent.Txn,
-					Status:    intent.Status,
-					Poison:    poison,
+					Span:       intent.Span,
+					IntentTxn:  intent.Txn,
+					Status:     intent.Status,
+					Poison:     poison,
+					ResolverID: resolverID,
 				}
 				local = r.ContainsKeyRange(intent.Key, intent.EndKey)
 			}

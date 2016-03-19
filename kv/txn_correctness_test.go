@@ -722,7 +722,6 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 // READ_COMMITTED and in practice requires REPEATABLE_READ to avoid.
 //   R1(A) R2(A) I1(A) C1 I2(A) C2
 func TestTxnDBLostUpdateAnomaly(t *testing.T) {
-	t.Skip("TODO(spencer): see #5404")
 	defer leaktest.AfterTest(t)()
 	txn := "R(A) I(A) C"
 	verify := &verifier{
@@ -773,7 +772,6 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 // Phantom deletes would typically fail with a history such as:
 //   R2(B) DR1(A-C) I2(B) C2 SC1(A-C) C1
 func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
-	t.Skip("TODO(spencer): see #5404")
 	defer leaktest.AfterTest(t)()
 	txn1 := "DR(A-C) SC(A-C) W(D,A+B) C"
 	txn2 := "R(B) I(B) C"

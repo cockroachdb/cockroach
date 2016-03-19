@@ -239,7 +239,7 @@ func (sc *SequenceCache) Put(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.
 // cache in the hopes of retrying to a successful outcome.
 func (sc *SequenceCache) shouldCacheError(pErr *roachpb.Error) bool {
 	switch pErr.GetDetail().(type) {
-	case *roachpb.WriteTooOldError, *roachpb.WriteIntentError, *roachpb.NotLeaderError, *roachpb.RangeKeyMismatchError:
+	case *roachpb.WriteIntentError, *roachpb.NotLeaderError, *roachpb.RangeKeyMismatchError:
 		return false
 	}
 	return true

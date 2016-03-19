@@ -50,21 +50,6 @@ const (
 // seen from the perspective of this coordinator. It records all
 // keys (and key ranges) mutated as part of the transaction for
 // resolution upon transaction commit or abort.
-//
-// Importantly, more than a single coordinator may participate in
-// a transaction's execution. Client connections may be stateless
-// (as through HTTP) or suffer disconnection. In those cases, other
-// nodes may step in as coordinators. Each coordinator will continue
-// to heartbeat the same transaction until the timeoutDuration. The
-// hope is that all coordinators will see the eventual commit or
-// abort and resolve any keys written during their tenure.
-//
-// However, coordinators might fail or the transaction may go on long
-// enough using other coordinators that the original may garbage
-// collect its transaction metadata state. Importantly, the system
-// does not rely on coordinators keeping their state for
-// cleanup. Instead, intents are garbage collected by the ranges
-// periodically on their own.
 type txnMetadata struct {
 	// txn is a copy of the transaction record, updated with each request.
 	txn roachpb.Transaction
@@ -702,15 +687,6 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Update(pErr.GetTxn())
 	}
 
-	// If the request was successful but we're in a transaction which needs to
-	// restart but doesn't know it yet, let it restart now (as opposed to
-	// waiting until EndTransaction).
-	if pErr == nil && newTxn.Isolation == roachpb.SERIALIZABLE &&
-		!newTxn.OrigTimestamp.Equal(newTxn.Timestamp) {
-		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), br.Txn)
-		br = nil
-	}
-
 	switch t := pErr.GetDetail().(type) {
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
@@ -739,10 +715,13 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
-		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Add(0, 1))
+		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Next())
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 	case *roachpb.TransactionRetryError:
-		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
+		// Increase timestamp so on restart, we're guaranteed to be ahead
+		// of timestamp cache entries related to our intents having been
+		// pushed (one cause of a serializable restart).
+		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp.Next())
 	case nil:
 		// Nothing to do here, avoid the default case.
 	default:

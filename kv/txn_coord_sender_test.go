@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -587,8 +588,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					TxnMeta: roachpb.TxnMeta{Timestamp: origTS.Add(10, 10)}, Priority: int32(10)}),
 			expEpoch:  1,
 			expPri:    10,
-			expTS:     origTS.Add(10, 10),
-			expOrigTS: origTS.Add(10, 10),
+			expTS:     origTS.Add(10, 11), // Restart will add 1 logical tick
+			expOrigTS: origTS.Add(10, 11),
 		},
 	}
 
@@ -631,7 +632,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				i, test.expTS, txn.Proto.Timestamp)
 		}
 		if !txn.Proto.OrigTimestamp.Equal(test.expOrigTS) {
-			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
+			t.Errorf("%d: expected orig timestamp to be %s; got %s",
 				i, test.expOrigTS, txn.Proto.OrigTimestamp)
 		}
 		if ns := txn.Proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
@@ -1029,12 +1030,22 @@ func TestTxnRestartCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This put increases the candidate timestamp, which causes an immediate restart.
-	if err := txn.Put(key, value); err == nil {
-		t.Fatalf("unexpected success")
+	// This put will lay down an intent, txn timestamp will increase beyond original.
+	if err := txn.Put(key, value); err != nil {
+		t.Fatal(err)
 	}
+	if !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
+		log.Infof("expected timestamp to increase: %s", txn.Proto)
+	}
+
+	// Commit (should cause restart metric to increase).
+	err := txn.Commit()
+	if _, ok := err.GetDetail().(*roachpb.TransactionRetryError); !ok {
+		log.Infof("expected transaction retry err; got %s", err)
+	}
+
 	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "restart txn", 0, 1, 0, 1)
+	checkTxnMetrics(t, sender, "restart txn", 0, 0, 1, 1)
 }
 
 func TestTxnDurations(t *testing.T) {

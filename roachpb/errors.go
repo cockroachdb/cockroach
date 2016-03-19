@@ -445,7 +445,7 @@ func (e *WriteTooOldError) Error() string {
 
 // message returns an error message.
 func (e *WriteTooOldError) message(_ *Error) string {
-	return fmt.Sprintf("write too old: timestamp %s <= %s", e.Timestamp, e.ExistingTimestamp)
+	return fmt.Sprintf("write at timestamp %s too old; wrote at %s", e.Timestamp, e.ActualTimestamp)
 }
 
 var _ ErrorDetailInterface = &WriteTooOldError{}
