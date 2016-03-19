@@ -94,7 +94,6 @@ func (*gcQueue) acceptsUnsplitRanges() bool {
 	return false
 }
 
-type logFunc func(fmt string, args ...interface{})
 type pushFunc func(roachpb.Timestamp, *roachpb.Transaction, roachpb.PushTxnType, *sync.WaitGroup)
 type resolveFunc func([]roachpb.Intent, bool, bool) *roachpb.Error
 
