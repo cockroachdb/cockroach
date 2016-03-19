@@ -1111,27 +1111,27 @@ class WriteTooOldError : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* release_timestamp();
   void set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp);
 
-  // optional .cockroach.roachpb.Timestamp existing_timestamp = 2;
-  bool has_existing_timestamp() const;
-  void clear_existing_timestamp();
-  static const int kExistingTimestampFieldNumber = 2;
-  const ::cockroach::roachpb::Timestamp& existing_timestamp() const;
-  ::cockroach::roachpb::Timestamp* mutable_existing_timestamp();
-  ::cockroach::roachpb::Timestamp* release_existing_timestamp();
-  void set_allocated_existing_timestamp(::cockroach::roachpb::Timestamp* existing_timestamp);
+  // optional .cockroach.roachpb.Timestamp actual_timestamp = 2;
+  bool has_actual_timestamp() const;
+  void clear_actual_timestamp();
+  static const int kActualTimestampFieldNumber = 2;
+  const ::cockroach::roachpb::Timestamp& actual_timestamp() const;
+  ::cockroach::roachpb::Timestamp* mutable_actual_timestamp();
+  ::cockroach::roachpb::Timestamp* release_actual_timestamp();
+  void set_allocated_actual_timestamp(::cockroach::roachpb::Timestamp* actual_timestamp);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.WriteTooOldError)
  private:
   inline void set_has_timestamp();
   inline void clear_has_timestamp();
-  inline void set_has_existing_timestamp();
-  inline void clear_has_existing_timestamp();
+  inline void set_has_actual_timestamp();
+  inline void clear_has_actual_timestamp();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Timestamp* timestamp_;
-  ::cockroach::roachpb::Timestamp* existing_timestamp_;
+  ::cockroach::roachpb::Timestamp* actual_timestamp_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -3262,47 +3262,47 @@ inline void WriteTooOldError::set_allocated_timestamp(::cockroach::roachpb::Time
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteTooOldError.timestamp)
 }
 
-// optional .cockroach.roachpb.Timestamp existing_timestamp = 2;
-inline bool WriteTooOldError::has_existing_timestamp() const {
+// optional .cockroach.roachpb.Timestamp actual_timestamp = 2;
+inline bool WriteTooOldError::has_actual_timestamp() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void WriteTooOldError::set_has_existing_timestamp() {
+inline void WriteTooOldError::set_has_actual_timestamp() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void WriteTooOldError::clear_has_existing_timestamp() {
+inline void WriteTooOldError::clear_has_actual_timestamp() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void WriteTooOldError::clear_existing_timestamp() {
-  if (existing_timestamp_ != NULL) existing_timestamp_->::cockroach::roachpb::Timestamp::Clear();
-  clear_has_existing_timestamp();
+inline void WriteTooOldError::clear_actual_timestamp() {
+  if (actual_timestamp_ != NULL) actual_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_actual_timestamp();
 }
-inline const ::cockroach::roachpb::Timestamp& WriteTooOldError::existing_timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.WriteTooOldError.existing_timestamp)
-  return existing_timestamp_ != NULL ? *existing_timestamp_ : *default_instance_->existing_timestamp_;
+inline const ::cockroach::roachpb::Timestamp& WriteTooOldError::actual_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.WriteTooOldError.actual_timestamp)
+  return actual_timestamp_ != NULL ? *actual_timestamp_ : *default_instance_->actual_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* WriteTooOldError::mutable_existing_timestamp() {
-  set_has_existing_timestamp();
-  if (existing_timestamp_ == NULL) {
-    existing_timestamp_ = new ::cockroach::roachpb::Timestamp;
+inline ::cockroach::roachpb::Timestamp* WriteTooOldError::mutable_actual_timestamp() {
+  set_has_actual_timestamp();
+  if (actual_timestamp_ == NULL) {
+    actual_timestamp_ = new ::cockroach::roachpb::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.WriteTooOldError.existing_timestamp)
-  return existing_timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.WriteTooOldError.actual_timestamp)
+  return actual_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* WriteTooOldError::release_existing_timestamp() {
-  clear_has_existing_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = existing_timestamp_;
-  existing_timestamp_ = NULL;
+inline ::cockroach::roachpb::Timestamp* WriteTooOldError::release_actual_timestamp() {
+  clear_has_actual_timestamp();
+  ::cockroach::roachpb::Timestamp* temp = actual_timestamp_;
+  actual_timestamp_ = NULL;
   return temp;
 }
-inline void WriteTooOldError::set_allocated_existing_timestamp(::cockroach::roachpb::Timestamp* existing_timestamp) {
-  delete existing_timestamp_;
-  existing_timestamp_ = existing_timestamp;
-  if (existing_timestamp) {
-    set_has_existing_timestamp();
+inline void WriteTooOldError::set_allocated_actual_timestamp(::cockroach::roachpb::Timestamp* actual_timestamp) {
+  delete actual_timestamp_;
+  actual_timestamp_ = actual_timestamp;
+  if (actual_timestamp) {
+    set_has_actual_timestamp();
   } else {
-    clear_has_existing_timestamp();
+    clear_has_actual_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteTooOldError.existing_timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteTooOldError.actual_timestamp)
 }
 
 // -------------------------------------------------------------------

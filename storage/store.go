@@ -71,7 +71,7 @@ const (
 
 var (
 	// defaultRangeRetryOptions are default retry options for retrying commands
-	// sent to the store's ranges, for WriteTooOld and WriteIntent errors.
+	// sent to the store's ranges, for WriteIntent errors.
 	defaultRangeRetryOptions = retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     5 * time.Second,
@@ -1507,30 +1507,18 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	}
 
 	if ba.Txn == nil {
-		// When not transactional, allow empty timestamp and simply use local
-		// clock.
+		// When not transactional, allow empty timestamp and simply use
+		// local clock.
 		if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 			ba.Timestamp.Forward(s.Clock().Now())
 		}
-
-		if ba.IsWrite() {
-			// If a batch is non-transactional, self-overlapping writes at the
-			// same timestamp would run into a WriteTooOldError. Pretend that
-			// some more logical clock ticks happened; when executing, we'll
-			// spread out the requests over those ticks.
-			// We're not using non-transactional requests for much, so this is
-			// an acceptable solution for the time being.
-			ba.Timestamp.Forward(ba.Timestamp.Add(0, int32(len(ba.Requests))-1))
-		}
 	} else if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		return nil, roachpb.NewErrorf("transactional request must not set batch timestamp")
-	} else if ba.IsReadOnly() {
-		// OrigTimestamp is the read timestamp of the transaction throughout
-		// its lifetime.
-		ba.Timestamp = ba.Txn.OrigTimestamp
 	} else {
-		// Writes happen at the provisional commit timestamp.
-		ba.Timestamp = ba.Txn.Timestamp
+		// Always use the original timestamp for reads and writes, even
+		// though some intents may be written at higher timestamps in the
+		// event of a WriteTooOldError.
+		ba.Timestamp = ba.Txn.OrigTimestamp
 	}
 
 	if s.Clock().MaxOffset() > 0 {
@@ -1570,6 +1558,13 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 					br.Txn = &roachpb.Transaction{}
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+				// Update our clock with the outgoing response txn timestamp.
+				s.ctx.Clock.Update(br.Txn.Timestamp)
+			}
+		} else {
+			if pErr == nil {
+				// Update our clock with the outgoing response timestamp.
+				s.ctx.Clock.Update(br.Timestamp)
 			}
 		}
 
@@ -1658,15 +1653,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		}
 
 		switch t := pErr.GetDetail().(type) {
-		case *roachpb.WriteTooOldError:
-			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
-			// Update request timestamp and retry immediately.
-			ba.Timestamp = t.ExistingTimestamp.Next()
-			r.Reset()
-			if log.V(1) {
-				log.Warning(pErr)
-			}
-			continue
 		case *roachpb.WriteIntentError:
 			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
@@ -1677,13 +1663,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 					log.Warning(pErr)
 				}
 				continue
-			}
-
-			// Otherwise, update timestamp on read/write and backoff / retry.
-			for _, intent := range t.Intents {
-				if ba.IsWrite() && ba.Timestamp.Less(intent.Txn.Timestamp) {
-					ba.Timestamp = intent.Txn.Timestamp.Next()
-				}
 			}
 			if log.V(1) {
 				log.Warning(pErr)
