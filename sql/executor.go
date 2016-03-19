@@ -479,11 +479,6 @@ func runTxnAttempt(
 	txnState.commitSeen = false
 
 	*results = nil
-	// (re)init the schemaChangers.
-	// TODO(andrei): figure out how to persist schema changers across
-	// different batches of statements in the same txn.
-	txnState.schemaChangers = schemaChangerCollection{}
-	planMaker.schemaChangeCallback = txnState.schemaChangers.queueSchemaChanger
 
 	planMaker.setTxn(txnState.txn)
 	var pErr *roachpb.Error
