@@ -1000,8 +1000,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	if txnState.tr != nil {
-		// TODO(pmattis): Should "sensitive" be true here?
-		txnState.tr.LazyLog(stmt, false)
+		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
 	result, pErr := e.execStmt(stmt, planMaker, timeutil.Now(),
 		implicitTxn /* autoCommit */)

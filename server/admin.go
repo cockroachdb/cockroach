@@ -54,13 +54,16 @@ import (
 )
 
 func init() {
-	// Tweak the authentication logic for the tracing endpoint.
-	// By default it's open for localhost only, but with Docker
-	// we want to get there from anywhere.
+	// Tweak the authentication logic for the tracing endpoint. By default it's
+	// open for localhost only, but with Docker we want to get there from
+	// anywhere. We maintain the default behavior of only allowing access to
+	// sensitive logs from localhost.
+	//
 	// TODO(mberhault): properly secure this once we require client certs.
-	trace.AuthRequest = func(_ *http.Request) (bool, bool) {
-		// Open-door policy except traces marked "sensitive".
-		return true, false
+	origAuthRequest := trace.AuthRequest
+	trace.AuthRequest = func(req *http.Request) (bool, bool) {
+		_, sensitive := origAuthRequest(req)
+		return true, sensitive
 	}
 }
 
