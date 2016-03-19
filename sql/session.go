@@ -173,6 +173,8 @@ func (ts *txnState) reset(e *Executor, s *Session) {
 	ts.txn = client.NewTxn(*e.ctx.DB)
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.tr = s.Trace
+	// Discard the old schemaChangers, if any.
+	ts.schemaChangers = schemaChangerCollection{}
 }
 
 func (ts *txnState) willBeRetried() bool {
