@@ -13,18 +13,20 @@
 // permissions and limitations under the License.
 //
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
 import (
 	"fmt"
-	"sync"
+	"net"
 	"time"
 
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -47,20 +49,8 @@ type SessionOffset struct {
 func (*SessionLocation) isSessionTimezone() {}
 func (*SessionOffset) isSessionTimezone()   {}
 
-// Release through releasePlanner().
-var plannerPool = sync.Pool{
-	New: func() interface{} {
-		return makePlanner()
-	},
-}
-
-func releasePlanner(p *planner) {
-	// Ensure future users don't clobber the session just used.
-	p.session = nil
-	plannerPool.Put(p)
-}
-
 // Session contains the state of a SQL client connection.
+// Create instances using NewSession().
 type Session struct {
 	Database string
 	Syntax   int32
@@ -68,9 +58,50 @@ type Session struct {
 	// Info about the open transaction (if any).
 	TxnState txnState
 
+	planner planner
+
 	Timezone              isSessionTimezone
 	DefaultIsolationLevel roachpb.IsolationType
 	Trace                 trace.Trace
+}
+
+// SessionArgs contains arguments for creating a new Session with NewSession().
+type SessionArgs struct {
+	Database string
+	User     string
+}
+
+// NewSession creates and initializes new Session object.
+// remote can be nil.
+func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
+	s := Session{}
+	s.Database = args.Database
+	cfg, cache := e.getSystemConfig()
+	s.planner = planner{
+		user: args.User,
+		// evalCtx is set in the Executor, for each Prepare or Execute.
+		evalCtx:       parser.EvalContext{},
+		leaseMgr:      e.ctx.LeaseManager,
+		systemConfig:  cfg,
+		databaseCache: cache,
+		session:       &s,
+		execCtx:       &e.ctx,
+	}
+	remoteStr := ""
+	if remote != nil {
+		remoteStr = remote.String()
+	}
+	s.Trace = trace.New("sql."+args.User, remoteStr)
+	s.Trace.SetMaxEvents(100)
+	return &s
+}
+
+// Finish releases resources held by the Session.
+func (s *Session) Finish() {
+	if s.Trace != nil {
+		s.Trace.Finish()
+		s.Trace = nil
+	}
 }
 
 func (s *Session) getLocation() (*time.Location, error) {

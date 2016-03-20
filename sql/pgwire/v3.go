@@ -24,8 +24,6 @@ import (
 	"reflect"
 	"strconv"
 
-	"golang.org/x/net/trace"
-
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -103,7 +101,7 @@ type v3Conn struct {
 	readBuf  readBuffer
 	writeBuf writeBuffer
 	tagBuf   [64]byte
-	session  sql.Session
+	session  *sql.Session
 
 	preparedStatements map[string]preparedStatement
 	preparedPortals    map[string]preparedPortal
@@ -120,7 +118,9 @@ type opts struct {
 	user string
 }
 
-func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v3Conn {
+func makeV3Conn(
+	conn net.Conn, executor *sql.Executor,
+	metrics *serverMetrics, sessionArgs sql.SessionArgs) v3Conn {
 	return v3Conn{
 		conn:               conn,
 		rd:                 bufio.NewReader(conn),
@@ -130,6 +130,7 @@ func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v
 		preparedStatements: make(map[string]preparedStatement),
 		preparedPortals:    make(map[string]preparedPortal),
 		metrics:            metrics,
+		session:            sql.NewSession(sessionArgs, executor, conn.RemoteAddr()),
 	}
 }
 
@@ -139,41 +140,36 @@ func (c *v3Conn) finish() {
 		log.Error(err)
 	}
 	_ = c.conn.Close()
-	if c.session.Trace != nil {
-		c.session.Trace.Finish()
-	}
+	c.session.Finish()
 }
 
-func (c *v3Conn) parseOptions(data []byte) error {
-	defer func() {
-		c.session.Trace = trace.New("sql."+c.opts.user, c.conn.RemoteAddr().String())
-		c.session.Trace.SetMaxEvents(100)
-	}()
-
+func parseOptions(data []byte) (sql.SessionArgs, error) {
+	args := sql.SessionArgs{}
 	buf := readBuffer{msg: data}
 	for {
 		key, err := buf.getString()
 		if err != nil {
-			return util.Errorf("error reading option key: %s", err)
+			return sql.SessionArgs{}, util.Errorf("error reading option key: %s", err)
 		}
 		if len(key) == 0 {
-			return nil
+			break
 		}
 		value, err := buf.getString()
 		if err != nil {
-			return util.Errorf("error reading option value: %s", err)
+			return sql.SessionArgs{}, util.Errorf("error reading option value: %s", err)
 		}
 		switch key {
 		case "database":
-			c.session.Database = value
+			args.Database = value
 		case "user":
-			c.opts.user = value
+			args.User = value
 		default:
 			if log.V(1) {
 				log.Warningf("unrecognized configuration parameter %q", key)
 			}
 		}
 	}
+	return args, nil
 }
 
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
@@ -350,7 +346,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	cols, pErr := c.executor.Prepare(c.opts.user, query, &c.session, args)
+	cols, pErr := c.executor.Prepare(query, c.session, args)
 	if pErr != nil {
 		return c.sendError(pErr.String())
 	}
@@ -590,7 +586,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(c.opts.user, &c.session, stmts, params)
+	results := c.executor.ExecuteStatements(c.session, stmts, params)
 
 	tracing.AnnotateTrace()
 	if results.Empty {
