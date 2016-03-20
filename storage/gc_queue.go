@@ -58,6 +58,10 @@ const (
 	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
 	// or intent byte age larger than the threshold queues the replica for GC.
 	considerThreshold = 10
+
+	// gcTaskLimit is the maximum number of concurrent goroutines
+	// that will be created by GC.
+	gcTaskLimit = 25
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -94,7 +98,7 @@ func (*gcQueue) acceptsUnsplitRanges() bool {
 	return false
 }
 
-type pushFunc func(roachpb.Timestamp, *roachpb.Transaction, roachpb.PushTxnType, *sync.WaitGroup)
+type pushFunc func(roachpb.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
 type resolveFunc func([]roachpb.Intent, bool, bool) *roachpb.Error
 
 // shouldQueue determines whether a replica should be queued for garbage
@@ -242,20 +246,29 @@ func processSequenceCache(snap engine.Engine, rangeID roachpb.RangeID, now, cuto
 	infoMu.Unlock()
 
 	var wg sync.WaitGroup
-	// TODO(tschottdorf): use stopper.LimitedAsyncTask.
+	sem := make(chan struct{}, gcTaskLimit)
 	wg.Add(len(txns))
 	for _, txn := range txns {
 		if txn.Status != roachpb.PENDING {
 			wg.Done()
 			continue
 		}
+		// Avoid passing loop variable into closure.
+		txnCopy := txn
 		// Check if the Txn is still alive. If this indicates that the Txn is
 		// aborted and old enough to guarantee that any running coordinator
 		// would have realized that the transaction wasn't running by means
 		// of a heartbeat, then we're free to remove the sequence cache entry.
 		// In the most likely case, there isn't even an entry (which will
 		// be apparent by a zero timestamp and nil last heartbeat).
-		go pushTxn(now, txn, roachpb.PUSH_TOUCH, &wg)
+		sem <- struct{}{}
+		go func() {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			pushTxn(now, txnCopy, roachpb.PUSH_TOUCH)
+		}()
 	}
 	wg.Wait()
 
@@ -314,8 +327,8 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	}
 
 	gcKeys, info, err := RunGC(desc, snap, now, zone.GC,
-		func(now roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType, wg *sync.WaitGroup) {
-			pushTxn(repl, now, txn, typ, wg)
+		func(now roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
+			pushTxn(repl, now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) *roachpb.Error {
 			return repl.store.intentResolver.resolveIntents(repl.context(), repl, intents, poison, wait)
@@ -414,11 +427,11 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 			return realResolveIntents(intents, poison, wait)
 		}
 		realPushTxn := pushTxn
-		pushTxn = func(ts roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType, wg *sync.WaitGroup) {
+		pushTxn = func(ts roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			infoMu.Lock()
 			infoMu.PushTxn++
 			infoMu.Unlock()
-			realPushTxn(ts, txn, typ, wg)
+			realPushTxn(ts, txn, typ)
 		}
 	}
 
@@ -525,12 +538,22 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 
 	// Process push transactions in parallel.
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, gcTaskLimit)
 	for _, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
 			continue
 		}
 		wg.Add(1)
-		go pushTxn(now, txn, roachpb.PUSH_ABORT, &wg)
+		sem <- struct{}{}
+		// Avoid passing loop variable into closure.
+		txnCopy := txn
+		go func() {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			pushTxn(now, txnCopy, roachpb.PUSH_ABORT)
+		}()
 	}
 	wg.Wait()
 
@@ -569,8 +592,7 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
 func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
-	typ roachpb.PushTxnType, wg *sync.WaitGroup) {
-	defer wg.Done() // signal wait group always on completion
+	typ roachpb.PushTxnType) {
 
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
