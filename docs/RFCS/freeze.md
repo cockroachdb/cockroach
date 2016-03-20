@@ -2,7 +2,7 @@
 - Status: draft
 - Start Date: 2016-02-18
 - Authors: Ben Darnell
-- RFC PR:
+- RFC PR: #4499
 - Cockroach Issue:
 
 
@@ -28,7 +28,7 @@ The freeze will proceed in several steps.
 Anything goes; changes to on-disk formats do not require any kind of
 migration path.
 
-### Stage 1: Guaranteed upgrade path
+### Stage 1: Guaranteed upgrade path (Mar 24, 2016)
 
 In stage 1, we require backwards-compatibility with data written by
 any previous stage 1 build. It should always be possible to upgrade by
@@ -37,11 +37,17 @@ It's OK at this stage if old and new versions cannot be run
 concurrently, or if the migration process takes some time (e.g.
 rewriting all data before the node can start up).
 
-### Stage 2: Online upgrades
+It is acceptable at this stage if the process is somewhat manual (e.g.
+stop all the nodes, run `cockroach migrate` on each one, then restart
+them). However, it is preferable if any migrations are done
+automatically when a node starts up with an old data directory.
+
+### Stage 2: Online upgrades (Date TBD)
 
 Beginning in stage 2, we require that any upgrade be able to be
 performed without taking the cluster offline: old and new nodes must
-be able to coexist.
+be able to coexist. The exact date for this stage is yet to be
+determined, but will be during the beta period and before 1.0.
 
 ## Affected code
 
@@ -72,9 +78,10 @@ major changes.
   they understand.
 * The network protocol (via GRPC header). Servers and clients will
   treat a higher version number than they understand as an error.
-* Gossip (perhaps via a new node attribute). The rebalance/allocation
-  system will not choose to place a replica on a node with a different
-  version number.
+* Gossip (perhaps via a new node attribute, or field in the
+  `NodeDescriptor` proto). The rebalance/allocation system will not
+  choose to place a replica on a node with a different version number.
+* The SQL `TableDescriptor`
 
 # Drawbacks
 
@@ -86,5 +93,10 @@ None.
 
 # Unresolved questions
 
-* When exactly do we begin the freeze?
-* Is there anything else worth doing at this point to facilitate future migrations?
+* When exactly do we begin the stage 2 freeze?
+* Is there anything else worth doing at this point to facilitate
+  future migrations?
+* What about downgrades? It's scary to upgrade when there is no going
+  back. However, supporting downgrades adds even more complexity and I
+  don't think it's worth making this commitment during beta (maybe for
+  1.0, though).
