@@ -33,8 +33,6 @@ import (
 const (
 	defaultInsecure = false
 	defaultUser     = security.RootUser
-	rpcScheme       = "rpc"
-	rpcsScheme      = "rpcs"
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
@@ -116,14 +114,6 @@ type Context struct {
 func (ctx *Context) InitDefaults() {
 	ctx.Insecure = defaultInsecure
 	ctx.User = defaultUser
-}
-
-// RPCRequestScheme returns "rpc" or "rpcs" based on the value of Insecure.
-func (ctx *Context) RPCRequestScheme() string {
-	if ctx.Insecure {
-		return rpcScheme
-	}
-	return rpcsScheme
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.

@@ -18,8 +18,6 @@ package security
 
 import (
 	"crypto/tls"
-	"log"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/gogo/protobuf/proto"
@@ -31,29 +29,6 @@ const (
 	// RootUser is the default cluster administrator.
 	RootUser = "root"
 )
-
-// LogTLSState logs information about TLS state in the form:
-// "<method>: peer certs: [<Subject.CommonName>...], chain: [[<CommonName>...][..]]"
-func LogTLSState(method string, tlsState *tls.ConnectionState) {
-	if tlsState == nil {
-		log.Printf("%s: no TLS\n", method)
-		return
-	}
-
-	peerCerts := []string{}
-	verifiedChain := []string{}
-	for _, cert := range tlsState.PeerCertificates {
-		peerCerts = append(peerCerts, cert.Subject.CommonName)
-	}
-	for _, chain := range tlsState.VerifiedChains {
-		subjects := []string{}
-		for _, cert := range chain {
-			subjects = append(subjects, cert.Subject.CommonName)
-		}
-		verifiedChain = append(verifiedChain, strings.Join(subjects, ","))
-	}
-	log.Printf("%s: peer certs: %v, chain: %v\n", method, peerCerts, verifiedChain)
-}
 
 // GetCertificateUser extract the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {

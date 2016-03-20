@@ -185,6 +185,11 @@ func (s *outputStats) Bytes() int64 {
 	return atomic.LoadInt64(&s.bytes)
 }
 
+// TODO(pmattis): outputStats.{Lines,Bytes} are neither used or tested. Silence
+// unused warnings.
+var _ = (*outputStats).Lines
+var _ = (*outputStats).Bytes
+
 // Stats tracks the number of lines of output and number of bytes
 // per severity level. Values must be read with atomic.LoadInt64.
 var Stats struct {

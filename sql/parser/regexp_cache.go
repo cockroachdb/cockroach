@@ -104,16 +104,6 @@ func (rc *RegexpCache) update(key regexpCacheKey, re *regexp.Regexp) {
 	}
 }
 
-// Clear clears all regular expressions from the cache.
-func (rc *RegexpCache) Clear() {
-	if rc == nil {
-		return
-	}
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	rc.cache.Clear()
-}
-
 // Len returns the number of compiled regular expressions in the cache.
 func (rc *RegexpCache) Len() int {
 	if rc == nil {

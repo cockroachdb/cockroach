@@ -37,7 +37,6 @@ import (
 type Farmer struct {
 	Output         io.Writer
 	Cwd, LogDir    string
-	Args           []string
 	KeyName        string
 	Stores         string
 	nodes, writers []string

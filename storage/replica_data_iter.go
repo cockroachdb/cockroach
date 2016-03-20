@@ -134,3 +134,10 @@ func (ri *replicaDataIterator) SeekReverse(key []byte) {
 func (ri *replicaDataIterator) Prev() {
 	panic("cannot reverse scan replicaDataIterator")
 }
+
+// replicaDataIterator.{SeekReverse,Prev} are not intended for use and are not
+// currently referenced in code or tests. They existed to prohibit accidentally
+// calling the same methods on replicaDataIterator.Iterator. Silence unused
+// warnings.
+var _ = (*replicaDataIterator).SeekReverse
+var _ = (*replicaDataIterator).Prev

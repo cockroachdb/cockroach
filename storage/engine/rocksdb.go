@@ -274,30 +274,6 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
-// CompactRange compacts the specified key range. Specifying nil for
-// the start key starts the compaction from the start of the database.
-// Similarly, specifying nil for the end key will compact through the
-// last key. Note that the use of the word "Range" here does not refer
-// to Cockroach ranges, just to a generalized key range.
-func (r *RocksDB) CompactRange(start, end MVCCKey) {
-	var (
-		s, e       C.DBKey
-		sPtr, ePtr *C.DBKey
-	)
-	if start.Key != nil {
-		sPtr = &s
-		s = goToCKey(start)
-	}
-	if end.Key != nil {
-		ePtr = &e
-		e = goToCKey(end)
-	}
-	err := statusToError(C.DBCompactRange(r.rdb, sPtr, ePtr))
-	if err != nil {
-		log.Warningf("compact range: %s", err)
-	}
-}
-
 // Destroy destroys the underlying filesystem data associated with the database.
 func (r *RocksDB) Destroy() error {
 	return statusToError(C.DBDestroy(goToCSlice([]byte(r.dir))))

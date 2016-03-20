@@ -162,9 +162,6 @@ func (node *RangeCond) String() string {
 	return fmt.Sprintf("%s BETWEEN %s AND %s", node.Left, node.From, node.To)
 }
 
-// IsOp represents an IS expression operator.
-type IsOp int
-
 // IsOfTypeExpr represents an IS {,NOT} OF (type_list) expression.
 type IsOfTypeExpr struct {
 	Not   bool

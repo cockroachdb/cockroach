@@ -128,18 +128,6 @@ func (rs *replicaScanner) RemoveReplica(repl *Replica) {
 	rs.removed <- repl
 }
 
-// WaitForScanCompletion waits until the end of the next scan and returns the
-// total number of scans completed so far.
-func (rs *replicaScanner) WaitForScanCompletion() int64 {
-	rs.completedScan.L.Lock()
-	defer rs.completedScan.L.Unlock()
-	initalValue := rs.count
-	for rs.count == initalValue {
-		rs.completedScan.Wait()
-	}
-	return rs.count
-}
-
 // paceInterval returns a duration between iterations to allow us to pace
 // the scan.
 func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {

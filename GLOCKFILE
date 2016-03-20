@@ -77,4 +77,4 @@ golang.org/x/tools fcde77432eb91f1389e8b5be6a4d018536ceac02
 google.golang.org/grpc d3ddb4469d5a1b949fc7a7da7c1d6a0d1b6de994
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
-honnef.co/go/unused 4dba7690cbd5a207a5a2260063d598f42038c525
+honnef.co/go/unused 16cf7f968ef7ba0cabb3f004ad0679d25077d1a1

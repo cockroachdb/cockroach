@@ -295,6 +295,10 @@ func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, 
 	return txn.scan(begin, end, maxRows, true)
 }
 
+// TODO(pmattis): Txn.ReverseScan is neither used or tested. Silence unused
+// warning.
+var _ = (*Txn)(nil).ReverseScan
+
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.

@@ -114,11 +114,6 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	}, nil
 }
 
-// LoadInsecureTLSConfig creates a TLSConfig that disables TLS.
-func LoadInsecureTLSConfig() *tls.Config {
-	return nil
-}
-
 // LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
 // The following paths must be passed:
 // - sslCA: path to the CA certificate

@@ -41,7 +41,7 @@ type Tester interface {
 type panicTesterImpl struct{}
 
 // PanicTester is a Tester which panics.
-var PanicTester Tester
+var PanicTester = panicTesterImpl{}
 
 func (panicTesterImpl) Failed() bool { return false }
 
@@ -49,12 +49,16 @@ func (panicTesterImpl) Error(args ...interface{}) {
 	panic(fmt.Sprint(args...))
 }
 
+func (panicTesterImpl) Errorf(format string, args ...interface{}) {
+	panic(fmt.Sprint(args...))
+}
+
 func (pt panicTesterImpl) Fatal(args ...interface{}) {
 	pt.Error(args...)
 }
 
-func (panicTesterImpl) Fatalf(format string, args ...interface{}) {
-	panic(fmt.Sprintf(format, args...))
+func (pt panicTesterImpl) Fatalf(format string, args ...interface{}) {
+	pt.Errorf(format, args...)
 }
 
 // CreateTempDir creates a temporary directory and returns its path.
@@ -86,31 +90,9 @@ func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) strin
 	return tempPath
 }
 
-// CreateNTempDirs creates N temporary directories and returns a slice
-// of paths.
-// You should usually call defer CleanupDirs(dirs) right after.
-func CreateNTempDirs(t Tester, prefix string, n int) []string {
-	dirs := make([]string, n)
-	var err error
-	for i := 0; i < n; i++ {
-		dirs[i], err = ioutil.TempDir("", prefix)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	return dirs
-}
-
 // CleanupDir removes the passed-in directory and all contents. Errors are ignored.
 func CleanupDir(dir string) {
 	_ = os.RemoveAll(dir)
-}
-
-// CleanupDirs removes all passed-in directories and their contents. Errors are ignored.
-func CleanupDirs(dirs []string) {
-	for _, dir := range dirs {
-		_ = os.RemoveAll(dir)
-	}
 }
 
 const defaultSucceedsSoonDuration = 15 * time.Second
@@ -150,15 +132,6 @@ func RetryForDuration(duration time.Duration, fn func() error) error {
 		time.Sleep(wait)
 	}
 	return lastErr
-}
-
-// Panics calls the supplied function and returns true if and only if it panics.
-func Panics(f func()) (panics bool) {
-	defer func() {
-		panics = recover() != nil
-	}()
-	f()
-	return
 }
 
 // NoZeroField returns nil if none of the fields of the struct underlying the

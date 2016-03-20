@@ -298,10 +298,6 @@ func (rt *rangeTree) makeKey(r Range) rangeKey {
 	}
 }
 
-func (rk rangeKey) Contains(lk rangeKey) bool {
-	return contains(rk.r, lk.r)
-}
-
 // Range implements Interface.
 func (rk rangeKey) Range() Range {
 	return rk.r

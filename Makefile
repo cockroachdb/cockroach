@@ -239,7 +239,7 @@ check:
 
 .PHONY: unused
 unused:
-	-unused ./... | grep -v -E '(\.pb\.go:|/C:|_string.go:|parser/(yacc|sql.y)|_cgo)'
+	-unused -exported ./... | grep -v -E '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex)'
 
 .PHONY: clean
 clean:
