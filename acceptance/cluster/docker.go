@@ -173,6 +173,10 @@ func (c *Container) Pause() error {
 	return c.cluster.client.ContainerPause(context.Background(), c.id)
 }
 
+// TODO(pmattis): Container.Pause is neither used or tested. Silence unused
+// warning.
+var _ = (*Container).Pause
+
 // Unpause resumes a paused container.
 func (c *Container) Unpause() error {
 	return c.cluster.client.ContainerUnpause(context.Background(), c.id)
@@ -202,6 +206,10 @@ func (c *Container) Stop(timeoutSeconds int) error {
 	c.cluster.expectEvent(c, eventDie)
 	return nil
 }
+
+// TODO(pmattis): Container.Stop is neither used or tested. Silence unused
+// warning.
+var _ = (*Container).Stop
 
 // Wait waits for a running container to exit.
 func (c *Container) Wait() error {

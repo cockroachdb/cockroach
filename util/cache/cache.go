@@ -406,12 +406,6 @@ func (ik IntervalKey) String() string {
 	return fmt.Sprintf("%d: %q-%q", ik.id, ik.Start, ik.End)
 }
 
-// Contains returns true if the specified IntervalKey is contained
-// within this IntervalKey.
-func (ik IntervalKey) Contains(lk IntervalKey) bool {
-	return lk.Start.Compare(ik.Start) >= 0 && ik.End.Compare(lk.End) >= 0
-}
-
 // NewIntervalCache creates a new Cache backed by an interval tree.
 // See NewCache() for details on parameters.
 func NewIntervalCache(config Config) *IntervalCache {

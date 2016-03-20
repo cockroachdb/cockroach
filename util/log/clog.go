@@ -175,16 +175,6 @@ type outputStats struct {
 	bytes int64
 }
 
-// Lines returns the number of lines written.
-func (s *outputStats) Lines() int64 {
-	return atomic.LoadInt64(&s.lines)
-}
-
-// Bytes returns the number of bytes written.
-func (s *outputStats) Bytes() int64 {
-	return atomic.LoadInt64(&s.bytes)
-}
-
 // Stats tracks the number of lines of output and number of bytes
 // per severity level. Values must be read with atomic.LoadInt64.
 var Stats struct {

@@ -38,6 +38,9 @@ func (u UUID) Bytes() error {
 	return errors.New("intentionally shadowed; use GetBytes()")
 }
 
+// Silence unused warning for UUID.Bytes.
+var _ = (UUID).Bytes
+
 // GetBytes returns the UUID as a byte slice.
 func (u UUID) GetBytes() []byte {
 	return u.UUID.Bytes()

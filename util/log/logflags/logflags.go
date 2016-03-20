@@ -48,10 +48,6 @@ func (ab *atomicBool) Set(s string) error {
 	return nil
 }
 
-func (ab *atomicBool) Get() string {
-	return ab.String()
-}
-
 var _ flag.Value = &atomicBool{}
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is

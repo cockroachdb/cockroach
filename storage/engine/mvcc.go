@@ -140,13 +140,6 @@ func (ms MVCCStats) GCBytes() int64 {
 	return ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 }
 
-// Delta returns the difference between two MVCCStats structures.
-func (ms MVCCStats) Delta(oms MVCCStats) MVCCStats {
-	result := ms // for clarity
-	result.Subtract(oms)
-	return result
-}
-
 // AgeTo encapsulates the complexity of computing the increment in age
 // quantities contained in MVCCStats. Two MVCCStats structs only add and
 // subtract meaningfully if their LastUpdateNanos matches, so aging them to

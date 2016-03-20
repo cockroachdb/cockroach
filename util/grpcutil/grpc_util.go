@@ -17,7 +17,6 @@
 package grpcutil
 
 import (
-	"net/http"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -28,14 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 )
-
-// IsGRPCRequest returns true if r came from a grpc client.
-//
-// Its logic is a partial recreation of gRPC's internal checks, see
-// https://github.com/grpc/grpc-go/blob/01de3de/transport/handler_server.go#L61:L69
-func IsGRPCRequest(r *http.Request) bool {
-	return r.ProtoMajor == 2 && strings.Contains(r.Header.Get(util.ContentTypeHeader), "application/grpc")
-}
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
 func IsClosedConnection(err error) bool {

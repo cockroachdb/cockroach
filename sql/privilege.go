@@ -24,21 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
-// Sort methods for the PrivilegeDescriptor.Users list.
-type userPrivilegeList []*UserPrivileges
-
-func (upl userPrivilegeList) Len() int {
-	return len(upl)
-}
-
-func (upl userPrivilegeList) Swap(i, j int) {
-	upl[i], upl[j] = upl[j], upl[i]
-}
-
-func (upl userPrivilegeList) Less(i, j int) bool {
-	return upl[i].User < upl[j].User
-}
-
 func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
 	return bits&priv.Mask() != 0
 }

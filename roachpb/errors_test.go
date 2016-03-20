@@ -26,8 +26,6 @@ type testError struct{}
 func (t *testError) Error() string              { return "test" }
 func (t *testError) message(pErr *Error) string { return "test" }
 func (t *testError) CanRetry() bool             { return true }
-func (t *testError) ErrorIndex() (int32, bool)  { return 99, true }
-func (t *testError) SetErrorIndex(_ int32)      { panic("unsupported") }
 
 // TestNewError verifies that a test error that
 // implements retryable or indexed is converted properly into a generic error.

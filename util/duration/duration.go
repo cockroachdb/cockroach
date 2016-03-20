@@ -113,12 +113,6 @@ func Add(t time.Time, d Duration) time.Time {
 	return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.Nanos) * time.Nanosecond)
 }
 
-// AddTime returns the time t+d.
-func (d Duration) AddTime(t time.Time) time.Time {
-	// TODO(dan): Overflow handling.
-	return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.Nanos) * time.Nanosecond)
-}
-
 // Add returns a Duration representing a time length of d+x.
 func (d Duration) Add(x Duration) Duration {
 	return Duration{d.Months + x.Months, d.Days + x.Days, d.Nanos + x.Nanos}

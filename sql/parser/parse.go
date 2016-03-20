@@ -89,17 +89,6 @@ func (p *Parser) NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
 	return expr, p.normalizeVisitor.err
 }
 
-// TypeCheckAndNormalizeExpr is a combination of TypeCheck() and
-// NormalizeExpr(). It returns an error if either of TypeCheck() or
-// NormalizeExpr() return one, and otherwise returns the Expr returned by
-// NormalizeExpr().
-func (p *Parser) TypeCheckAndNormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
-	if _, err := expr.TypeCheck(ctx.Args); err != nil {
-		return nil, err
-	}
-	return p.NormalizeExpr(ctx, expr)
-}
-
 // parse parses the sql and returns a list of statements.
 func parse(sql string, syntax Syntax) (StatementList, error) {
 	var p Parser
