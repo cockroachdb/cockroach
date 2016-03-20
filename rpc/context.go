@@ -152,7 +152,11 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	conn, err := grpc.Dial(target, append(opts, dialOpt, grpc.WithTimeout(base.NetworkTimeout))...)
+	dialOpts := make([]grpc.DialOption, 0, 2+len(opts))
+	dialOpts = append(dialOpts, dialOpt, grpc.WithTimeout(base.NetworkTimeout))
+	dialOpts = append(dialOpts, opts...)
+
+	conn, err := grpc.Dial(target, dialOpts...)
 	if err == nil {
 		if ctx.conns.cache == nil {
 			ctx.conns.cache = make(map[string]*grpc.ClientConn)
