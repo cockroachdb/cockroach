@@ -161,17 +161,37 @@ func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
 	if err := value.GetProto(&ent); err != nil {
 		return false, err
 	}
-	if len(ent.Data) > 0 {
-		_, cmdData := storage.DecodeRaftCommand(ent.Data)
+	if ent.Type == raftpb.EntryNormal {
+		if len(ent.Data) > 0 {
+			_, cmdData := storage.DecodeRaftCommand(ent.Data)
+			var cmd roachpb.RaftCommand
+			if err := cmd.Unmarshal(cmdData); err != nil {
+				return false, err
+			}
+			ent.Data = nil
+			fmt.Printf("%s\n", &ent)
+			fmt.Printf("%s\n", &cmd)
+		} else {
+			fmt.Printf("%s: EMPTY\n", &ent)
+		}
+	} else if ent.Type == raftpb.EntryConfChange {
+		var cc raftpb.ConfChange
+		if err := cc.Unmarshal(ent.Data); err != nil {
+			return false, err
+		}
+		var ctx storage.ConfChangeContext
+		if err := ctx.Unmarshal(cc.Context); err != nil {
+			return false, err
+		}
 		var cmd roachpb.RaftCommand
-		if err := cmd.Unmarshal(cmdData); err != nil {
+		if err := cmd.Unmarshal(ctx.Payload); err != nil {
 			return false, err
 		}
 		ent.Data = nil
 		fmt.Printf("%s\n", &ent)
 		fmt.Printf("%s\n", &cmd)
 	} else {
-		fmt.Printf("%s: EMPTY\n", &ent)
+		fmt.Printf("Unknown log entry type: %s\n", &ent)
 	}
 	return false, nil
 }
