@@ -739,3 +739,137 @@ func TestRSpanIntersect(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkValueSetBytes(b *testing.B) {
+	v := Value{}
+	bytes := make([]byte, 16)
+
+	for i := 0; i < b.N; i++ {
+		v.SetBytes(bytes)
+	}
+}
+
+func BenchmarkValueSetFloat(b *testing.B) {
+	v := Value{}
+	f := 1.1
+
+	for i := 0; i < b.N; i++ {
+		v.SetFloat(f)
+	}
+}
+
+func BenchmarkValueSetInt(b *testing.B) {
+	v := Value{}
+	in := int64(1)
+
+	for i := 0; i < b.N; i++ {
+		v.SetInt(in)
+	}
+}
+
+func BenchmarkValueSetProto(b *testing.B) {
+	v := Value{}
+	p := &Value{}
+
+	for i := 0; i < b.N; i++ {
+		if err := v.SetProto(p); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueSetTime(b *testing.B) {
+	v := Value{}
+	ti := time.Time{}
+
+	for i := 0; i < b.N; i++ {
+		v.SetTime(ti)
+	}
+}
+
+func BenchmarkValueSetDecimal(b *testing.B) {
+	v := Value{}
+	dec := inf.NewDec(11, 1)
+
+	for i := 0; i < b.N; i++ {
+		if err := v.SetDecimal(dec); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetBytes(b *testing.B) {
+	v := Value{}
+	bytes := make([]byte, 16)
+	v.SetBytes(bytes)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetBytes(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetFloat(b *testing.B) {
+	v := Value{}
+	f := 1.1
+	v.SetFloat(f)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetFloat(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetInt(b *testing.B) {
+	v := Value{}
+	in := int64(1)
+	v.SetInt(in)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetInt(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetProto(b *testing.B) {
+	v := Value{}
+	p, dst := &Value{}, &Value{}
+	if err := v.SetProto(p); err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		if err := v.GetProto(dst); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetTime(b *testing.B) {
+	v := Value{}
+	ti := time.Time{}
+	v.SetTime(ti)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetTime(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueGetDecimal(b *testing.B) {
+	v := Value{}
+	dec := inf.NewDec(11, 1)
+	if err := v.SetDecimal(dec); err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		if _, err := v.GetDecimal(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

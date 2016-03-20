@@ -302,6 +302,17 @@ func decodeDecimalValueWithoutExp(dec *inf.Dec, negVal bool, buf, tmp []byte) {
 	}
 }
 
+// UpperBoundDecimalSize returns the upper bound number of bytes that the
+// decimal will need for encoding.
+func UpperBoundDecimalSize(d *inf.Dec) int {
+	// Makeup of upper bound size:
+	// - 1 byte for the prefix
+	// - maxVarintSize for the exponent
+	// - wordLen for the big.Int bytes
+	// - 1 byte for the terminator
+	return 2 + maxVarintSize + wordLen(d.UnscaledBig().Bits())
+}
+
 // Taken from math/big/arith.go.
 const bigWordSize = int(unsafe.Sizeof(big.Word(0)))
 
