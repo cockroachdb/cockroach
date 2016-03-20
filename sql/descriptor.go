@@ -114,12 +114,12 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
 			return err
 		}
 		return expectDescriptor(systemConfig, descKey, descDesc)
-	}
+	})
 
 	return true, p.txn.Run(&b)
 }
