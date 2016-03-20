@@ -178,10 +178,6 @@ memory that the store may consume, for example:`) + `
 Commas are forbidden in all values, since they are used to separate fields.
 Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`),
-	"time-until-store-dead": wrapText(`
-Adjusts the timeout for stores. If there's been no gossiped update
-from a store after this time, the store is considered unavailable.
-Replicas on an unavailable store will be moved to available ones.`),
 
 	"url": wrapText(`
 Connection url. eg: postgresql://myuser@localhost:26257/mydb
