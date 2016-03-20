@@ -128,24 +128,18 @@ func send(opts SendOptions, replicas ReplicaSlice,
 		})
 	}
 
+	// Put known-unhealthy clients last.
+	nHealthy, err := splitHealthy(clients)
+	if err != nil {
+		return nil, err
+	}
+
 	var orderedClients []batchClient
 	switch opts.Ordering {
 	case orderStable:
 		orderedClients = clients
 	case orderRandom:
 		// Randomly permute order, but keep known-unhealthy clients last.
-		var nHealthy int
-		for i, client := range clients {
-			clientState, err := client.conn.State()
-			if err != nil {
-				return nil, err
-			}
-			if clientState == grpc.Ready {
-				clients[i], clients[nHealthy] = clients[nHealthy], clients[i]
-				nHealthy++
-			}
-		}
-
 		shuffleClients(clients[:nHealthy])
 		shuffleClients(clients[nHealthy:])
 
@@ -213,6 +207,26 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			}
 		}
 	}
+}
+
+// splitHealthy splits the provided client slice into healthy clients and
+// unhealthy clients, based on their connection state. Healthy clients will
+// be rearranged first in the slice, and unhealthy clients will be rearranged
+// last. Within these two groups, the rearrangement will be stable. The function
+// will then return the number of healthy clients.
+func splitHealthy(clients []batchClient) (int, error) {
+	var nHealthy int
+	for i, client := range clients {
+		clientState, err := client.conn.State()
+		if err != nil {
+			return 0, err
+		}
+		if clientState == grpc.Ready {
+			clients[i], clients[nHealthy] = clients[nHealthy], clients[i]
+			nHealthy++
+		}
+	}
+	return nHealthy, nil
 }
 
 // Allow local calls to be dispatched directly to the local server without
