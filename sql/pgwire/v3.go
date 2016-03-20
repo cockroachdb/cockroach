@@ -130,6 +130,7 @@ func makeV3Conn(conn net.Conn, executor *sql.Executor, metrics *serverMetrics) v
 		preparedStatements: make(map[string]preparedStatement),
 		preparedPortals:    make(map[string]preparedPortal),
 		metrics:            metrics,
+		session:            sql.Session{},
 	}
 }
 
@@ -139,9 +140,7 @@ func (c *v3Conn) finish() {
 		log.Error(err)
 	}
 	_ = c.conn.Close()
-	if c.session.Trace != nil {
-		c.session.Trace.Finish()
-	}
+	c.session.Finish()
 }
 
 func (c *v3Conn) parseOptions(data []byte) error {

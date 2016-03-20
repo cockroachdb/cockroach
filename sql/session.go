@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -66,9 +67,41 @@ type Session struct {
 	// Info about the open transaction (if any).
 	TxnState txnState
 
+	planner *planner
+
 	Timezone              isSessionTimezone
 	DefaultIsolationLevel roachpb.IsolationType
 	Trace                 trace.Trace
+}
+
+// Finish releases resources held by the Session.
+func (s *Session) Finish() {
+	if s.Trace != nil {
+		s.Trace.Finish()
+		s.Trace = nil
+	}
+	if s.planner != nil {
+		releasePlanner(s.planner)
+		s.planner = nil
+	}
+}
+
+func (s *Session) initPlanner(e *Executor, user string) {
+	if s.planner != nil {
+		panic("session planner already initialized")
+	}
+	cfg, cache := e.getSystemConfig()
+	s.planner = plannerPool.Get().(*planner)
+	*s.planner = planner{
+		user: user,
+		// evalCtx is set in the Executor, for each Prepare or Execute.
+		evalCtx:       parser.EvalContext{},
+		leaseMgr:      e.ctx.LeaseManager,
+		systemConfig:  cfg,
+		databaseCache: cache,
+		session:       s,
+		execCtx:       &e.ctx,
+	}
 }
 
 func (s *Session) getLocation() (*time.Location, error) {

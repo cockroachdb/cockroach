@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -39,7 +41,8 @@ type planner struct {
 	systemConfig  config.SystemConfig
 	databaseCache *databaseCache
 
-	testingVerifyMetadata func(config.SystemConfig) error
+	testingVerifyMetadataFn func(config.SystemConfig) error
+	verifyFnCheckedOnce     bool
 
 	parser             parser.Parser
 	isAggregateVisitor isAggregateVisitor
@@ -51,6 +54,98 @@ type planner struct {
 	schemaChangeCallback func(schemaChanger SchemaChanger)
 
 	execCtx *ExecutorContext
+}
+
+func (p *planner) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
+	// Note that this can overwrite a previous callback that was waiting to be
+	// verified, which is not ideal.
+	p.testingVerifyMetadataFn = fn
+	p.verifyFnCheckedOnce = false
+}
+
+// resetForStatement prepares the planner for executing a new batch of
+// statements.
+func (p *planner) resetForBatch(e *Executor, session *Session) {
+	// Update the systemConfig to a more recent copy, so that we can use tables
+	// that we created in previus batches of the same transaction.
+	cfg, cache := e.getSystemConfig()
+	p.systemConfig = cfg
+	p.databaseCache = cache
+
+	p.params = parameters{}
+
+	// The parser cannot be reused between batches.
+	p.parser = parser.Parser{}
+
+	p.evalCtx = parser.EvalContext{
+		NodeID:      e.nodeID,
+		ReCache:     e.reCache,
+		GetLocation: session.getLocation,
+	}
+}
+
+// blockConfigUpdatesMaybe will ask the Executor to block config updates,
+// so that checkTestingVerifyMetadataInitialOrDie() can later be run.
+// The point is to lock the system config so that no gossip updates sneak in
+// under us, so that we're able to assert that the verify callback only succeeds
+// after a gossip update.
+//
+// It returns an unblock function which can be called after
+// checkTestingVerifyMetadata{Initial}OrDie() has been called.
+//
+// This lock does not change semantics. Even outside of tests, the planner uses
+// static systemConfig for a user request, so locking the Executor's
+// systemConfig cannot change the semantics of the SQL operation being performed
+// under lock.
+func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
+	if !e.ctx.TestingKnobs.WaitForGossipUpdate {
+		return func() {}
+	}
+	return e.blockConfigUpdates()
+}
+
+// checkTestingVerifyMetadataInitialOrDie verifies that the metadata callback,
+// if one was set, fails. This validates that we need a gossip update for it to
+// eventually succeed.
+// No-op if we've already done an initial check for the set callback.
+// Gossip updates for the system config are assumed to be blocked when this is
+// called.
+func (p *planner) checkTestingVerifyMetadataInitialOrDie(
+	systemConfig config.SystemConfig, stmts parser.StatementList) {
+	if !p.execCtx.TestingKnobs.WaitForGossipUpdate {
+		return
+	}
+	// If there's nothinging to verify, or we've already verified the initial
+	// condition, there's nothing to do.
+	if p.testingVerifyMetadataFn == nil || p.verifyFnCheckedOnce {
+		return
+	}
+	if p.testingVerifyMetadataFn(systemConfig) == nil {
+		panic(fmt.Sprintf(
+			"expected %q (or the statements before them) to require a "+
+				"gossip update, but they did not", stmts))
+	}
+	p.verifyFnCheckedOnce = true
+}
+
+// checkTestingVerifyMetadataOrDie verifies the metadata callback, if one was
+// set.
+// Gossip updates for the system config are assumed to be blocked when this is
+// called.
+func (p *planner) checkTestingVerifyMetadataOrDie(
+	e *Executor, stmts parser.StatementList) {
+	if !p.execCtx.TestingKnobs.WaitForGossipUpdate ||
+		p.testingVerifyMetadataFn == nil {
+		return
+	}
+	if !p.verifyFnCheckedOnce {
+		panic("intial state of the condition to verify was not checked")
+	}
+
+	for p.testingVerifyMetadataFn(e.systemConfig) != nil {
+		e.waitForConfigUpdate()
+	}
+	p.testingVerifyMetadataFn = nil
 }
 
 func makePlanner() *planner {
