@@ -170,7 +170,6 @@ type Replica struct {
 		leaderLease    *roachpb.Lease
 		maxBytes       int64 // Max bytes before split.
 		pendingCmds    map[storagebase.CmdIDKey]*pendingCmd
-		pendingSeq     uint64 // atomic sequence counter for CmdIDKey generation.
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
