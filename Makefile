@@ -165,7 +165,7 @@ stress:
 .PHONY: stressrace
 stressrace:
 	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
-	cd $(PKG) && stress $(STRESSFLAGS) $(CURENTDIR)/stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	cd $(PKG) && stress $(STRESSFLAGS) $(CURRENTDIR)/stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: acceptance
 acceptance:
