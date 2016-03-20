@@ -81,7 +81,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 		return nil, pErr
 	}
 
-	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 			return err
 		}
 		return expectDeleted(systemConfig, oldKey)
-	}
+	})
 
 	return &emptyNode{}, nil
 }
@@ -181,7 +181,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 		return nil, pErr
 	}
 
-	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 			return err
 		}
 		return expectDeleted(systemConfig, tbKey)
-	}
+	})
 
 	return &emptyNode{}, nil
 }

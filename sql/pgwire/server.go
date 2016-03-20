@@ -136,13 +136,18 @@ func (s *Server) ServeConn(conn net.Conn) error {
 	}
 
 	if version == version30 {
-		v3conn := makeV3Conn(conn, s.executor, s.metrics)
+		sessionArgs, argsErr := parseOptions(buf.msg)
+		// We make a connection regardless of argsErr. If there was an error parsing
+		// the args, the connection will only be used to send a report of that
+		// error.
+		v3conn := makeV3Conn(conn, s.executor, s.metrics, sessionArgs)
 		defer v3conn.finish()
+		if argsErr != nil {
+			return v3conn.sendError(err.Error())
+		}
+		v3conn.opts.user = sessionArgs.User
 		if errSSLRequired {
 			return v3conn.sendError(ErrSSLRequired)
-		}
-		if err := v3conn.parseOptions(buf.msg); err != nil {
-			return v3conn.sendError(err.Error())
 		}
 		if tlsConn, ok := conn.(*tls.Conn); ok {
 			tlsState := tlsConn.ConnectionState()
