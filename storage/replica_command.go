@@ -1532,8 +1532,7 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 		if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 			p()
 		} else {
-			// TODO(.*): see #5051.
-			log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
+			panic(fmt.Sprintf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum))
 		}
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
