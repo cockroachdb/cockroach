@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"fmt"
+	"sync"
 	"time"
 
 	"golang.org/x/net/trace"
@@ -24,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 type isSessionTimezone interface {
@@ -42,6 +46,19 @@ type SessionOffset struct {
 
 func (*SessionLocation) isSessionTimezone() {}
 func (*SessionOffset) isSessionTimezone()   {}
+
+// Release through releasePlanner().
+var plannerPool = sync.Pool{
+	New: func() interface{} {
+		return makePlanner()
+	},
+}
+
+func releasePlanner(p *planner) {
+	// Ensure future users don't clobber the session just used.
+	p.session = nil
+	plannerPool.Put(p)
+}
 
 // Session contains the state of a SQL client connection.
 type Session struct {
@@ -117,4 +134,130 @@ type txnState struct {
 	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
 	// passing the Session along everywhere the trace is needed.
 	tr trace.Trace
+}
+
+// reset creates a new Txn and initializes it using the session defaults.
+func (ts *txnState) reset(e *Executor, s *Session) {
+	*ts = txnState{}
+	ts.txn = client.NewTxn(*e.ctx.DB)
+	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
+	ts.tr = s.Trace
+}
+
+func (ts *txnState) willBeRetried() bool {
+	return ts.autoRetry || ts.retryIntent
+}
+
+func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
+	ts.State = state
+	ts.txn = nil
+}
+
+// updateStateAndCleanupOnErr updates txnState based on the type of error that we
+// received. If it's a retriable error and we're going to retry the txn,
+// then the state moves to RestartWait. Otherwise, the state moves to Aborted
+// and the KV txn is cleaned up.
+func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor) {
+	if pErr == nil {
+		panic("updateStateAndCleanupOnErr called with no error")
+	}
+	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE || !ts.willBeRetried() {
+		// We can't or don't want to retry this txn, so the txn is over.
+		e.txnAbortCount.Inc(1)
+		ts.txn.CleanupOnError(pErr)
+		ts.resetStateAndTxn(Aborted)
+	} else {
+		// If we got a retriable error, move the SQL txn to the RestartWait state.
+		// Note that TransactionAborted is also a retriable error, handled here;
+		// in this case cleanup for the txn has been done for us under the hood.
+		switch pErr.TransactionRestart {
+		case roachpb.TransactionRestart_BACKOFF:
+			// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
+			// the backoff hint to the client anyway. See #5249
+			fallthrough
+		case roachpb.TransactionRestart_IMMEDIATE:
+			ts.State = RestartWait
+		default:
+			panic(fmt.Sprintf("unexpected restart value: %s", pErr.TransactionRestart))
+		}
+	}
+}
+
+// schemaChangerCollection accumulates and runs SchemaChangers.
+type schemaChangerCollection struct {
+	// The index of the current statement, relative to its group. For statements
+	// statements that have been received from the client in the same batch, the
+	// group consists of all statements in the same transaction.
+	curStatementIdx int
+	// schema change callbacks together with the index of the statement
+	// that enqueued it (within its group of statements).
+	// TODO(andrei): Schema changers enqueued in a txn are not restored
+	// if the txn is not COMMITTED in the same group of statements (#4428).
+	schemaChangers []struct {
+		idx int
+		sc  SchemaChanger
+	}
+}
+
+func (scc *schemaChangerCollection) queueSchemaChanger(
+	schemaChanger SchemaChanger) {
+	scc.schemaChangers = append(
+		scc.schemaChangers,
+		struct {
+			idx int
+			sc  SchemaChanger
+		}{scc.curStatementIdx, schemaChanger})
+}
+
+// execSchemaChanges releases schema leases and runs the queued
+// schema changers. This needs to be run after the transaction
+// scheduling the schema change has finished.
+//
+// The list of closures is cleared after (attempting) execution.
+//
+// Args:
+//  results: The results from all statements in the group that scheduled the
+//    schema changes we're about to execute. Results corresponding to the
+//    schema change statements will be changed in case an error occurs.
+func (scc *schemaChangerCollection) execSchemaChanges(
+	e *Executor, planMaker *planner, results ResultList) {
+	if planMaker.txn != nil {
+		panic("trying to execute schema changes while still in a transaction")
+	}
+	// Release the leases once a transaction is complete.
+	planMaker.releaseLeases()
+	if len(scc.schemaChangers) == 0 ||
+		// Disable execution in some tests.
+		disableSyncSchemaChangeExec {
+		return
+	}
+	// Execute any schema changes that were scheduled, in the order of the
+	// statements that scheduled them.
+	retryOpt := defaultRetryOpt
+	for _, scEntry := range scc.schemaChangers {
+		sc := &scEntry.sc
+		sc.db = *e.ctx.DB
+		for r := retry.Start(retryOpt); r.Next(); {
+			if done, err := sc.IsDone(); err != nil {
+				log.Warning(err)
+				break
+			} else if done {
+				break
+			}
+			if pErr := sc.exec(); pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); ok {
+					// Try again.
+					continue
+				}
+				// All other errors can be reported; we report it as the result
+				// corresponding to the statement that enqueued this changer.
+				// There's some sketchiness here: we assume there's a single result
+				// per statement and we clobber the result/error of the corresponding
+				// statement.
+				results[scEntry.idx] = Result{PErr: pErr}
+			}
+			break
+		}
+	}
+	scc.schemaChangers = scc.schemaChangers[:0]
 }
