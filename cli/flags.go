@@ -190,6 +190,15 @@ database, insecure, certs).`),
 
 	"user": wrapText(`
 Database user name.`),
+
+	"from": wrapText(`
+Start key in pretty-printed format. See also --raw.`),
+
+	"to": wrapText(`
+Exclusive end key in pretty-printed format. See also --raw.`),
+
+	"raw": wrapText(`
+Interpret keys as raw bytes.`),
 }
 
 const usageIndentation = 8
@@ -377,6 +386,14 @@ func initFlags(ctx *Context) {
 	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd, lsRangesCmd} {
 		f := cmd.Flags()
 		f.Int64Var(&maxResults, "max-results", 1000, usage("max-results"))
+	}
+
+	// Debug commands.
+	{
+		f := debugKeysCmd.Flags()
+		f.StringVar(&cliContext.debug.startKey, "from", "", usage("from"))
+		f.StringVar(&cliContext.debug.endKey, "to", "", usage("to"))
+		f.BoolVar(&cliContext.debug.raw, "raw", false, usage("raw"))
 	}
 }
 

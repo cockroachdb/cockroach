@@ -82,7 +82,33 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := db.Iterate(engine.NilKey, engine.MVCCKeyMax, printKey); err != nil {
+	from := engine.NilKey
+	to := engine.MVCCKeyMax
+	if d := cliContext.debug; d.raw {
+		if len(d.startKey) > 0 {
+			from = engine.MakeMVCCMetadataKey(roachpb.Key(d.startKey))
+		}
+		if len(d.endKey) > 0 {
+			to = engine.MakeMVCCMetadataKey(roachpb.Key(d.endKey))
+		}
+	} else {
+		if len(d.startKey) > 0 {
+			startKey, err := keys.UglyPrint(d.startKey)
+			if err != nil {
+				return err
+			}
+			from = engine.MakeMVCCMetadataKey(startKey)
+		}
+		if len(d.endKey) > 0 {
+			endKey, err := keys.UglyPrint(d.endKey)
+			if err != nil {
+				return err
+			}
+			to = engine.MakeMVCCMetadataKey(endKey)
+		}
+	}
+
+	if err := db.Iterate(from, to, printKey); err != nil {
 		return err
 	}
 
