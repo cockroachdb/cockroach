@@ -108,8 +108,8 @@ func (ctx *Context) HTTPRequestScheme() string {
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the Certs directory. If Certs is empty, use a very permissive config.
-// TODO(marc): empty Certs dir should fail when client certificates are required.
+// on the SSLCert flag. If SSLCert is empty, use a very permissive config.
+// TODO(marc): empty SSLCert should fail when client certificates are required.
 func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.Insecure {
@@ -124,7 +124,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 				ctx.clientTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
 			}
 		} else {
-			log.Println("no certificates directory specified: using insecure TLS")
+			log.Println("no certificates specified: using insecure TLS")
 			ctx.clientTLSConfig.tlsConfig = security.LoadInsecureClientTLSConfig()
 		}
 	})
@@ -134,7 +134,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 
 // GetServerTLSConfig returns the context server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the Certs directory. Fails if Insecure=false and Certs="".
+// on the SSLCert flag. Fails if Insecure=false and SSLCert="".
 func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.Insecure {
