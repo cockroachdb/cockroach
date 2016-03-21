@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 
@@ -269,6 +270,8 @@ func (p *planner) initSelect(
 		ordering = sort.Ordering().ordering
 	}
 
+	limitCount, limitOffset, err := p.evalLimit(limit)
+
 	if scan, ok := s.table.node.(*scanNode); ok {
 		// Find the set of columns that we actually need values for. This is an
 		// optimization to avoid unmarshaling unnecessary values and is also
@@ -302,7 +305,14 @@ func (p *planner) initSelect(
 			}
 		}
 
-		plan := p.selectIndex(s, scan, ordering, grouping)
+		// If we are not grouping and we have a reasonable limit, prefer an order
+		// matching index even if it is not covering.
+		var preferOrderMatchingIndex bool
+		if !grouping && len(ordering) > 0 && limitCount != math.MaxInt64 &&
+			limitCount+limitOffset <= 1000 {
+			preferOrderMatchingIndex = true
+		}
+		plan := p.selectIndex(s, scan, ordering, grouping, preferOrderMatchingIndex)
 
 		// Update s.table with the new plan.
 		s.table.node = plan
@@ -311,7 +321,6 @@ func (p *planner) initSelect(
 	s.ordering = s.computeOrdering(s.table.node.Ordering())
 
 	// Wrap this node as necessary.
-	limitCount, limitOffset, err := p.evalLimit(limit)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -656,7 +665,11 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 // transformed into a set of spans to scan within the index.
 //
 // If grouping is true, the ordering is the desired ordering for grouping.
-func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping bool) planNode {
+//
+// If preferOrderMatching is true, we prefer an index that matches the desired
+// ordering completely, even if it is not a covering index.
+func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping,
+	preferOrderMatching bool) planNode {
 	if s.desc.isEmpty() || (s.filter == nil && ordering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
@@ -737,7 +750,7 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 
 	if ordering != nil {
 		for _, c := range candidates {
-			c.analyzeOrdering(sel, s, ordering)
+			c.analyzeOrdering(sel, s, ordering, preferOrderMatching)
 		}
 	}
 
@@ -891,7 +904,8 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 // analyzeOrdering analyzes the ordering provided by the index and determines
 // if it matches the ordering requested by the query. Non-matching orderings
 // increase the cost of using the index.
-func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering columnOrdering) {
+func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering columnOrdering,
+	preferOrderMatching bool) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = exactPrefix(v.constraints)
@@ -917,6 +931,10 @@ func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering co
 	}
 	weight := float64(len(ordering)+1) / float64(match+1)
 	v.cost *= weight
+
+	if match == len(ordering) && preferOrderMatching {
+		v.cost *= 0.1
+	}
 
 	if log.V(2) {
 		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d requested=%d",

@@ -166,7 +166,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			desc:    *tableDesc,
 		}
 		scan.initDescDefaults()
-		rows := p.selectIndex(&selectNode{}, scan, nil, false)
+		rows := p.selectIndex(&selectNode{}, scan, nil, false, false)
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.
