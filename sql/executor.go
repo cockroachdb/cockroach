@@ -149,6 +149,7 @@ type Executor struct {
 	deleteCount      *metric.Counter
 	ddlCount         *metric.Counter
 	miscCount        *metric.Counter
+	queryCount       *metric.Counter
 
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
@@ -208,6 +209,7 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 		deleteCount:      registry.Counter("delete.count"),
 		ddlCount:         registry.Counter("ddl.count"),
 		miscCount:        registry.Counter("misc.count"),
+		queryCount:       registry.Counter("query.count"),
 	}
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 
@@ -1067,6 +1069,7 @@ func (e *Executor) execStmt(
 // updateStmtCounts updates metrics for the number of times the different types of SQL
 // statements have been received by this node.
 func (e *Executor) updateStmtCounts(stmt parser.Statement) {
+	e.queryCount.Inc(1)
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
 		e.txnBeginCount.Inc(1)

@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -357,7 +358,7 @@ func (tm *testModel) assertQuery(name string, sources []string,
 		result := &TimeSeriesDatapoint{}
 		*result = current
 		if isDerivative {
-			dTime := (current.TimestampNanos - last.TimestampNanos) / r.SampleDuration()
+			dTime := (current.TimestampNanos - last.TimestampNanos) / int64(time.Second)
 			if dTime == 0 {
 				result.Value = 0
 			} else {

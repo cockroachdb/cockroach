@@ -20,6 +20,7 @@ import (
 	"container/heap"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -535,7 +536,7 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]*T
 		response := &TimeSeriesDatapoint{}
 		*response = current
 		if isDerivative {
-			dTime := (current.TimestampNanos - last.TimestampNanos) / r.SampleDuration()
+			dTime := (current.TimestampNanos - last.TimestampNanos) / time.Second.Nanoseconds()
 			if dTime == 0 {
 				response.Value = 0
 			} else {
