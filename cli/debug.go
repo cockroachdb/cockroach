@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -295,8 +294,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		snap := db.NewSnapshot()
 		defer snap.Close()
 		_, info, err := storage.RunGC(&desc, snap, roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ roachpb.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType, wg *sync.WaitGroup) {
-				wg.Done()
+			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ roachpb.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
 			}, func(_ []roachpb.Intent, _, _ bool) *roachpb.Error { return nil })
 		if err != nil {
 			return err
