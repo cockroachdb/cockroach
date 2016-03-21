@@ -42,7 +42,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 		return nil, roachpb.NewError(errEmptyDatabaseName)
 	}
 
-	if p.user != security.RootUser {
+	if p.session.User != security.RootUser {
 		return nil, roachpb.NewUErrorf("only %s is allowed to rename databases", security.RootUser)
 	}
 

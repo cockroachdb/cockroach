@@ -71,7 +71,7 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 }
 
 // RequestWithUser must be implemented by `roachpb.Request`s which are
-// arguments to methods that are not permitted to skip user checks.
+// arguments to methods that are not permitted to skip.session.User checks.
 type RequestWithUser interface {
 	GetUser() string
 }
