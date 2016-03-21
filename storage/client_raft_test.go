@@ -1347,6 +1347,8 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// lease will cause GC to do a consistent range lookup, where it
 	// will see that the range has been moved and delete the old
 	// replica.
+	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration+
+		storage.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].ForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 0, 0})
 
