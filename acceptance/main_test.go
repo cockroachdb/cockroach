@@ -27,12 +27,15 @@ import (
 	"os"
 	"os/signal"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
+	timeutil.SetMonotonicityCheckThreshold(time.Microsecond)
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt)
