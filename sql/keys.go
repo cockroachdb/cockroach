@@ -58,15 +58,24 @@ var normalize = unicode.SpecialCase{
 // (NFC).
 func NormalizeName(name string) string {
 	lower := strings.Map(normalize.ToLower, name)
-	if !norm.NFC.IsNormalString(lower) {
-		return norm.NFC.String(lower)
+	if isASCII(lower) {
+		return lower
 	}
-	return lower
+	return norm.NFC.String(lower)
 }
 
 // equalName returns true iff the normalizations of a and b are equal.
 func equalName(a, b string) bool {
 	return NormalizeName(a) == NormalizeName(b)
+}
+
+func isASCII(s string) bool {
+	for _, c := range s {
+		if c > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
 }
 
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order
