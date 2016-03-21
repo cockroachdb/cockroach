@@ -162,49 +162,49 @@ func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
-	for {
-		switch s := wrapped.(type) {
-		case *parser.ParenSelect:
-			wrapped = s.Select.Select
-			if s.Select.OrderBy != nil {
-				if orderBy != nil {
-					return nil, roachpb.NewUErrorf("multiple ORDER BY clauses not allowed")
-				}
-				orderBy = s.Select.OrderBy
+
+	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+		wrapped = s.Select.Select
+		if s.Select.OrderBy != nil {
+			if orderBy != nil {
+				return nil, roachpb.NewUErrorf("multiple ORDER BY clauses not allowed")
 			}
-			if s.Select.Limit != nil {
-				if limit != nil {
-					return nil, roachpb.NewUErrorf("multiple LIMIT clauses not allowed")
-				}
-				limit = s.Select.Limit
-			}
-			continue
-		case *parser.SelectClause:
-			// Select can potentially optimize index selection if it's being ordered,
-			// so we allow it to do its own sorting.
-			node := &selectNode{planner: p}
-			return p.initSelect(node, s, n.OrderBy, n.Limit)
-		// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
-		// currently expects the ordering to be done externally, so we let it fall
-		// through. Instead of continuing this special casing, it may be worth
-		// investigating a general mechanism for passing some context down during
-		// plan node construction.
-		default:
-			plan, pberr := p.makePlan(s, autoCommit)
-			if pberr != nil {
-				return nil, pberr
-			}
-			sort, pberr := p.orderBy(orderBy, plan)
-			if pberr != nil {
-				return nil, pberr
-			}
-			var err error
-			plan, err = p.limit(limit, sort.wrap(plan))
-			if err != nil {
-				return nil, roachpb.NewError(err)
-			}
-			return plan, nil
+			orderBy = s.Select.OrderBy
 		}
+		if s.Select.Limit != nil {
+			if limit != nil {
+				return nil, roachpb.NewUErrorf("multiple LIMIT clauses not allowed")
+			}
+			limit = s.Select.Limit
+		}
+	}
+
+	switch s := wrapped.(type) {
+	case *parser.SelectClause:
+		// Select can potentially optimize index selection if it's being ordered,
+		// so we allow it to do its own sorting.
+		node := &selectNode{planner: p}
+		return p.initSelect(node, s, orderBy, limit)
+	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
+	// currently expects the ordering to be done externally, so we let it fall
+	// through. Instead of continuing this special casing, it may be worth
+	// investigating a general mechanism for passing some context down during
+	// plan node construction.
+	default:
+		plan, pberr := p.makePlan(s, autoCommit)
+		if pberr != nil {
+			return nil, pberr
+		}
+		sort, pberr := p.orderBy(orderBy, plan)
+		if pberr != nil {
+			return nil, pberr
+		}
+		var err error
+		plan, err = p.limit(limit, sort.wrap(plan))
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		return plan, nil
 	}
 }
 
