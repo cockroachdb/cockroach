@@ -35,7 +35,6 @@ type planner struct {
 	txn *client.Txn
 	// As the planner executes statements, it may change the current user session.
 	session       *Session
-	user          string
 	evalCtx       parser.EvalContext
 	leases        []*LeaseState
 	leaseMgr      *LeaseManager

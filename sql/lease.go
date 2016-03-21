@@ -97,7 +97,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	// descriptor might have been created within the transaction.
 	p := makePlanner()
 	p.txn = txn
-	p.user = security.RootUser
+	p.session.User = security.RootUser
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
 	values, pErr := p.queryRow(getDescriptor, int(tableID))
@@ -140,7 +140,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	pErr = s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
-		p.user = security.RootUser
+		p.session.User = security.RootUser
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
 		count, epErr := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
@@ -160,7 +160,7 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
-		p.user = security.RootUser
+		p.session.User = security.RootUser
 
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
@@ -298,7 +298,7 @@ func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration
 	pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		p := makePlanner()
 		p.txn = txn
-		p.user = security.RootUser
+		p.session.User = security.RootUser
 
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`

@@ -35,7 +35,7 @@ type InternalExecutor struct {
 func (ie InternalExecutor) ExecuteStatementInTransaction(txn *client.Txn, statement string, params ...interface{}) (int, *roachpb.Error) {
 	p := makePlanner()
 	p.setTxn(txn)
-	p.user = security.RootUser
+	p.session.User = security.RootUser
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, params...)
 }
