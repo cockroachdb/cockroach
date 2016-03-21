@@ -486,8 +486,8 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	for _, req := range ba.Requests {
 		args := req.GetInner()
 		if bt, ok := args.(*roachpb.BeginTransactionRequest); ok {
-			if haveBeginTxn || ba.Txn.Writing {
-				return util.Errorf("begin transaction requested twice in the same transaction")
+			if haveBeginTxn || ba.Txn.Writing || ba.Txn.Key != nil {
+				return util.Errorf("begin transaction requested twice in the same transaction: %s", ba.Txn)
 			}
 			haveBeginTxn = true
 			ba.Txn.Key = bt.Key
