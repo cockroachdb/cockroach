@@ -1511,6 +1511,9 @@ func (r *Replica) applyRaftCommandInBatch(
 		}
 	}
 
+	// Keep track of original txn Writing state to santitize txn reported with any error.
+	wasWriting := ba.Txn != nil && ba.Txn.Writing
+
 	// Execute the commands. If this returns without an error, the batch must
 	// be committed (EndTransaction with a CommitTrigger may unlock
 	// readOnlyCmdMu via a batch.Defer).
@@ -1535,6 +1538,10 @@ func (r *Replica) applyRaftCommandInBatch(
 				btch.Close()
 				btch = r.store.Engine().NewBatch()
 				*ms = engine.MVCCStats{}
+				// Restore the original txn's Writing bool if err specifies a transaction.
+				if txn := err.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
+					txn.Writing = wasWriting
+				}
 			}
 		}
 
@@ -1610,9 +1617,6 @@ func (r *Replica) executeBatch(
 	*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := &roachpb.BatchResponse{}
 	var intents []intentsWithArg
-	// If transactional, we use ba.Txn for each individual command and
-	// accumulate updates to it.
-	isTxn := ba.Txn != nil
 
 	remScanResults := int64(math.MaxInt64)
 	if ba.Header.MaxScanResults != 0 {
@@ -1639,7 +1643,7 @@ func (r *Replica) executeBatch(
 				// at a too-high timestamp and we must forward the batch txn or
 				// timestamp as appropriate so that it's returned.
 				pErr = nil
-				if isTxn {
+				if ba.Txn != nil {
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
 					ba.Txn.WriteTooOld = true
 				} else {
@@ -1665,27 +1669,23 @@ func (r *Replica) executeBatch(
 		// Add the response to the batch, updating the txn if applicable
 		// (e.g. on EndTransaction).
 		br.Add(reply)
-		if isTxn {
+		// If transactional, we use ba.Txn for each individual command and
+		// accumulate updates to it.
+		if ba.Txn != nil {
 			if txn := reply.Header().Txn; txn != nil {
 				ba.Txn.Update(txn)
 			}
 		}
 	}
-	if isTxn {
+
+	if ba.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = ba.Txn
-		// If this is the beginning of the write portion of a transaction,
-		// mark the returned transaction as Writing. It's important that
-		// we do this only at the end, since updating at the first write
-		// could "poison" the transaction on restartable errors, see #2920.
-		// TODO(tschottdorf): #4442.
-		if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
-			br.Txn.Writing = true
-		}
 	} else {
 		// When non-transactional, use the timestamp field.
 		br.Timestamp.Forward(ba.Timestamp)
 	}
+
 	return br, intents, nil
 }
 
