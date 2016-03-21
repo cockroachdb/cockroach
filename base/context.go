@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/spf13/pflag"
 )
 
 // Base context defaults.
@@ -82,6 +83,9 @@ type Context struct {
 	httpClient *http.Client
 	// Protects httpClient.
 	httpClientMu sync.Mutex
+
+	// FlagMap maps pointer values to the flags that set them.
+	FlagMap map[interface{}]*pflag.Flag
 }
 
 // InitDefaults sets up the default values for a context.
@@ -108,8 +112,8 @@ func (ctx *Context) HTTPRequestScheme() string {
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the Certs directory. If Certs is empty, use a very permissive config.
-// TODO(marc): empty Certs dir should fail when client certificates are required.
+// on the SSLCert file. If SSLCert is empty, use a very permissive config.
+// TODO(marc): empty SSLCert should fail when client certificates are required.
 func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.Insecure {
@@ -124,7 +128,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 				ctx.clientTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
 			}
 		} else {
-			log.Println("no certificates directory specified: using insecure TLS")
+			log.Println("no certificates specified: using insecure TLS")
 			ctx.clientTLSConfig.tlsConfig = security.LoadInsecureClientTLSConfig()
 		}
 	})
@@ -134,7 +138,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 
 // GetServerTLSConfig returns the context server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the Certs directory. Fails if Insecure=false and Certs="".
+// on the SSLCert file. Fails if Insecure=false and SSLCert="".
 func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.Insecure {
@@ -149,7 +153,8 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 				ctx.serverTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.serverTLSConfig.err)
 			}
 		} else {
-			ctx.serverTLSConfig.err = util.Errorf("--insecure=false, but --cert is empty. Certificates must be specified.")
+			ctx.serverTLSConfig.err = util.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
+				ctx.FlagMap[&ctx.Insecure].Name, ctx.FlagMap[&ctx.SSLCert].Name)
 		}
 	})
 

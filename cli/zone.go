@@ -227,7 +227,10 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn := makeSQLClient()
+	conn, err := makeSQLClient()
+	if err != nil {
+		return err
+	}
 	defer conn.Close()
 
 	path, err := queryDescriptorIDPath(conn, names)
@@ -279,7 +282,10 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 		mustUsage(cmd)
 		return nil
 	}
-	conn := makeSQLClient()
+	conn, err := makeSQLClient()
+	if err != nil {
+		return err
+	}
 	defer conn.Close()
 
 	zones, err := queryZones(conn)
@@ -357,7 +363,10 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn := makeSQLClient()
+	conn, err := makeSQLClient()
+	if err != nil {
+		return err
+	}
 	defer conn.Close()
 
 	if err := conn.Exec(`BEGIN`, nil); err != nil {
@@ -423,7 +432,10 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	conn := makeSQLClient()
+	conn, err := makeSQLClient()
+	if err != nil {
+		return err
+	}
 	defer conn.Close()
 
 	names, err := parseZoneName(args[0])

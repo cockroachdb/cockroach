@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"reflect"
 	"strings"
 
 	"github.com/kr/text"
@@ -380,10 +381,44 @@ func initFlags(ctx *Context) {
 	}
 }
 
+func visitCmds(cmd *cobra.Command, fn func(*cobra.Command)) {
+	fn(cmd)
+	for _, sub := range cmd.Commands() {
+		visitCmds(sub, fn)
+	}
+}
+
+func visitFlags(cmd *cobra.Command, fn func(*pflag.Flag)) {
+	cmd.PersistentFlags().VisitAll(fn)
+	cmd.Flags().VisitAll(fn)
+}
+
+var (
+	strPtrType   = reflect.PtrTo(reflect.TypeOf(""))
+	intPtrType   = reflect.PtrTo(reflect.TypeOf(0))
+	int64PtrType = reflect.PtrTo(reflect.TypeOf(int64(0)))
+	boolPtrType  = reflect.PtrTo(reflect.TypeOf(false))
+	flagPtrTypes = []reflect.Type{strPtrType, intPtrType, int64PtrType, boolPtrType}
+)
+
 func init() {
 	initFlags(cliContext)
 
 	cobra.OnInitialize(func() {
+		cliContext.FlagMap = make(map[interface{}]*pflag.Flag)
+		visitCmds(cockroachCmd, func(cmd *cobra.Command) {
+			visitFlags(cmd, func(f *pflag.Flag) {
+				val := reflect.ValueOf(f.Value)
+				for _, t := range flagPtrTypes {
+					if val.Type().ConvertibleTo(t) {
+						cliContext.FlagMap[val.Convert(t).Interface()] = f
+						return
+					}
+				}
+				cliContext.FlagMap[val.Interface()] = f
+			})
+		})
+
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
 		cliContext.HTTPAddr = net.JoinHostPort(connHost, httpPort)
 	})
