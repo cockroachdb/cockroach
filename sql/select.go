@@ -183,7 +183,7 @@ func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.
 			// Select can potentially optimize index selection if it's being ordered,
 			// so we allow it to do its own sorting.
 			node := &selectNode{planner: p}
-			return p.initSelect(node, s, n.OrderBy, n.Limit)
+			return p.initSelect(node, s, orderBy, limit)
 		// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 		// currently expects the ordering to be done externally, so we let it fall
 		// through. Instead of continuing this special casing, it may be worth

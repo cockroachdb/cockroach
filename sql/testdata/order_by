@@ -180,6 +180,14 @@ query I
 3
 2
 
+query I
+(((SELECT a FROM t ORDER BY a DESC LIMIT 4)))
+----
+5
+4
+3
+2
+
 query error multiple ORDER BY clauses not allowed
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
 
