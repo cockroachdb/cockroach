@@ -38,7 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -60,7 +61,7 @@ const (
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 5 * time.Second
-	defaultMetricsFrequency         = 10 * time.Second
+	defaultMetricsSampleInterval    = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 )
 
@@ -128,10 +129,10 @@ type Context struct {
 	// Environment Variable: COCKROACH_MAX_OFFSET
 	MaxOffset time.Duration
 
-	// MetricsFrequency determines the frequency at which the server should
-	// record internal metrics.
-	// Environment Variable: COCKROACH_METRICS_FREQUENCY
-	MetricsFrequency time.Duration
+	// MetricsSamplePeriod determines the time between records of
+	// server internal metrics.
+	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL
+	MetricsSampleInterval time.Duration
 
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
@@ -144,7 +145,8 @@ type Context struct {
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
-	// ConsistencyCheckInterval
+	// ConsistencyCheckInterval determines the time between range consistency checks.
+	// Environment Variable: COCKROACH_CONSISTENCY_CHECK_INTERVAL
 	ConsistencyCheckInterval time.Duration
 
 	// ConsistencyCheckPanicOnFailure causes the node to panic when it detects a
@@ -185,7 +187,7 @@ func GetTotalMemory() (int64, error) {
 		if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
 			if log.V(1) {
 				log.Infof("can't read available memory from cgroups (%s), using system memory %s instead", err,
-					util.IBytes(totalMem))
+					humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
 		}
@@ -193,14 +195,14 @@ func GetTotalMemory() (int64, error) {
 		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
 			if log.V(1) {
 				log.Infof("can't parse available memory from cgroups (%s), using system memory %s instead", err,
-					util.IBytes(totalMem))
+					humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
 		}
 		if cgAvlMem > math.MaxInt64 {
 			if log.V(1) {
 				log.Infof("available memory from cgroups is too large and unsupported %s using system memory %s instead",
-					humanize.IBytes(cgAvlMem), util.IBytes(totalMem))
+					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 
 			}
 			return totalMem, nil
@@ -234,7 +236,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.ScanInterval = defaultScanInterval
 	ctx.ScanMaxIdleTime = defaultScanMaxIdleTime
 	ctx.ConsistencyCheckInterval = defaultConsistencyCheckInterval
-	ctx.MetricsFrequency = defaultMetricsFrequency
+	ctx.MetricsSampleInterval = defaultMetricsSampleInterval
 	ctx.TimeUntilStoreDead = defaultTimeUntilStoreDead
 	ctx.Stores.Specs = append(ctx.Stores.Specs, StoreSpec{Path: "cockroach-data"})
 }
@@ -256,7 +258,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
+					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
 		} else {
@@ -269,7 +271,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 			}
 			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, spec.Path, util.IBytes(sizeInBytes), util.IBytes(minimumStoreSize))
+					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewRocksDB(spec.Attributes, spec.Path,
 				ctx.CacheSize/int64(len(ctx.Stores.Specs)), ctx.MemtableBudget, sizeInBytes, stopper))
@@ -303,46 +305,19 @@ func (ctx *Context) InitNode() error {
 	return nil
 }
 
-// parseBoolEnv parses a bool from an environment variable. This
-// function assumes that the default value is already present in boolVar.
-func parseBoolEnv(env, internalName string, boolVar *bool) {
-	if valueString := os.Getenv(env); len(valueString) != 0 {
-		if v, err := strconv.ParseBool(valueString); err != nil {
-			log.Errorf("could not parse environment variable %s=%s, setting to default of %t, error: %s",
-				env, valueString, *boolVar, err)
-		} else {
-			*boolVar = v
-			log.Infof("\"%s\" set to %t based on %s environment variable", internalName, v, env)
-		}
-	}
-}
-
-// parseDurationEnv parses a time.Duration from an environment variable. This
-// function assumes that the default value is already present in duration.
-func parseDurationEnv(env, internalName string, duration *time.Duration) {
-	if valueString := os.Getenv(env); len(valueString) != 0 {
-		if value, err := time.ParseDuration(valueString); err != nil {
-			log.Errorf("could not parse environment variable %s=%s, setting to default of %s, error: %s",
-				env, valueString, duration, err)
-		} else {
-			*duration = value
-			log.Infof("\"%s\" set to %s based on %s environment variable", internalName, *duration, env)
-		}
-	}
-}
-
 // readEnvironmentVariables populates all context values that are environment
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (ctx *Context) readEnvironmentVariables() {
-	parseBoolEnv("COCKROACH_LINEARIZABLE", "linearizable", &ctx.Linearizable)
-	parseBoolEnv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "consistency check panic on failure", &ctx.ConsistencyCheckPanicOnFailure)
-	parseDurationEnv("COCKROACH_MAX_OFFSET", "max offset", &ctx.MaxOffset)
-	parseDurationEnv("COCKROACH_METRICS_FREQUENCY", "metrics frequency", &ctx.MetricsFrequency)
-	parseDurationEnv("COCKROACH_SCAN_INTERVAL", "scan interval", &ctx.ScanInterval)
-	parseDurationEnv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "consistency check interval", &ctx.ConsistencyCheckInterval)
-	parseDurationEnv("COCKROACH_SCAN_MAX_IDLE_TIME", "scan max idle time", &ctx.ScanMaxIdleTime)
-	parseDurationEnv("COCKROACH_TIME_UNTIL_STORE_DEAD", "time until store dead", &ctx.TimeUntilStoreDead)
+	// cockroach-linearizable
+	ctx.Linearizable = envutil.EnvOrDefaultBool("linearizable", ctx.Linearizable)
+	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("consistency_check_panic_on_failure", ctx.ConsistencyCheckPanicOnFailure)
+	ctx.MaxOffset = envutil.EnvOrDefaultDuration("max_offset", ctx.MaxOffset)
+	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("metrics_sample_interval", ctx.MetricsSampleInterval)
+	ctx.ScanInterval = envutil.EnvOrDefaultDuration("scan_interval", ctx.ScanInterval)
+	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("scan_max_idle_time", ctx.ScanMaxIdleTime)
+	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("time_until_store_dead", ctx.TimeUntilStoreDead)
+	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("consistency_check_interval", ctx.ConsistencyCheckInterval)
 }
 
 // AdminURL returns the URL for the admin UI.
