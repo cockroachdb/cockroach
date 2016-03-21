@@ -80,7 +80,6 @@ func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
 	s.User = args.User
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
-		user: s.User,
 		// evalCtx is set in the Executor, for each Prepare or Execute.
 		evalCtx:       parser.EvalContext{},
 		leaseMgr:      e.ctx.LeaseManager,
