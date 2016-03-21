@@ -51,8 +51,8 @@ const (
 	defaultCacheSize                = 512 << 20 // 512 MB
 	defaultMemtableBudget           = 512 << 20 // 512 MB
 	defaultScanInterval             = 10 * time.Minute
-	defaultConsistencyCheckInterval = 24 * time.Hour
-	defaultScanMaxIdleTime          = 5 * time.Second
+	defaultConsistencyCheckInterval = 1 * time.Minute
+	defaultScanMaxIdleTime          = 1 * time.Second
 	defaultMetricsFrequency         = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 )

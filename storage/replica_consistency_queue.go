@@ -65,7 +65,7 @@ func (q *replicaConsistencyQueue) process(_ roachpb.Timestamp, rng *Replica, _ c
 
 func (*replicaConsistencyQueue) timer() time.Duration {
 	// Some interval between replicas.
-	return 10 * time.Second
+	return 100 * time.Millisecond
 }
 
 // purgatoryChan returns nil.
