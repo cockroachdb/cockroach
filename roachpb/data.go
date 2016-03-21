@@ -926,7 +926,7 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	}
 
 	key := rs.Key
-	if !desc.ContainsKey(key) {
+	if key.Less(desc.StartKey) {
 		key = desc.StartKey
 	}
 	endKey := rs.EndKey

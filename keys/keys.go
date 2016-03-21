@@ -346,6 +346,21 @@ func Addr(k roachpb.Key) roachpb.RKey {
 	return nil
 }
 
+// AddrLocalIncl returns the address for the key, used to lookup the range containing
+// the key. However, unlike Addr, it will return the following key that local range
+// keys address to. This is necessary for the end key in [inclusive-exclusive) key
+// spans, where the address that a local key addresses to should be included in the
+// span.
+func AddrLocalIncl(k roachpb.Key) roachpb.RKey {
+	rk := Addr(k)
+	if local := !rk.Equal(k); local {
+		// A local range key as an exclusive end key means that
+		// the range should include the addressed address.
+		rk = rk.ShallowNext()
+	}
+	return rk
+}
+
 // RangeMetaKey returns a range metadata (meta1, meta2) indexing key
 // for the given key. For ordinary keys this returns a level 2
 // metadata key - for level 2 keys, it returns a level 1 key. For
@@ -538,7 +553,8 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 			// Key.Next() is larger than `to`.
 			to = key.Next()
 		}
-		if endKey := Addr(h.EndKey); to.Less(endKey) {
+		endKey := AddrLocalIncl(h.EndKey)
+		if to.Less(endKey) {
 			// EndKey is larger than `to`.
 			to = endKey
 		}
