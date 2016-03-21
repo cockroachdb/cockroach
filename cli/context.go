@@ -42,6 +42,7 @@ func (s *statementsValue) Set(value string) error {
 type debugContext struct {
 	startKey, endKey string
 	raw              bool
+	values           bool
 }
 
 // Context contains global settings for the command-line client.

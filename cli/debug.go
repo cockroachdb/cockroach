@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
 )
@@ -69,6 +70,25 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
+func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
+	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
+		fmt.Printf("%s %q: ", kv.Key.Timestamp, kv.Key.Key)
+	} else {
+		fmt.Printf("%q: ", kv.Key.Key)
+	}
+	for _, decoder := range []func(kv engine.MVCCKeyValue) (string, error){tryRaftLogEntry, tryRangeDescriptor, tryMeta, trySequence, tryTxn} {
+		out, err := decoder(kv)
+		if err != nil {
+			continue
+		}
+		fmt.Println(out)
+		return false, nil
+	}
+	// No better idea, just print raw bytes and hope that folks use `less -S`.
+	fmt.Printf("%q\n\n", kv.Value)
+	return false, nil
+}
+
 func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -82,9 +102,11 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	d := cliContext.debug
+
 	from := engine.NilKey
 	to := engine.MVCCKeyMax
-	if d := cliContext.debug; d.raw {
+	if d.raw {
 		if len(d.startKey) > 0 {
 			from = engine.MakeMVCCMetadataKey(roachpb.Key(d.startKey))
 		}
@@ -108,7 +130,12 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := db.Iterate(from, to, printKey); err != nil {
+	printer := printKey
+	if d.values {
+		printer = printKeyValue
+	}
+
+	if err := db.Iterate(from, to, printer); err != nil {
 		return err
 	}
 
@@ -124,24 +151,85 @@ Prints all range descriptors in a store with a history of changes.
 	RunE: runDebugRangeDescriptors,
 }
 
-func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
-	startKey, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
+func descStr(desc roachpb.RangeDescriptor) string {
+	return fmt.Sprintf("[%s, %s)\n\tRaw:%s\n",
+		desc.StartKey, desc.EndKey, &desc)
+}
+
+func tryMeta(kv engine.MVCCKeyValue) (string, error) {
+	if !bytes.HasPrefix(kv.Key.Key, keys.Meta1Prefix) && !bytes.HasPrefix(kv.Key.Key, keys.Meta2Prefix) {
+		return "", errors.New("not a meta key")
+	}
+	value := roachpb.Value{
+		Timestamp: kv.Key.Timestamp,
+		RawBytes:  kv.Value,
+	}
+	var desc roachpb.RangeDescriptor
+	if err := value.GetProto(&desc); err != nil {
+		return "", err
+	}
+	return descStr(desc), nil
+}
+
+func maybeUnmarshalInline(v []byte, dest proto.Message) error {
+	var meta engine.MVCCMetadata
+	if err := meta.Unmarshal(v); err != nil {
+		return err
+	}
+	value := roachpb.Value{
+		RawBytes: meta.RawBytes,
+	}
+	return value.GetProto(dest)
+}
+
+func tryTxn(kv engine.MVCCKeyValue) (string, error) {
+	var txn roachpb.Transaction
+	if err := maybeUnmarshalInline(kv.Value, &txn); err != nil {
+		return "", err
+	}
+	return txn.String() + "\n", nil
+}
+
+func trySequence(kv engine.MVCCKeyValue) (string, error) {
+	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
+		return "", errors.New("not a sequence cache key")
+	}
+	_, _, _, err := keys.DecodeSequenceCacheKey(kv.Key.Key, nil)
 	if err != nil {
-		return false, err
+		return "", err
+	}
+	var dest roachpb.SequenceCacheEntry
+	if err := maybeUnmarshalInline(kv.Value, &dest); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("ts=%s, key=%q\n", dest.Timestamp, dest.Key), nil
+}
+
+func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {
+	_, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
+	if err != nil {
+		return "", err
 	}
 	if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-		return false, nil
+		return "", fmt.Errorf("wrong suffix: %s", suffix)
 	}
 	value := roachpb.Value{
 		RawBytes: kv.Value,
 	}
 	var desc roachpb.RangeDescriptor
 	if err := value.GetProto(&desc); err != nil {
-		return false, err
+		return "", err
 	}
-	fmt.Printf("Range descriptor %s at time %s\n\tCovers: [%s, %s)\n\tRaw:%s\n\n",
-		startKey, kv.Key.Timestamp.GoTime(), desc.StartKey, desc.EndKey, &desc)
-	return false, nil
+	return descStr(desc), nil
+}
+
+func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
+	if out, err := tryRangeDescriptor(kv); err != nil {
+		fmt.Printf("%s %q: invalid value: %v", kv.Key.Timestamp, kv.Key.Key, err)
+	} else {
+		fmt.Println(out)
+	}
+	return true, nil
 }
 
 func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
@@ -175,49 +263,46 @@ Prints all log entries in a store for the given range.
 	RunE: runDebugRaftLog,
 }
 
-func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
-	var meta engine.MVCCMetadata
-	if err := meta.Unmarshal(kv.Value); err != nil {
-		return false, err
-	}
-	value := roachpb.Value{
-		RawBytes: meta.RawBytes,
-	}
+func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	var ent raftpb.Entry
-	if err := value.GetProto(&ent); err != nil {
-		return false, err
+	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
+		return "", err
 	}
 	if ent.Type == raftpb.EntryNormal {
 		if len(ent.Data) > 0 {
 			_, cmdData := storage.DecodeRaftCommand(ent.Data)
 			var cmd roachpb.RaftCommand
 			if err := cmd.Unmarshal(cmdData); err != nil {
-				return false, err
+				return "", err
 			}
 			ent.Data = nil
-			fmt.Printf("%s\n", &ent)
-			fmt.Printf("%s\n", &cmd)
-		} else {
-			fmt.Printf("%s: EMPTY\n", &ent)
+			return fmt.Sprintf("%s by %v\n%s\n%s\n", &ent, cmd.OriginReplica, &cmd.Cmd, &cmd), nil
 		}
+		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
 		var cc raftpb.ConfChange
 		if err := cc.Unmarshal(ent.Data); err != nil {
-			return false, err
+			return "", err
 		}
 		var ctx storage.ConfChangeContext
 		if err := ctx.Unmarshal(cc.Context); err != nil {
-			return false, err
+			return "", err
 		}
 		var cmd roachpb.RaftCommand
 		if err := cmd.Unmarshal(ctx.Payload); err != nil {
-			return false, err
+			return "", err
 		}
 		ent.Data = nil
-		fmt.Printf("%s\n", &ent)
-		fmt.Printf("%s\n", &cmd)
+		return fmt.Sprintf("%s\n%s\n", &ent, &cmd), nil
+	}
+	return "", fmt.Errorf("Unknown log entry type: %s\n", &ent)
+}
+
+func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
+	if out, err := tryRaftLogEntry(kv); err != nil {
+		fmt.Printf("%q: %v\n\n", kv.Key.Key, err)
 	} else {
-		fmt.Printf("Unknown log entry type: %s\n", &ent)
+		fmt.Println(out)
 	}
 	return false, nil
 }
