@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -486,57 +485,6 @@ func TestNodeStatusResponse(t *testing.T) {
 		}
 		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
 			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatus.Desc)
-		}
-	}
-}
-
-// TestStoreStatusResponse verifies that node status returns the expected
-// results.
-func TestStoreStatusResponse(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ts := startServer(t)
-	defer ts.Stop()
-
-	body := getRequest(t, ts, statusStoresPrefix)
-
-	type ssWrapper struct {
-		Data []storage.StoreStatus `json:"d"`
-	}
-	wrapper := ssWrapper{}
-	if err := json.Unmarshal(body, &wrapper); err != nil {
-		t.Fatal(err)
-	}
-	storeStatuses := wrapper.Data
-
-	if len(storeStatuses) != ts.node.stores.GetStoreCount() {
-		t.Errorf("expected %d node statuses, got %d", ts.node.stores.GetStoreCount(), len(storeStatuses))
-	}
-	for _, storeStatus := range storeStatuses {
-		storeID := storeStatus.Desc.StoreID
-		store, err := ts.node.stores.GetStore(storeID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		desc, pErr := store.Descriptor()
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		// The capacities fluctuate a lot, so drop them for the deep equal.
-		desc.Capacity = roachpb.StoreCapacity{}
-		storeStatus.Desc.Capacity = roachpb.StoreCapacity{}
-		if !reflect.DeepEqual(*desc, storeStatus.Desc) {
-			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, storeStatus.Desc)
-		}
-
-		// Also fetch the each status individually.
-		fetchedStoreStatus := storage.StoreStatus{}
-		requestBody := getRequest(t, ts, fmt.Sprintf("%s%s", statusStoresPrefix, storeStatus.Desc.StoreID))
-		if err := json.Unmarshal(requestBody, &fetchedStoreStatus); err != nil {
-			t.Fatal(err)
-		}
-		fetchedStoreStatus.Desc.Capacity = roachpb.StoreCapacity{}
-		if !reflect.DeepEqual(*desc, fetchedStoreStatus.Desc) {
-			t.Errorf("store status descriptors are not equal\nexpected:%+v\nactual:%+v\n", *desc, fetchedStoreStatus.Desc)
 		}
 	}
 }
