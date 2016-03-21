@@ -287,6 +287,12 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(s.grpc.Serve(anyL))
 	})
 
+	s.gossip.Start(s.grpc, unresolvedAddr)
+
+	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+		return err
+	}
+
 	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(serveConn(pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !util.IsClosedConnection(err) {
@@ -299,18 +305,12 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	s.gossip.Start(s.grpc, unresolvedAddr)
-
 	// Register admin service
 	if err := s.admin.RegisterGRPCGateway(s.ctx); err != nil {
 		return err
 	}
 	s.stopper.AddCloser(s.admin)
 	RegisterAdminServer(s.grpc, s.admin)
-
-	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
-		return err
-	}
 
 	// Begin recording runtime statistics.
 	runtime := status.NewRuntimeStatRecorder(s.node.Descriptor.NodeID, s.clock)
