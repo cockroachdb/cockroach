@@ -199,6 +199,9 @@ Exclusive end key in pretty-printed format. See also --raw.`),
 
 	"raw": wrapText(`
 Interpret keys as raw bytes.`),
+
+	"values": wrapText(`
+Print values along with their associated key.`),
 }
 
 const usageIndentation = 8
@@ -394,6 +397,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&cliContext.debug.startKey, "from", "", usage("from"))
 		f.StringVar(&cliContext.debug.endKey, "to", "", usage("to"))
 		f.BoolVar(&cliContext.debug.raw, "raw", false, usage("raw"))
+		f.BoolVar(&cliContext.debug.values, "values", false, usage("values"))
 	}
 }
 
