@@ -736,3 +736,8 @@ func (l *LocalCluster) Restart(i int) error {
 func (l *LocalCluster) URL(i int) string {
 	return "https://" + l.Nodes[i].Addr(defaultHTTP).String()
 }
+
+// Addr returns the host and port from the node in the format HOST:PORT.
+func (l *LocalCluster) Addr(i int) string {
+	return l.Nodes[i].Addr(defaultHTTP).String()
+}
