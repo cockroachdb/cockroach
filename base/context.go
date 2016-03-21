@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/spf13/pflag"
 )
 
 // Base context defaults.
@@ -82,6 +83,9 @@ type Context struct {
 	httpClient *http.Client
 	// Protects httpClient.
 	httpClientMu sync.Mutex
+
+	// FlagMap maps pointer values to the flags that set them.
+	FlagMap map[interface{}]*pflag.Flag
 }
 
 // InitDefaults sets up the default values for a context.
@@ -108,7 +112,7 @@ func (ctx *Context) HTTPRequestScheme() string {
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the SSLCert flag. If SSLCert is empty, use a very permissive config.
+// on the SSLCert file. If SSLCert is empty, use a very permissive config.
 // TODO(marc): empty SSLCert should fail when client certificates are required.
 func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
@@ -134,7 +138,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 
 // GetServerTLSConfig returns the context server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the SSLCert flag. Fails if Insecure=false and SSLCert="".
+// on the SSLCert file. Fails if Insecure=false and SSLCert="".
 func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.Insecure {

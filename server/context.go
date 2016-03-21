@@ -349,20 +349,19 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 		options.Add("sslmode", "verify-full")
 		requiredFlags := []struct {
 			name  string
-			flag  string
-			value string
+			value *string
 		}{
-			{"sslcert", "cert", ctx.SSLCert},
-			{"sslkey", "key", ctx.SSLCertKey},
-			{"sslrootcert", "ca-cert", ctx.SSLCA},
+			{"sslcert", &ctx.SSLCert},
+			{"sslkey", &ctx.SSLCertKey},
+			{"sslrootcert", &ctx.SSLCA},
 		}
 		for _, c := range requiredFlags {
-			if c.value == "" {
-				return nil, fmt.Errorf("missing --%s flag", c.flag)
+			if *c.value == "" {
+				return nil, fmt.Errorf("missing --%s flag", ctx.FlagMap[c.value].Name)
 			}
-			path := absPath(c.value)
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				return nil, fmt.Errorf("file for --%s flag gave error: %v", c.flag, err)
+			path := absPath(*c.value)
+			if _, err := os.Stat(path); err != nil {
+				return nil, fmt.Errorf("file for --%s flag gave error: %v", ctx.FlagMap[c.value].Name, err)
 			}
 			options.Add(c.name, path)
 		}
