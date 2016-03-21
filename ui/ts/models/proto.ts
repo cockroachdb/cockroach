@@ -59,6 +59,16 @@ module Models {
     }
 
     /*****************************
+     * util/build.proto
+     ****************************/
+    export interface BuildInfo {
+      goVersion: string;
+      tag: string;
+      time: string;
+      deps: string;
+    }
+
+    /*****************************
      * server/status/status.proto
      ****************************/
 
@@ -108,6 +118,7 @@ module Models {
      */
     export interface NodeStatus {
       desc: NodeDescriptor;
+      build_info: BuildInfo;
       started_at: number;
       updated_at: number;
       metrics: StatusMetrics;

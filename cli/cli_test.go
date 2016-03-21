@@ -848,10 +848,15 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		t.Errorf("node address (%s) != expected (%s)", a, e)
 	}
 
+	// Verify Build Tag.
+	if a, e := fields[2], util.GetBuildInfo().Tag; a != e {
+		t.Errorf("build tag (%s) != expected (%s)", a, e)
+	}
+
 	// Verify that updated_at and started_at are reasonably recent.
 	// CircleCI can be very slow. This was flaky at 5s.
-	checkTimeElapsed(t, fields[2], 15*time.Second, start)
 	checkTimeElapsed(t, fields[3], 15*time.Second, start)
+	checkTimeElapsed(t, fields[4], 15*time.Second, start)
 
 	// Verify all byte/range metrics.
 	testcases := []struct {
@@ -859,14 +864,14 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		idx    int
 		maxval int64
 	}{
-		{"live_bytes", 4, 30000},
-		{"key_bytes", 5, 30000},
-		{"value_bytes", 6, 30000},
-		{"intent_bytes", 7, 30000},
-		{"system_bytes", 8, 30000},
-		{"leader_ranges", 9, 3},
-		{"repl_ranges", 10, 3},
-		{"avail_ranges", 11, 3},
+		{"live_bytes", 5, 30000},
+		{"key_bytes", 6, 30000},
+		{"value_bytes", 7, 30000},
+		{"intent_bytes", 8, 30000},
+		{"system_bytes", 9, 30000},
+		{"leader_ranges", 10, 3},
+		{"repl_ranges", 11, 3},
+		{"avail_ranges", 12, 3},
 	}
 	for _, tc := range testcases {
 		val, err := strconv.ParseInt(fields[tc.idx], 10, 64)
