@@ -106,7 +106,6 @@ func (e *Error) String() string {
 
 type internalError Error
 
-// Error implements error.
 func (e *internalError) Error() string {
 	return (*Error)(e).String()
 }
@@ -208,6 +207,18 @@ func (e *Error) StripErrorTransaction() {
 	// Do not call SetTxn() as we do not want to update e.Message with nil txn.
 	e.UnexposedTxn = nil
 }
+
+// Error formats error.
+func (e *ErrorWithPGCode) Error() string {
+	return e.message(nil)
+}
+
+// message returns an error message.
+func (e *ErrorWithPGCode) message(_ *Error) string {
+	return e.Message
+}
+
+var _ ErrorDetailInterface = &ErrorWithPGCode{}
 
 // Error formats error.
 func (e *NodeUnavailableError) Error() string {
@@ -549,34 +560,6 @@ func (*DidntUpdateDescriptorError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &DidntUpdateDescriptorError{}
-
-// Error formats error.
-func (e *SqlTransactionCommittedError) Error() string {
-	return e.message(nil)
-}
-
-// message returns an error message.
-func (*SqlTransactionCommittedError) message(_ *Error) string {
-	return "current transaction is committed, commands ignored until end of transaction block"
-}
-
-var _ ErrorDetailInterface = &SqlTransactionCommittedError{}
-
-// Error formats error.
-func (e *SqlTransactionAbortedError) Error() string {
-	return e.message(nil)
-}
-
-// message returns an error message.
-func (e *SqlTransactionAbortedError) message(_ *Error) string {
-	msg := "current transaction is aborted, commands ignored until end of transaction block"
-	if e.CustomMsg != "" {
-		msg += "; " + e.CustomMsg
-	}
-	return msg
-}
-
-var _ ErrorDetailInterface = &SqlTransactionAbortedError{}
 
 // Error formats error.
 func (e *ExistingSchemaChangeLeaseError) Error() string {

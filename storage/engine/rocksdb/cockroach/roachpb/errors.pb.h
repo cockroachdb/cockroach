@@ -46,6 +46,7 @@ class DidntUpdateDescriptorError;
 class ErrPosition;
 class Error;
 class ErrorDetail;
+class ErrorWithPGCode;
 class ExistingSchemaChangeLeaseError;
 class LeaseRejectedError;
 class LeaseVersionChangedError;
@@ -58,8 +59,6 @@ class RangeNotFoundError;
 class ReadWithinUncertaintyIntervalError;
 class ReplicaCorruptionError;
 class SendError;
-class SqlTransactionAbortedError;
-class SqlTransactionCommittedError;
 class TransactionAbortedError;
 class TransactionPushError;
 class TransactionRetryError;
@@ -1875,179 +1874,6 @@ class DidntUpdateDescriptorError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class SqlTransactionAbortedError : public ::google::protobuf::Message {
- public:
-  SqlTransactionAbortedError();
-  virtual ~SqlTransactionAbortedError();
-
-  SqlTransactionAbortedError(const SqlTransactionAbortedError& from);
-
-  inline SqlTransactionAbortedError& operator=(const SqlTransactionAbortedError& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const SqlTransactionAbortedError& default_instance();
-
-  void Swap(SqlTransactionAbortedError* other);
-
-  // implements Message ----------------------------------------------
-
-  inline SqlTransactionAbortedError* New() const { return New(NULL); }
-
-  SqlTransactionAbortedError* New(::google::protobuf::Arena* arena) const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const SqlTransactionAbortedError& from);
-  void MergeFrom(const SqlTransactionAbortedError& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(SqlTransactionAbortedError* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return _internal_metadata_.arena();
-  }
-  inline void* MaybeArenaPtr() const {
-    return _internal_metadata_.raw_arena_ptr();
-  }
-  public:
-
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // optional string custom_msg = 1;
-  bool has_custom_msg() const;
-  void clear_custom_msg();
-  static const int kCustomMsgFieldNumber = 1;
-  const ::std::string& custom_msg() const;
-  void set_custom_msg(const ::std::string& value);
-  void set_custom_msg(const char* value);
-  void set_custom_msg(const char* value, size_t size);
-  ::std::string* mutable_custom_msg();
-  ::std::string* release_custom_msg();
-  void set_allocated_custom_msg(::std::string* custom_msg);
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.SqlTransactionAbortedError)
- private:
-  inline void set_has_custom_msg();
-  inline void clear_has_custom_msg();
-
-  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr custom_msg_;
-  friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
-
-  void InitAsDefaultInstance();
-  static SqlTransactionAbortedError* default_instance_;
-};
-// -------------------------------------------------------------------
-
-class SqlTransactionCommittedError : public ::google::protobuf::Message {
- public:
-  SqlTransactionCommittedError();
-  virtual ~SqlTransactionCommittedError();
-
-  SqlTransactionCommittedError(const SqlTransactionCommittedError& from);
-
-  inline SqlTransactionCommittedError& operator=(const SqlTransactionCommittedError& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const ::google::protobuf::Descriptor* descriptor();
-  static const SqlTransactionCommittedError& default_instance();
-
-  void Swap(SqlTransactionCommittedError* other);
-
-  // implements Message ----------------------------------------------
-
-  inline SqlTransactionCommittedError* New() const { return New(NULL); }
-
-  SqlTransactionCommittedError* New(::google::protobuf::Arena* arena) const;
-  void CopyFrom(const ::google::protobuf::Message& from);
-  void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const SqlTransactionCommittedError& from);
-  void MergeFrom(const SqlTransactionCommittedError& from);
-  void Clear();
-  bool IsInitialized() const;
-
-  int ByteSize() const;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input);
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const;
-  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
-  int GetCachedSize() const { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(SqlTransactionCommittedError* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return _internal_metadata_.arena();
-  }
-  inline void* MaybeArenaPtr() const {
-    return _internal_metadata_.raw_arena_ptr();
-  }
-  public:
-
-  ::google::protobuf::Metadata GetMetadata() const;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.SqlTransactionCommittedError)
- private:
-
-  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::uint32 _has_bits_[1];
-  mutable int _cached_size_;
-  friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
-  friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
-  friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
-
-  void InitAsDefaultInstance();
-  static SqlTransactionCommittedError* default_instance_;
-};
-// -------------------------------------------------------------------
-
 class ExistingSchemaChangeLeaseError : public ::google::protobuf::Message {
  public:
   ExistingSchemaChangeLeaseError();
@@ -2124,6 +1950,115 @@ class ExistingSchemaChangeLeaseError : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static ExistingSchemaChangeLeaseError* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class ErrorWithPGCode : public ::google::protobuf::Message {
+ public:
+  ErrorWithPGCode();
+  virtual ~ErrorWithPGCode();
+
+  ErrorWithPGCode(const ErrorWithPGCode& from);
+
+  inline ErrorWithPGCode& operator=(const ErrorWithPGCode& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ErrorWithPGCode& default_instance();
+
+  void Swap(ErrorWithPGCode* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ErrorWithPGCode* New() const { return New(NULL); }
+
+  ErrorWithPGCode* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ErrorWithPGCode& from);
+  void MergeFrom(const ErrorWithPGCode& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ErrorWithPGCode* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string error_code = 1;
+  bool has_error_code() const;
+  void clear_error_code();
+  static const int kErrorCodeFieldNumber = 1;
+  const ::std::string& error_code() const;
+  void set_error_code(const ::std::string& value);
+  void set_error_code(const char* value);
+  void set_error_code(const char* value, size_t size);
+  ::std::string* mutable_error_code();
+  ::std::string* release_error_code();
+  void set_allocated_error_code(::std::string* error_code);
+
+  // optional string message = 2;
+  bool has_message() const;
+  void clear_message();
+  static const int kMessageFieldNumber = 2;
+  const ::std::string& message() const;
+  void set_message(const ::std::string& value);
+  void set_message(const char* value);
+  void set_message(const char* value, size_t size);
+  ::std::string* mutable_message();
+  ::std::string* release_message();
+  void set_allocated_message(::std::string* message);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ErrorWithPGCode)
+ private:
+  inline void set_has_error_code();
+  inline void clear_has_error_code();
+  inline void set_has_message();
+  inline void clear_has_message();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr error_code_;
+  ::google::protobuf::internal::ArenaStringPtr message_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static ErrorWithPGCode* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -2362,32 +2297,23 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::DidntUpdateDescriptorError* release_didnt_update_descriptor();
   void set_allocated_didnt_update_descriptor(::cockroach::roachpb::DidntUpdateDescriptorError* didnt_update_descriptor);
 
-  // optional .cockroach.roachpb.SqlTransactionAbortedError sql_transaction_aborted = 20;
-  bool has_sql_transaction_aborted() const;
-  void clear_sql_transaction_aborted();
-  static const int kSqlTransactionAbortedFieldNumber = 20;
-  const ::cockroach::roachpb::SqlTransactionAbortedError& sql_transaction_aborted() const;
-  ::cockroach::roachpb::SqlTransactionAbortedError* mutable_sql_transaction_aborted();
-  ::cockroach::roachpb::SqlTransactionAbortedError* release_sql_transaction_aborted();
-  void set_allocated_sql_transaction_aborted(::cockroach::roachpb::SqlTransactionAbortedError* sql_transaction_aborted);
-
-  // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
+  // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
   bool has_existing_scheme_change_lease() const;
   void clear_existing_scheme_change_lease();
-  static const int kExistingSchemeChangeLeaseFieldNumber = 21;
+  static const int kExistingSchemeChangeLeaseFieldNumber = 20;
   const ::cockroach::roachpb::ExistingSchemaChangeLeaseError& existing_scheme_change_lease() const;
   ::cockroach::roachpb::ExistingSchemaChangeLeaseError* mutable_existing_scheme_change_lease();
   ::cockroach::roachpb::ExistingSchemaChangeLeaseError* release_existing_scheme_change_lease();
   void set_allocated_existing_scheme_change_lease(::cockroach::roachpb::ExistingSchemaChangeLeaseError* existing_scheme_change_lease);
 
-  // optional .cockroach.roachpb.SqlTransactionCommittedError sql_transaction_committed = 22;
-  bool has_sql_transaction_committed() const;
-  void clear_sql_transaction_committed();
-  static const int kSqlTransactionCommittedFieldNumber = 22;
-  const ::cockroach::roachpb::SqlTransactionCommittedError& sql_transaction_committed() const;
-  ::cockroach::roachpb::SqlTransactionCommittedError* mutable_sql_transaction_committed();
-  ::cockroach::roachpb::SqlTransactionCommittedError* release_sql_transaction_committed();
-  void set_allocated_sql_transaction_committed(::cockroach::roachpb::SqlTransactionCommittedError* sql_transaction_committed);
+  // optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
+  bool has_error_with_pg_code() const;
+  void clear_error_with_pg_code();
+  static const int kErrorWithPgCodeFieldNumber = 21;
+  const ::cockroach::roachpb::ErrorWithPGCode& error_with_pg_code() const;
+  ::cockroach::roachpb::ErrorWithPGCode* mutable_error_with_pg_code();
+  ::cockroach::roachpb::ErrorWithPGCode* release_error_with_pg_code();
+  void set_allocated_error_with_pg_code(::cockroach::roachpb::ErrorWithPGCode* error_with_pg_code);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ErrorDetail)
  private:
@@ -2429,12 +2355,10 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void clear_has_lease_version_changed();
   inline void set_has_didnt_update_descriptor();
   inline void clear_has_didnt_update_descriptor();
-  inline void set_has_sql_transaction_aborted();
-  inline void clear_has_sql_transaction_aborted();
   inline void set_has_existing_scheme_change_lease();
   inline void clear_has_existing_scheme_change_lease();
-  inline void set_has_sql_transaction_committed();
-  inline void clear_has_sql_transaction_committed();
+  inline void set_has_error_with_pg_code();
+  inline void clear_has_error_with_pg_code();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -2458,9 +2382,8 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::ReplicaCorruptionError* replica_corruption_;
   ::cockroach::roachpb::LeaseVersionChangedError* lease_version_changed_;
   ::cockroach::roachpb::DidntUpdateDescriptorError* didnt_update_descriptor_;
-  ::cockroach::roachpb::SqlTransactionAbortedError* sql_transaction_aborted_;
   ::cockroach::roachpb::ExistingSchemaChangeLeaseError* existing_scheme_change_lease_;
-  ::cockroach::roachpb::SqlTransactionCommittedError* sql_transaction_committed_;
+  ::cockroach::roachpb::ErrorWithPGCode* error_with_pg_code_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -3752,68 +3675,117 @@ inline void ReplicaCorruptionError::set_processed(bool value) {
 
 // -------------------------------------------------------------------
 
-// SqlTransactionAbortedError
+// ExistingSchemaChangeLeaseError
 
-// optional string custom_msg = 1;
-inline bool SqlTransactionAbortedError::has_custom_msg() const {
+// -------------------------------------------------------------------
+
+// ErrorWithPGCode
+
+// optional string error_code = 1;
+inline bool ErrorWithPGCode::has_error_code() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void SqlTransactionAbortedError::set_has_custom_msg() {
+inline void ErrorWithPGCode::set_has_error_code() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void SqlTransactionAbortedError::clear_has_custom_msg() {
+inline void ErrorWithPGCode::clear_has_error_code() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void SqlTransactionAbortedError::clear_custom_msg() {
-  custom_msg_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_custom_msg();
+inline void ErrorWithPGCode::clear_error_code() {
+  error_code_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_error_code();
 }
-inline const ::std::string& SqlTransactionAbortedError::custom_msg() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.SqlTransactionAbortedError.custom_msg)
-  return custom_msg_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline const ::std::string& ErrorWithPGCode::error_code() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorWithPGCode.error_code)
+  return error_code_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void SqlTransactionAbortedError::set_custom_msg(const ::std::string& value) {
-  set_has_custom_msg();
-  custom_msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.SqlTransactionAbortedError.custom_msg)
+inline void ErrorWithPGCode::set_error_code(const ::std::string& value) {
+  set_has_error_code();
+  error_code_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ErrorWithPGCode.error_code)
 }
-inline void SqlTransactionAbortedError::set_custom_msg(const char* value) {
-  set_has_custom_msg();
-  custom_msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.SqlTransactionAbortedError.custom_msg)
+inline void ErrorWithPGCode::set_error_code(const char* value) {
+  set_has_error_code();
+  error_code_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ErrorWithPGCode.error_code)
 }
-inline void SqlTransactionAbortedError::set_custom_msg(const char* value, size_t size) {
-  set_has_custom_msg();
-  custom_msg_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+inline void ErrorWithPGCode::set_error_code(const char* value, size_t size) {
+  set_has_error_code();
+  error_code_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.SqlTransactionAbortedError.custom_msg)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ErrorWithPGCode.error_code)
 }
-inline ::std::string* SqlTransactionAbortedError::mutable_custom_msg() {
-  set_has_custom_msg();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.SqlTransactionAbortedError.custom_msg)
-  return custom_msg_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* ErrorWithPGCode::mutable_error_code() {
+  set_has_error_code();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorWithPGCode.error_code)
+  return error_code_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* SqlTransactionAbortedError::release_custom_msg() {
-  clear_has_custom_msg();
-  return custom_msg_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline ::std::string* ErrorWithPGCode::release_error_code() {
+  clear_has_error_code();
+  return error_code_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void SqlTransactionAbortedError::set_allocated_custom_msg(::std::string* custom_msg) {
-  if (custom_msg != NULL) {
-    set_has_custom_msg();
+inline void ErrorWithPGCode::set_allocated_error_code(::std::string* error_code) {
+  if (error_code != NULL) {
+    set_has_error_code();
   } else {
-    clear_has_custom_msg();
+    clear_has_error_code();
   }
-  custom_msg_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), custom_msg);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SqlTransactionAbortedError.custom_msg)
+  error_code_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), error_code);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorWithPGCode.error_code)
 }
 
-// -------------------------------------------------------------------
-
-// SqlTransactionCommittedError
-
-// -------------------------------------------------------------------
-
-// ExistingSchemaChangeLeaseError
+// optional string message = 2;
+inline bool ErrorWithPGCode::has_message() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ErrorWithPGCode::set_has_message() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ErrorWithPGCode::clear_has_message() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ErrorWithPGCode::clear_message() {
+  message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_message();
+}
+inline const ::std::string& ErrorWithPGCode::message() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorWithPGCode.message)
+  return message_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ErrorWithPGCode::set_message(const ::std::string& value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ErrorWithPGCode.message)
+}
+inline void ErrorWithPGCode::set_message(const char* value) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ErrorWithPGCode.message)
+}
+inline void ErrorWithPGCode::set_message(const char* value, size_t size) {
+  set_has_message();
+  message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ErrorWithPGCode.message)
+}
+inline ::std::string* ErrorWithPGCode::mutable_message() {
+  set_has_message();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorWithPGCode.message)
+  return message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ErrorWithPGCode::release_message() {
+  clear_has_message();
+  return message_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ErrorWithPGCode::set_allocated_message(::std::string* message) {
+  if (message != NULL) {
+    set_has_message();
+  } else {
+    clear_has_message();
+  }
+  message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorWithPGCode.message)
+}
 
 // -------------------------------------------------------------------
 
@@ -4636,58 +4608,15 @@ inline void ErrorDetail::set_allocated_didnt_update_descriptor(::cockroach::roac
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.didnt_update_descriptor)
 }
 
-// optional .cockroach.roachpb.SqlTransactionAbortedError sql_transaction_aborted = 20;
-inline bool ErrorDetail::has_sql_transaction_aborted() const {
+// optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
+inline bool ErrorDetail::has_existing_scheme_change_lease() const {
   return (_has_bits_[0] & 0x00080000u) != 0;
 }
-inline void ErrorDetail::set_has_sql_transaction_aborted() {
+inline void ErrorDetail::set_has_existing_scheme_change_lease() {
   _has_bits_[0] |= 0x00080000u;
 }
-inline void ErrorDetail::clear_has_sql_transaction_aborted() {
-  _has_bits_[0] &= ~0x00080000u;
-}
-inline void ErrorDetail::clear_sql_transaction_aborted() {
-  if (sql_transaction_aborted_ != NULL) sql_transaction_aborted_->::cockroach::roachpb::SqlTransactionAbortedError::Clear();
-  clear_has_sql_transaction_aborted();
-}
-inline const ::cockroach::roachpb::SqlTransactionAbortedError& ErrorDetail::sql_transaction_aborted() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.sql_transaction_aborted)
-  return sql_transaction_aborted_ != NULL ? *sql_transaction_aborted_ : *default_instance_->sql_transaction_aborted_;
-}
-inline ::cockroach::roachpb::SqlTransactionAbortedError* ErrorDetail::mutable_sql_transaction_aborted() {
-  set_has_sql_transaction_aborted();
-  if (sql_transaction_aborted_ == NULL) {
-    sql_transaction_aborted_ = new ::cockroach::roachpb::SqlTransactionAbortedError;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.sql_transaction_aborted)
-  return sql_transaction_aborted_;
-}
-inline ::cockroach::roachpb::SqlTransactionAbortedError* ErrorDetail::release_sql_transaction_aborted() {
-  clear_has_sql_transaction_aborted();
-  ::cockroach::roachpb::SqlTransactionAbortedError* temp = sql_transaction_aborted_;
-  sql_transaction_aborted_ = NULL;
-  return temp;
-}
-inline void ErrorDetail::set_allocated_sql_transaction_aborted(::cockroach::roachpb::SqlTransactionAbortedError* sql_transaction_aborted) {
-  delete sql_transaction_aborted_;
-  sql_transaction_aborted_ = sql_transaction_aborted;
-  if (sql_transaction_aborted) {
-    set_has_sql_transaction_aborted();
-  } else {
-    clear_has_sql_transaction_aborted();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.sql_transaction_aborted)
-}
-
-// optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 21;
-inline bool ErrorDetail::has_existing_scheme_change_lease() const {
-  return (_has_bits_[0] & 0x00100000u) != 0;
-}
-inline void ErrorDetail::set_has_existing_scheme_change_lease() {
-  _has_bits_[0] |= 0x00100000u;
-}
 inline void ErrorDetail::clear_has_existing_scheme_change_lease() {
-  _has_bits_[0] &= ~0x00100000u;
+  _has_bits_[0] &= ~0x00080000u;
 }
 inline void ErrorDetail::clear_existing_scheme_change_lease() {
   if (existing_scheme_change_lease_ != NULL) existing_scheme_change_lease_->::cockroach::roachpb::ExistingSchemaChangeLeaseError::Clear();
@@ -4722,47 +4651,47 @@ inline void ErrorDetail::set_allocated_existing_scheme_change_lease(::cockroach:
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.existing_scheme_change_lease)
 }
 
-// optional .cockroach.roachpb.SqlTransactionCommittedError sql_transaction_committed = 22;
-inline bool ErrorDetail::has_sql_transaction_committed() const {
-  return (_has_bits_[0] & 0x00200000u) != 0;
+// optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
+inline bool ErrorDetail::has_error_with_pg_code() const {
+  return (_has_bits_[0] & 0x00100000u) != 0;
 }
-inline void ErrorDetail::set_has_sql_transaction_committed() {
-  _has_bits_[0] |= 0x00200000u;
+inline void ErrorDetail::set_has_error_with_pg_code() {
+  _has_bits_[0] |= 0x00100000u;
 }
-inline void ErrorDetail::clear_has_sql_transaction_committed() {
-  _has_bits_[0] &= ~0x00200000u;
+inline void ErrorDetail::clear_has_error_with_pg_code() {
+  _has_bits_[0] &= ~0x00100000u;
 }
-inline void ErrorDetail::clear_sql_transaction_committed() {
-  if (sql_transaction_committed_ != NULL) sql_transaction_committed_->::cockroach::roachpb::SqlTransactionCommittedError::Clear();
-  clear_has_sql_transaction_committed();
+inline void ErrorDetail::clear_error_with_pg_code() {
+  if (error_with_pg_code_ != NULL) error_with_pg_code_->::cockroach::roachpb::ErrorWithPGCode::Clear();
+  clear_has_error_with_pg_code();
 }
-inline const ::cockroach::roachpb::SqlTransactionCommittedError& ErrorDetail::sql_transaction_committed() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.sql_transaction_committed)
-  return sql_transaction_committed_ != NULL ? *sql_transaction_committed_ : *default_instance_->sql_transaction_committed_;
+inline const ::cockroach::roachpb::ErrorWithPGCode& ErrorDetail::error_with_pg_code() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.error_with_pg_code)
+  return error_with_pg_code_ != NULL ? *error_with_pg_code_ : *default_instance_->error_with_pg_code_;
 }
-inline ::cockroach::roachpb::SqlTransactionCommittedError* ErrorDetail::mutable_sql_transaction_committed() {
-  set_has_sql_transaction_committed();
-  if (sql_transaction_committed_ == NULL) {
-    sql_transaction_committed_ = new ::cockroach::roachpb::SqlTransactionCommittedError;
+inline ::cockroach::roachpb::ErrorWithPGCode* ErrorDetail::mutable_error_with_pg_code() {
+  set_has_error_with_pg_code();
+  if (error_with_pg_code_ == NULL) {
+    error_with_pg_code_ = new ::cockroach::roachpb::ErrorWithPGCode;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.sql_transaction_committed)
-  return sql_transaction_committed_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.error_with_pg_code)
+  return error_with_pg_code_;
 }
-inline ::cockroach::roachpb::SqlTransactionCommittedError* ErrorDetail::release_sql_transaction_committed() {
-  clear_has_sql_transaction_committed();
-  ::cockroach::roachpb::SqlTransactionCommittedError* temp = sql_transaction_committed_;
-  sql_transaction_committed_ = NULL;
+inline ::cockroach::roachpb::ErrorWithPGCode* ErrorDetail::release_error_with_pg_code() {
+  clear_has_error_with_pg_code();
+  ::cockroach::roachpb::ErrorWithPGCode* temp = error_with_pg_code_;
+  error_with_pg_code_ = NULL;
   return temp;
 }
-inline void ErrorDetail::set_allocated_sql_transaction_committed(::cockroach::roachpb::SqlTransactionCommittedError* sql_transaction_committed) {
-  delete sql_transaction_committed_;
-  sql_transaction_committed_ = sql_transaction_committed;
-  if (sql_transaction_committed) {
-    set_has_sql_transaction_committed();
+inline void ErrorDetail::set_allocated_error_with_pg_code(::cockroach::roachpb::ErrorWithPGCode* error_with_pg_code) {
+  delete error_with_pg_code_;
+  error_with_pg_code_ = error_with_pg_code;
+  if (error_with_pg_code) {
+    set_has_error_with_pg_code();
   } else {
-    clear_has_sql_transaction_committed();
+    clear_has_error_with_pg_code();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.sql_transaction_committed)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.error_with_pg_code)
 }
 
 // -------------------------------------------------------------------
@@ -5096,8 +5025,6 @@ inline void Error::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

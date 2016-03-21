@@ -46,11 +46,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/pq"
 )
 
 var (
 	resultsRE     = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	errorRE       = regexp.MustCompile(`^(?:statement|query)\s+error\s+(.*)$`)
+	errorRE       = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 	logictestdata = flag.String("d", "testdata/[^.]*", "test data glob")
 	bigtest       = flag.Bool("bigtest", false, "use the big set of logic test files (overrides testdata)")
 )
@@ -79,9 +80,10 @@ func (l *lineScanner) Scan() bool {
 }
 
 type logicStatement struct {
-	pos       string
-	sql       string
-	expectErr string
+	pos           string
+	sql           string
+	expectErr     string
+	expectErrCode string
 }
 
 type logicSorter func(numCols int, values []string)
@@ -141,6 +143,7 @@ type logicQuery struct {
 	colTypes        string
 	label           string
 	sorter          logicSorter
+	expectErrCode   string
 	expectErr       string
 	expectedValues  int
 	expectedHash    string
@@ -306,7 +309,8 @@ func (t *logicTest) processTestFile(path string) {
 			stmt := logicStatement{pos: fmt.Sprintf("%s:%d", path, s.line)}
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectErr = m[1]
+				stmt.expectErrCode = m[1]
+				stmt.expectErr = m[2]
 			}
 			var buf bytes.Buffer
 			for s.Scan() {
@@ -331,7 +335,8 @@ func (t *logicTest) processTestFile(path string) {
 			query := logicQuery{pos: fmt.Sprintf("%s:%d", path, s.line)}
 			// Parse "query error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				query.expectErr = m[1]
+				query.expectErrCode = m[1]
+				query.expectErr = m[2]
 			} else if len(fields) < 2 {
 				t.Fatalf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
@@ -515,23 +520,42 @@ func (t *logicTest) processTestFile(path string) {
 	fmt.Printf("%s: %d\n", path, t.progress)
 }
 
+func (t *logicTest) verifyError(
+	pos string, expectErr string, expectErrCode string, err error) {
+	if expectErr == "" && expectErrCode == "" && err != nil {
+		t.Fatalf("%s: expected success, but found\n%s", pos, err)
+	}
+	if expectErr != "" && !testutils.IsError(err, expectErr) {
+		if err != nil {
+			t.Fatalf("%s: expected %q, but found\n%s", pos, expectErr, err)
+		} else {
+			t.Fatalf("%s: expected %q, but found success", pos, expectErr)
+		}
+	}
+	if expectErrCode != "" {
+		if err != nil {
+			pqErr, ok := err.(*pq.Error)
+			if !ok {
+				t.Fatalf("%s: expected error code %q, but the error we found is not "+
+					"a libpq error: %s", pos, expectErrCode, err)
+			}
+			if pqErr.Code != pq.ErrorCode(expectErrCode) {
+				t.Fatalf("%s: expected error code %q, but found code %q (%s)",
+					pos, expectErrCode, pqErr.Code, pqErr.Code.Name())
+			}
+		} else {
+			t.Fatalf("%s: expected error code %q, but found success",
+				pos, expectErrCode)
+		}
+	}
+}
+
 func (t *logicTest) execStatement(stmt logicStatement) {
 	if testing.Verbose() || log.V(1) {
 		fmt.Printf("%s %s: %s\n", stmt.pos, t.user, stmt.sql)
 	}
 	_, err := t.db.Exec(stmt.sql)
-	switch {
-	case stmt.expectErr == "":
-		if err != nil {
-			t.Fatalf("%s: expected success, but found\n%s", stmt.pos, err)
-		}
-	case !testutils.IsError(err, stmt.expectErr):
-		if err != nil {
-			t.Fatalf("%s: expected %q, but found\n%s", stmt.pos, stmt.expectErr, err)
-		} else {
-			t.Fatalf("%s: expected %q, but found success", stmt.pos, stmt.expectErr)
-		}
-	}
+	t.verifyError(stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
 }
 
 func (t *logicTest) execQuery(query logicQuery) {
@@ -539,13 +563,8 @@ func (t *logicTest) execQuery(query logicQuery) {
 		fmt.Printf("%s %s: %s\n", query.pos, t.user, query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
-	if query.expectErr == "" {
-		if err != nil {
-			t.Fatalf("%s: expected success, but found %v", query.pos, err)
-		}
-	} else if !testutils.IsError(err, query.expectErr) {
-		t.Fatalf("%s: expected %s, but found %v", query.pos, query.expectErr, err)
-	} else {
+	t.verifyError(query.pos, query.expectErr, query.expectErrCode, err)
+	if err != nil {
 		// An error occurred, but it was expected.
 		return
 	}

@@ -66,7 +66,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv@a
 7  /kv/a/'d'  /'c'     ROW
 8  /kv/a/'f'  /'e'     ROW
 
-statement error duplicate key value \(v\)=\('f'\) violates unique constraint "a"
+statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
 INSERT INTO kv VALUES ('e', 'f')
 
 query ITTT
