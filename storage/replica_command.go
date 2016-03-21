@@ -339,6 +339,7 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 	}
 
 	// Write the txn record.
+	h.Txn.Writing = true
 	err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, h.Txn)
 	return reply, err
 }
