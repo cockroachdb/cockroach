@@ -370,6 +370,25 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
+		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
+			base.Params(1).Results(1),
+			base.Params(nil).Results(1),
+		},
+		"SELECT COUNT(*) * 0 FROM d.ts LIMIT 1+EXTRACT(DAYS FROM NOW())": {
+			base.Params().Results(0),
+		},
+		"SELECT COUNT(*) * 0 FROM d.ts GROUP BY a HAVING MAX(b) <= CURRENT_DATE()": {
+			base.Params().Results(0),
+		},
+		/* TODO(knz) fix #5355
+		"SELECT DISTINCT $1::int FROM d.ts LIMIT 1+EXTRACT(DAYS FROM NOW())": {
+			base.Params(1).Results(1),
+		},
+		"SELECT DISTINCT 1 FROM d.ts LIMIT 1+EXTRACT(DAYS FROM NOW())": {
+			base.Params().Results(1),
+		},
+		*/
+		/* TODO(knz) fix #5340
 		"INSERT INTO d.ts VALUES(CURRENT_TIMESTAMP(), $1) RETURNING b": {
 			base.Params("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
@@ -380,11 +399,10 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
-
-		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
+		"INSERT INTO d.tsd (b) VALUES ($1) RETURNING b": {
 			base.Params(1).Results(1),
-			base.Params(nil).Results(1),
 		},
+		*/
 		/* TODO(mjibson): fix #4658
 		"INSERT INTO d.T VALUES ($1) RETURNING $1": {
 			base.Params(1).Results(1),
@@ -448,7 +466,11 @@ func TestPGPreparedQuery(t *testing.T) {
 		}
 	}
 
-	initStmt := `CREATE DATABASE d; CREATE TABLE d.t (a INT); INSERT INTO d.t VALUES (10),(11); CREATE TABLE d.ts (a TIMESTAMP, b DATE);`
+	initStmt := `CREATE DATABASE d;
+               CREATE TABLE d.t (a INT);
+               INSERT INTO d.t VALUES (10),(11);
+               CREATE TABLE d.ts (a TIMESTAMP, b DATE);
+               CREATE TABLE d.tsd (a TIMESTAMP DEFAULT NOW(), b INT);`
 	if _, err := db.Exec(initStmt); err != nil {
 		t.Fatal(err)
 	}

@@ -551,6 +551,7 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      argTypes{},
 			returnType: typeDate,
+			impure:     true,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
 				return e.makeDDate(e.GetTxnTimestamp().GoTime())
 			},

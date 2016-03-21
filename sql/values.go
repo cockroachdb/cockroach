@@ -67,6 +67,15 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
 		}
+		// TODO(knz): fix #5340
+		// We should stop here if working for planner.Prepare.  However
+		// for now we cannot stop here because planner.Insert() doesn't
+		// know how to deal with a result with only column
+		// names/types. The following simply doesn't work:
+		//	if p.prepareOnly {
+		//		continue
+		//	}
+
 		data, err := tuple.Eval(p.evalCtx)
 		if err != nil {
 			return nil, roachpb.NewError(err)
