@@ -295,10 +295,6 @@ func (s *Server) Start() error {
 		}))
 	})
 
-	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(m.Serve())
-	})
-
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
 	// Register admin service
@@ -330,6 +326,10 @@ func (s *Server) Start() error {
 
 	log.Infof("starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof("starting grpc/postgres server at %s", unresolvedAddr)
+
+	s.stopper.RunWorker(func() {
+		util.FatalIfUnexpected(m.Serve())
+	})
 
 	return nil
 }
