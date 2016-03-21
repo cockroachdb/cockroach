@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -318,6 +319,7 @@ func TestMetricsRecorder(t *testing.T) {
 	// ========================================
 	expectedNodeSummary := &NodeStatus{
 		Desc:      nodeDesc,
+		BuildInfo: util.GetBuildInfo(),
 		StartedAt: 50,
 		UpdatedAt: 100,
 		Metrics:   expectedNodeSummaryMetrics,

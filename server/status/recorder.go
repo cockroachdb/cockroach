@@ -233,6 +233,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 	// Generate an node status with no store data.
 	nodeStat := &NodeStatus{
 		Desc:          mr.mu.desc,
+		BuildInfo:     util.GetBuildInfo(),
 		UpdatedAt:     now,
 		StartedAt:     mr.mu.startedAt,
 		StoreStatuses: make([]StoreStatus, 0, mr.mu.lastSummaryCount),

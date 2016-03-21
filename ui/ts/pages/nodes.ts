@@ -639,6 +639,16 @@ module AdminViews {
           return m(".primary-stats");
         }
 
+        public RenderBuildInfo(): MithrilElement {
+          let nodeStats: Models.Proto.NodeStatus = nodeStatuses.GetStatus(this._nodeId);
+          if (nodeStats) {
+            return m(".section.info", [
+              m(".info", "Build: " + nodeStats.build_info.tag),
+            ]);
+          }
+          return null;
+        }
+
         public RenderGraphs(): MithrilElement {
           return m("", [
             m(".charts", [
@@ -956,7 +966,10 @@ module AdminViews {
         if (detail === "graph") {
           primaryContent = ctrl.RenderGraphs();
         } else {
-          primaryContent = ctrl.RenderPrimaryStats();
+          primaryContent = [
+            ctrl.RenderPrimaryStats(),
+            ctrl.RenderBuildInfo(),
+          ];
         }
 
         let nodeStatus: NodeStatus = nodeStatuses.GetStatus(ctrl.GetNodeId());
