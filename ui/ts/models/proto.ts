@@ -354,6 +354,7 @@ module Models {
       grants: Grant[];
       columns: SQLColumn[];
       indexes: SQLIndex[];
+      range_count: number;
     }
 
     export interface User {
