@@ -34,8 +34,9 @@ import (
 type planner struct {
 	txn *client.Txn
 	// As the planner executes statements, it may change the current user session.
+	// TODO(andrei): see if the circular dependency between planner and Session
+	// can be broken if we move the User and Database here from the Session.
 	session       *Session
-	user          string
 	evalCtx       parser.EvalContext
 	leases        []*LeaseState
 	leaseMgr      *LeaseManager
