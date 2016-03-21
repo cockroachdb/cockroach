@@ -25,43 +25,42 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) limit(limit *parser.Limit, plan planNode) (planNode, error) {
+// evalLimit evaluates the Count and Offset fields. If Count is missing, the
+// value is MaxInt64. If Offset is missing, the value is 0
+func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error) {
+	count = math.MaxInt64
+	offset = 0
+
 	if limit == nil {
-		return plan, nil
+		return count, offset, nil
 	}
 
-	var count, offset int64
-
 	data := []struct {
-		name       string
-		src        parser.Expr
-		dst        *int64
-		defaultVal int64
+		name string
+		src  parser.Expr
+		dst  *int64
 	}{
-		{"LIMIT", limit.Count, &count, math.MaxInt64},
-		{"OFFSET", limit.Offset, &offset, 0},
+		{"LIMIT", limit.Count, &count},
+		{"OFFSET", limit.Offset, &offset},
 	}
 
 	for _, datum := range data {
-		if datum.src == nil {
-			*datum.dst = datum.defaultVal
-		} else {
+		if datum.src != nil {
 			if parser.ContainsVars(datum.src) {
-				return nil, util.Errorf("argument of %s must not contain variables", datum.name)
+				return 0, 0, util.Errorf("argument of %s must not contain variables", datum.name)
 			}
 
 			normalized, err := p.parser.NormalizeExpr(p.evalCtx, datum.src)
 			if err != nil {
-				return nil, err
+				return 0, 0, err
 			}
 			dstDatum, err := normalized.Eval(p.evalCtx)
 			if err != nil {
-				return nil, err
+				return 0, 0, err
 			}
 
 			if dstDatum == parser.DNull {
-				*datum.dst = datum.defaultVal
+				// Use the default value.
 				continue
 			}
 
@@ -70,15 +69,24 @@ func (p *planner) limit(limit *parser.Limit, plan planNode) (planNode, error) {
 				continue
 			}
 
-			return nil, fmt.Errorf("argument of %s must be type %s, not type %s", datum.name, parser.DummyInt.Type(), dstDatum.Type())
+			return 0, 0, fmt.Errorf("argument of %s must be type %s, not type %s",
+				datum.name, parser.DummyInt.Type(), dstDatum.Type())
 		}
+	}
+	return count, offset, nil
+}
+
+// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
+func (p *planner) limit(count, offset int64, plan planNode) planNode {
+	if count == math.MaxInt64 && offset == 0 {
+		return plan
 	}
 
 	if count != math.MaxInt64 {
 		plan.SetLimitHint(offset+count, false /* hard */)
 	}
 
-	return &limitNode{planNode: plan, count: count, offset: offset}, nil
+	return &limitNode{planNode: plan, count: count, offset: offset}
 }
 
 type limitNode struct {

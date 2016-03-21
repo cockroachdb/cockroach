@@ -199,12 +199,11 @@ func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.
 		if pberr != nil {
 			return nil, pberr
 		}
-		var err error
-		plan, err = p.limit(limit, sort.wrap(plan))
+		count, offset, err := p.evalLimit(limit)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		return plan, nil
+		return p.limit(count, offset, sort.wrap(plan)), nil
 	}
 }
 
@@ -271,8 +270,9 @@ func (p *planner) initSelect(
 	}
 
 	if scan, ok := s.table.node.(*scanNode); ok {
-		// Find the set of columns that we actually need values for. This is an optimization to avoid
-		// unmarshaling unnecessary values and is also used for index selection.
+		// Find the set of columns that we actually need values for. This is an
+		// optimization to avoid unmarshaling unnecessary values and is also
+		// used for index selection.
 		neededCols := make([]bool, len(s.table.columns))
 		for i := range neededCols {
 			_, ok := s.qvals[columnRef{&s.table, i}]
@@ -280,15 +280,15 @@ func (p *planner) initSelect(
 		}
 		scan.setNeededColumns(neededCols)
 
-		// If we are only preparing, the filter expression can contain unexpanded subqueries which
-		// are not supported by splitFilter.
+		// If we are only preparing, the filter expression can contain
+		// unexpanded subqueries which are not supported by splitFilter.
 		if !p.evalCtx.PrepareOnly {
 			// Compute a filter expression for the scan node.
 			convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
 				qval := expr.(*qvalue)
 				if qval.colRef.table != &s.table {
-					// TODO(radu): when we will support multiple tables, this will be a valid
-					// case.
+					// TODO(radu): when we will support multiple tables, this
+					// will be a valid case.
 					panic("scan qvalue refers to unknown table")
 				}
 				return true, scan.getQValue(qval.colRef.colIdx)
@@ -296,8 +296,8 @@ func (p *planner) initSelect(
 
 			scan.filter, s.filter = splitFilter(s.filter, convFunc)
 			if s.filter != nil {
-				// Right now we support only one table, so the entire expression should be
-				// converted.
+				// Right now we support only one table, so the entire expression
+				// should be converted.
 				panic(fmt.Sprintf("residual filter `%s` (scan filter `%s`)", s.filter, scan.filter))
 			}
 		}
@@ -311,11 +311,11 @@ func (p *planner) initSelect(
 	s.ordering = s.computeOrdering(s.table.node.Ordering())
 
 	// Wrap this node as necessary.
-	limitNode, err := p.limit(limit, p.distinct(parsed, sort.wrap(group.wrap(s))))
+	limitCount, limitOffset, err := p.evalLimit(limit)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	return limitNode, nil
+	return p.limit(limitCount, limitOffset, p.distinct(parsed, sort.wrap(group.wrap(s)))), nil
 }
 
 // Initializes the table node, given the parsed select expression
