@@ -28,7 +28,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/cockroachdb/cockroach/util/humanizeutil"
 )
 
 var maxResults int64
@@ -57,15 +58,17 @@ nodes. For example:`) + `
 
 	"cache": wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
-storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
+storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).
+If left unspecified, defaults to half of the physical memory, or
+512MB if the memory size cannot be determined.`),
 
-	"client_host": wrapText(`
+	"host": wrapText(`
 Database server host to connect to.`),
 
-	"client_port": wrapText(`
+	"port": wrapText(`
 Database server port to connect to.`),
 
-	"client_http_port": wrapText(`
+	"http_port": wrapText(`
 Database server port to connect to for HTTP requests.`),
 
 	"database": wrapText(`
@@ -97,10 +100,10 @@ hostname; it must resolve from other nodes in the cluster.`),
 	"insecure": wrapText(`
 Run over plain HTTP. WARNING: this is strongly discouraged.`),
 
-	"key-size": wrapText(`
+	"key_size": wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
 
-	"max-results": wrapText(`
+	"max_results": wrapText(`
 Define the maximum number of results that will be retrieved.`),
 
 	"password": wrapText(`
@@ -113,10 +116,10 @@ The port to bind to.`),
 	"server_http_port": wrapText(`
 The port to bind to for HTTP requests.`),
 
-	"ca-cert": wrapText(`
+	"ca_cert": wrapText(`
 Path to the CA certificate. Needed by clients and servers in secure mode.`),
 
-	"ca-key": wrapText(`
+	"ca_key": wrapText(`
 Path to the key protecting --ca-cert. Only needed when signing new certificates.`),
 
 	"cert": wrapText(`
@@ -213,7 +216,7 @@ func newBytesValue(val *int64) *bytesValue {
 }
 
 func (b *bytesValue) Set(s string) error {
-	v, err := util.ParseBytes(s)
+	v, err := humanizeutil.ParseBytes(s)
 	if err != nil {
 		return err
 	}
@@ -230,24 +233,30 @@ func (b *bytesValue) String() string {
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return util.IBytes(*b.val)
+	return humanizeutil.IBytes(*b.val)
 }
 
 func wrapText(s string) string {
 	return text.Wrap(s, wrapWidth)
 }
 
-func usage(name string) string {
+func makeUsageString(name string, hasEnv bool) string {
 	s, ok := flagUsage[name]
 	if !ok {
 		panic(fmt.Sprintf("flag usage not defined for %q", name))
 	}
 	s = "\n" + strings.TrimSpace(s) + "\n"
+	if hasEnv {
+		s = s + "Environment variable: COCKROACH_" + strings.ToUpper(name) + "\n"
+	}
 	// github.com/spf13/pflag appends the default value after the usage text. Add
 	// the correct indentation (7 spaces) here. This is admittedly fragile.
 	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
 		strings.Repeat(" ", usageIndentation-1)
 }
+
+func usage(name string) string      { return makeUsageString(name, true) }
+func usageNoEnv(name string) string { return makeUsageString(name, false) }
 
 // initFlags sets the cli.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
@@ -275,29 +284,26 @@ func initFlags(ctx *Context) {
 		f := startCmd.Flags()
 
 		// Server flags.
-		f.StringVar(&connHost, "host", "", usage("server_host"))
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("server_http_port"))
-		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
-		f.VarP(&ctx.Stores, "store", "s", usage("store"))
+		f.StringVar(&connHost, "host", "", usageNoEnv("server_host"))
+		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usageNoEnv("server_port"))
+		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usageNoEnv("server_http_port"))
+		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usageNoEnv("attrs"))
+		f.VarP(&ctx.Stores, "store", "s", usageNoEnv("store"))
 
 		// Security flags.
-		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
+		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usageNoEnv("insecure"))
 		// Certificates.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usageNoEnv("ca_cert"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usageNoEnv("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usageNoEnv("key"))
 
 		// Cluster joining flags.
-		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usage("join"))
+		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usageNoEnv("join"))
 
 		// Engine flags.
+		setDefaultCacheSize(&ctx.Context)
 		cacheSize = newBytesValue(&ctx.CacheSize)
-		f.Var(cacheSize, "cache", usage("cache"))
-
-		// Clear the cache default value. This flag does have a default, but
-		// it is set only when the "start" command is run.
-		f.Lookup("cache").DefValue = ""
+		f.Var(cacheSize, "cache", usageNoEnv("cache"))
 
 		if err := startCmd.MarkFlagRequired("store"); err != nil {
 			panic(err)
@@ -306,7 +312,7 @@ func initFlags(ctx *Context) {
 
 	{
 		f := exterminateCmd.Flags()
-		f.Var(&ctx.Stores, "store", usage("store"))
+		f.Var(&ctx.Stores, "store", usageNoEnv("store"))
 		if err := exterminateCmd.MarkFlagRequired("store"); err != nil {
 			panic(err)
 		}
@@ -315,17 +321,14 @@ func initFlags(ctx *Context) {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCAKey, "ca-key", ctx.SSLCAKey, usage("ca-key"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
-		f.IntVar(&keySize, "key-size", defaultKeySize, usage("key-size"))
-		if err := cmd.MarkFlagRequired("key-size"); err != nil {
-			panic(err)
-		}
+		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usageNoEnv("ca_cert"))
+		f.StringVar(&ctx.SSLCAKey, "ca-key", ctx.SSLCAKey, usageNoEnv("ca_key"))
+		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usageNoEnv("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usageNoEnv("key"))
+		f.IntVar(&keySize, "key-size", defaultKeySize, usageNoEnv("key_size"))
 	}
 
-	setUserCmd.Flags().StringVar(&password, "password", "", usage("password"))
+	setUserCmd.Flags().StringVar(&password, "password", envutil.EnvOrDefaultString("password", ""), usage("password"))
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, exterminateCmd, quitCmd, /* startCmd is covered above */
@@ -337,18 +340,18 @@ func initFlags(ctx *Context) {
 	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
-		f.StringVar(&connHost, "host", "", usage("client_host"))
+		f.BoolVar(&ctx.Insecure, "insecure", envutil.EnvOrDefaultBool("insecure", ctx.Insecure), usage("insecure"))
+		f.StringVar(&connHost, "host", envutil.EnvOrDefaultString("host", ""), usage("host"))
 
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
+		f.StringVar(&ctx.SSLCA, "ca-cert", envutil.EnvOrDefaultString("ca_cert", ctx.SSLCA), usage("ca_cert"))
+		f.StringVar(&ctx.SSLCert, "cert", envutil.EnvOrDefaultString("cert", ctx.SSLCert), usage("cert"))
+		f.StringVar(&ctx.SSLCertKey, "key", envutil.EnvOrDefaultString("key", ctx.SSLCertKey), usage("key"))
 	}
 
 	{
 		f := sqlShellCmd.Flags()
-		f.VarP(&ctx.execStmts, "execute", "e", usage("execute"))
+		f.VarP(&ctx.execStmts, "execute", "e", usageNoEnv("execute"))
 	}
 
 	// Commands that need the cockroach port.
@@ -357,7 +360,7 @@ func initFlags(ctx *Context) {
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
+		f.StringVarP(&connPort, "port", "p", envutil.EnvOrDefaultString("port", base.DefaultPort), usage("port"))
 	}
 
 	// Commands that need an http port.
@@ -365,7 +368,7 @@ func initFlags(ctx *Context) {
 	httpCmds = append(httpCmds, nodeCmds...)
 	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("client_http_port"))
+		f.StringVar(&httpPort, "http-port", envutil.EnvOrDefaultString("http_port", base.DefaultHTTPPort), usage("http_port"))
 	}
 
 	// Commands that establish a SQL connection.
@@ -374,17 +377,17 @@ func initFlags(ctx *Context) {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connURL, "url", "", usage("url"))
+		f.StringVar(&connURL, "url", envutil.EnvOrDefaultString("url", ""), usage("url"))
 
-		f.StringVarP(&connUser, "user", "u", security.RootUser, usage("user"))
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
-		f.StringVarP(&connDBName, "database", "d", "", usage("database"))
+		f.StringVarP(&connUser, "user", "u", envutil.EnvOrDefaultString("user", security.RootUser), usage("user"))
+		f.StringVarP(&connPort, "port", "p", envutil.EnvOrDefaultString("port", base.DefaultPort), usage("port"))
+		f.StringVarP(&connDBName, "database", "d", envutil.EnvOrDefaultString("database", ""), usage("database"))
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
 	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd, lsRangesCmd} {
 		f := cmd.Flags()
-		f.Int64Var(&maxResults, "max-results", 1000, usage("max-results"))
+		f.Int64Var(&maxResults, "max-results", 1000, usageNoEnv("max_results"))
 	}
 
 	// Debug commands.

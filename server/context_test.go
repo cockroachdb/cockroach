@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip/resolver"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -88,7 +89,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_MAX_OFFSET"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_METRICS_FREQUENCY"); err != nil {
+		if err := os.Unsetenv("COCKROACH_METRICS_SAMPLE_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
@@ -98,6 +99,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := os.Unsetenv("COCKROACH_TIME_UNTIL_STORE_DEAD"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,10 +127,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctxExpected.MaxOffset = time.Second
-	if err := os.Setenv("COCKROACH_METRICS_FREQUENCY", "1h10m"); err != nil {
+	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "1h10m"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.MetricsFrequency = time.Hour + time.Minute*10
+	ctxExpected.MetricsSampleInterval = time.Hour + time.Minute*10
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +143,12 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctxExpected.TimeUntilStoreDead = time.Millisecond * 10
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "10ms"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ConsistencyCheckInterval = time.Millisecond * 10
 
+	envutil.ClearEnvCache()
 	ctx.readEnvironmentVariables()
 	if !reflect.DeepEqual(ctx, ctxExpected) {
 		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
@@ -156,7 +165,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	if err := os.Setenv("COCKROACH_MAX_OFFSET", "abcd"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Setenv("COCKROACH_METRICS_FREQUENCY", "abcd"); err != nil {
+	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "abcd"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {
@@ -168,7 +177,11 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "abcd"); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "abcd"); err != nil {
+		t.Fatal(err)
+	}
 
+	envutil.ClearEnvCache()
 	ctx.readEnvironmentVariables()
 	if !reflect.DeepEqual(ctx, ctxExpected) {
 		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)

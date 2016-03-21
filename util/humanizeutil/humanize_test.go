@@ -14,12 +14,13 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-package util
+package humanizeutil_test
 
 import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -47,16 +48,16 @@ func TestBytes(t *testing.T) {
 
 	for i, testCase := range testCases {
 		// Test IBytes.
-		if actual := IBytes(testCase.value); actual != testCase.exp {
+		if actual := humanizeutil.IBytes(testCase.value); actual != testCase.exp {
 			t.Errorf("%d: IBytes(%d) actual:%s does not match expected:%s", i, testCase.value, actual, testCase.exp)
 		}
 		// Test negative IBytes.
-		if actual := IBytes(-testCase.value); actual != testCase.expNeg {
+		if actual := humanizeutil.IBytes(-testCase.value); actual != testCase.expNeg {
 			t.Errorf("%d: IBytes(%d) actual:%s does not match expected:%s", i, -testCase.value, actual,
 				testCase.expNeg)
 		}
 		// Test ParseBytes.
-		if actual, err := ParseBytes(testCase.exp); err != nil {
+		if actual, err := humanizeutil.ParseBytes(testCase.exp); err != nil {
 			if len(testCase.parseErr) > 0 {
 				if testCase.parseErr != err.Error() {
 					t.Errorf("%d: ParseBytes(%s) caused an incorrect error actual:%s, expected:%s", i, testCase.exp,
@@ -70,7 +71,7 @@ func TestBytes(t *testing.T) {
 				testCase.parseExp)
 		}
 		// Test negative ParseBytes.
-		if actual, err := ParseBytes(testCase.expNeg); err != nil {
+		if actual, err := humanizeutil.ParseBytes(testCase.expNeg); err != nil {
 			if len(testCase.parseErrNeg) > 0 {
 				if testCase.parseErrNeg != err.Error() {
 					t.Errorf("%d: ParseBytes(%s) caused an incorrect error actual:%s, expected:%s", i, testCase.expNeg,
@@ -101,7 +102,7 @@ func TestBytes(t *testing.T) {
 		{"-10 EiB", "too large: -10 EiB"},      // our error
 	}
 	for i, testCase := range testFailCases {
-		if _, err := ParseBytes(testCase.value); err.Error() != testCase.expected {
+		if _, err := humanizeutil.ParseBytes(testCase.value); err.Error() != testCase.expected {
 			t.Errorf("%d: ParseBytes(%s) caused an incorrect error actual:%s, expected:%s", i, testCase.value, err,
 				testCase.expected)
 		}

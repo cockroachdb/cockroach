@@ -20,13 +20,17 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/envutil"
 )
 
 func TestOffset(t *testing.T) {
 	for _, expectedOffset := range []time.Duration{-time.Hour, time.Hour} {
-		if err := os.Setenv(offsetEnvKey, expectedOffset.String()); err != nil {
+		if err := os.Setenv("COCKROACH_SIMULATED_OFFSET", expectedOffset.String()); err != nil {
 			t.Fatal(err)
 		}
+
+		envutil.ClearEnvCache()
 
 		initFakeTime()
 
