@@ -331,7 +331,7 @@ func (ctx *Context) AdminURL() string {
 }
 
 // PGURL returns the URL for the postgres endpoint.
-func (ctx *Context) PGURL(user string) *url.URL {
+func (ctx *Context) PGURL(user string) (*url.URL, error) {
 	// Try to convert path to an absolute path. Failing to do so return path
 	// unchanged.
 	absPath := func(path string) string {
@@ -347,16 +347,31 @@ func (ctx *Context) PGURL(user string) *url.URL {
 		options.Add("sslmode", "disable")
 	} else {
 		options.Add("sslmode", "verify-full")
-		options.Add("sslcert", absPath(ctx.SSLCert))
-		options.Add("sslkey", absPath(ctx.SSLCertKey))
-		options.Add("sslrootcert", absPath(ctx.SSLCA))
+		requiredFlags := []struct {
+			name  string
+			value *string
+		}{
+			{"sslcert", &ctx.SSLCert},
+			{"sslkey", &ctx.SSLCertKey},
+			{"sslrootcert", &ctx.SSLCA},
+		}
+		for _, c := range requiredFlags {
+			if *c.value == "" {
+				return nil, fmt.Errorf("missing --%s flag", base.FlagMap[c.value].Name)
+			}
+			path := absPath(*c.value)
+			if _, err := os.Stat(path); err != nil {
+				return nil, fmt.Errorf("file for --%s flag gave error: %v", base.FlagMap[c.value].Name, err)
+			}
+			options.Add(c.name, path)
+		}
 	}
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     url.User(user),
 		Host:     ctx.Addr,
 		RawQuery: options.Encode(),
-	}
+	}, nil
 }
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
