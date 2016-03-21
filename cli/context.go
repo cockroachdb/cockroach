@@ -39,6 +39,11 @@ func (s *statementsValue) Set(value string) error {
 	return nil
 }
 
+type debugContext struct {
+	startKey, endKey string
+	raw              bool
+}
+
 // Context contains global settings for the command-line client.
 type Context struct {
 	// Embed the server context.
@@ -46,6 +51,8 @@ type Context struct {
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
+	// debugContext holds values used by debug cli commands.
+	debug debugContext
 }
 
 // NewContext returns a Context with default values.
