@@ -52,14 +52,14 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		// We're dealing with a range-spanning request.
 		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
 		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
+			// This is a Range-local key range. Check whether the local key
+			// is in the range, and if not, cut it out of the request.
 			if !rs.ContainsKeyRange(keyAddr, endKeyAddr) {
-				return false, emptySpan, util.Errorf("local key range must not span ranges")
+				return false, emptySpan, nil
 			}
 			if !l || !r {
 				return false, emptySpan, util.Errorf("local key mixed with global key in range")
 			}
-			// Range-local local key range.
-			return true, header, nil
 		}
 		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
 		if keyAddr.Less(rs.Key) {

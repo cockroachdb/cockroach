@@ -57,9 +57,15 @@ func TestTruncate(t *testing.T) {
 
 		{
 			// Range-local range not contained in active range.
-			keys: [][2]string{{loc("a"), loc("b")}},
-			from: "b", to: "e",
-			err: "local key range must not span ranges",
+			keys:    [][2]string{{loc("a"), loc("b")}},
+			expKeys: [][2]string{{}},
+			from:    "b", to: "e",
+		},
+		{
+			// Range-local range partially contained in active range.
+			keys:    [][2]string{{loc("a"), loc("b")}},
+			expKeys: [][2]string{{loc("a"), loc("b")}},
+			from:    "a", to: "e",
 		},
 		{
 			// Mixed range-local vs global key range.
