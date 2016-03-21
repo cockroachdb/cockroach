@@ -74,7 +74,7 @@ module Models {
      * CockroachDB.
      */
     export module MetricConstants {
-      export var ranges: string = "ranges";
+      export var replicas: string = "replicas";
       export var leaderRanges: string = "ranges.leader";
       export var replicatedRanges: string = "ranges.replicated";
       export var availableRanges: string = "ranges.available";
