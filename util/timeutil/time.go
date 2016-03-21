@@ -17,15 +17,12 @@
 package timeutil
 
 import (
-	"os"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 )
-
-const offsetEnvKey = "COCKROACH_SIMULATED_OFFSET"
-const monotonicCheckEnableEnvKey = "COCKROACH_ENABLE_CHECK_MONOTONIC_TIME"
 
 var (
 	nowFunc = time.Now
@@ -43,16 +40,11 @@ var (
 func initMonotonicityCheck() {
 	// TODO(knz) perhaps we should change the default to disabled.
 	// However for Beta we always enable.
-	monotonicityCheckEnabled = os.Getenv(monotonicCheckEnableEnvKey) != "0"
+	monotonicityCheckEnabled = envutil.EnvOrDefaultBool("enable_check_monotonic_time", true)
 }
 
 func initFakeTime() {
-	if offsetStr := os.Getenv(offsetEnvKey); offsetStr != "" {
-		var err error
-		if offset, err = time.ParseDuration(offsetStr); err != nil {
-			panic(err)
-		}
-	}
+	offset = envutil.EnvOrDefaultDuration("simulated_offset", time.Duration(0))
 	if offset == 0 {
 		nowFunc = time.Now
 	} else {

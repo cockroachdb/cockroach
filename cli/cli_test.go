@@ -734,6 +734,7 @@ Available Commands:
   gen         generate manpages and bash completion file
   version     output version information
   debug       debugging commands
+  env         output environment settings
 
 Flags:
       --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default ERROR)

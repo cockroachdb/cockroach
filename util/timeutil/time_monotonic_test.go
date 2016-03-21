@@ -19,15 +19,19 @@ package timeutil
 import (
 	"os"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/envutil"
 )
 
 func TestMonotonicityCheck(t *testing.T) {
-	if err := os.Setenv(offsetEnvKey, "-1h"); err != nil {
+	if err := os.Setenv("COCKROACH_SIMULATED_OFFSET", "-1h"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Setenv(monotonicCheckEnableEnvKey, "1"); err != nil {
+	if err := os.Setenv("COCKROACH_ENABLE_CHECK_MONOTONIC_TIME", "true"); err != nil {
 		t.Fatal(err)
 	}
+
+	envutil.ClearEnvCache()
 
 	initMonotonicityCheck()
 

@@ -547,7 +547,7 @@ func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tsrv := TestServer{}
 	tsrv.Ctx = NewTestContext()
-	tsrv.Ctx.MetricsFrequency = 5 * time.Millisecond
+	tsrv.Ctx.MetricsSampleInterval = 5 * time.Millisecond
 	if err := tsrv.Start(); err != nil {
 		t.Fatal(err)
 	}

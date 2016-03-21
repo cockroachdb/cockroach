@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"os"
 	"time"
 
 	"golang.org/x/net/context"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -217,7 +217,11 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 // Allow local calls to be dispatched directly to the local server without
 // sending an RPC.
-var enableLocalCalls = os.Getenv("ENABLE_LOCAL_CALLS") != "0"
+var enableLocalCalls bool
+
+func init() {
+	enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", false)
+}
 
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
