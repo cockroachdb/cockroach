@@ -65,7 +65,11 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 			}
 
 			if dstDInt, ok := dstDatum.(parser.DInt); ok {
-				*datum.dst = int64(dstDInt)
+				val := int64(dstDInt)
+				if val < 0 {
+					return 0, 0, fmt.Errorf("negative value for %s", datum.name)
+				}
+				*datum.dst = val
 				continue
 			}
 

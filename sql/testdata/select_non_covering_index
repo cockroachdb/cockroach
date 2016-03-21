@@ -84,3 +84,42 @@ EXPLAIN SELECT * FROM t WHERE c > 0 AND d = 8
 0 index-join
 1 scan       t@c /1-
 1 scan       t@primary
+
+# The following testcases verify that when we have a small limit, we prefer an
+# order-matching index.
+
+query ITT
+EXPLAIN SELECT * FROM t ORDER BY c
+----
+0 sort       +c
+1 scan       t@primary -
+
+query ITT
+EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5
+----
+0 limit      count: 5, offset: 0
+1 index-join
+2 scan       t@c -
+2 scan       t@primary
+
+query ITT
+EXPLAIN SELECT * FROM t ORDER BY c OFFSET 5
+----
+0 limit      count: ALL, offset: 5
+1 sort       +c
+2 scan       t@primary -
+
+query ITT
+EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
+----
+0 limit      count: 5, offset: 5
+1 index-join
+2 scan       t@c -
+2 scan       t@primary
+
+query ITT
+EXPLAIN SELECT * FROM t ORDER BY c LIMIT 1000000
+----
+0 limit      count: 1000000, offset: 0
+1 sort       +c (top 1000000)
+2 scan       t@primary -
