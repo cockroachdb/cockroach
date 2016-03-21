@@ -400,7 +400,7 @@ func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.
 		// Directly verify a subset of metrics which have predictable output.
 		compareMetricMaps(actualStores[key].Metrics, expectedStores[key].Metrics,
 			[]string{
-				"ranges",
+				"replicas",
 				"ranges.replicated",
 			},
 			[]string{
@@ -483,15 +483,15 @@ func TestStatusSummaries(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		expectedRanges := 0
+		expectedReplicas := 0
 		if s.StoreID() == roachpb.StoreID(1) {
-			expectedRanges = initialRanges
+			expectedReplicas = initialRanges
 		}
 		stat := status.StoreStatus{
 			Desc: *desc,
 			Metrics: map[string]float64{
-				"ranges":            float64(expectedRanges),
-				"ranges.replicated": float64(expectedRanges),
+				"replicas":          float64(expectedReplicas),
+				"ranges.replicated": float64(expectedReplicas),
 				"livebytes":         0,
 				"keybytes":          0,
 				"valbytes":          0,
@@ -585,7 +585,7 @@ func TestStatusSummaries(t *testing.T) {
 
 	// Increment metrics on the first store.
 	store1 = expectedStoreStatuses[roachpb.StoreID(1)].Metrics
-	store1["ranges"]++
+	store1["replicas"]++
 	store1["ranges.leader"]++
 	store1["ranges.available"]++
 	store1["ranges.replicated"]++

@@ -259,7 +259,7 @@ module AdminViews {
                   title: "Total Ranges",
                   visualizationArguments: {
                     format: ".0s",
-                    data: {value: totalStats[MetricNames.ranges]},
+                    data: {value: totalStats[MetricNames.leaderRanges]},
                   },
                 },
                 {

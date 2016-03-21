@@ -384,7 +384,7 @@ type storeMetrics struct {
 	registry *metric.Registry
 
 	// Range data metrics.
-	rangeCount           *metric.Counter
+	replicaCount         *metric.Counter
 	leaderRangeCount     *metric.Gauge
 	replicatedRangeCount *metric.Gauge
 	availableRangeCount  *metric.Gauge
@@ -432,7 +432,7 @@ func newStoreMetrics() *storeMetrics {
 	storeRegistry := metric.NewRegistry()
 	return &storeMetrics{
 		registry:             storeRegistry,
-		rangeCount:           storeRegistry.Counter("ranges"),
+		replicaCount:         storeRegistry.Counter("replicas"),
 		leaderRangeCount:     storeRegistry.Gauge("ranges.leader"),
 		replicatedRangeCount: storeRegistry.Gauge("ranges.replicated"),
 		availableRangeCount:  storeRegistry.Gauge("ranges.available"),
@@ -733,7 +733,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				return false, err
 			}
 			// Add this range and its stats to our counter.
-			s.metrics.rangeCount.Inc(1)
+			s.metrics.replicaCount.Inc(1)
 			s.metrics.addMVCCStats(rng.stats.GetMVCC())
 			// TODO(bdarnell): lazily create raft groups to make the following comment true again.
 			// Note that we do not create raft groups at this time; they will be created
@@ -1221,7 +1221,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return err
 	}
 
-	s.metrics.rangeCount.Inc(1)
+	s.metrics.replicaCount.Inc(1)
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
@@ -1271,7 +1271,7 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 	if err := s.addReplicaInternalLocked(rng); err != nil {
 		return err
 	}
-	s.metrics.rangeCount.Inc(1)
+	s.metrics.replicaCount.Inc(1)
 	return nil
 }
 
@@ -1346,7 +1346,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
-	s.metrics.rangeCount.Dec(1)
+	s.metrics.replicaCount.Dec(1)
 
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets
@@ -1407,7 +1407,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	delete(s.mu.uninitReplicas, rangeID)
 
 	// Add the range and its current stats into metrics.
-	s.metrics.rangeCount.Inc(1)
+	s.metrics.replicaCount.Inc(1)
 	s.metrics.addMVCCStats(rng.stats.GetMVCC())
 
 	if s.mu.replicasByKey.Has(rng) {
