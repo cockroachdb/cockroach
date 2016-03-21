@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -136,10 +135,6 @@ func transferMoney(client *testClient, numAccounts, maxTransfer int) error {
 	return err
 }
 
-func retryableError(err error) bool {
-	return testutils.IsError(err, "connection reset by peer") || testutils.IsError(err, "connection refused") || testutils.IsError(err, "failed to send RPC") || testutils.IsError(err, "EOF")
-}
-
 // Verify accounts.
 func verifyAccounts(t *testing.T, client *testClient) {
 	var sum int
@@ -149,7 +144,7 @@ func verifyAccounts(t *testing.T, client *testClient) {
 		client.RLock()
 		defer client.RUnlock()
 		err := client.db.QueryRow("SELECT SUM(balance) FROM bank.accounts").Scan(&sum)
-		if err != nil && !retryableError(err) {
+		if err != nil && !isRetryableError(err) {
 			t.Fatal(err)
 		}
 		return err
@@ -166,7 +161,7 @@ func transferMoneyLoop(idx int, state *testState, numAccounts, maxTransfer int) 
 	for !state.done() {
 		if err := transferMoney(client, numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
-			if !retryableError(err) {
+			if !isRetryableError(err) {
 				// Report the err and terminate.
 				state.errChan <- err
 				break

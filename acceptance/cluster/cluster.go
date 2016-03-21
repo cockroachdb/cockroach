@@ -50,6 +50,8 @@ type Cluster interface {
 	Restart(int) error
 	// URL returns the HTTP(s) endpoint.
 	URL(int) string
+	// Addr returns the host and port from the node in the format HOST:PORT.
+	Addr(int) string
 }
 
 // Consistent performs a replication consistency check on all the ranges

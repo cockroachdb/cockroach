@@ -255,6 +255,11 @@ func (f *Farmer) URL(i int) string {
 	return "http://" + net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
 }
 
+// Addr returns the host and port from the node in the format HOST:PORT.
+func (f *Farmer) Addr(i int) string {
+	return net.JoinHostPort(f.Nodes()[i], base.DefaultHTTPPort)
+}
+
 func (f *Farmer) logf(format string, args ...interface{}) {
 	if f.Output != nil {
 		fmt.Fprintf(f.Output, format, args...)
