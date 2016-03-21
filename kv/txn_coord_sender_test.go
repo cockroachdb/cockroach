@@ -807,6 +807,74 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 	}
 }
 
+// TestTxnCoordSenderNoDuplicateIntents verifies that TxnCoordSender does not
+// generate duplicate intents and that it merges intents for overlapping ranges.
+func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+
+	var expectedIntents []roachpb.Span
+
+	senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (
+		*roachpb.BatchResponse, *roachpb.Error) {
+		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			et := rArgs.(*roachpb.EndTransactionRequest)
+			if !reflect.DeepEqual(et.IntentSpans, expectedIntents) {
+				t.Errorf("Invalid intents: %+v; expected %+v", et.IntentSpans, expectedIntents)
+			}
+		}
+		br := ba.CreateReply()
+		txnClone := ba.Txn.Clone()
+		br.Txn = &txnClone
+		br.Txn.Writing = true
+		return br, nil
+	}
+	ts := NewTxnCoordSender(senderFn(senderFunc), clock, false, tracing.NewTracer(), stopper,
+		NewTxnMetrics(metric.NewRegistry()))
+
+	defer stopper.Stop()
+	defer teardownHeartbeats(ts)
+
+	db := client.NewDB(ts)
+	txn := client.NewTxn(*db)
+
+	// Write to a, b, u-w before the final batch.
+
+	pErr := txn.Put(roachpb.Key("a"), []byte("value"))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	pErr = txn.Put(roachpb.Key("b"), []byte("value"))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	pErr = txn.DelRange(roachpb.Key("u"), roachpb.Key("w"))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// The final batch overwrites key a and overlaps part of the u-w range.
+	b := txn.NewBatch()
+	b.Put(roachpb.Key("b"), []byte("value"))
+	b.Put(roachpb.Key("c"), []byte("value"))
+	b.DelRange(roachpb.Key("v"), roachpb.Key("z"), false)
+
+	// The expected intents are a, b, c, and u-z.
+	expectedIntents = []roachpb.Span{
+		{Key: roachpb.Key("a"), EndKey: nil},
+		{Key: roachpb.Key("b"), EndKey: nil},
+		{Key: roachpb.Key("c"), EndKey: nil},
+		{Key: roachpb.Key("u"), EndKey: roachpb.Key("z")},
+	}
+
+	pErr = txn.CommitInBatch(b)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
 // checkTxnMetrics verifies that the provided Sender's transaction metrics match the expected
 // values. This is done through a series of retries with increasing backoffs, to work around
 // the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
