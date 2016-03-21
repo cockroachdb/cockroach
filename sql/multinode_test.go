@@ -32,6 +32,12 @@ import (
 // creates database `name and returns open sql.DB connections to each
 // node (to the named db), as well as a cleanup func that stops and
 // cleans up all nodes and connections.
+// TODO(davidt): Change zone config to actually add replication.
+// TODO(davidt): Ensure that ranges are actually replicated before returning.
+// Until these TODOs are resolved, the cluster returned is not particularly
+// useful for benchmarking, as without replication overhead it is the same as
+// single-node operation, except without the local-call optimization for the
+// additional nodes.
 func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*sql.DB, func()) {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
@@ -78,6 +84,9 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*sql.DB,
 	return conns, f
 }
 
+// NB(davidt): until `SetupMultinodeTestCluster` actually returns a cluster
+// with replication configured, this is only testing adding nodes to a cluster
+// and then their ability to serve SQL by talking to a remote, single-node KV.
 func TestMultinodeCockroach(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer tracing.Disable()()
