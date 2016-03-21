@@ -168,6 +168,12 @@ SELECT * FROM xyzw LIMIT a
 query error argument of OFFSET must not contain variables
 SELECT * FROM xyzw OFFSET a
 
+query error negative value for LIMIT
+SELECT * FROM xyzw LIMIT -100
+
+query error negative value for OFFSET
+SELECT * FROM xyzw OFFSET -100
+
 query error unsupported binary operator: <int> \+ <float>
 SELECT * FROM xyzw OFFSET 1 + 0.0
 
