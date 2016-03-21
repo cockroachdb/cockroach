@@ -17,6 +17,7 @@
 package keys
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"testing"
@@ -145,6 +146,20 @@ func TestPrettyPrint(t *testing.T) {
 
 		if exp != MassagePrettyPrintedSpanForTest(test.key.String(), nil) {
 			t.Errorf("%d: expected %s, got %s", i, exp, test.key.String())
+		}
+
+		parsed, err := UglyPrint(keyInfo)
+		if err != nil {
+			if _, ok := err.(*errUglifyUnsupported); !ok {
+				t.Errorf("%d: %s: %s", i, keyInfo, err)
+			} else {
+				t.Logf("%d: skipping parsing of %s; key is unsupported: %v", i, keyInfo, err)
+			}
+		} else if exp, act := test.key, parsed; !bytes.Equal(exp, act) {
+			t.Errorf("%d: expected %q, got %q", i, exp, act)
+		}
+		if t.Failed() {
+			return
 		}
 	}
 }
