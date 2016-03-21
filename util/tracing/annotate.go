@@ -19,9 +19,9 @@ package tracing
 // static void annotateTrace() {
 // }
 import "C"
-import "os"
+import "github.com/cockroachdb/cockroach/util/envutil"
 
-var annotationEnabled = os.Getenv("ANNOTATE_TRACES") == "1"
+var annotationEnabled = envutil.EnvOrDefaultBool("annotate_traces", false)
 
 // AnnotateTrace adds an annotation to the golang executation tracer by calling
 // a no-op cgo function.

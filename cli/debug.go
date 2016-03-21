@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -57,7 +58,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 }
 
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (engine.Engine, error) {
-	initCacheSize()
+	setDefaultCacheSize(&cliContext.Context)
 
 	db := engine.NewRocksDB(roachpb.Attributes{}, dir,
 		cliContext.CacheSize, cliContext.MemtableBudget, 0, stopper)
@@ -473,6 +474,18 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var debugEnvCmd = &cobra.Command{
+	Use:   "env",
+	Short: "output environment settings",
+	Long: `
+Output environment variables that influence configuration.
+`,
+	Run: func(cmd *cobra.Command, args []string) {
+		env := envutil.GetEnvReport()
+		fmt.Print(env)
+	},
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 }
@@ -485,6 +498,7 @@ var debugCmds = []*cobra.Command{
 	debugSplitKeyCmd,
 	kvCmd,
 	rangeCmd,
+	debugEnvCmd,
 }
 
 var debugCmd = &cobra.Command{
