@@ -57,7 +57,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 }
 
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (engine.Engine, error) {
-	initCacheSize()
+	setDefaultCacheSize(&cliContext.Context)
 
 	db := engine.NewRocksDB(roachpb.Attributes{}, dir,
 		cliContext.CacheSize, cliContext.MemtableBudget, 0, stopper)

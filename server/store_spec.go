@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/humanizeutil"
 )
 
 var minimumStoreSize = 10 * int64(config.DefaultZoneConfig().RangeMaxBytes)
@@ -53,7 +53,7 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
 	if ss.SizeInBytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", util.IBytes(ss.SizeInBytes))
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.SizeInBytes))
 	}
 	if ss.SizePercent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
@@ -159,13 +159,13 @@ func newStoreSpec(value string) (StoreSpec, error) {
 				}
 			} else {
 				var err error
-				ss.SizeInBytes, err = util.ParseBytes(value)
+				ss.SizeInBytes, err = humanizeutil.ParseBytes(value)
 				if err != nil {
 					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
 				}
 				if ss.SizeInBytes < minimumStoreSize {
 					return StoreSpec{}, fmt.Errorf("store size (%s) must be larger than %s", value,
-						util.IBytes(minimumStoreSize))
+						humanizeutil.IBytes(minimumStoreSize))
 				}
 			}
 		case "attrs":

@@ -17,11 +17,10 @@
 package timeutil
 
 import (
-	"os"
 	"time"
-)
 
-const offsetEnvKey = "COCKROACH_SIMULATED_OFFSET"
+	"github.com/cockroachdb/cockroach/util/envutil"
+)
 
 var (
 	nowFunc = time.Now
@@ -39,13 +38,8 @@ func SetTimeOffset(offset time.Duration) {
 }
 
 func initFakeTime() {
-	if offsetStr := os.Getenv(offsetEnvKey); offsetStr != "" {
-		offset, err := time.ParseDuration(offsetStr)
-		if err != nil {
-			panic(err)
-		}
-		SetTimeOffset(offset)
-	}
+	offset := envutil.EnvOrDefaultDuration("simulated_offset", 0)
+	SetTimeOffset(offset)
 }
 
 // Now returns the current local time with an optional offset specified by the

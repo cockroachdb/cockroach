@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"log" // Don't bring cockroach/util/log into this low-level package.
 	"math/rand"
-	"os"
-	"strconv"
+
+	"github.com/cockroachdb/cockroach/util/envutil"
 )
 
 // NewPseudoSeed generates a seed from crypto/rand.
@@ -67,21 +67,11 @@ func RandBytes(r *rand.Rand, size int) []byte {
 
 // SeedForTests seeds the random number generator and prints the seed
 // value used. This value can be specified via an environment variable
-// RANDOM_SEED=x to reuse the same value later. This function should
+// COCKROACH_RANDOM_SEED=x to reuse the same value later. This function should
 // be called from TestMain; individual tests should not touch the seed
 // of the global random number generator.
 func SeedForTests() {
-	var seed int64
-	env := os.Getenv("RANDOM_SEED")
-	if env == "" {
-		seed = NewPseudoSeed()
-	} else {
-		var err error
-		seed, err = strconv.ParseInt(env, 10, 64)
-		if err != nil {
-			panic(err)
-		}
-	}
+	seed := envutil.EnvOrDefaultInt64("random_seed", NewPseudoSeed())
 	rand.Seed(seed)
 	log.Printf("Random seed: %v", seed)
 }

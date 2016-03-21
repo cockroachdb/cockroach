@@ -25,10 +25,23 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
 )
 
 // Proxy to allow overrides in tests.
 var osStderr = os.Stderr
+
+var envCmd = &cobra.Command{
+	Use:   "env",
+	Short: "output environment settings",
+	Long: `
+Output environment variables that influence configuration.
+`,
+	Run: func(cmd *cobra.Command, args []string) {
+		env := envutil.GetEnvReport()
+		fmt.Print(env)
+	},
+}
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
@@ -72,6 +85,7 @@ func init() {
 		genCmd,
 		versionCmd,
 		debugCmd,
+		envCmd,
 	)
 }
 

@@ -340,13 +340,13 @@ func (s *Server) Start() error {
 	}
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(s.ctx.MetricsFrequency)
+	s.startSampleEnvironment(s.ctx.MetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(s.recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
+	s.tsDB.PollSource(s.recorder, s.ctx.MetricsSampleInterval, ts.Resolution10s, s.stopper)
 
 	// Begin recording status summaries.
-	s.node.startWriteSummaries(s.ctx.MetricsFrequency)
+	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
 	// Create and start the schema change manager only after a NodeID

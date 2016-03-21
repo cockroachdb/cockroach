@@ -179,6 +179,8 @@ dupl:
 check:
 	@echo "checking for time.Now calls (use timeutil.Now() instead)"
 	@! git grep -E 'time\.Now' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go:'
+	@echo "checking for os.Getenv calls (use envutils.GetEnv() instead)"
+	@! git grep -e 'os\.Getenv' -- '*.go' | grep -vE '^(util/(log|envutil)|acceptance/.*)/\w+\.go:'
 	@echo "checking for proto.Clone calls (use util.CloneProto instead)"
 	@! git grep -E '\.Clone\([^)]+\)' -- '*.go' | grep -vE '^util/clone_proto(_test)?\.go:'
 	@echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"
