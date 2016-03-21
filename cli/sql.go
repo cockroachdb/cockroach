@@ -47,9 +47,8 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against a cockroach database.
 `,
-	RunE:          runTerm,
-	SilenceErrors: true,
-	SilenceUsage:  true,
+	RunE:         runTerm,
+	SilenceUsage: true,
 }
 
 const (
@@ -263,7 +262,10 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return errMissingParams
 	}
 
-	conn := makeSQLClient()
+	conn, err := makeSQLClient()
+	if err != nil {
+		return err
+	}
 	defer conn.Close()
 
 	if len(cliContext.execStmts) > 0 {

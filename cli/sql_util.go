@@ -142,14 +142,17 @@ func makeSQLConn(url string) *sqlConn {
 	}
 }
 
-func makeSQLClient() *sqlConn {
+func makeSQLClient() (*sqlConn, error) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		u := cliContext.PGURL(connUser)
+		u, err := cliContext.PGURL(connUser)
+		if err != nil {
+			return nil, err
+		}
 		u.Path = connDBName
 		sqlURL = u.String()
 	}
-	return makeSQLConn(sqlURL)
+	return makeSQLConn(sqlURL), nil
 }
 
 type queryFunc func(conn *sqlConn) (*sqlRows, error)
