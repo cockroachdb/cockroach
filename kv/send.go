@@ -39,7 +39,7 @@ type orderingPolicy int
 
 const (
 	// orderStable uses endpoints in the order provided.
-	orderStable = iota
+	orderStable orderingPolicy = iota
 	// orderRandom randomly orders available endpoints.
 	orderRandom
 )

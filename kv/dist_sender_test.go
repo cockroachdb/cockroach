@@ -964,8 +964,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// requests. The first request should be the point request on
 	// "a". The second request should be on "b".
 	first := true
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
-		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+	sendStub := func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs := keys.Range(ba)
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
@@ -985,7 +984,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	}
 
 	ctx := &DistSenderContext{
-		RPCSend:           testFn,
+		RPCSend:           sendStub,
 		RangeDescriptorDB: descDB,
 	}
 	ds := NewDistSender(ctx, g)
@@ -996,8 +995,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// on "a".
 	//
 	// In the second attempt, The range of the descriptor found in
-	// the cache is ["a", c"), but the put on "a" will not be
-	// resent. The request is truncated to contain only the put on "b".
+	// the cache is ["a", "c"), but the put on "a" will not be
+	// present. The request is truncated to contain only the put on "b".
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &roachpb.Transaction{Name: "test"}
 	val := roachpb.MakeValueFromString("val")
@@ -1007,6 +1006,110 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
+	}
+}
+
+// TestTruncateWithLocalSpanAndDescriptor verifies that a batch request with local keys
+// is truncated with a range span and the range of a descriptor found in cache.
+func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill mockRangeDescriptorDB with two descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+		desc := descriptor1
+		if key.Equal(roachpb.RKey("b")) {
+			desc = descriptor2
+		}
+		return []roachpb.RangeDescriptor{desc}, nil
+	})
+
+	// Define our rpcSend stub which checks the span of the batch
+	// requests.
+	first := true
+	requests := 0
+	sendStub := func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+		requests++
+		rs := keys.Range(ba)
+		if first {
+			wantStart := roachpb.RKey("a")
+			wantEnd := roachpb.RKey("b")
+			if !(rs.Key.Equal(wantStart) && rs.EndKey.Equal(wantEnd)) {
+				t.Errorf("Unexpected span [%s,%s), want [%s,%s)", rs.Key, rs.EndKey, wantStart, wantEnd)
+			}
+			first = false
+		} else {
+			wantStart := roachpb.RKey("b")
+			wantEnd := roachpb.RKey("c")
+			if !(rs.Key.Equal(wantStart) && rs.EndKey.Equal(wantEnd)) {
+				t.Errorf("Unexpected span [%s,%s), want [%s,%s)", rs.Key, rs.EndKey, wantStart, wantEnd)
+			}
+		}
+
+		batchReply := &roachpb.BatchResponse{}
+		reply := &roachpb.ScanResponse{}
+		batchReply.Add(reply)
+		return batchReply, nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend:           sendStub,
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(ctx, g)
+
+	// Send a batch request contains two scans. In the first
+	// attempt, the range of the descriptor found in the cache is
+	// ["", "b"). The request is truncated to contain only the scan
+	// on local keys that address up to "b".
+	//
+	// In the second attempt, The range of the descriptor found in
+	// the cache is ["b", "d"), The request is truncated to contain
+	// only the scan on local keys that address from "b" to "d".
+	ba := roachpb.BatchRequest{}
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	ba.Add(roachpb.NewScan(keys.RangeDescriptorKey(roachpb.RKey("a")), keys.RangeDescriptorKey(roachpb.RKey("c")), 0))
+
+	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+	if want := 2; requests != want {
+		t.Errorf("expected request to be split into %d parts, found %d", want, requests)
 	}
 }
 

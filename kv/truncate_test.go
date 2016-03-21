@@ -17,6 +17,9 @@ func TestTruncate(t *testing.T) {
 	loc := func(s string) string {
 		return string(keys.RangeDescriptorKey(roachpb.RKey(s)))
 	}
+	locPrefix := func(s string) string {
+		return string(keys.MakeRangeKeyPrefix(roachpb.RKey(s)))
+	}
 	testCases := []struct {
 		keys     [][2]string
 		expKeys  [][2]string
@@ -54,12 +57,29 @@ func TestTruncate(t *testing.T) {
 			expKeys: [][2]string{{loc("b"), loc("e") + "\x00"}},
 			from:    "b", to: "e\x00",
 		},
-
 		{
 			// Range-local range not contained in active range.
-			keys: [][2]string{{loc("a"), loc("b")}},
-			from: "b", to: "e",
-			err: "local key range must not span ranges",
+			keys:    [][2]string{{loc("a"), loc("b")}},
+			expKeys: [][2]string{{}},
+			from:    "c", to: "e",
+		},
+		{
+			// Range-local range not contained in active range.
+			keys:    [][2]string{{loc("e"), loc("f")}},
+			expKeys: [][2]string{{}},
+			from:    "b", to: "e",
+		},
+		{
+			// Range-local range partially contained in active range.
+			keys:    [][2]string{{loc("a"), loc("b")}},
+			expKeys: [][2]string{{loc("a"), locPrefix("b")}},
+			from:    "a", to: "b",
+		},
+		{
+			// Range-local range partially contained in active range.
+			keys:    [][2]string{{loc("a"), loc("b")}},
+			expKeys: [][2]string{{locPrefix("b"), loc("b")}},
+			from:    "b", to: "e",
 		},
 		{
 			// Mixed range-local vs global key range.

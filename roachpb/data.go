@@ -177,6 +177,11 @@ func (k Key) Equal(l Key) bool {
 	return bytes.Equal(k, l)
 }
 
+// Less compares two Keys.
+func (k Key) Less(l Key) bool {
+	return bytes.Compare(k, l) < 0
+}
+
 // Compare implements the interval.Comparable interface for tree nodes.
 func (k Key) Compare(b interval.Comparable) int {
 	return bytes.Compare(k, b.(Key))
@@ -926,7 +931,7 @@ func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
 	}
 
 	key := rs.Key
-	if !desc.ContainsKey(key) {
+	if key.Less(desc.StartKey) {
 		key = desc.StartKey
 	}
 	endKey := rs.EndKey
