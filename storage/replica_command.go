@@ -1481,10 +1481,10 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]by
 		key := iter.Key()
 		value := iter.Value()
 
-		if log.V(1) {
-			// Add the k:v into the debug message.
-			debug.Entries = append(debug.Entries, roachpb.VerifyChecksumRequest_Debug_KeyValue{Key: key.Key, Value: value})
-		}
+		//if log.V(1) {
+		// Add the k:v into the debug message.
+		debug.Entries = append(debug.Entries, roachpb.VerifyChecksumRequest_Debug_KeyValue{Key: key.Key, Value: value})
+		//}
 
 		// Encode the length of the key and value.
 		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
@@ -1508,9 +1508,9 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]by
 		}
 	}
 	sha := make([]byte, 0, sha512.Size)
-	if !log.V(1) {
-		debug = nil
-	}
+	//if !log.V(1) {
+	//	debug = nil
+	//}
 	return hasher.Sum(sha), debug, nil
 }
 
@@ -1554,7 +1554,7 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 				}
 			}
 			// TODO(.*): see #5051.
-			log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
+			panic(fmt.Sprintf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum))
 		}
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
