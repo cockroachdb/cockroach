@@ -95,14 +95,14 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	// Delete the zone config entry for this database.
 	b.Del(zoneKey)
 
-	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
 			if err := expectDeleted(systemConfig, key); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
+	})
 
 	if pErr := p.txn.Run(b); pErr != nil {
 		return nil, pErr
@@ -118,7 +118,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 			Statement     string
 			User          string
 			DroppedTables []string
-		}{n.Name.String(), n.String(), p.user, tbNameStrings},
+		}{n.Name.String(), n.String(), p.session.User, tbNameStrings},
 	); pErr != nil {
 		return nil, pErr
 	}
@@ -210,7 +210,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 				TableName string
 				Statement string
 				User      string
-			}{droppedDesc.Name, n.String(), p.user},
+			}{droppedDesc.Name, n.String(), p.session.User},
 		); pErr != nil {
 			return nil, pErr
 		}
@@ -277,14 +277,14 @@ func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableD
 	// Delete the zone config entry for this table.
 	b.Del(zoneKey)
 
-	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
 			if err := expectDeleted(systemConfig, key); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
+	})
 
 	if pErr := p.txn.Run(b); pErr != nil {
 		return nil, pErr

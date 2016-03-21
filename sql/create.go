@@ -32,7 +32,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 		return nil, roachpb.NewError(errEmptyDatabaseName)
 	}
 
-	if p.user != security.RootUser {
+	if p.session.User != security.RootUser {
 		return nil, roachpb.NewUErrorf("only %s is allowed to create databases", security.RootUser)
 	}
 
@@ -52,7 +52,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.Name.String(), n.String(), p.user},
+			}{n.Name.String(), n.String(), p.session.User},
 		); pErr != nil {
 			return nil, pErr
 		}
@@ -182,7 +182,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 				TableName string
 				Statement string
 				User      string
-			}{n.Table.String(), n.String(), p.user},
+			}{n.Table.String(), n.String(), p.session.User},
 		); pErr != nil {
 			return nil, pErr
 		}

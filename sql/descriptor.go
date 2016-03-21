@@ -61,13 +61,13 @@ type descriptorProto interface {
 	Validate() error
 }
 
-// checkPrivilege verifies that p.user has `privilege` on `descriptor`.
+// checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
 func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege.Kind) error {
-	if descriptor.GetPrivileges().CheckPrivilege(p.user, privilege) {
+	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
 		return nil
 	}
 	return fmt.Errorf("user %s does not have %s privilege on %s %s",
-		p.user, privilege, descriptor.TypeName(), descriptor.GetName())
+		p.session.User, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
 // createDescriptor takes a Table or Database descriptor and creates it if
@@ -114,12 +114,12 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	p.testingVerifyMetadata = func(systemConfig config.SystemConfig) error {
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
 			return err
 		}
 		return expectDescriptor(systemConfig, descKey, descDesc)
-	}
+	})
 
 	return true, p.txn.Run(&b)
 }

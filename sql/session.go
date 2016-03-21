@@ -13,17 +13,23 @@
 // permissions and limitations under the License.
 //
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package sql
 
 import (
+	"fmt"
+	"net"
 	"time"
 
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 type isSessionTimezone interface {
@@ -44,16 +50,59 @@ func (*SessionLocation) isSessionTimezone() {}
 func (*SessionOffset) isSessionTimezone()   {}
 
 // Session contains the state of a SQL client connection.
+// Create instances using NewSession().
 type Session struct {
 	Database string
+	User     string
 	Syntax   int32
 
 	// Info about the open transaction (if any).
 	TxnState txnState
 
+	planner planner
+
 	Timezone              isSessionTimezone
 	DefaultIsolationLevel roachpb.IsolationType
 	Trace                 trace.Trace
+}
+
+// SessionArgs contains arguments for creating a new Session with NewSession().
+type SessionArgs struct {
+	Database string
+	User     string
+}
+
+// NewSession creates and initializes new Session object.
+// remote can be nil.
+func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
+	s := Session{}
+	s.Database = args.Database
+	s.User = args.User
+	cfg, cache := e.getSystemConfig()
+	s.planner = planner{
+		// evalCtx is set in the Executor, for each Prepare or Execute.
+		evalCtx:       parser.EvalContext{},
+		leaseMgr:      e.ctx.LeaseManager,
+		systemConfig:  cfg,
+		databaseCache: cache,
+		session:       &s,
+		execCtx:       &e.ctx,
+	}
+	remoteStr := ""
+	if remote != nil {
+		remoteStr = remote.String()
+	}
+	s.Trace = trace.New("sql."+args.User, remoteStr)
+	s.Trace.SetMaxEvents(100)
+	return &s
+}
+
+// Finish releases resources held by the Session.
+func (s *Session) Finish() {
+	if s.Trace != nil {
+		s.Trace.Finish()
+		s.Trace = nil
+	}
 }
 
 func (s *Session) getLocation() (*time.Location, error) {
@@ -117,4 +166,142 @@ type txnState struct {
 	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
 	// passing the Session along everywhere the trace is needed.
 	tr trace.Trace
+}
+
+// reset creates a new Txn and initializes it using the session defaults.
+func (ts *txnState) reset(e *Executor, s *Session) {
+	*ts = txnState{}
+	ts.txn = client.NewTxn(*e.ctx.DB)
+	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
+	ts.tr = s.Trace
+	// Discard the old schemaChangers, if any.
+	ts.schemaChangers = schemaChangerCollection{}
+}
+
+func (ts *txnState) willBeRetried() bool {
+	return ts.autoRetry || ts.retryIntent
+}
+
+func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
+	ts.State = state
+	ts.txn = nil
+}
+
+// updateStateAndCleanupOnErr updates txnState based on the type of error that we
+// received. If it's a retriable error and we're going to retry the txn,
+// then the state moves to RestartWait. Otherwise, the state moves to Aborted
+// and the KV txn is cleaned up.
+func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor) {
+	if pErr == nil {
+		panic("updateStateAndCleanupOnErr called with no error")
+	}
+	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE || !ts.willBeRetried() {
+		// We can't or don't want to retry this txn, so the txn is over.
+		e.txnAbortCount.Inc(1)
+		ts.txn.CleanupOnError(pErr)
+		ts.resetStateAndTxn(Aborted)
+	} else {
+		// If we got a retriable error, move the SQL txn to the RestartWait state.
+		// Note that TransactionAborted is also a retriable error, handled here;
+		// in this case cleanup for the txn has been done for us under the hood.
+		switch pErr.TransactionRestart {
+		case roachpb.TransactionRestart_BACKOFF:
+			// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
+			// the backoff hint to the client anyway. See #5249
+			fallthrough
+		case roachpb.TransactionRestart_IMMEDIATE:
+			ts.State = RestartWait
+		default:
+			panic(fmt.Sprintf("unexpected restart value: %s", pErr.TransactionRestart))
+		}
+	}
+}
+
+type schemaChangerCollection struct {
+	// A schemaChangerCollection accumulates schemaChangers from potentially
+	// multiple user requests, part of the same SQL transaction. We need to
+	// remember what group and index within the group each schemaChanger came
+	// from, so we can map failures back to the statement that produced them.
+	curGroupNum int
+
+	// The index of the current statement, relative to its group. For statements
+	// that have been received from the client in the same batch, the
+	// group consists of all statements in the same transaction.
+	curStatementIdx int
+	// schema change callbacks together with the index of the statement
+	// that enqueued it (within its group of statements).
+	schemaChangers []struct {
+		epoch int
+		idx   int
+		sc    SchemaChanger
+	}
+}
+
+func (scc *schemaChangerCollection) queueSchemaChanger(
+	schemaChanger SchemaChanger) {
+	scc.schemaChangers = append(
+		scc.schemaChangers,
+		struct {
+			epoch int
+			idx   int
+			sc    SchemaChanger
+		}{scc.curGroupNum, scc.curStatementIdx, schemaChanger})
+}
+
+// execSchemaChanges releases schema leases and runs the queued
+// schema changers. This needs to be run after the transaction
+// scheduling the schema change has finished.
+//
+// The list of closures is cleared after (attempting) execution.
+//
+// Args:
+//  results: The results from all statements in the group that scheduled the
+//    schema changes we're about to execute. Results corresponding to the
+//    schema change statements will be changed in case an error occurs.
+func (scc *schemaChangerCollection) execSchemaChanges(
+	e *Executor, planMaker *planner, results ResultList) {
+	if planMaker.txn != nil {
+		panic("trying to execute schema changes while still in a transaction")
+	}
+	// Release the leases once a transaction is complete.
+	planMaker.releaseLeases()
+	if len(scc.schemaChangers) == 0 ||
+		// Disable execution in some tests.
+		disableSyncSchemaChangeExec {
+		return
+	}
+	// Execute any schema changes that were scheduled, in the order of the
+	// statements that scheduled them.
+	retryOpt := defaultRetryOpt
+	for _, scEntry := range scc.schemaChangers {
+		sc := &scEntry.sc
+		sc.db = *e.ctx.DB
+		for r := retry.Start(retryOpt); r.Next(); {
+			if done, err := sc.IsDone(); err != nil {
+				log.Warning(err)
+				break
+			} else if done {
+				break
+			}
+			if pErr := sc.exec(); pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); ok {
+					// Try again.
+					continue
+				}
+				// All other errors can be reported; we report it as the result
+				// corresponding to the statement that enqueued this changer.
+				// There's some sketchiness here: we assume there's a single result
+				// per statement and we clobber the result/error of the corresponding
+				// statement.
+				// There's also another subtlety: we can only report results for
+				// statements in the current batch; we can't modify the results of older
+				// statements.
+				if scEntry.epoch == scc.curGroupNum {
+					results[scEntry.idx] = Result{PErr: pErr}
+				}
+			}
+			break
+		}
+	}
+	scc.schemaChangers = scc.schemaChangers[:0]
 }
