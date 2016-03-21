@@ -138,7 +138,7 @@ func transferMoney(client *testClient, numAccounts, maxTransfer int) error {
 }
 
 func retryableError(err error) bool {
-	return testutils.IsError(err, "connection reset by peer") || testutils.IsError(err, "connection refused") || testutils.IsError(err, "failed to send RPC") || testutils.IsError(err, "EOF")
+	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|store.+not found)")
 }
 
 // Verify accounts.
