@@ -292,3 +292,25 @@ query ITT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
 0 scan t@b_desc -
+
+statement ok
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX adb (a, d, b),
+  INDEX abcd (a, b, c, d)
+)
+
+# Verify that we prefer the index where more columns are constrained, even if it
+# has more keys per row.
+query ITT
+EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
+----
+0 scan abcd@abcd /1/4-/1/5
+
+query ITT
+EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
+----
+0 scan abcd@abcd /1/4-/1/5 /2/9-/2/10
