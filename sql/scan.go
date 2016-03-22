@@ -197,10 +197,10 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 
 	alias := n.desc.Name
 
-	indexName := tableName.Index()
-	if indexName != "" && !equalName(n.desc.PrimaryIndex.Name, indexName) {
+	indexName := NormalizeName(tableName.Index())
+	if indexName != "" && NormalizeName(n.desc.PrimaryIndex.Name) != indexName {
 		for i := range n.desc.Indexes {
-			if equalName(n.desc.Indexes[i].Name, indexName) {
+			if NormalizeName(n.desc.Indexes[i].Name) == indexName {
 				// Remove all but the matching index from the descriptor.
 				n.desc.Indexes = n.desc.Indexes[i : i+1]
 				n.index = &n.desc.Indexes[0]

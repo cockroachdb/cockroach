@@ -65,9 +65,9 @@ func (qt qvalResolver) findColumn(qname *parser.QualifiedName) (columnRef, error
 	// no alias is given, we will search for the column in all FROMs and make sure there is only
 	// one.  For now we just check that the name matches (if given).
 	if qname.Base == "" || equalName(qt.table.alias, string(qname.Base)) {
-		colName := qname.Column()
+		colName := NormalizeName(qname.Column())
 		for idx, col := range qt.table.columns {
-			if equalName(col.Name, colName) {
+			if NormalizeName(col.Name) == colName {
 				ref.table = qt.table
 				ref.colIdx = idx
 				return ref, nil

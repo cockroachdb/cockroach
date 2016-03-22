@@ -396,10 +396,12 @@ func (desc *TableDescriptor) Validate() error {
 		if column.ID == 0 {
 			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
-		if _, ok := columnNames[NormalizeName(column.Name)]; ok {
+
+		normName := NormalizeName(column.Name)
+		if _, ok := columnNames[normName]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
-		columnNames[NormalizeName(column.Name)] = column.ID
+		columnNames[normName] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {
 			return fmt.Errorf("column \"%s\" duplicate ID of column \"%s\": %d",
@@ -447,10 +449,11 @@ func (desc *TableDescriptor) Validate() error {
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		if _, ok := indexNames[NormalizeName(index.Name)]; ok {
+		normName := NormalizeName(index.Name)
+		if _, ok := indexNames[normName]; ok {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
-		indexNames[NormalizeName(index.Name)] = struct{}{}
+		indexNames[normName] = struct{}{}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
@@ -520,14 +523,15 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 // DescriptorStatus for the column, and an index into either the columns
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
 func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, error) {
+	normName := NormalizeName(name)
 	for i, c := range desc.Columns {
-		if equalName(c.Name, name) {
+		if NormalizeName(c.Name) == normName {
 			return DescriptorActive, i, nil
 		}
 	}
 	for i, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			if equalName(c.Name, name) {
+			if NormalizeName(c.Name) == normName {
 				return DescriptorIncomplete, i, nil
 			}
 		}
@@ -537,8 +541,9 @@ func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, in
 
 // FindActiveColumnByName finds an active column with the specified name.
 func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, error) {
+	normName := NormalizeName(name)
 	for _, c := range desc.Columns {
-		if equalName(c.Name, name) {
+		if NormalizeName(c.Name) == normName {
 			return c, nil
 		}
 	}
@@ -559,14 +564,15 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 // DescriptorStatus for the index, and an index into either the indexes
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
 func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, error) {
+	normName := NormalizeName(name)
 	for i, idx := range desc.Indexes {
-		if equalName(idx.Name, name) {
+		if NormalizeName(idx.Name) == normName {
 			return DescriptorActive, i, nil
 		}
 	}
 	for i, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
-			if equalName(idx.Name, name) {
+			if NormalizeName(idx.Name) == normName {
 				return DescriptorIncomplete, i, nil
 			}
 		}

@@ -71,9 +71,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := string(qname.Base)
+				target := NormalizeName(string(qname.Base))
 				for j, col := range columns {
-					if equalName(target, col.Name) {
+					if NormalizeName(col.Name) == target {
 						index = j
 						break
 					}
@@ -89,9 +89,10 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 					return nil, roachpb.NewError(err)
 				}
 				if qname.Table() == "" || equalName(s.table.alias, qname.Table()) {
+					qnameCol := NormalizeName(qname.Column())
 					for j, r := range s.render {
 						if qval, ok := r.(*qvalue); ok {
-							if equalName(qval.colRef.get().Name, qname.Column()) {
+							if NormalizeName(qval.colRef.get().Name) == qnameCol {
 								index = j
 								break
 							}
