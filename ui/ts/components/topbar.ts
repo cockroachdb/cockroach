@@ -16,15 +16,25 @@ module Components {
         updatedStr: "-",
       };
     }
-    export function view(ctrl: any, args: {title?: string|MithrilVirtualElement; updated: number; titleImage?: MithrilVirtualElement; }): MithrilVirtualElement {
+
+    interface TopbarInfo {
+      title: string|MithrilVirtualElement;
+      updated: number;
+      // TODO: currently the health indicator causes redraws when undesirable
+      // hideHealth is set to true to disable the health indicator and prevent
+      // redraws every 2 seconds
+      hideHealth?: boolean; // hide the health tracker if true
+    }
+
+    export function view(ctrl: any, args: TopbarInfo): MithrilVirtualElement {
       if (args.updated && _.isFinite(args.updated)) {
         ctrl.updatedStr = Utils.Format.Date(new Date(Utils.Convert.NanoToMilli(args.updated)));
       }
 
       return m(".topbar", [
-        (args.title && m("h2", args.title) || (args.titleImage)),
+        m("h2", args.title),
         m(".info-container", [
-          m(".health", ["health:", m.component(Components.Health, {})]),
+          (args.hideHealth ? m(".health") : m(".health", ["health:", m.component(Components.Health, {})])),
           m(".last-updated", [ m("strong", "Updated: "), ctrl.updatedStr ]),
         ]),
       ]);
