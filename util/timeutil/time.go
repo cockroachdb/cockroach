@@ -33,12 +33,24 @@ var (
 	offset time.Duration
 
 	monotonicityCheckEnabled bool
+	monotonicityThreshold    time.Duration
 	mu                       struct {
 		sync.Mutex
 		lastTime                time.Time
 		monotonicityErrorsCount int32
 	}
 )
+
+// SetMonotonicityCheckThreshold configures the threshold below which
+// time jumps are not considered noteworthy.
+func SetMonotonicityCheckThreshold(d time.Duration) {
+	if log.V(1) {
+		log.Infof("ignoring time backward jumps smaller than %s", d)
+	}
+	mu.Lock()
+	monotonicityThreshold = d
+	mu.Unlock()
+}
 
 func initMonotonicityCheck() {
 	// TODO(knz) perhaps we should change the default to disabled.
@@ -76,9 +88,12 @@ func Now() time.Time {
 		lastTime := mu.lastTime
 		newTime := nowFunc()
 
-		if !lastTime.IsZero() && newTime.Before(lastTime) {
-			mu.monotonicityErrorsCount++
-			defer log.Warningf("backward time jump detected: previously %s, now %s (offset %s)", lastTime, newTime, newTime.Sub(lastTime))
+		if !lastTime.IsZero() {
+			interval := lastTime.Sub(newTime)
+			if interval >= monotonicityThreshold {
+				mu.monotonicityErrorsCount++
+				defer log.Warningf("backward time jump detected: previously %s, now %s (offset %s)", lastTime, newTime, newTime.Sub(lastTime))
+			}
 		}
 
 		mu.lastTime = newTime
