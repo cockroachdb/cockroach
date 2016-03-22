@@ -380,7 +380,7 @@ func sequenceCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roach
 	input = mustShiftSlash(input)
 	_, input = mustShift(input[:len(input)-1])
 	id, err := uuid.FromString(input)
-	if err != nil || len(input) != uuid.EmptyUUID.Size() {
+	if err != nil || len(input) != len(uuid.EmptyUUID.String()) {
 		if err == nil {
 			err = errors.New("epoch/sequence not supported")
 		}
