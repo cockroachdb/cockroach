@@ -230,6 +230,15 @@ type indexConstraint struct {
 	tupleMap []int
 }
 
+// numColumns returns the number of columns this constraint applies to. Only
+// constraints for expressions with tuple comparisons apply to multiple columns.
+func (c indexConstraint) numColumns() int {
+	if c.tupleMap == nil {
+		return 1
+	}
+	return len(c.tupleMap)
+}
+
 func (c indexConstraint) String() string {
 	var buf bytes.Buffer
 	if c.start != nil {
@@ -307,7 +316,11 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 		// make any index which does restrict the keys more desirable.
 		v.cost *= 1000
 	} else {
-		v.cost *= float64(len(v.index.ColumnIDs)) / float64(len(v.constraints))
+		numCols := 0
+		for _, c := range v.constraints {
+			numCols += c.numColumns()
+		}
+		v.cost *= float64(len(v.index.ColumnIDs)) / float64(numCols)
 	}
 }
 
@@ -918,13 +931,10 @@ func encodeInclusiveEndValue(
 // the start and/or end, the second one will have "3/4" appended to
 // the start and/or end.
 //
-// Returns the exploded spans and the number of index columns covered
-// by this constraint (i.e. 1, if the left side is a qvalue or
-// len(tupleMap) if it's a tuple).
+// Returns the exploded spans.
 func applyInConstraint(spans []span, c indexConstraint, firstCol int,
-	index *IndexDescriptor, isLastEndConstraint bool) ([]span, int) {
+	index *IndexDescriptor, isLastEndConstraint bool) []span {
 	var e *parser.ComparisonExpr
-	var coveredColumns int
 	// It might be that the IN constraint is a start constraint, an
 	// end constraint, or both, depending on how whether we had
 	// start and end constraints for all the previous index cols.
@@ -945,7 +955,6 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 		case parser.DTuple:
 			// The constraint is a tuple of tuples, meaning something like
 			// (...) IN ((1,2),(3,4)).
-			coveredColumns = len(c.tupleMap)
 			for j, tupleIdx := range c.tupleMap {
 				var err error
 				var colDir encoding.Direction
@@ -967,7 +976,6 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			if colDir, err = index.ColumnDirections[firstCol].toEncodingDirection(); err != nil {
 				panic(err)
 			}
-			coveredColumns = 1
 			if start, err = encodeTableKey(nil, datum, colDir); err != nil {
 				panic(err)
 			}
@@ -988,7 +996,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 			spans = append(spans, s)
 		}
 	}
-	return spans, coveredColumns
+	return spans
 }
 
 // makeSpans constructs the spans for an index given a set of constraints.
@@ -1008,42 +1016,41 @@ func makeSpans(constraints indexConstraints,
 		end:   append(roachpb.Key(nil), prefix...),
 	}}
 
-	colIdx := -1
+	colIdx := 0
 	for i, c := range constraints {
-		colIdx++
 		// We perform special processing on the last end constraint to account for
 		// the exclusive nature of the scan end key.
 		lastEnd := (c.end != nil) &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
 		// IN is handled separately, since it can affect multiple columns.
-		if ((c.start != nil) && (c.start.Operator == parser.In)) ||
-			((c.end != nil) && (c.end.Operator == parser.IN)) {
-			var coveredCols int
-			resultSpans, coveredCols = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
-			// Skip over all the columns contained in the tuple.
-			colIdx += coveredCols - 1
-			continue
-		}
-		var dir encoding.Direction
-		var err error
-		if dir, err = index.ColumnDirections[colIdx].toEncodingDirection(); err != nil {
-			panic(err)
-		}
-		if c.start != nil {
-			if dir == encoding.Ascending {
-				encodeStartConstraintAscending(resultSpans, c.start)
-			} else {
-				encodeStartConstraintDescending(resultSpans, c.start)
+		if (c.start != nil && c.start.Operator == parser.In) ||
+			(c.end != nil && c.end.Operator == parser.In) {
+			resultSpans = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
+		} else {
+			if c.numColumns() != 1 {
+				panic(fmt.Sprintf("non-IN constraint applies to %d columns", c.numColumns()))
+			}
+			dir, err := index.ColumnDirections[colIdx].toEncodingDirection()
+			if err != nil {
+				panic(err)
+			}
+			if c.start != nil {
+				if dir == encoding.Ascending {
+					encodeStartConstraintAscending(resultSpans, c.start)
+				} else {
+					encodeStartConstraintDescending(resultSpans, c.start)
+				}
+			}
+			if c.end != nil {
+				if dir == encoding.Ascending {
+					encodeEndConstraintAscending(resultSpans, c.end, lastEnd)
+				} else {
+					encodeEndConstraintDescending(resultSpans, c.end, lastEnd)
+				}
 			}
 		}
-		if c.end != nil {
-			if dir == encoding.Ascending {
-				encodeEndConstraintAscending(resultSpans, c.end, lastEnd)
-			} else {
-				encodeEndConstraintDescending(resultSpans, c.end, lastEnd)
-			}
-		}
+		colIdx += c.numColumns()
 	}
 
 	// If we had no end constraints, make it so that we scan the whole index.
