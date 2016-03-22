@@ -167,13 +167,14 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	// resolve.
 	ir.mu.Lock()
 	// TODO(tschottdorf): can optimize this and use same underlying slice.
-	var pushIntents, resolveIntents []roachpb.Intent
+	var pushIntents []roachpb.Intent
+	var pErr *roachpb.Error
 	for _, intent := range intents {
 		if intent.Status != roachpb.PENDING {
 			// The current intent does not need conflict resolution
 			// because the transaction is already finalized.
-			// TODO(bdarnell): can this happen any more?
-			resolveIntents = append(resolveIntents, intent)
+			pErr = roachpb.NewErrorf("unexpected aborted/resolved intent: %s", intent)
+			break
 		} else if _, ok := ir.mu.inFlight[*intent.Txn.ID]; ok && skipIfInFlight {
 			// Another goroutine is working on this transaction so we can
 			// skip it.
@@ -187,6 +188,9 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		}
 	}
 	ir.mu.Unlock()
+	if pErr != nil {
+		return nil, pErr
+	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	var pushReqs []roachpb.Request
@@ -211,7 +215,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	// txn is correctly propagated in an error response.
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)
-	br, err := ir.store.db.RunWithResponse(b)
+	br, pErr := ir.store.db.RunWithResponse(b)
 	ir.mu.Lock()
 	for _, intent := range pushIntents {
 		ir.mu.inFlight[*intent.Txn.ID]--
@@ -220,11 +224,11 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		}
 	}
 	ir.mu.Unlock()
-	if err != nil {
-		// TODO(bdarnell): return resolveIntents even on error.
-		return nil, err
+	if pErr != nil {
+		return nil, pErr
 	}
 
+	var resolveIntents []roachpb.Intent
 	for i, intent := range pushIntents {
 		pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 		intent.Txn = pushee.TxnMeta
