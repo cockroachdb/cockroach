@@ -144,14 +144,14 @@ module AdminViews {
             },
           },
           {
-            title: "Ranges",
+            title: "Replicas",
             view: (status: NodeStatus): string => {
-             return status.metrics[MetricNames.ranges].toString();
+             return status.metrics[MetricNames.replicas].toString();
             },
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.ranges],
+            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.replicas],
             rollup: function(rows: NodeStatus[]): string {
-              return sumReducer("ranges", _.map(rows, (r: NodeStatus) => r.metrics)).toString();
+              return sumReducer(MetricNames.replicas, _.map(rows, (r: NodeStatus) => r.metrics)).toString();
             },
           },
           // TODO: add more stats
@@ -403,10 +403,10 @@ module AdminViews {
           if (allStats) {
             return m(".primary-stats", [
                 {
-                  title: "Total Ranges",
+                  title: "Total Replicas",
                   visualizationArguments: {
                     format: ".0s",
-                    data: {value: allStats[MetricNames.ranges]},
+                    data: {value: allStats[MetricNames.replicas]},
                   },
                 },
                 {
@@ -598,7 +598,7 @@ module AdminViews {
             {title: "Intent Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s[MetricNames.intentBytes])},
             {title: "Sys Bytes", valueFn: (s: Status): string => Utils.Format.Bytes(s[MetricNames.sysBytes])},
             {title: "GC Bytes Age", valueFn: (s: Status): string => s[MetricNames.gcBytesAge].toString()},
-            {title: "Total Ranges", valueFn: (s: Status): string => s[MetricNames.ranges].toString()},
+            {title: "Total Replicas", valueFn: (s: Status): string => s[MetricNames.replicas].toString()},
             {title: "Leader Ranges", valueFn: (s: Status): string => s[MetricNames.leaderRanges].toString()},
             {title: "Available", valueFn: (s: Status): string => Utils.Format.Percentage(s[MetricNames.availableRanges], s[MetricNames.leaderRanges])},
             {title: "Fully Replicated", valueFn: (s: Status): string => Utils.Format.Percentage(s[MetricNames.replicatedRanges], s[MetricNames.leaderRanges])},

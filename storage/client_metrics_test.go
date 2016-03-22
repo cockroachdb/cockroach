@@ -157,7 +157,7 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify range count is as expected
-	checkCounter(t, mtc.stores[0], "ranges", 2)
+	checkCounter(t, mtc.stores[0], "replicas", 2)
 
 	// Verify all stats on store0 after split.
 	verifyStats(t, mtc, 0)
@@ -192,7 +192,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Verify stats after sequence cache addition.
 	verifyStats(t, mtc, 0)
-	checkCounter(t, mtc.stores[0], "ranges", 2)
+	checkCounter(t, mtc.stores[0], "replicas", 2)
 
 	// Unreplicate range from the first store.
 	mtc.unreplicateRange(replica.RangeID, 0)
@@ -202,8 +202,8 @@ func TestStoreMetrics(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.
-	checkCounter(t, mtc.stores[0], "ranges", 1)
-	checkCounter(t, mtc.stores[1], "ranges", 1)
+	checkCounter(t, mtc.stores[0], "replicas", 1)
+	checkCounter(t, mtc.stores[1], "replicas", 1)
 
 	// Verify all stats on store0 and store1 after range is removed.
 	verifyStats(t, mtc, 0)
