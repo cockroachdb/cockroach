@@ -233,7 +233,6 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		preCount := state.counts()
 
 		madeProgress := func() bool {
-			c.Assert(state.t)
 			newCounts := state.counts()
 			for i := range newCounts {
 				if newCounts[i] > preCount[i] {
@@ -248,6 +247,7 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		for !state.done() && !madeProgress() {
 			time.Sleep(time.Second)
 		}
+		c.Assert(state.t)
 		log.Warningf("round %d: cluster recovered", curRound)
 	}
 }
