@@ -19,12 +19,10 @@ package timeutil
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func TestMonotonicityCheck(t *testing.T) {
-	if err := os.Setenv(offsetEnvKey, "-1h"); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Setenv(monotonicCheckEnableEnvKey, "1"); err != nil {
 		t.Fatal(err)
 	}
@@ -33,11 +31,24 @@ func TestMonotonicityCheck(t *testing.T) {
 
 	firstTime := Now()
 
+	if err := os.Setenv(offsetEnvKey, "-10m"); err != nil {
+		t.Fatal(err)
+	}
 	initFakeTime()
-
 	secondTime := Now()
+	if mu.monotonicityErrorsCount != 1 {
+		t.Fatalf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
+	}
+
+	SetMonotonicityCheckThreshold(time.Hour)
+	if err := os.Setenv(offsetEnvKey, "-20m"); err != nil {
+		t.Fatal(err)
+	}
+	initFakeTime()
+	thirdTime := Now()
 
 	if mu.monotonicityErrorsCount != 1 {
-		t.Errorf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
+		t.Fatalf("clock backward jump below threshold was incorrectly detected by the monotonicity checker (from %s to %s)", secondTime, thirdTime)
 	}
+
 }
