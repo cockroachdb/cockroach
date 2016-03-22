@@ -1754,8 +1754,19 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
 	if err != nil {
-		return util.Errorf("refusing incoming Raft message %s for group %d from %s to %s: %s",
-			req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
+		// If getOrCreateReplicaLocked returns an error, log it at V(1)
+		// instead of returning it (where the caller will log it as
+		// Error). Errors here generally mean that the sender is out of
+		// date, and it may remain so until replicaGCQueue runs, so when
+		// these messages occur they will repeat many times.
+		// TODO(bdarnell): if we had a better way to report errors to the
+		// sender then we could prompt the sender to GC this replica
+		// immediately.
+		if log.V(1) {
+			log.Infof("refusing incoming Raft message %s for group %d from %s to %s: %s",
+				req.Message.Type, req.GroupID, req.FromReplica, req.ToReplica, err)
+		}
+		return nil
 	}
 	r.mu.Lock()
 	err = r.mu.raftGroup.Step(req.Message)
