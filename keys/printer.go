@@ -18,11 +18,13 @@ package keys
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -32,6 +34,14 @@ type dictEntry struct {
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
 	ppFunc func(key roachpb.Key) string
+	// Parses the relevant prefix of the input into a roachpb.Key, returning
+	// the remainder and the key corresponding to the consumed prefix of
+	// 'input'. Allowed to panic on errors.
+	psFunc func(input string) (string, roachpb.Key)
+}
+
+func parseUnsupported(_ string) (string, roachpb.Key) {
+	panic(&errUglifyUnsupported{})
 }
 
 var (
@@ -52,22 +62,57 @@ var (
 		entries []dictEntry
 	}{
 		{name: "/Local", start: localPrefix, end: LocalMax, entries: []dictEntry{
-			{name: "/Store", prefix: roachpb.Key(localStorePrefix), ppFunc: localStoreKeyPrint},
-			{name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix), ppFunc: localRangeIDKeyPrint},
-			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint},
+			{name: "/Store", prefix: roachpb.Key(localStorePrefix),
+				ppFunc: localStoreKeyPrint, psFunc: localStoreKeyParse},
+			{name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
+				ppFunc: localRangeIDKeyPrint, psFunc: localRangeIDKeyParse},
+			{name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
+				psFunc: parseUnsupported},
 		}},
 		{name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, entries: []dictEntry{
-			{name: "", prefix: Meta1Prefix, ppFunc: print},
-		}},
+			{name: "", prefix: Meta1Prefix, ppFunc: print,
+				psFunc: func(input string) (string, roachpb.Key) {
+					input = mustShiftSlash(input)
+					unq, err := strconv.Unquote(input)
+					if err != nil {
+						panic(err)
+					}
+					if len(unq) == 0 {
+						return "", Meta1Prefix
+					}
+					return "", RangeMetaKey(Addr(RangeMetaKey(Addr(
+						roachpb.Key(unq)))))
+				},
+			}},
+		},
 		{name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, entries: []dictEntry{
-			{name: "", prefix: Meta2Prefix, ppFunc: print},
-		}},
+			{name: "", prefix: Meta2Prefix, ppFunc: print,
+				psFunc: func(input string) (string, roachpb.Key) {
+					input = mustShiftSlash(input)
+					unq, err := strconv.Unquote(input)
+					if err != nil {
+						panic(&errUglifyUnsupported{err})
+					}
+					if len(unq) == 0 {
+						return "", Meta2Prefix
+					}
+					return "", RangeMetaKey(Addr(roachpb.Key(unq)))
+				},
+			}},
+		},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "/StatusStore", prefix: StatusStorePrefix, ppFunc: decodeKeyPrint},
-			{name: "/StatusNode", prefix: StatusNodePrefix, ppFunc: decodeKeyPrint},
+			{name: "/StatusStore", prefix: StatusStorePrefix,
+				ppFunc: decodeKeyPrint,
+				psFunc: parseUnsupported,
+			},
+			{name: "/StatusNode", prefix: StatusNodePrefix,
+				ppFunc: decodeKeyPrint,
+				psFunc: parseUnsupported,
+			},
 		}},
 		{name: "/Table", start: TableDataMin, end: TableDataMax, entries: []dictEntry{
-			{name: "", prefix: nil, ppFunc: decodeKeyPrint},
+			{name: "", prefix: nil, ppFunc: decodeKeyPrint,
+				psFunc: parseUnsupported},
 		}},
 	}
 
@@ -85,12 +130,16 @@ var (
 		name   string
 		suffix []byte
 		ppFunc func(key roachpb.Key) string
+		psFunc func(rangeID roachpb.RangeID, input string) (string, roachpb.Key)
 	}{
-		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: sequenceCacheKeyPrint},
+		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: sequenceCacheKeyPrint, psFunc: sequenceCacheKeyParse},
 		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: localRaftAppliedIndexSuffix},
-		{name: "RaftLog", suffix: localRaftLogSuffix, ppFunc: raftLogKeyPrint},
+		{name: "RaftLog", suffix: localRaftLogSuffix,
+			ppFunc: raftLogKeyPrint,
+			psFunc: raftLogKeyParse,
+		},
 		{name: "RaftTruncatedState", suffix: localRaftTruncatedStateSuffix},
 		{name: "RaftLastIndex", suffix: localRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: localRangeLastReplicaGCTimestampSuffix},
@@ -110,14 +159,53 @@ var (
 	}
 )
 
+var constSubKeyDict = []struct {
+	name string
+	key  roachpb.RKey
+}{
+	{"/storeIdent", localStoreIdentSuffix},
+	{"/gossipBootstrap", localStoreGossipSuffix},
+}
+
 func localStoreKeyPrint(key roachpb.Key) string {
-	if bytes.HasPrefix(key, localStoreIdentSuffix) {
-		return "/storeIdent"
-	} else if bytes.HasPrefix(key, localStoreGossipSuffix) {
-		return "/gossipBootstrap"
+	for _, v := range constSubKeyDict {
+		if bytes.HasPrefix(key, v.key) {
+			return v.name
+		}
 	}
 
 	return fmt.Sprintf("%q", []byte(key))
+}
+
+func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
+	for _, s := range constSubKeyDict {
+		if strings.HasPrefix(input, s.name) {
+			remainder = input[len(s.name):]
+			output = MakeStoreKey(s.key, nil)
+			return
+		}
+	}
+	slashPos := strings.Index(input[1:], "/")
+	if slashPos < 0 {
+		slashPos = len(input)
+	}
+	remainder = input[:slashPos] // `/something/else` -> `/else`
+	output = roachpb.Key(input[1:slashPos])
+	return
+}
+
+const strLogIndex = "/logIndex:"
+
+func raftLogKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
+	if !strings.HasPrefix(input, strLogIndex) {
+		panic("expected log index")
+	}
+	input = input[len(strLogIndex):]
+	index, err := strconv.ParseUint(input, 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return "", RaftLogKey(rangeID, index)
 }
 
 func raftLogKeyPrint(key roachpb.Key) string {
@@ -128,7 +216,82 @@ func raftLogKeyPrint(key roachpb.Key) string {
 		return fmt.Sprintf("/err<%v:%q>", err, []byte(key))
 	}
 
-	return fmt.Sprintf("/logIndex:%d", logIndex)
+	return fmt.Sprintf("%s%d", strLogIndex, logIndex)
+}
+
+func mustShiftSlash(in string) string {
+	slash, out := mustShift(in)
+	if slash != "/" {
+		panic("expected /: " + in)
+	}
+	return out
+}
+
+func mustShift(in string) (first, remainder string) {
+	if len(in) == 0 {
+		panic("premature end of string")
+	}
+	return in[:1], in[1:]
+}
+
+func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
+	var rangeID int64
+	var err error
+	input = mustShiftSlash(input)
+	if endPos := strings.Index(input, "/"); endPos > 0 {
+		rangeID, err = strconv.ParseInt(input[:endPos], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		input = input[endPos:]
+	} else {
+		panic(errors.New("illegal RangeID"))
+	}
+	input = mustShiftSlash(input)
+	var infix string
+	infix, input = mustShift(input)
+	var replicated bool
+	switch {
+	case bytes.Equal(localRangeIDUnreplicatedInfix, []byte(infix)):
+	case bytes.Equal(localRangeIDReplicatedInfix, []byte(infix)):
+		replicated = true
+	default:
+		panic(fmt.Errorf("invalid infix"))
+	}
+
+	input = mustShiftSlash(input)
+	// Get the suffix.
+	var suffix roachpb.RKey
+	for _, s := range rangeIDSuffixDict {
+		if strings.HasPrefix(input, s.name) {
+			input = input[len(s.name):]
+			if s.psFunc != nil {
+				remainder, key = s.psFunc(roachpb.RangeID(rangeID), input)
+				return
+			}
+			suffix = roachpb.RKey(s.suffix)
+			break
+		}
+	}
+	maker := MakeRangeIDUnreplicatedKey
+	if replicated {
+		maker = MakeRangeIDReplicatedKey
+	}
+	if suffix != nil {
+		if input != "" {
+			panic(&errUglifyUnsupported{errors.New("nontrivial detail")})
+		}
+		var detail roachpb.RKey
+		// TODO(tschottdorf): can't do this, init cycle:
+		// detail, err := UglyPrint(input)
+		// if err != nil {
+		// 	return "", nil, err
+		// }
+		remainder = ""
+		key = maker(roachpb.RangeID(rangeID), suffix, roachpb.RKey(detail))
+		return
+	}
+	panic(&errUglifyUnsupported{errors.New("unhandled general range key")})
 }
 
 func localRangeIDKeyPrint(key roachpb.Key) string {
@@ -202,6 +365,28 @@ func localRangeKeyPrint(key roachpb.Key) string {
 	fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
 
 	return buf.String()
+}
+
+type errUglifyUnsupported struct {
+	wrapped error
+}
+
+func (euu *errUglifyUnsupported) Error() string {
+	return fmt.Sprintf("unsupported pretty key: %s", euu.wrapped)
+}
+
+func sequenceCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
+	var err error
+	input = mustShiftSlash(input)
+	_, input = mustShift(input[:len(input)-1])
+	id, err := uuid.FromString(input)
+	if err != nil || len(input) != uuid.EmptyUUID.Size() {
+		if err == nil {
+			err = errors.New("epoch/sequence not supported")
+		}
+		panic(&errUglifyUnsupported{err})
+	}
+	return "", SequenceCacheKeyPrefix(rangeID, id)
 }
 
 func sequenceCacheKeyPrint(key roachpb.Key) string {
@@ -327,6 +512,76 @@ func PrettyPrint(key roachpb.Key) string {
 	}
 	str, _ := prettyPrintInternal(key)
 	return str
+}
+
+var errIllegalInput = errors.New("illegal input")
+
+// UglyPrint is a partial right inverse to PrettyPrint: it takes a key
+// formatted for human consumption and attempts to translate it into a
+// roachpb.Key. Not all key types are supported and no optimization has been
+// performed. This is intended for use in debugging only.
+func UglyPrint(input string) (_ roachpb.Key, rErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if err, ok := r.(error); ok {
+				rErr = err
+				return
+			}
+			rErr = fmt.Errorf("%v", r)
+		}
+	}()
+
+	origInput := input
+	var output roachpb.Key
+
+	mkErr := func(err error) (roachpb.Key, error) {
+		if err == nil {
+			err = errIllegalInput
+		}
+		return nil, util.ErrorfSkipFrames(1, `can't parse "%s" after reading %s: %s`, input, origInput[:len(origInput)-len(input)], err)
+	}
+
+	var entries []dictEntry // nil if not pinned to a subrange
+outer:
+	for len(input) > 0 {
+		if entries != nil {
+			for _, v := range entries {
+				if strings.HasPrefix(input, v.name) {
+					input = input[len(v.name):]
+					if v.psFunc == nil {
+						return mkErr(nil)
+					}
+					remainder, key := v.psFunc(input)
+					input = remainder
+					output = append(output, key...)
+					entries = nil
+					continue outer
+				}
+			}
+			return nil, &errUglifyUnsupported{errors.New("known key, but unsupported subtype")}
+		}
+		for _, v := range constKeyDict {
+			if strings.HasPrefix(input, v.name) {
+				output = append(output, v.value...)
+				input = input[len(v.name):]
+				continue outer
+			}
+		}
+		for _, v := range keyDict {
+			if strings.HasPrefix(input, v.name) {
+				// No appending to output yet, the dictionary will take care of
+				// it.
+				input = input[len(v.name):]
+				entries = v.entries
+				continue outer
+			}
+		}
+		return mkErr(errors.New("can't handle key"))
+	}
+	if out := PrettyPrint(output); out != origInput {
+		return nil, fmt.Errorf("constructed key deviates from original: %s vs %s", out, origInput)
+	}
+	return output, nil
 }
 
 func init() {
