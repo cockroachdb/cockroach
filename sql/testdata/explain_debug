@@ -68,12 +68,10 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b DESC
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b DESC LIMIT 1 OFFSET 1
 ----
-0  /abc/primary/1/'one'    NULL               PARTIAL
-0  /abc/primary/1/'one'/c  1.1                BUFFERED
-1  /abc/primary/2/'two'    NULL               BUFFERED
-2  /abc/primary/3/'three'  NULL               BUFFERED
-0  0                       (2, 'two', NULL)   FILTERED
-1  1                       (3, 'three', NULL) ROW
+0  /abc/foo/'two'          /2    PARTIAL   
+0  /abc/primary/2/'two'    NULL  FILTERED  
+1  /abc/foo/'three'        /3    PARTIAL   
+1  /abc/primary/3/'three'  NULL  ROW       
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
