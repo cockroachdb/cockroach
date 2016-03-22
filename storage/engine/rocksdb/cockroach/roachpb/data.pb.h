@@ -1516,24 +1516,24 @@ class Transaction : public ::google::protobuf::Message {
   bool writing() const;
   void set_writing(bool value);
 
-  // optional bool write_too_old = 10;
+  // optional bool write_too_old = 12;
   bool has_write_too_old() const;
   void clear_write_too_old();
-  static const int kWriteTooOldFieldNumber = 10;
+  static const int kWriteTooOldFieldNumber = 12;
   bool write_too_old() const;
   void set_write_too_old(bool value);
 
-  // optional uint32 sequence = 11;
+  // optional uint32 sequence = 10;
   bool has_sequence() const;
   void clear_sequence();
-  static const int kSequenceFieldNumber = 11;
+  static const int kSequenceFieldNumber = 10;
   ::google::protobuf::uint32 sequence() const;
   void set_sequence(::google::protobuf::uint32 value);
 
-  // repeated .cockroach.roachpb.Span intents = 12;
+  // repeated .cockroach.roachpb.Span intents = 11;
   int intents_size() const;
   void clear_intents();
-  static const int kIntentsFieldNumber = 12;
+  static const int kIntentsFieldNumber = 11;
   const ::cockroach::roachpb::Span& intents(int index) const;
   ::cockroach::roachpb::Span* mutable_intents(int index);
   ::cockroach::roachpb::Span* add_intents();
@@ -3458,7 +3458,7 @@ inline void Transaction::set_writing(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.writing)
 }
 
-// optional bool write_too_old = 10;
+// optional bool write_too_old = 12;
 inline bool Transaction::has_write_too_old() const {
   return (_has_bits_[0] & 0x00000200u) != 0;
 }
@@ -3482,7 +3482,7 @@ inline void Transaction::set_write_too_old(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
 }
 
-// optional uint32 sequence = 11;
+// optional uint32 sequence = 10;
 inline bool Transaction::has_sequence() const {
   return (_has_bits_[0] & 0x00000400u) != 0;
 }
@@ -3506,7 +3506,7 @@ inline void Transaction::set_sequence(::google::protobuf::uint32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.sequence)
 }
 
-// repeated .cockroach.roachpb.Span intents = 12;
+// repeated .cockroach.roachpb.Span intents = 11;
 inline int Transaction::intents_size() const {
   return intents_.size();
 }

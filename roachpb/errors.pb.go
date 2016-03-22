@@ -199,7 +199,7 @@ func (*WriteIntentError) Descriptor() ([]byte, []int) { return fileDescriptorErr
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
 // history. The write is instead done at actual timestamp, which is
-// the existing_timestamp+1.
+// the timestamp of the existing version+1.
 type WriteTooOldError struct {
 	Timestamp       Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	ActualTimestamp Timestamp `protobuf:"bytes,2,opt,name=actual_timestamp,json=actualTimestamp" json:"actual_timestamp"`

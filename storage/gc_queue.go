@@ -331,7 +331,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 			pushTxn(repl, now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) error {
-			return repl.store.intentResolver.resolveIntents(repl.context(), repl, nil, intents, poison, wait)
+			return repl.store.intentResolver.resolveIntents(repl.context(), repl, intents, poison, wait)
 		})
 
 	if err != nil {
