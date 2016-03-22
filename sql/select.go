@@ -297,7 +297,25 @@ func (p *planner) initSelect(
 			}
 		}
 
-		plan := p.selectIndex(s, scan, ordering, grouping)
+		var analyzeOrdering analyzeOrderingFn
+		if grouping && len(ordering) == 1 && s.filter == nil {
+			// If grouping has a desired single-column order and the index
+			// matches that order, we can limit the scan to a single key.
+			analyzeOrdering =
+				func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool) {
+					selOrder := s.computeOrdering(indexOrdering)
+					matchingCols = computeOrderingMatch(ordering, selOrder, false)
+					return matchingCols, 1, matchingCols == 1
+				}
+		} else if ordering != nil {
+			analyzeOrdering =
+				func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool) {
+					selOrder := s.computeOrdering(indexOrdering)
+					return computeOrderingMatch(ordering, selOrder, false), len(ordering), false
+				}
+		}
+
+		plan := selectIndex(scan, analyzeOrdering)
 
 		// Update s.table with the new plan.
 		s.table.node = plan

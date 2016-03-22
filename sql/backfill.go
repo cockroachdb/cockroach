@@ -154,7 +154,6 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 
 	if len(newIndexDescs) > 0 {
 		// Get all the rows affected.
-		// TODO(vivek): Avoid going through Select.
 		// TODO(tamird): Support partial indexes?
 		// Use a scanNode with SELECT to pass in a TableDescriptor
 		// to the SELECT without needing to use a parser.QualifiedName,
@@ -166,7 +165,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			desc:    *tableDesc,
 		}
 		scan.initDescDefaults()
-		rows := p.selectIndex(&selectNode{}, scan, nil, false)
+		rows := selectIndex(scan, nil)
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.
