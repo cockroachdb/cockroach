@@ -2,15 +2,6 @@
 // source: cockroach/util/unresolved_addr.proto
 // DO NOT EDIT!
 
-/*
-	Package util is a generated protocol buffer package.
-
-	It is generated from these files:
-		cockroach/util/unresolved_addr.proto
-
-	It has these top-level messages:
-		UnresolvedAddr
-*/
 package util
 
 import proto "github.com/gogo/protobuf/proto"
@@ -25,10 +16,6 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
 
 // / UnresolvedAddr is an unresolved version of net.Addr.
 type UnresolvedAddr struct {

@@ -73,6 +73,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 var nodesColumnHeaders = []string{
 	"id",
 	"address",
+	"build",
 	"updated_at",
 	"started_at",
 	"live_bytes",
@@ -143,6 +144,7 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 		updatedAtStr := updatedAt.Format(localTimeFormat)
 		startedAt := time.Unix(0, nodeStatus.StartedAt)
 		startedAtStr := startedAt.Format(localTimeFormat)
+		build := nodeStatus.BuildInfo.Tag
 
 		metricVals := map[string]float64{}
 		for _, storeStatus := range nodeStatus.StoreStatuses {
@@ -154,6 +156,7 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 		rows = append(rows, []string{
 			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 			hostPort,
+			build,
 			updatedAtStr,
 			startedAtStr,
 			strconv.FormatInt(int64(metricVals["livebytes"]), 10),

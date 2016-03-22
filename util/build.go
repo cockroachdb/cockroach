@@ -26,14 +26,6 @@ var (
 	buildDeps string // Git SHAs of dependencies
 )
 
-// BuildInfo ...
-type BuildInfo struct {
-	Vers string `json:"goVersion"`
-	Tag  string `json:"tag"`
-	Time string `json:"time"`
-	Deps string `json:"dependencies"`
-}
-
 // GetBuildInfo ...
 func GetBuildInfo() BuildInfo {
 	return BuildInfo{
