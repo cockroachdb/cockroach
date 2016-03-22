@@ -785,6 +785,9 @@ func (t *Transaction) Update(o *Transaction) {
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
 	t.Writing = t.Writing || o.Writing
+	// This isn't or'd (similar to Writing) because we want WriteTooOld
+	// to be set each time according to "o". This allows a persisted
+	// txn to have its WriteTooOld flag reset on update.
 	t.WriteTooOld = o.WriteTooOld
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence

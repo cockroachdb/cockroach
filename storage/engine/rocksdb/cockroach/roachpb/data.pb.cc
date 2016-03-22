@@ -501,8 +501,8 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\037\000\022c\n\023observed_timestamps\030\010 \003(\01326.cockro"
     "ach.roachpb.Transaction.ObservedTimestam"
     "psEntryB\016\310\336\037\000\202\337\037\006NodeID\022\025\n\007writing\030\t \001(\010"
-    "B\004\310\336\037\000\022\033\n\rwrite_too_old\030\n \001(\010B\004\310\336\037\000\022\026\n\010s"
-    "equence\030\013 \001(\rB\004\310\336\037\000\022.\n\007intents\030\014 \003(\0132\027.c"
+    "B\004\310\336\037\000\022\033\n\rwrite_too_old\030\014 \001(\010B\004\310\336\037\000\022\026\n\010s"
+    "equence\030\n \001(\rB\004\310\336\037\000\022.\n\007intents\030\013 \003(\0132\027.c"
     "ockroach.roachpb.SpanB\004\310\336\037\000\032W\n\027ObservedT"
     "imestampsEntry\022\013\n\003key\030\001 \001(\005\022+\n\005value\030\002 \001"
     "(\0132\034.cockroach.roachpb.Timestamp:\0028\001:\004\230\240"
@@ -5600,28 +5600,13 @@ bool Transaction::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(80)) goto parse_write_too_old;
+        if (input->ExpectTag(80)) goto parse_sequence;
         break;
       }
 
-      // optional bool write_too_old = 10;
+      // optional uint32 sequence = 10;
       case 10: {
         if (tag == 80) {
-         parse_write_too_old:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &write_too_old_)));
-          set_has_write_too_old();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(88)) goto parse_sequence;
-        break;
-      }
-
-      // optional uint32 sequence = 11;
-      case 11: {
-        if (tag == 88) {
          parse_sequence:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
@@ -5630,13 +5615,13 @@ bool Transaction::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(98)) goto parse_intents;
+        if (input->ExpectTag(90)) goto parse_intents;
         break;
       }
 
-      // repeated .cockroach.roachpb.Span intents = 12;
-      case 12: {
-        if (tag == 98) {
+      // repeated .cockroach.roachpb.Span intents = 11;
+      case 11: {
+        if (tag == 90) {
          parse_intents:
           DO_(input->IncrementRecursionDepth());
          parse_loop_intents:
@@ -5645,8 +5630,23 @@ bool Transaction::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(98)) goto parse_loop_intents;
+        if (input->ExpectTag(90)) goto parse_loop_intents;
         input->UnsafeDecrementRecursionDepth();
+        if (input->ExpectTag(96)) goto parse_write_too_old;
+        break;
+      }
+
+      // optional bool write_too_old = 12;
+      case 12: {
+        if (tag == 96) {
+         parse_write_too_old:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &write_too_old_)));
+          set_has_write_too_old();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -5738,20 +5738,20 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(9, this->writing(), output);
   }
 
-  // optional bool write_too_old = 10;
-  if (has_write_too_old()) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(10, this->write_too_old(), output);
-  }
-
-  // optional uint32 sequence = 11;
+  // optional uint32 sequence = 10;
   if (has_sequence()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(11, this->sequence(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(10, this->sequence(), output);
   }
 
-  // repeated .cockroach.roachpb.Span intents = 12;
+  // repeated .cockroach.roachpb.Span intents = 11;
   for (unsigned int i = 0, n = this->intents_size(); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      12, this->intents(i), output);
+      11, this->intents(i), output);
+  }
+
+  // optional bool write_too_old = 12;
+  if (has_write_too_old()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(12, this->write_too_old(), output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5832,21 +5832,21 @@ void Transaction::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(9, this->writing(), target);
   }
 
-  // optional bool write_too_old = 10;
-  if (has_write_too_old()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(10, this->write_too_old(), target);
-  }
-
-  // optional uint32 sequence = 11;
+  // optional uint32 sequence = 10;
   if (has_sequence()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(11, this->sequence(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(10, this->sequence(), target);
   }
 
-  // repeated .cockroach.roachpb.Span intents = 12;
+  // repeated .cockroach.roachpb.Span intents = 11;
   for (unsigned int i = 0, n = this->intents_size(); i < n; i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        12, this->intents(i), target);
+        11, this->intents(i), target);
+  }
+
+  // optional bool write_too_old = 12;
+  if (has_write_too_old()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(12, this->write_too_old(), target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -5916,12 +5916,12 @@ int Transaction::ByteSize() const {
       total_size += 1 + 1;
     }
 
-    // optional bool write_too_old = 10;
+    // optional bool write_too_old = 12;
     if (has_write_too_old()) {
       total_size += 1 + 1;
     }
 
-    // optional uint32 sequence = 11;
+    // optional uint32 sequence = 10;
     if (has_sequence()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt32Size(
@@ -5942,7 +5942,7 @@ int Transaction::ByteSize() const {
     }
   }
 
-  // repeated .cockroach.roachpb.Span intents = 12;
+  // repeated .cockroach.roachpb.Span intents = 11;
   total_size += 1 * this->intents_size();
   for (int i = 0; i < this->intents_size(); i++) {
     total_size +=
@@ -6383,7 +6383,7 @@ void Transaction::clear_writing() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.writing)
 }
 
-// optional bool write_too_old = 10;
+// optional bool write_too_old = 12;
 bool Transaction::has_write_too_old() const {
   return (_has_bits_[0] & 0x00000200u) != 0;
 }
@@ -6407,7 +6407,7 @@ void Transaction::clear_write_too_old() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
 }
 
-// optional uint32 sequence = 11;
+// optional uint32 sequence = 10;
 bool Transaction::has_sequence() const {
   return (_has_bits_[0] & 0x00000400u) != 0;
 }
@@ -6431,7 +6431,7 @@ void Transaction::clear_sequence() {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.sequence)
 }
 
-// repeated .cockroach.roachpb.Span intents = 12;
+// repeated .cockroach.roachpb.Span intents = 11;
 int Transaction::intents_size() const {
   return intents_.size();
 }

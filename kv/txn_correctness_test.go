@@ -770,7 +770,7 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 // functionality causes read/write conflicts.
 //
 // Phantom deletes would typically fail with a history such as:
-//   R2(B) DR1(A-C) I2(B) C2 SC1(A-C) C1
+//   R2(B) DR1(A-C) I2(B) C2 SC1(A-C) W1(D,A+B) C1
 func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	txn1 := "DR(A-C) SC(A-C) W(D,A+B) C"

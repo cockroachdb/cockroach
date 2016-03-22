@@ -434,11 +434,6 @@ message ResolveIntentRequest {
   // Optionally poison the sequence cache for the transaction the intent's
   // range.
   optional bool poison = 4 [(gogoproto.nullable) = false];
-  // The transaction ID of the resolver, if available. This is used to
-  // avoid setting spans in the timestamp cache which will necessarily
-  // move the pusher's timestamp forward.
-  optional bytes resolver_id = 5 [(gogoproto.customname) = "ResolverID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -460,11 +455,6 @@ message ResolveIntentRangeRequest {
   // Optionally poison the sequence cache for the transaction on all ranges
   // on which the intents reside.
   optional bool poison = 4 [(gogoproto.nullable) = false];
-  // The transaction ID of the resolver, if available. This is used to
-  // avoid setting spans in the timestamp cache which will necessarily
-  // move the pusher's timestamp forward.
-  optional bytes resolver_id = 5 [(gogoproto.customname) = "ResolverID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
 }
 
 // A NoopResponse is the return value from a no-op operation.

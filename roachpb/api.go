@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -81,6 +82,15 @@ const (
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
 )
+
+// GetTxnID returns the transaction ID if the header has a transaction
+// or else nil.
+func (h Header) GetTxnID() *uuid.UUID {
+	if h.Txn == nil {
+		return nil
+	}
+	return h.Txn.ID
+}
 
 // IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {

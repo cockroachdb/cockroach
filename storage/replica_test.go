@@ -1132,15 +1132,10 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	t1 := 2 * time.Second
 	key := roachpb.Key([]byte("b"))
 	tc.manualClock.Set(t1.Nanoseconds())
-	drArgs := roachpb.DeleteRangeRequest{
-		Span: roachpb.Span{
-			Key:    key,
-			EndKey: key.Next(),
-		},
-	}
+	drArgs := roachpb.NewDeleteRange(key, key.Next(), false)
 	ts = tc.clock.Now()
 
-	_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, &drArgs)
+	_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Timestamp: ts}, drArgs)
 
 	if pErr != nil {
 		t.Error(pErr)
@@ -1530,14 +1525,6 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	if !respH.Timestamp.Equal(expTS) {
 		t.Errorf("expected timestamp to increment to %s; got %s", expTS, respH.Timestamp)
 	}
-}
-
-// TestReplicaNoTimestampIncrementAfterPush verifies that a command
-// with a transaction which successfully pushes an intent doesn't
-// experience timestamp increase.
-func TestReplicaNoTimestampIncrementAfterPush(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// TODO(spencer): add implementation
 }
 
 // TestReplicaSequenceCacheReadError verifies that an error is returned to the
@@ -2076,18 +2063,63 @@ func TestEndTransactionWithErrors(t *testing.T) {
 }
 
 // TestReplayProtection verifies that transactional replays cannot
-// commit intents. The replay consist of an initial BeginTxn/Write
+// commit intents. The replay consists of an initial BeginTxn/Write
 // batch and ends with an EndTxn batch.
 func TestReplayProtection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO(spencer): add implementation
-}
+	defer setTxnAutoGC(true)()
+	tc := testContext{}
+	tsc := TestStoreContext()
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
 
-// TestReplayProtectionWithAbandonedIntent verifies that transactional
-// replays cannot resurrect and commit an abandoned intent.
-func TestReplayProtectionWithAbandonedIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// TODO(spencer): add implementation
+	for i, iso := range []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT} {
+		key := roachpb.Key(fmt.Sprintf("a-%d", i))
+		txn := newTransaction("test", key, 1, iso, tc.clock)
+
+		var ba roachpb.BatchRequest
+		bt, btH := beginTxnArgs(key, txn)
+		put := putArgs(key, []byte("value"))
+		ba.Header = btH
+		ba.Add(&bt)
+		ba.Add(&put)
+		br, pErr := tc.Sender().Send(tc.rng.context(), ba)
+		if pErr != nil {
+			t.Fatalf("%d: unexpected error: %s", i, pErr)
+		}
+		args, h := endTxnArgs(br.Txn, true)
+		args.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}}
+		txn.Sequence++
+		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); pErr != nil {
+			t.Fatalf("%d: unexpected error: %s", i, pErr)
+		}
+
+		// Verify txn record is cleaned.
+		var readTxn roachpb.Transaction
+		txnKey := keys.TransactionKey(txn.Key, txn.ID)
+		ok, err := engine.MVCCGetProto(tc.rng.store.Engine(), txnKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, &readTxn)
+		if err != nil || ok {
+			t.Errorf("%d: expected transaction record to be cleared (%t): %s", i, ok, err)
+		}
+
+		// Now replay begin & put (should work fine).
+		if _, pErr = tc.Sender().Send(tc.rng.context(), ba); pErr != nil {
+			t.Fatalf("%d: unexpected error: %s", i, pErr)
+		}
+
+		// EndTransaction will fail with retry.
+		_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args)
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+			t.Errorf("%d: expected transaction retry for iso=%s", i, iso)
+		}
+
+		// Intent should still be there unresolved.
+		gArgs := getArgs(key)
+		_, pErr = client.SendWrapped(tc.rng, tc.rng.context(), &gArgs)
+		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+			t.Errorf("%d: expected write intent error, but got %s", i, pErr)
+		}
+	}
 }
 
 // TestEndTransactionGC verifies that a transaction record is immediately
@@ -2360,7 +2392,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey)
 	txn := newTransaction("name", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng, nil,
+	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng,
 		[]roachpb.Intent{{
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
@@ -3387,7 +3419,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // choice of old or new is returned with no error.
 // TODO(tschottdorf): add a test in which there is a dangling intent on a
 // descriptor we would've otherwise discarded in a reverse scan; verify that
-// we don't erroneously return that descriptor (recently fixed bug) if the
+// we don't erroneously return that descriptor (recently fixed bug).
 func TestReplicaDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Test RangeLookup with Scan.

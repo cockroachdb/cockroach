@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -71,7 +70,6 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	// Wait for that command to execute on all the followers.
 	util.SucceedsSoon(t, func() error {
 		values := []int64{}
-		log.Infof("clock[0].Now(): %s", clocks[0].Now())
 		for _, eng := range mtc.engines {
 			val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
 			if err != nil {

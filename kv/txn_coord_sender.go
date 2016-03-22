@@ -486,11 +486,13 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	for _, req := range ba.Requests {
 		args := req.GetInner()
 		if bt, ok := args.(*roachpb.BeginTransactionRequest); ok {
-			if haveBeginTxn || ba.Txn.Writing || ba.Txn.Key != nil {
+			if haveBeginTxn || ba.Txn.Writing {
 				return util.Errorf("begin transaction requested twice in the same transaction: %s", ba.Txn)
 			}
 			haveBeginTxn = true
-			ba.Txn.Key = bt.Key
+			if ba.Txn.Key == nil {
+				ba.Txn.Key = bt.Key
+			}
 		}
 		if roachpb.IsTransactionWrite(args) && !haveBeginTxn && !ba.Txn.Writing {
 			return util.Errorf("transactional write before begin transaction")
@@ -715,7 +717,7 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 	case *roachpb.TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
-		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp.Next())
+		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp)
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 	case *roachpb.TransactionRetryError:
 		// Increase timestamp so on restart, we're guaranteed to be ahead
