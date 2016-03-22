@@ -104,9 +104,10 @@ func (tc *TimestampCache) SetLowWater(lowWater roachpb.Timestamp) {
 
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
-// key only. txnID is nil for no transaction. readOnly specifies
-// whether the command adding this timestamp was read-only or not.
-func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestamp, txnID *uuid.UUID, readOnly bool) {
+// key only. txnID is nil for no transaction. readTSCache specifies
+// whether the command adding this timestamp should update the read
+// timestamp; false to update the write timestamp cache.
+func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestamp, txnID *uuid.UUID, readTSCache bool) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.ShallowNext()
@@ -119,7 +120,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
 		cache := tc.wCache
-		if readOnly {
+		if readTSCache {
 			cache = tc.rCache
 		}
 
@@ -271,13 +272,13 @@ func (tc *TimestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) 
 	return tc.getMax(start, end, txnID, false)
 }
 
-func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readOnly bool) roachpb.Timestamp {
+func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) roachpb.Timestamp {
 	if len(end) == 0 {
 		end = start.ShallowNext()
 	}
 	max := tc.lowWater
 	cache := tc.wCache
-	if readOnly {
+	if readTSCache {
 		cache = tc.rCache
 	}
 	for _, o := range cache.GetOverlaps(start, end) {
@@ -321,10 +322,10 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 		// The cache was not cleared before, so we can't just insert entries because
 		// intervals may need to be adjusted or removed to maintain the non-overlapping
 		// guarantee.
-		softMerge := func(srcCache *cache.IntervalCache, readOnly bool) {
+		softMerge := func(srcCache *cache.IntervalCache, readTSCache bool) {
 			srcCache.Do(func(k, v interface{}) {
 				key, val := *k.(*cache.IntervalKey), *v.(*cacheValue)
-				dest.Add(roachpb.Key(key.Start), roachpb.Key(key.End), val.timestamp, val.txnID, readOnly)
+				dest.Add(roachpb.Key(key.Start), roachpb.Key(key.End), val.timestamp, val.txnID, readTSCache)
 			})
 		}
 		softMerge(tc.rCache, true)

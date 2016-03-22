@@ -1010,12 +1010,59 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 }
 
 // TestStoreLongTxnStarvation sets up a test which guarantees that
-// every time a txn writes, it get a write-too-old error by always
+// every time a txn writes, it gets a write-too-old error by always
 // having a non-txnal write succeed before the txn can retry,
 // forcing endless retries for both serializable and snapshot txns.
 func TestStoreLongTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO(spencer): add implementation
+	store, _, stopper := createTestStore(t)
+	setTestRetryOptions(store)
+	defer stopper.Stop()
+
+	for i, iso := range []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT} {
+		key := roachpb.Key(fmt.Sprintf("a-%d", i))
+		txn := newTransaction("test", key, 1, iso, store.ctx.Clock)
+		txn.Priority = math.MaxInt32
+
+		for retry := 0; ; retry++ {
+			if retry > 1 {
+				t.Fatalf("%d: too many retries", i)
+			}
+			// Always send a naked put to push the transaction.
+			nakedPut := putArgs(key, []byte("naked"))
+			_, pErr := client.SendWrapped(store.testSender(), context.Background(), &nakedPut)
+			if pErr != nil && retry == 0 {
+				t.Fatalf("%d: unexpected error on first put: %s", i, pErr)
+			} else if retry == 1 {
+				if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+					t.Fatalf("%d: expected write intent error; got %s", i, pErr)
+				}
+			}
+
+			// Within the transaction, write same key.
+			var ba roachpb.BatchRequest
+			bt, btH := beginTxnArgs(key, txn)
+			put := putArgs(key, []byte("value"))
+			et, _ := endTxnArgs(txn, true)
+			ba.Header = btH
+			ba.Add(&bt)
+			ba.Add(&put)
+			ba.Add(&et)
+			_, pErr = store.testSender().Send(context.Background(), ba)
+			if retry == 0 {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+					t.Fatalf("%d: expected retry error on first txn put: %s", i, pErr)
+				}
+				txn = pErr.GetTxn()
+			} else {
+				if pErr != nil {
+					t.Fatalf("%d: unexpected error: %s", i, pErr)
+				}
+				break
+			}
+			txn.Restart(1, 1, store.ctx.Clock.Now())
+		}
+	}
 }
 
 // TestStoreResolveWriteIntent adds write intent and then verifies

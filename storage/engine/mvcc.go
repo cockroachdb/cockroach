@@ -821,7 +821,7 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
-	return mvccPutUsingIter(engine, iter, ms, key, timestamp, &value, txn, nil)
+	return mvccPutUsingIter(engine, iter, ms, key, timestamp, &value, txn, nil /* valueFn */)
 }
 
 func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key,
@@ -867,7 +867,7 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 // an optional alternative to supplying value directly. It is passed
 // the existing value (or nil if none exists) and returns the value
 // to write or an error. If valueFn is supplied, value should be nil
-// and vice versa.
+// and vice versa. valueFn can delete by returning nil.
 func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	value []byte, txn *roachpb.Transaction, buf *putBuffer, valueFn func(*roachpb.Value) ([]byte, error)) error {
 	if len(key) == 0 {
@@ -880,23 +880,23 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 		return err
 	}
 
-	maybeGetValue := func(readTS roachpb.Timestamp) error {
+	// maybeGetValue returns either value (if valueFn is nil) or else
+	// the result of calling valueFn on the data read at readTS.
+	maybeGetValue := func(exists bool, readTS roachpb.Timestamp) ([]byte, error) {
 		// If a valueFn is specified, read existing value using the iter.
-		if valueFn != nil {
-			var exVal *roachpb.Value
-			if ok {
-				getBuf := getBufferPool.Get().(*getBuffer)
-				defer getBufferPool.Put(getBuf)
-				getBuf.meta = buf.meta // initialize get metadata from what we've already read
-				if exVal, _, err = mvccGetInternal(iter, metaKey, readTS, true /* consistent */, txn, getBuf); err != nil {
-					return err
-				}
-			}
-			if value, err = valueFn(exVal); err != nil {
-				return err
+		if valueFn == nil {
+			return value, nil
+		}
+		var exVal *roachpb.Value
+		if exists {
+			getBuf := getBufferPool.Get().(*getBuffer)
+			defer getBufferPool.Put(getBuf)
+			getBuf.meta = buf.meta // initialize get metadata from what we've already read
+			if exVal, _, err = mvccGetInternal(iter, metaKey, readTS, true /* consistent */, txn, getBuf); err != nil {
+				return nil, err
 			}
 		}
-		return nil
+		return valueFn(exVal)
 	}
 
 	// Verify we're not mixing inline and non-inline values.
@@ -908,12 +908,12 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 	// Handle inline put.
 	if putIsInline {
 		var metaKeySize, metaValSize int64
-		if value == nil && valueFn == nil {
+		if value, err = maybeGetValue(ok, timestamp); err != nil {
+			return err
+		}
+		if value == nil {
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
-			if err = maybeGetValue(timestamp); err != nil {
-				return err
-			}
 			buf.meta = MVCCMetadata{RawBytes: value}
 			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
 		}
@@ -939,8 +939,10 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 				return util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
 			}
-			// Make sure we process valueFn before clearing any earlier version.
-			if err = maybeGetValue(timestamp); err != nil {
+			// Make sure we process valueFn before clearing any earlier
+			// version.  For example, a conditional put within same
+			// transaction should read previous write.
+			if value, err = maybeGetValue(ok, timestamp); err != nil {
 				return err
 			}
 			// We are replacing our own older write intent. If we are
@@ -964,30 +966,33 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 			actualTimestamp := meta.Timestamp.Next()
 			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: actualTimestamp}
 			// If we're in a transaction, always get the value at the orig
-			// timestamp; otherwise, use the advanced timestamp.
-			if txn == nil {
-				if err = maybeGetValue(actualTimestamp); err != nil {
+			// timestamp.
+			if txn != nil {
+				if value, err = maybeGetValue(ok, timestamp); err != nil {
 					return err
 				}
 			} else {
-				if err = maybeGetValue(timestamp); err != nil {
+				// Outside of a transaction, read the latest value and advance
+				// the write timestamp to the latest value's timestamp + 1. The
+				// new timestamp is returned to the caller in the WriteTooOldError.
+				if value, err = maybeGetValue(ok, actualTimestamp); err != nil {
 					return err
 				}
 			}
 			timestamp = actualTimestamp
 		} else {
-			if err = maybeGetValue(timestamp); err != nil {
+			if value, err = maybeGetValue(ok, timestamp); err != nil {
 				return err
 			}
 		}
 	} else {
+		if value, err = maybeGetValue(ok, timestamp); err != nil {
+			return err
+		}
 		// No existing metadata record. If this is a delete, do nothing;
 		// otherwise we can perform the write.
-		if value == nil && valueFn == nil {
+		if value == nil {
 			return nil
-		}
-		if err = maybeGetValue(timestamp); err != nil {
-			return err
 		}
 	}
 	buf.newMeta = MVCCMetadata{Txn: txn.GetMeta(), Timestamp: timestamp}
@@ -1005,7 +1010,7 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 	// accounted for separately.
 	newMeta.KeyBytes = mvccVersionTimestampSize
 	newMeta.ValBytes = int64(len(value))
-	newMeta.Deleted = value == nil && valueFn == nil
+	newMeta.Deleted = value == nil
 
 	var metaKeySize, metaValSize int64
 	if newMeta.Txn != nil {
@@ -1453,7 +1458,9 @@ func mvccResolveWriteIntent(engine Engine, iter Iterator, ms *MVCCStats,
 	// A commit with a newer epoch effectively means that we wrote this
 	// intent before an earlier retry, but didn't write it again
 	// after. A commit with an older timestamp than the intent should
-	// never happen
+	// not happen even on replays because BeginTransaction has replay
+	// protection. The BeginTransaction replay protection guarantees a
+	// restart in EndTransaction, so the replay won't resolve intents.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
 	timestampsValid := !intent.Txn.Timestamp.Less(meta.Timestamp)
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid

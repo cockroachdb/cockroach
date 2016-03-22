@@ -112,7 +112,7 @@ message WriteIntentError {
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
 // history. The write is instead done at actual timestamp, which is
-// the existing_timestamp+1.
+// the timestamp of the existing version+1.
 message WriteTooOldError {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];

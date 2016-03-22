@@ -332,11 +332,16 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 			clonedTxn := h.Txn.Clone()
 			h.Txn = &clonedTxn
 			h.Txn.Update(&txn)
-			reply.Txn = h.Txn // rest of the batch should use the new txn
 		} else {
 			return reply, roachpb.NewTransactionStatusError("non-aborted transaction exists already")
 		}
+	} else {
+		clonedTxn := h.Txn.Clone()
+		h.Txn = &clonedTxn
 	}
+
+	// Rest of the batch should use the new txn.
+	reply.Txn = h.Txn
 
 	// Write the txn record.
 	h.Txn.Writing = true
@@ -415,7 +420,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	}
 
 	// Take max of supplied txn's timestamp and persisted txn's
-	// timestamp. It may have been "pushed" by another transaction.
+	// timestamp. It may have been pushed by another transaction.
 	// Note that we do not use the batch request timestamp, which for
 	// a transaction is always set to the txn's original timestamp.
 	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
@@ -576,7 +581,8 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	// However, it cannot be resolved by a replay of this EndTransaction
 	// call because the txn timestamp will be too old. If the replay
 	// included a BeginTransaction, the txn will have to be pushed by
-	// other readers or writers. If the replay didn't include a
+	// other readers or writers, so that the commit would fail (due to a
+	// too-old commit timestamp). If the replay didn't include a
 	// BeginTransaction, any push will immediately succeed as a missing
 	// txn record on push sets the transaction to aborted. In both
 	// cases, the txn will be GCd on the slow path.
@@ -965,8 +971,8 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	// There are three cases in which there is no transaction entry:
 	//
 	// * the pushee is still active but the BeginTransaction was delayed
-	//   for long enough that a concurrently written write intent to
-	//   range is now pushing the transaction.
+	//   for long enough that a write intent from this txn to another
+	//   range is causing another reader or writer to push.
 	// * the pushee resolved its intents synchronously on successful commit;
 	//   in this case, the transaction record of the pushee is also removed.
 	//   Note that in this case, the intent which prompted this PushTxn
