@@ -33,9 +33,9 @@ module Components {
       // Keyboard event callback that runs the modal close function when the escape key is pressed
       closeOnEscape: (e: KeyboardEvent) => void = (e: KeyboardEvent): void => {
         if (e.keyCode === 27) {
-          m.redraw();
           if (this.onclose) {
             this.onclose();
+            m.redraw();
           }
         }
       };

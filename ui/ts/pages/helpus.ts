@@ -71,7 +71,7 @@ module AdminViews {
 
       export function view(ctrl: HelpUsController): _mithril.MithrilVirtualElement {
         return m(".page.help-us", [
-          m.component(Components.Topbar, {title: "Help Cockroach Labs", updated: Utils.Convert.MilliToNano(Date.now())}),
+          m.component(Components.Topbar, {title: "Help Cockroach Labs", updated: Utils.Convert.MilliToNano(Date.now()), hideHealth: true}),
           m(".section", [
             m(".header", m("h1", "Usage Reporting")),
             m(".form", [

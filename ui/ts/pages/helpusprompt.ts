@@ -57,6 +57,8 @@ module AdminViews {
         clickBanner(): void {
           // Adds the modal with opacity 0.
           this.stage = Stage.ModalStart;
+          // set optin value to correspond with pre-checked input in modal
+          this.userData.attributes.optin = true;
           // At the next tick, set the modal opacity to 1 and trigger a redraw so it will fade in.
           setTimeout(
             () => {
@@ -85,30 +87,37 @@ module AdminViews {
           }
         }
 
-        // If the close button is hit, or the escape button is pressed, close the modal and remove "help-us" from the URL.
-        close(): void {
+        hide: () => void = (): void => {
+          this.show = false;
+          m.redraw();
+        };
+
+        fadeOut: () => void = (): void => {
+          // Fade the correct modal.
+          if (this.stage < Stage.ModalClose) {
+            this.stage = Stage.ModalClose;
+          } else if (this.stage >= Stage.ModalClose) {
+            this.stage = Stage.ThanksClose;
+          }
+          setTimeout(this.hide, 200); // remove after animation completes
+        };
+
+        // If the close button is hit or the escape button is pressed before the
+        // form was submitted, then we save with optin as false
+        // and increment the number of dismisses.
+        dismiss: () => void = (): void => {
           this.userData.attributes.dismissed = (this.userData.attributes.dismissed ? this.userData.attributes.dismissed + 1 : 1);
-          this.userData.save().then(() => {
-            // Remove the event listener that listens for the escape key.
-            let routeParts: string[] = m.route().split("?");
-            let route: string = routeParts[0];
-            let params: Object = m.route.parseQueryString(routeParts[1]);
-            delete params["help-us"];
-            // Fade the correct modal.
-            if (this.stage < Stage.ModalClose) {
-              this.stage = Stage.ModalClose;
-            } else {
-              this.stage = Stage.ThanksClose;
-            }
-            // Remove help-us from the URL after the fade completes.
-            setTimeout(
-              () => {
-                this.show = false;
-                m.route(route, params);
-              },
-              200);
-          });
-        }
+          this.userData.attributes.optin = false;
+          this.userData.save()
+            .then(this.fadeOut)
+            .catch(this.fadeOut);
+        };
+
+        // If the close button or escape key are pressed after saving, we simply
+        // close the modal.
+        close: () => void = (): void => {
+          this.fadeOut();
+        };
       }
 
       export function controller(): ModalController {
@@ -131,8 +140,6 @@ module AdminViews {
           containerClass = ".close";
         }
 
-        let close: () => void = ctrl.close.bind(ctrl);
-
         if (ctrl.show) {
             // Banner
           switch (ctrl.stage) {
@@ -141,7 +148,7 @@ module AdminViews {
                 m("span.checkmark", m.trust("&#x2713; ")),
                 "Check for updates and help us improve",
                 m("button", {onclick: ctrl.clickBanner.bind(ctrl)}, "Opt In"),
-                m(".close", {onclick: close}, m.trust("&#x2715; ")),
+                m(".close", {onclick: ctrl.dismiss}, m.trust("&#x2715; ")),
               ]);
             // Help Us Form
             case Stage.ThanksSize:
@@ -179,10 +186,10 @@ module AdminViews {
                       ]),
                     ]),
                     m("button.right", {onclick: ctrl.modalSubmit.bind(ctrl)}, "Submit"),
-                    m("button.right.cancel", {onclick: close}, "Cancel"),
+                    m("button.right.cancel", {onclick: ctrl.dismiss}, "Cancel"),
                   ]),
                 ],
-                onclose: close,
+                onclose: ctrl.dismiss,
               });
 
             // Thanks
@@ -198,13 +205,16 @@ module AdminViews {
                     m("a[href='/help-us/reporting']", {config: m.route, onclick: close}, "usage reporting page"),
                     ".",
                   ]),
-                  m("button", {onclick: close}, "Return to Dashboard"),
+                  m("button", {onclick: ctrl.close}, "Return to Dashboard"),
                 ],
-                onclose: close,
+                onclose: ctrl.close,
               });
             default:
               console.error("Unknown stage ", ctrl.stage);
+              return m("");
           }
+        } else {
+          return m("");
         }
       }
     }
