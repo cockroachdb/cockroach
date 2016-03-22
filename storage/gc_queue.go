@@ -99,7 +99,7 @@ func (*gcQueue) acceptsUnsplitRanges() bool {
 }
 
 type pushFunc func(roachpb.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
-type resolveFunc func([]roachpb.Intent, bool, bool) *roachpb.Error
+type resolveFunc func([]roachpb.Intent, bool, bool) error
 
 // shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
@@ -192,7 +192,7 @@ func processTransactionTable(snap engine.Engine, desc *roachpb.RangeDescriptor, 
 			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
-				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */).GoError()
+				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */)
 			}(); err != nil {
 				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
@@ -330,7 +330,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		func(now roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(repl, now, txn, typ)
 		},
-		func(intents []roachpb.Intent, poison bool, wait bool) *roachpb.Error {
+		func(intents []roachpb.Intent, poison bool, wait bool) error {
 			return repl.store.intentResolver.resolveIntents(repl.context(), repl, intents, poison, wait)
 		})
 
@@ -415,11 +415,11 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 
 	{
 		realResolveIntents := resolveIntents
-		resolveIntents = func(intents []roachpb.Intent, poison bool, wait bool) (pErr *roachpb.Error) {
+		resolveIntents = func(intents []roachpb.Intent, poison bool, wait bool) (err error) {
 			defer func() {
 				infoMu.Lock()
 				infoMu.ResolveTotal += len(intents)
-				if pErr == nil {
+				if err == nil {
 					infoMu.ResolveSuccess += len(intents)
 				}
 				infoMu.Unlock()
@@ -567,8 +567,8 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 		}
 	}
 
-	if pErr := resolveIntents(intents, true /* wait */, false /* !poison */); pErr != nil {
-		return nil, GCInfo{}, pErr.GoError()
+	if err := resolveIntents(intents, true /* wait */, false /* !poison */); err != nil {
+		return nil, GCInfo{}, err
 	}
 
 	// Deal with any leftover sequence cache keys. There shouldn't be many of

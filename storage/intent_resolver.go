@@ -260,10 +260,10 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				defer cancel()
 				h := roachpb.Header{Timestamp: now}
 				resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
-					item.intents, h, roachpb.PUSH_TOUCH, true /* skipInFlight */)
-				if pErr := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
-					true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
-					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
+					item.intents, h, roachpb.PUSH_TOUCH, true /* skipIfInFlight */)
+				if err := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
+					true /* wait */, false /* TODO(tschottdorf): #5088 */); err != nil {
+					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)
 					return
 				}
 				if pushErr != nil {
@@ -278,9 +278,9 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 				// For EndTransaction, we know the transaction is finalized so
 				// we can skip the push and go straight to the resolve.
-				if pErr := ir.resolveIntents(ctxWithTimeout, r, item.intents,
-					true /* wait */, false /* TODO(tschottdorf): #5088 */); pErr != nil {
-					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", pErr)
+				if err := ir.resolveIntents(ctxWithTimeout, r, item.intents,
+					true /* wait */, false /* TODO(tschottdorf): #5088 */); err != nil {
+					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)
 					return
 				}
 
@@ -342,7 +342,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // immediately after calling this function, it will not hit the same
 // intents again.
 func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
-	intents []roachpb.Intent, wait bool, poison bool) *roachpb.Error {
+	intents []roachpb.Intent, wait bool, poison bool) error {
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
 	defer cleanup()
@@ -386,7 +386,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	// The local batch goes directly to Raft.
 	var wg sync.WaitGroup
 	if len(baLocal.Requests) > 0 {
-		action := func() *roachpb.Error {
+		action := func() error {
 			// Trace this under the ID of the intent owner.
 			// Create a new span though, since we do not want to pass a span
 			// between goroutines or we risk use-after-finish.
@@ -398,7 +398,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 			ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 			defer cancel()
 			_, pErr := r.addWriteCmd(ctxWithTimeout, baLocal, &wg)
-			return pErr
+			return pErr.GoError()
 		}
 		wg.Add(1)
 		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
@@ -420,9 +420,9 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	if len(reqsRemote) > 0 {
 		b := &client.Batch{}
 		b.InternalAddRequest(reqsRemote...)
-		action := func() *roachpb.Error {
+		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
-			return r.store.DB().Run(b)
+			return r.store.DB().Run(b).GoError()
 		}
 		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {

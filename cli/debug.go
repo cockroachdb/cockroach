@@ -295,7 +295,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		defer snap.Close()
 		_, info, err := storage.RunGC(&desc, snap, roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ roachpb.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
-			}, func(_ []roachpb.Intent, _, _ bool) *roachpb.Error { return nil })
+			}, func(_ []roachpb.Intent, _, _ bool) error { return nil })
 		if err != nil {
 			return err
 		}
