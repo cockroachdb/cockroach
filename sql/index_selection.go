@@ -30,6 +30,42 @@ import (
 
 const nonCoveringIndexPenalty = 10
 
+// analyzeOrderingFn is the interface through which the index selection code
+// discovers how useful is the ordering provided by a certain index. The higher
+// layer (select) desires a certain ordering on a number of columns; it calls
+// into the index selection code with an analyzeOrderingFn that computes how
+// many columns of that desired ordering are satisfied by the index ordering.
+// Both the number of matching columns and the total columns in the desired
+// ordering are returned.
+//
+// In addition, singleKey indicates if the ordering is such that we only need to
+// retrieve one key (cases like `SELECT MIN(x) ..` and we have an index on x).
+//
+// For example, consider the table t {
+//    a INT,
+//    b INT,
+//    c INT,
+//    INDEX ab (a, b)
+//    INDEX bac (b, a, c)
+// }
+//
+// For `SELECT * FROM t ORDER BY a, c`, the desired ordering is (a, c);
+// totalCols is 2. In this case:
+//  - the primary index has no ordering on a, b, c; matchingCols is 0.
+//  - the ab index matches the first column of the desired ordering;
+//    matchingCols is 1.
+//  - the bac index doesn't match the desired ordering at all; mathcingCols
+//    is 0.
+//
+// For `SELECT * FROM t WHERE b=1 ORDER BY a, c`, the desired ordering is (a, c);
+// totalCols is 2. In this case:
+//  - the primary index has no ordering on a, b, c; matchingCols is 0.
+//  - the ab index matches the first column of the desired ordering;
+//    matchingCols is 1.
+//  - the bac index, along with the fact that b is constrained to a single
+//    value, matches the desired ordering; matchingCols is 2.
+type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool)
+
 // selectIndex analyzes the scanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
 //
@@ -40,13 +76,13 @@ const nonCoveringIndexPenalty = 10
 // these constraints and the best index is selected. The contraints are then
 // transformed into a set of spans to scan within the index.
 //
-// If grouping is true, the ordering is the desired ordering for grouping.
+// The analyzeOrdering function is used to determine how useful the ordering of
+// an index is. If no particular ordering is desired, it can be nil.
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrdering, grouping,
-	preferOrderMatching bool) planNode {
-	if s.desc.isEmpty() || (s.filter == nil && ordering == nil) {
+func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool) planNode {
+	if s.desc.isEmpty() || (s.filter == nil && analyzeOrdering == nil) {
 		// No table or no where-clause and no ordering.
 		s.initOrdering(0)
 		return s
@@ -124,9 +160,9 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		}
 	}
 
-	if ordering != nil {
+	if analyzeOrdering != nil {
 		for _, c := range candidates {
-			c.analyzeOrdering(sel, s, ordering, preferOrderMatching)
+			c.analyzeOrdering(s, analyzeOrdering, preferOrderMatching)
 		}
 	}
 
@@ -162,13 +198,11 @@ func (p *planner) selectIndex(sel *selectNode, s *scanNode, ordering columnOrder
 		plan = makeIndexJoin(s, c.exactPrefix)
 	}
 
-	if grouping && len(ordering) == 1 && len(s.spans) == 1 && noFilter && sel.filter == nil {
-		// If grouping has a desired order and there is a single span for which the
-		// filter is true, check to see if the ordering matches the desired
-		// ordering. If it does we can limit the scan to a single key.
-		existingOrdering := sel.computeOrdering(plan.Ordering())
-		match := computeOrderingMatch(ordering, existingOrdering, false)
-		if match == 1 {
+	// If we have no filter, we can request a single key in some cases.
+	if noFilter && analyzeOrdering != nil {
+		_, _, singleKey := analyzeOrdering(plan.Ordering())
+		if singleKey {
+			s.spans = s.spans[:1]
 			s.spans[0].count = 1
 		}
 	}
@@ -283,21 +317,19 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering columnOrdering,
+func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrderingFn,
 	preferOrderMatching bool) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = exactPrefix(v.constraints)
 
-	// Compute the ordering provided by the index.
-	indexOrdering := sel.computeOrdering(scan.computeOrdering(v.index, v.exactPrefix, false))
+	// Analyze the ordering provided by the index (either forward or reverse).
+	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
+	revIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, true)
+	fwdMatch, orderCols, _ := analyzeOrdering(fwdIndexOrdering)
+	revMatch, orderCols, _ := analyzeOrdering(revIndexOrdering)
 
-	// Compute how much of the index ordering matches the requested ordering for
-	// both forward and reverse scans.
-	fwdMatch := computeOrderingMatch(ordering, indexOrdering, false)
-	revMatch := computeOrderingMatch(ordering, indexOrdering, true)
-
-	// Weight the cost by how much of the ordering matched.
+	// Weigh the cost by how much of the ordering matched.
 	//
 	// TODO(pmattis): Need to determine the relative weight for index selection
 	// based on sorting vs index selection based on filtering. Sorting is
@@ -308,17 +340,17 @@ func (v *indexInfo) analyzeOrdering(sel *selectNode, scan *scanNode, ordering co
 		match = revMatch
 		v.reverse = true
 	}
-	weight := float64(len(ordering)+1) / float64(match+1)
+	weight := float64(orderCols+1) / float64(match+1)
 	v.cost *= weight
 
-	if match == len(ordering) && preferOrderMatching {
+	if match == orderCols && preferOrderMatching {
 		// Offset the non-covering index cost penalty.
 		v.cost *= (1.0 / nonCoveringIndexPenalty)
 	}
 
 	if log.V(2) {
-		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d requested=%d",
-			v.index.Name, weight, v.reverse, indexOrdering, ordering)
+		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d",
+			v.index.Name, weight, v.reverse, fwdIndexOrdering)
 	}
 }
 

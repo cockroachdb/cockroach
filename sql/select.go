@@ -302,6 +302,24 @@ func (p *planner) initSelect(
 			}
 		}
 
+		var analyzeOrdering analyzeOrderingFn
+		if grouping && len(ordering) == 1 && s.filter == nil {
+			// If grouping has a desired single-column order and the index
+			// matches that order, we can limit the scan to a single key.
+			analyzeOrdering =
+				func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool) {
+					selOrder := s.computeOrdering(indexOrdering)
+					matchingCols = computeOrderingMatch(ordering, selOrder, false)
+					return matchingCols, 1, matchingCols == 1
+				}
+		} else if ordering != nil {
+			analyzeOrdering =
+				func(indexOrdering orderingInfo) (matchingCols, totalCols int, singleKey bool) {
+					selOrder := s.computeOrdering(indexOrdering)
+					return computeOrderingMatch(ordering, selOrder, false), len(ordering), false
+				}
+		}
+
 		// If we have a reasonable limit, prefer an order matching index even if
 		// it is not covering - unless we are grouping, in which case the limit
 		// applies to the grouping results and not to the rows we scan.
@@ -309,7 +327,8 @@ func (p *planner) initSelect(
 		if !grouping && len(ordering) > 0 && limitCount <= 1000-limitOffset {
 			preferOrderMatchingIndex = true
 		}
-		plan := p.selectIndex(s, scan, ordering, grouping, preferOrderMatchingIndex)
+
+		plan := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
 
 		// Update s.table with the new plan.
 		s.table.node = plan
