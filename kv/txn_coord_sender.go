@@ -342,7 +342,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			tc.Unlock()
 			if !ok {
 				pErr := roachpb.NewErrorf("writing transaction timed out, was aborted, " +
-					" or ran on multiple coordinators")
+					"or ran on multiple coordinators")
 				return nil, pErr
 			}
 		}
@@ -522,8 +522,9 @@ func (tc *TxnCoordSender) cleanupTxn(ctx context.Context, txn roachpb.Transactio
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[*txn.ID]
-	// The heartbeat might've already removed the record.
-	if !ok {
+	// The heartbeat might've already removed the record. Or we may have already
+	// closed txnEnd but we are racing with the heartbeat cleanup.
+	if !ok || txnMeta.txnEnd == nil {
 		return
 	}
 
@@ -551,7 +552,7 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (duration, restar
 
 	delete(tc.txns, txnID)
 
-	return
+	return duration, restarts, status
 }
 
 // heartbeatLoop periodically sends a HeartbeatTxn RPC to an extant
