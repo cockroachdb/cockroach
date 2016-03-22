@@ -42,6 +42,10 @@ const (
 	nameCPUSysPercent  = "cpu.sys.percent"
 )
 
+// logOSStats is a function that logs OS-specific stats. We will not necessarily
+// have implementations for all OSes.
+var logOSStats func()
+
 // RuntimeStatRecorder is used to periodically persist useful runtime statistics
 // as time series data. "Runtime statistics" include OS-level statistics (such as
 // memory and CPU usage) and Go runtime statistics (e.g. count of Goroutines).
@@ -138,6 +142,12 @@ func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
 	log.Infof("runtime stats: %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
 		numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
+	if log.V(2) {
+		log.Infof("memstats: %+v", ms)
+	}
+	if logOSStats != nil {
+		logOSStats()
+	}
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC
 
