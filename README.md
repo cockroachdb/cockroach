@@ -8,7 +8,6 @@
 **Table of Contents**
 
 - [What is CockroachDB?](#what-is-cockroachdb)
-- [Status](#status)
 - [Quickstart](#quickstart)
 - [Manual Deployment](#manual-deployment)
 - [Cloud Deployment](#cloud-deployment)
@@ -17,11 +16,9 @@
 - [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
 - [Architecture](#architecture) and [Client Architecture](#client-architecture)
 
-## What is CockroachDB
+## What is CockroachDB?
 
-CockroachDB is a distributed SQL database built on top of a transactional and consistent key:value store. The primary design goals are support for ACID transactions, horizontal scalability, and survivability, hence the name. CockroachDB implements a Raft consensus algorithm for consistency. It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
-
-## Status
+CockroachDB is a distributed SQL database built on a transactional and strongly-consistent key-value store. It **scales** horizontally; **survives** disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention; supports **strongly-consistent** ACID transactions; and provides a familiar **SQL** API for structuring, manipulating, and querying data.
 
 CockroachDB is currently in alpha. See our
 [Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
@@ -69,7 +66,7 @@ root@26257> SELECT * FROM accounts;
 
 4. Checkout the admin UI by pointing your browser to `http://<localhost>:26257`.
 
-5. Learn how to [secure your cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html).
+You might also want to learn how to [secure your cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html) and connect with a [client driver](https://www.cockroachlabs.com/docs/install-client-drivers.html).
 
 ## Manual Deployment
 
@@ -80,19 +77,24 @@ To run a CockroachDB cluster on multiple machines, see [Manual Deployment].
 For a sample configuration to run an insecure CockroachDB cluster on AWS using [Terraform](https://terraform.io/),
 see [cloud deployment](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws).
 
-## Get in touch
+## Get In Touch
 
-We spend almost all of our time here on GitHub, and use the [issue
-tracker](https://github.com/cockroachdb/cockroach/issues) for
-bug reports.
+When you see a bug or have improvements to suggest, please open an [issue
+tracker](https://github.com/cockroachdb/cockroach/issues).
 
-For development related questions and anything else, message our mailing list at [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). We recommend joining before posting, or your messages may be held back for moderation.
+For development-related questions, there are two easy ways to get in touch:
+
+- [Join us on Gitter](https://gitter.im/cockroachdb/cockroach). This is the best, most immediate way to connect with CockroachDB engineers.
+- [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db). Please join first or you messages may be held back for moderation.
 
 ### Contributing
 
-We're an Open Source project and welcome contributions.
-See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
-Once that's done, take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted), and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls/) to learn about our style and conventions.
+We're an open source project and welcome contributions.
+
+1. See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
+2. Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted).
+3. Review our [style guide](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#style-guide) and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls) to learn about our style and conventions.
+4. Make your changes according to our [code review workflow](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#code-review-workflow).
 
 ## Talks
 
