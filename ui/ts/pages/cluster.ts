@@ -289,7 +289,6 @@ module AdminViews {
         private _refresh(): void {
           this.exec.refresh();
           nodeStatuses.refresh();
-          Models.Events.eventSingleton.refresh();
         }
 
         private _addChart(axis: Metrics.Axis): void {

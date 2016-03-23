@@ -17,6 +17,7 @@
 package acceptance
 
 import (
+	"bytes"
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	_ "github.com/cockroachdb/pq"
@@ -241,6 +243,26 @@ func getJSON(url, rel string, v interface{}) error {
 		if log.V(1) {
 			log.Info(err)
 		}
+		return err
+	}
+	return json.Unmarshal(b, v)
+}
+
+// postJSON POSTs to the URL specified by the parameters and unmarshals the
+// result into the supplied interface.
+func postJSON(url, rel string, reqBody interface{}, v interface{}) error {
+	reqBodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	resp, err := HTTPClient.Post(url+rel, util.JSONContentType, bytes.NewReader(reqBodyBytes))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		return err
 	}
 	return json.Unmarshal(b, v)
