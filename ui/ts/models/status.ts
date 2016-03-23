@@ -12,6 +12,7 @@ module Models {
   export module Status {
     import promise = _mithril.MithrilPromise;
     import Moment = moment.Moment;
+    import MithrilPromise = _mithril.MithrilPromise;
 
     export interface StoreStatusResponseSet {
       d: Proto.StoreStatus[];
@@ -118,13 +119,15 @@ module Models {
         return this._dataMap()[nodeId];
       }
 
-      public refresh(): void {
-        this._data.refresh();
+      public refresh(): MithrilPromise<any> {
+        return this._data.refresh();
       }
 
       public error(): Error {
         return this._data.error();
       }
     }
+
+    export let nodeStatusSingleton = new Nodes();
   }
 }

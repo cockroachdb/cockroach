@@ -34,7 +34,7 @@ module AdminViews {
     import MithrilComponent = _mithril.MithrilComponent;
     import MetricNames = Models.Proto.MetricConstants;
 
-    let nodeStatuses: Models.Status.Nodes = new Models.Status.Nodes();
+    let nodeStatuses: Models.Status.Nodes = Models.Status.nodeStatusSingleton;
 
     function _nodeMetric(metric: string): string {
       return "cr.node." + metric;
