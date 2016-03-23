@@ -26,43 +26,43 @@ CockroachDB is currently in alpha. See our
 
 ## Quickstart 
 
-1. [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html)
+1.  [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html)
 
-2. [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes running on different ports:
+2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes running on different ports:
 
-```shell
-$ ./cockroach start --insecure &
-$ ./cockroach start --insecure --store=node2-data --port=26258 --http-port=8081 --join=localhost:26257 &
-$ ./cockroach start --insecure --store=node3-data --port=26259 --http-port=8082 --join=localhost:26257 &
-```
+    ```shell
+    $ ./cockroach start --insecure &
+    $ ./cockroach start --insecure --store=node2-data --port=26258 --http-port=8081 --join=localhost:26257 &
+    $ ./cockroach start --insecure --store=node3-data --port=26259 --http-port=8082 --join=localhost:26257 &
+    ```
 
-3. Use the built-in SQL client to talk to the cluster:
+3.  Use the built-in SQL client to talk to the cluster:
 
-```shell
-$ ./cockroach sql --insecure
-# Welcome to the cockroach SQL interface.
-# All statements must be terminated by a semicolon.
-# To exit: CTRL + D.
+    ```shell
+    $ ./cockroach sql --insecure
+    # Welcome to the cockroach SQL interface.
+    # All statements must be terminated by a semicolon.
+    # To exit: CTRL + D.
 
-root@:26257> CREATE DATABASE bank;
-CREATE DATABASE
+    root@:26257> CREATE DATABASE bank;
+    CREATE DATABASE
 
-root@:26257> SET DATABASE = bank;
-SET
+    root@:26257> SET DATABASE = bank;
+    SET
 
-root@:26257> CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL);
-CREATE TABLE
+    root@:26257> CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL);
+    CREATE TABLE
 
-root@26257> INSERT INTO accounts VALUES (1234, DECIMAL '10000.50');
-INSERT 1
+    root@26257> INSERT INTO accounts VALUES (1234, DECIMAL '10000.50');
+    INSERT 1
 
-root@26257> SELECT * FROM accounts;
-+------+----------+
-|  id  | balance  |
-+------+----------+
-| 1234 | 10000.50 |
-+------+----------+
-```
+    root@26257> SELECT * FROM accounts;
+    +------+----------+
+    |  id  | balance  |
+    +------+----------+
+    | 1234 | 10000.50 |
+    +------+----------+
+    ```
 
 4. Checkout the admin UI by pointing your browser to `http://<localhost>:26257`.
 
@@ -84,17 +84,20 @@ tracker](https://github.com/cockroachdb/cockroach/issues).
 
 For development-related questions, there are two easy ways to get in touch:
 
-- [Join us on Gitter](https://gitter.im/cockroachdb/cockroach). This is the best, most immediate way to connect with CockroachDB engineers.
-- [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db). Please join first or you messages may be held back for moderation.
+-   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach). This is the best, most immediate way to connect with CockroachDB engineers.
+-   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db). Please join first or you messages may be held back for moderation.
 
 ### Contributing
 
 We're an open source project and welcome contributions.
 
-1. See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
-2. Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted).
-3. Review our [style guide](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#style-guide) and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls) to learn about our style and conventions.
-4. Make your changes according to our [code review workflow](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#code-review-workflow).
+1.  See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
+
+2.  Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted).
+
+3.  Review our [style guide](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#style-guide) and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls) to learn about our style and conventions.
+
+4.  Make your changes according to our [code review workflow](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#code-review-workflow).
 
 ## Talks
 
