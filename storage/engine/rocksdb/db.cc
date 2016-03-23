@@ -510,7 +510,7 @@ void SerializeTimeSeriesToValue(
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
 bool MergeTimeSeriesValues(
-    std::string *left, const std::string &right, bool full_merge, rocksdb::Logger* logger) {
+    std::string *left, const std::string &right, rocksdb::Logger* logger) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData left_ts;
   cockroach::roachpb::InternalTimeSeriesData right_ts;
@@ -537,15 +537,6 @@ bool MergeTimeSeriesValues(
     rocksdb::Warn(logger,
                   "TimeSeries merge failed due to mismatched sample durations.");
     return false;
-  }
-
-  // If only a partial merge, do not sort and combine - instead, just quickly
-  // merge the two values together. Values will be processed later after a
-  // full merge.
-  if (!full_merge) {
-    left_ts.MergeFrom(right_ts);
-    SerializeTimeSeriesToValue(left, left_ts);
-    return true;
   }
 
   // Initialize new_ts and its primitive data fields. Values from the left and
@@ -650,7 +641,7 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
 
 bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
                  const cockroach::storage::engine::MVCCMetadata &right,
-                 bool full_merge, rocksdb::Logger* logger) {
+                 rocksdb::Logger* logger) {
   if (left->has_raw_bytes()) {
     if (!right.has_raw_bytes()) {
       rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
@@ -682,7 +673,7 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
                       "inconsistent value types for merging time series data (type(left) != type(right))");
         return false;
       }
-      return MergeTimeSeriesValues(left->mutable_raw_bytes(), right.raw_bytes(), full_merge, logger);
+      return MergeTimeSeriesValues(left->mutable_raw_bytes(), right.raw_bytes(), logger);
     } else {
       const rocksdb::Slice rdata = ValueDataBytes(right.raw_bytes());
       left->mutable_raw_bytes()->append(rdata.data(), rdata.size());
@@ -693,7 +684,7 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
     if (right.has_merge_timestamp()) {
       left->mutable_merge_timestamp()->CopyFrom(right.merge_timestamp());
     }
-    if (full_merge && IsTimeSeriesData(left->raw_bytes())) {
+    if (IsTimeSeriesData(left->raw_bytes())) {
       ConsolidateTimeSeriesValue(left->mutable_raw_bytes(), logger);
     }
     return true;
@@ -751,27 +742,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     }
 
     for (int i = 0; i < operand_list.size(); i++) {
-      if (!MergeOne(&meta, operand_list[i], true, logger)) {
-        return false;
-      }
-    }
-
-    if (!meta.SerializeToString(new_value)) {
-      rocksdb::Warn(logger, "serialization error");
-      return false;
-    }
-    return true;
-  }
-
-  virtual bool PartialMergeMulti(
-      const rocksdb::Slice& key,
-      const std::deque<rocksdb::Slice>& operand_list,
-      std::string* new_value,
-      rocksdb::Logger* logger) const {
-    cockroach::storage::engine::MVCCMetadata meta;
-
-    for (int i = 0; i < operand_list.size(); i++) {
-      if (!MergeOne(&meta, operand_list[i], false, logger)) {
+      if (!MergeOne(&meta, operand_list[i], logger)) {
         return false;
       }
     }
@@ -786,14 +757,13 @@ class DBMergeOperator : public rocksdb::MergeOperator {
  private:
   bool MergeOne(cockroach::storage::engine::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
-                bool full_merge,
                 rocksdb::Logger* logger) const {
     cockroach::storage::engine::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
     }
-    return MergeValues(meta, operand_meta, full_merge, logger);
+    return MergeValues(meta, operand_meta, logger);
   }
 };
 
@@ -1603,7 +1573,7 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
     return ToDBString("corrupted update value");
   }
 
-  if (!MergeValues(&meta, update_meta, true, NULL)) {
+  if (!MergeValues(&meta, update_meta, NULL)) {
     return ToDBString("incompatible merge values");
   }
   return MergeResult(&meta, new_value);
