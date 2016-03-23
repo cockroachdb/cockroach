@@ -295,7 +295,7 @@ func initFlags(ctx *Context) {
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
 		f.StringVar(&ctx.SocketFile, "socket", "", usage("socket"))
-		f.MarkHidden("socket")
+		_ = f.MarkHidden("socket")
 
 		// Security flags.
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
