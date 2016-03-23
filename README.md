@@ -3,6 +3,18 @@
 
 [![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-alpha-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
+# A Scalable, Survivable, Strongly-Consistent SQL Database
+
+- [What is CockroachDB?](#what-is-cockroachdb)
+- [Quickstart](#quickstart)
+- [Client Drivers](#client-drivers)
+- [Manual Deployment](#manual-deployment)
+- [Cloud Deployment](#cloud-deployment)
+- [Get In Touch](#get-in-touch)
+- [Contributing](#contributing)
+- [Talks](#talks)
+- [Design Overview](#design-overview)
+
 ## What is CockroachDB?
 
 CockroachDB is a distributed SQL database built on a transactional and strongly-consistent key-value store. It **scales** horizontally; **survives** disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention; supports **strongly-consistent** ACID transactions; and provides a familiar **SQL** API for structuring, manipulating, and querying data.
@@ -74,10 +86,9 @@ see [cloud deployment](https://github.com/cockroachdb/cockroach/tree/master/clou
 
 ## Get In Touch
 
-When you see a bug or have improvements to suggest, please open an [issue
-tracker](https://github.com/cockroachdb/cockroach/issues).
+When you see a bug or have improvements to suggest, please open an [issue](https://github.com/cockroachdb/cockroach/issues).
 
-For development-related questions, there are two easy ways to get in touch:
+For development-related questions and anything else, there are two easy ways to get in touch:
 
 -   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach). This is the best, most immediate way to connect with CockroachDB engineers.
 -   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db). Please join first or you messages may be held back for moderation.
@@ -96,38 +107,33 @@ We're an open source project and welcome contributions.
 
 ## Talks
 
-Date | Topic | Duration | Venue | Presenter
------|-------|----------|-------|----------
-12/02/2015 | [CockroachDB's MVCC model](https://www.youtube.com/watch?v=-ij2OiDTxz0) | 21 min | Annual RocksDB meetup at Facebook HQ | [Spencer Kimball] (https://github.com/spencerkimball)
-10/28/2015 | [Architecture * overview](https://www.youtube.com/watch?v=tV-WXM2IJ3U) | 30 min | Code Driven NYC | [Spencer Kimball] (https://github.com/spencerkimball)
+-   12/2/2015: [Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball), 21min  
+    CockroachDB's MVCC model.
 
-* [Venue: Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball) on (12/02/2015), 21min.<br />
-  CockroachDB's MVCC model.
-* [Venue: Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball) on (10/28/2015), 30min.<br />
-  Architecture & Overview.
-* [Venue: Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell) on (08/21/2015), 52min.<br />
-* [Venue: Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball) on (06/16/2015), 23min.<br />
-  A short, less technical presentation of CockroachDB.
-* [Venue: NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf) on (06/10/2015), 15min.<br />
-  A short, non-technical talk with a small cluster survivability demo.
-* [Venue: CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball) on (05/27/2015), 25min.<br />
-  An introduction to the goals and design of CockroachDB. The recommended talk to watch if all you have time for is one.
-* [Venue: The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf) on (03/04/2015), 45min.<br />
-  The most technical talk given thus far, going through the implementation of transactions in some detail.
+-   10/28/2015: [Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball), 30min  
+    Architecture & overview.
 
-### Older talks
+-   8/21/2015: [Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell), 52min
 
-* [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014), 1h25min.
-* [Venue: Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014), 1h.
+-   6/16/2015: [Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball), 23min  
+    A short, less technical presentation of CockroachDB.
 
+-   6/10/2015: [NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf), 15min  
+    A short, non-technical talk with a small cluster survivability demo.
+
+-   5/27/2015: [CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball), 25min  
+    An introduction to the goals and design of CockroachDB. **Recommended** if you only have time for one talk.
+
+-   3/4/2015: [The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf), 45min  
+    The most technical talk given thus far, going through the implementation of transactions in some detail.
+
+-   11/5/2014: [The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf), 1h 25min
+
+-   9/5/2014: [Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball), 1h
 
 ## Design Overview
 
-This is an overview. For an in depth discussion of the design, see the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
-
-For a quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p)
-or watch a [presentation](#talks).
-
+This is an overview. For an in-depth discussion of the design and architecture, see the full [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md). For another quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p).
 
 CockroachDB is a distributed SQL database built on top of a transactional and consistent key:value store. The primary design goals are support for ACID transactions, horizontal scalability and survivability, hence the name. CockroachDB implements a Raft consensus algorithm for consistency. It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
 
@@ -142,9 +148,9 @@ total byte size within a globally configurable min/max size
 interval. Range sizes default to target 64M in order to facilitate
 quick splits and merges and to distribute load at hotspots within a
 key range. Range replicas are intended to be located in disparate
-datacenters for survivability (e.g. { US-East, US-West, Japan }, {
-Ireland, US-East, US-West}, { Ireland, US-East, US-West, Japan,
-Australia }).
+datacenters for survivability (e.g. `{ US-East, US-West, Japan }`, `{
+Ireland, US-East, US-West}` , `{ Ireland, US-East, US-West, Japan,
+Australia }`).
 
 Single mutations to ranges are mediated via an instance of a
 distributed consensus algorithm to ensure consistency. We’ve chosen to
@@ -176,16 +182,12 @@ performance and/or availability. Unlike Spanner, zones are monolithic
 and don’t allow movement of fine grained data on the level of entity
 groups.
 
-A [Megastore][4]-like message queue mechanism is also provided to 1)
-efficiently sideline updates which can tolerate asynchronous execution
-and 2) provide an integrated message queuing system for asynchronous
-communication between distributed system components.
-
 #### SQL - NoSQL - NewSQL Capabilities
 
 ![SQL - NoSQL - NewSQL Capabilities](/resource/doc/sql-nosql-newsql.png?raw=true)
 
-## Datastore Goal Articulation
+
+### Datastore Goal Articulation
 
 There are other important axes involved in data-stores which are less
 well understood and/or explained. There is lots of cross-dependency,
@@ -252,7 +254,7 @@ write-optimized (HBase, Cassandra, SQLite3/LSM, CockroachDB).
 
 ![Read vs. Write Optimization Spectrum](/resource/doc/read-vs-write.png?raw=true)
 
-## Architecture
+### Architecture
 
 CockroachDB implements a layered architecture, with various
 subdirectories implementing layers as appropriate. The highest level of
@@ -278,7 +280,7 @@ replicas.
 
 ![Range Architecture Blowup](/resource/doc/architecture-blowup.png?raw=true)
 
-## Client Architecture
+### Client Architecture
 
 RoachNodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
 application/json. Client implementations consist of an HTTP sender
