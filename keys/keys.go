@@ -70,6 +70,15 @@ func NodeStatusKey(nodeID int32) roachpb.Key {
 	return key
 }
 
+// NodeLastUsageReportKey returns the key for accessing the node last update check
+// time (when version check or usage reporting was done).
+func NodeLastUsageReportKey(nodeID int32) roachpb.Key {
+	key := make(roachpb.Key, 0, len(UpdateCheckPrefix)+9)
+	key = append(key, UpdateCheckPrefix...)
+	key = encoding.EncodeUvarintAscending(key, uint64(nodeID))
+	return key
+}
+
 func makePrefixWithRangeID(prefix []byte, rangeID roachpb.RangeID, infix roachpb.RKey) roachpb.Key {
 	// Size the key buffer so that it is large enough for most callers.
 	key := make(roachpb.Key, 0, 32)
