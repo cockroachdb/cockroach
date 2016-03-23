@@ -84,9 +84,9 @@ func TestOffsetMeasurement(t *testing.T) {
 	})
 }
 
-// TestDelayedOffsetMeasurement tests that the client will record a
-// zero offset if the heartbeat reply exceeds the
-// maximumClockReadingDelay, but not the heartbeat timeout.
+// TestDelayedOffsetMeasurement tests that the client will record a zero offset
+// if the heartbeat reply exceeds the maximum clock reading delay, but not the
+// heartbeat timeout.
 func TestDelayedOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -104,11 +104,11 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 	})
 
-	// Create a client that receives a heartbeat right after the
-	// maximumClockReadingDelay.
+	// Create a client that receives a heartbeat right after the maximum clock
+	// reading delay.
 	clientAdvancing := AdvancingClock{
 		time:                0,
-		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
+		advancementInterval: serverClock.MaxOffset().Nanoseconds()*maximumPingDurationMult + 1,
 	}
 	clientClock := hlc.NewClock(clientAdvancing.UnixNano)
 	clientCtx := newNodeTestContext(clientClock, stopper)
