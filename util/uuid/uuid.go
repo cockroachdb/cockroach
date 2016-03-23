@@ -16,7 +16,11 @@
 
 package uuid
 
-import "github.com/satori/go.uuid"
+import (
+	"errors"
+
+	"github.com/satori/go.uuid"
+)
 
 // EmptyUUID is the zero-UUID.
 var EmptyUUID = &UUID{}
@@ -25,6 +29,18 @@ var EmptyUUID = &UUID{}
 // used as a gogo/protobuf customtype.
 type UUID struct {
 	uuid.UUID
+}
+
+// Bytes shadows (*github.com/satori/go.uuid.UUID).Bytes() to prevent confusing
+// our default proto stringer.
+// TODO(tschottdorf): fix upstream.
+func (u UUID) Bytes() error {
+	return errors.New("intentionally shadowed; use GetBytes()")
+}
+
+// GetBytes returns the UUID as a byte slice.
+func (u UUID) GetBytes() []byte {
+	return u.UUID.Bytes()
 }
 
 // Size returns the marshalled size of u, in bytes.

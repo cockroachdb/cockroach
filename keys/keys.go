@@ -108,7 +108,7 @@ func MakeRangeIDReplicatedKey(rangeID roachpb.RangeID, suffix, detail roachpb.RK
 // for the given transaction ID.
 func SequenceCacheKeyPrefix(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
 	key := MakeRangeIDReplicatedKey(rangeID, LocalSequenceCacheSuffix, nil)
-	key = encoding.EncodeBytesAscending(key, txnID.Bytes())
+	key = encoding.EncodeBytesAscending(key, txnID.GetBytes())
 	return key
 }
 
@@ -307,7 +307,7 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
 func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
-	return MakeRangeKey(Addr(key), localTransactionSuffix, roachpb.RKey(txnID.Bytes()))
+	return MakeRangeKey(Addr(key), localTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
 }
 
 // Addr returns the address for the key, used to lookup the range containing

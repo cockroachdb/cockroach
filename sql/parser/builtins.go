@@ -503,7 +503,7 @@ var builtins = map[string][]builtin{
 			returnType: typeBytes,
 			impure:     true,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DBytes(uuid.NewV4().Bytes()), nil
+				return DBytes(uuid.NewV4().GetBytes()), nil
 			},
 		},
 	},
