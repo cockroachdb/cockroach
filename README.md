@@ -7,11 +7,11 @@
 
 **Table of Contents**
 
-- [What is CockroachDB](#what-is-cockroachdb)
+- [What is CockroachDB?](#what-is-cockroachdb)
 - [Status](#status)
-- [Running CockroachDB Locally](#running-cockroachdb-locally)
-- [Deploying CockroachDB in the cloud](#deploying-cockroachdb-in-the-cloud)
-- [Running a multi-node cluster](#running-a-multi-node-cluster)
+- [Quickstart](#quickstart)
+- [Manual Deployment](#manual-deployment)
+- [Cloud Deployment](#cloud-deployment)
 - [Getting in touch and contributing](#get-in-touch)
 - [Talks](#talks)
 - [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
@@ -27,128 +27,58 @@ CockroachDB is currently in alpha. See our
 [Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
 [Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development.
 
-## Running CockroachDB Locally
+## Quickstart 
 
-### Environment Setup
+1. [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html)
 
-#### Native (read: without Docker)
+2. [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes running on different ports:
 
-* set up the dev environment (see [CONTRIBUTING.md](CONTRIBUTING.md))
-* `make build`
-
-#### Using Docker
-
-Install Docker! On OSX ([official docs](https://docs.docker.com/engine/installation/mac/#from-your-shell)):
-```bash
-# install docker and docker-machine:
-$ brew install docker docker-machine
-# install VirtualBox:
-$ brew cask install virtualbox
-# create the VM (this will also start it):
-$ docker-machine create --driver virtualbox default
-# if the VM exists but isn't running, start it:
-$ docker-machine start default
-# set up the environment for the docker client:
-$ eval $(docker-machine env default)
-```
-Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
-
-Pull the CockroachDB Docker image and drop into a shell within it:
-```bash
-docker pull cockroachdb/cockroach
-docker run -p 26257:26257 -p 8080:8080 -t -i cockroachdb/cockroach shell
-# root@82cb657cdc42:/cockroach#
+```shell
+$ ./cockroach start --insecure &
+$ ./cockroach start --insecure --store=node2-data --port=26258 --http-port=8081 --join=localhost:26257 &
+$ ./cockroach start --insecure --store=node3-data --port=26259 --http-port=8082 --join=localhost:26257 &
 ```
 
-### Bootstrap and talk to a single node
+3. Use the built-in SQL client to talk to the cluster:
 
-Note: If you’re using Docker as described above, run all the commands described below in the container’s shell.
-
-Setting up Cockroach is easy, but starting a test node is even easier. All it takes is running:
-
-```bash
-./cockroach start --insecure &
-```
-
-Verify that you're up and running by visiting the cluster UI. If you're running
-without Docker (or on Linux), you'll find it at
-[localhost:8080](http://localhost:8080); for OSX under Docker, things are a
-little more complicated and you need to run `docker-machine ip default` to get
-the correct address (but the port is the same).
-
-##### Built-in client
-
-Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
-
-```bash
-./cockroach sql --insecure
+```shell
+$ ./cockroach sql --insecure
 # Welcome to the cockroach SQL interface.
 # All statements must be terminated by a semicolon.
 # To exit: CTRL + D.
-192.168.99.100:26257> show databases;
-+----------+
-| Database |
-+----------+
-| system   |
-+----------+
-192.168.99.100:26257> SET database = system;
-OK
-192.168.99.100:26257> show tables;
-+------------+
-|   Table    |
-+------------+
-| descriptor |
-| eventlog   |
-| lease      |
-| namespace  |
-| rangelog   |
-| reporting  |
-| users      |
-| zones      |
-+------------+
+
+root@:26257> CREATE DATABASE bank;
+CREATE DATABASE
+
+root@:26257> SET DATABASE = bank;
+SET
+
+root@:26257> CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL);
+CREATE TABLE
+
+root@26257> INSERT INTO accounts VALUES (1234, DECIMAL '10000.50');
+INSERT 1
+
+root@26257> SELECT * FROM accounts;
++------+----------+
+|  id  | balance  |
++------+----------+
+| 1234 | 10000.50 |
++------+----------+
 ```
 
-Check out `./cockroach help` to see all available commands.
+4. Checkout the admin UI by pointing your browser to `http://<localhost>:26257`.
 
+5. Learn how to [secure your cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html).
 
-## Deploying CockroachDB in the cloud
+## Manual Deployment
+
+To run a CockroachDB cluster on multiple machines, see [Manual Deployment].
+
+## Cloud Deployment
 
 For a sample configuration to run an insecure CockroachDB cluster on AWS using [Terraform](https://terraform.io/),
 see [cloud deployment](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws).
-
-## Running a multi-node cluster
-
-We'll set up a three-node cluster below.
-
-The code assumes that `$NODE{1,2,3}` are the host names of the three nodes in the cluster.
-
-```bash
-# Create certificates
-./cockroach cert create-ca
-./cockroach cert create-node 127.0.0.1 ::1 localhost $NODE1 $NODE2 $NODE3
-./cockroach cert create-client root
-# Distribute certificates
-for n in $NODE1 $NODE2 $NODE3; do
-  scp -r certs ${n}:certs
-done
-```
-
-Now, on node 1, initialize the cluster (this example uses `/data`; yours may vary):
-
-```bash
-./cockroach start --store=/data1
-```
-
-Then, add nodes 2, 3, etc. to the cluster by specifying the `--join` flag to connect to any already-joined node.
-
-```bash
-./cockroach start --store=/data2 --join=${NODE1}:26257
-```
-
-Verify that the cluster is connected on the web UI by directing your browser at
-```
-https://<any_node>:8080
-```
 
 ## Get in touch
 
