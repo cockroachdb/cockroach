@@ -1795,7 +1795,7 @@ func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachp
 		return nil, err
 	}
 
-	if bestSplitKey.Equal(encStartKey) {
+	if bestSplitKey.Key.Equal(encStartKey.Key) {
 		return nil, util.Errorf("the range cannot be split; considered range %q-%q has no valid splits", key, endKey)
 	}
 

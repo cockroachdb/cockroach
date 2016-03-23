@@ -2144,6 +2144,18 @@ func TestFindValidSplitKeys(t *testing.T) {
 			expSplit: roachpb.Key("\x04zone\xff"),
 			expError: false,
 		},
+		// A Range for which MVCCSplitKey would return the start key isn't fair
+		// game, even if the StartKey actually exists. There was once a bug
+		// here which compared timestamps as well as keys and thus didn't
+		// realize it was splitting at the initial key (due to getting confused
+		// by the actual value having a nonzero timestamp).
+		{
+			keys: []roachpb.Key{
+				roachpb.Key("a"),
+			},
+			expSplit: nil,
+			expError: true,
+		},
 	}
 
 	for i, test := range testCases {
@@ -2168,8 +2180,8 @@ func TestFindValidSplitKeys(t *testing.T) {
 		rangeEnd := test.keys[len(test.keys)-1].Next()
 		splitKey, err := MVCCFindSplitKey(snap, rangeID, keys.Addr(rangeStart), keys.Addr(rangeEnd))
 		if test.expError {
-			if err == nil {
-				t.Errorf("%d: expected error", i)
+			if !testutils.IsError(err, "has no valid splits") {
+				t.Errorf("%d: unexpected error: %v", i, err)
 			}
 			continue
 		}
