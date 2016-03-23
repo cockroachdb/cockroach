@@ -18,53 +18,18 @@ package timeutil
 
 import (
 	"os"
-	"sync"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const offsetEnvKey = "COCKROACH_SIMULATED_OFFSET"
-const monotonicCheckEnableEnvKey = "COCKROACH_ENABLE_CHECK_MONOTONIC_TIME"
 
 var (
 	nowFunc = time.Now
-
-	offset time.Duration
-
-	monotonicityCheckEnabled bool
-	monotonicityThreshold    time.Duration
-	mu                       struct {
-		sync.Mutex
-		lastTime                time.Time
-		monotonicityErrorsCount int32
-	}
 )
 
-// SetMonotonicityCheckThreshold configures the threshold below which
-// time jumps are not considered noteworthy.
-func SetMonotonicityCheckThreshold(d time.Duration) {
-	if log.V(1) {
-		log.Infof("ignoring time backward jumps smaller than %s", d)
-	}
-	mu.Lock()
-	monotonicityThreshold = d
-	mu.Unlock()
-}
-
-func initMonotonicityCheck() {
-	// TODO(knz) perhaps we should change the default to disabled.
-	// However for Beta we always enable.
-	monotonicityCheckEnabled = os.Getenv(monotonicCheckEnableEnvKey) != "0"
-}
-
-func initFakeTime() {
-	if offsetStr := os.Getenv(offsetEnvKey); offsetStr != "" {
-		var err error
-		if offset, err = time.ParseDuration(offsetStr); err != nil {
-			panic(err)
-		}
-	}
+// SetTimeOffset configures a fixed offset to add (or substract)
+// to reported time samples.
+func SetTimeOffset(offset time.Duration) {
 	if offset == 0 {
 		nowFunc = time.Now
 	} else {
@@ -74,31 +39,21 @@ func initFakeTime() {
 	}
 }
 
+func initFakeTime() {
+	if offsetStr := os.Getenv(offsetEnvKey); offsetStr != "" {
+		offset, err := time.ParseDuration(offsetStr)
+		if err != nil {
+			panic(err)
+		}
+		SetTimeOffset(offset)
+	}
+}
+
 // Now returns the current local time with an optional offset specified by the
 // environment. The offset functionality is guarded by the  "clockoffset" build
 // tag - if built with that tag, the clock offset is parsed from the
 // "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
 // which supports quasi-human values like "1h" or "1m".
-// Additionally, the time is checked to be monotonic (no backward
-// jumps in time) unless COCKROACH_ENABLE_CHECK_MONOTONIC_TIME is set
-// to 0.
 func Now() time.Time {
-	if monotonicityCheckEnabled {
-		mu.Lock()
-		lastTime := mu.lastTime
-		newTime := nowFunc()
-
-		if !lastTime.IsZero() {
-			interval := lastTime.Sub(newTime)
-			if interval >= monotonicityThreshold {
-				mu.monotonicityErrorsCount++
-				defer log.Warningf("backward time jump detected: previously %s, now %s (offset %s)", lastTime, newTime, newTime.Sub(lastTime))
-			}
-		}
-
-		mu.lastTime = newTime
-		mu.Unlock()
-		return newTime
-	}
 	return nowFunc()
 }
