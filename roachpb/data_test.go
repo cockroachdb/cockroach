@@ -18,10 +18,12 @@ package roachpb
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -425,6 +427,12 @@ func TestTransactionString(t *testing.T) {
 
 	var txnEmpty Transaction
 	_ = txnEmpty.String() // prevent regression of NPE
+
+	var cmd RaftCommand
+	cmd.Cmd.Txn = &txn
+	if actStr, idStr := fmt.Sprintf("%s", &cmd), txn.ID.String(); !strings.Contains(actStr, idStr) {
+		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
+	}
 }
 
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as

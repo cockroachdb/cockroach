@@ -1756,7 +1756,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		log.Infoc(ctx, "gossiping cluster id %q from store %d, range %d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().Bytes(), 0*time.Second); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
 		log.Errorc(ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if ok, pErr := r.getLeaseForGossip(ctx); !ok || pErr != nil {
@@ -1765,7 +1765,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if log.V(1) {
 		log.Infoc(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().Bytes(), sentinelGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().GetBytes(), sentinelGossipTTL); err != nil {
 		log.Errorc(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
