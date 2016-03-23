@@ -24,9 +24,8 @@ import (
 )
 
 // insertLoad add a very basic load that inserts into a unique table and checks
-// that the inserted values are indeed correct. 'finished' is a channel that
-// when closed stops the load.
-func insertLoad(t *testing.T, dc *dynamicClient, finished <-chan struct{}, ID int) {
+// that the inserted values are indeed correct.
+func insertLoad(t *testing.T, dc *dynamicClient, ID int) {
 	// Initialize the db.
 	if _, err := dc.exec(`CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
 		t.Fatal(err)
@@ -50,7 +49,7 @@ CREATE TABLE %s (
 	nextUpdate := timeutil.Now()
 
 	// Perform inserts and selects
-	for isRunning(finished) {
+	for dc.isRunning() {
 
 		// Insert some values.
 		valueInsert++

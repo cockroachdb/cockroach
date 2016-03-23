@@ -38,7 +38,7 @@ func testRepairInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 
 	// Add some loads.
 	for i := 0; i < c.NumNodes()*2; i++ {
-		go insertLoad(t, dc, finished, i)
+		go insertLoad(t, dc, i)
 	}
 
 	// TODO(bram): #5345 add repair mechanism.

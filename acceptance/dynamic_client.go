@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
-	"net/url"
 	"sync"
 	"testing"
 
@@ -34,9 +33,10 @@ type dynamicClient struct {
 	c        cluster.Cluster
 	finished <-chan struct{}
 
-	sync.Mutex // This mutex protects all fields below.
-	// clients is a map from node indexes to db clients.
-	clients map[int]*sql.DB
+	mu struct {
+		sync.Mutex                 // Protects all fields in the mu struct.
+		clients    map[int]*sql.DB // clients is a map from node indexes to db clients.
+	}
 }
 
 // newDyanmicClient creates a dynamic client. `close()` must be called after
@@ -46,34 +46,34 @@ func newDynamicClient(t *testing.T, c cluster.Cluster, finished <-chan struct{})
 		t:        t,
 		c:        c,
 		finished: finished,
-		clients:  make(map[int]*sql.DB),
 	}
+	dc.mu.clients = make(map[int]*sql.DB)
 	return dc
 }
 
 // close closes all connected database clients.
 func (dc *dynamicClient) close() {
-	dc.Lock()
-	defer dc.Unlock()
-	for i, client := range dc.clients {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	for i, client := range dc.mu.clients {
 		if client != nil {
-			log.Infof("closing connection to %s", dc.getHost(dc.c.PGUrl(i)))
+			log.Infof("closing connection to %s", dc.c.Addr(i))
 			client.Close()
-			delete(dc.clients, i)
+			delete(dc.mu.clients, i)
 		}
 	}
 }
 
 // isRetryableError returns true for any errors that show a connection issue
-// and not necessarily an issue with the node itself. This can occur when a
-// node is resetting or is unstable in some other way.
+// or possibly an issue with the node itself. This can occur when a node is
+// resetting or is unstable in some other way.
 func isRetryableError(err error) bool {
 	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF)")
 }
 
 // exec calls exec on a client using a preexisting or new connection.
 func (dc *dynamicClient) exec(query string, args ...interface{}) (sql.Result, error) {
-	for isRunning(dc.finished) {
+	for dc.isRunning() {
 		client := dc.getClient()
 		if client == nil {
 			return nil, fmt.Errorf("there are no available connections to the cluster")
@@ -92,7 +92,7 @@ func (dc *dynamicClient) exec(query string, args ...interface{}) (sql.Result, er
 // queryRowScan performs first a QueryRow and follows that up with a Scan using
 // a preexisting or new connection.
 func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interface{}) error {
-	for isRunning(dc.finished) {
+	for dc.isRunning() {
 		client := dc.getClient()
 		if client == nil {
 			return fmt.Errorf("there are no available connections to the cluster")
@@ -111,33 +111,33 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 // getClient returns open client to a random node from the cluster. Returns nil
 // if no connection could be made.
 func (dc *dynamicClient) getClient() *sql.DB {
-	dc.Lock()
-	defer dc.Unlock()
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
 
 	indexes := rand.Perm(dc.c.NumNodes())
 	for _, index := range indexes {
-		client, ok := dc.clients[index]
+		client := dc.mu.clients[index]
 		// If we don't have a cached connection, create a new one.
-		if !ok || client == nil {
+		if client == nil {
 			var err error
 			client, err = sql.Open("postgres", dc.c.PGUrl(index))
 			if err != nil {
-				log.Infof("could not establish connection to %s: %s", dc.getHost(dc.c.PGUrl(index)), err)
+				log.Infof("could not establish connection to %s: %s", dc.c.Addr(index), err)
 				continue
 			}
 			if client == nil {
-				log.Infof("could not establish connection to %s", dc.getHost(dc.c.PGUrl(index)))
+				log.Infof("could not establish connection to %s", dc.c.Addr(index))
 				continue
 			}
-			log.Infof("connection established to %s", dc.getHost(dc.c.PGUrl(index)))
-			dc.clients[index] = client
+			log.Infof("connection established to %s", dc.c.Addr(index))
+			dc.mu.clients[index] = client
 		}
 		// Ensure that connection is active.
 		if err := client.Ping(); err != nil {
 			// Could not ping the client, close the connection.
-			log.Infof("closing established connection due to error %s: %s", dc.getHost(dc.c.PGUrl(index)), err)
+			log.Infof("closing established connection due to error %s: %s", dc.c.Addr(index), err)
 			client.Close()
-			delete(dc.clients, index)
+			delete(dc.mu.clients, index)
 			continue
 		}
 		return client
@@ -148,19 +148,10 @@ func (dc *dynamicClient) getClient() *sql.DB {
 	return nil
 }
 
-// getHost returns the host:port of the passed in raw URL.
-func (dc *dynamicClient) getHost(rawURL string) string {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		dc.t.Fatal(err)
-	}
-	return parsedURL.Host
-}
-
 // isRunning returns true as long as the finished channel is still open.
-func isRunning(finished <-chan struct{}) bool {
+func (dc *dynamicClient) isRunning() bool {
 	select {
-	case <-finished:
+	case <-dc.finished:
 		return false
 	default:
 	}
