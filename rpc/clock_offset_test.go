@@ -120,8 +120,8 @@ func TestBuildEndpointList(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
 
 	expectedList := endpointList{
 		endpoint{offset: -15, endType: -1},
@@ -134,7 +134,7 @@ func TestBuildEndpointList(t *testing.T) {
 		endpoint{offset: 18, endType: 1},
 	}
 
-	list := remoteClocks.buildEndpointList()
+	list := monitor.buildEndpointList()
 	sort.Sort(list)
 
 	for i := range expectedList {
@@ -164,13 +164,13 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
+	monitor := newRemoteClockMonitor(clock)
 	// The stagnant offsets older than this will be removed.
-	remoteClocks.monitorInterval = 10 * time.Nanosecond
-	remoteClocks.mu.offsets = offsets
-	remoteClocks.mu.lastMonitoredAt = time.Unix(0, 10) // offsets measured before this will be removed.
+	monitor.monitorInterval = 10 * time.Nanosecond
+	monitor.mu.offsets = offsets
+	monitor.mu.lastMonitoredAt = time.Unix(0, 10) // offsets measured before this will be removed.
 
-	remoteClocks.buildEndpointList()
+	monitor.buildEndpointList()
 
 	_, ok0 := offsets["stagnant0"]
 	_, ok1 := offsets["stagnant1"]
@@ -196,10 +196,10 @@ func TestFindOffsetInterval(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
 	expectedInterval := clusterOffsetInterval{lowerbound: 60, upperbound: 78}
-	assertClusterOffset(remoteClocks, expectedInterval, t)
+	assertClusterOffset(monitor, expectedInterval, t)
 }
 
 // TestFindOffsetIntervalNoMajorityOverlap tests that, if a majority of offsets
@@ -218,9 +218,9 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
-	assertMajorityIntervalError(remoteClocks, t)
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
+	assertMajorityIntervalError(monitor, t)
 }
 
 // TestFindOffsetIntervalNoRemotes tests that we measure 0 offset if there are
@@ -231,10 +231,10 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(10 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
 	expectedInterval := clusterOffsetInterval{lowerbound: 0, upperbound: 0}
-	assertClusterOffset(remoteClocks, expectedInterval, t)
+	assertClusterOffset(monitor, expectedInterval, t)
 }
 
 // TestFindOffsetIntervalOneClock tests that we return the entire remote offset
@@ -250,10 +250,10 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 	// The clock interval will be:
 	// [offset - error - maxOffset, offset + error + maxOffset]
 	clock.SetMaxOffset(10 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
 	expectedInterval := clusterOffsetInterval{lowerbound: -20, upperbound: 20}
-	assertClusterOffset(remoteClocks, expectedInterval, t)
+	assertClusterOffset(monitor, expectedInterval, t)
 }
 
 // TestFindOffsetIntervalTwoClocks tests the edge case of two remote clocks.
@@ -264,19 +264,19 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
 
 	// Two intervals overlap.
 	offsets["0"] = RemoteOffset{Offset: 0, Uncertainty: 10}
 	offsets["1"] = RemoteOffset{Offset: 20, Uncertainty: 10}
 	expectedInterval := clusterOffsetInterval{lowerbound: 10, upperbound: 10}
-	assertClusterOffset(remoteClocks, expectedInterval, t)
+	assertClusterOffset(monitor, expectedInterval, t)
 
 	// Two intervals don't overlap.
 	offsets["0"] = RemoteOffset{Offset: 0, Uncertainty: 10}
 	offsets["1"] = RemoteOffset{Offset: 30, Uncertainty: 10}
-	assertMajorityIntervalError(remoteClocks, t)
+	assertMajorityIntervalError(monitor, t)
 }
 
 // TestFindOffsetWithLargeError tests a case where offset errors are
@@ -295,10 +295,10 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 	offsets["1"] = RemoteOffset{Offset: 120, Uncertainty: 300}
 	offsets["2"] = RemoteOffset{Offset: 130, Uncertainty: 300}
 
-	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
+	monitor := newRemoteClockMonitor(clock)
+	monitor.mu.offsets = offsets
 
-	interval, err := remoteClocks.findOffsetInterval()
+	interval, err := monitor.findOffsetInterval()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,15 +388,15 @@ func TestClockOffsetMetrics(t *testing.T) {
 	})
 }
 
-func assertMajorityIntervalError(clocks *RemoteClockMonitor, t *testing.T) {
-	_, err := clocks.findOffsetInterval()
+func assertMajorityIntervalError(monitor *RemoteClockMonitor, t *testing.T) {
+	_, err := monitor.findOffsetInterval()
 	if _, ok := err.(*majorityIntervalNotFoundError); !ok {
 		t.Errorf("expected a %T, got: %+v", &majorityIntervalNotFoundError{}, err)
 	}
 }
 
-func assertClusterOffset(clocks *RemoteClockMonitor, expected clusterOffsetInterval, t *testing.T) {
-	interval, err := clocks.findOffsetInterval()
+func assertClusterOffset(monitor *RemoteClockMonitor, expected clusterOffsetInterval, t *testing.T) {
+	interval, err := monitor.findOffsetInterval()
 	if err != nil {
 		t.Errorf("expected interval %v, instead err: %s",
 			expected, err)
@@ -405,16 +405,16 @@ func assertClusterOffset(clocks *RemoteClockMonitor, expected clusterOffsetInter
 	}
 }
 
-func assertIntervalHealth(expectedHealthy bool, i clusterOffsetInterval, maxOffset time.Duration, t *testing.T) {
+func assertIntervalHealth(expectedHealthy bool, interval clusterOffsetInterval, maxOffset time.Duration, t *testing.T) {
 	if expectedHealthy {
-		if !isHealthyOffsetInterval(i, maxOffset) {
+		if !isHealthyOffsetInterval(interval, maxOffset) {
 			t.Errorf("expected interval %v for offset %d nanoseconds to be healthy",
-				i, maxOffset.Nanoseconds())
+				interval, maxOffset.Nanoseconds())
 		}
 	} else {
-		if isHealthyOffsetInterval(i, maxOffset) {
+		if isHealthyOffsetInterval(interval, maxOffset) {
 			t.Errorf("expected interval %v for offset %d nanoseconds to be unhealthy",
-				i, maxOffset.Nanoseconds())
+				interval, maxOffset.Nanoseconds())
 		}
 	}
 }
