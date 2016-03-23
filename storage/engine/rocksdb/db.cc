@@ -486,6 +486,8 @@ double GetMin(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
 // is modified to contain the accumulated values.
 void AccumulateTimeSeriesSamples(cockroach::roachpb::InternalTimeSeriesSample* dest,
                                  const cockroach::roachpb::InternalTimeSeriesSample &src) {
+  assert(src.has_sum());
+  assert(src.count() > 0);
   // Accumulate integer values
   int total_count = dest->count() + src.count();
   if (total_count > 1) {
@@ -493,9 +495,7 @@ void AccumulateTimeSeriesSamples(cockroach::roachpb::InternalTimeSeriesSample* d
     dest->set_max(std::max(GetMax(dest), GetMax(&src)));
     dest->set_min(std::min(GetMin(dest), GetMin(&src)));
   }
-  if (total_count > 0) {
-    dest->set_sum(dest->sum() + src.sum());
-  }
+  dest->set_sum(dest->sum() + src.sum());
   dest->set_count(total_count);
 }
 
