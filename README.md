@@ -183,7 +183,7 @@ performance and/or availability. Unlike Spanner, zones are monolithic
 and don’t allow movement of fine grained data on the level of entity
 groups.
 
-##### SQL - NoSQL - NewSQL Capabilities
+#### SQL - NoSQL - NewSQL Capabilities
 
 ![SQL - NoSQL - NewSQL Capabilities](/resource/doc/sql-nosql-newsql.png?raw=true)
 
@@ -195,7 +195,7 @@ well understood and/or explained. There is lots of cross-dependency,
 but it's safe to segregate two more of them as (a) scan efficiency,
 and (b) read vs write optimization.
 
-##### Datastore Scan Efficiency Spectrum
+#### Datastore Scan Efficiency Spectrum
 
 Scan efficiency refers to the number of IO ops required to scan a set
 of sorted adjacent rows matching a criteria. However, it's a
@@ -219,7 +219,7 @@ controlling physical order in different systems.
 
 ![Datastore Scan Efficiency Spectrum](/resource/doc/scan-efficiency.png?raw=true)
 
-##### Read vs. Write Optimization Spectrum
+#### Read vs. Write Optimization Spectrum
 
 Read vs write optimization is a product of the underlying sorted-order
 data-structure used. Btrees are read-optimized. Hybrid write-deferred
