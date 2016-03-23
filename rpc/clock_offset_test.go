@@ -124,14 +124,14 @@ func TestBuildEndpointList(t *testing.T) {
 	remoteClocks.mu.offsets = offsets
 
 	expectedList := endpointList{
-		endpoint{offset: -15, endType: -1},
-		endpoint{offset: -14, endType: -1},
-		endpoint{offset: -13, endType: -1},
-		endpoint{offset: -12, endType: -1},
-		endpoint{offset: 15, endType: 1},
-		endpoint{offset: 16, endType: 1},
-		endpoint{offset: 17, endType: 1},
-		endpoint{offset: 18, endType: 1},
+		endpoint{offset: -10, endType: -1},
+		endpoint{offset: -9, endType: -1},
+		endpoint{offset: -8, endType: -1},
+		endpoint{offset: -7, endType: -1},
+		endpoint{offset: 10, endType: 1},
+		endpoint{offset: 11, endType: 1},
+		endpoint{offset: 12, endType: 1},
+		endpoint{offset: 13, endType: 1},
 	}
 
 	list := remoteClocks.buildEndpointList()
@@ -241,18 +241,17 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 // of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	offsets := map[string]RemoteOffset{
-		"0": {Offset: 0, Uncertainty: 10},
-	}
+	offset := RemoteOffset{Offset: 1, Uncertainty: 2}
 
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	// The clock interval will be:
-	// [offset - error - maxOffset, offset + error + maxOffset]
-	clock.SetMaxOffset(10 * time.Nanosecond)
+	// [offset - error, offset + error]
+	// MaxOffset does not matter.
+	clock.SetMaxOffset(10 * time.Hour)
 	remoteClocks := newRemoteClockMonitor(clock)
-	remoteClocks.mu.offsets = offsets
-	expectedInterval := clusterOffsetInterval{lowerbound: -20, upperbound: 20}
+	remoteClocks.mu.offsets["0"] = offset
+	expectedInterval := clusterOffsetInterval{lowerbound: -1, upperbound: 3}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
@@ -302,7 +301,7 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedInterval := clusterOffsetInterval{lowerbound: -270, upperbound: 510}
+	expectedInterval := clusterOffsetInterval{lowerbound: -170, upperbound: 410}
 	if interval != expectedInterval {
 		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
 	}
