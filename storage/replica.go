@@ -100,12 +100,12 @@ const (
 // with maximum index equal to the value of the final Method. Unused
 // indexes default to false.
 var consultsTimestampCacheMethods = [...]bool{
-	roachpb.Put:            true,
-	roachpb.ConditionalPut: true,
-	roachpb.Increment:      true,
-	roachpb.Delete:         true,
-	roachpb.DeleteRange:    true,
-	roachpb.EndTransaction: true,
+	roachpb.Put:              true,
+	roachpb.ConditionalPut:   true,
+	roachpb.Increment:        true,
+	roachpb.Delete:           true,
+	roachpb.DeleteRange:      true,
+	roachpb.BeginTransaction: true,
 }
 
 func consultsTimestampCache(r roachpb.Request) bool {
@@ -810,7 +810,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	// which might overlap this one in effect.
 	// TODO(spencer,tschottdorf): might remove this, but harder than it looks.
 	//   This isn't just unittests (which would require revamping the test
-	//   context sender, but also some of the scanner queues place batches
+	//   context sender), but also some of the scanner queues place batches
 	//   directly into the local range they're servicing.
 	if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		if ba.Txn != nil {
@@ -890,11 +890,10 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) {
 		if consultsTimestampCache(args) {
 			header := args.Header()
 			key := header.Key
-			// On EndTransaction, we consult the transaction key.
-			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
-				if ba.Txn == nil {
-					continue
-				}
+			// On BeginTransaction, we consult the transaction key.  We
+			// leave write timestamp cache entries on EndTransaction, Which
+			// prevents replays.
+			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key = keys.TransactionKey(key, ba.GetTxnID())
 			}
 
@@ -909,7 +908,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) {
 			// On more recent writes, forward the timestamp and set the
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
-			// timestamp cache.
+			// write timestamp cache.
 			wTS := r.mu.tsCache.GetMaxWrite(key, header.EndKey, ba.GetTxnID())
 			if ba.Txn != nil {
 				if !wTS.Less(ba.Txn.Timestamp) {
@@ -1677,15 +1676,16 @@ func (r *Replica) executeBatch(
 					ba.Txn.WriteTooOld = true
 				} else {
 					// WriteTooOldErrors may be the product of raft replays. We
-					// offer no certain protection from then on non-transactional
-					// writes. However, if the timestamps match exactly and no
-					// earlier write in this batch overlapped this write, we propagate
-					// a WriteTooOldError to mitigate replay issues, which are limited
-					// in relevance to increments.
+					// offer no certain protection from them on non-transactional
+					// writes. However, if the timestamps match exactly and no earlier
+					// write in this batch overlapped this write, we propagate a
+					// WriteTooOldError to mitigate replay issues, which are limited
+					// in relevance primarily to increments. If there are intervening
+					// raft commands between replays that overlap, replays will succeed.
 					if ba.Timestamp.Next().Equal(tErr.ActualTimestamp) {
-						overlap := false
-						for i := 0; i < index; i++ {
-							if args.Header().ContainsKey(args.Header().Key) {
+						var overlap bool
+						for _, union := range ba.Requests[:index] {
+							if union.GetInner().Header().Overlaps(args.Header()) {
 								overlap = true
 								break
 							}

@@ -125,6 +125,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		var resp roachpb.EndTransactionResponse
 		resp, intents, err = r.EndTransaction(batch, ms, h, *tArgs)
 		reply = &resp
+		log.Infof("END TXN: %s: %s", reply.Header().Txn, err)
 	case *roachpb.RangeLookupRequest:
 		var resp roachpb.RangeLookupResponse
 		resp, intents, err = r.RangeLookup(batch, h, *tArgs)
@@ -141,6 +142,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		var resp roachpb.PushTxnResponse
 		resp, err = r.PushTxn(batch, ms, h, *tArgs)
 		reply = &resp
+		log.Infof("PUSH TXN: %s pushes %s: %s", tArgs.PusherTxn, reply.(*roachpb.PushTxnResponse).PusheeTxn, err)
 	case *roachpb.ResolveIntentRequest:
 		var resp roachpb.ResolveIntentResponse
 		resp, err = r.ResolveIntent(batch, ms, h, *tArgs)
@@ -294,6 +296,11 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, remScanResu
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	if h.Txn == nil {
 		return util.Errorf("no transaction specified to HeartbeatTxn")
+	} else if h.Txn.WriteTooOld {
+		// This can happen on BeginTransaction replays which occur
+		// after an EndTransaction has already written to the write
+		// timestamp cache, causing WriteTooOld to be set.
+		return roachpb.NewTransactionRetryError()
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
 		return util.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
@@ -320,9 +327,11 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 
 	// Verify transaction does not already exist.
 	txn := roachpb.Transaction{}
-	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn); err != nil {
+	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn)
+	if err != nil {
 		return reply, err
-	} else if ok {
+	}
+	if ok {
 		// Check whether someone has come in ahead and already aborted the
 		// txn.
 		if txn.Status == roachpb.ABORTED {
@@ -340,8 +349,8 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 
 	// Write the txn record.
 	reply.Txn.Writing = true
-	err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.Txn)
-	return reply, err
+	log.Infof("BEGIN TXN: %s", reply.Txn)
+	return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.Txn)
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
@@ -362,7 +371,7 @@ func (r *Replica) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, h ro
 	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn); err != nil {
 		return reply, nil, err
 	} else if !ok {
-		return reply, nil, util.Errorf("transaction does not exist: %s on store %d", h.Txn, r.store.StoreID())
+		return reply, nil, roachpb.NewTransactionStatusError("does not exist")
 	}
 
 	if args.Deadline != nil && args.Deadline.Less(h.Timestamp) {
@@ -983,6 +992,11 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	// recreating a GC'ed transaction as PENDING, which is an error if it
 	// has open intents (which is likely if someone pushes it).
 	if !ok {
+		// If getting an update for a transaction record which doesn't yet
+		// exist, return empty.
+		if args.PushType == roachpb.PUSH_UPDATE {
+			return reply, nil
+		}
 		// The transaction doesn't exist on disk; we're allowed to abort it.
 		// TODO(tschottdorf): especially for SNAPSHOT transactions, there's
 		// something to win here by not aborting, but instead pushing the
@@ -992,9 +1006,6 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		// using a trivial Transaction proto here. Maybe some fields ought
 		// to receive dummy values.
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
-		if args.PushType == roachpb.PUSH_TOUCH {
-			return reply, nil
-		}
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
@@ -1016,6 +1027,11 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	// far enough forward, return success.
 	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
+		return reply, nil
+	}
+
+	// If getting an update for a transaction record, return now.
+	if args.PushType == roachpb.PUSH_UPDATE {
 		return reply, nil
 	}
 
@@ -1050,16 +1066,16 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		pusherWins = true
 	} else if args.PushType == roachpb.PUSH_TOUCH {
 		// If just attempting to cleanup old or already-committed txns,
-		// don't push, just return updated PusheeTxn with response.
-		return reply, nil
+		// pusher always fails.
+		pusherWins = false
 	} else if reply.PusheeTxn.Priority < priority ||
 		(reply.PusheeTxn.Priority == priority && args.PusherTxn.ID != nil &&
 			(args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp) ||
 				(args.PusherTxn.Timestamp.Equal(reply.PusheeTxn.Timestamp) &&
-					bytes.Compare(reply.PusheeTxn.ID.GetBytes(), args.PusherTxn.ID.GetBytes()) == -1))) {
+					bytes.Compare(reply.PusheeTxn.ID.GetBytes(), args.PusherTxn.ID.GetBytes()) < 0))) {
 		// Pusher wins based on priority; if priorities are equal, order
 		// by lower txn timestamp; if priorities & timestamps are equal,
-		// great transaction ID wins.
+		// the greater transaction ID wins.
 		if log.V(1) {
 			log.Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
 		}

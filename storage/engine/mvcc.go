@@ -868,7 +868,8 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 // an optional alternative to supplying value directly. It is passed
 // the existing value (or nil if none exists) and returns the value
 // to write or an error. If valueFn is supplied, value should be nil
-// and vice versa. valueFn can delete by returning nil.
+// and vice versa. valueFn can delete by returning nil. Returning
+// []byte{} will write an empty value, not delete.
 func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
 	value []byte, txn *roachpb.Transaction, buf *putBuffer, valueFn func(*roachpb.Value) ([]byte, error)) error {
 	if len(key) == 0 {

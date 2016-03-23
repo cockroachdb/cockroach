@@ -654,6 +654,36 @@ func TestMakePriorityLimits(t *testing.T) {
 	}
 }
 
+// TestSpanOverlaps verifies overlap checking on spans
+func TestSpanOverlaps(t *testing.T) {
+	sA := Span{Key: []byte("a")}
+	sD := Span{Key: []byte("d")}
+	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
+	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+
+	testData := []struct {
+		s1, s2   Span
+		overlaps bool
+	}{
+		{sA, sA, true},
+		{sA, sD, false},
+		{sA, sBtoD, false},
+		{sBtoD, sA, false},
+		{sD, sBtoD, false},
+		{sBtoD, sD, false},
+		{sA, sAtoC, true},
+		{sAtoC, sA, true},
+		{sAtoC, sAtoC, true},
+		{sAtoC, sBtoD, true},
+		{sBtoD, sAtoC, true},
+	}
+	for i, test := range testData {
+		if o := test.s1.Overlaps(test.s2); o != test.overlaps {
+			t.Errorf("%d: expected overlap %t; got %t between %s vs. %s", i, test.overlaps, o, test.s1, test.s2)
+		}
+	}
+}
+
 // TestRSpanContains verifies methods to check whether a key
 // or key range is contained within the span.
 func TestRSpanContains(t *testing.T) {
