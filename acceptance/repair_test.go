@@ -30,13 +30,15 @@ func TestRepair(t *testing.T) {
 
 func testRepairInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 	finished := make(chan struct{})
+	dc := newDynamicClient(t, c, finished)
+	// close the dc after the finished channel has been closed to ensure that
+	// no new connections are created.
+	defer dc.close()
 	defer close(finished)
-
-	dc := newDynamicClient(t, c)
 
 	// Add some loads.
 	for i := 0; i < c.NumNodes()*2; i++ {
-		go insertLoad(t, dc, finished)
+		go insertLoad(t, dc, finished, i)
 	}
 
 	// TODO(bram): #5345 add repair mechanism.

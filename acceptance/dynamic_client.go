@@ -17,6 +17,7 @@ package acceptance
 import (
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"sync"
 	"testing"
@@ -29,92 +30,51 @@ import (
 // dynamicClient should be used in acceptance tests when connecting to a
 // cluster that may lose and gain nodes as the test proceeds.
 type dynamicClient struct {
-	t *testing.T
+	t        *testing.T
+	c        cluster.Cluster
+	finished <-chan struct{}
 
 	sync.Mutex // This mutex protects all fields below.
-	// lastConsumerId keeps track of the last consumer to have initialized
-	// against the dynamic client in order to provide a new unique id.
-	lastConsumerID int
-	// urls is an internal list of currently available URLs. When a new
-	// connection cannot be established to a url, it is expunged from this
-	// list.
-	urls map[string]struct{}
-	// clients is a map from consumerIDs to db clients.
+	// clients is a map from node indexes to db clients.
 	clients map[int]*sql.DB
 }
 
-// newDyanmicClient creates a dynamic client.
-func newDynamicClient(t *testing.T, c cluster.Cluster) *dynamicClient {
+// newDyanmicClient creates a dynamic client. `close()` must be called after
+// the dynamic client is no longer needed.
+func newDynamicClient(t *testing.T, c cluster.Cluster, finished <-chan struct{}) *dynamicClient {
 	dc := &dynamicClient{
-		t:       t,
-		clients: make(map[int]*sql.DB),
+		t:        t,
+		c:        c,
+		finished: finished,
+		clients:  make(map[int]*sql.DB),
 	}
-
-	dc.updateURLs(c)
 	return dc
 }
 
-// init initializes returns a unique consumer ID that should be passed  to the
-// dynamic client for all subsequent calls. All dc consumers should call close
-// when finished.
-func (dc *dynamicClient) init() int {
+// close closes all connected database clients.
+func (dc *dynamicClient) close() {
 	dc.Lock()
 	defer dc.Unlock()
-	dc.lastConsumerID++
-	return dc.lastConsumerID
-}
-
-// close closes any clients attached to the current consumerID. This should be
-// a deferred call following each call to init to ensure that any outstanding
-// open clients are closed.
-func (dc *dynamicClient) close(consumerID int) {
-	dc.Lock()
-	defer dc.Unlock()
-	client, ok := dc.clients[consumerID]
-	if ok {
-		client.Close()
-		delete(dc.clients, consumerID)
-	}
-}
-
-// updateURLs adds all the URLs from the current cluster. This should be called
-// after a new node is added or removed.
-func (dc *dynamicClient) updateURLs(c cluster.Cluster) {
-	dc.Lock()
-	defer dc.Unlock()
-
-	oldURLs := dc.urls
-	dc.urls = make(map[string]struct{})
-	for i := 0; i < c.NumNodes(); i++ {
-		rawURL := c.PGUrl(i)
-		dc.urls[rawURL] = struct{}{}
-		if _, exists := oldURLs[rawURL]; !exists {
-			log.Infof("%s added to dynamic client list", dc.getHost(rawURL))
-		} else {
-			delete(oldURLs, rawURL)
+	for i, client := range dc.clients {
+		if client != nil {
+			log.Infof("closing connection to %s", dc.getHost(dc.c.PGUrl(i)))
+			client.Close()
+			delete(dc.clients, i)
 		}
 	}
-
-	for oldURL := range oldURLs {
-		log.Infof("%s removed from dynamic client list", dc.getHost(oldURL))
-	}
 }
 
-// isReconnectableError returns any errors that show a connection issue and not
-// necessarily a client one. This can occur when a client is resetting or is
-// unstable in some other way.
-func isReconnectableError(err error) bool {
-	return testutils.IsError(err, "connection reset by peer") ||
-		testutils.IsError(err, "connection refused") ||
-		testutils.IsError(err, "failed to send RPC") ||
-		testutils.IsError(err, "EOF")
+// isRetryableError returns true for any errors that show a connection issue
+// and not necessarily an issue with the node itself. This can occur when a
+// node is resetting or is unstable in some other way.
+func isRetryableError(err error) bool {
+	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF)")
 }
 
-// exec calls exec on a client using a preexisting or creates a new connection
-// if that one fails.
-func (dc *dynamicClient) exec(consumerID int, query string, args ...interface{}) (sql.Result, error) {
-	for {
-		client := dc.getClient(consumerID)
+// exec calls exec on a client using a preexisting or new connection.
+func (dc *dynamicClient) exec(query string, args ...interface{}) (sql.Result, error) {
+	for isRunning(dc.finished) {
+		client := dc.getClient()
 		if client == nil {
 			return nil, fmt.Errorf("there are no available connections to the cluster")
 		}
@@ -122,17 +82,18 @@ func (dc *dynamicClient) exec(consumerID int, query string, args ...interface{})
 		if err == nil {
 			return result, nil
 		}
-		if !isReconnectableError(err) {
+		if !isRetryableError(err) {
 			return result, err
 		}
-		dc.close(consumerID)
 	}
+	return nil, nil
 }
 
-// queryRowScan performs first a QueryRow and follows that up with a Scan.
-func (dc *dynamicClient) queryRowScan(consumerID int, query string, queryArgs, destArgs []interface{}) error {
-	for {
-		client := dc.getClient(consumerID)
+// queryRowScan performs first a QueryRow and follows that up with a Scan using
+// a preexisting or new connection.
+func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interface{}) error {
+	for isRunning(dc.finished) {
+		client := dc.getClient()
 		if client == nil {
 			return fmt.Errorf("there are no available connections to the cluster")
 		}
@@ -140,44 +101,50 @@ func (dc *dynamicClient) queryRowScan(consumerID int, query string, queryArgs, d
 		if err == nil {
 			return nil
 		}
-		if !isReconnectableError(err) {
+		if !isRetryableError(err) {
 			return err
 		}
-		dc.close(consumerID)
 	}
+	return nil
 }
 
-// getClient first checks for an existing client and returns that if one
-// already exists. If it doesn't exist, it tries to create a new one. Returns
-// nil if unable to connect to any node. Note that this should not typically
-// be called directly from a consumer, they should call the DB methods
-// directly (i.e. exec() or queryRowScan()).
-func (dc *dynamicClient) getClient(consumerID int) *sql.DB {
+// getClient returns open client to a random node from the cluster. Returns nil
+// if no connection could be made.
+func (dc *dynamicClient) getClient() *sql.DB {
 	dc.Lock()
 	defer dc.Unlock()
-	if client, ok := dc.clients[consumerID]; ok {
+
+	indexes := rand.Perm(dc.c.NumNodes())
+	for _, index := range indexes {
+		client, ok := dc.clients[index]
+		// If we don't have a cached connection, create a new one.
+		if !ok || client == nil {
+			var err error
+			client, err = sql.Open("postgres", dc.c.PGUrl(index))
+			if err != nil {
+				log.Infof("could not establish connection to %s: %s", dc.getHost(dc.c.PGUrl(index)), err)
+				continue
+			}
+			if client == nil {
+				log.Infof("could not establish connection to %s", dc.getHost(dc.c.PGUrl(index)))
+				continue
+			}
+			log.Infof("connection established to %s", dc.getHost(dc.c.PGUrl(index)))
+			dc.clients[index] = client
+		}
+		// Ensure that connection is active.
+		if err := client.Ping(); err != nil {
+			// Could not ping the client, close the connection.
+			log.Infof("closing established connection due to error %s: %s", dc.getHost(dc.c.PGUrl(index)), err)
+			client.Close()
+			delete(dc.clients, index)
+			continue
+		}
 		return client
 	}
 
-	for len(dc.urls) > 0 {
-		// This relies on the fact that range will randomize the keys of dc.url so
-		// new clients should pick a random node to connect to.
-		for rawURL := range dc.urls {
-			client, err := sql.Open("postgres", rawURL)
-			if err == nil {
-				dc.clients[consumerID] = client
-				log.Infof("%d: now connected to %s", consumerID, dc.getHost(rawURL))
-				return client
-			}
-			if !isReconnectableError(err) {
-				log.Infof("could not create client for %s, removing it from the dynamic client", dc.getHost(rawURL))
-				delete(dc.urls, rawURL)
-				continue
-			}
-			// If we have a reconnectable error, leave the URL around for the next
-			// pass.
-		}
-	}
+	// If we find that we end up having no connections often, consider putting
+	// in a retry loop for this whole function.
 	return nil
 }
 
@@ -188,4 +155,14 @@ func (dc *dynamicClient) getHost(rawURL string) string {
 		dc.t.Fatal(err)
 	}
 	return parsedURL.Host
+}
+
+// isRunning returns true as long as the finished channel is still open.
+func isRunning(finished <-chan struct{}) bool {
+	select {
+	case <-finished:
+		return false
+	default:
+	}
+	return true
 }

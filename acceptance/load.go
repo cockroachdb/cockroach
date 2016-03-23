@@ -23,30 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
-// isRunning returns true as long as the finished channel is still open.
-func isRunning(finished <-chan struct{}) bool {
-	select {
-	case <-finished:
-		return false
-	default:
-	}
-	return true
-}
-
 // insertLoad add a very basic load that inserts into a unique table and checks
 // that the inserted values are indeed correct. 'finished' is a channel that
 // when closed stops the load.
-func insertLoad(t *testing.T, dc *dynamicClient, finished <-chan struct{}) {
-	clientNumber := dc.init()
-	defer dc.close(clientNumber)
-
+func insertLoad(t *testing.T, dc *dynamicClient, finished <-chan struct{}, ID int) {
 	// Initialize the db.
-	if _, err := dc.exec(clientNumber, `CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
+	if _, err := dc.exec(`CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
 		t.Fatal(err)
 	}
 
-	tableName := fmt.Sprintf("Insert.Table%d", clientNumber)
-
+	tableName := fmt.Sprintf("Insert.Table%d", ID)
 	createTableStatement := fmt.Sprintf(`
 CREATE TABLE %s (
 	key INT PRIMARY KEY,
@@ -56,7 +42,7 @@ CREATE TABLE %s (
 	selectStatement := fmt.Sprintf(`SELECT key-value AS "total" FROM %s WHERE key = $1`, tableName)
 
 	// Init the db for the basic insert.
-	if _, err := dc.exec(clientNumber, createTableStatement); err != nil {
+	if _, err := dc.exec(createTableStatement); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,7 +54,7 @@ CREATE TABLE %s (
 
 		// Insert some values.
 		valueInsert++
-		if _, err := dc.exec(clientNumber, insertStatement, valueInsert); err != nil {
+		if _, err := dc.exec(insertStatement, valueInsert); err != nil {
 			t.Fatal(err)
 		}
 
@@ -79,7 +65,7 @@ CREATE TABLE %s (
 		}
 
 		var total int
-		err := dc.queryRowScan(clientNumber, selectStatement, []interface{}{valueCheck}, []interface{}{&total})
+		err := dc.queryRowScan(selectStatement, []interface{}{valueCheck}, []interface{}{&total})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -88,7 +74,7 @@ CREATE TABLE %s (
 		}
 
 		if timeutil.Now().After(nextUpdate) {
-			log.Infof("%d: inserted and checked %d values", clientNumber, valueInsert)
+			log.Infof("Insert %d: inserted and checked %d values", ID, valueInsert)
 			nextUpdate = timeutil.Now().Add(time.Second)
 		}
 	}
