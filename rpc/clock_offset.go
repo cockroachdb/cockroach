@@ -276,35 +276,27 @@ func (r *RemoteClockMonitor) findOffsetInterval() (clusterOffsetInterval, error)
 // prevent us from running through the list an extra time under a lock).
 //
 // A RemoteOffset r is represented by this interval:
-// [r.Offset - r.Uncertainty - MaxOffset, r.Offset + r.Uncertainty + MaxOffset],
-// where MaxOffset is the furthest a node's clock can deviate from the cluster
-// time. While the offset between this node and the remote time is actually
-// within [r.Offset - r.Uncertainty, r.Offset + r.Uncertainty], we also must expand the
-// interval by MaxOffset. This accounts for the fact that the remote clock is at
-// most MaxOffset distance from the cluster time. Thus the expanded interval
-// ought to contain this node's offset from the true cluster time, not just the
-// offset from the remote clock's time.
+// [r.Offset - r.Uncertainty, r.Offset + r.Uncertainty]
 func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	maxOffset := r.clock.MaxOffset()
 	endpoints := make(endpointList, 0, len(r.mu.offsets)*2)
-	for addr, o := range r.mu.offsets {
+	for addr, offset := range r.mu.offsets {
 		// Remove anything that hasn't been updated since the last time offest
 		// was measured. This indicates that we no longer have a connection to
 		// that addr.
-		if o.measuredAt().Before(r.mu.lastMonitoredAt) {
+		if offset.measuredAt().Before(r.mu.lastMonitoredAt) {
 			delete(r.mu.offsets, addr)
 			continue
 		}
 
 		lowpoint := endpoint{
-			offset:  time.Duration(o.Offset-o.Uncertainty)*time.Nanosecond - maxOffset,
+			offset:  time.Duration(offset.Offset-offset.Uncertainty) * time.Nanosecond,
 			endType: -1,
 		}
 		highpoint := endpoint{
-			offset:  time.Duration(o.Offset+o.Uncertainty)*time.Nanosecond + maxOffset,
+			offset:  time.Duration(offset.Offset+offset.Uncertainty) * time.Nanosecond,
 			endType: +1,
 		}
 		endpoints = append(endpoints, lowpoint, highpoint)
