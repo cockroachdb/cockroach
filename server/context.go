@@ -73,6 +73,9 @@ type Context struct {
 	// addressed upstream. See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
 
+	// Unix socket: for postgres only.
+	SocketFile string
+
 	// Stores is specified to enable durable key-value storage.
 	Stores StoreSpecList
 
