@@ -930,3 +930,39 @@ func TestPrepareSyntax(t *testing.T) {
 		t.Fatalf("unexpected result: %q", v)
 	}
 }
+
+func TestPGWireOverUnixSocket(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We need a temp directory in which we'll create the
+	// unix socket ".s.PGSQL.<port>".
+	// We hard-code "/tmp" as the directory as the osx default can cause
+	// the socket filename length to exceed 104 characters, triggering an error.
+	tempDir, err := ioutil.TempDir("/tmp", "cockroach-unix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	socketFile := filepath.Join(tempDir, ".s.PGSQL.123456")
+
+	ctx, _ := createTestServerContext()
+	ctx.Insecure = true
+	ctx.SocketFile = socketFile
+	s := setupTestServerWithContext(t, ctx)
+	defer s.Stop()
+
+	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.
+	options := url.Values{
+		"host": []string{tempDir},
+	}
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		Host:     ":123456",
+		RawQuery: options.Encode(),
+	}
+	t.Logf("PGURL: %s", pgURL.String())
+	if err := trivialQuery(pgURL); err != nil {
+		t.Fatal(err)
+	}
+}

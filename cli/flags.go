@@ -94,6 +94,11 @@ is one of:`) + `
 The address to listen on. The node will also advertise itself using this
 hostname; it must resolve from other nodes in the cluster.`),
 
+	"socket": wrapText(`
+Unix socket file, postgresql protocol only.
+Note: when given a path to a unix socket, most postgres clients will
+open "<given path>/.s.PGSQL.<server port>"`),
+
 	"insecure": wrapText(`
 Run over plain HTTP. WARNING: this is strongly discouraged.`),
 
@@ -284,6 +289,13 @@ func initFlags(ctx *Context) {
 		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("server_http_port"))
 		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
 		f.VarP(&ctx.Stores, "store", "s", usage("store"))
+
+		// Usage for the unix socket is odd as we use a real file, whereas
+		// postgresql and clients consider it a directory and build a filename
+		// inside it using the port.
+		// Thus, we keep it hidden and use it for testing only.
+		f.StringVar(&ctx.SocketFile, "socket", "", usage("socket"))
+		_ = f.MarkHidden("socket")
 
 		// Security flags.
 		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
