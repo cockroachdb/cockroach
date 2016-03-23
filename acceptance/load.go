@@ -16,21 +16,33 @@ package acceptance
 
 import (
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
+// isRunning returns true as long as the finished channel is still open.
+func isRunning(finished <-chan struct{}) bool {
+	select {
+	case <-finished:
+		return false
+	default:
+	}
+	return true
+}
+
 // insertLoad add a very basic load that inserts into a unique table and checks
-// that the inserted values are indeed correct.
-func insertLoad(dc *dynamicClient) {
-	clientNumber := dc.initClient()
-	defer dc.closeClient(clientNumber)
+// that the inserted values are indeed correct. 'finished' is a channel that
+// when closed stops the load.
+func insertLoad(t *testing.T, dc *dynamicClient, finished <-chan struct{}) {
+	clientNumber := dc.init()
+	defer dc.close(clientNumber)
 
 	// Initialize the db.
 	if _, err := dc.exec(clientNumber, `CREATE DATABASE IF NOT EXISTS Insert`); err != nil {
-		dc.t.Fatal(err)
+		t.Fatal(err)
 	}
 
 	tableName := fmt.Sprintf("Insert.Table%d", clientNumber)
@@ -45,18 +57,19 @@ CREATE TABLE %s (
 
 	// Init the db for the basic insert.
 	if _, err := dc.exec(clientNumber, createTableStatement); err != nil {
-		dc.t.Fatal(err)
+		t.Fatal(err)
 	}
 
 	var valueCheck, valueInsert int
 	nextUpdate := timeutil.Now()
 
 	// Perform inserts and selects
-	for dc.running() {
+	for isRunning(finished) {
+
 		// Insert some values.
 		valueInsert++
 		if _, err := dc.exec(clientNumber, insertStatement, valueInsert); err != nil {
-			dc.t.Fatal(err)
+			t.Fatal(err)
 		}
 
 		// Check that another value is still correct.
@@ -68,10 +81,10 @@ CREATE TABLE %s (
 		var total int
 		err := dc.queryRowScan(clientNumber, selectStatement, []interface{}{valueCheck}, []interface{}{&total})
 		if err != nil {
-			dc.t.Fatal(err)
+			t.Fatal(err)
 		}
 		if total != 0 {
-			dc.t.Fatalf("total expected to be 0, is %d", total)
+			t.Fatalf("total expected to be 0, is %d", total)
 		}
 
 		if timeutil.Now().After(nextUpdate) {
