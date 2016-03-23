@@ -454,7 +454,7 @@ bool WillOverflow(int64_t a, int64_t b) {
   if (b > 0) {
     return a > (std::numeric_limits<int64_t>::max() - b);
   }
-  return (std::numeric_limits<int64_t>::min() - b) > a;
+  return (std::numeric_limits<int64_t>::lowest() - b) > a;
 }
 
 // Method used to sort InternalTimeSeriesSamples.
@@ -471,32 +471,37 @@ bool IsTimeSeriesData(const std::string &val) {
 
 double GetMax(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
   if (sample->has_max()) return sample->max();
-  if (sample->has_sum()) return sample->sum();
-  return std::numeric_limits<double>::min();
+  return sample->sum();
 }
 
 double GetMin(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
   if (sample->has_min()) return sample->min();
-  if (sample->has_sum()) return sample->sum();
-  return std::numeric_limits<double>::max();
+  return sample->sum();
 }
 
 // AccumulateTimeSeriesSamples accumulates the individual values of two
 // InternalTimeSeriesSamples which have a matching timestamp. The dest parameter
-// is modified to contain the accumulated values.
+// is modified to contain the accumulated values. Message src MUST have a
+// non-zero count of samples; it is assumed that no system will attempt to merge
+// a sample with zero datapoints.
 void AccumulateTimeSeriesSamples(cockroach::roachpb::InternalTimeSeriesSample* dest,
                                  const cockroach::roachpb::InternalTimeSeriesSample &src) {
   assert(src.has_sum());
   assert(src.count() > 0);
-  // Accumulate integer values
-  int total_count = dest->count() + src.count();
-  if (total_count > 1) {
-    // Keep explicit max and min values.
-    dest->set_max(std::max(GetMax(dest), GetMax(&src)));
-    dest->set_min(std::min(GetMin(dest), GetMin(&src)));
+
+  // If dest is empty, just copy from the src.
+  if (dest->count() == 0) {
+    dest->CopyFrom(src);
+    return;
   }
+  assert(dest->has_sum());
+
+  // Keep explicit max and min values.
+  dest->set_max(std::max(GetMax(dest), GetMax(&src)));
+  dest->set_min(std::min(GetMin(dest), GetMin(&src)));
+  // Accumulate sum and count.
   dest->set_sum(dest->sum() + src.sum());
-  dest->set_count(total_count);
+  dest->set_count(dest->count() + src.count());
 }
 
 void SerializeTimeSeriesToValue(
