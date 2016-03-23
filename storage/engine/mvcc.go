@@ -823,6 +823,7 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 	return mvccPutUsingIter(engine, iter, ms, key, timestamp, &value, txn, nil /* valueFn */)
 }
 
+// TODO(nvanbenschoten): explore non-pointer roachpb.Value.
 func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key,
 	timestamp roachpb.Timestamp, value *roachpb.Value, txn *roachpb.Transaction,
 	valueFn func(*roachpb.Value) ([]byte, error)) error {
@@ -973,7 +974,7 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 			} else {
 				// Outside of a transaction, read the latest value and advance
 				// the write timestamp to the latest value's timestamp + 1. The
-				// new timestamp is returned to the caller in the WriteTooOldError.
+				// new timestamp is returned to the caller in maybeTooOldErr.
 				if value, err = maybeGetValue(ok, actualTimestamp); err != nil {
 					return err
 				}

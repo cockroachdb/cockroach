@@ -1656,6 +1656,16 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			if log.V(1) {
 				log.Warning(pErr)
 			}
+			// Update the batch transaction, if applicable, in case it has
+			// been independently pushed and has more recent information.
+			if ba.Txn != nil {
+				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Header, now)
+				if pErr != nil {
+					return nil, pErr
+				}
+				// TODO(spencer): stop updating the passed in batch.
+				ba.Header.Txn = updatedTxn
+			}
 			continue
 		}
 		return nil, pErr
@@ -1669,6 +1679,37 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 	}
 	return nil, pErr
+}
+
+// maybeUpdateTransaction does a "touch" push on the specified
+// transaction to glean possible changes, such as a higher timestamp
+// and/or priority. It turns out this is necessary while a request
+// is in a backoff/retry loop pushing write intents as two txns
+// can have circular dependencies where both are unable to push
+// because they have different information about their own txns.
+func (s *Store) maybeUpdateTransaction(h roachpb.Header, now roachpb.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
+	// Attempt to push the transaction which created the intent.
+	b := &client.Batch{}
+	b.InternalAddRequest(&roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: h.Txn.Key,
+		},
+		Now:       now,
+		PusheeTxn: h.Txn.TxnMeta,
+		PushType:  roachpb.PUSH_TOUCH,
+	})
+	br, pErr := s.db.RunWithResponse(b)
+	if pErr != nil {
+		return nil, pErr
+	}
+	updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+	switch updatedTxn.Status {
+	case roachpb.COMMITTED:
+		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
+	case roachpb.ABORTED:
+		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedTxn)
+	}
+	return updatedTxn, nil
 }
 
 // enqueueRaftMessage enqueues a request for eventual processing. It

@@ -1011,8 +1011,10 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 
 // TestStoreLongTxnStarvation sets up a test which guarantees that
 // every time a txn writes, it gets a write-too-old error by always
-// having a non-txnal write succeed before the txn can retry,
-// forcing endless retries for both serializable and snapshot txns.
+// having a non-transactional write succeed before the txn can retry,
+// which would force endless retries unless batch requests are
+// allowed to go ahead and lay down intents with advanced timestamps.
+// Verifies no starvation for both serializable and snapshot txns.
 func TestStoreLongTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
@@ -1028,7 +1030,8 @@ func TestStoreLongTxnStarvation(t *testing.T) {
 			if retry > 1 {
 				t.Fatalf("%d: too many retries", i)
 			}
-			// Always send a naked put to push the transaction.
+			// Always send non-transactional put to push the transaction
+			// and write a non-intent version.
 			nakedPut := putArgs(key, []byte("naked"))
 			_, pErr := client.SendWrapped(store.testSender(), context.Background(), &nakedPut)
 			if pErr != nil && retry == 0 {
@@ -1213,9 +1216,9 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		h := roachpb.Header{Txn: pushee}
+		_, btH := beginTxnArgs(key, pushee)
 		args.Value.SetBytes([]byte("value2"))
-		if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, h, &args); pErr != nil {
+		if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, btH, &args); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1224,8 +1227,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		pusher.OrigTimestamp.Forward(now)
 		pusher.Timestamp.Forward(now)
 		gArgs := getArgs(key)
-		h.Txn = pusher
-		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &gArgs)
+		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: pusher}, &gArgs)
 		if test.resolvable {
 			if pErr != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, pErr)
@@ -1276,7 +1278,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 					t.Errorf("expected read to fail")
 				}
 				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-					t.Errorf("expected transaction retry error; got %T", pErr)
+					t.Errorf("iso=%s; expected transaction retry error; got %T", test.pusheeIso, pErr.GetDetail())
 				}
 			}
 		}

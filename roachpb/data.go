@@ -788,6 +788,9 @@ func (t *Transaction) Update(o *Transaction) {
 	// This isn't or'd (similar to Writing) because we want WriteTooOld
 	// to be set each time according to "o". This allows a persisted
 	// txn to have its WriteTooOld flag reset on update.
+	// TODO(tschottdorf): reset in a central location when it's certifiably
+	//   a new request. Update is called in many situations and shoulnd't
+	//   reset anything.
 	t.WriteTooOld = o.WriteTooOld
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
@@ -890,6 +893,14 @@ func AsIntents(spans []Span, txn *Transaction) []Intent {
 // Equal compares for equality.
 func (s Span) Equal(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
+}
+
+// ContainsKey returns whether this span contains the specified key.
+func (s Span) ContainsKey(key Key) bool {
+	if len(s.EndKey) == 0 {
+		return key.Equal(s.Key)
+	}
+	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
 }
 
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.

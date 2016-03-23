@@ -166,7 +166,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		}
 
 		if txn.Proto.Epoch == 0 {
-			start <- struct{}{} // let someone write into our future
+			close(start) // let someone write into our future
 			// When they're done writing, increment.
 			if pErr := <-done; pErr != nil {
 				t.Fatal(pErr)
@@ -185,6 +185,9 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		// before anything else happened in the concurrent writer
 		// goroutine). The second iteration of the txn should read the
 		// correct value and commit.
+		if txn.Proto.Epoch == 0 && !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
+			t.Fatal("expected orig timestamp less than timestamp")
+		}
 		ir, pErr := txn.Inc(key, 1)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -235,7 +238,7 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		if txn.Proto.Epoch == 0 {
-			start <- struct{}{} // let someone write into our future
+			close(start) // let someone write into our future
 			// When they're done, write based on what we read.
 			if pErr := <-done; pErr != nil {
 				t.Fatal(pErr)
