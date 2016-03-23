@@ -40,6 +40,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -535,14 +536,16 @@ var builtins = map[string][]builtin{
 			types:      argTypes{timestampType},
 			returnType: typeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: e.GetTxnTimestamp().GoTime().Sub(args[0].(DTimestamp).Time)}, nil
+				nanos := e.GetTxnTimestamp().GoTime().Sub(args[0].(DTimestamp).Time).Nanoseconds()
+				return DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
 		builtin{
 			types:      argTypes{timestampType, timestampType},
 			returnType: typeInterval,
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: args[0].(DTimestamp).Sub(args[1].(DTimestamp).Time)}, nil
+				nanos := args[0].(DTimestamp).Sub(args[1].(DTimestamp).Time).Nanoseconds()
+				return DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
 	},

@@ -28,6 +28,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/duration"
 )
 
 var (
@@ -691,7 +692,7 @@ func (d DTimestamp) String() string {
 
 // DInterval is the interval Datum.
 type DInterval struct {
-	time.Duration
+	duration.Duration
 }
 
 // Type implements the Datum interface.
@@ -715,13 +716,7 @@ func (d DInterval) Compare(other Datum) int {
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if d.Duration < v.Duration {
-		return -1
-	}
-	if v.Duration < d.Duration {
-		return 1
-	}
-	return 0
+	return d.Duration.Compare(v.Duration)
 }
 
 // HasPrev implements the Datum interface.
@@ -731,7 +726,16 @@ func (d DInterval) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d DInterval) Prev() Datum {
-	return DInterval{Duration: d.Duration - 1}
+	prevD := DInterval{duration.Duration{Months: d.Months, Days: d.Days, Nanos: d.Nanos}}
+	if prevD.Months != math.MinInt64 {
+		prevD.Months--
+		return prevD
+	} else if prevD.Days != math.MinInt64 {
+		prevD.Days--
+		return prevD
+	}
+	prevD.Nanos--
+	return prevD
 }
 
 // HasNext implements the Datum interface.
@@ -741,17 +745,33 @@ func (d DInterval) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d DInterval) Next() Datum {
-	return DInterval{Duration: d.Duration + 1}
+	nextD := DInterval{duration.Duration{Months: d.Months, Days: d.Days, Nanos: d.Nanos}}
+	if nextD.Months != math.MaxInt64 {
+		nextD.Months++
+		return nextD
+	} else if nextD.Days != math.MaxInt64 {
+		nextD.Days++
+		return nextD
+	}
+	nextD.Nanos++
+	return nextD
 }
 
 // IsMax implements the Datum interface.
 func (d DInterval) IsMax() bool {
-	return d.Duration == math.MaxInt64
+	return d.Months == math.MaxInt64 && d.Days == math.MaxInt64 && d.Nanos == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
 func (d DInterval) IsMin() bool {
-	return d.Duration == math.MinInt64
+	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
+}
+
+// String implements the Datum interface.
+func (d DInterval) String() string {
+	// TODO(dan): Once we can parse DIntervals with months and days, add support
+	// for them here.
+	return time.Duration(d.Duration.Nanos).String()
 }
 
 // DTuple is the tuple Datum.

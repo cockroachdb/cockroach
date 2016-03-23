@@ -25,6 +25,7 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -703,7 +704,39 @@ func TestEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+type testCaseDuration struct {
+	value  duration.Duration
+	expEnc []byte
+}
+
+func testCustomEncodeDuration(testCases []testCaseDuration,
+	encFunc func([]byte, duration.Duration) ([]byte, error), t *testing.T) {
+	for _, test := range testCases {
+		enc, err := encFunc(nil, test.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Compare(enc, test.expEnc) != 0 {
+			t.Errorf("expected [% x]; got [% x] (value: %d)", test.expEnc, enc, test.value)
+		}
+	}
+}
+
+func TestEncodeDecodeDuration(t *testing.T) {
+	// TODO(dan): Once we have better parsing for durations, add something like TestEncodeDecodeTime.
+	testCases := []testCaseDuration{
+		{duration.Duration{Months: 0, Days: 0, Nanos: 0}, []byte{0x16, 0x88, 0x88, 0x88}},
+		{duration.Duration{Months: 0, Days: 0, Nanos: 1}, []byte{0x16, 0x89, 0x88, 0x88}},
+		{duration.Duration{Months: 0, Days: 1, Nanos: 0}, []byte{0x16, 0xfb, 0x4e, 0x94, 0x91, 0x4f, 0x00, 0x00, 0x88, 0x89}},
+		{duration.Duration{Months: 1, Days: 0, Nanos: 0}, []byte{0x16, 0xfc, 0x09, 0x35, 0x69, 0x07, 0x42, 0x00, 0x00, 0x89, 0x88}},
+		{duration.Duration{Months: 0, Days: 40, Nanos: 0}, []byte{0x16, 0xfc, 0x0c, 0x47, 0x36, 0xb4, 0x58, 0x00, 0x00, 0x88, 0xb0}},
+	}
+	testCustomEncodeDuration(testCases, EncodeDurationAscending, t)
+}
+
 func TestPeekType(t *testing.T) {
+	encodedDurationAscending, _ := EncodeDurationAscending(nil, duration.Duration{})
+	encodedDurationDescending, _ := EncodeDurationDescending(nil, duration.Duration{})
 	testCases := []struct {
 		enc []byte
 		typ Type
@@ -724,6 +757,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
 		{EncodeTimeAscending(nil, timeutil.Now()), Time},
 		{EncodeTimeDescending(nil, timeutil.Now()), TimeDesc},
+		{encodedDurationAscending, Duration},
+		{encodedDurationDescending, DurationDesc},
 	}
 	for i, c := range testCases {
 		typ := PeekType(c.enc)
@@ -978,5 +1013,36 @@ func BenchmarkDecodeStringDescending(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _, _ = DecodeStringDescending(vals[i%len(vals)], buf)
+	}
+}
+
+func BenchmarkEncodeDuration(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]duration.Duration, 10000)
+	for i := range vals {
+		vals[i] = duration.Duration{Months: rng.Int63(), Days: rng.Int63(), Nanos: rng.Int63()}
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = EncodeDurationAscending(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeDuration(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		d := duration.Duration{Months: rng.Int63(), Days: rng.Int63(), Nanos: rng.Int63()}
+		vals[i], _ = EncodeDurationAscending(nil, d)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = DecodeDurationAscending(vals[i%len(vals)])
 	}
 }

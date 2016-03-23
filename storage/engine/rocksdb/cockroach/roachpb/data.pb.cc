@@ -517,14 +517,15 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "hpb.ReplicaDescriptorB\004\310\336\037\000:\004\230\240\037\000\"a\n\022Seq"
     "uenceCacheEntry\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n"
     "\ttimestamp\030\002 \001(\0132\034.cockroach.roachpb.Tim"
-    "estampB\004\310\336\037\000*^\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007"
+    "estampB\004\310\336\037\000*l\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007"
     "\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022"
-    "\013\n\007DECIMAL\020\005\022\016\n\nTIMESERIES\020d*>\n\021ReplicaC"
-    "hangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REP"
-    "LICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALI"
-    "ZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transacti"
-    "onStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007"
-    "ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3228);
+    "\013\n\007DECIMAL\020\005\022\014\n\010DURATION\020\006\022\016\n\nTIMESERIES"
+    "\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000"
+    "\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationT"
+    "ype\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036"
+    "\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tC"
+    "OMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpb"
+    "X\001", 3242);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -578,6 +579,7 @@ bool ValueType_IsValid(int value) {
     case 3:
     case 4:
     case 5:
+    case 6:
     case 100:
       return true;
     default:

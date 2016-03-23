@@ -117,7 +117,10 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		p.session.Timezone = &SessionLocation{Location: location}
 
 	case parser.DInterval:
-		offset = int64(v.Duration / time.Second)
+		offset, _, _, err = v.Duration.Div(int64(time.Second)).Encode()
+		if err != nil {
+			return nil, err
+		}
 
 	case parser.DInt:
 		offset = int64(v) * 60 * 60
