@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"math/rand"
@@ -30,6 +31,7 @@ import (
 )
 
 const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
+const baseReportingURL = `https://register.cockroachdb.com/api/report`
 
 const updateCheckFrequency = time.Hour * 24
 const updateCheckJitterSeconds = 120
@@ -40,6 +42,26 @@ type versionInfo struct {
 	Details string `json:"details"`
 }
 
+type reportingInfo struct {
+	Node   nodeInfo    `json:"node"`
+	Stores []storeInfo `json:"stores"`
+}
+
+type nodeInfo struct {
+	NodeID     roachpb.NodeID `json:"node_id"`
+	Bytes      int            `json:"bytes"`
+	KeyCount   int            `json:"key_count"`
+	RangeCount int            `json:"range_count"`
+}
+
+type storeInfo struct {
+	NodeID     roachpb.NodeID  `json:"node_id"`
+	StoreID    roachpb.StoreID `json:"store_id"`
+	Bytes      int             `json:"bytes"`
+	KeyCount   int             `json:"key_count"`
+	RangeCount int             `json:"range_count"`
+}
+
 // SetupReportingURLs parses the phone-home for version updates URL and should be
 // called before server starts except in tests.
 func (s *Server) SetupReportingURLs() error {
@@ -48,13 +70,25 @@ func (s *Server) SetupReportingURLs() error {
 	if err != nil {
 		return err
 	}
+	s.parsedReportingURL, err = url.Parse(baseReportingURL)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s *Server) periodicallyCheckForUpdates() {
 	s.stopper.RunWorker(func() {
+		startup := timeutil.Now()
+
 		for {
+			// `maybeCheckForUpdates` and `maybeReportUsage` both return the
+			// duration until they should next be checked.
+			// Wait for the shorter of the durations returned by the two checks.
 			wait := s.maybeCheckForUpdates()
+			if reportWait := s.maybeReportUsage(timeutil.Now().Sub(startup)); reportWait < wait {
+				wait = reportWait
+			}
 			jitter := rand.Intn(updateCheckJitterSeconds) - updateCheckJitterSeconds/2
 			wait = wait + (time.Duration(jitter) * time.Second)
 			select {
@@ -158,5 +192,71 @@ func (s *Server) checkForUpdates() {
 
 	for _, v := range r.Details {
 		log.Info("A new version is available: %s\n\t%s", v.Version, v.Details)
+	}
+}
+
+func (s *Server) usageReportingEnabled() bool {
+	resp, err := s.db.Get(keys.UpdateCheckReportUsage)
+	if err != nil {
+		log.Warning(err)
+		return false
+	}
+	return resp.Exists() && resp.ValueInt() != 0
+}
+
+func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
+	if running < updateCheckRetryFrequency {
+		// On first check, we decline to report usage as metrics may not yet
+		// be stable, so instead we request re-evaluation after a retry delay.
+		return updateCheckRetryFrequency - running
+	}
+	if !s.usageReportingEnabled() {
+		return updateCheckFrequency
+	}
+	return s.maybeRunPeriodicCheck("metrics reporting", keys.NodeLastUsageReportKey(int32(s.node.Descriptor.NodeID)), s.reportUsage)
+}
+
+func (s *Server) getReportingInfo() reportingInfo {
+	n := s.node.recorder.GetStatusSummary()
+
+	summary := nodeInfo{NodeID: s.node.Descriptor.NodeID}
+
+	stores := make([]storeInfo, len(n.StoreStatuses))
+	for i, r := range n.StoreStatuses {
+		stores[i].NodeID = r.Desc.Node.NodeID
+		stores[i].StoreID = r.Desc.StoreID
+		stores[i].KeyCount = int(r.Metrics["keycount"])
+		summary.KeyCount += stores[i].KeyCount
+		stores[i].RangeCount = int(r.Metrics["replicas"])
+		summary.RangeCount += stores[i].RangeCount
+		bytes := int(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
+		stores[i].Bytes = bytes
+		summary.Bytes += bytes
+	}
+	return reportingInfo{summary, stores}
+}
+
+func (s *Server) reportUsage() {
+	// TestServer.Start nils these out to prevent tests possibly phoning home.
+	if s.parsedReportingURL == nil {
+		return
+	}
+
+	b := new(bytes.Buffer)
+	if err := json.NewEncoder(b).Encode(s.getReportingInfo()); err != nil {
+		log.Warning(err)
+		return
+	}
+
+	q := s.parsedReportingURL.Query()
+	q.Set("version", util.GetBuildInfo().Tag)
+	q.Set("uuid", s.node.ClusterID.String())
+	s.parsedReportingURL.RawQuery = q.Encode()
+
+	_, err := http.Post(s.parsedReportingURL.String(), "application/json", b)
+	if err != nil && log.V(2) {
+		// This is probably going to be relatively common in production
+		// environments where network access is usually curtailed.
+		log.Warning("Error checking reporting node usage metrics: ", err)
 	}
 }

@@ -20,6 +20,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	// This is imported for its side-effect of registering expvar
 	// endpoints with the http.DefaultServeMux.
@@ -602,6 +603,18 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 	br := s.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
 	if err := s.checkQueryResults(br.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
+	}
+
+	// If the opt-in to reporting is set, flip the setting in system kv.
+	m := struct {
+		OptIn bool `json:"optin"`
+	}{}
+	if err := json.Unmarshal(req.Value, &m); err == nil {
+		if err := s.db.Put(keys.UpdateCheckReportUsage, m.OptIn); err != nil {
+			log.Warning(err)
+		}
+	} else {
+		log.Warning(err)
 	}
 
 	// See if the key already exists.
