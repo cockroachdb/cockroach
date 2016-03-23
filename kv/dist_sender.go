@@ -119,15 +119,15 @@ type DistSender struct {
 	leaderCache *leaderCache
 	// RPCSend is used to send RPC calls and defaults to send
 	// outside of tests.
-	rpcSend         rpcSendFn
+	rpcSend         RPCSendFn
 	rpcContext      *rpc.Context
 	rpcRetryOptions retry.Options
 }
 
 var _ client.Sender = &DistSender{}
 
-// rpcSendFn is the function type used to dispatch RPC calls.
-type rpcSendFn func(SendOptions, ReplicaSlice,
+// RPCSendFn is the function type used to dispatch RPC calls.
+type RPCSendFn func(SendOptions, ReplicaSlice,
 	roachpb.BatchRequest, *rpc.Context) (*roachpb.BatchResponse, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
@@ -146,7 +146,7 @@ type DistSenderContext struct {
 	nodeDescriptor *roachpb.NodeDescriptor
 	// The RPC dispatcher. Defaults to send but can be changed here for testing
 	// purposes.
-	RPCSend           rpcSendFn
+	RPCSend           RPCSendFn
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 	Tracer            opentracing.Tracer

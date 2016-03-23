@@ -281,3 +281,9 @@ func sendOne(client batchClient, timeout time.Duration,
 		done <- batchCall{reply: reply, err: err}
 	}()
 }
+
+// DefaultSend returns the default sender function. This is exported for tests
+// that need to add to, instead of replace, the default behavior.
+func DefaultSend() RPCSendFn {
+	return send
+}

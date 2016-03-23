@@ -32,11 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -688,6 +690,66 @@ func TestClientPermissions(t *testing.T) {
 		_, pErr = tc.client.Get(tc.path)
 		if (pErr == nil) != tc.allowed || (!tc.allowed && !testutils.IsPError(pErr, matchErr)) {
 			t.Errorf("#%d: expected allowed=%t, got err=%s", tcNum, tc.allowed, pErr)
+		}
+	}
+}
+
+// TestInconsistentReads tests that the methods that generate inconsistent reads
+// generate outgoing requests with an INCONSISTENT read consistency.
+func TestInconsistentReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	defaultSend := kv.DefaultSend()
+	// Mock out DistSender's sender function to check the read consistency for
+	// outgoing BatchRequests and return an empty reply.
+	var testFn kv.RPCSendFn = func(opts kv.SendOptions, replicas kv.ReplicaSlice, args roachpb.BatchRequest, ctx *rpc.Context) (*roachpb.BatchResponse, error) {
+		if args.ReadConsistency != roachpb.INCONSISTENT {
+			return nil, util.Errorf("BatchRequest has unexpected ReadConsistency %s",
+				args.ReadConsistency)
+		}
+		return defaultSend(opts, replicas, args, ctx)
+	}
+	ctx := &kv.DistSenderContext{
+		RPCSend:    testFn,
+		RPCContext: s.RPCContext(),
+	}
+	ds := kv.NewDistSender(ctx, s.Gossip())
+	db := client.NewDB(ds)
+
+	// Perform inconsistent reads through the mocked sender function.
+	{
+		key := roachpb.Key([]byte("key"))
+		if _, pErr := db.GetInconsistent(key); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	{
+		key := roachpb.Key([]byte("key"))
+		var p roachpb.BatchRequest
+		if pErr := db.GetProtoInconsistent(key, &p); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	{
+		key1 := roachpb.Key([]byte("key1"))
+		key2 := roachpb.Key([]byte("key2"))
+		const dontCareMaxRows = 1000
+		if _, pErr := db.ScanInconsistent(key1, key2, dontCareMaxRows); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	{
+		key := roachpb.Key([]byte("key"))
+		ba := db.NewBatch()
+		ba.ReadConsistency = roachpb.INCONSISTENT
+		ba.Get(key)
+		if pErr := db.Run(ba); pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
 }

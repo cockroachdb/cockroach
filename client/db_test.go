@@ -368,7 +368,7 @@ func TestCommonMethods(t *testing.T) {
 				if typ == otherTyp {
 					continue
 				}
-				if _, ok := otherTyp.MethodByName(m.Name); !ok {
+				if _, ok := otherTyp.MethodByName(m.Name); !ok && !strings.HasSuffix(m.Name, "Inconsistent") {
 					t.Errorf("(%s).%s does not exist, but (%s).%s does",
 						otherTyp, m.Name, typ, m.Name)
 				}

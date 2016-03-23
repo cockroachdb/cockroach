@@ -80,7 +80,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 
 	ltc.stores = storage.NewStores(ltc.Clock)
 	tracer := tracing.NewTracer()
-	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var rpcSend RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		if ltc.Latency > 0 {
 			time.Sleep(ltc.Latency)

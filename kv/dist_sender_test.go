@@ -263,7 +263,7 @@ func TestSendRPCOrder(t *testing.T) {
 	// Stub to be changed in each test case.
 	var verifyCall func(SendOptions, ReplicaSlice) error
 
-	var testFn rpcSendFn = func(opts SendOptions, replicas ReplicaSlice,
+	var testFn RPCSendFn = func(opts SendOptions, replicas ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		if err := verifyCall(opts, replicas); err != nil {
 			return nil, err
@@ -384,7 +384,7 @@ func TestOwnNodeCertain(t *testing.T) {
 	}
 
 	act := make(map[roachpb.NodeID]roachpb.Timestamp)
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		for k, v := range ba.Txn.ObservedTimestamps {
 			act[k] = v
@@ -429,7 +429,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	}
 	first := true
 
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		if first {
 			reply := &roachpb.BatchResponse{}
@@ -469,7 +469,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		return args.CreateReply(), nil
 	}
@@ -531,7 +531,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		}
 		first := true
 
-		var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+		var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 			args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 			if !first {
 				return args.CreateReply(), nil
@@ -589,7 +589,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
 
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs := keys.Range(ba)
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
@@ -699,7 +699,7 @@ func TestSendRPCRetry(t *testing.T) {
 			StoreID: roachpb.StoreID(i),
 		})
 	}
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
@@ -785,7 +785,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromString("1")},
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs := keys.Range(ba)
 		batchReply := &roachpb.BatchResponse{}
@@ -833,7 +833,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	g, s := makeTestGossip(t)
 	defer s()
 
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		return args.CreateReply(), nil
 	}
@@ -874,7 +874,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Prepare the test function
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	doCheck := func(testFn rpcSendFn, fakeTime roachpb.Timestamp) {
+	doCheck := func(testFn RPCSendFn, fakeTime roachpb.Timestamp) {
 		ds.rpcSend = testFn
 		_, err := client.SendWrapped(ds, nil, put)
 		if err != nil && err != expectedErr {
@@ -964,7 +964,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// requests. The first request should be the point request on
 	// "a". The second request should be on "b".
 	first := true
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs := keys.Range(ba)
 		if first {
@@ -1046,7 +1046,7 @@ func TestSequenceUpdate(t *testing.T) {
 	})
 
 	var expSequence uint32
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		expSequence++
 		if expSequence != ba.Txn.Sequence {
 			t.Errorf("expected sequence %d; got %d", expSequence, ba.Txn.Sequence)
@@ -1141,7 +1141,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	// first request.
 	first := true
 	var firstSequence uint32
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs := keys.Range(ba)
 		if first {
@@ -1261,7 +1261,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 
 	for _, test := range testCases {
 		var act [][]roachpb.Method
-		var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+		var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 			ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
@@ -1337,7 +1337,7 @@ func TestCountRanges(t *testing.T) {
 		}
 		return []roachpb.RangeDescriptor{descriptors[len(descriptors)-1]}, nil
 	})
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+	var testFn RPCSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		return ba.CreateReply(), nil
 	}
