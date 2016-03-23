@@ -224,9 +224,7 @@ func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {
 }
 
 func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
-	if out, err := tryRangeDescriptor(kv); err != nil {
-		fmt.Printf("%s %q: invalid value: %v", kv.Key.Timestamp, kv.Key.Key, err)
-	} else {
+	if out, err := tryRangeDescriptor(kv); err == nil {
 		fmt.Printf("%s %q: %s\n", kv.Key.Timestamp, kv.Key.Key, out)
 	}
 	return false, nil
