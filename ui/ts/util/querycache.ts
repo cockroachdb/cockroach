@@ -7,6 +7,7 @@ module Utils {
   "use strict";
 
   import promise = _mithril.MithrilPromise;
+  import MithrilPromise = _mithril.MithrilPromise;
 
   /**
    * QueryCache supports caching the result of an arbitrary query so that the
@@ -47,7 +48,7 @@ module Utils {
     private _result: Utils.Property<T> = Utils.Prop(<T> null);
     private _lastResult: Utils.Property<T> = Utils.Prop(<T> null);
     private _error: Utils.Property<Error> = Utils.Prop(<Error> null);
-    private _inFlight: boolean = false;
+    private _inFlight: MithrilPromise<any> = null; // tracks the current promise
 
     /**
      * Construct a new QueryCache which caches the ultimate results of the
@@ -69,16 +70,14 @@ module Utils {
      * invocation is already in progress. The currently cached results (if
      * any) are not replaced until the query invocation completes.
      */
-    refresh(): void {
+    refresh(): MithrilPromise<any> {
       if (this._inFlight) {
-        return;
+        return this._inFlight;
       }
-      this._inFlight = true;
-
-      this._query().then(
+      this._inFlight = this._query().then(
         (obj: T): T => {
           this._error(null);
-          this._inFlight = false;
+          this._inFlight = null;
           this._lastResult(obj);
           return this._result(obj);
         },
@@ -95,7 +94,7 @@ module Utils {
             err = new Error("Connection to server failed.");
           }
           this._result(null);
-          this._inFlight = false;
+          this._inFlight = null;
           return this._error(err);
         });
     }
