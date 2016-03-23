@@ -227,7 +227,7 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 	if out, err := tryRangeDescriptor(kv); err != nil {
 		fmt.Printf("%s %q: invalid value: %v", kv.Key.Timestamp, kv.Key.Key, err)
 	} else {
-		fmt.Println(out)
+		fmt.Printf("%s %q: %s\n", kv.Key.Timestamp, kv.Key.Key, out)
 	}
 	return false, nil
 }
@@ -302,7 +302,7 @@ func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
 	if out, err := tryRaftLogEntry(kv); err != nil {
 		fmt.Printf("%q: %v\n\n", kv.Key.Key, err)
 	} else {
-		fmt.Println(out)
+		fmt.Printf("%q: %s\n", kv.Key.Key, out)
 	}
 	return false, nil
 }
