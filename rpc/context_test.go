@@ -215,10 +215,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		{offset: 0},
 		{offset: 0},
 		{offset: 0},
-		// Due to measurement uncertainty being at least equal to maxOffset (see
-		// comments in clock_offset.go), this is the minimum offset that actually
-		// triggers node death.
-		{offset: maxOffset*2 + 1},
+		// The minimum offset that actually triggers node death.
+		{offset: maxOffset + 1},
 	}
 
 	for i := range nodeCtxs {
