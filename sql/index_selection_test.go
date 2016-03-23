@@ -26,7 +26,95 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 )
+
+func TestMergeAndSortSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Each testcase is a list of ranges; each range gets converted into a span.
+	testCases := [][][2]int{
+		{{1, 10}},
+		{{1, 2}, {2, 3}},
+		{{1, 2}, {2, 3}, {2, 4}, {2, 5}, {3, 4}, {3, 4}, {3, 5}},
+		{{2, 4}, {1, 3}},
+		{{1, 2}, {2, 3}, {2, 4}, {3, 6}, {4, 6}, {5, 6}},
+		{{3, 4}, {1, 2}},
+		{{3, 5}, {1, 2}, {4, 7}},
+		{{1, 50}, {1, 2}, {1, 3}, {3, 5}, {3, 10}, {9, 30}, {30, 49}},
+		{{10, 15}, {5, 9}, {20, 30}, {40, 50}, {35, 36}},
+		{{10, 15}, {5, 9}, {20, 30}, {40, 50}, {35, 36}, {36, 40}},
+		{{10, 15}, {5, 9}, {20, 30}, {9, 10}, {40, 50}, {35, 36}, {36, 40}},
+		{{14, 21}, {10, 15}, {5, 9}, {20, 30}, {9, 10}, {40, 50}, {35, 36}, {36, 40}},
+		{{14, 21}, {10, 15}, {5, 9}, {20, 30}, {9, 10}, {40, 50}, {35, 36}, {36, 40}, {30, 35}},
+	}
+
+	for _, tc := range testCases {
+		// We use a bitmap on the keyspace to verify the results:
+		//  - we set the bits for all areas covered by the ranges;
+		//  - we verify that merged spans are ordered, non-overlapping, and
+		//    contain only covered areas of the bitmap;
+		//  - we verify that after we unset all areas covered by the merged
+		//    spans, there are no bits that remain set.
+		bitmap := make([]bool, 100)
+		var s spans
+		for _, v := range tc {
+			start := v[0]
+			end := v[1]
+			for j := start; j < end; j++ {
+				bitmap[j] = true
+			}
+			s = append(s, span{start: []byte{byte(start)}, end: []byte{byte(end)}})
+		}
+
+		printSpans := func(s spans, title string) {
+			fmt.Printf("%s:", title)
+			for _, span := range s {
+				fmt.Printf(" %d-%d", span.start[0], span.end[0])
+			}
+			fmt.Printf("\n")
+		}
+
+		if testing.Verbose() || log.V(1) {
+			printSpans(s, "Input spans ")
+		}
+
+		s = mergeAndSortSpans(s)
+
+		if testing.Verbose() || log.V(1) {
+			printSpans(s, "Output spans")
+		}
+
+		last := -1
+		for i := range s {
+			start := int(s[i].start[0])
+			end := int(s[i].end[0])
+			if start >= end {
+				t.Fatalf("invalid span %d-%d", start, end)
+			}
+			if start <= last {
+				t.Fatalf("span %d-%d starts before previous span ends", start, end)
+			}
+			last = end
+			for j := start; j < end; j++ {
+				if !bitmap[j] {
+					t.Fatalf("span %d-%d incorrectly contains %d", start, end, j)
+				}
+				bitmap[j] = false
+			}
+			if start != 0 && bitmap[start-1] {
+				t.Fatalf("span %d-%d should begin earlier", start, end)
+			}
+			if bitmap[end] {
+				t.Fatalf("span %d-%d should end later", start, end)
+			}
+		}
+		for i, val := range bitmap {
+			if val {
+				t.Fatalf("key %d not covered by any spans", i)
+			}
+		}
+	}
+}
 
 func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
 	*TableDescriptor, *IndexDescriptor) {
@@ -71,7 +159,7 @@ func makeTestIndexFromStr(t *testing.T, columnsStr string) (*TableDescriptor, *I
 }
 
 func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
-	index *IndexDescriptor) (indexConstraints, parser.Expr) {
+	index *IndexDescriptor) (orIndexConstraints, parser.Expr) {
 	expr, _ := parseAndNormalizeExpr(t, sql)
 	exprs, equiv := analyzeExpr(expr)
 
@@ -95,7 +183,7 @@ func TestMakeConstraints(t *testing.T) {
 		columns  string
 		expected string
 	}{
-		{`a = 1`, `b`, `[]`},
+		{`a = 1`, `b`, ``},
 		{`a = 1`, `a`, `[a = 1]`},
 		{`a != 1`, `a`, `[a IS NOT NULL]`},
 		{`a > 1`, `a`, `[a >= 2]`},
@@ -167,10 +255,45 @@ func TestMakeConstraints(t *testing.T) {
 		{`(b, a) IN ((1, 2))`, `a,b`, `[(b, a) IN ((1, 2))]`},
 		{`(b, a) IN ((1, 2))`, `a`, `[(b, a) IN ((1, 2))]`},
 
+		{`(a, b) = (1, 2)`, `a,b`, `[(a, b) IN ((1, 2))]`},
+		{`(b, a) = (1, 2)`, `a,b`, `[(b, a) IN ((1, 2))]`},
+		{`(b, a) = (1, 2)`, `a`, `[(b, a) IN ((1, 2))]`},
+
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `[(a, b) IN ((1, 2))]`},
 
 		{`a IS NULL`, `a`, `[a IS NULL]`},
 		{`a IS NOT NULL`, `a`, `[a IS NOT NULL]`},
+
+		{`a = 1 OR a = 3`, `a`, `[a IN (1, 3)]`},
+		{`a <= 1 OR a >= 8`, `a`, `[a IS NOT NULL, a <= 1] OR [a >= 8]`},
+		{`a < 1 OR a > 2`, `a`, `[a IS NOT NULL, a <= 0] OR [a >= 3]`},
+		{`a < 1 OR a = 3 OR a > 5`, `a`, `[a IS NOT NULL, a <= 0] OR [a = 3] OR [a >= 6]`},
+
+		{`a = 1 OR b = 3`, `a,b`, ``},
+		{`a = 1 OR b > 3`, `a,b`, ``},
+		{`a > 1 OR b > 3`, `a,b`, ``},
+
+		{`(a > 1 AND a < 10) OR (a = 15)`, `a`, `[a >= 2, a <= 9] OR [a = 15]`},
+		{`(a >= 1 AND a <= 10) OR (a >= 20 AND a <= 30)`, `a`,
+			`[a >= 1, a <= 10] OR [a >= 20, a <= 30]`},
+		{`(a > 1 AND a < 10) OR (a > 20 AND a < 30)`, `a`,
+			`[a >= 2, a <= 9] OR [a >= 21, a <= 29]`},
+
+		{`a = 1 OR (a = 3 AND b = 2)`, `a`, `[a = 1] OR [a = 3]`},
+		{`a = 1 OR (a = 3 AND b = 2)`, `b`, ``},
+		{`a = 1 OR (a = 3 AND b = 2)`, `a,b`, `[a = 1] OR [a = 3, b = 2]`},
+		{`a < 2 OR (a > 5 AND b > 2)`, `a`,
+			`[a IS NOT NULL, a <= 1] OR [a >= 6]`},
+		{`a < 2 OR (a > 5 AND b > 2)`, `b`, ``},
+		{`a < 2 OR (a > 5 AND b > 2)`, `a,b`,
+			`[a IS NOT NULL, a <= 1] OR [a >= 6, b >= 3]`},
+
+		{`(a = 1 AND b >= 10 AND b <= 20) OR (a = 2 AND b >= 1 AND b <= 9)`,
+			`a`, `[a = 1] OR [a = 2]`},
+		{`(a = 1 AND b >= 10 AND b <= 20) OR (a = 2 AND b >= 1 AND b <= 9)`,
+			`b`, `[b >= 10, b <= 20] OR [b >= 1, b <= 9]`},
+		{`(a = 1 AND b >= 10 AND b <= 20) OR (a = 2 AND b >= 1 AND b <= 9)`,
+			`a,b`, `[a = 1, b >= 10, b <= 20] OR [a = 2, b >= 1, b <= 9]`},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndexFromStr(t, d.columns)
@@ -211,11 +334,11 @@ func TestMakeSpans(t *testing.T) {
 		{`a IS NULL`, `a`, `-/#`, `/NULL-`},
 		{`a IS NOT NULL`, `a`, `/#-`, `-/#`},
 
-		{`a IN (1,2,3)`, `a`, `/1-/2 /2-/3 /3-/4`, `/3-/2 /2-/1 /1-/0`},
+		{`a IN (1,2,3)`, `a`, `/1-/4`, `/3-/0`},
 		{`a IN (1,2,3) AND b = 1`, `a,b`,
 			`/1/1-/1/2 /2/1-/2/2 /3/1-/3/2`, `/3/1-/3/0 /2/1-/2/0 /1/1-/1/0`},
 		{`a = 1 AND b IN (1,2,3)`, `a,b`,
-			`/1/1-/1/2 /1/2-/1/3 /1/3-/1/4`, `/1/3-/1/2 /1/2-/1/1 /1/1-/1/0`},
+			`/1/1-/1/4`, `/1/3-/1/0`},
 		{`a >= 1 AND b IN (1,2,3)`, `a,b`, `/1-`, `-/0`},
 		{`a <= 1 AND b IN (1,2,3)`, `a,b`, `/#-/2`, `/1-/#`},
 		{`(a, b) IN ((1, 2), (3, 4))`, `a,b`,
@@ -289,6 +412,53 @@ func TestMakeSpans(t *testing.T) {
 
 		{`(a, b) = (1, 2)`, `a`, `/1-/2`, `/1-/0`},
 		{`(a, b) = (1, 2)`, `a,b`, `/1/2-/1/3`, `/1/2-/1/1`},
+
+		{`a > 1 OR a >= 5`, `a`, `/2-`, `-/1`},
+		{`a < 5 OR a >= 1`, `a`, `/#-`, `-/#`},
+		{`a < 1 OR a >= 5`, `a`, `/#-/1 /5-`, `-/4 /0-/#`},
+		{`a = 1 OR a > 8`, `a`, `/1-/2 /9-`, `-/8 /1-/0`},
+		{`a = 8 OR a > 1`, `a`, `/2-`, `-/1`},
+		{`a < 1 OR a = 5 OR a > 8`, `a`, `/#-/1 /5-/6 /9-`, `-/8 /5-/4 /0-/#`},
+		{`a < 8 OR a = 8 OR a > 8`, `a`, `/#-`, `-/#`},
+
+		{`(a = 1 AND b = 5) OR (a = 3 AND b = 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
+		{`(a = 1 AND b = 5) OR (a = 3 AND b = 7)`, `b`, `/5-/6 /7-/8`, `/7-/6 /5-/4`},
+		{`(a = 1 AND b = 5) OR (a = 3 AND b = 7)`, `a,b`,
+			`/1/5-/1/6 /3/7-/3/8`, `/3/7-/3/6 /1/5-/1/4`},
+
+		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
+		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `b`, `/#-/5 /8-`, `-/7 /4-/#`},
+		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `a,b`,
+			`/1/#-/1/5 /3/8-/4`, `/3-/3/7 /1/4-/1/#`},
+
+		{`(a = 1 AND b > 5) OR (a = 3 AND b > 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
+		{`(a = 1 AND b > 5) OR (a = 3 AND b > 7)`, `b`, `/6-`, `-/5`},
+		{`(a = 1 AND b > 5) OR (a = 3 AND b > 7)`, `a,b`,
+			`/1/6-/2 /3/8-/4`, `/3-/3/7 /1-/1/5`},
+
+		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
+		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `b`, `/#-`, `-/#`},
+		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `a,b`,
+			`/1/6-/2 /3/#-/3/7`, `/3/6-/3/# /1-/1/5`},
+
+		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `a`, `/#-/1 /4-`, `-/3 /0-/#`},
+		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `b`, `/#-/5 /8-`, `-/7 /4-/#`},
+		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `a,b`,
+			`/#-/0/5 /4/8-`, `-/4/7 /0/4-/#`},
+
+		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `a`, `/#-/1 /4-`, `-/3 /0-/#`},
+		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `b`, `/#-/5 /8-`, `-/7 /4-/#`},
+		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `a,b`,
+			`/#-/1 /4-`, `-/3 /0-/#`},
+
+		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `a`, `/#-`, `-/#`},
+		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `b`, `/#-/5 /8-`, `-/7 /4-/#`},
+		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `a,b`, `/#-`, `-/#`},
+
+		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `a`, `/1-/2 /3-/4 /5-/6`, `/5-/4 /3-/2 /1-/0`},
+		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `b`, `-`, `-`},
+		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `a,b`,
+			`/1/1-/1/2 /3/3-/3/4 /5-/6`, `/5-/4 /3/3-/3/2 /1/1-/1/0`},
 
 		// When encoding an end constraint for a maximal datum, we use
 		// bytes.PrefixEnd() to go beyond the normal encodings of that datatype.
@@ -385,11 +555,37 @@ func TestExactPrefix(t *testing.T) {
 		{`(a, b) IN ((1, 2))`, `b`, 1},
 		{`(a, b) IN ((1, 2)) AND c = true`, `a,b,c`, 3},
 		{`a = 1 AND (b, c) IN ((2, true))`, `a,b,c`, 3},
+
+		{`(a, b) = (1, 2) OR (a, b, c) = (1, 3, true)`, `a,b`, 1},
+		{`(a, b) = (1, 2) OR (a, b, c) = (3, 4, true)`, `a,b`, 0},
+		{`(a, b) = (1, 2) OR a = 1`, `a,b`, 1},
+		{`(a, b) = (1, 2) OR a = 2`, `a,b`, 0},
+
+		{`a = 1 OR (a = 1 AND b = 2)`, `a`, 1},
+		{`a = 1 OR (a = 1 AND b = 2)`, `b`, 0},
+		{`a = 1 OR (a = 1 AND b = 2)`, `a,b`, 1},
+		{`a = 1 OR (a = 2 AND b = 2)`, `a`, 0},
+
+		{`(a = 1 AND b = 2) OR (a = 1 AND b = 2)`, `a`, 1},
+		{`(a = 1 AND b = 2) OR (a = 1 AND b = 2)`, `b`, 1},
+		{`(a = 1 AND b = 2) OR (a = 1 AND b = 2)`, `b,a`, 2},
+		{`(a = 1 AND b = 2) OR (a = 1 AND b = 2)`, `a,b`, 2},
+		{`(a = 1 AND b = 1) OR (a = 1 AND b = 2)`, `a`, 1},
+		{`(a = 1 AND b = 1) OR (a = 1 AND b = 2)`, `b`, 0},
+		{`(a = 1 AND b = 1) OR (a = 1 AND b = 2)`, `a,b`, 1},
+		{`(a = 1 AND b = 1) OR (a = 1 AND b = 2)`, `b,a`, 0},
+		{`(a = 1 AND b = 1) OR (a = 2 AND b = 2)`, `a`, 0},
+		{`(a = 1 AND b = 1) OR (a = 2 AND b = 2)`, `b`, 0},
+		{`(a = 1 AND b = 1) OR (a = 2 AND b = 2)`, `a,b`, 0},
+
+		{`(a = 1 AND b > 4) OR (a = 1 AND b < 1)`, `a`, 1},
+		{`(a = 1 AND b > 4) OR (a = 1 AND b < 1)`, `b`, 0},
+		{`(a = 1 AND b > 4) OR (a = 1 AND b < 1)`, `a,b`, 1},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndexFromStr(t, d.columns)
 		constraints, _ := makeConstraints(t, d.expr, desc, index)
-		prefix := exactPrefix(constraints)
+		prefix := constraints.exactPrefix()
 		if d.expected != prefix {
 			t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 		}

@@ -136,24 +136,20 @@ func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatc
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
-		// expressions. For example, "a=1 OR a=3" will get translated into "[[a=1],
-		// [a=3]]".
-		// Right now we don't generate any constraints if we have multiple disjunctions.
-		// We would need to perform index selection independently for each of
-		// the disjunctive expressions and then take the resulting index info and
-		// determine if we're performing distinct scans in the indexes or if the
-		// scans overlap. If the scans overlap we'll need to union the output
-		// keys. If the scans are distinct (such as in the "a=1 OR a=3" case) then
-		// we can sort the scans by start key.
+		// expressions. For example, "a <= 1 OR a >= 5" will get translated into
+		// "[[a <= 1], [a >= 5]]".
 		//
-		// There are complexities: if there are a large number of disjunctive
-		// expressions we should limit how many indexes we use. We probably should
-		// optimize the common case of "a IN (1, 3)" so that we only perform index
-		// selection once even though we generate multiple scan ranges for the
-		// index.
+		// We currently map all disjunctions onto the same index; this works
+		// well if we can derive constraints for a set of columns from all
+		// disjunctions, e.g. `a < 5 OR a > 10`.
 		//
-		// Each disjunctive expression might generate multiple ranges of an index
-		// to scan. An examples of this is "a IN (1, 2, 3)".
+		// However, we can't generate any constraints if the disjunctions refer
+		// to different columns, e.g. `a > 1 OR b > 1`. We would need to perform
+		// index selection independently for each of the disjunctive
+		// expressions, and we would need infrastructure to do a
+		// multi-index-join.  There are complexities: if there are a large
+		// number of disjunctive expressions we should limit how many indexes we
+		// use.
 
 		for _, c := range candidates {
 			c.analyzeExprs(exprs)
@@ -232,23 +228,23 @@ type indexConstraint struct {
 
 // numColumns returns the number of columns this constraint applies to. Only
 // constraints for expressions with tuple comparisons apply to multiple columns.
-func (c indexConstraint) numColumns() int {
-	if c.tupleMap == nil {
+func (ic indexConstraint) numColumns() int {
+	if ic.tupleMap == nil {
 		return 1
 	}
-	return len(c.tupleMap)
+	return len(ic.tupleMap)
 }
 
-func (c indexConstraint) String() string {
+func (ic indexConstraint) String() string {
 	var buf bytes.Buffer
-	if c.start != nil {
-		fmt.Fprintf(&buf, "%s", c.start)
+	if ic.start != nil {
+		fmt.Fprintf(&buf, "%s", ic.start)
 	}
-	if c.end != nil && c.end != c.start {
-		if c.start != nil {
+	if ic.end != nil && ic.end != ic.start {
+		if ic.start != nil {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%s", c.end)
+		fmt.Fprintf(&buf, "%s", ic.end)
 	}
 	return buf.String()
 }
@@ -259,23 +255,39 @@ func (c indexConstraint) String() string {
 // its .tupleMap).
 type indexConstraints []indexConstraint
 
-func (c indexConstraints) String() string {
+func (ic indexConstraints) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("[")
-	for i := range c {
+	for i := range ic {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(c[i].String())
+		buf.WriteString(ic[i].String())
 	}
 	buf.WriteString("]")
+	return buf.String()
+}
+
+// orIndexConstraints stores multiple indexConstraint, one for each top level
+// disjunction in our filtering expression. Each indexConstraints element
+// generates a set of spans; these sets of spans are merged.
+type orIndexConstraints []indexConstraints
+
+func (c orIndexConstraints) String() string {
+	var buf bytes.Buffer
+	for i := range c {
+		if i > 0 {
+			buf.WriteString(" OR ")
+		}
+		buf.WriteString(c[i].String())
+	}
 	return buf.String()
 }
 
 type indexInfo struct {
 	desc        *TableDescriptor
 	index       *IndexDescriptor
-	constraints indexConstraints
+	constraints orIndexConstraints
 	cost        float64
 	covering    bool // Does the index cover the required qvalues?
 	reverse     bool
@@ -304,7 +316,7 @@ func (v *indexInfo) init(s *scanNode) {
 // analyzeExprs examines the range map to determine the cost of using the
 // index.
 func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
-	if err := v.makeConstraints(exprs); err != nil {
+	if err := v.makeOrConstraints(exprs); err != nil {
 		panic(err)
 	}
 
@@ -315,13 +327,26 @@ func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
 		// The index isn't being restricted at all, bump the cost significantly to
 		// make any index which does restrict the keys more desirable.
 		v.cost *= 1000
-	} else {
+		return
+	}
+	// When we have multiple indexConstraints, each one is for a top-level
+	// disjunction (OR); together they are no more restrictive than any one of
+	// them. We thus take the minimum number of restricted columns among them.
+	//
+	// TODO(radu): we need to be more discriminating - constraints such as
+	// "NOT NULL" are almost as useless as no constraints, whereas "exact value"
+	// constraints are very restrictive.
+	minNumCols := len(v.index.ColumnIDs)
+	for _, cset := range v.constraints {
 		numCols := 0
-		for _, c := range v.constraints {
+		for _, c := range cset {
 			numCols += c.numColumns()
 		}
-		v.cost *= float64(len(v.index.ColumnIDs)) / float64(numCols)
+		if minNumCols > numCols {
+			minNumCols = numCols
+		}
 	}
+	v.cost *= float64(len(v.index.ColumnIDs)) / float64(minNumCols)
 }
 
 // analyzeOrdering analyzes the ordering provided by the index and determines
@@ -334,7 +359,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	preferOrderMatching bool) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
-	v.exactPrefix = exactPrefix(v.constraints)
+	v.exactPrefix = v.constraints.exactPrefix()
 
 	// Analyze the ordering provided by the index (either forward or reverse).
 	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
@@ -378,10 +403,35 @@ func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 	return false, -1
 }
 
-// makeConstraints populates the indexInfo.constraints field based on the
-// analyzed expressions. The constraints are a start and end expressions for a
-// prefix of the columns that make up the index. For example, consider
-// the expression "a >= 1 AND b >= 2":
+// makeOrConstraints populates the indexInfo.constraints field based on the
+// analyzed expressions. Each element of coonstraints corresponds to one
+// of the top-level disjunctions and is generated using makeIndexConstraint.
+func (v *indexInfo) makeOrConstraints(orExprs []parser.Exprs) error {
+	constraints := make(orIndexConstraints, len(orExprs))
+	for i, e := range orExprs {
+		var err error
+		constraints[i], err = v.makeIndexConstraints(e)
+		if err != nil {
+			return err
+		}
+		// If an OR branch has no constraints, we cannot have _any_
+		// constraints.
+		if len(constraints[i]) == 0 {
+			return nil
+		}
+	}
+
+	v.constraints = constraints
+	return nil
+}
+
+// makeIndexConstraints generates constraints for a set of conjunctions (AND
+// expressions). These expressions can be the entire filter, or they can be one
+// of multiple top-level disjunctions (ORs).
+//
+// The constraints consist of start and end expressions for a prefix of the
+// columns that make up the index. For example, consider the expression
+// "a >= 1 AND b >= 2":
 //
 //   {a: {start: >= 1}, b: {start: >= 2}}
 //
@@ -392,10 +442,11 @@ func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 // once a constraint doesn't have a .start, no further constraints will
 // have one). This is because they wouldn't be useful when generating spans.
 //
-// makeConstraints takes into account the direction of the columns in the index.
-// For ascending cols, start constraints look for comparison expressions with the
-// operators >, >=, = or IN and end constraints look for comparison expressions
-// with the operators <, <=, = or IN. Vice versa for descending cols.
+// makeIndexConstraints takes into account the direction of the columns in the
+// index.  For ascending cols, start constraints look for comparison expressions
+// with the operators >, >=, = or IN and end constraints look for comparison
+// expressions with the operators <, <=, = or IN. Vice versa for descending
+// cols.
 //
 // Whenever possible, < and > are converted to <= and >=, respectively.
 // This is because we can use inclusive constraints better than exclusive ones;
@@ -415,13 +466,9 @@ func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 // 1", but if we performed this transform in simpilfyComparisonExpr it would
 // simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
 // obvious based on comparisons of the constants.
-func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
-	if len(exprs) != 1 {
-		// TODO(andrei): what should we do with ORs?
-		return nil
-	}
+func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraints, error) {
+	var constraints indexConstraints
 
-	andExprs := exprs[0]
 	trueStartDone := false
 	trueEndDone := false
 
@@ -430,7 +477,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 		var colDir encoding.Direction
 		var err error
 		if colDir, err = v.index.ColumnDirections[i].toEncodingDirection(); err != nil {
-			return err
+			return nil, err
 		}
 
 		var constraint indexConstraint
@@ -532,7 +579,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 					// generated. Consider the constraints [a >= 1, a <= 2, b IN (1,
 					// 2)]. This would turn into the spans /1/1-/3/2 and /1/2-/3/3.
 					ok := true
-					for _, c := range v.constraints {
+					for _, c := range constraints {
 						ok = ok && (c.start == c.end) && (c.start.Operator == parser.EQ)
 					}
 					if !ok {
@@ -610,14 +657,14 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 				// encoding would be incorrect. See #4313.
 				if preStart != *startExpr {
 					if mixed, err := isMixedTypeComparison(*startExpr); err != nil {
-						return err
+						return nil, err
 					} else if mixed {
 						*startExpr = nil
 					}
 				}
 				if preEnd != *endExpr {
 					if mixed, err := isMixedTypeComparison(*endExpr); err != nil {
-						return err
+						return nil, err
 					} else if mixed {
 						*endExpr = nil
 					}
@@ -650,7 +697,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 		}
 
 		if constraint.start != nil || constraint.end != nil {
-			v.constraints = append(v.constraints, constraint)
+			constraints = append(constraints, constraint)
 		}
 
 		if *endExpr == nil {
@@ -663,7 +710,7 @@ func (v *indexInfo) makeConstraints(exprs []parser.Exprs) error {
 			break
 		}
 	}
-	return nil
+	return constraints, nil
 }
 
 // isCoveringIndex returns true if all of the columns needed from the scanNode are contained within
@@ -999,12 +1046,90 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 	return spans
 }
 
-// makeSpans constructs the spans for an index given a set of constraints.
-// The resulting spans are non-overlapping (by virtue of the input constraints
-// being disjunct) and are ordered as the index is (i.e. scanning them in order
-// would require only iterating forward through the index).
-func makeSpans(constraints indexConstraints,
-	tableID ID, index *IndexDescriptor) []span {
+// spanEvent corresponds to either the start or the end of a span. It is used
+// internally by mergeAndSortSpans.
+type spanEvent struct {
+	start bool
+	key   roachpb.Key
+}
+
+type spanEvents []spanEvent
+
+// implement Sort.Interface
+func (a spanEvents) Len() int      { return len(a) }
+func (a spanEvents) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a spanEvents) Less(i, j int) bool {
+	cmp := a[i].key.Compare(a[j].key)
+	if cmp != 0 {
+		return cmp < 0
+	}
+	// For the same key, prefer "start" events.
+	return a[i].start && !a[j].start
+}
+
+// makeSpans constructs the spans for an index given the orIndexConstraints by
+// merging the spans for the disjunctions (top-level OR branches). The resulting
+// spans are non-overlapping and ordered.
+func makeSpans(constraints orIndexConstraints, tableID ID, index *IndexDescriptor) spans {
+	if len(constraints) == 0 {
+		return makeSpansForIndexConstraints(nil, tableID, index)
+	}
+	var allSpans spans
+	for _, c := range constraints {
+		s := makeSpansForIndexConstraints(c, tableID, index)
+		allSpans = append(allSpans, s...)
+	}
+	return mergeAndSortSpans(allSpans)
+}
+
+// mergeAndSortSpans is used to merge a set of potentially overlapping spans
+// into a sorted set of non-overlapping spans.
+func mergeAndSortSpans(s spans) spans {
+	// This is the classic 1D geometry problem of merging overlapping segments
+	// on the X axis. It can be solved using a scan algorithm: we go through all
+	// segment starting and ending points in X order (as "events") and keep
+	// track of how many open segments we have at each point.
+	events := make(spanEvents, 2*len(s))
+	for i := range s {
+		events[2*i] = spanEvent{start: true, key: s[i].start}
+		events[2*i+1] = spanEvent{start: false, key: s[i].end}
+		if s[i].start.Compare(s[i].end) >= 0 {
+			panic(fmt.Sprintf("invalid input span %s", prettySpan(s[i], 0)))
+		}
+	}
+	sort.Sort(events)
+	openSpans := 0
+	s = s[:0]
+	for _, e := range events {
+		if e.start {
+			if openSpans == 0 {
+				// Start a new span. Because for equal keys the start events
+				// come first, there can't be end events for this key.
+				// The end of the span will be adjusted as we move forward.
+				s = append(s, span{start: e.key, end: e.key})
+			}
+			openSpans++
+		} else {
+			openSpans--
+			if openSpans < 0 {
+				panic("end span with no spans started")
+			} else if openSpans == 0 {
+				// Adjust the end of the last span.
+				s[len(s)-1].end = e.key
+			}
+		}
+	}
+	if openSpans != 0 {
+		panic("scan ended with open spans")
+	}
+	return s
+}
+
+// makeSpansForIndexConstraints constructs the spans for an index given an
+// instance of indexConstraints. The resulting spans are non-overlapping (by
+// virtue of the input constraints being disjunct).
+func makeSpansForIndexConstraints(constraints indexConstraints, tableID ID,
+	index *IndexDescriptor) spans {
 	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.
@@ -1070,28 +1195,28 @@ func makeSpans(constraints indexConstraints,
 			n++
 		}
 	}
-	resultSpans = resultSpans[:n]
-	// Sort the spans to return them in index order.
-	sort.Sort(resultSpans)
-	return resultSpans
+	return resultSpans[:n]
 }
 
 // exactPrefix returns the count of the columns of the index for which an exact
-// prefix match was requested. For example, if an index was defined on the
-// columns (a, b, c) and the WHERE clause was "(a, b) = (1, 2)", exactPrefix()
-// would return 2.
-func exactPrefix(constraints []indexConstraint) int {
+// prefix match was requested in the indexConstraints (which can be one of
+// multiple OR branches in the WHERE clause). For example, if an index was
+// defined on the columns (a, b, c) and the index constraints are derived from
+// "(a, b) = (1, 2)", exactPrefix() would return 2.
+func (ic indexConstraints) exactPrefix() int {
 	prefix := 0
-	for _, c := range constraints {
+	for _, c := range ic {
 		if c.start == nil || c.end == nil || c.start != c.end {
 			return prefix
 		}
 		switch c.start.Operator {
 		case parser.EQ:
 			prefix++
-			continue
 		case parser.In:
 			if tuple, ok := c.start.Right.(parser.DTuple); !ok || len(tuple) != 1 {
+				// TODO(radu): we may still have an exact prefix if the first
+				// value in each tuple is the same, e.g.
+				// `(a, b) IN ((1, 2), (1, 3))`
 				return prefix
 			}
 			if _, ok := c.start.Left.(*parser.Tuple); ok {
@@ -1104,6 +1229,97 @@ func exactPrefix(constraints []indexConstraint) int {
 		}
 	}
 	return prefix
+
+}
+
+// exactPrefixDatums returns the first num exact prefix values as Datums; num
+// must be at most ic.exactPrefix()
+func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
+	if num == 0 {
+		return nil
+	}
+	datums := make([]parser.Datum, 0, num)
+	for _, c := range ic {
+		if c.start == nil || c.end == nil || c.start != c.end {
+			break
+		}
+		switch c.start.Operator {
+		case parser.EQ:
+			datums = append(datums, c.start.Right.(parser.Datum))
+		case parser.In:
+			right := c.start.Right.(parser.DTuple)[0]
+			if _, ok := c.start.Left.(*parser.Tuple); ok {
+				// We have something like `(a,b,c) IN (1,2,3)`
+				rtuple := right.(parser.DTuple)
+				for _, tupleIdx := range c.tupleMap {
+					datums = append(datums, rtuple[tupleIdx])
+					if len(datums) == num {
+						return datums
+					}
+				}
+			} else {
+				// We have something like `a IN (1)`.
+				datums = append(datums, right)
+			}
+		default:
+			panic("asking for too many datums")
+		}
+		if len(datums) == num {
+			return datums
+		}
+	}
+	panic("asking for too many datums")
+}
+
+// exactPrefix returns the count of the columns of the index for which an exact
+// prefix match was requested. Some examples if an index was defined on the
+// columns (a, b, c):
+//
+//    |----------------------------------------------------------|
+//    |            WHERE clause                    | exactPrefix |
+//    |----------------------------------------------------------|
+//    |  (a, b) = (1, 2)                           |      2      |
+//    |  (a, b) = (1, 2) OR (a, b, c) = (1, 3, 0)  |      1      |
+//    |  (a, b) = (1, 2) OR (a, b, c) = (3, 4, 0)  |      0      |
+//    |  (a, b) = (1, 2) OR a = 1                  |      1      |
+//    |  (a, b) = (1, 2) OR a = 2                  |      0      |
+//    |----------------------------------------------------------|
+func (c orIndexConstraints) exactPrefix() int {
+	if len(c) == 0 {
+		return 0
+	}
+	// To have an exact prefix of length L:
+	//  - all "or" constraints must have an exact prefix of at least L
+	//  - for each of the L columns in the exact prefix, all constraints must
+	//    resolve to the *same* value for that column.
+
+	// We start by finding the minimum length of all exact prefixes.
+	minPrefix := c[0].exactPrefix()
+	for i := 1; i < len(c) && minPrefix > 0; i++ {
+		p := c[i].exactPrefix()
+		if minPrefix > p {
+			minPrefix = p
+		}
+	}
+	if minPrefix == 0 || len(c) == 1 {
+		return minPrefix
+	}
+
+	// Get the exact values for the first constraint.
+	datums := c[0].exactPrefixDatums(minPrefix)
+
+	for i := 1; i < len(c); i++ {
+		iDatums := c[i].exactPrefixDatums(len(datums))
+		// Compare the exact values of this constraint, keep the matching
+		// prefix.
+		for i, d := range datums {
+			if !(d.TypeEqual(iDatums[i]) && d.Compare(iDatums[i]) == 0) {
+				datums = datums[:i]
+				break
+			}
+		}
+	}
+	return len(datums)
 }
 
 // applyConstraints applies the constraints on values specified by constraints
@@ -1113,9 +1329,14 @@ func exactPrefix(constraints []indexConstraint) int {
 // constraint is "a = 1", the expression is simplified to "b > 2".
 //
 // Note that applyConstraints currently only handles simple cases.
-func applyConstraints(expr parser.Expr, constraints indexConstraints) parser.Expr {
+func applyConstraints(expr parser.Expr, constraints orIndexConstraints) parser.Expr {
 	v := &applyConstraintsVisitor{}
-	for _, c := range constraints {
+	if len(constraints) != 1 {
+		// We only support simplifying the expressions if there aren't multiple
+		// disjunctions (top-level OR branches).
+		return expr
+	}
+	for _, c := range constraints[0] {
 		v.constraint = c
 		expr, _ = parser.WalkExpr(v, expr)
 		// We can only continue to apply the constraints if the constraints we have
