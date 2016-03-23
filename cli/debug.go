@@ -229,7 +229,7 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 	} else {
 		fmt.Println(out)
 	}
-	return true, nil
+	return false, nil
 }
 
 func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
