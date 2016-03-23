@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -45,13 +45,14 @@ func TestNoLinkForbidden(t *testing.T) {
 		t.Skip("GOPATH isn't set")
 	}
 
-	imports, err := testutils.TransitiveImports("github.com/cockroachdb/cockroach", true)
+	imports, err := buildutil.TransitiveImports("github.com/cockroachdb/cockroach", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, forbidden := range []string{
-		"testing", // defines flags
+		"testing",  // defines flags
+		"go/build", // probably not something we want in the main binary
 		"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
 	} {
 		if _, ok := imports[forbidden]; ok {
