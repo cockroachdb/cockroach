@@ -643,6 +643,35 @@ func (s *Store) StartedAt() int64 {
 	return s.startedAt
 }
 
+// IterateRangeDescriptors calls the provided function with each descriptor
+// from the provided Engine. The return values of this method and fn have
+// semantics similar to engine.MVCCIterate.
+func IterateRangeDescriptors(eng engine.Engine, fn func(desc roachpb.RangeDescriptor) (bool, error)) error {
+	// Iterator over all range-local key-based data.
+	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
+	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
+
+	kvToDesc := func(kv roachpb.KeyValue) (bool, error) {
+		// Only consider range metadata entries; ignore others.
+		_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+		if err != nil {
+			return false, err
+		}
+		if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
+			return false, nil
+		}
+		var desc roachpb.RangeDescriptor
+		if err := kv.Value.GetProto(&desc); err != nil {
+			return false, err
+		}
+		return fn(desc)
+	}
+
+	_, err := engine.MVCCIterate(eng, start, end, roachpb.MaxTimestamp, false /* !consistent */, nil, /* txn */
+		false /* !reverse */, kvToDesc)
+	return err
+}
+
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *stop.Stopper) error {
 	s.stopper = stopper
@@ -694,58 +723,40 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
 
-	// Iterator over all range-local key-based data.
-	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
-	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
-
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
-	_, err = engine.MVCCIterate(s.engine, start, end, now, false /* !consistent */, nil, /* txn */
-		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
-			// Only consider range metadata entries; ignore others.
-			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
-			if err != nil {
-				return false, err
-			}
-			if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-				return false, nil
-			}
-			var desc roachpb.RangeDescriptor
-			if err := kv.Value.GetProto(&desc); err != nil {
-				return false, err
-			}
-
-			if _, repDesc := desc.FindReplica(s.StoreID()); repDesc == nil {
-				// We are no longer a member of the range, but we didn't GC
-				// the replica before shutting down. Destroy the replica now
-				// to avoid creating a new replica without a valid replica ID
-				// (which is necessary to have a non-nil raft group)
-				return false, s.destroyReplicaData(&desc)
-			}
-			rng, err := NewReplica(&desc, s, 0)
-			if err != nil {
-				return false, err
-			}
-			if err = s.addReplicaInternalLocked(rng); err != nil {
-				return false, err
-			}
-			// Add this range and its stats to our counter.
-			s.metrics.replicaCount.Inc(1)
-			s.metrics.addMVCCStats(rng.stats.GetMVCC())
-			// TODO(bdarnell): lazily create raft groups to make the following comment true again.
-			// Note that we do not create raft groups at this time; they will be created
-			// on-demand the first time they are needed. This helps reduce the amount of
-			// election-related traffic in a cold start.
-			// Raft initialization occurs when we propose a command on this range or
-			// receive a raft message addressed to it.
-			// TODO(bdarnell): Also initialize raft groups when read leases are needed.
-			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
-			// and initialize those groups.
-			return false, nil
-		})
+	err = IterateRangeDescriptors(s.engine, func(desc roachpb.RangeDescriptor) (bool, error) {
+		if _, repDesc := desc.FindReplica(s.StoreID()); repDesc == nil {
+			// We are no longer a member of the range, but we didn't GC
+			// the replica before shutting down. Destroy the replica now
+			// to avoid creating a new replica without a valid replica ID
+			// (which is necessary to have a non-nil raft group)
+			return false, s.destroyReplicaData(&desc)
+		}
+		rng, err := NewReplica(&desc, s, 0)
+		if err != nil {
+			return false, err
+		}
+		if err = s.addReplicaInternalLocked(rng); err != nil {
+			return false, err
+		}
+		// Add this range and its stats to our counter.
+		s.metrics.replicaCount.Inc(1)
+		s.metrics.addMVCCStats(rng.stats.GetMVCC())
+		// TODO(bdarnell): lazily create raft groups to make the following comment true again.
+		// Note that we do not create raft groups at this time; they will be created
+		// on-demand the first time they are needed. This helps reduce the amount of
+		// election-related traffic in a cold start.
+		// Raft initialization occurs when we propose a command on this range or
+		// receive a raft message addressed to it.
+		// TODO(bdarnell): Also initialize raft groups when read leases are needed.
+		// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
+		// and initialize those groups.
+		return false, nil
+	})
 	s.mu.Unlock()
 	if err != nil {
 		return err

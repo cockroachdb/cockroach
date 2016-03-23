@@ -23,6 +23,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -1745,21 +1746,38 @@ func IsValidSplitKey(key roachpb.Key) bool {
 //
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeySpans.
-func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachpb.RKey) (roachpb.Key, error) {
+//
+// debugFn, if not nil, is used to print informational log messages about
+// the key finding process.
+func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachpb.RKey, debugFn func(msg string, args ...interface{})) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
 		key = keys.Addr(keys.LocalMax)
 	}
+
+	logf := func(msg string, args ...interface{}) {
+		if debugFn != nil {
+			debugFn(msg, args...)
+		} else if log.V(2) {
+			log.Infof("FindSplitKey["+rangeID.String()+"] "+msg, args...)
+		}
+	}
+
 	encStartKey := MakeMVCCMetadataKey(key.AsRawKey())
 	encEndKey := MakeMVCCMetadataKey(endKey.AsRawKey())
+
+	logf("searching split key for %d [%s, %s)", rangeID, key, endKey)
 
 	// Get range size from stats.
 	var ms MVCCStats
 	if err := MVCCGetRangeStats(engine, rangeID, &ms); err != nil {
 		return nil, err
 	}
-	rangeSize := ms.KeyBytes + ms.ValBytes
 
+	rangeSize := ms.KeyBytes + ms.ValBytes
 	targetSize := rangeSize / 2
+
+	logf("range size: %s, targetSize %s", humanize.IBytes(uint64(rangeSize)), humanize.IBytes(uint64(targetSize)))
+
 	sizeSoFar := int64(0)
 	bestSplitKey := encStartKey
 	bestSplitDiff := int64(math.MaxInt64)
@@ -1775,12 +1793,16 @@ func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachp
 			diff = -diff
 		}
 		if valid && diff < bestSplitDiff {
+			logf("better split: diff %d at %s", diff, kv.Key)
 			bestSplitKey = kv.Key
 			bestSplitDiff = diff
 		}
 
 		// Determine whether we've found best key and can exit iteration.
-		done := !bestSplitKey.Equal(encStartKey) && diff > bestSplitDiff
+		done := !bestSplitKey.Key.Equal(encStartKey.Key) && diff > bestSplitDiff
+		if done {
+			logf("target size reached")
+		}
 
 		// Add this key/value to the size scanned so far.
 		if kv.Key.IsValue() && bytes.Equal(kv.Key.Key, lastKey) {
