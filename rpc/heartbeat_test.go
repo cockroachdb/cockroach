@@ -23,8 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -103,52 +101,4 @@ func TestManualHeartbeat(t *testing.T) {
 		t.Errorf("expected ServerTime %d, instead %d",
 			manualResponse.ServerTime, regularResponse.ServerTime)
 	}
-}
-
-func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	ctx := newNodeTestContext(nil, stopper)
-
-	_, ln := newTestServer(t, ctx, false)
-	remoteAddr := ln.Addr().String()
-	ctx.RemoteClocks.mu.Lock()
-	ctx.RemoteClocks.mu.offsets[remoteAddr] = RemoteOffset{
-		Offset:      10,
-		Uncertainty: 5,
-		MeasuredAt:  20,
-	}
-	ctx.RemoteClocks.mu.Unlock()
-	// Create a client and set its remote offset. On first heartbeat,
-	// it will update the server's remote clocks map.
-	_, err := ctx.GRPCDial(remoteAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx.RemoteClocks.mu.Lock()
-	o := ctx.RemoteClocks.mu.offsets[remoteAddr]
-	ctx.RemoteClocks.mu.Unlock()
-	expServerOffset := RemoteOffset{Offset: -10, Uncertainty: 5, MeasuredAt: 20}
-	if proto.Equal(&o, &expServerOffset) {
-		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
-	}
-	ln.Close()
-
-	// Remove the offset from RemoteClocks and close the connection from the
-	// remote end. A new offset for the server should not be added to the clock
-	// monitor.
-	ctx.RemoteClocks.mu.Lock()
-	delete(ctx.RemoteClocks.mu.offsets, remoteAddr)
-	ln.Close()
-	ctx.RemoteClocks.mu.Unlock()
-
-	ctx.RemoteClocks.mu.Lock()
-	if offset, ok := ctx.RemoteClocks.mu.offsets[remoteAddr]; ok {
-		t.Errorf("unexpected updated offset: %v", offset)
-	}
-	ctx.RemoteClocks.mu.Unlock()
 }
