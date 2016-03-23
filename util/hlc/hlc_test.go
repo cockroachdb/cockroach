@@ -152,18 +152,43 @@ func TestClock(t *testing.T) {
 	c.Now()
 }
 
-// ExampleManualClock shows how a manual clock can be
+// TestExampleManualClock shows how a manual clock can be
 // used as a physical clock. This is useful for testing.
-func ExampleManualClock() {
+func TestExampleManualClock(t *testing.T) {
 	m := NewManualClock(10)
 	c := NewClock(m.UnixNano)
 	c.Now()
 	if c.Timestamp().WallTime != 10 {
-		log.Fatalf("manual clock error")
+		t.Fatalf("manual clock error")
 	}
 	m.Set(20)
 	c.Now()
 	if c.Timestamp().WallTime != 20 {
-		log.Fatalf("manual clock error")
+		t.Fatalf("manual clock error")
 	}
+}
+
+func TestMonotonicityCheck(t *testing.T) {
+	m := NewManualClock(100000)
+	c := NewClock(m.UnixNano)
+
+	// Update the state of the hybrid clock.
+	firstTime := c.Now()
+
+	m.Increment((-10 * time.Minute).Nanoseconds())
+
+	secondTime := c.Now()
+	if c.monotonicityErrorsCount != 1 {
+		t.Fatalf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
+	}
+
+	c.SetMaxOffset(10 * time.Hour)
+
+	m.Increment((-10 * time.Minute).Nanoseconds())
+
+	thirdTime := c.Now()
+	if c.monotonicityErrorsCount != 1 {
+		t.Fatalf("clock backward jump below threshold was incorrectly detected by the monotonicity checker (from %s to %s)", secondTime, thirdTime)
+	}
+
 }
