@@ -35,6 +35,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -436,6 +437,23 @@ func (v *Value) SetTime(t time.Time) {
 	v.setTag(ValueType_TIME)
 }
 
+// SetDuration encodes the specified duration value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetDuration(t duration.Duration) error {
+	// 3 varints are encoded.
+	const encodingSizeOverestimate = 1 + 3*binary.MaxVarintLen64
+	var err error
+	v.RawBytes = make([]byte, headerSize, headerSize+encodingSizeOverestimate)
+	// TODO(dan): roachpb.Value doesn't have to sort in the same way the encoded
+	// keys do. Consider doing something more efficient than this.
+	v.RawBytes, err = encoding.EncodeDurationAscending(v.RawBytes, t)
+	if err != nil {
+		return err
+	}
+	v.setTag(ValueType_DURATION)
+	return nil
+}
+
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *inf.Dec) error {
@@ -510,6 +528,16 @@ func (v Value) GetTime() (time.Time, error) {
 		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
 	_, t, err := encoding.DecodeTimeAscending(v.dataBytes())
+	return t, err
+}
+
+// GetDuration decodes a duration value from the bytes field of the receiver. If
+// the tag is not DURATION an error will be returned.
+func (v Value) GetDuration() (duration.Duration, error) {
+	if tag := v.GetTag(); tag != ValueType_DURATION {
+		return duration.Duration{}, fmt.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
+	}
+	_, t, err := encoding.DecodeDurationAscending(v.dataBytes())
 	return t, err
 }
 

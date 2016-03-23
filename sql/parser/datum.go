@@ -28,6 +28,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/duration"
 )
 
 var (
@@ -691,7 +692,7 @@ func (d DTimestamp) String() string {
 
 // DInterval is the interval Datum.
 type DInterval struct {
-	time.Duration
+	duration.Duration
 }
 
 // Type implements the Datum interface.
@@ -715,13 +716,7 @@ func (d DInterval) Compare(other Datum) int {
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if d.Duration < v.Duration {
-		return -1
-	}
-	if v.Duration < d.Duration {
-		return 1
-	}
-	return 0
+	return d.Duration.Compare(v.Duration)
 }
 
 // HasPrev implements the Datum interface.
@@ -731,7 +726,14 @@ func (d DInterval) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d DInterval) Prev() Datum {
-	return DInterval{Duration: d.Duration - 1}
+	prevD := d
+	if prevD.Nanos != math.MinInt64 {
+		prevD.Nanos--
+	} else {
+		// This is a bit hard because we might have to shift nanos over.
+		panic("TODO(dan)")
+	}
+	return prevD
 }
 
 // HasNext implements the Datum interface.
@@ -741,17 +743,30 @@ func (d DInterval) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d DInterval) Next() Datum {
-	return DInterval{Duration: d.Duration + 1}
+	nextD := d
+	if nextD.Nanos != math.MaxInt64 {
+		nextD.Nanos++
+	} else {
+		// This is a bit hard because we might have to shift nanos over.
+		panic("TODO(dan)")
+	}
+	return nextD
 }
 
 // IsMax implements the Datum interface.
 func (d DInterval) IsMax() bool {
-	return d.Duration == math.MaxInt64
+	return d.Months == math.MaxInt64 && d.Days == math.MaxInt64 && d.Nanos == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
 func (d DInterval) IsMin() bool {
-	return d.Duration == math.MinInt64
+	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
+}
+
+// String implements the Datum interface.
+func (d DInterval) String() string {
+	// TODO(dan): Make this output postgres compatible for all values.
+	return time.Duration(d.Duration.Nanos).String()
 }
 
 // DTuple is the tuple Datum.

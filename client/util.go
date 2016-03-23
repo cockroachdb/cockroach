@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -81,6 +82,10 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 	case time.Time:
 		r.SetTime(t)
 		return r, nil
+
+	case duration.Duration:
+		err := r.SetDuration(t)
+		return r, err
 
 	case proto.Message:
 		err := r.SetProto(t)
