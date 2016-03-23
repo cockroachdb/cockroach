@@ -809,6 +809,9 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	// clock has been updated to the high water mark of any commands
 	// which might overlap this one in effect.
 	// TODO(spencer,tschottdorf): might remove this, but harder than it looks.
+	//   This isn't just unittests (which would require revamping the test
+	//   context sender, but also some of the scanner queues place batches
+	//   directly into the local range they're servicing.
 	if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		if ba.Txn != nil {
 			// TODO(tschottdorf): see if this is already done somewhere else.
@@ -862,10 +865,10 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *r
 	r.mu.cmdQ.Remove(cmdKeys)
 }
 
-// maybeUpdateTimestampFromCache moves the batch timestamp forward
-// depending on the presence of overlapping entries in the timestamp
-// cache. If the batch is transaction, the txn timestamp and the
-// txn.WriteTooOld bool are updated.
+// applyTimestampCache moves the batch timestamp forward depending on
+// the presence of overlapping entries in the timestamp cache. If the
+// batch is transactional, the txn timestamp and the txn.WriteTooOld
+// bool are updated.
 //
 // Two important invariants of Cockroach: 1) encountering a more
 // recently written value means transaction restart. 2) values must
@@ -879,7 +882,7 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *r
 //
 // TODO(tschottdorf): find a way not to update the batch txn
 //   which should be immutable.
-func (r *Replica) maybeUpdateTimestampFromCache(ba *roachpb.BatchRequest) {
+func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, union := range ba.Requests {
@@ -903,8 +906,10 @@ func (r *Replica) maybeUpdateTimestampFromCache(ba *roachpb.BatchRequest) {
 				ba.Timestamp.Forward(rTS.Next())
 			}
 
-			// On more recent writes, forward the timestamp and set the write
-			// too old boolean for transactions.
+			// On more recent writes, forward the timestamp and set the
+			// write too old boolean for transactions. Note that currently
+			// only EndTransaction and DeleteRange requests update the
+			// timestamp cache.
 			wTS := r.mu.tsCache.GetMaxWrite(key, header.EndKey, ba.GetTxnID())
 			if ba.Txn != nil {
 				if !wTS.Less(ba.Txn.Timestamp) {
@@ -1054,9 +1059,9 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
-	// forward. Or, in the case of a transactional write, te txn
+	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	r.maybeUpdateTimestampFromCache(&ba)
+	r.applyTimestampCache(&ba)
 
 	log.Trace(ctx, "raft")
 
@@ -1535,7 +1540,8 @@ func (r *Replica) applyRaftCommandInBatch(
 		}
 	}
 
-	// Keep track of original txn Writing state to santitize txn reported with any error.
+	// Keep track of original txn Writing state to santitize txn
+	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
 
 	// Execute the commands. If this returns without an error, the batch must
@@ -1666,13 +1672,36 @@ func (r *Replica) executeBatch(
 				// On WriteTooOldError, we've written a new value or an intent
 				// at a too-high timestamp and we must forward the batch txn or
 				// timestamp as appropriate so that it's returned.
-				pErr = nil
 				if ba.Txn != nil {
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
 					ba.Txn.WriteTooOld = true
 				} else {
+					// WriteTooOldErrors may be the product of raft replays. We
+					// offer no certain protection from then on non-transactional
+					// writes. However, if the timestamps match exactly and no
+					// earlier write in this batch overlapped this write, we propagate
+					// a WriteTooOldError to mitigate replay issues, which are limited
+					// in relevance to increments.
+					if ba.Timestamp.Next().Equal(tErr.ActualTimestamp) {
+						overlap := false
+						for i := 0; i < index; i++ {
+							if args.Header().ContainsKey(args.Header().Key) {
+								overlap = true
+								break
+							}
+						}
+						// No overlap, but existing version with exact timestamp,
+						// return WriteTooOldError for retry as a likely replay.
+						if !overlap {
+							return nil, intents, pErr
+						}
+					}
 					ba.Timestamp.Forward(tErr.ActualTimestamp)
 				}
+				// Clear the WriteTooOldError; we're done processing it by having
+				// moved the batch or txn timestamps forward and set WriteTooOld
+				// if this is a transactional write.
+				pErr = nil
 			default:
 				// Initialize the error index.
 				pErr.SetErrorIndex(int32(index))

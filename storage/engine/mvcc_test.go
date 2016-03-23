@@ -450,7 +450,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	// with WriteTooOldError).
 	incVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(2, 0), nil, 1)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
-		t.Fatal("unexpected success")
+		t.Fatal("unexpectedly not WriteTooOld: %s", err)
 	} else if !wtoErr.ActualTimestamp.Equal(makeTS(3, 1)) {
 		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 1), wtoErr.ActualTimestamp)
 	}
@@ -1484,8 +1484,8 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	}
 	// Write value4 with an old timestamp without txn...should get a write too old error.
 	err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value4, &value3, nil)
-	if err == nil {
-		t.Fatal("expected write too old error")
+	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+		t.Fatal("expected write too old error; got %s", err)
 	}
 	expTS := txn.Timestamp.Next()
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(expTS) {
@@ -1515,7 +1515,7 @@ func TestMVCCConditionalPutWriteTooOld(t *testing.T) {
 	// Now do a non-transactional put @t=1ns with expectation of value1; will succeed @t=10,1.
 	err := MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value2, &value1, nil)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 1)) {
-		t.Fatalf("expected WriteTooOldError with actual time = 10,1; got %s", wtoErr)
+		t.Fatalf("expected WriteTooOldError with actual time = 10,1; got %s", err)
 	}
 	// Try a transactional put @t=1ns with expectation of value2; should fail.
 	if err := MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value2, &value1, txn1); err == nil {
@@ -1524,7 +1524,7 @@ func TestMVCCConditionalPutWriteTooOld(t *testing.T) {
 	// Now do a transactional put @t=1ns with expectation of nil; will succeed @t=10,2.
 	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(1, 0), value3, nil, txn1)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(makeTS(10, 2)) {
-		t.Fatalf("expected WriteTooOldError with actual time = 10,2; got %s", wtoErr)
+		t.Fatalf("expected WriteTooOldError with actual time = 10,2; got %s", err)
 	}
 }
 
