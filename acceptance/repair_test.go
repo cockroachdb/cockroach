@@ -17,9 +17,9 @@ package acceptance
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // RepairTest kills and starts new nodes systematically to ensure we do
@@ -29,27 +29,20 @@ func TestRepair(t *testing.T) {
 }
 
 func testRepairInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-	start := timeutil.Now()
-	deadline := start.Add(cfg.Duration)
+	finished := make(chan struct{})
+	defer close(finished)
 
-	running := func() bool {
-		select {
-		case <-stopper:
-			return false
-		default:
-		}
-		return timeutil.Now().Before(deadline)
-	}
-
-	dc := newDynamicClient(t, c, running)
+	dc := newDynamicClient(t, c)
 
 	// Add some loads.
 	for i := 0; i < c.NumNodes()*2; i++ {
-		go insertLoad(dc)
+		go insertLoad(t, dc, finished)
 	}
 
 	// TODO(bram): #5345 add repair mechanism.
 
-	for running() {
+	select {
+	case <-stopper:
+	case <-time.After(cfg.Duration):
 	}
 }

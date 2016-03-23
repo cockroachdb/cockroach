@@ -29,47 +29,51 @@ import (
 // dynamicClient should be used in acceptance tests when connecting to a
 // cluster that may lose and gain nodes as the test proceeds.
 type dynamicClient struct {
-	t       *testing.T
-	running func() bool
+	t *testing.T
 
-	sync.Mutex    // This mutex protects all fields below.
-	clientNumbers int
-	urls          map[string]struct{}
-	clients       map[int]*sql.DB
+	sync.Mutex // This mutex protects all fields below.
+	// lastConsumerId keeps track of the last consumer to have initialized
+	// against the dynamic client in order to provide a new unique id.
+	lastConsumerID int
+	// urls is an internal list of currently available URLs. When a new
+	// connection cannot be established to a url, it is expunged from this
+	// list.
+	urls map[string]struct{}
+	// clients is a map from consumerIDs to db clients.
+	clients map[int]*sql.DB
 }
 
-// newDyanmicClient creates a dynamic client. Running should be a threadsafe
-// function that returns true if the test is still running.
-func newDynamicClient(t *testing.T, c cluster.Cluster, running func() bool) *dynamicClient {
+// newDyanmicClient creates a dynamic client.
+func newDynamicClient(t *testing.T, c cluster.Cluster) *dynamicClient {
 	dc := &dynamicClient{
 		t:       t,
 		clients: make(map[int]*sql.DB),
-		running: running,
 	}
 
 	dc.updateURLs(c)
 	return dc
 }
 
-// initClient initializes a new dynamic client and returns a unique client
-// number that should be passed to the dc for all subsequent calls. All dc
-// clients should call close when finished with them.
-func (dc *dynamicClient) initClient() int {
+// init initializes returns a unique consumer ID that should be passed  to the
+// dynamic client for all subsequent calls. All dc consumers should call close
+// when finished.
+func (dc *dynamicClient) init() int {
 	dc.Lock()
 	defer dc.Unlock()
-	dc.clientNumbers++
-	return dc.clientNumbers
+	dc.lastConsumerID++
+	return dc.lastConsumerID
 }
 
-// close closes the client attached to the current clientNumber. This should be
-// a deferred call following each call to initClient.
-func (dc *dynamicClient) closeClient(clientNumber int) {
+// close closes any clients attached to the current consumerID. This should be
+// a deferred call following each call to init to ensure that any outstanding
+// open clients are closed.
+func (dc *dynamicClient) close(consumerID int) {
 	dc.Lock()
 	defer dc.Unlock()
-	client, ok := dc.clients[clientNumber]
+	client, ok := dc.clients[consumerID]
 	if ok {
 		client.Close()
-		delete(dc.clients, clientNumber)
+		delete(dc.clients, consumerID)
 	}
 }
 
@@ -108,9 +112,9 @@ func isReconnectableError(err error) bool {
 
 // exec calls exec on a client using a preexisting or creates a new connection
 // if that one fails.
-func (dc *dynamicClient) exec(clientNumber int, query string, args ...interface{}) (sql.Result, error) {
+func (dc *dynamicClient) exec(consumerID int, query string, args ...interface{}) (sql.Result, error) {
 	for {
-		client := dc.getClient(clientNumber)
+		client := dc.getClient(consumerID)
 		if client == nil {
 			return nil, fmt.Errorf("there are no available connections to the cluster")
 		}
@@ -121,14 +125,14 @@ func (dc *dynamicClient) exec(clientNumber int, query string, args ...interface{
 		if !isReconnectableError(err) {
 			return result, err
 		}
-		dc.closeClient(clientNumber)
+		dc.close(consumerID)
 	}
 }
 
 // queryRowScan performs first a QueryRow and follows that up with a Scan.
-func (dc *dynamicClient) queryRowScan(clientNumber int, query string, queryArgs, destArgs []interface{}) error {
+func (dc *dynamicClient) queryRowScan(consumerID int, query string, queryArgs, destArgs []interface{}) error {
 	for {
-		client := dc.getClient(clientNumber)
+		client := dc.getClient(consumerID)
 		if client == nil {
 			return fmt.Errorf("there are no available connections to the cluster")
 		}
@@ -139,17 +143,19 @@ func (dc *dynamicClient) queryRowScan(clientNumber int, query string, queryArgs,
 		if !isReconnectableError(err) {
 			return err
 		}
-		dc.closeClient(clientNumber)
+		dc.close(consumerID)
 	}
 }
 
 // getClient first checks for an existing client and returns that if one
 // already exists. If it doesn't exist, it tries to create a new one. Returns
-// nil if unable to connect to any node.
-func (dc *dynamicClient) getClient(clientNumber int) *sql.DB {
+// nil if unable to connect to any node. Note that this should not typically
+// be called directly from a consumer, they should call the DB methods
+// directly (i.e. exec() or queryRowScan()).
+func (dc *dynamicClient) getClient(consumerID int) *sql.DB {
 	dc.Lock()
 	defer dc.Unlock()
-	if client, ok := dc.clients[clientNumber]; ok {
+	if client, ok := dc.clients[consumerID]; ok {
 		return client
 	}
 
@@ -159,8 +165,8 @@ func (dc *dynamicClient) getClient(clientNumber int) *sql.DB {
 		for rawURL := range dc.urls {
 			client, err := sql.Open("postgres", rawURL)
 			if err == nil {
-				dc.clients[clientNumber] = client
-				log.Infof("%d: now connected to %s", clientNumber, dc.getHost(rawURL))
+				dc.clients[consumerID] = client
+				log.Infof("%d: now connected to %s", consumerID, dc.getHost(rawURL))
 				return client
 			}
 			if !isReconnectableError(err) {
