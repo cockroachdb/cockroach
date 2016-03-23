@@ -412,7 +412,7 @@ func (txn *Txn) Rollback() *roachpb.Error {
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) *roachpb.Error {
-	_, pErr := txn.send(0, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
+	_, pErr := txn.send(0, roachpb.CONSISTENT, endTxnReq(commit, deadline, txn.SystemConfigTrigger()))
 	return pErr
 }
 
@@ -545,11 +545,17 @@ RetryLoop:
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous).
-func (txn *Txn) send(maxScanResults int64, reqs ...roachpb.Request) (
+func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType, reqs ...roachpb.Request) (
 	*roachpb.BatchResponse, *roachpb.Error) {
 
 	if txn.Proto.Status != roachpb.PENDING {
 		return nil, roachpb.NewErrorf("attempting to use %s transaction", txn.Proto.Status)
+	}
+
+	// It doesn't make sense to use inconsistent reads in a transaction. However,
+	// we still need to accept it as a parameter for this to compile.
+	if readConsistency != roachpb.CONSISTENT {
+		return nil, roachpb.NewErrorf("attempting to use %d readConsistency in a txn", readConsistency)
 	}
 
 	lastIndex := len(reqs) - 1
@@ -598,7 +604,7 @@ func (txn *Txn) send(maxScanResults int64, reqs ...roachpb.Request) (
 		reqs = reqs[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(maxScanResults, reqs...)
+	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)
 	if elideEndTxn && pErr == nil {
 		// This normally happens on the server and sent back in response
 		// headers, but this transaction was optimized away. The caller may

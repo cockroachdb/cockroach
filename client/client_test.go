@@ -691,3 +691,56 @@ func TestClientPermissions(t *testing.T) {
 		}
 	}
 }
+
+// TestInconsistentReads tests that the methods that generate inconsistent reads
+// generate outgoing requests with an INCONSISTENT read consistency.
+func TestInconsistentReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Mock out DistSender's sender function to check the read consistency for
+	// outgoing BatchRequests and return an empty reply.
+	var senderFn client.SenderFunc
+	senderFn = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if ba.ReadConsistency != roachpb.INCONSISTENT {
+			return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s",
+				ba.ReadConsistency)
+		}
+		return ba.CreateReply(), nil
+	}
+	db := client.NewDB(senderFn)
+
+	// Perform inconsistent reads through the mocked sender function.
+	{
+		key := roachpb.Key([]byte("key"))
+		if _, pErr := db.GetInconsistent(key); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	{
+		key := roachpb.Key([]byte("key"))
+		var p roachpb.BatchRequest
+		if pErr := db.GetProtoInconsistent(key, &p); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	{
+		key1 := roachpb.Key([]byte("key1"))
+		key2 := roachpb.Key([]byte("key2"))
+		const dontCareMaxRows = 1000
+		if _, pErr := db.ScanInconsistent(key1, key2, dontCareMaxRows); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	{
+		key := roachpb.Key([]byte("key"))
+		ba := db.NewBatch()
+		ba.ReadConsistency = roachpb.INCONSISTENT
+		ba.Get(key)
+		if pErr := db.Run(ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+}
