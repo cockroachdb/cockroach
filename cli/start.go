@@ -163,6 +163,9 @@ func runStart(_ *cobra.Command, _ []string) error {
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.Vers)
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
 	fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+	if len(cliContext.SocketFile) != 0 {
+		fmt.Fprintf(tw, "socket:\t%s\n", cliContext.SocketFile)
+	}
 	fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
 	for i, spec := range cliContext.Stores.Specs {
 		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
