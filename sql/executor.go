@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -246,7 +248,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // Prepare returns the result types of the given statement. Args may be a
 // partially populated val args map. Prepare will populate the missing val
 // args. The column result types are returned (or nil if there are no results).
-func (e *Executor) Prepare(query string, session *Session, args parser.MapArgs) (
+func (e *Executor) Prepare(ctx context.Context, query string, session *Session, args parser.MapArgs) (
 	[]ResultColumn, *roachpb.Error) {
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -258,7 +260,7 @@ func (e *Executor) Prepare(query string, session *Session, args parser.MapArgs) 
 	session.planner.evalCtx.PrepareOnly = true
 
 	// TODO(andrei): does the prepare phase really need a Txn?
-	txn := client.NewTxn(*e.ctx.DB)
+	txn := client.NewTxn(ctx, *e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -282,7 +284,7 @@ func (e *Executor) Prepare(query string, session *Session, args parser.MapArgs) 
 // ExecuteStatements executes the given statement(s) and returns a response.
 // On error, the returned integer is an HTTP error code.
 func (e *Executor) ExecuteStatements(
-	session *Session, stmts string,
+	ctx context.Context, session *Session, stmts string,
 	params []parser.Datum) StatementResults {
 
 	session.planner.resetForBatch(e)
@@ -290,7 +292,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	res := e.execRequest(session, stmts)
+	res := e.execRequest(ctx, session, stmts)
 	return res
 }
 
@@ -326,7 +328,7 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(ctx context.Context, session *Session, sql string) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
@@ -369,7 +371,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[0:1]
 			}
-			txnState.reset(e, session)
+			txnState.reset(ctx, e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
 			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
