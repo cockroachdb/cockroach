@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/cockroachdb/cockroach/util/duration"
 )
 
 var (
@@ -181,19 +182,19 @@ var binOps = map[binArgs]binOp{
 	binArgs{Plus, timestampType, intervalType}: {
 		returnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DTimestamp{Time: left.(DTimestamp).Add(right.(DInterval).Duration)}, nil
+			return DTimestamp{Time: duration.Add(left.(DTimestamp).Time, right.(DInterval).Duration)}, nil
 		},
 	},
 	binArgs{Plus, intervalType, timestampType}: {
 		returnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DTimestamp{Time: right.(DTimestamp).Add(left.(DInterval).Duration)}, nil
+			return DTimestamp{Time: duration.Add(right.(DTimestamp).Time, left.(DInterval).Duration)}, nil
 		},
 	},
 	binArgs{Plus, intervalType, intervalType}: {
 		returnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DInterval).Duration + right.(DInterval).Duration}, nil
+			return DInterval{Duration: left.(DInterval).Duration.Add(right.(DInterval).Duration)}, nil
 		},
 	},
 	binArgs{Minus, intType, intType}: {
@@ -233,19 +234,20 @@ var binOps = map[binArgs]binOp{
 	binArgs{Minus, timestampType, timestampType}: {
 		returnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DTimestamp).Sub(right.(DTimestamp).Time)}, nil
+			nanos := left.(DTimestamp).Sub(right.(DTimestamp).Time).Nanoseconds()
+			return DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 		},
 	},
 	binArgs{Minus, timestampType, intervalType}: {
 		returnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DTimestamp{Time: left.(DTimestamp).Add(-right.(DInterval).Duration)}, nil
+			return DTimestamp{Time: duration.Add(left.(DTimestamp).Time, right.(DInterval).Duration.Mul(-1))}, nil
 		},
 	},
 	binArgs{Minus, intervalType, intervalType}: {
 		returnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DInterval).Duration - right.(DInterval).Duration}, nil
+			return DInterval{Duration: left.(DInterval).Duration.Sub(right.(DInterval).Duration)}, nil
 		},
 	},
 
@@ -274,13 +276,13 @@ var binOps = map[binArgs]binOp{
 	binArgs{Mult, intType, intervalType}: {
 		returnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: time.Duration(left.(DInt)) * right.(DInterval).Duration}, nil
+			return DInterval{Duration: right.(DInterval).Duration.Mul(int64(left.(DInt)))}, nil
 		},
 	},
 	binArgs{Mult, intervalType, intType}: {
 		returnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
-			return DInterval{Duration: left.(DInterval).Duration * time.Duration(right.(DInt))}, nil
+			return DInterval{Duration: left.(DInterval).Duration.Mul(int64(right.(DInt)))}, nil
 		},
 	},
 
@@ -320,7 +322,7 @@ var binOps = map[binArgs]binOp{
 			if rInt == 0 {
 				return nil, errDivByZero
 			}
-			return DInterval{Duration: left.(DInterval).Duration / time.Duration(rInt)}, nil
+			return DInterval{Duration: left.(DInterval).Duration.Div(int64(rInt))}, nil
 		},
 	},
 
@@ -565,7 +567,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LT, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			return DBool(left.(DInterval).Duration < right.(DInterval).Duration), nil
+			return DBool(left.(DInterval).Duration.Compare(right.(DInterval).Duration) < 0), nil
 		},
 	},
 
@@ -651,7 +653,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 	cmpArgs{LE, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
-			return DBool(left.(DInterval).Duration <= right.(DInterval).Duration), nil
+			return DBool(left.(DInterval).Duration.Compare(right.(DInterval).Duration) <= 0), nil
 		},
 	},
 
@@ -1073,11 +1075,11 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			// We use the Golang format for specifying duration.
 			// TODO(vivek): we might consider using the postgres format as well.
 			d, err := time.ParseDuration(string(d.(DString)))
-			return DInterval{Duration: d}, err
+			return DInterval{Duration: duration.Duration{Nanos: d.Nanoseconds()}}, err
 
 		case DInt:
 			// An integer duration represents a duration in nanoseconds.
-			return DInterval{Duration: time.Duration(d.(DInt))}, nil
+			return DInterval{Duration: duration.Duration{Nanos: int64(d.(DInt))}}, nil
 		}
 	}
 

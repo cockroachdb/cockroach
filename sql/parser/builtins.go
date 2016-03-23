@@ -105,6 +105,8 @@ type builtin struct {
 	fn     func(EvalContext, DTuple) (Datum, error)
 }
 
+var timestampMinusBinOp = binOps[binArgs{Minus, timestampType, timestampType}]
+
 // The map from function name to function data. Keep the list of functions
 // sorted please.
 var builtins = map[string][]builtin{
@@ -535,14 +537,14 @@ var builtins = map[string][]builtin{
 			types:      argTypes{timestampType},
 			returnType: typeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: e.GetTxnTimestamp().GoTime().Sub(args[0].(DTimestamp).Time)}, nil
+				return timestampMinusBinOp.fn(e, DTimestamp{e.GetTxnTimestamp().GoTime()}, args[0])
 			},
 		},
 		builtin{
 			types:      argTypes{timestampType, timestampType},
 			returnType: typeInterval,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DInterval{Duration: args[0].(DTimestamp).Sub(args[1].(DTimestamp).Time)}, nil
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return timestampMinusBinOp.fn(e, args[0], args[1])
 			},
 		},
 	},

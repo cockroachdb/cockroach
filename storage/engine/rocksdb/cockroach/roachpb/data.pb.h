@@ -65,6 +65,7 @@ enum ValueType {
   BYTES = 3,
   TIME = 4,
   DECIMAL = 5,
+  DURATION = 6,
   TIMESERIES = 100
 };
 bool ValueType_IsValid(int value);

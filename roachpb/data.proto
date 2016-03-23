@@ -61,6 +61,7 @@ enum ValueType {
   BYTES = 3;
   TIME = 4;
   DECIMAL = 5;
+  DURATION = 6;
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
