@@ -1666,13 +1666,36 @@ func (r *Replica) executeBatch(
 				// On WriteTooOldError, we've written a new value or an intent
 				// at a too-high timestamp and we must forward the batch txn or
 				// timestamp as appropriate so that it's returned.
-				pErr = nil
 				if ba.Txn != nil {
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
 					ba.Txn.WriteTooOld = true
 				} else {
+					// WriteTooOldErrors may be the product of raft replays. We
+					// offer no certain protection from then on non-transactional
+					// writes. However, if the timestamps match exactly and no
+					// earlier write in this batch overlapped this write, we propagate
+					// a WriteTooOldError to mitigate replay issues, which are limited
+					// in relevance to increments.
+					if ba.Timestamp.Next().Equal(tErr.ActualTimestamp) {
+						overlap := false
+						for i := 0; i < index; i++ {
+							if args.Header().ContainsKey(args.Header().Key) {
+								overlap = true
+								break
+							}
+						}
+						// No overlap, but existing version with exact timestamp,
+						// return WriteTooOldError for retry as a likely replay.
+						if !overlap {
+							return nil, intents, pErr
+						}
+					}
 					ba.Timestamp.Forward(tErr.ActualTimestamp)
 				}
+				// Clear the WriteTooOldError; we're done processing it by having
+				// moved the batch or txn timestamps forward and set WriteTooOld
+				// if this is a transactional write.
+				pErr = nil
 			default:
 				// Initialize the error index.
 				pErr.SetErrorIndex(int32(index))

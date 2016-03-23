@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -600,7 +601,7 @@ func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
 			Key: txn.Key,
 		},
 		Now:       now,
-		PusherTxn: roachpb.Transaction{Priority: roachpb.MaxUserPriority},
+		PusherTxn: roachpb.Transaction{Priority: math.MaxInt32},
 		PusheeTxn: txn.TxnMeta,
 		PushType:  typ,
 	}

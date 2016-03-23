@@ -2713,19 +2713,19 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	}{
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, true},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, true},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, true},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, true},
 		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
 		{ts, ns*2 + 1, roachpb.PUSH_ABORT, false},
-		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, false},
+		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, true},
 		{ts, ns*2 + 2, roachpb.PUSH_TIMESTAMP, true},
 		{ts, ns*2 + 2, roachpb.PUSH_ABORT, true},
 		{ts, ns*2 + 2, roachpb.PUSH_TOUCH, true},
@@ -2765,8 +2765,10 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("%d: expected txn push error: %s", i, pErr)
 			}
-		} else if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
-			t.Errorf("%d: expected aborted transaction, got %s", i, txn)
+		} else if test.pushType != roachpb.PUSH_TOUCH {
+			if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
+				t.Errorf("%d: expected aborted transaction, got %s", i, txn)
+			}
 		}
 	}
 }
@@ -2800,15 +2802,15 @@ func TestPushTxnPriorities(t *testing.T) {
 		{1, 2, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
 		// With same priorities, older txn timestamp succeeds.
 		{1, 1, ts1, ts2, roachpb.PUSH_ABORT, true},
-		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, roachpb.PUSH_ABORT, false},
-		{1, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
+		// With same priorities, same txn timestamp fails (orders by txn ID).
+		{1, 1, ts1, ts1, roachpb.PUSH_ABORT, true},
+		{1, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
 		// With same priorities, newer txn timestamp fails.
 		{1, 1, ts2, ts1, roachpb.PUSH_ABORT, false},
 		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, false},
-		// When confirming, priority never wins.
-		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, false},
-		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		// When confirming, priority alwasy succeeds.
+		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, true},
+		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, true},
 	}
 
 	for i, test := range testCases {
@@ -2819,6 +2821,11 @@ func TestPushTxnPriorities(t *testing.T) {
 		pushee.Priority = test.pusheePriority
 		pusher.Timestamp = test.pusherTS
 		pushee.Timestamp = test.pusheeTS
+		// Make sure pusher ID is greater; if priorities and timestamps are the same,
+		// the greater ID succeeds with push.
+		if bytes.Compare(pusher.ID.Bytes(), pushee.ID.Bytes()) < 0 {
+			pusher.ID, pushee.ID = pushee.ID, pusher.ID
+		}
 
 		_, btH := beginTxnArgs(key, pushee)
 		put := putArgs(key, key)
@@ -3848,14 +3855,27 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	if rng == nil {
 		t.Fatalf("no replica contains the SystemConfig span")
 	}
-	v := roachpb.MakeValueFromString("foo")
-	// Create a transaction. We don't write a txn record, so pushing this will
-	// succeed and abort the intent we write here.
-	txn := newTransaction("test", []byte("a"), 1, roachpb.SERIALIZABLE, rng.store.Clock())
-	if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
-		keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, txn); err != nil {
-		t.Fatal(err)
+
+	// Create a transaction and write an intent to the system
+	// config span.
+	key := keys.SystemConfigSpan.Key
+	_, btH := beginTxnArgs(key, newTransaction("test", key, 1, roachpb.SERIALIZABLE, rng.store.Clock()))
+	btH.Txn.Priority = 1 // low so it can be pushed
+	put := putArgs(key, []byte("foo"))
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(), btH, &put); pErr != nil {
+		t.Fatal(pErr)
 	}
+
+	// Abort the transaction so that the async intent resolution caused
+	// by loading the system config span doesn't waste any time in
+	// clearing the intent.
+	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, rng.store.Clock())
+	pusher.Priority = 2 // will push successfully
+	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
+	if _, pErr := client.SendWrapped(tc.Sender(), tc.rng.context(), &pushArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
 	// Verify that this trips up loading the SystemConfig data.
 	if _, _, err := rng.loadSystemConfigSpan(); err != errSystemConfigIntent {
 		t.Fatal(err)
@@ -3863,6 +3883,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 
 	// In the loop, wait until the intent is aborted. Then write a "real" value
 	// there and verify that we can now load the data as expected.
+	v := roachpb.MakeValueFromString("foo")
 	util.SucceedsSoon(t, func() error {
 		if err := engine.MVCCPut(rng.store.Engine(), &engine.MVCCStats{},
 			keys.SystemConfigSpan.Key, rng.store.Clock().Now(), v, nil); err != nil {

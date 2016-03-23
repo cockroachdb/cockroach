@@ -589,8 +589,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					TxnMeta: roachpb.TxnMeta{Timestamp: plus10}, Priority: int32(10)}),
 			expEpoch:  1,
 			expPri:    10,
-			expTS:     plus10.Next(), // Restart will add 1 logical tick
-			expOrigTS: plus10.Next(),
+			expTS:     plus10,
+			expOrigTS: plus10,
 		},
 	}
 

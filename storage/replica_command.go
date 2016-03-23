@@ -997,6 +997,9 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		// using a trivial Transaction proto here. Maybe some fields ought
 		// to receive dummy values.
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
+		if args.PushType == roachpb.PUSH_TOUCH {
+			return reply, nil
+		}
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
@@ -1051,13 +1054,17 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 		}
 		pusherWins = true
 	} else if args.PushType == roachpb.PUSH_TOUCH {
-		// If just attempting to cleanup old or already-committed txns, don't push.
-		pusherWins = false
+		// If just attempting to cleanup old or already-committed txns,
+		// don't push, just return updated PusheeTxn with response.
+		return reply, nil
 	} else if reply.PusheeTxn.Priority < priority ||
 		(reply.PusheeTxn.Priority == priority && args.PusherTxn.ID != nil &&
-			args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
+			(args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp) ||
+				(args.PusherTxn.Timestamp.Equal(reply.PusheeTxn.Timestamp) &&
+					bytes.Compare(reply.PusheeTxn.ID.Bytes(), args.PusherTxn.ID.Bytes()) == -1))) {
 		// Pusher wins based on priority; if priorities are equal, order
-		// by lower txn timestamp.
+		// by lower txn timestamp; if priorities & timestamps are equal,
+		// great transaction ID wins.
 		if log.V(1) {
 			log.Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
 		}

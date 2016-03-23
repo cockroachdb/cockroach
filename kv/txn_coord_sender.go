@@ -721,10 +721,9 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		newTxn.Timestamp.Forward(t.PusheeTxn.Timestamp)
 		newTxn.Restart(ba.UserPriority, t.PusheeTxn.Priority-1, newTxn.Timestamp)
 	case *roachpb.TransactionRetryError:
-		// Increase timestamp so on restart, we're guaranteed to be ahead
-		// of timestamp cache entries related to our intents having been
-		// pushed (one cause of a serializable restart).
-		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp.Next())
+		// Increase timestamp so on restart, we're ahead of any timestamp
+		// cache entries or newer versions which caused the restart.
+		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
 	case nil:
 		// Nothing to do here, avoid the default case.
 	default:

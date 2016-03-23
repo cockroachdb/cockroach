@@ -1213,9 +1213,9 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		h := roachpb.Header{Txn: pushee}
+		_, btH := beginTxnArgs(key, pushee)
 		args.Value.SetBytes([]byte("value2"))
-		if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, h, &args); pErr != nil {
+		if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, btH, &args); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1224,8 +1224,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		pusher.OrigTimestamp.Forward(now)
 		pusher.Timestamp.Forward(now)
 		gArgs := getArgs(key)
-		h.Txn = pusher
-		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &gArgs)
+		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: pusher}, &gArgs)
 		if test.resolvable {
 			if pErr != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, pErr)
@@ -1276,7 +1275,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 					t.Errorf("expected read to fail")
 				}
 				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-					t.Errorf("expected transaction retry error; got %T", pErr)
+					t.Errorf("iso=%s; expected transaction retry error; got %T", test.pusheeIso, pErr.GetDetail())
 				}
 			}
 		}
