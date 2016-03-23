@@ -2062,6 +2062,100 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 }
 
+// TestRaftReplayProtection verifies that non-transactional batches
+// enjoy some protection from raft replays, but highlights an example
+// where they won't.
+func TestRaftReplayProtection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTxnAutoGC(true)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := roachpb.Key("a")
+
+	// Start with an increment for key.
+	inc := incrementArgs(key, 1)
+	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{}, &inc)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Do an increment with timestamp to an earlier timestamp, but same key.
+	// This will bump up to a higher timestamp than the original increment
+	// and not surface a WriteTooOldError.
+	h := roachpb.Header{Timestamp: respH.Timestamp.Prev()}
+	_, respH, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &inc)
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", respH)
+	}
+	if expTS := h.Timestamp.Next().Next(); !respH.Timestamp.Equal(expTS) {
+		t.Fatalf("expected too-old increment to advance two logical ticks to %s; got %s", expTS, respH.Timestamp)
+	}
+
+	// Do an increment with exact timestamp; should propagate write too
+	// old error. This is assumed to be a replay because the timestamp
+	// encountered is an exact duplicate and nothing came before the
+	// increment in the batch.
+	h.Timestamp = respH.Timestamp
+	_, _, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &inc)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Fatalf("expected WriteTooOldError; got %s", pErr)
+	}
+
+	// Send a double increment in a batch. This should increment twice,
+	// as the same key is being incremented in the same batch.
+	// Send a delete range
+	var ba roachpb.BatchRequest
+	ba.Add(&inc)
+	ba.Add(&inc)
+	br, pErr := tc.Sender().Send(tc.rng.context(), ba)
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Now resend the batch with the same timestamp; this should look
+	// like the replay it is and surface a WriteTooOldError.
+	ba.Timestamp = br.Timestamp
+	_, pErr = tc.Sender().Send(tc.rng.context(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Fatalf("expected WriteTooOldError; got %s", pErr)
+	}
+
+	// Send a DeleteRange & increment.
+	ba = roachpb.BatchRequest{}
+	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
+	ba.Add(&inc)
+	br, pErr = tc.Sender().Send(tc.rng.context(), ba)
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Send exact same batch; the DeleteRange should trip up and
+	// we'll get a replay error.
+	ba.Timestamp = br.Timestamp
+	_, pErr = tc.Sender().Send(tc.rng.context(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Fatalf("expected WriteTooOldError; got %s", pErr)
+	}
+
+	// Send just a DeleteRange batch.
+	ba = roachpb.BatchRequest{}
+	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
+	br, pErr = tc.Sender().Send(tc.rng.context(), ba)
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Now send it again; will not look like a replay because of
+	// deletion tombstone.
+	ba.Timestamp = br.Timestamp
+	_, pErr = tc.Sender().Send(tc.rng.context(), ba)
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+}
+
 // TestReplayProtection verifies that transactional replays cannot
 // commit intents. The replay consists of an initial BeginTxn/Write
 // batch and ends with an EndTxn batch.
@@ -2069,14 +2163,15 @@ func TestReplayProtection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
-	tsc := TestStoreContext()
-	tc.StartWithStoreContext(t, tsc)
+	tc.Start(t)
 	defer tc.Stop()
 
 	for i, iso := range []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT} {
 		key := roachpb.Key(fmt.Sprintf("a-%d", i))
+		keyB := roachpb.Key(fmt.Sprintf("b-%d", i))
 		txn := newTransaction("test", key, 1, iso, tc.clock)
 
+		// Send a batch with put to key.
 		var ba roachpb.BatchRequest
 		bt, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, []byte("value"))
@@ -2087,10 +2182,22 @@ func TestReplayProtection(t *testing.T) {
 		if pErr != nil {
 			t.Fatalf("%d: unexpected error: %s", i, pErr)
 		}
-		args, h := endTxnArgs(br.Txn, true)
-		args.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}}
-		txn.Sequence++
-		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args); pErr != nil {
+
+		// Send a put for keyB.
+		putB := putArgs(keyB, []byte("value"))
+		putTxn := br.Txn.Clone()
+		putTxn.Sequence++
+		_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: &putTxn}, &putB)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		// EndTransaction.
+		etTxn := respH.Txn.Clone()
+		etTxn.Sequence++
+		et, etH := endTxnArgs(&etTxn, true)
+		et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
+		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), etH, &et); pErr != nil {
 			t.Fatalf("%d: unexpected error: %s", i, pErr)
 		}
 
@@ -2102,19 +2209,31 @@ func TestReplayProtection(t *testing.T) {
 			t.Errorf("%d: expected transaction record to be cleared (%t): %s", i, ok, err)
 		}
 
-		// Now replay begin & put (should work fine).
-		if _, pErr = tc.Sender().Send(tc.rng.context(), ba); pErr != nil {
-			t.Fatalf("%d: unexpected error: %s", i, pErr)
-		}
-
-		// EndTransaction will fail with retry.
-		_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), h, &args)
+		// Now replay begin & put BeginTransaction should fail with a retry.
+		_, pErr = tc.Sender().Send(tc.rng.context(), ba)
 		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 			t.Errorf("%d: expected transaction retry for iso=%s", i, iso)
 		}
 
-		// Intent should still be there unresolved.
+		// Intent should not have been created.
 		gArgs := getArgs(key)
+		if _, pErr = client.SendWrapped(tc.rng, tc.rng.context(), &gArgs); pErr != nil {
+			t.Errorf("%d: unexpected error reading key: %s", i, pErr)
+		}
+
+		// Send a put for keyB.
+		if _, _, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		// EndTransaction should also fail, but with a status error (does not exist).
+		_, pErr = client.SendWrappedWith(tc.Sender(), tc.rng.context(), etH, &et)
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
+			t.Errorf("%d: expected transaction aborted for iso=%s; got %s", i, iso, pErr)
+		}
+
+		// Expect that keyB intent did not get resolved.
+		gArgs = getArgs(keyB)
 		_, pErr = client.SendWrapped(tc.rng, tc.rng.context(), &gArgs)
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 			t.Errorf("%d: expected write intent error, but got %s", i, pErr)
@@ -2713,22 +2832,28 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	}{
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, true},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_UPDATE, true},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, true},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_UPDATE, true},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, true},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_UPDATE, true},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_ABORT, false},
-		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, true},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, false},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_UPDATE, true},
 		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
 		{ts, ns*2 + 1, roachpb.PUSH_ABORT, false},
-		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, true},
+		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, false},
+		{ts, ns*2 + 1, roachpb.PUSH_UPDATE, true},
 		{ts, ns*2 + 2, roachpb.PUSH_TIMESTAMP, true},
 		{ts, ns*2 + 2, roachpb.PUSH_ABORT, true},
 		{ts, ns*2 + 2, roachpb.PUSH_TOUCH, true},
+		{ts, ns*2 + 2, roachpb.PUSH_UPDATE, true},
 	}
 
 	for i, test := range testCases {
@@ -2765,7 +2890,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("%d: expected txn push error: %s", i, pErr)
 			}
-		} else if test.pushType != roachpb.PUSH_TOUCH {
+		} else if test.pushType != roachpb.PUSH_UPDATE {
 			if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
 				t.Errorf("%d: expected aborted transaction, got %s", i, txn)
 			}
@@ -2808,9 +2933,12 @@ func TestPushTxnPriorities(t *testing.T) {
 		// With same priorities, newer txn timestamp fails.
 		{1, 1, ts2, ts1, roachpb.PUSH_ABORT, false},
 		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, false},
-		// When confirming, priority alwasy succeeds.
-		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, true},
-		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, true},
+		// When touching, priority never wins.
+		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		// When updating, priority always succeeds.
+		{2, 1, ts1, ts1, roachpb.PUSH_UPDATE, true},
+		{1, 2, ts1, ts1, roachpb.PUSH_UPDATE, true},
 	}
 
 	for i, test := range testCases {
@@ -3876,7 +4004,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Verify that this trips up loading the SystemConfig data.
+	// Verify that the intent trips up loading the SystemConfig data.
 	if _, _, err := rng.loadSystemConfigSpan(); err != errSystemConfigIntent {
 		t.Fatal(err)
 	}

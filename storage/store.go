@@ -1643,6 +1643,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
+			if ba.Txn != nil {
+				log.Infof("%s: write intent error (retry %d): %s", ba.Txn.Short(), r.CurrentAttempt(), t.Intents[0].Txn)
+			}
 			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
@@ -1659,12 +1662,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
 			if ba.Txn != nil {
-				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Header, now)
-				if pErr != nil {
+				if pErr := s.maybeUpdateTransaction(ba.Header.Txn, now); pErr != nil {
 					return nil, pErr
 				}
-				// TODO(spencer): stop updating the passed in batch.
-				ba.Header.Txn = updatedTxn
 			}
 			continue
 		}
@@ -1687,29 +1687,35 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 // is in a backoff/retry loop pushing write intents as two txns
 // can have circular dependencies where both are unable to push
 // because they have different information about their own txns.
-func (s *Store) maybeUpdateTransaction(h roachpb.Header, now roachpb.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
+//
+// The supplied transaction is updated with the results of the
+// "touch" push if possible.
+func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Timestamp) *roachpb.Error {
 	// Attempt to push the transaction which created the intent.
 	b := &client.Batch{}
 	b.InternalAddRequest(&roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: h.Txn.Key,
+			Key: txn.Key,
 		},
 		Now:       now,
-		PusheeTxn: h.Txn.TxnMeta,
-		PushType:  roachpb.PUSH_TOUCH,
+		PusheeTxn: txn.TxnMeta,
+		PushType:  roachpb.PUSH_UPDATE,
 	})
 	br, pErr := s.db.RunWithResponse(b)
 	if pErr != nil {
-		return nil, pErr
+		return pErr
 	}
-	updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-	switch updatedTxn.Status {
-	case roachpb.COMMITTED:
-		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
-	case roachpb.ABORTED:
-		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedTxn)
+	updatedTxn := br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+	if updatedTxn.ID != nil { // can be nil if no BeginTransaction has been sent
+		switch updatedTxn.Status {
+		case roachpb.COMMITTED:
+			return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), &updatedTxn)
+		case roachpb.ABORTED:
+			return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &updatedTxn)
+		}
+		*txn = updatedTxn
 	}
-	return updatedTxn, nil
+	return nil
 }
 
 // enqueueRaftMessage enqueues a request for eventual processing. It

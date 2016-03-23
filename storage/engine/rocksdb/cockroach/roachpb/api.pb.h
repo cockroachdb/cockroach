@@ -125,11 +125,12 @@ inline bool ReadConsistencyType_Parse(
 enum PushTxnType {
   PUSH_TIMESTAMP = 0,
   PUSH_ABORT = 1,
-  PUSH_TOUCH = 2
+  PUSH_TOUCH = 2,
+  PUSH_UPDATE = 3
 };
 bool PushTxnType_IsValid(int value);
 const PushTxnType PushTxnType_MIN = PUSH_TIMESTAMP;
-const PushTxnType PushTxnType_MAX = PUSH_TOUCH;
+const PushTxnType PushTxnType_MAX = PUSH_UPDATE;
 const int PushTxnType_ARRAYSIZE = PushTxnType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* PushTxnType_descriptor();
