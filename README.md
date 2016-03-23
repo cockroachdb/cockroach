@@ -3,18 +3,8 @@
 
 [![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-alpha-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-## A Scalable, Survivable, Strongly-Consistent SQL Database
-
-**Table of Contents**
-
-- [What is CockroachDB?](#what-is-cockroachdb)
-- [Quickstart](#quickstart)
-- [Manual Deployment](#manual-deployment)
-- [Cloud Deployment](#cloud-deployment)
-- [Getting in touch and contributing](#get-in-touch)
-- [Talks](#talks)
-- [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
-- [Architecture](#architecture) and [Client Architecture](#client-architecture)
+# CockroachDB
+**A Scalable, Survivable, Strongly-Consistent SQL Database**
 
 ## What is CockroachDB?
 
@@ -26,7 +16,7 @@ CockroachDB is currently in alpha. See our
 
 ## Quickstart 
 
-1.  [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html)
+1.  [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
 
 2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes running on different ports:
 
@@ -87,7 +77,7 @@ For development-related questions, there are two easy ways to get in touch:
 -   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach). This is the best, most immediate way to connect with CockroachDB engineers.
 -   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db). Please join first or you messages may be held back for moderation.
 
-### Contributing
+## Contributing
 
 We're an open source project and welcome contributions.
 
