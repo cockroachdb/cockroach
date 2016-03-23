@@ -401,10 +401,26 @@ func initFlags(ctx *Context) {
 	}
 }
 
+func visitCmds(cmd *cobra.Command, fn func(*cobra.Command)) {
+	fn(cmd)
+	for _, sub := range cmd.Commands() {
+		visitCmds(sub, fn)
+	}
+}
+
+func visitFlags(cmd *cobra.Command, fn func(*pflag.Flag)) {
+	cmd.PersistentFlags().VisitAll(fn)
+	cmd.Flags().VisitAll(fn)
+}
+
 func init() {
 	initFlags(cliContext)
 
 	cobra.OnInitialize(func() {
+		visitCmds(cockroachCmd, func(cmd *cobra.Command) {
+			visitFlags(cmd, base.AddToFlagMap)
+		})
+
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
 		cliContext.HTTPAddr = net.JoinHostPort(connHost, httpPort)
 	})
