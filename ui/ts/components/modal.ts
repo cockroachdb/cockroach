@@ -17,9 +17,9 @@ module Components {
       modalClass: string;
 
       // Modal title
-      title: (string|MithrilVirtualElement|MithrilVirtualElement[]);
+      title: (string|MithrilVirtualElement|MithrilVirtualElement[]|(MithrilVirtualElement|string)[]);
       // Modal content
-      content: (string|MithrilVirtualElement|MithrilVirtualElement[]);
+      content: (string|MithrilVirtualElement|MithrilVirtualElement[]|(MithrilVirtualElement|string)[]);
 
       // Close callback for clicking the X or the screen
       onclose: () => void;

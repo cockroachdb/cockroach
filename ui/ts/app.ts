@@ -6,9 +6,9 @@
 /// <reference path="pages/cluster.ts" />
 /// <reference path="pages/nodes.ts" />
 /// <reference path="pages/helpus.ts" />
-/// <reference path="pages/helpusprompt.ts" />
 /// <reference path="pages/events.ts" />
 /// <reference path="pages/databases.ts" />
+/// <reference path="pages/banner.ts" />
 
 m.mount(document.getElementById("header"), AdminViews.SubModules.TitleBar);
 
@@ -29,4 +29,4 @@ m.route(document.getElementById("root"), "/cluster", {
   "/cluster/:detail": AdminViews.Cluster.Page,
 });
 
-m.mount(document.getElementById("helpus"), AdminViews.SubModules.HelpUsPrompt);
+m.mount(document.getElementById("banner"), AdminViews.SubModules.Banner);
