@@ -75,6 +75,7 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 			loadedCount := atomic.LoadInt64(&count)
 			log.Infof("%d (%d/s)", loadedCount, loadedCount-baseCount)
 			c.Assert(t)
+			cluster.Consistent(t, c)
 		}
 	}
 

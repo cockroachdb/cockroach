@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -49,4 +50,18 @@ type Cluster interface {
 	Restart(int) error
 	// URL returns the HTTP(s) endpoint.
 	URL(int) string
+}
+
+// Consistent performs a replication consistency check on all the ranges
+// in the cluster. It depends on a majority of the nodes being up.
+func Consistent(t *testing.T, c Cluster) {
+	if c.NumNodes() <= 0 {
+		return
+	}
+	// Always connect to the first node in the cluster.
+	kvClient, kvStopper := c.NewClient(t, 0)
+	defer kvStopper.Stop()
+	if pErr := kvClient.CheckConsistency(keys.LocalMax, keys.MaxKey); pErr != nil {
+		t.Fatal(pErr)
+	}
 }

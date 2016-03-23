@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -234,7 +233,6 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		preCount := state.counts()
 
 		madeProgress := func() bool {
-			c.Assert(state.t)
 			newCounts := state.counts()
 			for i := range newCounts {
 				if newCounts[i] > preCount[i] {
@@ -249,6 +247,8 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 		for !state.done() && !madeProgress() {
 			time.Sleep(time.Second)
 		}
+		c.Assert(state.t)
+		cluster.Consistent(state.t, c)
 		log.Warningf("round %d: cluster recovered", curRound)
 	}
 }
@@ -416,10 +416,4 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	elapsed := time.Since(start)
 	count := atomic.LoadUint64(&client.count)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
-	kvClient, kvStopper := c.NewClient(t, num-1)
-	defer kvStopper.Stop()
-	if pErr := kvClient.CheckConsistency(keys.TableDataMin, keys.TableDataMax); pErr != nil {
-		// TODO(.*): change back to t.Fatal after #5051.
-		log.Error(pErr)
-	}
 }
