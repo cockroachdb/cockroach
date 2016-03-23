@@ -130,22 +130,31 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 // r.monitorInterval to be too large, else we might end up relying on old
 // information.
 func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
+	emptyOffset := offset == RemoteOffset{}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var emptyOffset RemoteOffset
-	if offset == emptyOffset {
-		return
-	}
-
 	if oldOffset, ok := r.mu.offsets[addr]; !ok {
-		r.mu.offsets[addr] = offset
+		// We don't have a measurement - if the incoming measurement is not empty,
+		// set it.
+		if !emptyOffset {
+			r.mu.offsets[addr] = offset
+		}
 	} else if oldOffset.measuredAt().Before(r.mu.lastMonitoredAt) {
-		// No matter what offset is, we weren't going to use oldOffset again,
-		// because it was measured before the last cluster offset calculation.
-		r.mu.offsets[addr] = offset
+		// We have a measurement but it's old - if the incoming measurement is not empty,
+		// set it, otherwise delete the old measurement.
+		if !emptyOffset {
+			r.mu.offsets[addr] = offset
+		} else {
+			delete(r.mu.offsets, addr)
+		}
 	} else if offset.Uncertainty < oldOffset.Uncertainty {
-		r.mu.offsets[addr] = offset
+		// We have a measurement but its uncertainty is greater than that of the
+		// incoming measurement - if the incoming measurement is not empty, set it.
+		if !emptyOffset {
+			r.mu.offsets[addr] = offset
+		}
 	}
 
 	if log.V(2) {
