@@ -1,5 +1,7 @@
 // source: pages/nodes.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="./optinattributes.ts" />
+/// <reference path="./cockroachlabs.ts" />
 
 module Models {
   "use strict";
@@ -9,32 +11,11 @@ module Models {
     import MithrilAttributes = _mithril.MithrilAttributes;
     import GetUIDataResponse = Models.Proto.GetUIDataResponse;
     import MithrilDeferred = _mithril.MithrilDeferred;
-
-    export const OPTIN: string = "optin";
-    export const DISMISSED: string = "dismissed";
-    export const FIRSTNAME: string = "firstname";
-    export const LASTNAME: string = "lastname";
-    export const EMAIL: string = "email";
-    export const COMPANY: string = "company";
-    export const UPDATES: string = "updates";
-    export const LASTUPDATED: string = "lastUpdated";
+    import OptInAttributes = Models.OptInAttributes;
 
     // Help Us flow is shown by default
     export function helpUsFlag(): boolean {
       return true;
-    }
-
-    /**
-     * OptInAttributes tracks the values we get from the system.ui table
-     */
-    export class OptInAttributes {
-      email: string = "";
-      optin: boolean = null; // Did the user opt in/out of reporting usage
-      dismissed: number = null; // How many times did the user dismiss the banner/modal without opting in/out
-      firstname: string = "";
-      lastname: string = "";
-      company: string = "";
-      updates: boolean = null; // Did the user sign up for product/feature updates
     }
 
     function getHelpUsData(): MithrilPromise<OptInAttributes> {

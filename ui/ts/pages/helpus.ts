@@ -29,8 +29,7 @@ module AdminViews {
           if (!this.userData.optedIn()) {
             return [
               `CockroachDB is in beta, and we're working diligently to make it better.
-              Opt in to share basic anonymous usage statistics,
-              and get notified when new versions of CockroachDB are available.`,
+              Opt in to share basic anonymous usage statistics.`,
             ];
           } else {
             return ["We appreciate your support. ",
