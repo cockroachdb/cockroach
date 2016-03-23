@@ -454,7 +454,7 @@ bool WillOverflow(int64_t a, int64_t b) {
   if (b > 0) {
     return a > (std::numeric_limits<int64_t>::max() - b);
   }
-  return (std::numeric_limits<int64_t>::min() - b) > a;
+  return (std::numeric_limits<int64_t>::lowest() - b) > a;
 }
 
 // Method used to sort InternalTimeSeriesSamples.
@@ -472,7 +472,7 @@ bool IsTimeSeriesData(const std::string &val) {
 double GetMax(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
   if (sample->has_max()) return sample->max();
   if (sample->has_sum()) return sample->sum();
-  return std::numeric_limits<double>::min();
+  return std::numeric_limits<double>::lowest();
 }
 
 double GetMin(const cockroach::roachpb::InternalTimeSeriesSample *sample) {
