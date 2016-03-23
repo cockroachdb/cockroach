@@ -3,9 +3,13 @@
 
 [![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-alpha-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-# [CockroachDB](https://cockroachlabs.com)
+## What is CockroachDB?
 
 CockroachDB is a distributed SQL database built on a transactional and strongly-consistent key-value store. It **scales** horizontally; **survives** disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention; supports **strongly-consistent** ACID transactions; and provides a familiar **SQL** API for structuring, manipulating, and querying data.
+
+For more details, see our [FAQ](https://www.cockroachlabs.com/docs/frequently-asked-questions.html),[docs](https://www.cockroachlabs.com/docs), and [design overview](#design-overview).
+
+## Status
 
 CockroachDB is currently in alpha. See our
 [Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
@@ -23,7 +27,7 @@ CockroachDB is currently in alpha. See our
     $ ./cockroach start --insecure --store=node3-data --port=26259 --http-port=8082 --join=localhost:26257 &
     ```
 
-3.  Use the built-in SQL client to talk to the cluster:
+3.  [Use the built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html) to run some [CockroachDB SQL statements](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html):
 
     ```shell
     $ ./cockroach sql --insecure
@@ -53,11 +57,15 @@ CockroachDB is currently in alpha. See our
 
 4. Checkout the admin UI by pointing your browser to `http://<localhost>:26257`.
 
-You might also want to learn how to [secure your cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html) and connect with a [client driver](https://www.cockroachlabs.com/docs/install-client-drivers.html).
+5. Learn how to [secure your cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html)
+
+## Client Drivers
+
+CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect to CockroachDB from various languages. For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/install-client-drivers.html).
 
 ## Manual Deployment
 
-To run a CockroachDB cluster on multiple machines, see [Manual Deployment].
+To run a CockroachDB cluster on multiple machines, see [Manual Deployment](https://www.cockroachlabs.com/docs/manual-deployment.html).
 
 ## Cloud Deployment
 
@@ -88,6 +96,11 @@ We're an open source project and welcome contributions.
 
 ## Talks
 
+Date | Topic | Duration | Venue | Presenter
+-----|-------|----------|-------|----------
+12/02/2015 | [CockroachDB's MVCC model](https://www.youtube.com/watch?v=-ij2OiDTxz0) | 21 min | Annual RocksDB meetup at Facebook HQ | [Spencer Kimball] (https://github.com/spencerkimball)
+10/28/2015 | [Architecture * overview](https://www.youtube.com/watch?v=tV-WXM2IJ3U) | 30 min | Code Driven NYC | [Spencer Kimball] (https://github.com/spencerkimball)
+
 * [Venue: Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball) on (12/02/2015), 21min.<br />
   CockroachDB's MVCC model.
 * [Venue: Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball) on (10/28/2015), 30min.<br />
@@ -108,7 +121,7 @@ We're an open source project and welcome contributions.
 * [Venue: Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014), 1h.
 
 
-## Design
+## Design Overview
 
 This is an overview. For an in depth discussion of the design, see the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
