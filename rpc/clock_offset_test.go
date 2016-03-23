@@ -123,14 +123,14 @@ func TestBuildEndpointList(t *testing.T) {
 	monitor.mu.offsets = offsets
 
 	expectedList := endpointList{
-		endpoint{offset: -15, endType: -1},
-		endpoint{offset: -14, endType: -1},
-		endpoint{offset: -13, endType: -1},
-		endpoint{offset: -12, endType: -1},
-		endpoint{offset: 15, endType: 1},
-		endpoint{offset: 16, endType: 1},
-		endpoint{offset: 17, endType: 1},
-		endpoint{offset: 18, endType: 1},
+		endpoint{offset: -10, endType: -1},
+		endpoint{offset: -9, endType: -1},
+		endpoint{offset: -8, endType: -1},
+		endpoint{offset: -7, endType: -1},
+		endpoint{offset: 10, endType: 1},
+		endpoint{offset: 11, endType: 1},
+		endpoint{offset: 12, endType: 1},
+		endpoint{offset: 13, endType: 1},
 	}
 
 	list := monitor.buildEndpointList()
@@ -244,14 +244,15 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
 	// The clock interval will be:
-	// [offset - error - maxOffset, offset + error + maxOffset]
-	clock.SetMaxOffset(10 * time.Nanosecond)
+	// [offset - error, offset + error]
+	// MaxOffset does not matter.
+	clock.SetMaxOffset(10 * time.Hour)
 	monitor := newRemoteClockMonitor(clock)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": {Offset: 1, Uncertainty: 2},
 	}
 
-	expectedInterval := clusterOffsetInterval{lowerbound: -11, upperbound: 13}
+	expectedInterval := clusterOffsetInterval{lowerbound: -1, upperbound: 3}
 	if interval, err := monitor.findOffsetInterval(); err != nil {
 		t.Errorf("expected interval %v, instead err: %s", expectedInterval, err)
 	} else if interval != expectedInterval {
@@ -311,7 +312,7 @@ func TestFindOffsetWithLargeError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedInterval := clusterOffsetInterval{lowerbound: -270, upperbound: 510}
+	expectedInterval := clusterOffsetInterval{lowerbound: -170, upperbound: 410}
 	if interval != expectedInterval {
 		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
 	}
