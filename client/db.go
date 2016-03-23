@@ -409,7 +409,9 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error)
 //
 // If you need more control over how the txn is executed, check out txn.Exec().
 func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
-	txn := NewTxn(*db)
+	// TODO(dan): This context should, at longest, live for the lifetime of this
+	// method. Add a defered cancel.
+	txn := NewTxn(context.TODO(), *db)
 	txn.SetDebugName("", 1)
 	pErr := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) *roachpb.Error {
