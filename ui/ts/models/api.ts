@@ -20,6 +20,7 @@ module Models {
     import UnparsedClusterEvents = Models.Proto.UnparsedClusterEvents;
     import UnparsedClusterEvent = Models.Proto.UnparsedClusterEvent;
     import GetUIDataResponse = Models.Proto.GetUIDataResponse;
+    import MithrilDeferred = _mithril.MithrilDeferred;
 
     export interface ClusterEvent {
       timestamp: Moment;
@@ -95,16 +96,30 @@ module Models {
     }
 
     export function getUIData(keys: string[]): MithrilPromise<GetUIDataResponse> {
+      let d: MithrilDeferred<GetUIDataResponse> = m.deferred();
       // Create the URL, which looks like this:
       // /_admin/v1/uidata?keys=KEY1&keys=KEY2&...&keys=LAST_KEY
-      let queryStr: string = _.map(keys, function(key: string): string {
+      let queryStr: string = _.map(keys, function (key: string): string {
         return "keys=" + encodeURIComponent(key);
       }).join("&");
-      return m.request<GetUIDataResponse>({
-        url: "/_admin/v1/uidata?" + queryStr,
-        config: Utils.Http.XHRConfig,
-        background: true,
-      });
+
+      m.request<GetUIDataResponse>({
+          url: "/_admin/v1/uidata?" + queryStr,
+          config: Utils.Http.XHRConfig,
+          background: true,
+        })
+        .then((data: GetUIDataResponse): void => {
+          d.resolve(data);
+        })
+        .catch((e: any) => {
+          if (e && e.error && e.code && e.code === 5) { // not found
+            d.resolve(null);
+          } else {
+            d.reject(e);
+          }
+        });
+
+      return d.promise;
     }
 
     export function setUIData(keyValues: {[key: string]: string}): MithrilPromise<any> {
