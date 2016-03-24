@@ -2073,44 +2073,57 @@ func TestRaftReplayProtection(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
-
-	// Start with an increment for key.
-	inc := incrementArgs(key, 1)
-	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{}, &inc)
-	if pErr != nil {
-		t.Fatal(pErr)
+	incs := []int64{1, 3, 7}
+	sum := 2 * incs[0]
+	for _, n := range incs[1:] {
+		sum += n
 	}
 
-	// Do an increment with timestamp to an earlier timestamp, but same key.
-	// This will bump up to a higher timestamp than the original increment
-	// and not surface a WriteTooOldError.
-	h := roachpb.Header{Timestamp: respH.Timestamp.Prev()}
-	_, respH, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &inc)
-	if pErr != nil {
-		t.Fatalf("unexpected error: %s", respH)
-	}
-	if expTS := h.Timestamp.Next().Next(); !respH.Timestamp.Equal(expTS) {
-		t.Fatalf("expected too-old increment to advance two logical ticks to %s; got %s", expTS, respH.Timestamp)
-	}
+	{
+		// Start with an increment for key.
+		incArgs := incrementArgs(key, incs[0])
+		_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{}, &incArgs)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// Do an increment with exact timestamp; should propagate write too
-	// old error. This is assumed to be a replay because the timestamp
-	// encountered is an exact duplicate and nothing came before the
-	// increment in the batch.
-	h.Timestamp = respH.Timestamp
-	_, _, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &inc)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
-		t.Fatalf("expected WriteTooOldError; got %s", pErr)
+		// Do an increment with timestamp to an earlier timestamp, but same key.
+		// This will bump up to a higher timestamp than the original increment
+		// and not surface a WriteTooOldError.
+		h := roachpb.Header{Timestamp: respH.Timestamp.Prev()}
+		_, respH, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &incArgs)
+		if pErr != nil {
+			t.Fatalf("unexpected error: %s", respH)
+		}
+		if expTS := h.Timestamp.Next().Next(); !respH.Timestamp.Equal(expTS) {
+			t.Fatalf("expected too-old increment to advance two logical ticks to %s; got %s", expTS, respH.Timestamp)
+		}
+
+		// Do an increment with exact timestamp; should propagate write too
+		// old error. This is assumed to be a replay because the timestamp
+		// encountered is an exact duplicate and nothing came before the
+		// increment in the batch.
+		h.Timestamp = respH.Timestamp
+		_, _, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &incArgs)
+		if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+			t.Fatalf("expected WriteTooOldError; got %s", pErr)
+		}
 	}
 
 	// Send a double increment in a batch. This should increment twice,
 	// as the same key is being incremented in the same batch.
 	var ba roachpb.BatchRequest
-	ba.Add(&inc)
-	ba.Add(&inc)
+	for _, inc := range incs[1:] {
+		incArgs := incrementArgs(key, inc)
+		ba.Add(&incArgs)
+	}
 	br, pErr := tc.Sender().Send(tc.rng.context(), ba)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	if latest := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.IncrementResponse).NewValue; latest != sum {
+		t.Fatalf("expected %d, got %d", sum, latest)
 	}
 
 	// Now resend the batch with the same timestamp; this should look
@@ -2122,9 +2135,10 @@ func TestRaftReplayProtection(t *testing.T) {
 	}
 
 	// Send a DeleteRange & increment.
+	incArgs := incrementArgs(key, 1)
 	ba = roachpb.BatchRequest{}
 	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
-	ba.Add(&inc)
+	ba.Add(&incArgs)
 	br, pErr = tc.Sender().Send(tc.rng.context(), ba)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
