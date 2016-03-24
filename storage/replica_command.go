@@ -992,7 +992,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	if !ok {
 		// If getting an update for a transaction record which doesn't yet
 		// exist, return empty.
-		if args.PushType == roachpb.PUSH_UPDATE {
+		if args.PushType == roachpb.PUSH_QUERY {
 			return reply, nil
 		}
 		// The transaction doesn't exist on disk; we're allowed to abort it.
@@ -1029,7 +1029,7 @@ func (r *Replica) PushTxn(batch engine.Engine, ms *engine.MVCCStats, h roachpb.H
 	}
 
 	// If getting an update for a transaction record, return now.
-	if args.PushType == roachpb.PUSH_UPDATE {
+	if args.PushType == roachpb.PUSH_QUERY {
 		return reply, nil
 	}
 

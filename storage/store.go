@@ -1709,7 +1709,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		},
 		Now:       now,
 		PusheeTxn: txn.TxnMeta,
-		PushType:  roachpb.PUSH_UPDATE,
+		PushType:  roachpb.PUSH_QUERY,
 	})
 	br, pErr := s.db.RunWithResponse(&b)
 	if pErr != nil {

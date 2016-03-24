@@ -363,9 +363,9 @@ enum PushTxnType {
   // Abort the transaction if it's abandoned, but don't attempt to mutate it
   // otherwise.
   PUSH_TOUCH = 2;
-  // Update the transaction with persisted information if available. If no
-  // transaction is persisted, return the supplied transaction verbatim.
-  PUSH_UPDATE = 3;
+  // Query and return the latest transaction record if available. If no record
+  // is persisted, return the supplied transaction verbatim.
+  PUSH_QUERY = 3;
 }
 
 // A PushTxnRequest is arguments to the PushTxn() method. It's sent by

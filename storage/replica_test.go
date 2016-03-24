@@ -2874,27 +2874,27 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_ABORT, false},
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, false},
-		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_UPDATE, true},
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_QUERY, true},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_ABORT, false},
 		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_TOUCH, false},
-		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_UPDATE, true},
+		{roachpb.ZeroTimestamp, ns, roachpb.PUSH_QUERY, true},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_ABORT, false},
 		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_TOUCH, false},
-		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_UPDATE, true},
+		{roachpb.ZeroTimestamp, ns*2 - 1, roachpb.PUSH_QUERY, true},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_ABORT, false},
 		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_TOUCH, false},
-		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_UPDATE, true},
+		{roachpb.ZeroTimestamp, ns * 2, roachpb.PUSH_QUERY, true},
 		{ts, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
 		{ts, ns*2 + 1, roachpb.PUSH_ABORT, false},
 		{ts, ns*2 + 1, roachpb.PUSH_TOUCH, false},
-		{ts, ns*2 + 1, roachpb.PUSH_UPDATE, true},
+		{ts, ns*2 + 1, roachpb.PUSH_QUERY, true},
 		{ts, ns*2 + 2, roachpb.PUSH_TIMESTAMP, true},
 		{ts, ns*2 + 2, roachpb.PUSH_ABORT, true},
 		{ts, ns*2 + 2, roachpb.PUSH_TOUCH, true},
-		{ts, ns*2 + 2, roachpb.PUSH_UPDATE, true},
+		{ts, ns*2 + 2, roachpb.PUSH_QUERY, true},
 	}
 
 	for i, test := range testCases {
@@ -2931,7 +2931,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
 				t.Errorf("%d: expected txn push error: %s", i, pErr)
 			}
-		} else if test.pushType != roachpb.PUSH_UPDATE {
+		} else if test.pushType != roachpb.PUSH_QUERY {
 			if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
 				t.Errorf("%d: expected aborted transaction, got %s", i, txn)
 			}
@@ -2978,8 +2978,8 @@ func TestPushTxnPriorities(t *testing.T) {
 		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, false},
 		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, false},
 		// When updating, priority always succeeds.
-		{2, 1, ts1, ts1, roachpb.PUSH_UPDATE, true},
-		{1, 2, ts1, ts1, roachpb.PUSH_UPDATE, true},
+		{2, 1, ts1, ts1, roachpb.PUSH_QUERY, true},
+		{1, 2, ts1, ts1, roachpb.PUSH_QUERY, true},
 	}
 
 	for i, test := range testCases {
