@@ -821,15 +821,30 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
-	return mvccPutUsingIter(engine, iter, ms, key, timestamp, &value, txn, nil /* valueFn */)
+	return mvccPutUsingIter(engine, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
 }
 
-// TODO(nvanbenschoten): explore non-pointer roachpb.Value.
+// MVCCDelete marks the key deleted so that it will not be returned in
+// future get responses.
+func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
+	txn *roachpb.Transaction) error {
+	iter := engine.NewIterator(key)
+	defer iter.Close()
+
+	return mvccPutUsingIter(engine, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
+}
+
+var noValue = roachpb.Value{}
+
+// mvccPutUsingIter sets the value for a specified key using the provided
+// Iterator. The function takes a value and a valueFn, only one of which
+// should be provided. If the valueFn is nil, value's raw bytes will be set
+// for the key, else the bytes provided by the valueFn will be used.
 func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key,
-	timestamp roachpb.Timestamp, value *roachpb.Value, txn *roachpb.Transaction,
+	timestamp roachpb.Timestamp, value roachpb.Value, txn *roachpb.Transaction,
 	valueFn func(*roachpb.Value) ([]byte, error)) error {
 	var rawBytes []byte
-	if value != nil {
+	if valueFn == nil {
 		if value.Timestamp != roachpb.ZeroTimestamp {
 			return util.Errorf("cannot have timestamp set in value on Put")
 		}
@@ -839,23 +854,6 @@ func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.K
 	buf := putBufferPool.Get().(*putBuffer)
 
 	err := mvccPutInternal(engine, iter, ms, key, timestamp, rawBytes, txn, buf, valueFn)
-
-	// Using defer would be more convenient, but it is measurably
-	// slower.
-	putBufferPool.Put(buf)
-	return err
-}
-
-// MVCCDelete marks the key deleted so that it will not be returned in
-// future get responses.
-func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	txn *roachpb.Transaction) error {
-	buf := putBufferPool.Get().(*putBuffer)
-
-	iter := engine.NewIterator(key)
-	defer iter.Close()
-
-	err := mvccPutInternal(engine, iter, ms, key, timestamp, nil, txn, buf, nil)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -1047,7 +1045,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roac
 	defer iter.Close()
 
 	var int64Val int64
-	err := mvccPutUsingIter(engine, iter, ms, key, timestamp, nil, txn, func(value *roachpb.Value) ([]byte, error) {
+	err := mvccPutUsingIter(engine, iter, ms, key, timestamp, noValue, txn, func(value *roachpb.Value) ([]byte, error) {
 		if value != nil {
 			var err error
 			if int64Val, err = value.GetInt(); err != nil {
@@ -1081,7 +1079,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
-	return mvccPutUsingIter(engine, iter, ms, key, timestamp, nil, txn, func(existVal *roachpb.Value) ([]byte, error) {
+	return mvccPutUsingIter(engine, iter, ms, key, timestamp, noValue, txn, func(existVal *roachpb.Value) ([]byte, error) {
 		if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
 			// Every type flows through here, so we can't use the typed getters.
 			if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
