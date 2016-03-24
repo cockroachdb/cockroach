@@ -34,6 +34,8 @@ const (
 	// than minCacheWindow will necessarily have to advance their commit
 	// timestamp.
 	MinTSCacheWindow = 10 * time.Second
+
+	defaultEvictionSizeThreshold = 512
 )
 
 // A TimestampCache maintains an interval tree FIFO cache of keys or
@@ -49,6 +51,15 @@ const (
 type TimestampCache struct {
 	rCache, wCache   *cache.IntervalCache
 	lowWater, latest roachpb.Timestamp
+
+	// evictionSizeThreshold allows old entries to stay in the TimestampCache
+	// indefinitely as long as the number of intervals in the cache doesn't
+	// exceed this value. Once the cache grows beyond it, intervals are
+	// evicted according to the time window. This threshold is intended to
+	// permit transactions to take longer than the eviction window duration
+	// if the size of the cache is not a concern, such as when a user
+	// is using an interactive SQL shell.
+	evictionSizeThreshold int
 }
 
 // A cacheValue combines the timestamp with an optional txn ID.
@@ -75,8 +86,9 @@ func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 // hybrid clock.
 func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 	tc := &TimestampCache{
-		rCache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		wCache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		rCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		wCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		evictionSizeThreshold: defaultEvictionSizeThreshold,
 	}
 	tc.Clear(clock)
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
@@ -92,6 +104,12 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 	tc.lowWater = clock.Now()
 	tc.lowWater.WallTime += clock.MaxOffset().Nanoseconds()
 	tc.latest = tc.lowWater
+}
+
+// Len returns the total number of read and write intervals in the
+// TimestampCache.
+func (tc *TimestampCache) Len() int {
+	return tc.rCache.Len() + tc.wCache.Len()
 }
 
 // SetLowWater sets the cache's low water mark, which is the minimum
@@ -335,6 +353,9 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the MinTSCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
+	if tc.Len() <= tc.evictionSizeThreshold {
+		return false
+	}
 	ce := value.(*cacheValue)
 	// In case low water mark was set higher, evict any entries
 	// which occurred before it.
