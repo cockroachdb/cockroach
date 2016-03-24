@@ -2073,10 +2073,11 @@ func TestRaftReplayProtection(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
+	incs, sum := []int64{1, 3, 7}, int64(12) /* we'll send 1 twice */
 
 	// Start with an increment for key.
-	inc := incrementArgs(key, 1)
-	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{}, &inc)
+	incArgs := incrementArgs(key, incs[0])
+	_, respH, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{}, &incArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2085,7 +2086,7 @@ func TestRaftReplayProtection(t *testing.T) {
 	// This will bump up to a higher timestamp than the original increment
 	// and not surface a WriteTooOldError.
 	h := roachpb.Header{Timestamp: respH.Timestamp.Prev()}
-	_, respH, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &inc)
+	_, respH, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &incArgs)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", respH)
 	}
@@ -2098,7 +2099,7 @@ func TestRaftReplayProtection(t *testing.T) {
 	// encountered is an exact duplicate and nothing came before the
 	// increment in the batch.
 	h.Timestamp = respH.Timestamp
-	_, _, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &inc)
+	_, _, pErr = SendWrapped(tc.Sender(), tc.rng.context(), h, &incArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
 		t.Fatalf("expected WriteTooOldError; got %s", pErr)
 	}
@@ -2106,11 +2107,19 @@ func TestRaftReplayProtection(t *testing.T) {
 	// Send a double increment in a batch. This should increment twice,
 	// as the same key is being incremented in the same batch.
 	var ba roachpb.BatchRequest
-	ba.Add(&inc)
-	ba.Add(&inc)
+	{
+		for _, inc := range incs[1:] {
+			incArgs := incrementArgs(key, inc)
+			ba.Add(&incArgs)
+		}
+	}
 	br, pErr := tc.Sender().Send(tc.rng.context(), ba)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	if latest := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.IncrementResponse).NewValue; latest != sum {
+		t.Fatalf("expected %d, got %d", sum, latest)
 	}
 
 	// Now resend the batch with the same timestamp; this should look
@@ -2124,7 +2133,7 @@ func TestRaftReplayProtection(t *testing.T) {
 	// Send a DeleteRange & increment.
 	ba = roachpb.BatchRequest{}
 	ba.Add(roachpb.NewDeleteRange(key, key.Next(), false))
-	ba.Add(&inc)
+	ba.Add(&incArgs)
 	br, pErr = tc.Sender().Send(tc.rng.context(), ba)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
