@@ -158,6 +158,7 @@ func TestTimestampCacheEviction(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
+	tc.evictionSizeThreshold = 0
 
 	// Increment time to the maxClockOffset low water mark + 1.
 	manual.Set(maxClockOffset.Nanoseconds() + 1)
@@ -171,6 +172,31 @@ func TestTimestampCacheEviction(t *testing.T) {
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS := tc.GetMaxRead(roachpb.Key("c"), nil, nil); !rTS.Equal(aTS) {
 		t.Errorf("expected low water mark %s, got %s", aTS, rTS)
+	}
+}
+
+// TestTimestampCacheNoEviction verifies that even after
+// the MinTSCacheWindow interval, if the cache has not hit
+// its size threshold, it will not evict entries.
+func TestTimestampCacheNoEviction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(maxClockOffset)
+	tc := NewTimestampCache(clock)
+
+	// Increment time to the maxClockOffset low water mark + 1.
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
+	aTS := clock.Now()
+	tc.Add(roachpb.Key("a"), nil, aTS, nil, true)
+
+	// Increment time by the MinTSCacheWindow and add another key.
+	manual.Increment(MinTSCacheWindow.Nanoseconds())
+	tc.Add(roachpb.Key("b"), nil, clock.Now(), nil, true)
+
+	// Verify that the cache still has 2 entries in it
+	if l, want := tc.Len(), 2; l != want {
+		t.Errorf("expected %d entries to remain, got %d", want, l)
 	}
 }
 
