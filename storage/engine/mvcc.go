@@ -604,7 +604,6 @@ func MVCCGetAsTxn(
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
 		TxnMeta:       txnMeta,
-		Priority:      roachpb.MakePriority(roachpb.MinUserPriority),
 		Status:        roachpb.PENDING,
 		Writing:       true,
 		OrigTimestamp: txnMeta.Timestamp,
