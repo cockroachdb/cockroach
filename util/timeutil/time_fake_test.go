@@ -20,6 +20,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 )
 
 func TestOffset(t *testing.T) {
