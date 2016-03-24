@@ -24,6 +24,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"hash"
 	"math"
 
 	"math/rand"
@@ -1359,6 +1360,7 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
 			Checksum:   c.checksum,
+			FPChecksum: c.fpChecksum,
 		}
 		ba.Add(checkArgs)
 		_, pErr := r.Send(r.context(), ba)
@@ -1370,7 +1372,7 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 }
 
 const (
-	replicaChecksumVersion    = 0
+	replicaChecksumVersion    = 1
 	replicaChecksumGCInterval = time.Hour
 )
 
@@ -1398,11 +1400,12 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte) {
+func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte, fpSha []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
 		c.checksum = sha
+		c.fpChecksum = fpSha
 		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
 		r.mu.checksums[id] = c
 		// Notify
@@ -1454,52 +1457,67 @@ func (r *Replica) ComputeChecksum(batch engine.Engine, ms *engine.MVCCStats, h r
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if !stopper.RunAsyncTask(func() {
 		defer snap.Close()
-		sha, err := r.sha512(desc, snap)
+		sha, fpSha, err := r.sha512(desc, snap)
 		if err != nil {
 			log.Error(err)
 			sha = nil
 		}
-		r.computeChecksumDone(id, sha)
+		r.computeChecksumDone(id, sha, fpSha)
 	}) {
 		defer snap.Close()
 		// Set checksum to nil.
-		r.computeChecksumDone(id, nil)
+		r.computeChecksumDone(id, nil, nil)
 	}
 	return roachpb.ComputeChecksumResponse{}, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
-func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]byte, error) {
+func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]byte, []byte, error) {
 	hasher := sha512.New()
+	var fpHasher hash.Hash
 	// Iterate over all the data in the range.
 	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
+		h := hasher
+		if bytes.HasPrefix(key.Key, keys.TimeseriesPrefix) {
+			if fpHasher == nil {
+				fpHasher = sha512.New()
+			}
+			h = fpHasher
+		}
+
 		value := iter.Value()
 		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
-			return nil, err
+		if err := binary.Write(h, binary.LittleEndian, int64(len(key.Key))); err != nil {
+			return nil, nil, err
 		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(value))); err != nil {
-			return nil, err
+		if err := binary.Write(h, binary.LittleEndian, int64(len(value))); err != nil {
+			return nil, nil, err
 		}
-		if _, err := hasher.Write(key.Key); err != nil {
-			return nil, err
+		if _, err := h.Write(key.Key); err != nil {
+			return nil, nil, err
 		}
 		timestamp, err := key.Timestamp.Marshal()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if _, err := hasher.Write(timestamp); err != nil {
-			return nil, err
+		if _, err := h.Write(timestamp); err != nil {
+			return nil, nil, err
 		}
-		if _, err := hasher.Write(value); err != nil {
-			return nil, err
+		if _, err := h.Write(value); err != nil {
+			return nil, nil, err
 		}
 	}
 	sha := make([]byte, 0, sha512.Size)
-	return hasher.Sum(sha), nil
+	sha = hasher.Sum(sha)
+	var fpSha []byte
+	if fpHasher != nil {
+		fpSha = make([]byte, 0, sha512.Size)
+		fpSha = fpHasher.Sum(fpSha)
+	}
+	return sha, fpSha, nil
 }
 
 // VerifyChecksum verifies the checksum that was computed through a
@@ -1532,9 +1550,15 @@ func (r *Replica) VerifyChecksum(batch engine.Engine, ms *engine.MVCCStats, h ro
 		if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 			p()
 		} else {
-			// TODO(.*): see #5051.
-			log.Errorf("checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
+			// TODO(vivek): Make panic.
+			log.Errorf("replica=%s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 		}
+	}
+	if c.fpChecksum != nil && args.FPChecksum != nil && !bytes.Equal(c.fpChecksum, args.FPChecksum) {
+		// Never panic because of FPChecksum mismatch, because floating point
+		// representations and math can vary on different hardware
+		// architectures.
+		log.Errorf("replica=%s, FP checksum mismatch: e = %x, v = %x", r, args.FPChecksum, c.fpChecksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
 }

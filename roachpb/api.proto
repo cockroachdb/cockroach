@@ -553,6 +553,12 @@ message VerifyChecksumRequest {
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional bytes checksum = 4;
+  // checksum of cockroach internally consistent k:v pairs with values
+  // containing floating points. Different architectures can do floating
+  // point math in unpredictable ways. We separate out the checksum
+  // computation of these k:v pairs so as to ignore differences in
+  // heterogenous systems. 
+  optional bytes fp_checksum = 5 [(gogoproto.customname) = "FPChecksum"];
 }
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.

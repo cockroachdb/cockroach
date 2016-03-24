@@ -5302,6 +5302,18 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   ::std::string* release_checksum();
   void set_allocated_checksum(::std::string* checksum);
 
+  // optional bytes fp_checksum = 5;
+  bool has_fp_checksum() const;
+  void clear_fp_checksum();
+  static const int kFpChecksumFieldNumber = 5;
+  const ::std::string& fp_checksum() const;
+  void set_fp_checksum(const ::std::string& value);
+  void set_fp_checksum(const char* value);
+  void set_fp_checksum(const void* value, size_t size);
+  ::std::string* mutable_fp_checksum();
+  ::std::string* release_fp_checksum();
+  void set_allocated_fp_checksum(::std::string* fp_checksum);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.VerifyChecksumRequest)
  private:
   inline void set_has_header();
@@ -5312,6 +5324,8 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   inline void clear_has_checksum_id();
   inline void set_has_checksum();
   inline void clear_has_checksum();
+  inline void set_has_fp_checksum();
+  inline void clear_has_fp_checksum();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -5319,6 +5333,7 @@ class VerifyChecksumRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Span* header_;
   ::google::protobuf::internal::ArenaStringPtr checksum_id_;
   ::google::protobuf::internal::ArenaStringPtr checksum_;
+  ::google::protobuf::internal::ArenaStringPtr fp_checksum_;
   ::google::protobuf::uint32 version_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
@@ -10704,6 +10719,59 @@ inline void VerifyChecksumRequest::set_allocated_checksum(::std::string* checksu
   }
   checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+
+// optional bytes fp_checksum = 5;
+inline bool VerifyChecksumRequest::has_fp_checksum() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void VerifyChecksumRequest::set_has_fp_checksum() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void VerifyChecksumRequest::clear_has_fp_checksum() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void VerifyChecksumRequest::clear_fp_checksum() {
+  fp_checksum_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_fp_checksum();
+}
+inline const ::std::string& VerifyChecksumRequest::fp_checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+  return fp_checksum_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VerifyChecksumRequest::set_fp_checksum(const ::std::string& value) {
+  set_has_fp_checksum();
+  fp_checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+}
+inline void VerifyChecksumRequest::set_fp_checksum(const char* value) {
+  set_has_fp_checksum();
+  fp_checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+}
+inline void VerifyChecksumRequest::set_fp_checksum(const void* value, size_t size) {
+  set_has_fp_checksum();
+  fp_checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+}
+inline ::std::string* VerifyChecksumRequest::mutable_fp_checksum() {
+  set_has_fp_checksum();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+  return fp_checksum_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* VerifyChecksumRequest::release_fp_checksum() {
+  clear_has_fp_checksum();
+  return fp_checksum_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VerifyChecksumRequest::set_allocated_fp_checksum(::std::string* fp_checksum) {
+  if (fp_checksum != NULL) {
+    set_has_fp_checksum();
+  } else {
+    clear_has_fp_checksum();
+  }
+  fp_checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), fp_checksum);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
 }
 
 // -------------------------------------------------------------------
