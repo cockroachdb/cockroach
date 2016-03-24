@@ -17,7 +17,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <limits>
 #include <stdarg.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/stringprintf.h>
@@ -442,20 +441,6 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
     return Transform(dst) == dst;
   }
 };
-
-bool WillOverflow(int64_t a, int64_t b) {
-  // Morally MinInt64 < a+b < MaxInt64, but without overflows.
-  // First make sure that a <= b. If not, swap them.
-  if (a > b) {
-    std::swap(a, b);
-  }
-  // Now b is the larger of the numbers, and we compare sizes
-  // in a way that can never over- or underflow.
-  if (b > 0) {
-    return a > (std::numeric_limits<int64_t>::max() - b);
-  }
-  return (std::numeric_limits<int64_t>::lowest() - b) > a;
-}
 
 // Method used to sort InternalTimeSeriesSamples.
 bool TimeSeriesSampleOrdering(const cockroach::roachpb::InternalTimeSeriesSample* a,
