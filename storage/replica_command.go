@@ -123,7 +123,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		reply = &resp
 	case *roachpb.EndTransactionRequest:
 		var resp roachpb.EndTransactionResponse
-		resp, intents, err = r.EndTransaction(batch, ms, h, *tArgs)
+		resp, intents, err = r.EndTransaction(ctx, batch, ms, h, *tArgs)
 		reply = &resp
 	case *roachpb.RangeLookupRequest:
 		var resp roachpb.RangeLookupResponse
@@ -370,7 +370,7 @@ func (r *Replica) BeginTransaction(
 // TODO(tschottdorf): return nil reply on any error. The error itself
 // must be the authoritative source of information.
 func (r *Replica) EndTransaction(
-	batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.EndTransactionRequest,
+	ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.EndTransactionRequest,
 ) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
 	var reply roachpb.EndTransactionResponse
 
@@ -558,7 +558,7 @@ func (r *Replica) EndTransaction(
 
 		if err := func() error {
 			if ct.GetSplitTrigger() != nil {
-				if err := r.splitTrigger(r.context(), batch, ms, ct.SplitTrigger, reply.Txn.Timestamp); err != nil {
+				if err := r.splitTrigger(r.context(ctx), batch, ms, ct.SplitTrigger, reply.Txn.Timestamp); err != nil {
 					return err
 				}
 				*ms = engine.MVCCStats{} // clear stats, as split recomputed.
@@ -1379,6 +1379,7 @@ func (r *Replica) LeaderLease(
 func (r *Replica) CheckConsistency(
 	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
+	ctx := r.context(context.TODO())
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
@@ -1396,7 +1397,7 @@ func (r *Replica) CheckConsistency(
 			ChecksumID: id,
 		}
 		ba.Add(checkArgs)
-		_, pErr := r.Send(r.context(), ba)
+		_, pErr := r.Send(ctx, ba)
 		if pErr != nil {
 			return roachpb.CheckConsistencyResponse{}, pErr
 		}
@@ -1427,7 +1428,7 @@ func (r *Replica) CheckConsistency(
 			Checksum:   c.checksum,
 		}
 		ba.Add(checkArgs)
-		_, pErr := r.Send(r.context(), ba)
+		_, pErr := r.Send(ctx, ba)
 		if pErr != nil {
 			return roachpb.CheckConsistencyResponse{}, pErr
 		}
