@@ -30,7 +30,7 @@ CockroachDB is currently in alpha. See our
 
 1.  [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
 
-2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes running on different ports:
+2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes listening on different ports:
 
     ```shell
     $ ./cockroach start --insecure &
