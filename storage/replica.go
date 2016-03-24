@@ -376,12 +376,12 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	return nil
 }
 
-// context returns a context which is initialized with information about
-// this range. It is only relevant when commands need to be executed
-// on this range in the absence of a pre-existing context, such as
-// during range scanner operations.
-func (r *Replica) context() context.Context {
-	return context.WithValue(r.store.Context(nil), log.RangeID, r.RangeID)
+// context returns a context with information about this range, derived from
+// the supplied context (which is not allowed to be nil). It is only relevant
+// when commands need to be executed on this range in the absence of a
+// pre-existing context, such as during range scanner operations.
+func (r *Replica) context(ctx context.Context) context.Context {
+	return context.WithValue(r.store.context(ctx), log.RangeID, r.RangeID)
 }
 
 // GetMaxBytes atomically gets the range maximum byte limit.
@@ -479,7 +479,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 			// checks from normal request machinery, (e.g. the command queue).
 			// Note that the command itself isn't traced, but usually the caller
 			// waiting for the result has an active Trace.
-			cmd, err := r.proposeRaftCommand(r.context(), ba)
+			cmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
 			if err != nil {
 				return roachpb.NewError(err)
 			}
@@ -1399,7 +1399,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 // the command's done channel, if available.
 func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, raftCmd roachpb.RaftCommand) *roachpb.Error {
 	if index == 0 {
-		log.Fatalc(r.context(), "processRaftCommand requires a non-zero index")
+		log.Fatalc(r.context(context.TODO()), "processRaftCommand requires a non-zero index")
 	}
 
 	r.mu.Lock()
@@ -1413,7 +1413,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 		ctx = cmd.ctx
 	} else {
 		// TODO(tschottdorf): consider the Trace situation here.
-		ctx = r.context()
+		ctx = r.context(context.Background())
 	}
 
 	log.Trace(ctx, "applying batch")
@@ -1426,7 +1426,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	if cmd != nil {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: err}
 	} else if err != nil && log.V(1) {
-		log.Errorc(r.context(), "error executing raft command: %s", err)
+		log.Errorc(r.context(context.TODO()), "error executing raft command: %s", err)
 	}
 
 	return err
@@ -1815,7 +1815,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		return nil
 	}
 
-	ctx := r.context()
+	ctx := r.context(context.TODO())
 
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
@@ -1879,7 +1879,7 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
-	ctx := r.context()
+	ctx := r.context(context.TODO())
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	kvs, hash, err := r.loadSystemConfigSpan()
 	if err != nil {
@@ -1928,7 +1928,7 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // range, store, node or cluster with corresponding actions taken.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		log.Errorc(r.context(), "stalling replica due to: %s", cErr.ErrorMsg)
+		log.Errorc(r.context(context.TODO()), "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
 		return roachpb.NewError(cErr)
 	}
@@ -1946,7 +1946,7 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	br, intents, pErr :=
-		r.executeBatch(r.context(), storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+		r.executeBatch(r.context(context.TODO()), storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}
