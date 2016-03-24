@@ -102,14 +102,13 @@ module Models {
       });
     }
 
-    export function setUIData(key: string, value: string): MithrilPromise<any> {
+    export function setUIData(keyValues: {[key: string]: string}): MithrilPromise<any> {
       return m.request<UnparsedClusterEvents>({
         url: `/_admin/v1/uidata`,
         config: Utils.Http.XHRConfig,
         method: "POST",
         data: {
-          key: key,
-          value: value,
+          key_values: keyValues,
         },
       });
     }

@@ -26,7 +26,7 @@ module Models {
     }
 
     /**
-     * OptInAttributes tracks the values we get from the SYSTEM.REPORTING table
+     * OptInAttributes tracks the values we get from the system.ui table
      */
     export class OptInAttributes {
       email: string = "";
@@ -54,7 +54,7 @@ module Models {
     }
 
     function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
-      return Models.API.setUIData("helpus", btoa(JSON.stringify(attrs)));
+      return Models.API.setUIData({"helpus": btoa(JSON.stringify(attrs))});
     }
 
     export class UserOptIn {

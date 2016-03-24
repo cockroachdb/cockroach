@@ -184,11 +184,9 @@ message EventsResponse {
 // SetUIDataRequest stores a value in the system.ui table with the given key
 // and value.
 message SetUIDataRequest {
-  // key identifies the key to set.
-  string key = 1;
-
-  // value identifies the value to store with the key.
-  bytes value = 2;
+  // key_values is a map of keys to bytes values. Each key will be stored
+  // with its corresponding vaulue as a separate row in system.ui.
+  map<string, bytes> key_values = 1;
 }
 
 // SetUIDataResponse is currently an empty response.

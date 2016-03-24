@@ -592,53 +592,56 @@ func (s *adminServer) getUIData(session *sql.Session, user, key string) ([]byte,
 
 // SetUIData is an endpoint that sets the data associated with a key.
 func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetUIDataResponse, error) {
-	if len(req.Key) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "key cannot be empty")
+	if len(req.KeyValues) == 0 {
+		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.sqlExecutor, nil)
 
-	// Do an upsert of the key.
-	br := s.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
-	if err := s.checkQueryResults(br.ResultList, 1); err != nil {
-		return nil, s.serverError(err)
-	}
+	for key, val := range req.KeyValues {
+		// Do an upsert of the key. We update each key in a separate transaction to
+		// avoid long-running transactions and possible deadlocks.
+		br := s.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
+		if err := s.checkQueryResults(br.ResultList, 1); err != nil {
+			return nil, s.serverError(err)
+		}
 
-	// See if the key already exists.
-	alreadyExists := true
-	if _, _, err := s.getUIData(session, s.getUser(req), req.Key); err != nil {
-		if err != errUIKeyNotFound {
-			return nil, s.serverError(err)
+		// See if the key already exists.
+		alreadyExists := true
+		if _, _, err := s.getUIData(session, s.getUser(req), key); err != nil {
+			if err != errUIKeyNotFound {
+				return nil, s.serverError(err)
+			}
+			alreadyExists = false
 		}
-		alreadyExists = false
-	}
 
-	// INSERT or UPDATE as appropriate.
-	if alreadyExists {
-		query := "UPDATE system.ui SET value = $1, lastUpdated = NOW() WHERE key = $2; COMMIT;"
-		params := []parser.Datum{
-			parser.DString(req.Value), // $1
-			parser.DString(req.Key),   // $2
-		}
-		r := s.sqlExecutor.ExecuteStatements(session, query, params)
-		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
-			return nil, s.serverError(err)
-		}
-		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
-			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
-		}
-	} else {
-		query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW()); COMMIT;"
-		params := []parser.Datum{
-			parser.DString(req.Key),  // $1
-			parser.DBytes(req.Value), // $2
-		}
-		r := s.sqlExecutor.ExecuteStatements(session, query, params)
-		if err := s.checkQueryResults(r.ResultList, 2); err != nil {
-			return nil, s.serverError(err)
-		}
-		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
-			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
+		// INSERT or UPDATE as appropriate.
+		if alreadyExists {
+			query := "UPDATE system.ui SET value = $1, lastUpdated = NOW() WHERE key = $2; COMMIT;"
+			params := []parser.Datum{
+				parser.DString(val), // $1
+				parser.DString(key), // $2
+			}
+			r := s.sqlExecutor.ExecuteStatements(session, query, params)
+			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
+				return nil, s.serverError(err)
+			}
+			if a, e := r.ResultList[0].RowsAffected, 1; a != e {
+				return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
+			}
+		} else {
+			query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW()); COMMIT;"
+			params := []parser.Datum{
+				parser.DString(key), // $1
+				parser.DBytes(val),  // $2
+			}
+			r := s.sqlExecutor.ExecuteStatements(session, query, params)
+			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
+				return nil, s.serverError(err)
+			}
+			if a, e := r.ResultList[0].RowsAffected, 1; a != e {
+				return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
+			}
 		}
 	}
 
