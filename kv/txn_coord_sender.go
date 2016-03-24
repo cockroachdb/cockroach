@@ -724,6 +724,8 @@ func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchReque
 		// Increase timestamp so on restart, we're ahead of any timestamp
 		// cache entries or newer versions which caused the restart.
 		newTxn.Restart(ba.UserPriority, pErr.GetTxn().Priority, newTxn.Timestamp)
+	case *roachpb.WriteTooOldError:
+		newTxn.Restart(ba.UserPriority, newTxn.Priority, t.ActualTimestamp)
 	case nil:
 		// Nothing to do here, avoid the default case.
 	default:

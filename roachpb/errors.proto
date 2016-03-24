@@ -86,6 +86,11 @@ message TransactionPushError {
 message TransactionRetryError {
 }
 
+// A TransactionReplayError indicates that a BeginTransaction request
+// is being replayed.
+message TransactionReplayError {
+}
+
 // A TransactionStatusError indicates that the transaction status is
 // incompatible with the requested operation. This might mean the
 // transaction has already been committed. It might also be the case
@@ -192,6 +197,7 @@ message ErrorDetail {
   optional TransactionAbortedError transaction_aborted = 5;
   optional TransactionPushError transaction_push = 6;
   optional TransactionRetryError transaction_retry = 7;
+  optional TransactionReplayError transaction_replay = 22;
   optional TransactionStatusError transaction_status = 8;
   optional WriteIntentError write_intent = 9;
   optional WriteTooOldError write_too_old = 10;

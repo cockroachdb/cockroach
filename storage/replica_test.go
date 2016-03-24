@@ -2156,6 +2156,46 @@ func TestRaftReplayProtection(t *testing.T) {
 	}
 }
 
+// TestRaftReplayProtectionInTxn verifies that transactional batches
+// enjoy protection from raft replays.
+func TestRaftReplayProtectionInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTxnAutoGC(true)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+
+	// Send a batch with begin txn, put & end txn.
+	var ba roachpb.BatchRequest
+	bt, btH := beginTxnArgs(key, txn)
+	put := putArgs(key, []byte("value"))
+	et, _ := endTxnArgs(txn, true)
+	et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}}
+	ba.Header = btH
+	ba.Add(&bt)
+	ba.Add(&put)
+	ba.Add(&et)
+	_, pErr := tc.Sender().Send(tc.rng.context(), ba)
+	if pErr != nil {
+		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Reach in and manually send to raft (to simulate Raft replay) and
+	// also avoid updating the timestamp cache; verify WriteTooOldError.
+	ba.Timestamp = txn.OrigTimestamp
+	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	respWithErr := <-pendingCmd.done
+	if _, ok := respWithErr.Err.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Fatalf("expected WriteTooOldError; got %s", respWithErr.Err)
+	}
+}
+
 // TestReplayProtection verifies that transactional replays cannot
 // commit intents. The replay consists of an initial BeginTxn/Write
 // batch and ends with an EndTxn batch.
@@ -2209,10 +2249,10 @@ func TestReplayProtection(t *testing.T) {
 			t.Errorf("%d: expected transaction record to be cleared (%t): %s", i, ok, err)
 		}
 
-		// Now replay begin & put BeginTransaction should fail with a retry.
+		// Now replay begin & put BeginTransaction should fail with a replay error.
 		_, pErr = tc.Sender().Send(tc.rng.context(), ba)
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-			t.Errorf("%d: expected transaction retry for iso=%s", i, iso)
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
+			t.Errorf("%d: expected transaction replay for iso=%s", i, iso)
 		}
 
 		// Intent should not have been created.
@@ -2221,9 +2261,11 @@ func TestReplayProtection(t *testing.T) {
 			t.Errorf("%d: unexpected error reading key: %s", i, pErr)
 		}
 
-		// Send a put for keyB.
-		if _, _, pErr := SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
-			t.Fatal(pErr)
+		// Send a put for keyB; should fail with a WriteTooOldError as this
+		// will look like an obvious replay.
+		_, _, pErr = SendWrapped(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: &putTxn}, &putB)
+		if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+			t.Errorf("%d: expected write too old error for iso=%s; got %s", i, iso, pErr)
 		}
 
 		// EndTransaction should also fail, but with a status error (does not exist).
@@ -2232,11 +2274,10 @@ func TestReplayProtection(t *testing.T) {
 			t.Errorf("%d: expected transaction aborted for iso=%s; got %s", i, iso, pErr)
 		}
 
-		// Expect that keyB intent did not get resolved.
+		// Expect that keyB intent did not get written!
 		gArgs = getArgs(keyB)
-		_, pErr = client.SendWrapped(tc.rng, tc.rng.context(), &gArgs)
-		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
-			t.Errorf("%d: expected write intent error, but got %s", i, pErr)
+		if _, pErr = client.SendWrapped(tc.rng, tc.rng.context(), &gArgs); pErr != nil {
+			t.Errorf("%d: unexpected error reading keyB: %s", i, pErr)
 		}
 	}
 }

@@ -125,7 +125,6 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		var resp roachpb.EndTransactionResponse
 		resp, intents, err = r.EndTransaction(batch, ms, h, *tArgs)
 		reply = &resp
-		log.Infof("END TXN: %s: %s", reply.Header().Txn, err)
 	case *roachpb.RangeLookupRequest:
 		var resp roachpb.RangeLookupResponse
 		resp, intents, err = r.RangeLookup(batch, h, *tArgs)
@@ -142,7 +141,6 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		var resp roachpb.PushTxnResponse
 		resp, err = r.PushTxn(batch, ms, h, *tArgs)
 		reply = &resp
-		log.Infof("PUSH TXN: %s pushes %s: %s", tArgs.PusherTxn, reply.(*roachpb.PushTxnResponse).PusheeTxn, err)
 	case *roachpb.ResolveIntentRequest:
 		var resp roachpb.ResolveIntentResponse
 		resp, err = r.ResolveIntent(batch, ms, h, *tArgs)
@@ -296,11 +294,6 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, remScanResu
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	if h.Txn == nil {
 		return util.Errorf("no transaction specified to HeartbeatTxn")
-	} else if h.Txn.WriteTooOld {
-		// This can happen on BeginTransaction replays which occur
-		// after an EndTransaction has already written to the write
-		// timestamp cache, causing WriteTooOld to be set.
-		return roachpb.NewTransactionRetryError()
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
 		return util.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
@@ -321,9 +314,15 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 		return reply, err
 	}
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
-
 	clonedTxn := h.Txn.Clone()
 	reply.Txn = &clonedTxn
+
+	// This can happen on BeginTransaction replays which occur
+	// after an EndTransaction has already written to the write
+	// timestamp cache, causing WriteTooOld to be set.
+	if reply.Txn.WriteTooOld {
+		return reply, roachpb.NewTransactionReplayError()
+	}
 
 	// Verify transaction does not already exist.
 	txn := roachpb.Transaction{}
@@ -349,7 +348,6 @@ func (r *Replica) BeginTransaction(batch engine.Engine, ms *engine.MVCCStats, h 
 
 	// Write the txn record.
 	reply.Txn.Writing = true
-	log.Infof("BEGIN TXN: %s", reply.Txn)
 	return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, reply.Txn)
 }
 

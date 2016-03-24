@@ -93,6 +93,7 @@
 		TransactionAbortedError
 		TransactionPushError
 		TransactionRetryError
+		TransactionReplayError
 		TransactionStatusError
 		WriteIntentError
 		WriteTooOldError

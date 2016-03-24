@@ -186,7 +186,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		// goroutine). The second iteration of the txn should read the
 		// correct value and commit.
 		if txn.Proto.Epoch == 0 && !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
-			t.Fatal("expected orig timestamp less than timestamp: %s", txn.Proto)
+			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto)
 		}
 		ir, pErr := txn.Inc(key, 1)
 		if pErr != nil {
