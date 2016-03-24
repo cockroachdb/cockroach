@@ -1613,6 +1613,9 @@ func (r *Replica) applyRaftCommandInBatch(
 // or transaction abort error is returned, respectively.
 // checkSequenceCache locks the replica.
 func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
+	if r.store.ctx.TestingKnobs.DisableSequenceCache {
+		return nil
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
