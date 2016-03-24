@@ -1596,7 +1596,7 @@ func (r *Replica) applyRaftCommandInBatch(
 			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
 			if (!isEndTxn && ba.IsTransactionWrite()) || pErr != nil {
 				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
-					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, pErr); putErr != nil {
+					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, 0 /* priority */, pErr); putErr != nil {
 					// TODO(tschottdorf): ReplicaCorruptionError.
 					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
 				}
@@ -1643,6 +1643,9 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 		}
 		newTxn := txn.Clone()
 		newTxn.Timestamp.Forward(entry.Timestamp)
+		if entry.Priority > newTxn.Priority {
+			newTxn.Priority = entry.Priority
+		}
 		return roachpb.NewErrorWithTxn(err, &newTxn)
 	}
 	return nil

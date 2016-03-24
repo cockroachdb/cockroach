@@ -155,7 +155,9 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	// txn with only the priority set.
 	if pusherTxn == nil {
 		pusherTxn = &roachpb.Transaction{
-			Priority: roachpb.MakePriority(h.UserPriority),
+			TxnMeta: roachpb.TxnMeta{
+				Priority: roachpb.MakePriority(h.UserPriority),
+			},
 		}
 	}
 

@@ -592,7 +592,6 @@ func mvccGetUsingIter(iter Iterator, key roachpb.Key, timestamp roachpb.Timestam
 func MVCCGetAsTxn(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txnMeta roachpb.TxnMeta) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
 		TxnMeta:       txnMeta,
-		Priority:      roachpb.MakePriority(roachpb.MinUserPriority),
 		Status:        roachpb.PENDING,
 		Writing:       true,
 		OrigTimestamp: txnMeta.Timestamp,

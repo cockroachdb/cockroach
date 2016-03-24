@@ -1579,7 +1579,7 @@ func TestReplicaSequenceCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = uint32(1 + i)
-		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, roachpb.NewError(pastError))
+		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, 0, roachpb.NewError(pastError))
 
 		args := incrementArgs(key, 1)
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{
@@ -1680,7 +1680,7 @@ func TestReplicaSequenceCacheOnlyWithIntent(t *testing.T) {
 
 	txn := newTransaction("test", []byte("test"), 10, roachpb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 100
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, nil); err != nil {
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2687,6 +2687,7 @@ func TestSequenceCacheError(t *testing.T) {
 
 	txn := roachpb.Transaction{}
 	txn.ID = uuid.NewV4()
+	txn.Priority = 1
 	txn.Sequence = 1
 	txn.Timestamp = roachpb.Timestamp{WallTime: 1}
 
@@ -2694,7 +2695,7 @@ func TestSequenceCacheError(t *testing.T) {
 	// to trigger TransactionRetryError.
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, nil); err != nil {
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2710,7 +2711,8 @@ func TestSequenceCacheError(t *testing.T) {
 	}
 
 	// Poison the sequence cache to trigger TransactionAbortedError.
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, nil); err != nil {
+	priority := int32(10)
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, priority, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2718,6 +2720,7 @@ func TestSequenceCacheError(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.Timestamp = ts
+		expected.Priority = priority
 		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
 			t.Errorf("txn does not match: %s v.s. %s", pErr.GetTxn(), expected)
 		}
@@ -3263,7 +3266,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 95, KeyBytes: 28, ValBytes: 67, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 145, SysCount: 3, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 99, KeyBytes: 28, ValBytes: 71, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 147, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.

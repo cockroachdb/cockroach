@@ -601,7 +601,7 @@ func pushTxn(repl *Replica, now roachpb.Timestamp, txn *roachpb.Transaction,
 			Key: txn.Key,
 		},
 		Now:       now,
-		PusherTxn: roachpb.Transaction{Priority: math.MaxInt32},
+		PusherTxn: roachpb.Transaction{TxnMeta: roachpb.TxnMeta{Priority: math.MaxInt32}},
 		PusheeTxn: txn.TxnMeta,
 		PushType:  typ,
 	}
