@@ -507,7 +507,7 @@ func (s *statusServer) handleNodesStatus(w http.ResponseWriter, r *http.Request,
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	rows, pErr := s.db.Scan(startKey, endKey, 0)
+	rows, pErr := s.db.ScanInconsistent(startKey, endKey, 0)
 	if pErr != nil {
 		log.Error(pErr)
 		http.Error(w, pErr.String(), http.StatusInternalServerError)
@@ -537,7 +537,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request, 
 
 	key := keys.NodeStatusKey(int32(nodeID))
 	nodeStatus := &status.NodeStatus{}
-	if pErr := s.db.GetProto(key, nodeStatus); pErr != nil {
+	if pErr := s.db.GetProtoInconsistent(key, nodeStatus); pErr != nil {
 		log.Error(pErr)
 		http.Error(w, pErr.String(), http.StatusInternalServerError)
 		return

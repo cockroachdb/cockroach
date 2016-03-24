@@ -198,12 +198,29 @@ func (db *DB) Get(key interface{}) (KeyValue, *roachpb.Error) {
 	return runOneRow(db, b)
 }
 
+// GetInconsistent is Get with an inconsistent read.
+func (db *DB) GetInconsistent(key interface{}) (KeyValue, *roachpb.Error) {
+	b := db.NewBatch()
+	b.ReadConsistency = roachpb.INCONSISTENT
+	b.Get(key)
+	return runOneRow(db, b)
+}
+
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetProto(key interface{}, msg proto.Message) *roachpb.Error {
 	r, pErr := db.Get(key)
+	if pErr != nil {
+		return pErr
+	}
+	return roachpb.NewError(r.ValueProto(msg))
+}
+
+// GetProtoInconsistent is GetProto with an inconsistent read.
+func (db *DB) GetProtoInconsistent(key interface{}, msg proto.Message) *roachpb.Error {
+	r, pErr := db.GetInconsistent(key)
 	if pErr != nil {
 		return pErr
 	}
@@ -246,8 +263,9 @@ func (db *DB) Inc(key interface{}, value int64) (KeyValue, *roachpb.Error) {
 	return runOneRow(db, b)
 }
 
-func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, *roachpb.Error) {
+func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool, readConsistency roachpb.ReadConsistencyType) ([]KeyValue, *roachpb.Error) {
 	b := db.NewBatch()
+	b.ReadConsistency = readConsistency
 	if !isReverse {
 		b.Scan(begin, end, maxRows)
 	} else {
@@ -264,7 +282,12 @@ func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]Key
 //
 // key can be either a byte slice or a string.
 func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, *roachpb.Error) {
-	return db.scan(begin, end, maxRows, false)
+	return db.scan(begin, end, maxRows, false, roachpb.CONSISTENT)
+}
+
+// ScanInconsistent is Scan with an inconsistent read.
+func (db *DB) ScanInconsistent(begin, end interface{}, maxRows int64) ([]KeyValue, *roachpb.Error) {
+	return db.scan(begin, end, maxRows, false, roachpb.INCONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -274,7 +297,7 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, *roachpb.
 //
 // key can be either a byte slice or a string.
 func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, *roachpb.Error) {
-	return db.scan(begin, end, maxRows, true)
+	return db.scan(begin, end, maxRows, true, roachpb.CONSISTENT)
 }
 
 // Del deletes one or more keys.
@@ -334,13 +357,13 @@ func (db *DB) CheckConsistency(begin, end interface{}) *roachpb.Error {
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(send func(int64, ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error), b *Batch) (*roachpb.BatchResponse, *roachpb.Error) {
+func sendAndFill(send func(int64, roachpb.ReadConsistencyType, ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error), b *Batch) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	br, pErr := send(b.MaxScanResults, b.reqs...)
+	br, pErr := send(b.MaxScanResults, b.ReadConsistency, b.reqs...)
 	if pErr != nil {
 		// Discard errors from fillResults.
 		_ = b.fillResults(nil, pErr)
@@ -400,10 +423,19 @@ func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
 
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns a nil response for empty input (no requests).
-func (db *DB) send(maxScanResults int64, reqs ...roachpb.Request) (
-	*roachpb.BatchResponse, *roachpb.Error) {
+func (db *DB) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType,
+	reqs ...roachpb.Request) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(reqs) == 0 {
 		return nil, nil
+	}
+
+	if readConsistency == roachpb.INCONSISTENT {
+		for _, req := range reqs {
+			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
+				req.Method() != roachpb.ReverseScan {
+				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
+			}
+		}
 	}
 
 	ba := roachpb.BatchRequest{}
@@ -413,6 +445,7 @@ func (db *DB) send(maxScanResults int64, reqs ...roachpb.Request) (
 	if db.userPriority != 1 {
 		ba.UserPriority = db.userPriority
 	}
+	ba.ReadConsistency = readConsistency
 
 	tracing.AnnotateTrace()
 

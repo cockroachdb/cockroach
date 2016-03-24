@@ -98,6 +98,7 @@ module Models {
       return m.request<GetUIDataResponse>({
         url: `/_admin/v1/uidata?key=${key}`,
         config: Utils.Http.XHRConfig,
+        background: true,
       });
     }
 

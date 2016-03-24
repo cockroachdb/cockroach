@@ -16,6 +16,10 @@ module Components {
     export function controller(): any {}
 
     export function view(ctrl: any, limit: number): MithrilVirtualElement {
+      if (!Models.Events.eventSingleton.loaded) {
+        Models.Events.eventSingleton.refresh();
+      }
+
       if (Models.Events.eventSingleton.loaded) {
         Models.Events.eventSingleton.setLimit(limit);
 

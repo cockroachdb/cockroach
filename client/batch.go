@@ -49,6 +49,10 @@ type Batch struct {
 	// in the batch. This can only be used if all requests are of the same type, and that type is
 	// Scan or ReverseScan.
 	MaxScanResults int64
+	// ReadConsistency specifies the consistency for read operations. The default
+	// is CONSISTENT. This value is ignored for write operations.
+	ReadConsistency roachpb.ReadConsistencyType
+
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf [8]Result
 	rowsBuf    [8]KeyValue

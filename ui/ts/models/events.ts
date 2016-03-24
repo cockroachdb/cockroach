@@ -85,11 +85,7 @@ module Models {
       updated: Moment;
       limit: number = 10;
 
-      constructor() {
-        this.refresh().then((): void => {
-          this.loaded = true;
-        }) ;
-      }
+      constructor() {}
 
       setLimit(limit: number): void {
         if (this.limit !== limit) {
@@ -100,6 +96,7 @@ module Models {
 
       refresh(): _mithril.MithrilPromise<any> {
         return Models.API.events().then((response: ClusterEvents): void => {
+          this.loaded = true;
           this.normalizedRows = this.convertToNormalizedRows(response.events);
         });
       }
