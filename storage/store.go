@@ -378,6 +378,9 @@ type StoreTestingKnobs struct {
 	// A callback to be called instead of panicking due to a
 	// checksum mismatch in VerifyChecksum()
 	BadChecksumPanic func()
+	// When true, sequence cache entries will not be checked (but still
+	// written).
+	DisableSequenceCache bool
 }
 
 type storeMetrics struct {
