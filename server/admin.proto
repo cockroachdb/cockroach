@@ -181,14 +181,11 @@ message EventsResponse {
   repeated Event events = 1;
 }
 
-// SetUIDataRequest stores a value in the system.ui table with the given key
-// and value.
+// SetUIDataRequest stores the given key/value pairs in the system.ui table.
 message SetUIDataRequest {
-  // key identifies the key to set.
-  string key = 1;
-
-  // value identifies the value to store with the key.
-  bytes value = 2;
+  // key_values is a map of keys to bytes values. Each key will be stored
+  // with its corresponding value as a separate row in system.ui.
+  map<string, bytes> key_values = 1;
 }
 
 // SetUIDataResponse is currently an empty response.
@@ -266,11 +263,14 @@ service Admin {
   // This requires a POST. Because of the libraries we're using, the POST body
   // must be in the following format:
   //
-  // {"key": "KEY GOES HERE", "value": "BASE64-ENCODED VALUE GOES HERE"}
+  // {"key_values":
+  //   { "key1": "base64_encoded_value1"},
+  //   ...
+  //   { "keyN": "base64_encoded_valueN"},
+  // }
   //
-  // Note that "key" and "value" are both quoted strings. value must be base64-
-  // encoded, because it may be binary. All of these JSON style decisions
-  // have been forced by the underlying libraries.
+  // Note that all keys are quoted strings and that all values are base64-
+  // encoded.
   rpc SetUIData(SetUIDataRequest) returns (SetUIDataResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/uidata"
