@@ -34,8 +34,8 @@ CockroachDB is currently in alpha. See our
 
     ```shell
     $ ./cockroach start --insecure &
-    $ ./cockroach start --insecure --store=node2-data --port=26258 --http-port=8081 --join=localhost:26257 &
-    $ ./cockroach start --insecure --store=node3-data --port=26259 --http-port=8082 --join=localhost:26257 &
+    $ ./cockroach start --insecure --store=cockroach-data2 --port=26258 --http-port=8081 --join=localhost:26257 &
+    $ ./cockroach start --insecure --store=cockroach-data3 --port=26259 --http-port=8082 --join=localhost:26257 &
     ```
 
 3.  [Start the built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html) as an interactive shell:
@@ -70,9 +70,9 @@ CockroachDB is currently in alpha. See our
     +------+----------+
     ```
 
-4. Checkout the admin UI by pointing your browser to `http://<localhost>:26257`.
+4. Checkout the admin UI by pointing your browser to `http://<localhost>:8080`.
 
-5. Learn how to [secure a cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html).
+5. CockroachDB makes it easy to [secure a cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html).
 
 ## Client Drivers
 
@@ -90,8 +90,9 @@ When you see a bug or have improvements to suggest, please open an [issue](https
 
 For development-related questions and anything else, there are two easy ways to get in touch:
 
--   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach). This is the best, most immediate way to connect with CockroachDB engineers.
--   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db). Please join first or you messages may be held back for moderation.
+-   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the best, most immediate way to connect with CockroachDB engineers.
+
+-   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db) - Please join first or you messages may be held back for moderation.
 
 ## Contributing
 
@@ -107,22 +108,26 @@ We're an open source project and welcome contributions.
 
 ## Talks
 
--   12/2/2015: [Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball), 21min  
-    CockroachDB's MVCC model.
+The best ones to start with:
 
 -   10/28/2015: [Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball), 30min  
     Architecture & overview.
 
--   8/21/2015: [Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell), 52min
-
 -   6/16/2015: [Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball), 23min  
     A short, less technical presentation of CockroachDB.
+
+Other talks of interest:
+
+-   12/2/2015: [Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball), 21min  
+    CockroachDB's MVCC model.
+
+-   8/21/2015: [Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell), 52min
 
 -   6/10/2015: [NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf), 15min  
     A short, non-technical talk with a small cluster survivability demo.
 
 -   5/27/2015: [CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball), 25min  
-    An introduction to the goals and design of CockroachDB. **Recommended** if you have time for only one talk.
+    An introduction to the goals and design of CockroachDB. 
 
 -   3/4/2015: [The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf), 45min  
     The most technical talk given thus far, going through the implementation of transactions in some detail.
