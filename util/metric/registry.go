@@ -169,6 +169,13 @@ func (r *Registry) GetGauge(name string) *Gauge {
 	return gauge
 }
 
+// GaugeFloat64 registers a new GaugeFloat64 with the given name.
+func (r *Registry) GaugeFloat64(name string) *GaugeFloat64 {
+	g := NewGaugeFloat64()
+	r.MustAdd(name, g)
+	return g
+}
+
 // Rate creates an EWMA rate over the given timescale. The comments on NewRate
 // apply.
 func (r *Registry) Rate(name string, timescale time.Duration) *Rate {

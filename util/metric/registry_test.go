@@ -26,6 +26,7 @@ func TestRegistry(t *testing.T) {
 	sub := NewRegistry()
 
 	topGauge := r.Gauge("top.gauge")
+	_ = r.GaugeFloat64("top.floatgauge")
 	topCounter := r.Counter("top.counter")
 	topRate := r.Rate("top.rate", time.Minute)
 	_ = r.Rates("top.rates")
@@ -50,6 +51,7 @@ func TestRegistry(t *testing.T) {
 		"top.latency-10m":      {},
 		"top.latency-1h":       {},
 		"top.gauge":            {},
+		"top.floatgauge":       {},
 		"top.counter":          {},
 		"bottom.gauge#1":       {},
 		"bottom.rates-count#1": {},

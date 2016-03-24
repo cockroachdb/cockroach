@@ -291,6 +291,8 @@ func extractValue(mtr interface{}) (float64, error) {
 		return float64(mtr.Count()), nil
 	case *metric.Gauge:
 		return float64(mtr.Value()), nil
+	case *metric.GaugeFloat64:
+		return mtr.Value(), nil
 	default:
 		return 0, util.Errorf("cannot extract value for type %T", mtr)
 	}

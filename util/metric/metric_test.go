@@ -38,7 +38,15 @@ func TestGauge(t *testing.T) {
 		t.Fatalf("unexpected value: %d", v)
 	}
 	testMarshal(t, g, "10")
+}
 
+func TestGaugeFloat64(t *testing.T) {
+	g := NewGaugeFloat64()
+	g.Update(10.4)
+	if v := g.Value(); v != 10.4 {
+		t.Fatalf("unexpected value: %d", v)
+	}
+	testMarshal(t, g, "10.4")
 }
 
 func TestCounter(t *testing.T) {

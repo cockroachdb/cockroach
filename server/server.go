@@ -27,6 +27,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -75,6 +76,7 @@ type Server struct {
 	pgServer            pgwire.Server
 	node                *Node
 	recorder            *status.MetricsRecorder
+	runtime             status.RuntimeStatSampler
 	admin               *adminServer
 	status              *statusServer
 	tsDB                *ts.DB
@@ -198,6 +200,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder.AddNodeRegistry("sql.%s", sqlRegistry)
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 	s.recorder.AddNodeRegistry("clock-offset.%s", s.rpcContext.RemoteClocks.Registry())
+
+	s.runtime = status.MakeRuntimeStatSampler(s.clock)
+	s.recorder.AddNodeRegistry("sys.%s", s.runtime.Registry())
 
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
@@ -335,8 +340,7 @@ func (s *Server) Start() error {
 	}
 
 	// Begin recording runtime statistics.
-	runtime := status.NewRuntimeStatRecorder(s.node.Descriptor.NodeID, s.clock)
-	s.tsDB.PollSource(runtime, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
+	s.startSampleEnvironment(s.ctx.MetricsFrequency)
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(s.recorder, s.ctx.MetricsFrequency, ts.Resolution10s, s.stopper)
@@ -363,6 +367,24 @@ func (s *Server) Start() error {
 	})
 
 	return nil
+}
+
+// startSampleEnvironment begins a worker that periodically instructs the
+// runtime stat sampler to sample the environment.
+func (s *Server) startSampleEnvironment(frequency time.Duration) {
+	// Immediately record summaries once on server startup.
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(frequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.runtime.SampleEnvironment()
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // initHTTP registers http prefixes.
