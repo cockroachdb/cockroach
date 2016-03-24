@@ -87,7 +87,7 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 		sample := roachpb.InternalTimeSeriesSample{
 			Offset: sampleOffset,
 			Count:  1,
-			Sum:    dp.Value,
+			Sum:    roachpb.TimeSeriesSampleSum(dp.Value),
 		}
 		itsd.Samples = append(itsd.Samples, sample)
 	}
