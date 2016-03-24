@@ -1370,7 +1370,7 @@ func (r *Replica) CheckConsistency(args roachpb.CheckConsistencyRequest, desc *r
 }
 
 const (
-	replicaChecksumVersion    = 0
+	replicaChecksumVersion    = 1
 	replicaChecksumGCInterval = time.Hour
 )
 
