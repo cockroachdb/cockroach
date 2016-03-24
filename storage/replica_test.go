@@ -2175,8 +2175,12 @@ func TestRaftReplayProtection(t *testing.T) {
 func TestRaftReplayProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
+	ctx := TestStoreContext()
+	// The sequence cache provides some replay protection and can make this
+	// test flaky when the fake replay below is preceded by an actual replay.
+	ctx.TestingKnobs.DisableSequenceCache = true
 	tc := testContext{}
-	tc.Start(t)
+	tc.StartWithStoreContext(t, ctx)
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
@@ -2197,16 +2201,18 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
-	// Reach in and manually send to raft (to simulate Raft replay) and
-	// also avoid updating the timestamp cache; verify WriteTooOldError.
-	ba.Timestamp = txn.OrigTimestamp
-	pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	respWithErr := <-pendingCmd.done
-	if _, ok := respWithErr.Err.GetDetail().(*roachpb.WriteTooOldError); !ok {
-		t.Fatalf("expected WriteTooOldError; got %s", respWithErr.Err)
+	for i := 0; i < 2; i++ {
+		// Reach in and manually send to raft (to simulate Raft replay) and
+		// also avoid updating the timestamp cache; verify WriteTooOldError.
+		ba.Timestamp = txn.OrigTimestamp
+		pendingCmd, err := tc.rng.proposeRaftCommand(tc.rng.context(), ba)
+		if err != nil {
+			t.Fatalf("%d: unexpected error: %s", i, err)
+		}
+		respWithErr := <-pendingCmd.done
+		if _, ok := respWithErr.Err.GetDetail().(*roachpb.WriteTooOldError); !ok {
+			t.Fatalf("%d: expected WriteTooOldError; got %s", i, respWithErr.Err)
+		}
 	}
 }
 
