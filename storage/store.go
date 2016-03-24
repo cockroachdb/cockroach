@@ -71,7 +71,7 @@ const (
 
 var (
 	// defaultRangeRetryOptions are default retry options for retrying commands
-	// sent to the store's ranges, for WriteTooOld and WriteIntent errors.
+	// sent to the store's ranges, for WriteIntent errors.
 	defaultRangeRetryOptions = retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     5 * time.Second,
@@ -1507,30 +1507,18 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	}
 
 	if ba.Txn == nil {
-		// When not transactional, allow empty timestamp and simply use local
-		// clock.
+		// When not transactional, allow empty timestamp and simply use
+		// local clock.
 		if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 			ba.Timestamp.Forward(s.Clock().Now())
 		}
-
-		if ba.IsWrite() {
-			// If a batch is non-transactional, self-overlapping writes at the
-			// same timestamp would run into a WriteTooOldError. Pretend that
-			// some more logical clock ticks happened; when executing, we'll
-			// spread out the requests over those ticks.
-			// We're not using non-transactional requests for much, so this is
-			// an acceptable solution for the time being.
-			ba.Timestamp.Forward(ba.Timestamp.Add(0, int32(len(ba.Requests))-1))
-		}
 	} else if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
 		return nil, roachpb.NewErrorf("transactional request must not set batch timestamp")
-	} else if ba.IsReadOnly() {
-		// OrigTimestamp is the read timestamp of the transaction throughout
-		// its lifetime.
-		ba.Timestamp = ba.Txn.OrigTimestamp
 	} else {
-		// Writes happen at the provisional commit timestamp.
-		ba.Timestamp = ba.Txn.Timestamp
+		// Always use the original timestamp for reads and writes, even
+		// though some intents may be written at higher timestamps in the
+		// event of a WriteTooOldError.
+		ba.Timestamp = ba.Txn.OrigTimestamp
 	}
 
 	if s.Clock().MaxOffset() > 0 {
@@ -1570,6 +1558,13 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 					br.Txn = &roachpb.Transaction{}
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+				// Update our clock with the outgoing response txn timestamp.
+				s.ctx.Clock.Update(br.Txn.Timestamp)
+			}
+		} else {
+			if pErr == nil {
+				// Update our clock with the outgoing response timestamp.
+				s.ctx.Clock.Update(br.Timestamp)
 			}
 		}
 
@@ -1658,15 +1653,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		}
 
 		switch t := pErr.GetDetail().(type) {
-		case *roachpb.WriteTooOldError:
-			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
-			// Update request timestamp and retry immediately.
-			ba.Timestamp = t.ExistingTimestamp.Next()
-			r.Reset()
-			if log.V(1) {
-				log.Warning(pErr)
-			}
-			continue
 		case *roachpb.WriteIntentError:
 			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
@@ -1678,15 +1664,15 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 				}
 				continue
 			}
-
-			// Otherwise, update timestamp on read/write and backoff / retry.
-			for _, intent := range t.Intents {
-				if ba.IsWrite() && ba.Timestamp.Less(intent.Txn.Timestamp) {
-					ba.Timestamp = intent.Txn.Timestamp.Next()
-				}
-			}
 			if log.V(1) {
 				log.Warning(pErr)
+			}
+			// Update the batch transaction, if applicable, in case it has
+			// been independently pushed and has more recent information.
+			if ba.Txn != nil {
+				if pErr := s.maybeUpdateTransaction(&ba.Header, now); pErr != nil {
+					return nil, pErr
+				}
 			}
 			continue
 		}
@@ -1701,6 +1687,43 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 	}
 	return nil, pErr
+}
+
+// maybeUpdateTransaction does a "touch" push on the specified
+// transaction to glean possible changes, such as a higher timestamp
+// and/or priority. It turns out this is necessary while a request
+// is in a backoff/retry loop pushing write intents as two txns
+// can have circular dependencies where both are unable to push
+// because they have different information about their own txns.
+//
+// The supplied transaction is updated with the results of the
+// "touch" push if possible.
+func (s *Store) maybeUpdateTransaction(h *roachpb.Header, now roachpb.Timestamp) *roachpb.Error {
+	// Attempt to push the transaction which created the intent.
+	b := client.Batch{}
+	b.InternalAddRequest(&roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: h.Txn.Key,
+		},
+		Now:       now,
+		PusheeTxn: h.Txn.TxnMeta,
+		PushType:  roachpb.PUSH_UPDATE,
+	})
+	br, pErr := s.db.RunWithResponse(&b)
+	if pErr != nil {
+		return pErr
+	}
+	updatedTxn := br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+	if updatedTxn.ID != nil { // can be nil if no BeginTransaction has been sent
+		switch updatedTxn.Status {
+		case roachpb.COMMITTED:
+			return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), &updatedTxn)
+		case roachpb.ABORTED:
+			return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &updatedTxn)
+		}
+		h.Txn = &updatedTxn
+	}
+	return nil
 }
 
 // enqueueRaftMessage enqueues a request for eventual processing. It

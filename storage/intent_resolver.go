@@ -84,6 +84,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 	readOnly := roachpb.IsReadOnly(args) // TODO(tschottdorf): pass as param
 
 	resolveIntents, pushErr := ir.maybePushTransactions(ctx, wiErr.Intents, h, pushType, false)
+
 	if resErr := ir.resolveIntents(ctx, r, resolveIntents,
 		false /* !wait */, true /* poison */); resErr != nil {
 		// When resolving without waiting, errors should not
@@ -119,7 +120,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 	return roachpb.NewError(&wiErr)
 }
 
-// maybePushTransaction tries to push the conflicting transaction(s)
+// maybePushTransactions tries to push the conflicting transaction(s)
 // responsible for the given intents: either move its
 // timestamp forward on a read/write conflict, abort it on a
 // write/write conflict, or do nothing if the transaction is no longer
@@ -262,7 +263,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				defer cancel()
 				h := roachpb.Header{Timestamp: now}
 				resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
-					item.intents, h, roachpb.PUSH_TOUCH, true /* skipIfInFlight */)
+					item.intents, h, roachpb.PUSH_TOUCH, true /* skipInFlight */)
 				if err := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
 					true /* wait */, false /* TODO(tschottdorf): #5088 */); err != nil {
 					log.Warningc(ctxWithTimeout, "failed to resolve intents: %s", err)

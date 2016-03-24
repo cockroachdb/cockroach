@@ -234,12 +234,12 @@ func (sc *SequenceCache) Put(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.
 	return engine.MVCCPutProto(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
 }
 
-// Responses with write-too-old, write-intent and not leader errors
-// are retried on the server, and so are not recorded in the sequence
-// cache in the hopes of retrying to a successful outcome.
+// Responses with write-intent and not leader errors are retried on
+// the server, and so are not recorded in the sequence cache in the
+// hopes of retrying to a successful outcome.
 func (sc *SequenceCache) shouldCacheError(pErr *roachpb.Error) bool {
 	switch pErr.GetDetail().(type) {
-	case *roachpb.WriteTooOldError, *roachpb.WriteIntentError, *roachpb.NotLeaderError, *roachpb.RangeKeyMismatchError:
+	case *roachpb.WriteIntentError, *roachpb.NotLeaderError, *roachpb.RangeKeyMismatchError:
 		return false
 	}
 	return true

@@ -1,5 +1,6 @@
-# Demonstrates eager restarting of a serializable transaction when its
-# commit timestamp moves forward.
+# Demonstrates late restarting of a serializable transaction when its
+# commit timestamp has moved forward.
+# TODO(tschottdorf): implement eager restart for CLI.
 
 statement ok
 CREATE TABLE t (a INT)
@@ -25,10 +26,14 @@ SELECT * FROM t
 
 user root
 
-# The insert increases the candidate timestamp, and a restart occurs
-# immediately (as opposed to on EndTransaction).
-statement error retry txn.*
+# The insert increases the candidate timestamp, but a restart won't occur
+# until an EndTransaction.
+statement ok
 INSERT INTO t(a) VALUES (1)
+
+# Commit will send an EndTransaction which will result in a retry error.
+statement error retry txn.*
+COMMIT
 
 statement ok
 ROLLBACK

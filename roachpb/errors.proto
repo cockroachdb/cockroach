@@ -86,6 +86,13 @@ message TransactionPushError {
 message TransactionRetryError {
 }
 
+// A TransactionReplayError indicates that a BeginTransaction request
+// is being replayed. This can happen on network replays in which a
+// BeginTransaction request is sent again either from the client or
+// is belatedly delivered after an earlier attempt succeeded.
+message TransactionReplayError {
+}
+
 // A TransactionStatusError indicates that the transaction status is
 // incompatible with the requested operation. This might mean the
 // transaction has already been committed. It might also be the case
@@ -111,10 +118,11 @@ message WriteIntentError {
 
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
-// history. The write should be retried at existing_timestamp+1.
+// history. The write is instead done at actual timestamp, which is
+// the timestamp of the existing version+1.
 message WriteTooOldError {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+  optional Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // An OpRequiresTxnError indicates that a command required to be
@@ -191,6 +199,7 @@ message ErrorDetail {
   optional TransactionAbortedError transaction_aborted = 5;
   optional TransactionPushError transaction_push = 6;
   optional TransactionRetryError transaction_retry = 7;
+  optional TransactionReplayError transaction_replay = 22;
   optional TransactionStatusError transaction_status = 8;
   optional WriteIntentError write_intent = 9;
   optional WriteTooOldError write_too_old = 10;

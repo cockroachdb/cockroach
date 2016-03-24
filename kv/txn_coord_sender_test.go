@@ -524,6 +524,8 @@ func TestTxnCoordSenderGC(t *testing.T) {
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	origTS := makeTS(123, 0)
+	plus10 := origTS.Add(10, 10)
+	plus20 := plus10.Add(10, 0)
 	testCases := []struct {
 		pErr             *roachpb.Error
 		expEpoch         uint32
@@ -547,14 +549,14 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					roachpb.NewReadWithinUncertaintyIntervalError(roachpb.ZeroTimestamp, roachpb.ZeroTimestamp),
 					&roachpb.Transaction{})
 				const nodeID = 1
-				pErr.GetTxn().UpdateObservedTimestamp(nodeID, origTS.Add(10, 10))
+				pErr.GetTxn().UpdateObservedTimestamp(nodeID, plus10)
 				pErr.OriginNode = nodeID
 				return pErr
 			}(),
 			expEpoch:  1,
 			expPri:    1,
-			expTS:     origTS.Add(10, 10),
-			expOrigTS: origTS.Add(10, 10),
+			expTS:     plus10,
+			expOrigTS: plus10,
 			nodeSeen:  true,
 		},
 		{
@@ -562,7 +564,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// the next attempt.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
 				&roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: origTS.Add(20, 10)}, Priority: 10,
+					TxnMeta: roachpb.TxnMeta{Timestamp: plus20}, Priority: 10,
 				}),
 			expPri: 10,
 		},
@@ -571,24 +573,24 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// Additionally, priority ratchets up to just below the pusher's.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 				PusheeTxn: roachpb.Transaction{
-					TxnMeta:  roachpb.TxnMeta{Timestamp: origTS.Add(10, 10)},
+					TxnMeta:  roachpb.TxnMeta{Timestamp: plus10},
 					Priority: int32(10)},
 			},
 				&roachpb.Transaction{}),
 			expEpoch:  1,
 			expPri:    9,
-			expTS:     origTS.Add(10, 11),
-			expOrigTS: origTS.Add(10, 11),
+			expTS:     plus10,
+			expOrigTS: plus10,
 		},
 		{
 			// On retry, restart with new epoch, timestamp and priority.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{},
 				&roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: origTS.Add(10, 10)}, Priority: int32(10)}),
+					TxnMeta: roachpb.TxnMeta{Timestamp: plus10}, Priority: int32(10)}),
 			expEpoch:  1,
 			expPri:    10,
-			expTS:     origTS.Add(10, 10),
-			expOrigTS: origTS.Add(10, 10),
+			expTS:     plus10,
+			expOrigTS: plus10,
 		},
 	}
 
@@ -631,7 +633,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				i, test.expTS, txn.Proto.Timestamp)
 		}
 		if !txn.Proto.OrigTimestamp.Equal(test.expOrigTS) {
-			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
+			t.Errorf("%d: expected orig timestamp to be %s; got %s",
 				i, test.expOrigTS, txn.Proto.OrigTimestamp)
 		}
 		if ns := txn.Proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
@@ -1121,12 +1123,22 @@ func TestTxnRestartCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This put increases the candidate timestamp, which causes an immediate restart.
-	if err := txn.Put(key, value); err == nil {
-		t.Fatalf("unexpected success")
+	// This put will lay down an intent, txn timestamp will increase beyond original.
+	if err := txn.Put(key, value); err != nil {
+		t.Fatal(err)
 	}
+	if !txn.Proto.OrigTimestamp.Less(txn.Proto.Timestamp) {
+		t.Errorf("expected timestamp to increase: %s", txn.Proto)
+	}
+
+	// Commit (should cause restart metric to increase).
+	pErr := txn.Commit()
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+		t.Errorf("expected transaction retry err; got %s", pErr)
+	}
+
 	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "restart txn", 0, 1, 0, 1)
+	checkTxnMetrics(t, sender, "restart txn", 0, 0, 1, 1)
 }
 
 func TestTxnDurations(t *testing.T) {

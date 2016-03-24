@@ -821,18 +821,24 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
-	return mvccPutUsingIter(engine, iter, ms, key, timestamp, value, txn)
+	return mvccPutUsingIter(engine, iter, ms, key, timestamp, &value, txn, nil /* valueFn */)
 }
 
+// TODO(nvanbenschoten): explore non-pointer roachpb.Value.
 func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key,
-	timestamp roachpb.Timestamp, value roachpb.Value, txn *roachpb.Transaction) error {
-	if value.Timestamp != roachpb.ZeroTimestamp {
-		return util.Errorf("cannot have timestamp set in value on Put")
+	timestamp roachpb.Timestamp, value *roachpb.Value, txn *roachpb.Transaction,
+	valueFn func(*roachpb.Value) ([]byte, error)) error {
+	var rawBytes []byte
+	if value != nil {
+		if value.Timestamp != roachpb.ZeroTimestamp {
+			return util.Errorf("cannot have timestamp set in value on Put")
+		}
+		rawBytes = value.RawBytes
 	}
 
 	buf := putBufferPool.Get().(*putBuffer)
 
-	err := mvccPutInternal(engine, iter, ms, key, timestamp, value.RawBytes, txn, buf)
+	err := mvccPutInternal(engine, iter, ms, key, timestamp, rawBytes, txn, buf, valueFn)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -849,7 +855,7 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
-	err := mvccPutInternal(engine, iter, ms, key, timestamp, nil, txn, buf)
+	err := mvccPutInternal(engine, iter, ms, key, timestamp, nil, txn, buf, nil)
 
 	// Using defer would be more convenient, but it is measurably
 	// slower.
@@ -858,9 +864,14 @@ func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb
 }
 
 // mvccPutInternal adds a new timestamped value to the specified key.
-// If value is nil, creates a deletion tombstone value.
+// If value is nil, creates a deletion tombstone value. valueFn is
+// an optional alternative to supplying value directly. It is passed
+// the existing value (or nil if none exists) and returns the value
+// to write or an error. If valueFn is supplied, value should be nil
+// and vice versa. valueFn can delete by returning nil. Returning
+// []byte{} will write an empty value, not delete.
 func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	value []byte, txn *roachpb.Transaction, buf *putBuffer) error {
+	value []byte, txn *roachpb.Transaction, buf *putBuffer, valueFn func(*roachpb.Value) ([]byte, error)) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -871,14 +882,37 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 		return err
 	}
 
+	// maybeGetValue returns either value (if valueFn is nil) or else
+	// the result of calling valueFn on the data read at readTS.
+	maybeGetValue := func(exists bool, readTS roachpb.Timestamp) ([]byte, error) {
+		// If a valueFn is specified, read existing value using the iter.
+		if valueFn == nil {
+			return value, nil
+		}
+		var exVal *roachpb.Value
+		if exists {
+			getBuf := getBufferPool.Get().(*getBuffer)
+			defer getBufferPool.Put(getBuf)
+			getBuf.meta = buf.meta // initialize get metadata from what we've already read
+			if exVal, _, err = mvccGetInternal(iter, metaKey, readTS, true /* consistent */, txn, getBuf); err != nil {
+				return nil, err
+			}
+		}
+		return valueFn(exVal)
+	}
+
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.Equal(roachpb.ZeroTimestamp)
 	if ok && putIsInline != buf.meta.IsInline() {
 		return util.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
 	}
+	// Handle inline put.
 	if putIsInline {
 		var metaKeySize, metaValSize int64
+		if value, err = maybeGetValue(ok, timestamp); err != nil {
+			return err
+		}
 		if value == nil {
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
@@ -892,6 +926,7 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 	}
 
 	var meta *MVCCMetadata
+	var maybeTooOldErr error
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
@@ -906,25 +941,56 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 				return util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
 			}
-
+			// Make sure we process valueFn before clearing any earlier
+			// version.  For example, a conditional put within same
+			// transaction should read previous write.
+			if value, err = maybeGetValue(ok, timestamp); err != nil {
+				return err
+			}
 			// We are replacing our own older write intent. If we are
 			// writing at the same timestamp we can simply overwrite it;
 			// otherwise we must explicitly delete the obsolete intent.
 			if !timestamp.Equal(meta.Timestamp) {
 				versionKey := metaKey
 				versionKey.Timestamp = meta.Timestamp
-				if err := engine.Clear(versionKey); err != nil {
+				if err = engine.Clear(versionKey); err != nil {
 					return err
 				}
 			}
+		} else if !meta.Timestamp.Less(timestamp) {
+			// This is the case where we're trying to write under a
+			// committed value. Obviously we can't do that, but we can
+			// increment our timestamp to one logical tick past the existing
+			// value and go on to write, but then return a write-too-old
+			// error indicating what the timestamp ended up being. This
+			// timestamp can then be used to increment the txn timestamp and
+			// be returned with the response.
+			actualTimestamp := meta.Timestamp.Next()
+			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: actualTimestamp}
+			// If we're in a transaction, always get the value at the orig
+			// timestamp.
+			if txn != nil {
+				if value, err = maybeGetValue(ok, timestamp); err != nil {
+					return err
+				}
+			} else {
+				// Outside of a transaction, read the latest value and advance
+				// the write timestamp to the latest value's timestamp + 1. The
+				// new timestamp is returned to the caller in maybeTooOldErr.
+				if value, err = maybeGetValue(ok, actualTimestamp); err != nil {
+					return err
+				}
+			}
+			timestamp = actualTimestamp
 		} else {
-			// No pending transaction, so we can write as long as it is not
-			// in the past.
-			if !meta.Timestamp.Less(timestamp) {
-				return &roachpb.WriteTooOldError{Timestamp: timestamp, ExistingTimestamp: meta.Timestamp}
+			if value, err = maybeGetValue(ok, timestamp); err != nil {
+				return err
 			}
 		}
 	} else {
+		if value, err = maybeGetValue(ok, timestamp); err != nil {
+			return err
+		}
 		// No existing metadata record. If this is a delete, do nothing;
 		// otherwise we can perform the write.
 		if value == nil {
@@ -940,10 +1006,10 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 		return err
 	}
 
-	// Write the mvcc metadata now that we have sizes for the latest versioned
-	// value. For values, the size of keys is always account for as
-	// mvccVersionTimestampSize. The size of the metadata key is accounted for
-	// separately.
+	// Write the mvcc metadata now that we have sizes for the latest
+	// versioned value. For values, the size of keys is always accounted
+	// for as mvccVersionTimestampSize. The size of the metadata key is
+	// accounted for separately.
 	newMeta.KeyBytes = mvccVersionTimestampSize
 	newMeta.ValBytes = int64(len(value))
 	newMeta.Deleted = value == nil
@@ -967,7 +1033,7 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 			metaKeySize, metaValSize, meta, newMeta))
 	}
 
-	return nil
+	return maybeTooOldErr
 }
 
 // MVCCIncrement fetches the value for key, and assuming the value is
@@ -977,41 +1043,31 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 // An initial value is read from the key using the same operational
 // timestamp as we use to write a value.
 func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, inc int64) (int64, error) {
-	// Use the specified timestamp to read the value. When a write
-	// with newer timestamp exists, one of the following will
-	// happen:
-	// - If the read value is not an integer value or overflow
-	//   happens, returns an error with an appropriate message.
-	// - Otherwise, either a WriteTooOldError or WriteIntentError is returned,
-	//   depending on whether the newer write is an intent.
-	value, _, err := MVCCGet(engine, key, timestamp, true /* consistent */, txn)
-	if err != nil {
-		return 0, err
-	}
+	iter := engine.NewIterator(key)
+	defer iter.Close()
 
 	var int64Val int64
-	if value != nil {
-		int64Val, err = value.GetInt()
-		if err != nil {
-			return 0, util.Errorf("key %q does not contain an integer value", key)
+	err := mvccPutUsingIter(engine, iter, ms, key, timestamp, nil, txn, func(value *roachpb.Value) ([]byte, error) {
+		if value != nil {
+			var err error
+			if int64Val, err = value.GetInt(); err != nil {
+				return nil, util.Errorf("key %q does not contain an integer value", key)
+			}
 		}
-	}
 
-	// Check for overflow and underflow.
-	if willOverflow(int64Val, inc) {
-		return 0, util.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
-	}
+		// Check for overflow and underflow.
+		if willOverflow(int64Val, inc) {
+			return nil, util.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
+		}
 
-	// Skip writing the value in the event the value already exists.
-	if inc == 0 && value != nil {
-		return int64Val, nil
-	}
+		int64Val = int64Val + inc
+		newValue := roachpb.Value{}
+		newValue.SetInt(int64Val)
+		newValue.InitChecksum(key)
+		return newValue.RawBytes, nil
+	})
 
-	r := int64Val + inc
-	newValue := roachpb.Value{}
-	newValue.SetInt(r)
-	newValue.InitChecksum(key)
-	return r, MVCCPut(engine, ms, key, timestamp, newValue, txn)
+	return int64Val, err
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the
@@ -1025,31 +1081,21 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
-	// Use the specified timestamp to read the value. When a write
-	// with newer timestamp exists, either of the following will
-	// happen:
-	// - If the conditional check succeeds, either a WriteTooOldError or WriteIntentError
-	//   is returned, depending on whether the newer write is an intent.
-	// - If the conditional check fails, a ConditionFailedError is returned.
-	existVal, _, err := mvccGetUsingIter(iter, key, timestamp, true /* consistent */, txn)
-	if err != nil {
-		return err
-	}
-
-	if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
-		// Every type flows through here, so we can't use the typed getters.
-		if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
-			return &roachpb.ConditionFailedError{
+	return mvccPutUsingIter(engine, iter, ms, key, timestamp, nil, txn, func(existVal *roachpb.Value) ([]byte, error) {
+		if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
+			// Every type flows through here, so we can't use the typed getters.
+			if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
+				return nil, &roachpb.ConditionFailedError{
+					ActualValue: existVal,
+				}
+			}
+		} else if expValPresent != existValPresent {
+			return nil, &roachpb.ConditionFailedError{
 				ActualValue: existVal,
 			}
 		}
-	} else if expValPresent != existValPresent {
-		return &roachpb.ConditionFailedError{
-			ActualValue: existVal,
-		}
-	}
-
-	return mvccPutUsingIter(engine, iter, ms, key, timestamp, value, txn)
+		return value.RawBytes, nil
+	})
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,
@@ -1090,7 +1136,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max 
 	buf := putBufferPool.Get().(*putBuffer)
 	iter := engine.NewIterator(endKey)
 	f := func(kv roachpb.KeyValue) (bool, error) {
-		if err := mvccPutInternal(engine, iter, ms, kv.Key, timestamp, nil, txn, buf); err != nil {
+		if err := mvccPutInternal(engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
 			return true, err
 		}
 		if returnKeys {
@@ -1406,14 +1452,21 @@ func mvccResolveWriteIntent(engine Engine, iter Iterator, ms *MVCCStats,
 		return nil
 	}
 
-	// A commit in an old epoch is prevented by the sequence cache (assuming
-	// the client doesn't maliciously send one). A commit with a newer epoch
-	// effectively means that we wrote this intent before an earlier retry, but
-	// didn't write it again after. We assert on the former.
-	commit := intent.Status == roachpb.COMMITTED && meta.Txn.Epoch == intent.Txn.Epoch
-	if intent.Status == roachpb.COMMITTED && meta.Txn.Epoch > intent.Txn.Epoch {
-		panic(fmt.Sprintf("attempt to commit in old epoch %+v, but have newer intent: %+v", intent, meta.Txn))
-	}
+	// A commit in an older epoch or timestamp is prevented by the
+	// sequence cache under normal operation. Replays of EndTransaction
+	// commands which occur after the transaction record has been erased
+	// make this a possibility; we treat such intents as uncommitted.
+	//
+	// A commit with a newer epoch effectively means that we wrote this
+	// intent before an earlier retry, but didn't write it again
+	// after. A commit with an older timestamp than the intent should
+	// not happen even on replays because BeginTransaction has replay
+	// protection. The BeginTransaction replay protection guarantees a
+	// restart in EndTransaction, so the replay won't resolve intents.
+	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
+	timestampsValid := !intent.Txn.Timestamp.Less(meta.Timestamp)
+	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
+
 	// Note the small difference to commit epoch handling here: We allow a push
 	// from a previous epoch to move a newer intent. That's not necessary, but
 	// useful. Consider the following, where B reads at a timestamp that's

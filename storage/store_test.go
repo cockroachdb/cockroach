@@ -1009,6 +1009,65 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	})
 }
 
+// TestStoreLongTxnStarvation sets up a test which guarantees that
+// every time a txn writes, it gets a write-too-old error by always
+// having a non-transactional write succeed before the txn can retry,
+// which would force endless retries unless batch requests are
+// allowed to go ahead and lay down intents with advanced timestamps.
+// Verifies no starvation for both serializable and snapshot txns.
+func TestStoreLongTxnStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	setTestRetryOptions(store)
+	defer stopper.Stop()
+
+	for i, iso := range []roachpb.IsolationType{roachpb.SERIALIZABLE, roachpb.SNAPSHOT} {
+		key := roachpb.Key(fmt.Sprintf("a-%d", i))
+		txn := newTransaction("test", key, 1, iso, store.ctx.Clock)
+		txn.Priority = math.MaxInt32
+
+		for retry := 0; ; retry++ {
+			if retry > 1 {
+				t.Fatalf("%d: too many retries", i)
+			}
+			// Always send non-transactional put to push the transaction
+			// and write a non-intent version.
+			nakedPut := putArgs(key, []byte("naked"))
+			_, pErr := client.SendWrapped(store.testSender(), context.Background(), &nakedPut)
+			if pErr != nil && retry == 0 {
+				t.Fatalf("%d: unexpected error on first put: %s", i, pErr)
+			} else if retry == 1 {
+				if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+					t.Fatalf("%d: expected write intent error; got %s", i, pErr)
+				}
+			}
+
+			// Within the transaction, write same key.
+			var ba roachpb.BatchRequest
+			bt, btH := beginTxnArgs(key, txn)
+			put := putArgs(key, []byte("value"))
+			et, _ := endTxnArgs(txn, true)
+			ba.Header = btH
+			ba.Add(&bt)
+			ba.Add(&put)
+			ba.Add(&et)
+			_, pErr = store.testSender().Send(context.Background(), ba)
+			if retry == 0 {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+					t.Fatalf("%d: expected retry error on first txn put: %s", i, pErr)
+				}
+				txn = pErr.GetTxn()
+			} else {
+				if pErr != nil {
+					t.Fatalf("%d: unexpected error: %s", i, pErr)
+				}
+				break
+			}
+			txn.Restart(1, 1, store.ctx.Clock.Now())
+		}
+	}
+}
+
 // TestStoreResolveWriteIntent adds write intent and then verifies
 // that a put returns success and aborts intent's txn in the event the
 // pushee has lower priority. Otherwise, verifies that a
@@ -1157,9 +1216,9 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		h := roachpb.Header{Txn: pushee}
+		_, btH := beginTxnArgs(key, pushee)
 		args.Value.SetBytes([]byte("value2"))
-		if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, h, &args); pErr != nil {
+		if _, pErr := maybeWrapWithBeginTransaction(store.testSender(), nil, btH, &args); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1168,8 +1227,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		pusher.OrigTimestamp.Forward(now)
 		pusher.Timestamp.Forward(now)
 		gArgs := getArgs(key)
-		h.Txn = pusher
-		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, h, &gArgs)
+		firstReply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{Txn: pusher}, &gArgs)
 		if test.resolvable {
 			if pErr != nil {
 				t.Errorf("%d: expected read to succeed: %s", i, pErr)
@@ -1220,7 +1278,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 					t.Errorf("expected read to fail")
 				}
 				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-					t.Errorf("expected transaction retry error; got %T", pErr)
+					t.Errorf("iso=%s; expected transaction retry error; got %T", test.pusheeIso, pErr.GetDetail())
 				}
 			}
 		}

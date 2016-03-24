@@ -61,6 +61,7 @@ class ReplicaCorruptionError;
 class SendError;
 class TransactionAbortedError;
 class TransactionPushError;
+class TransactionReplayError;
 class TransactionRetryError;
 class TransactionStatusError;
 class WriteIntentError;
@@ -842,6 +843,85 @@ class TransactionRetryError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class TransactionReplayError : public ::google::protobuf::Message {
+ public:
+  TransactionReplayError();
+  virtual ~TransactionReplayError();
+
+  TransactionReplayError(const TransactionReplayError& from);
+
+  inline TransactionReplayError& operator=(const TransactionReplayError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const TransactionReplayError& default_instance();
+
+  void Swap(TransactionReplayError* other);
+
+  // implements Message ----------------------------------------------
+
+  inline TransactionReplayError* New() const { return New(NULL); }
+
+  TransactionReplayError* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const TransactionReplayError& from);
+  void MergeFrom(const TransactionReplayError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TransactionReplayError* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.TransactionReplayError)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static TransactionReplayError* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class TransactionStatusError : public ::google::protobuf::Message {
  public:
   TransactionStatusError();
@@ -1111,27 +1191,27 @@ class WriteTooOldError : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* release_timestamp();
   void set_allocated_timestamp(::cockroach::roachpb::Timestamp* timestamp);
 
-  // optional .cockroach.roachpb.Timestamp existing_timestamp = 2;
-  bool has_existing_timestamp() const;
-  void clear_existing_timestamp();
-  static const int kExistingTimestampFieldNumber = 2;
-  const ::cockroach::roachpb::Timestamp& existing_timestamp() const;
-  ::cockroach::roachpb::Timestamp* mutable_existing_timestamp();
-  ::cockroach::roachpb::Timestamp* release_existing_timestamp();
-  void set_allocated_existing_timestamp(::cockroach::roachpb::Timestamp* existing_timestamp);
+  // optional .cockroach.roachpb.Timestamp actual_timestamp = 2;
+  bool has_actual_timestamp() const;
+  void clear_actual_timestamp();
+  static const int kActualTimestampFieldNumber = 2;
+  const ::cockroach::roachpb::Timestamp& actual_timestamp() const;
+  ::cockroach::roachpb::Timestamp* mutable_actual_timestamp();
+  ::cockroach::roachpb::Timestamp* release_actual_timestamp();
+  void set_allocated_actual_timestamp(::cockroach::roachpb::Timestamp* actual_timestamp);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.WriteTooOldError)
  private:
   inline void set_has_timestamp();
   inline void clear_has_timestamp();
-  inline void set_has_existing_timestamp();
-  inline void clear_has_existing_timestamp();
+  inline void set_has_actual_timestamp();
+  inline void clear_has_actual_timestamp();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Timestamp* timestamp_;
-  ::cockroach::roachpb::Timestamp* existing_timestamp_;
+  ::cockroach::roachpb::Timestamp* actual_timestamp_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -2189,6 +2269,15 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::TransactionRetryError* release_transaction_retry();
   void set_allocated_transaction_retry(::cockroach::roachpb::TransactionRetryError* transaction_retry);
 
+  // optional .cockroach.roachpb.TransactionReplayError transaction_replay = 22;
+  bool has_transaction_replay() const;
+  void clear_transaction_replay();
+  static const int kTransactionReplayFieldNumber = 22;
+  const ::cockroach::roachpb::TransactionReplayError& transaction_replay() const;
+  ::cockroach::roachpb::TransactionReplayError* mutable_transaction_replay();
+  ::cockroach::roachpb::TransactionReplayError* release_transaction_replay();
+  void set_allocated_transaction_replay(::cockroach::roachpb::TransactionReplayError* transaction_replay);
+
   // optional .cockroach.roachpb.TransactionStatusError transaction_status = 8;
   bool has_transaction_status() const;
   void clear_transaction_status();
@@ -2331,6 +2420,8 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void clear_has_transaction_push();
   inline void set_has_transaction_retry();
   inline void clear_has_transaction_retry();
+  inline void set_has_transaction_replay();
+  inline void clear_has_transaction_replay();
   inline void set_has_transaction_status();
   inline void clear_has_transaction_status();
   inline void set_has_write_intent();
@@ -2370,6 +2461,7 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::TransactionAbortedError* transaction_aborted_;
   ::cockroach::roachpb::TransactionPushError* transaction_push_;
   ::cockroach::roachpb::TransactionRetryError* transaction_retry_;
+  ::cockroach::roachpb::TransactionReplayError* transaction_replay_;
   ::cockroach::roachpb::TransactionStatusError* transaction_status_;
   ::cockroach::roachpb::WriteIntentError* write_intent_;
   ::cockroach::roachpb::WriteTooOldError* write_too_old_;
@@ -3102,6 +3194,10 @@ inline void TransactionPushError::set_allocated_pushee_txn(::cockroach::roachpb:
 
 // -------------------------------------------------------------------
 
+// TransactionReplayError
+
+// -------------------------------------------------------------------
+
 // TransactionStatusError
 
 // optional string msg = 1;
@@ -3262,47 +3358,47 @@ inline void WriteTooOldError::set_allocated_timestamp(::cockroach::roachpb::Time
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteTooOldError.timestamp)
 }
 
-// optional .cockroach.roachpb.Timestamp existing_timestamp = 2;
-inline bool WriteTooOldError::has_existing_timestamp() const {
+// optional .cockroach.roachpb.Timestamp actual_timestamp = 2;
+inline bool WriteTooOldError::has_actual_timestamp() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void WriteTooOldError::set_has_existing_timestamp() {
+inline void WriteTooOldError::set_has_actual_timestamp() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void WriteTooOldError::clear_has_existing_timestamp() {
+inline void WriteTooOldError::clear_has_actual_timestamp() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void WriteTooOldError::clear_existing_timestamp() {
-  if (existing_timestamp_ != NULL) existing_timestamp_->::cockroach::roachpb::Timestamp::Clear();
-  clear_has_existing_timestamp();
+inline void WriteTooOldError::clear_actual_timestamp() {
+  if (actual_timestamp_ != NULL) actual_timestamp_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_actual_timestamp();
 }
-inline const ::cockroach::roachpb::Timestamp& WriteTooOldError::existing_timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.WriteTooOldError.existing_timestamp)
-  return existing_timestamp_ != NULL ? *existing_timestamp_ : *default_instance_->existing_timestamp_;
+inline const ::cockroach::roachpb::Timestamp& WriteTooOldError::actual_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.WriteTooOldError.actual_timestamp)
+  return actual_timestamp_ != NULL ? *actual_timestamp_ : *default_instance_->actual_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* WriteTooOldError::mutable_existing_timestamp() {
-  set_has_existing_timestamp();
-  if (existing_timestamp_ == NULL) {
-    existing_timestamp_ = new ::cockroach::roachpb::Timestamp;
+inline ::cockroach::roachpb::Timestamp* WriteTooOldError::mutable_actual_timestamp() {
+  set_has_actual_timestamp();
+  if (actual_timestamp_ == NULL) {
+    actual_timestamp_ = new ::cockroach::roachpb::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.WriteTooOldError.existing_timestamp)
-  return existing_timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.WriteTooOldError.actual_timestamp)
+  return actual_timestamp_;
 }
-inline ::cockroach::roachpb::Timestamp* WriteTooOldError::release_existing_timestamp() {
-  clear_has_existing_timestamp();
-  ::cockroach::roachpb::Timestamp* temp = existing_timestamp_;
-  existing_timestamp_ = NULL;
+inline ::cockroach::roachpb::Timestamp* WriteTooOldError::release_actual_timestamp() {
+  clear_has_actual_timestamp();
+  ::cockroach::roachpb::Timestamp* temp = actual_timestamp_;
+  actual_timestamp_ = NULL;
   return temp;
 }
-inline void WriteTooOldError::set_allocated_existing_timestamp(::cockroach::roachpb::Timestamp* existing_timestamp) {
-  delete existing_timestamp_;
-  existing_timestamp_ = existing_timestamp;
-  if (existing_timestamp) {
-    set_has_existing_timestamp();
+inline void WriteTooOldError::set_allocated_actual_timestamp(::cockroach::roachpb::Timestamp* actual_timestamp) {
+  delete actual_timestamp_;
+  actual_timestamp_ = actual_timestamp;
+  if (actual_timestamp) {
+    set_has_actual_timestamp();
   } else {
-    clear_has_existing_timestamp();
+    clear_has_actual_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteTooOldError.existing_timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.WriteTooOldError.actual_timestamp)
 }
 
 // -------------------------------------------------------------------
@@ -4092,15 +4188,58 @@ inline void ErrorDetail::set_allocated_transaction_retry(::cockroach::roachpb::T
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.transaction_retry)
 }
 
-// optional .cockroach.roachpb.TransactionStatusError transaction_status = 8;
-inline bool ErrorDetail::has_transaction_status() const {
+// optional .cockroach.roachpb.TransactionReplayError transaction_replay = 22;
+inline bool ErrorDetail::has_transaction_replay() const {
   return (_has_bits_[0] & 0x00000080u) != 0;
 }
-inline void ErrorDetail::set_has_transaction_status() {
+inline void ErrorDetail::set_has_transaction_replay() {
   _has_bits_[0] |= 0x00000080u;
 }
-inline void ErrorDetail::clear_has_transaction_status() {
+inline void ErrorDetail::clear_has_transaction_replay() {
   _has_bits_[0] &= ~0x00000080u;
+}
+inline void ErrorDetail::clear_transaction_replay() {
+  if (transaction_replay_ != NULL) transaction_replay_->::cockroach::roachpb::TransactionReplayError::Clear();
+  clear_has_transaction_replay();
+}
+inline const ::cockroach::roachpb::TransactionReplayError& ErrorDetail::transaction_replay() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.transaction_replay)
+  return transaction_replay_ != NULL ? *transaction_replay_ : *default_instance_->transaction_replay_;
+}
+inline ::cockroach::roachpb::TransactionReplayError* ErrorDetail::mutable_transaction_replay() {
+  set_has_transaction_replay();
+  if (transaction_replay_ == NULL) {
+    transaction_replay_ = new ::cockroach::roachpb::TransactionReplayError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.transaction_replay)
+  return transaction_replay_;
+}
+inline ::cockroach::roachpb::TransactionReplayError* ErrorDetail::release_transaction_replay() {
+  clear_has_transaction_replay();
+  ::cockroach::roachpb::TransactionReplayError* temp = transaction_replay_;
+  transaction_replay_ = NULL;
+  return temp;
+}
+inline void ErrorDetail::set_allocated_transaction_replay(::cockroach::roachpb::TransactionReplayError* transaction_replay) {
+  delete transaction_replay_;
+  transaction_replay_ = transaction_replay;
+  if (transaction_replay) {
+    set_has_transaction_replay();
+  } else {
+    clear_has_transaction_replay();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.transaction_replay)
+}
+
+// optional .cockroach.roachpb.TransactionStatusError transaction_status = 8;
+inline bool ErrorDetail::has_transaction_status() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+inline void ErrorDetail::set_has_transaction_status() {
+  _has_bits_[0] |= 0x00000100u;
+}
+inline void ErrorDetail::clear_has_transaction_status() {
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void ErrorDetail::clear_transaction_status() {
   if (transaction_status_ != NULL) transaction_status_->::cockroach::roachpb::TransactionStatusError::Clear();
@@ -4137,13 +4276,13 @@ inline void ErrorDetail::set_allocated_transaction_status(::cockroach::roachpb::
 
 // optional .cockroach.roachpb.WriteIntentError write_intent = 9;
 inline bool ErrorDetail::has_write_intent() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void ErrorDetail::set_has_write_intent() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void ErrorDetail::clear_has_write_intent() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void ErrorDetail::clear_write_intent() {
   if (write_intent_ != NULL) write_intent_->::cockroach::roachpb::WriteIntentError::Clear();
@@ -4180,13 +4319,13 @@ inline void ErrorDetail::set_allocated_write_intent(::cockroach::roachpb::WriteI
 
 // optional .cockroach.roachpb.WriteTooOldError write_too_old = 10;
 inline bool ErrorDetail::has_write_too_old() const {
-  return (_has_bits_[0] & 0x00000200u) != 0;
+  return (_has_bits_[0] & 0x00000400u) != 0;
 }
 inline void ErrorDetail::set_has_write_too_old() {
-  _has_bits_[0] |= 0x00000200u;
+  _has_bits_[0] |= 0x00000400u;
 }
 inline void ErrorDetail::clear_has_write_too_old() {
-  _has_bits_[0] &= ~0x00000200u;
+  _has_bits_[0] &= ~0x00000400u;
 }
 inline void ErrorDetail::clear_write_too_old() {
   if (write_too_old_ != NULL) write_too_old_->::cockroach::roachpb::WriteTooOldError::Clear();
@@ -4223,13 +4362,13 @@ inline void ErrorDetail::set_allocated_write_too_old(::cockroach::roachpb::Write
 
 // optional .cockroach.roachpb.OpRequiresTxnError op_requires_txn = 11;
 inline bool ErrorDetail::has_op_requires_txn() const {
-  return (_has_bits_[0] & 0x00000400u) != 0;
+  return (_has_bits_[0] & 0x00000800u) != 0;
 }
 inline void ErrorDetail::set_has_op_requires_txn() {
-  _has_bits_[0] |= 0x00000400u;
+  _has_bits_[0] |= 0x00000800u;
 }
 inline void ErrorDetail::clear_has_op_requires_txn() {
-  _has_bits_[0] &= ~0x00000400u;
+  _has_bits_[0] &= ~0x00000800u;
 }
 inline void ErrorDetail::clear_op_requires_txn() {
   if (op_requires_txn_ != NULL) op_requires_txn_->::cockroach::roachpb::OpRequiresTxnError::Clear();
@@ -4266,13 +4405,13 @@ inline void ErrorDetail::set_allocated_op_requires_txn(::cockroach::roachpb::OpR
 
 // optional .cockroach.roachpb.ConditionFailedError condition_failed = 12;
 inline bool ErrorDetail::has_condition_failed() const {
-  return (_has_bits_[0] & 0x00000800u) != 0;
+  return (_has_bits_[0] & 0x00001000u) != 0;
 }
 inline void ErrorDetail::set_has_condition_failed() {
-  _has_bits_[0] |= 0x00000800u;
+  _has_bits_[0] |= 0x00001000u;
 }
 inline void ErrorDetail::clear_has_condition_failed() {
-  _has_bits_[0] &= ~0x00000800u;
+  _has_bits_[0] &= ~0x00001000u;
 }
 inline void ErrorDetail::clear_condition_failed() {
   if (condition_failed_ != NULL) condition_failed_->::cockroach::roachpb::ConditionFailedError::Clear();
@@ -4309,13 +4448,13 @@ inline void ErrorDetail::set_allocated_condition_failed(::cockroach::roachpb::Co
 
 // optional .cockroach.roachpb.LeaseRejectedError lease_rejected = 13;
 inline bool ErrorDetail::has_lease_rejected() const {
-  return (_has_bits_[0] & 0x00001000u) != 0;
+  return (_has_bits_[0] & 0x00002000u) != 0;
 }
 inline void ErrorDetail::set_has_lease_rejected() {
-  _has_bits_[0] |= 0x00001000u;
+  _has_bits_[0] |= 0x00002000u;
 }
 inline void ErrorDetail::clear_has_lease_rejected() {
-  _has_bits_[0] &= ~0x00001000u;
+  _has_bits_[0] &= ~0x00002000u;
 }
 inline void ErrorDetail::clear_lease_rejected() {
   if (lease_rejected_ != NULL) lease_rejected_->::cockroach::roachpb::LeaseRejectedError::Clear();
@@ -4352,13 +4491,13 @@ inline void ErrorDetail::set_allocated_lease_rejected(::cockroach::roachpb::Leas
 
 // optional .cockroach.roachpb.NodeUnavailableError node_unavailable = 14;
 inline bool ErrorDetail::has_node_unavailable() const {
-  return (_has_bits_[0] & 0x00002000u) != 0;
+  return (_has_bits_[0] & 0x00004000u) != 0;
 }
 inline void ErrorDetail::set_has_node_unavailable() {
-  _has_bits_[0] |= 0x00002000u;
+  _has_bits_[0] |= 0x00004000u;
 }
 inline void ErrorDetail::clear_has_node_unavailable() {
-  _has_bits_[0] &= ~0x00002000u;
+  _has_bits_[0] &= ~0x00004000u;
 }
 inline void ErrorDetail::clear_node_unavailable() {
   if (node_unavailable_ != NULL) node_unavailable_->::cockroach::roachpb::NodeUnavailableError::Clear();
@@ -4395,13 +4534,13 @@ inline void ErrorDetail::set_allocated_node_unavailable(::cockroach::roachpb::No
 
 // optional .cockroach.roachpb.SendError send = 15;
 inline bool ErrorDetail::has_send() const {
-  return (_has_bits_[0] & 0x00004000u) != 0;
+  return (_has_bits_[0] & 0x00008000u) != 0;
 }
 inline void ErrorDetail::set_has_send() {
-  _has_bits_[0] |= 0x00004000u;
+  _has_bits_[0] |= 0x00008000u;
 }
 inline void ErrorDetail::clear_has_send() {
-  _has_bits_[0] &= ~0x00004000u;
+  _has_bits_[0] &= ~0x00008000u;
 }
 inline void ErrorDetail::clear_send() {
   if (send_ != NULL) send_->::cockroach::roachpb::SendError::Clear();
@@ -4438,13 +4577,13 @@ inline void ErrorDetail::set_allocated_send(::cockroach::roachpb::SendError* sen
 
 // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
 inline bool ErrorDetail::has_raft_group_deleted() const {
-  return (_has_bits_[0] & 0x00008000u) != 0;
+  return (_has_bits_[0] & 0x00010000u) != 0;
 }
 inline void ErrorDetail::set_has_raft_group_deleted() {
-  _has_bits_[0] |= 0x00008000u;
+  _has_bits_[0] |= 0x00010000u;
 }
 inline void ErrorDetail::clear_has_raft_group_deleted() {
-  _has_bits_[0] &= ~0x00008000u;
+  _has_bits_[0] &= ~0x00010000u;
 }
 inline void ErrorDetail::clear_raft_group_deleted() {
   if (raft_group_deleted_ != NULL) raft_group_deleted_->::cockroach::roachpb::RaftGroupDeletedError::Clear();
@@ -4481,13 +4620,13 @@ inline void ErrorDetail::set_allocated_raft_group_deleted(::cockroach::roachpb::
 
 // optional .cockroach.roachpb.ReplicaCorruptionError replica_corruption = 17;
 inline bool ErrorDetail::has_replica_corruption() const {
-  return (_has_bits_[0] & 0x00010000u) != 0;
+  return (_has_bits_[0] & 0x00020000u) != 0;
 }
 inline void ErrorDetail::set_has_replica_corruption() {
-  _has_bits_[0] |= 0x00010000u;
+  _has_bits_[0] |= 0x00020000u;
 }
 inline void ErrorDetail::clear_has_replica_corruption() {
-  _has_bits_[0] &= ~0x00010000u;
+  _has_bits_[0] &= ~0x00020000u;
 }
 inline void ErrorDetail::clear_replica_corruption() {
   if (replica_corruption_ != NULL) replica_corruption_->::cockroach::roachpb::ReplicaCorruptionError::Clear();
@@ -4524,13 +4663,13 @@ inline void ErrorDetail::set_allocated_replica_corruption(::cockroach::roachpb::
 
 // optional .cockroach.roachpb.LeaseVersionChangedError lease_version_changed = 18;
 inline bool ErrorDetail::has_lease_version_changed() const {
-  return (_has_bits_[0] & 0x00020000u) != 0;
+  return (_has_bits_[0] & 0x00040000u) != 0;
 }
 inline void ErrorDetail::set_has_lease_version_changed() {
-  _has_bits_[0] |= 0x00020000u;
+  _has_bits_[0] |= 0x00040000u;
 }
 inline void ErrorDetail::clear_has_lease_version_changed() {
-  _has_bits_[0] &= ~0x00020000u;
+  _has_bits_[0] &= ~0x00040000u;
 }
 inline void ErrorDetail::clear_lease_version_changed() {
   if (lease_version_changed_ != NULL) lease_version_changed_->::cockroach::roachpb::LeaseVersionChangedError::Clear();
@@ -4567,13 +4706,13 @@ inline void ErrorDetail::set_allocated_lease_version_changed(::cockroach::roachp
 
 // optional .cockroach.roachpb.DidntUpdateDescriptorError didnt_update_descriptor = 19;
 inline bool ErrorDetail::has_didnt_update_descriptor() const {
-  return (_has_bits_[0] & 0x00040000u) != 0;
+  return (_has_bits_[0] & 0x00080000u) != 0;
 }
 inline void ErrorDetail::set_has_didnt_update_descriptor() {
-  _has_bits_[0] |= 0x00040000u;
+  _has_bits_[0] |= 0x00080000u;
 }
 inline void ErrorDetail::clear_has_didnt_update_descriptor() {
-  _has_bits_[0] &= ~0x00040000u;
+  _has_bits_[0] &= ~0x00080000u;
 }
 inline void ErrorDetail::clear_didnt_update_descriptor() {
   if (didnt_update_descriptor_ != NULL) didnt_update_descriptor_->::cockroach::roachpb::DidntUpdateDescriptorError::Clear();
@@ -4610,13 +4749,13 @@ inline void ErrorDetail::set_allocated_didnt_update_descriptor(::cockroach::roac
 
 // optional .cockroach.roachpb.ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
 inline bool ErrorDetail::has_existing_scheme_change_lease() const {
-  return (_has_bits_[0] & 0x00080000u) != 0;
+  return (_has_bits_[0] & 0x00100000u) != 0;
 }
 inline void ErrorDetail::set_has_existing_scheme_change_lease() {
-  _has_bits_[0] |= 0x00080000u;
+  _has_bits_[0] |= 0x00100000u;
 }
 inline void ErrorDetail::clear_has_existing_scheme_change_lease() {
-  _has_bits_[0] &= ~0x00080000u;
+  _has_bits_[0] &= ~0x00100000u;
 }
 inline void ErrorDetail::clear_existing_scheme_change_lease() {
   if (existing_scheme_change_lease_ != NULL) existing_scheme_change_lease_->::cockroach::roachpb::ExistingSchemaChangeLeaseError::Clear();
@@ -4653,13 +4792,13 @@ inline void ErrorDetail::set_allocated_existing_scheme_change_lease(::cockroach:
 
 // optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
 inline bool ErrorDetail::has_error_with_pg_code() const {
-  return (_has_bits_[0] & 0x00100000u) != 0;
+  return (_has_bits_[0] & 0x00200000u) != 0;
 }
 inline void ErrorDetail::set_has_error_with_pg_code() {
-  _has_bits_[0] |= 0x00100000u;
+  _has_bits_[0] |= 0x00200000u;
 }
 inline void ErrorDetail::clear_has_error_with_pg_code() {
-  _has_bits_[0] &= ~0x00100000u;
+  _has_bits_[0] &= ~0x00200000u;
 }
 inline void ErrorDetail::clear_error_with_pg_code() {
   if (error_with_pg_code_ != NULL) error_with_pg_code_->::cockroach::roachpb::ErrorWithPGCode::Clear();
@@ -5025,6 +5164,8 @@ inline void Error::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

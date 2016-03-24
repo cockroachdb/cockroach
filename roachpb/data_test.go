@@ -419,7 +419,7 @@ func TestTransactionString(t *testing.T) {
 		MaxTimestamp:  makeTS(40, 41),
 	}
 	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41`
+		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
@@ -489,6 +489,7 @@ var nonZeroTxn = Transaction{
 	MaxTimestamp:       makeTS(40, 41),
 	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
 	Writing:            true,
+	WriteTooOld:        true,
 	Sequence:           123,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 }
@@ -649,6 +650,35 @@ func TestMakePriorityLimits(t *testing.T) {
 		}
 		if len(seen) < 85 {
 			t.Errorf("%f: expected randomized values, got %d: %v", userPri, len(seen), seen)
+		}
+	}
+}
+
+func TestSpanOverlaps(t *testing.T) {
+	sA := Span{Key: []byte("a")}
+	sD := Span{Key: []byte("d")}
+	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
+	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+
+	testData := []struct {
+		s1, s2   Span
+		overlaps bool
+	}{
+		{sA, sA, true},
+		{sA, sD, false},
+		{sA, sBtoD, false},
+		{sBtoD, sA, false},
+		{sD, sBtoD, false},
+		{sBtoD, sD, false},
+		{sA, sAtoC, true},
+		{sAtoC, sA, true},
+		{sAtoC, sAtoC, true},
+		{sAtoC, sBtoD, true},
+		{sBtoD, sAtoC, true},
+	}
+	for i, test := range testData {
+		if o := test.s1.Overlaps(test.s2); o != test.overlaps {
+			t.Errorf("%d: expected overlap %t; got %t between %s vs. %s", i, test.overlaps, o, test.s1, test.s2)
 		}
 	}
 }

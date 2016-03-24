@@ -597,6 +597,11 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 				Key: firstWriteKey,
 			},
 		}
+		// If the transaction already has a key (we're in a restart), make
+		// sure we set the key in the begin transaction request to the original.
+		if txn.Proto.Key != nil {
+			bt.Key = txn.Proto.Key
+		}
 		reqs = append(append(append([]roachpb.Request(nil), reqs[:firstWriteIndex]...), bt), reqs[firstWriteIndex:]...)
 	}
 
