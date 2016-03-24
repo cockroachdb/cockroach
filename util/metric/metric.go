@@ -60,11 +60,13 @@ type Iterable interface {
 }
 
 var _ Iterable = &Gauge{}
+var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
 var _ Iterable = &Rate{}
 
 var _ json.Marshaler = &Gauge{}
+var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &Histogram{}
 var _ json.Marshaler = &Rate{}
@@ -199,7 +201,7 @@ func (c *Counter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Counter.Count())
 }
 
-// A Gauge atomically stores a single value.
+// A Gauge atomically stores a single integer value.
 type Gauge struct {
 	metrics.Gauge
 }
@@ -216,6 +218,25 @@ func (g *Gauge) Each(f func(string, interface{})) { f("", g) }
 // MarshalJSON marshals to JSON.
 func (g *Gauge) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.Gauge.Value())
+}
+
+// A GaugeFloat64 atomically stores a single float64 value.
+type GaugeFloat64 struct {
+	metrics.GaugeFloat64
+}
+
+// NewGaugeFloat64 creates a GaugeFloat64.
+func NewGaugeFloat64() *GaugeFloat64 {
+	g := &GaugeFloat64{metrics.NewGaugeFloat64()}
+	return g
+}
+
+// Each calls the given closure with the empty string and itself.
+func (g *GaugeFloat64) Each(f func(string, interface{})) { f("", g) }
+
+// MarshalJSON marshals to JSON.
+func (g *GaugeFloat64) MarshalJSON() ([]byte, error) {
+	return json.Marshal(g.GaugeFloat64.Value())
 }
 
 // A Rate is a exponential weighted moving average.

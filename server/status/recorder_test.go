@@ -206,6 +206,7 @@ func TestMetricsRecorder(t *testing.T) {
 		val  int64
 	}{
 		{"testGauge", "gauge", 20},
+		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
 		{"testRate", "rate", 2},
 		{"testHistogram", "histogram", 10},
@@ -260,6 +261,9 @@ func TestMetricsRecorder(t *testing.T) {
 			switch data.typ {
 			case "gauge":
 				reg.reg.Gauge(data.name).Update(data.val)
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
+			case "floatgauge":
+				reg.reg.GaugeFloat64(data.name).Update(float64(data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "counter":
 				reg.reg.Counter(data.name).Inc(data.val)
