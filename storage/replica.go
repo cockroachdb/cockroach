@@ -158,26 +158,42 @@ type Replica struct {
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
-	// RWMutex
+	// RWMutex.
 	readOnlyCmdMu sync.RWMutex
 
 	mu struct {
-		sync.Mutex                   // Protects all fields in the mu struct.
-		appliedIndex   uint64        // Last index applied to the state machine.
-		cmdQ           *CommandQueue // Enforce at most one command is running per key(s).
-		desc           *roachpb.RangeDescriptor
-		lastIndex      uint64 // Last index persisted to the raft log (not necessarily committed).
-		leaderLease    *roachpb.Lease
-		maxBytes       int64 // Max bytes before split.
+		// Protects all fields in the mu struct.
+		sync.Mutex
+		// Last index applied to the state machine.
+		appliedIndex uint64
+		// Enforces at most one command is running per key(s).
+		cmdQ *CommandQueue
+		// Range descriptor.
+		//
+		// The lock protects the pointer but the RangeDescriptor struct itself
+		// should be treated as immutable; a reference to it can be returned to
+		// a caller via Replica.Desc() and then used outside of the lock.
+		//
+		// Changes of the descriptor should normally go through one of the
+		// Replica.setDesc* methods.
+		desc *roachpb.RangeDescriptor
+		// Last index persisted to the raft log (not necessarily committed).
+		lastIndex   uint64
+		leaderLease *roachpb.Lease
+		// Max bytes before split.
+		maxBytes       int64
 		pendingCmds    map[storagebase.CmdIDKey]*pendingCmd
 		raftGroup      *raft.RawNode
 		replicaID      roachpb.ReplicaID
 		truncatedState *roachpb.RaftTruncatedState
-		tsCache        *TimestampCache       // Most recent timestamps for keys / key ranges
-		llChans        []chan *roachpb.Error // Slice of channels to send on after leader lease acquisition
+		// Most recent timestamps for keys / key ranges.
+		tsCache *TimestampCache
+		// Slice of channels to send on after leader lease acquisition.
+		llChans []chan *roachpb.Error
 		// proposeRaftCommandFn can be set to mock out the propose operation.
 		proposeRaftCommandFn func(*pendingCmd) error
-		checksums            map[uuid.UUID]replicaChecksum // computed checksum at a snapshot UUID.
+		// Computed checksum at a snapshot UUID.
+		checksums map[uuid.UUID]replicaChecksum
 	}
 }
 
