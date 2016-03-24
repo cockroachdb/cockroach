@@ -244,7 +244,7 @@ func (ls *Stores) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, cons
 		ConsiderIntents: considerIntents,
 		Reverse:         useReverseScan,
 	})
-	br, pErr := ls.Send(context.Background(), ba)
+	br, pErr := ls.Send(context.TODO(), ba)
 	if pErr != nil {
 		return nil, pErr
 	}

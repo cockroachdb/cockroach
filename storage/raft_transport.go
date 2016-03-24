@@ -181,7 +181,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 		return
 	}
 	client := NewMultiRaftClient(conn)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	if log.V(1) {
 		log.Infof("establishing Raft transport stream to node %d at %s", nodeID, addr)
@@ -227,7 +227,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			return
 		case req := <-ch:
 			if req.Message.Type == raftpb.MsgSnap {
-				ctx, cancel := context.WithCancel(context.Background())
+				ctx, cancel := context.WithCancel(context.TODO())
 				defer cancel()
 				snapStream, err := client.RaftMessage(ctx)
 				if err != nil {
