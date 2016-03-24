@@ -37,17 +37,17 @@ var (
 				{
 					Offset: 0,
 					Count:  1,
-					Sum:    1,
+					Sum:    roachpb.TimeSeriesSampleSum(1),
 				},
 				{
 					Offset: 5,
 					Count:  1,
-					Sum:    5,
+					Sum:    roachpb.TimeSeriesSampleSum(5),
 				},
 				{
 					Offset: 7,
 					Count:  1,
-					Sum:    10,
+					Sum:    roachpb.TimeSeriesSampleSum(10),
 				},
 			},
 		},
@@ -58,16 +58,16 @@ var (
 				{
 					Offset: 1,
 					Count:  3,
-					Sum:    60,
-					Max:    proto.Float64(30),
-					Min:    proto.Float64(10),
+					Sum:    roachpb.TimeSeriesSampleSum(60),
+					Max:    proto.Int64(roachpb.TimeSeriesSampleSum(30)),
+					Min:    proto.Int64(roachpb.TimeSeriesSampleSum(10)),
 				},
 				{
 					Offset: 6,
 					Count:  2,
-					Sum:    80,
-					Max:    proto.Float64(50),
-					Min:    proto.Float64(30),
+					Sum:    roachpb.TimeSeriesSampleSum(80),
+					Max:    proto.Int64(roachpb.TimeSeriesSampleSum(50)),
+					Min:    proto.Int64(roachpb.TimeSeriesSampleSum(30)),
 				},
 			},
 		},
@@ -80,33 +80,33 @@ var (
 				{
 					Offset: 0,
 					Count:  1,
-					Sum:    1,
+					Sum:    roachpb.TimeSeriesSampleSum(1),
 				},
 				{
 					Offset: 3,
 					Count:  5,
-					Sum:    50,
-					Max:    proto.Float64(10),
-					Min:    proto.Float64(1),
+					Sum:    roachpb.TimeSeriesSampleSum(50),
+					Max:    proto.Int64(roachpb.TimeSeriesSampleSum(10)),
+					Min:    proto.Int64(roachpb.TimeSeriesSampleSum(1)),
 				},
 				{
 					Offset: 4,
 					Count:  1,
-					Sum:    25,
+					Sum:    roachpb.TimeSeriesSampleSum(25),
 				},
 				{
 					Offset: 6,
 					Count:  3,
-					Sum:    60,
-					Max:    proto.Float64(30),
-					Min:    proto.Float64(10),
+					Sum:    roachpb.TimeSeriesSampleSum(60),
+					Max:    proto.Int64(roachpb.TimeSeriesSampleSum(30)),
+					Min:    proto.Int64(roachpb.TimeSeriesSampleSum(10)),
 				},
 				{
 					Offset: 15,
 					Count:  2,
-					Sum:    112,
-					Max:    proto.Float64(100),
-					Min:    proto.Float64(12),
+					Sum:    roachpb.TimeSeriesSampleSum(112),
+					Max:    proto.Int64(roachpb.TimeSeriesSampleSum(100)),
+					Min:    proto.Int64(roachpb.TimeSeriesSampleSum(12)),
 				},
 			},
 		},
@@ -145,7 +145,7 @@ func TestInterpolation(t *testing.T) {
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 35, 60, 64, 68, 72, 76, 80, 0},
 			func(s roachpb.InternalTimeSeriesSample) float64 {
-				return s.Sum
+				return s.Summation()
 			},
 		},
 	}

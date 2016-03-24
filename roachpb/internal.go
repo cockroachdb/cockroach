@@ -17,9 +17,12 @@
 
 package roachpb
 
+// sumMultiple is the int64 number used to represent 1.0 at a scale of 3.
+const sumMultiple = 1000
+
 // Summation returns the sum value for this sample.
 func (samp InternalTimeSeriesSample) Summation() float64 {
-	return samp.Sum
+	return float64(samp.Sum) / sumMultiple
 }
 
 // Average returns the average value for this sample.
@@ -27,27 +30,27 @@ func (samp InternalTimeSeriesSample) Average() float64 {
 	if samp.Count == 0 {
 		return 0
 	}
-	return samp.Sum / float64(samp.Count)
+	return samp.Summation() / float64(samp.Count)
 }
 
 // Maximum returns the maximum value encountered by this sample.
 func (samp InternalTimeSeriesSample) Maximum() float64 {
 	if samp.Count < 2 {
-		return samp.Sum
+		return samp.Summation()
 	}
-	if samp.Max != nil {
-		return *samp.Max
-	}
-	return 0
+	return float64(*samp.Max) / sumMultiple
 }
 
 // Minimum returns the minimum value encountered by this sample.
 func (samp InternalTimeSeriesSample) Minimum() float64 {
 	if samp.Count < 2 {
-		return samp.Sum
+		return samp.Summation()
 	}
-	if samp.Min != nil {
-		return *samp.Min
-	}
-	return 0
+	return float64(*samp.Min) / sumMultiple
+}
+
+// TimeSeriesSampleSum takes a sum in float64 and converts it into
+// a fixed point represented as an int64.
+func TimeSeriesSampleSum(n float64) int64 {
+	return int64(n * sumMultiple)
 }

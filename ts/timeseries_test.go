@@ -85,17 +85,17 @@ func TestToInternal(t *testing.T) {
 						{
 							Offset: 15,
 							Count:  1,
-							Sum:    1.0,
+							Sum:    roachpb.TimeSeriesSampleSum(1.0),
 						},
 						{
 							Offset: 30,
 							Count:  1,
-							Sum:    3.0,
+							Sum:    roachpb.TimeSeriesSampleSum(3.0),
 						},
 						{
 							Offset: 46,
 							Count:  1,
-							Sum:    5.0,
+							Sum:    roachpb.TimeSeriesSampleSum(5.0),
 						},
 					},
 				},
@@ -106,7 +106,7 @@ func TestToInternal(t *testing.T) {
 						{
 							Offset: 1,
 							Count:  1,
-							Sum:    2.0,
+							Sum:    roachpb.TimeSeriesSampleSum(2.0),
 						},
 					},
 				},
@@ -117,12 +117,12 @@ func TestToInternal(t *testing.T) {
 						{
 							Offset: 0,
 							Count:  1,
-							Sum:    4.0,
+							Sum:    roachpb.TimeSeriesSampleSum(4.0),
 						},
 						{
 							Offset: 12,
 							Count:  1,
-							Sum:    0.0,
+							Sum:    roachpb.TimeSeriesSampleSum(0.0),
 						},
 					},
 				},
@@ -168,8 +168,8 @@ func TestNegativeMax(t *testing.T) {
 
 	if maxVal := out.Samples[0].Max; maxVal == nil {
 		t.Fatal("Expected maximum of sample 0 to be non-nil after initial merge.")
-	} else if *maxVal != -1.0 {
-		t.Fatalf("Expected maximum of sample 0 to be -1.0 after initial merge, was %f", *maxVal)
+	} else if *maxVal != roachpb.TimeSeriesSampleSum(-1.0) {
+		t.Fatalf("Expected maximum of sample 0 to be -1.0 after initial merge, was %f", out.Samples[0].Maximum())
 	}
 
 	// Prevent regression of #5414: The negative number was only improperly set
@@ -184,7 +184,7 @@ func TestNegativeMax(t *testing.T) {
 
 	if maxVal := out.Samples[0].Max; maxVal == nil {
 		t.Fatal("Expected maximum of sample 0 to be non-nil after initial merge.")
-	} else if *maxVal != -1.0 {
-		t.Fatalf("Expected maximum of sample 0 to be -1.0 after initial merge, was %f", *maxVal)
+	} else if *maxVal != roachpb.TimeSeriesSampleSum(-1.0) {
+		t.Fatalf("Expected maximum of sample 0 to be -1.0 after initial merge, was %f", out.Samples[0].Maximum())
 	}
 }

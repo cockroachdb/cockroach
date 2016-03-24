@@ -77,10 +77,11 @@ message InternalTimeSeriesSample {
 
   // Count of measurements taken within this sample.
   optional uint32 count = 6 [(gogoproto.nullable) = false];
-  // Sum of all measurements.
-  optional double sum = 7 [(gogoproto.nullable) = false];
+  // Sum of all measurements. This is a fixed point value
+  // with a scale of 3 represented as an int64.
+  optional int64 sum = 7 [(gogoproto.nullable) = false];
   // Maximum encountered measurement in this sample.
-  optional double max = 8;
+  optional int64 max = 8;
   // Minimum encountered measurement in this sample.
-  optional double min = 9;
+  optional int64 min = 9;
 }

@@ -33,9 +33,9 @@ var testtime = int64(-446061360000000000)
 type tsSample struct {
 	offset int32
 	count  uint32
-	sum    float64
-	max    float64
-	min    float64
+	sum    int64
+	max    int64
+	min    int64
 }
 
 func gibberishString(n int) string {
@@ -74,8 +74,8 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 			Sum:    sample.sum,
 		}
 		if sample.count > 1 {
-			newSample.Max = proto.Float64(sample.max)
-			newSample.Min = proto.Float64(sample.min)
+			newSample.Max = proto.Int64(sample.max)
+			newSample.Min = proto.Int64(sample.min)
 		}
 		ts.Samples = append(ts.Samples, newSample)
 	}
