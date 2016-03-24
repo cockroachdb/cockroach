@@ -20,6 +20,8 @@ package storage
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -36,7 +38,7 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 
 	intents := []roachpb.Intent{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.ABORTED}}
 	if _, pErr := tc.store.intentResolver.maybePushTransactions(
-		tc.rng.context(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true); !testutils.IsPError(pErr, "unexpected aborted/resolved intent") {
+		tc.rng.context(context.Background()), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true); !testutils.IsPError(pErr, "unexpected aborted/resolved intent") {
 		t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
 	}
 }
