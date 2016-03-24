@@ -36,6 +36,24 @@ const (
 	MinTSCacheWindow = 10 * time.Second
 )
 
+var (
+	// evictionSizeThreshold is the maximum allowed number of intervals
+	// in the TimestampCache before it will begin evicting intervals
+	// based on the time window. This threshold is intended to permit
+	// transactions to take longer than the evition window duration
+	// if the size of the cache is not a concern, such as when a user
+	// is using an interactive SQL shell.
+	evictionSizeThreshold = 512
+)
+
+func removeEvictionSizeThreshold() func() {
+	orig := evictionSizeThreshold
+	evictionSizeThreshold = -1
+	return func() {
+		evictionSizeThreshold = orig
+	}
+}
+
 // A TimestampCache maintains an interval tree FIFO cache of keys or
 // key ranges and the timestamps at which they were most recently read
 // or written. If a timestamp was read or written by a transaction,
@@ -92,6 +110,12 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 	tc.lowWater = clock.Now()
 	tc.lowWater.WallTime += clock.MaxOffset().Nanoseconds()
 	tc.latest = tc.lowWater
+}
+
+// Len returns the total number of read and write intervals in the
+// TimestampCache.
+func (tc *TimestampCache) Len() int {
+	return tc.rCache.Len() + tc.wCache.Len()
 }
 
 // SetLowWater sets the cache's low water mark, which is the minimum
@@ -335,6 +359,9 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the MinTSCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
+	if tc.Len() <= evictionSizeThreshold {
+		return false
+	}
 	ce := value.(*cacheValue)
 	// In case low water mark was set higher, evict any entries
 	// which occurred before it.
