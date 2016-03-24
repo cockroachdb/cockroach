@@ -1002,11 +1002,12 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ComputeChecksumResponse, _internal_metadata_),
       -1);
   VerifyChecksumRequest_descriptor_ = file->message_type(49);
-  static const int VerifyChecksumRequest_offsets_[4] = {
+  static const int VerifyChecksumRequest_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, version_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, checksum_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, checksum_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(VerifyChecksumRequest, fp_checksum_),
   };
   VerifyChecksumRequest_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -1595,122 +1596,123 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "\000\342\336\037\nChecksumID\332\336\037/github.com/cockroachd"
     "b/cockroach/util/uuid.UUID\"V\n\027ComputeChe"
     "cksumResponse\022;\n\006header\030\001 \001(\0132!.cockroac"
-    "h.roachpb.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\317\001\n\025V"
+    "h.roachpb.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\364\001\n\025V"
     "erifyChecksumRequest\0221\n\006header\030\001 \001(\0132\027.c"
     "ockroach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\022\025\n\007versi"
     "on\030\002 \001(\rB\004\310\336\037\000\022Z\n\013checksum_id\030\003 \001(\014BE\310\336\037"
     "\000\342\336\037\nChecksumID\332\336\037/github.com/cockroachd"
     "b/cockroach/util/uuid.UUID\022\020\n\010checksum\030\004"
-    " \001(\014\"U\n\026VerifyChecksumResponse\022;\n\006header"
-    "\030\001 \001(\0132!.cockroach.roachpb.ResponseHeade"
-    "rB\010\310\336\037\000\320\336\037\001\"\320\013\n\014RequestUnion\022*\n\003get\030\001 \001("
-    "\0132\035.cockroach.roachpb.GetRequest\022*\n\003put\030"
-    "\002 \001(\0132\035.cockroach.roachpb.PutRequest\022A\n\017"
-    "conditional_put\030\003 \001(\0132(.cockroach.roachp"
-    "b.ConditionalPutRequest\0226\n\tincrement\030\004 \001"
-    "(\0132#.cockroach.roachpb.IncrementRequest\022"
-    "0\n\006delete\030\005 \001(\0132 .cockroach.roachpb.Dele"
-    "teRequest\022;\n\014delete_range\030\006 \001(\0132%.cockro"
-    "ach.roachpb.DeleteRangeRequest\022,\n\004scan\030\007"
-    " \001(\0132\036.cockroach.roachpb.ScanRequest\022E\n\021"
-    "begin_transaction\030\010 \001(\0132*.cockroach.roac"
-    "hpb.BeginTransactionRequest\022A\n\017end_trans"
-    "action\030\t \001(\0132(.cockroach.roachpb.EndTran"
-    "sactionRequest\0229\n\013admin_split\030\n \001(\0132$.co"
-    "ckroach.roachpb.AdminSplitRequest\0229\n\013adm"
-    "in_merge\030\013 \001(\0132$.cockroach.roachpb.Admin"
-    "MergeRequest\022=\n\rheartbeat_txn\030\014 \001(\0132&.co"
-    "ckroach.roachpb.HeartbeatTxnRequest\022(\n\002g"
-    "c\030\r \001(\0132\034.cockroach.roachpb.GCRequest\0223\n"
-    "\010push_txn\030\016 \001(\0132!.cockroach.roachpb.Push"
-    "TxnRequest\022;\n\014range_lookup\030\017 \001(\0132%.cockr"
-    "oach.roachpb.RangeLookupRequest\022\?\n\016resol"
-    "ve_intent\030\020 \001(\0132\'.cockroach.roachpb.Reso"
-    "lveIntentRequest\022J\n\024resolve_intent_range"
-    "\030\021 \001(\0132,.cockroach.roachpb.ResolveIntent"
-    "RangeRequest\022.\n\005merge\030\022 \001(\0132\037.cockroach."
-    "roachpb.MergeRequest\022;\n\014truncate_log\030\023 \001"
-    "(\0132%.cockroach.roachpb.TruncateLogReques"
-    "t\022;\n\014leader_lease\030\024 \001(\0132%.cockroach.roac"
-    "hpb.LeaderLeaseRequest\022;\n\014reverse_scan\030\025"
-    " \001(\0132%.cockroach.roachpb.ReverseScanRequ"
-    "est\022C\n\020compute_checksum\030\026 \001(\0132).cockroac"
-    "h.roachpb.ComputeChecksumRequest\022A\n\017veri"
-    "fy_checksum\030\027 \001(\0132(.cockroach.roachpb.Ve"
-    "rifyChecksumRequest\022E\n\021check_consistency"
-    "\030\030 \001(\0132*.cockroach.roachpb.CheckConsiste"
-    "ncyRequest\022,\n\004noop\030\031 \001(\0132\036.cockroach.roa"
-    "chpb.NoopRequest:\004\310\240\037\001\"\352\013\n\rResponseUnion"
-    "\022+\n\003get\030\001 \001(\0132\036.cockroach.roachpb.GetRes"
-    "ponse\022+\n\003put\030\002 \001(\0132\036.cockroach.roachpb.P"
-    "utResponse\022B\n\017conditional_put\030\003 \001(\0132).co"
-    "ckroach.roachpb.ConditionalPutResponse\0227"
-    "\n\tincrement\030\004 \001(\0132$.cockroach.roachpb.In"
-    "crementResponse\0221\n\006delete\030\005 \001(\0132!.cockro"
-    "ach.roachpb.DeleteResponse\022<\n\014delete_ran"
-    "ge\030\006 \001(\0132&.cockroach.roachpb.DeleteRange"
-    "Response\022-\n\004scan\030\007 \001(\0132\037.cockroach.roach"
-    "pb.ScanResponse\022F\n\021begin_transaction\030\010 \001"
-    "(\0132+.cockroach.roachpb.BeginTransactionR"
-    "esponse\022B\n\017end_transaction\030\t \001(\0132).cockr"
-    "oach.roachpb.EndTransactionResponse\022:\n\013a"
-    "dmin_split\030\n \001(\0132%.cockroach.roachpb.Adm"
-    "inSplitResponse\022:\n\013admin_merge\030\013 \001(\0132%.c"
-    "ockroach.roachpb.AdminMergeResponse\022>\n\rh"
-    "eartbeat_txn\030\014 \001(\0132\'.cockroach.roachpb.H"
-    "eartbeatTxnResponse\022)\n\002gc\030\r \001(\0132\035.cockro"
-    "ach.roachpb.GCResponse\0224\n\010push_txn\030\016 \001(\013"
-    "2\".cockroach.roachpb.PushTxnResponse\022<\n\014"
-    "range_lookup\030\017 \001(\0132&.cockroach.roachpb.R"
-    "angeLookupResponse\022@\n\016resolve_intent\030\020 \001"
-    "(\0132(.cockroach.roachpb.ResolveIntentResp"
-    "onse\022K\n\024resolve_intent_range\030\021 \001(\0132-.coc"
-    "kroach.roachpb.ResolveIntentRangeRespons"
-    "e\022/\n\005merge\030\022 \001(\0132 .cockroach.roachpb.Mer"
-    "geResponse\022<\n\014truncate_log\030\023 \001(\0132&.cockr"
-    "oach.roachpb.TruncateLogResponse\022<\n\014lead"
-    "er_lease\030\024 \001(\0132&.cockroach.roachpb.Leade"
-    "rLeaseResponse\022<\n\014reverse_scan\030\025 \001(\0132&.c"
-    "ockroach.roachpb.ReverseScanResponse\022D\n\020"
-    "compute_checksum\030\026 \001(\0132*.cockroach.roach"
-    "pb.ComputeChecksumResponse\022B\n\017verify_che"
-    "cksum\030\027 \001(\0132).cockroach.roachpb.VerifyCh"
-    "ecksumResponse\022F\n\021check_consistency\030\030 \001("
-    "\0132+.cockroach.roachpb.CheckConsistencyRe"
-    "sponse\022-\n\004noop\030\031 \001(\0132\037.cockroach.roachpb"
-    ".NoopResponse:\004\310\240\037\001\"\231\003\n\006Header\0225\n\ttimest"
-    "amp\030\001 \001(\0132\034.cockroach.roachpb.TimestampB"
-    "\004\310\336\037\000\022;\n\007replica\030\002 \001(\0132$.cockroach.roach"
-    "pb.ReplicaDescriptorB\004\310\336\037\000\022,\n\010range_id\030\003"
-    " \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022+\n\ruser"
-    "_priority\030\004 \001(\001B\024\310\336\037\000\372\336\037\014UserPriority\022+\n"
-    "\003txn\030\005 \001(\0132\036.cockroach.roachpb.Transacti"
-    "on\022F\n\020read_consistency\030\006 \001(\0162&.cockroach"
-    ".roachpb.ReadConsistencyTypeB\004\310\336\037\000\022+\n\005tr"
-    "ace\030\007 \001(\0132\034.cockroach.util.tracing.Span\022"
-    "\036\n\020max_scan_results\030\010 \001(\003B\004\310\336\037\000\"\202\001\n\014Batc"
-    "hRequest\0223\n\006header\030\001 \001(\0132\031.cockroach.roa"
-    "chpb.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 \003(\0132"
-    "\037.cockroach.roachpb.RequestUnionB\004\310\336\037\000:\004"
-    "\230\240\037\000\"\365\002\n\rBatchResponse\022A\n\006header\030\001 \001(\0132\'"
-    ".cockroach.roachpb.BatchResponse.HeaderB"
-    "\010\310\336\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockroach"
-    ".roachpb.ResponseUnionB\004\310\336\037\000\032\337\001\n\006Header\022"
-    "\'\n\005error\030\001 \001(\0132\030.cockroach.roachpb.Error"
-    "\0225\n\tTimestamp\030\002 \001(\0132\034.cockroach.roachpb."
-    "TimestampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockroach"
-    ".roachpb.Transaction\022\027\n\017collected_spans\030"
-    "\004 \003(\014\022/\n\003now\030\005 \001(\0132\034.cockroach.roachpb.T"
-    "imestampB\004\310\336\037\000:\004\230\240\037\000*L\n\023ReadConsistencyT"
-    "ype\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014IN"
-    "CONSISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUS"
-    "H_TIMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TO"
-    "UCH\020\002\032\004\210\243\036\0002X\n\010Internal\022L\n\005Batch\022\037.cockr"
-    "oach.roachpb.BatchRequest\032 .cockroach.ro"
-    "achpb.BatchResponse\"\0002X\n\010External\022L\n\005Bat"
-    "ch\022\037.cockroach.roachpb.BatchRequest\032 .co"
-    "ckroach.roachpb.BatchResponse\"\000B\tZ\007roach"
-    "pbX\004", 10404);
+    " \001(\014\022#\n\013fp_checksum\030\005 \001(\014B\016\342\336\037\nFPChecksu"
+    "m\"U\n\026VerifyChecksumResponse\022;\n\006header\030\001 "
+    "\001(\0132!.cockroach.roachpb.ResponseHeaderB\010"
+    "\310\336\037\000\320\336\037\001\"\320\013\n\014RequestUnion\022*\n\003get\030\001 \001(\0132\035"
+    ".cockroach.roachpb.GetRequest\022*\n\003put\030\002 \001"
+    "(\0132\035.cockroach.roachpb.PutRequest\022A\n\017con"
+    "ditional_put\030\003 \001(\0132(.cockroach.roachpb.C"
+    "onditionalPutRequest\0226\n\tincrement\030\004 \001(\0132"
+    "#.cockroach.roachpb.IncrementRequest\0220\n\006"
+    "delete\030\005 \001(\0132 .cockroach.roachpb.DeleteR"
+    "equest\022;\n\014delete_range\030\006 \001(\0132%.cockroach"
+    ".roachpb.DeleteRangeRequest\022,\n\004scan\030\007 \001("
+    "\0132\036.cockroach.roachpb.ScanRequest\022E\n\021beg"
+    "in_transaction\030\010 \001(\0132*.cockroach.roachpb"
+    ".BeginTransactionRequest\022A\n\017end_transact"
+    "ion\030\t \001(\0132(.cockroach.roachpb.EndTransac"
+    "tionRequest\0229\n\013admin_split\030\n \001(\0132$.cockr"
+    "oach.roachpb.AdminSplitRequest\0229\n\013admin_"
+    "merge\030\013 \001(\0132$.cockroach.roachpb.AdminMer"
+    "geRequest\022=\n\rheartbeat_txn\030\014 \001(\0132&.cockr"
+    "oach.roachpb.HeartbeatTxnRequest\022(\n\002gc\030\r"
+    " \001(\0132\034.cockroach.roachpb.GCRequest\0223\n\010pu"
+    "sh_txn\030\016 \001(\0132!.cockroach.roachpb.PushTxn"
+    "Request\022;\n\014range_lookup\030\017 \001(\0132%.cockroac"
+    "h.roachpb.RangeLookupRequest\022\?\n\016resolve_"
+    "intent\030\020 \001(\0132\'.cockroach.roachpb.Resolve"
+    "IntentRequest\022J\n\024resolve_intent_range\030\021 "
+    "\001(\0132,.cockroach.roachpb.ResolveIntentRan"
+    "geRequest\022.\n\005merge\030\022 \001(\0132\037.cockroach.roa"
+    "chpb.MergeRequest\022;\n\014truncate_log\030\023 \001(\0132"
+    "%.cockroach.roachpb.TruncateLogRequest\022;"
+    "\n\014leader_lease\030\024 \001(\0132%.cockroach.roachpb"
+    ".LeaderLeaseRequest\022;\n\014reverse_scan\030\025 \001("
+    "\0132%.cockroach.roachpb.ReverseScanRequest"
+    "\022C\n\020compute_checksum\030\026 \001(\0132).cockroach.r"
+    "oachpb.ComputeChecksumRequest\022A\n\017verify_"
+    "checksum\030\027 \001(\0132(.cockroach.roachpb.Verif"
+    "yChecksumRequest\022E\n\021check_consistency\030\030 "
+    "\001(\0132*.cockroach.roachpb.CheckConsistency"
+    "Request\022,\n\004noop\030\031 \001(\0132\036.cockroach.roachp"
+    "b.NoopRequest:\004\310\240\037\001\"\352\013\n\rResponseUnion\022+\n"
+    "\003get\030\001 \001(\0132\036.cockroach.roachpb.GetRespon"
+    "se\022+\n\003put\030\002 \001(\0132\036.cockroach.roachpb.PutR"
+    "esponse\022B\n\017conditional_put\030\003 \001(\0132).cockr"
+    "oach.roachpb.ConditionalPutResponse\0227\n\ti"
+    "ncrement\030\004 \001(\0132$.cockroach.roachpb.Incre"
+    "mentResponse\0221\n\006delete\030\005 \001(\0132!.cockroach"
+    ".roachpb.DeleteResponse\022<\n\014delete_range\030"
+    "\006 \001(\0132&.cockroach.roachpb.DeleteRangeRes"
+    "ponse\022-\n\004scan\030\007 \001(\0132\037.cockroach.roachpb."
+    "ScanResponse\022F\n\021begin_transaction\030\010 \001(\0132"
+    "+.cockroach.roachpb.BeginTransactionResp"
+    "onse\022B\n\017end_transaction\030\t \001(\0132).cockroac"
+    "h.roachpb.EndTransactionResponse\022:\n\013admi"
+    "n_split\030\n \001(\0132%.cockroach.roachpb.AdminS"
+    "plitResponse\022:\n\013admin_merge\030\013 \001(\0132%.cock"
+    "roach.roachpb.AdminMergeResponse\022>\n\rhear"
+    "tbeat_txn\030\014 \001(\0132\'.cockroach.roachpb.Hear"
+    "tbeatTxnResponse\022)\n\002gc\030\r \001(\0132\035.cockroach"
+    ".roachpb.GCResponse\0224\n\010push_txn\030\016 \001(\0132\"."
+    "cockroach.roachpb.PushTxnResponse\022<\n\014ran"
+    "ge_lookup\030\017 \001(\0132&.cockroach.roachpb.Rang"
+    "eLookupResponse\022@\n\016resolve_intent\030\020 \001(\0132"
+    "(.cockroach.roachpb.ResolveIntentRespons"
+    "e\022K\n\024resolve_intent_range\030\021 \001(\0132-.cockro"
+    "ach.roachpb.ResolveIntentRangeResponse\022/"
+    "\n\005merge\030\022 \001(\0132 .cockroach.roachpb.MergeR"
+    "esponse\022<\n\014truncate_log\030\023 \001(\0132&.cockroac"
+    "h.roachpb.TruncateLogResponse\022<\n\014leader_"
+    "lease\030\024 \001(\0132&.cockroach.roachpb.LeaderLe"
+    "aseResponse\022<\n\014reverse_scan\030\025 \001(\0132&.cock"
+    "roach.roachpb.ReverseScanResponse\022D\n\020com"
+    "pute_checksum\030\026 \001(\0132*.cockroach.roachpb."
+    "ComputeChecksumResponse\022B\n\017verify_checks"
+    "um\030\027 \001(\0132).cockroach.roachpb.VerifyCheck"
+    "sumResponse\022F\n\021check_consistency\030\030 \001(\0132+"
+    ".cockroach.roachpb.CheckConsistencyRespo"
+    "nse\022-\n\004noop\030\031 \001(\0132\037.cockroach.roachpb.No"
+    "opResponse:\004\310\240\037\001\"\231\003\n\006Header\0225\n\ttimestamp"
+    "\030\001 \001(\0132\034.cockroach.roachpb.TimestampB\004\310\336"
+    "\037\000\022;\n\007replica\030\002 \001(\0132$.cockroach.roachpb."
+    "ReplicaDescriptorB\004\310\336\037\000\022,\n\010range_id\030\003 \001("
+    "\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022+\n\ruser_pr"
+    "iority\030\004 \001(\001B\024\310\336\037\000\372\336\037\014UserPriority\022+\n\003tx"
+    "n\030\005 \001(\0132\036.cockroach.roachpb.Transaction\022"
+    "F\n\020read_consistency\030\006 \001(\0162&.cockroach.ro"
+    "achpb.ReadConsistencyTypeB\004\310\336\037\000\022+\n\005trace"
+    "\030\007 \001(\0132\034.cockroach.util.tracing.Span\022\036\n\020"
+    "max_scan_results\030\010 \001(\003B\004\310\336\037\000\"\202\001\n\014BatchRe"
+    "quest\0223\n\006header\030\001 \001(\0132\031.cockroach.roachp"
+    "b.HeaderB\010\310\336\037\000\320\336\037\001\0227\n\010requests\030\002 \003(\0132\037.c"
+    "ockroach.roachpb.RequestUnionB\004\310\336\037\000:\004\230\240\037"
+    "\000\"\365\002\n\rBatchResponse\022A\n\006header\030\001 \001(\0132\'.co"
+    "ckroach.roachpb.BatchResponse.HeaderB\010\310\336"
+    "\037\000\320\336\037\001\0229\n\tresponses\030\002 \003(\0132 .cockroach.ro"
+    "achpb.ResponseUnionB\004\310\336\037\000\032\337\001\n\006Header\022\'\n\005"
+    "error\030\001 \001(\0132\030.cockroach.roachpb.Error\0225\n"
+    "\tTimestamp\030\002 \001(\0132\034.cockroach.roachpb.Tim"
+    "estampB\004\310\336\037\000\022+\n\003txn\030\003 \001(\0132\036.cockroach.ro"
+    "achpb.Transaction\022\027\n\017collected_spans\030\004 \003"
+    "(\014\022/\n\003now\030\005 \001(\0132\034.cockroach.roachpb.Time"
+    "stampB\004\310\336\037\000:\004\230\240\037\000*L\n\023ReadConsistencyType"
+    "\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCON"
+    "SISTENT\020\002\032\004\210\243\036\000*G\n\013PushTxnType\022\022\n\016PUSH_T"
+    "IMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH"
+    "\020\002\032\004\210\243\036\0002X\n\010Internal\022L\n\005Batch\022\037.cockroac"
+    "h.roachpb.BatchRequest\032 .cockroach.roach"
+    "pb.BatchResponse\"\0002X\n\010External\022L\n\005Batch\022"
+    "\037.cockroach.roachpb.BatchRequest\032 .cockr"
+    "oach.roachpb.BatchResponse\"\000B\tZ\007roachpbX"
+    "\004", 10441);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -19426,6 +19428,7 @@ const int VerifyChecksumRequest::kHeaderFieldNumber;
 const int VerifyChecksumRequest::kVersionFieldNumber;
 const int VerifyChecksumRequest::kChecksumIdFieldNumber;
 const int VerifyChecksumRequest::kChecksumFieldNumber;
+const int VerifyChecksumRequest::kFpChecksumFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 VerifyChecksumRequest::VerifyChecksumRequest()
@@ -19453,6 +19456,7 @@ void VerifyChecksumRequest::SharedCtor() {
   version_ = 0u;
   checksum_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   checksum_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  fp_checksum_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -19464,6 +19468,7 @@ VerifyChecksumRequest::~VerifyChecksumRequest() {
 void VerifyChecksumRequest::SharedDtor() {
   checksum_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   checksum_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  fp_checksum_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
     delete header_;
   }
@@ -19495,7 +19500,7 @@ VerifyChecksumRequest* VerifyChecksumRequest::New(::google::protobuf::Arena* are
 }
 
 void VerifyChecksumRequest::Clear() {
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 31u) {
     if (has_header()) {
       if (header_ != NULL) header_->::cockroach::roachpb::Span::Clear();
     }
@@ -19505,6 +19510,9 @@ void VerifyChecksumRequest::Clear() {
     }
     if (has_checksum()) {
       checksum_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    }
+    if (has_fp_checksum()) {
+      fp_checksum_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -19572,6 +19580,19 @@ bool VerifyChecksumRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(42)) goto parse_fp_checksum;
+        break;
+      }
+
+      // optional bytes fp_checksum = 5;
+      case 5: {
+        if (tag == 42) {
+         parse_fp_checksum:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_fp_checksum()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -19624,6 +19645,12 @@ void VerifyChecksumRequest::SerializeWithCachedSizes(
       4, this->checksum(), output);
   }
 
+  // optional bytes fp_checksum = 5;
+  if (has_fp_checksum()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      5, this->fp_checksum(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -19660,6 +19687,13 @@ void VerifyChecksumRequest::SerializeWithCachedSizes(
         4, this->checksum(), target);
   }
 
+  // optional bytes fp_checksum = 5;
+  if (has_fp_checksum()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        5, this->fp_checksum(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -19671,7 +19705,7 @@ void VerifyChecksumRequest::SerializeWithCachedSizes(
 int VerifyChecksumRequest::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 31u) {
     // optional .cockroach.roachpb.Span header = 1;
     if (has_header()) {
       total_size += 1 +
@@ -19698,6 +19732,13 @@ int VerifyChecksumRequest::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
           this->checksum());
+    }
+
+    // optional bytes fp_checksum = 5;
+    if (has_fp_checksum()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->fp_checksum());
     }
 
   }
@@ -19741,6 +19782,10 @@ void VerifyChecksumRequest::MergeFrom(const VerifyChecksumRequest& from) {
       set_has_checksum();
       checksum_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.checksum_);
     }
+    if (from.has_fp_checksum()) {
+      set_has_fp_checksum();
+      fp_checksum_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.fp_checksum_);
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -19773,6 +19818,7 @@ void VerifyChecksumRequest::InternalSwap(VerifyChecksumRequest* other) {
   std::swap(version_, other->version_);
   checksum_id_.Swap(&other->checksum_id_);
   checksum_.Swap(&other->checksum_);
+  fp_checksum_.Swap(&other->fp_checksum_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -19960,6 +20006,59 @@ void VerifyChecksumRequest::clear_checksum() {
   }
   checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), checksum);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.checksum)
+}
+
+// optional bytes fp_checksum = 5;
+bool VerifyChecksumRequest::has_fp_checksum() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+void VerifyChecksumRequest::set_has_fp_checksum() {
+  _has_bits_[0] |= 0x00000010u;
+}
+void VerifyChecksumRequest::clear_has_fp_checksum() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+void VerifyChecksumRequest::clear_fp_checksum() {
+  fp_checksum_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_fp_checksum();
+}
+ const ::std::string& VerifyChecksumRequest::fp_checksum() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+  return fp_checksum_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void VerifyChecksumRequest::set_fp_checksum(const ::std::string& value) {
+  set_has_fp_checksum();
+  fp_checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+}
+ void VerifyChecksumRequest::set_fp_checksum(const char* value) {
+  set_has_fp_checksum();
+  fp_checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+}
+ void VerifyChecksumRequest::set_fp_checksum(const void* value, size_t size) {
+  set_has_fp_checksum();
+  fp_checksum_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+}
+ ::std::string* VerifyChecksumRequest::mutable_fp_checksum() {
+  set_has_fp_checksum();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
+  return fp_checksum_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ ::std::string* VerifyChecksumRequest::release_fp_checksum() {
+  clear_has_fp_checksum();
+  return fp_checksum_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+ void VerifyChecksumRequest::set_allocated_fp_checksum(::std::string* fp_checksum) {
+  if (fp_checksum != NULL) {
+    set_has_fp_checksum();
+  } else {
+    clear_has_fp_checksum();
+  }
+  fp_checksum_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), fp_checksum);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.VerifyChecksumRequest.fp_checksum)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

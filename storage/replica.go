@@ -135,6 +135,10 @@ type pendingCmd struct {
 type replicaChecksum struct {
 	// Computed checksum. This is set to nil on error.
 	checksum []byte
+	// Computed checksum over k:v pairs containing floating point values.
+	// This is set to nil when no such k:v pairs exist in the range or
+	// on error.
+	fpChecksum []byte
 	// GC this checksum after this timestamp. The timestamp is valid only
 	// after the checksum has been computed.
 	gcTimestamp time.Time
