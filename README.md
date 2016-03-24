@@ -5,21 +5,20 @@
 
 ## A Scalable, Survivable, Strongly-Consistent SQL Database
 
-**Table of Contents**
-
-- [What is CockroachDB](#what-is-cockroachdb)
-- [Status](#status)
-- [Running CockroachDB Locally](#running-cockroachdb-locally)
-- [Deploying CockroachDB in the cloud](#deploying-cockroachdb-in-the-cloud)
-- [Running a multi-node cluster](#running-a-multi-node-cluster)
-- [Getting in touch and contributing](#get-in-touch)
+- [What is CockroachDB?](#what-is-cockroachdb)
+- [Quickstart](#quickstart)
+- [Client Drivers](#client-drivers)
+- [Deployment](#deployment)
+- [Get In Touch](#get-in-touch)
+- [Contributing](#contributing)
 - [Talks](#talks)
-- [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
-- [Architecture](#architecture) and [Client Architecture](#client-architecture)
+- [Design](#design)
 
-## What is CockroachDB
+## What is CockroachDB?
 
-CockroachDB is a distributed SQL database built on top of a transactional and consistent key:value store. The primary design goals are support for ACID transactions, horizontal scalability, and survivability, hence the name. CockroachDB implements a Raft consensus algorithm for consistency. It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
+CockroachDB is a distributed SQL database built on a transactional and strongly-consistent key-value store. It **scales** horizontally; **survives** disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention; supports **strongly-consistent** ACID transactions; and provides a familiar **SQL** API for structuring, manipulating, and querying data.
+
+For more details, see our [FAQ](https://www.cockroachlabs.com/docs/frequently-asked-questions.html), [documentation](https://www.cockroachlabs.com/docs), and [design overview](#design-overview).
 
 ## Status
 
@@ -27,173 +26,121 @@ CockroachDB is currently in alpha. See our
 [Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
 [Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development.
 
-## Running CockroachDB Locally
+## Quickstart 
 
-### Environment Setup
+1.  [Install Cockroach DB](https://www.cockroachlabs.com/docs/install-cockroachdb.html).
 
-#### Native (read: without Docker)
+2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes running on different ports:
 
-* set up the dev environment (see [CONTRIBUTING.md](CONTRIBUTING.md))
-* `make build`
+    ```shell
+    $ ./cockroach start --insecure &
+    $ ./cockroach start --insecure --store=cockroach-data2 --port=26258 --http-port=8081 --join=localhost:26257 &
+    $ ./cockroach start --insecure --store=cockroach-data3 --port=26259 --http-port=8082 --join=localhost:26257 &
+    ```
 
-#### Using Docker
+3.  [Start the built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html) as an interactive shell:
 
-Install Docker! On OSX ([official docs](https://docs.docker.com/engine/installation/mac/#from-your-shell)):
-```bash
-# install docker and docker-machine:
-$ brew install docker docker-machine
-# install VirtualBox:
-$ brew cask install virtualbox
-# create the VM (this will also start it):
-$ docker-machine create --driver virtualbox default
-# if the VM exists but isn't running, start it:
-$ docker-machine start default
-# set up the environment for the docker client:
-$ eval $(docker-machine env default)
-```
-Other operating systems will have a similar set of commands. Please check Docker's documentation for more info.
+    ```shell
+    $ ./cockroach sql --insecure
+    # Welcome to the cockroach SQL interface.
+    # All statements must be terminated by a semicolon.
+    # To exit: CTRL + D.
+    ```
 
-Pull the CockroachDB Docker image and drop into a shell within it:
-```bash
-docker pull cockroachdb/cockroach
-docker run -p 26257:26257 -p 8080:8080 -t -i cockroachdb/cockroach shell
-# root@82cb657cdc42:/cockroach#
-```
+4. Run some [CockroachDB SQL statements](https://www.cockroachlabs.com/docs/learn-cockroachdb-sql.html):
 
-### Bootstrap and talk to a single node
+    ```shell
+    root@:26257> CREATE DATABASE bank;
+    CREATE DATABASE
 
-Note: If you’re using Docker as described above, run all the commands described below in the container’s shell.
+    root@:26257> SET DATABASE = bank;
+    SET
 
-Setting up Cockroach is easy, but starting a test node is even easier. All it takes is running:
+    root@:26257> CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL);
+    CREATE TABLE
 
-```bash
-./cockroach start --insecure &
-```
+    root@26257> INSERT INTO accounts VALUES (1234, DECIMAL '10000.50');
+    INSERT 1
 
-Verify that you're up and running by visiting the cluster UI. If you're running
-without Docker (or on Linux), you'll find it at
-[localhost:8080](http://localhost:8080); for OSX under Docker, things are a
-little more complicated and you need to run `docker-machine ip default` to get
-the correct address (but the port is the same).
+    root@26257> SELECT * FROM accounts;
+    +------+----------+
+    |  id  | balance  |
+    +------+----------+
+    | 1234 | 10000.50 |
+    +------+----------+
+    ```
 
-##### Built-in client
+4. Checkout the admin UI by pointing your browser to `http://<localhost>:8080`.
 
-Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a built-in sql client:
+5. CockroachDB makes it easy to [secure a cluster](https://www.cockroachlabs.com/docs/secure-a-cluster.html).
 
-```bash
-./cockroach sql --insecure
-# Welcome to the cockroach SQL interface.
-# All statements must be terminated by a semicolon.
-# To exit: CTRL + D.
-192.168.99.100:26257> show databases;
-+----------+
-| Database |
-+----------+
-| system   |
-+----------+
-192.168.99.100:26257> SET database = system;
-OK
-192.168.99.100:26257> show tables;
-+------------+
-|   Table    |
-+------------+
-| descriptor |
-| eventlog   |
-| lease      |
-| namespace  |
-| rangelog   |
-| reporting  |
-| users      |
-| zones      |
-+------------+
-```
+## Client Drivers
 
-Check out `./cockroach help` to see all available commands.
+CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages. For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/install-client-drivers.html).
 
+## Deployment
 
-## Deploying CockroachDB in the cloud
+-   [Manual](https://www.cockroachlabs.com/docs/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
 
-For a sample configuration to run an insecure CockroachDB cluster on AWS using [Terraform](https://terraform.io/),
-see [cloud deployment](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws).
+-   [Cloud](https://github.com/cockroachdb/cockroach/tree/master/cloud/aws) - A sample configuration to run an insecure CockroachDB cluster on AWS using [Terraform](https://terraform.io/).
 
-## Running a multi-node cluster
+## Get In Touch
 
-We'll set up a three-node cluster below.
+When you see a bug or have improvements to suggest, please open an [issue](https://github.com/cockroachdb/cockroach/issues).
 
-The code assumes that `$NODE{1,2,3}` are the host names of the three nodes in the cluster.
+For development-related questions and anything else, there are two easy ways to get in touch:
 
-```bash
-# Create certificates
-./cockroach cert create-ca
-./cockroach cert create-node 127.0.0.1 ::1 localhost $NODE1 $NODE2 $NODE3
-./cockroach cert create-client root
-# Distribute certificates
-for n in $NODE1 $NODE2 $NODE3; do
-  scp -r certs ${n}:certs
-done
-```
+-   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the best, most immediate way to connect with CockroachDB engineers.
 
-Now, on node 1, initialize the cluster (this example uses `/data`; yours may vary):
+-   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db) - Please join first or you messages may be held back for moderation.
 
-```bash
-./cockroach start --store=/data1
-```
+## Contributing
 
-Then, add nodes 2, 3, etc. to the cluster by specifying the `--join` flag to connect to any already-joined node.
+We're an open source project and welcome contributions.
 
-```bash
-./cockroach start --store=/data2 --join=${NODE1}:26257
-```
+1.  See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
 
-Verify that the cluster is connected on the web UI by directing your browser at
-```
-https://<any_node>:8080
-```
+2.  Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted).
 
-## Get in touch
+3.  Review our [style guide](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#style-guide) and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls) to learn about our style and conventions.
 
-We spend almost all of our time here on GitHub, and use the [issue
-tracker](https://github.com/cockroachdb/cockroach/issues) for
-bug reports.
-
-For development related questions and anything else, message our mailing list at [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). We recommend joining before posting, or your messages may be held back for moderation.
-
-### Contributing
-
-We're an Open Source project and welcome contributions.
-See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
-Once that's done, take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted), and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls/) to learn about our style and conventions.
+4.  Make your changes according to our [code review workflow](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#code-review-workflow).
 
 ## Talks
 
-* [Venue: Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball) on (12/02/2015), 21min.<br />
-  CockroachDB's MVCC model.
-* [Venue: Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball) on (10/28/2015), 30min.<br />
-  Architecture & Overview.
-* [Venue: Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell) on (08/21/2015), 52min.<br />
-* [Venue: Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball) on (06/16/2015), 23min.<br />
-  A short, less technical presentation of CockroachDB.
-* [Venue: NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf) on (06/10/2015), 15min.<br />
-  A short, non-technical talk with a small cluster survivability demo.
-* [Venue: CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball) on (05/27/2015), 25min.<br />
-  An introduction to the goals and design of CockroachDB. The recommended talk to watch if all you have time for is one.
-* [Venue: The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf) on (03/04/2015), 45min.<br />
-  The most technical talk given thus far, going through the implementation of transactions in some detail.
+The best ones to start with:
 
-### Older talks
+-   10/28/2015: [Code Driven NYC](https://www.youtube.com/watch?v=tV-WXM2IJ3U), by [Spencer Kimball] (https://github.com/spencerkimball), 30min  
+    Architecture & overview.
 
-* [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014), 1h25min.
-* [Venue: Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014), 1h.
+-   6/16/2015: [Data Driven NYC](https://youtu.be/TA-Jw78Ms_4), by [Spencer Kimball] (https://github.com/spencerkimball), 23min  
+    A short, less technical presentation of CockroachDB.
 
+Other talks of interest:
+
+-   12/2/2015: [Annual RocksDB meetup at Facebook HQ](https://www.youtube.com/watch?v=-ij2OiDTxz0), by [Spencer Kimball] (https://github.com/spencerkimball), 21min  
+    CockroachDB's MVCC model.
+
+-   8/21/2015: [Golang UK Conference 2015](https://www.youtube.com/watch?v=33oqpLmQ3LE), by [Ben Darnell](https://github.com/bdarnell), 52min
+
+-   6/10/2015: [NY Enterprise Technology Meetup](https://www.youtube.com/watch?v=SXAEZlpsHNE), by [Tobias Schottdorf](https://github.com/tschottdorf), 15min  
+    A short, non-technical talk with a small cluster survivability demo.
+
+-   5/27/2015: [CoreOS Fest](https://www.youtube.com/watch?v=LI7uaaYeYmQ), by [Spencer Kimball](https://github.com/spencerkimball), 25min  
+    An introduction to the goals and design of CockroachDB. 
+
+-   3/4/2015: [The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), by [Tobias Schottdorf](https://github.com/tschottdorf), 45min  
+    The most technical talk given thus far, going through the implementation of transactions in some detail.
+
+-   11/5/2014: [The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), by [Tobias Schottdorf](https://github.com/tschottdorf), 1h 25min
+
+-   9/5/2014: [Yelp!](https://www.youtube.com/watch?feature=youtu.be&v=MEAuFgsmND0), by [Spencer Kimball](https://github.com/spencerkimball), 1h
 
 ## Design
 
-This is an overview. For an in depth discussion of the design, see the [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
+This is an overview. For an in-depth discussion of the design and architecture, see the full [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md). For another quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p).
 
-For a quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p)
-or watch a [presentation](#talks).
-
-
+### Overview
 CockroachDB is a distributed SQL database built on top of a transactional and consistent key:value store. The primary design goals are support for ACID transactions, horizontal scalability and survivability, hence the name. CockroachDB implements a Raft consensus algorithm for consistency. It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention. CockroachDB nodes (RoachNodes) are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
 
 CockroachDB implements a single, monolithic sorted map from key to value
@@ -207,9 +154,9 @@ total byte size within a globally configurable min/max size
 interval. Range sizes default to target 64M in order to facilitate
 quick splits and merges and to distribute load at hotspots within a
 key range. Range replicas are intended to be located in disparate
-datacenters for survivability (e.g. { US-East, US-West, Japan }, {
-Ireland, US-East, US-West}, { Ireland, US-East, US-West, Japan,
-Australia }).
+datacenters for survivability (e.g. `{ US-East, US-West, Japan }`, `{
+Ireland, US-East, US-West}` , `{ Ireland, US-East, US-West, Japan,
+Australia }`).
 
 Single mutations to ranges are mediated via an instance of a
 distributed consensus algorithm to ensure consistency. We’ve chosen to
@@ -241,16 +188,12 @@ performance and/or availability. Unlike Spanner, zones are monolithic
 and don’t allow movement of fine grained data on the level of entity
 groups.
 
-A [Megastore][4]-like message queue mechanism is also provided to 1)
-efficiently sideline updates which can tolerate asynchronous execution
-and 2) provide an integrated message queuing system for asynchronous
-communication between distributed system components.
-
 #### SQL - NoSQL - NewSQL Capabilities
 
 ![SQL - NoSQL - NewSQL Capabilities](/resource/doc/sql-nosql-newsql.png?raw=true)
 
-## Datastore Goal Articulation
+
+### Datastore Goal Articulation
 
 There are other important axes involved in data-stores which are less
 well understood and/or explained. There is lots of cross-dependency,
@@ -317,7 +260,7 @@ write-optimized (HBase, Cassandra, SQLite3/LSM, CockroachDB).
 
 ![Read vs. Write Optimization Spectrum](/resource/doc/read-vs-write.png?raw=true)
 
-## Architecture
+### Architecture
 
 CockroachDB implements a layered architecture, with various
 subdirectories implementing layers as appropriate. The highest level of
@@ -343,7 +286,7 @@ replicas.
 
 ![Range Architecture Blowup](/resource/doc/architecture-blowup.png?raw=true)
 
-## Client Architecture
+### Client Architecture
 
 RoachNodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
 application/json. Client implementations consist of an HTTP sender
