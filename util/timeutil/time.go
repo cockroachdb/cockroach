@@ -27,8 +27,7 @@ var (
 	nowFunc = time.Now
 )
 
-// SetTimeOffset configures a fixed offset to add (or substract)
-// to reported time samples.
+// SetTimeOffset configures a fixed offset to reported time samples.
 func SetTimeOffset(offset time.Duration) {
 	if offset == 0 {
 		nowFunc = time.Now
