@@ -593,7 +593,7 @@ func (e *Executor) execStmtInAbortedTxn(
 	if txnState.State != Aborted && txnState.State != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
 	}
-	switch stmt.(type) {
+	switch s := stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State == RestartWait {
 			if pErr := txnState.txn.Rollback(); pErr != nil {
@@ -605,15 +605,21 @@ func (e *Executor) execStmtInAbortedTxn(
 		result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 		txnState.resetStateAndTxn(NoTxn)
 		return result, nil
-	case *parser.RestartTransaction:
+	case *parser.RollbackToSavepoint:
+		if pErr := parser.ValidateRestartCheckpoint(s.Savepoint); pErr != nil {
+			return Result{PErr: pErr}, pErr
+		}
 		if txnState.State == RestartWait {
 			// Reset the state. Txn is Open again.
 			txnState.State = Open
+			txnState.retrying = true
 			// TODO(andrei/cdo): add a counter for user-directed retries.
 			return Result{}, nil
 		}
 		pErr := sqlErrToPErr(&errTransactionAborted{
-			CustomMsg: "RETRY INTENT has not been used or a non-retriable error was encountered."})
+			CustomMsg: fmt.Sprintf(
+				"SAVEPOINT %s has not been used or a non-retriable error was encountered.",
+				parser.RestartSavepointName)})
 		return Result{PErr: pErr}, pErr
 	default:
 		pErr := sqlErrToPErr(&errTransactionAborted{})
@@ -680,7 +686,7 @@ func (e *Executor) execStmtInOpenTxn(
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)
-	switch stmt.(type) {
+	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
 			txnState.resetStateAndTxn(Aborted)
@@ -694,11 +700,14 @@ func (e *Executor) execStmtInOpenTxn(
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
 		return commitSQLTransaction(txnState, planMaker, commit, e)
-	case *parser.ReleaseTransaction:
+	case *parser.ReleaseSavepoint:
 		if implicitTxn {
 			return e.noTransactionHelper(txnState)
 		}
-		// ReleaseTransaction is executed fully here; there's no planNode for it
+		if pErr := parser.ValidateRestartCheckpoint(s.Savepoint); pErr != nil {
+			return Result{PErr: pErr}, pErr
+		}
+		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
 		return commitSQLTransaction(txnState, planMaker, release, e)
 	case *parser.RollbackTransaction:
@@ -713,24 +722,35 @@ func (e *Executor) execStmtInOpenTxn(
 		if implicitTxn {
 			return e.noTransactionHelper(txnState)
 		}
-	case *parser.RetryIntent:
+	case *parser.Savepoint:
 		if implicitTxn {
 			return e.noTransactionHelper(txnState)
+		}
+		if pErr := parser.ValidateRestartCheckpoint(s.Name); pErr != nil {
+			return Result{PErr: pErr}, pErr
 		}
 		// We check if the transaction has "started" already by looking inside the txn proto.
 		// The executor should not be doing that. But it's also what the planner does for
 		// SET TRANSACTION ISOLATION ... It feels ever more wrong here.
 		// TODO(andrei): find a better way to track this running state.
-		if txnState.txn.Proto.IsInitialized() {
-			pErr := roachpb.NewError(
-				util.Errorf("RETRY INTENT needs to be the first statement in a transaction"))
+		// TODO(andrei): the check for retrying is a hack - we erroneously allow
+		// SAVEPOINT to be issued at any time during a retry, not just in the
+		// beginning. We should figure out how to track whether we started using the
+		// transaction during a retry.
+		if txnState.txn.Proto.IsInitialized() && !txnState.retrying {
+			pErr := roachpb.NewError(util.Errorf(
+				"SAVEPOINT %s needs to be the first statement in a transaction",
+				parser.RestartSavepointName))
 			return Result{PErr: pErr}, pErr
 		}
-		// Note that RetryIntent doesn't have a corresponding plan node.
+		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
 		txnState.retryIntent = true
 		return Result{}, nil
-	case *parser.RestartTransaction:
+	case *parser.RollbackToSavepoint:
+		if pErr := parser.ValidateRestartCheckpoint(s.Savepoint); pErr != nil {
+			return Result{PErr: pErr}, pErr
+		}
 		// Can't restart if we didn't get an error first, which would've put the
 		// txn in a different state.
 		txnState.resetStateAndTxn(Aborted)

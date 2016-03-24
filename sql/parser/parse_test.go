@@ -42,8 +42,7 @@ func TestParse(t *testing.T) {
 		{`BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH`},
 		{`COMMIT TRANSACTION`},
 		{`ROLLBACK TRANSACTION`},
-		{`RESTART TRANSACTION`},
-		{`RETRY INTENT`},
+		{"SAVEPOINT foo"},
 
 		{`CREATE DATABASE a`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
@@ -582,21 +581,28 @@ func TestParse2(t *testing.T) {
 			`COMMIT TRANSACTION`},
 		{`END`,
 			`COMMIT TRANSACTION`},
-		{`RESTART`,
-			`RESTART TRANSACTION`},
 		{`BEGIN TRANSACTION PRIORITY LOW, ISOLATION LEVEL SNAPSHOT`,
 			`BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW`},
 		{`SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SERIALIZABLE`,
 			`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY NORMAL`},
+		{"RELEASE foo", "RELEASE SAVEPOINT foo"},
+		{"RELEASE SAVEPOINT foo", "RELEASE SAVEPOINT foo"},
+		{"ROLLBACK", "ROLLBACK TRANSACTION"},
+		{"ROLLBACK TRANSACTION", "ROLLBACK TRANSACTION"},
+		{"ROLLBACK TO foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
+		{"ROLLBACK TO SAVEPOINT foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
+		{"ROLLBACK TRANSACTION TO foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
+		{"ROLLBACK TRANSACTION TO SAVEPOINT foo", "ROLLBACK TRANSACTION TO SAVEPOINT foo"},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
 		if err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+			t.Errorf("%s: expected success, but found %s", d.sql, err)
+			continue
 		}
 		s := stmts.String()
 		if d.expected != s {
-			t.Errorf("expected %s, but found %s", d.expected, s)
+			t.Errorf("%s: expected %s, but found (%d statements): %q", d.sql, d.expected, len(stmts), s)
 		}
 		if _, err := parseTraditional(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)

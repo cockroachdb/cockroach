@@ -172,25 +172,19 @@ func (*RenameTable) StatementType() StatementType { return DDL }
 func (*RenameTable) StatementTag() string { return "RENAME TABLE" }
 
 // StatementType implements the Statement interface.
-func (*ReleaseTransaction) StatementType() StatementType { return Ack }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*ReleaseTransaction) StatementTag() string { return "RELEASE" }
-
-// StatementType implements the Statement interface.
-func (*RestartTransaction) StatementType() StatementType { return Ack }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*RestartTransaction) StatementTag() string { return "RESTART" }
-
-// StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }
 
+// StatementTag returns a short string identifying the type of statement.
+func (*ReleaseSavepoint) StatementTag() string { return "RELEASE" }
+
 // StatementType implements the Statement interface.
-func (*RetryIntent) StatementType() StatementType { return Ack }
+func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RetryIntent) StatementTag() string { return "RETRY INTENT" }
+func (*RollbackToSavepoint) StatementTag() string { return "ROLLBACK" }
+
+// StatementType implements the Statement interface.
+func (*RollbackToSavepoint) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Revoke) StatementTag() string { return "REVOKE" }
@@ -200,6 +194,12 @@ func (*RollbackTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RollbackTransaction) StatementTag() string { return "ROLLBACK" }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Savepoint) StatementTag() string { return "SAVEPOINT" }
+
+// StatementType implements the Statement interface.
+func (*Savepoint) StatementType() StatementType { return Ack }
 
 // StatementType implements the Statement interface.
 func (*Select) StatementType() StatementType { return Rows }
