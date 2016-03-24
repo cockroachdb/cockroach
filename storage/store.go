@@ -1670,9 +1670,11 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
 			if ba.Txn != nil {
-				if pErr := s.maybeUpdateTransaction(&ba.Header, now); pErr != nil {
+				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Txn, now)
+				if pErr != nil {
 					return nil, pErr
 				}
+				ba.Txn = updatedTxn
 			}
 			continue
 		}
@@ -1698,32 +1700,32 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 //
 // The supplied transaction is updated with the results of the
 // "touch" push if possible.
-func (s *Store) maybeUpdateTransaction(h *roachpb.Header, now roachpb.Timestamp) *roachpb.Error {
+func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
 	// Attempt to push the transaction which created the intent.
 	b := client.Batch{}
 	b.InternalAddRequest(&roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: h.Txn.Key,
+			Key: txn.Key,
 		},
 		Now:       now,
-		PusheeTxn: h.Txn.TxnMeta,
+		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_UPDATE,
 	})
 	br, pErr := s.db.RunWithResponse(&b)
 	if pErr != nil {
-		return pErr
+		return nil, pErr
 	}
-	updatedTxn := br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+	updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 	if updatedTxn.ID != nil { // can be nil if no BeginTransaction has been sent
 		switch updatedTxn.Status {
 		case roachpb.COMMITTED:
-			return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), &updatedTxn)
+			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
 		case roachpb.ABORTED:
-			return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &updatedTxn)
+			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedTxn)
 		}
-		h.Txn = &updatedTxn
+		return updatedTxn, nil
 	}
-	return nil
+	return txn, nil
 }
 
 // enqueueRaftMessage enqueues a request for eventual processing. It
