@@ -13,12 +13,17 @@
 // permissions and limitations under the License.
 //
 // Author: Vivek Menezes (vivek@cockroachlabs.com)
+// Author: Andrei Matei (andreimatei1@gmail.com)
 
 package parser
 
 import (
 	"bytes"
 	"fmt"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
@@ -103,23 +108,45 @@ func (node *RollbackTransaction) String() string {
 	return "ROLLBACK TRANSACTION"
 }
 
-// RestartTransaction represents a RESTART TRANSACTION statement.
-type RestartTransaction struct{}
+// RestartSavepointName is the only savepoint name that we accept, modulo
+// capitalization.
+const RestartSavepointName string = "COCKROACH_RESTART"
 
-func (node *RestartTransaction) String() string {
-	return "RESTART TRANSACTION"
+// ValidateRestartCheckpoint checks that a checkpoint name is our magic restart
+// value.
+// We accept everything with the desired prefix because at least the C++ libpqxx
+// appends sequence numbers to the savepoint name specified by the user.
+func ValidateRestartCheckpoint(savepoint string) *roachpb.Error {
+	if !strings.HasPrefix(strings.ToUpper(savepoint), RestartSavepointName) {
+		return roachpb.NewError(util.Errorf(
+			"SAVEPOINT not supported except for %s", RestartSavepointName))
+	}
+	return nil
 }
 
-// ReleaseTransaction represents a RELEASE TRANSACTION statement.
-type ReleaseTransaction struct{}
-
-func (node *ReleaseTransaction) String() string {
-	return "RELEASE TRANSACTION"
+// Savepoint represents a SAVEPOINT <name> statement.
+type Savepoint struct {
+	Name string
 }
 
-// RetryIntent represents a RETRY INTENT statement.
-type RetryIntent struct{}
+func (node *Savepoint) String() string {
+	return "SAVEPOINT " + node.Name
+}
 
-func (node *RetryIntent) String() string {
-	return "RETRY INTENT"
+// ReleaseSavepoint represents a RELEASE SAVEPOINT <name> statement.
+type ReleaseSavepoint struct {
+	Savepoint string
+}
+
+func (node *ReleaseSavepoint) String() string {
+	return "RELEASE SAVEPOINT " + node.Savepoint
+}
+
+// RollbackToSavepoint represents a ROLLBACK TO SAVEPOINT <name> statement.
+type RollbackToSavepoint struct {
+	Savepoint string
+}
+
+func (node *RollbackToSavepoint) String() string {
+	return "ROLLBACK TRANSACTION TO SAVEPOINT " + node.Savepoint
 }

@@ -271,9 +271,11 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
 %type <Statement> preparable_stmt
+%type <Statement> release_stmt
 %type <Statement> rename_stmt
 %type <Statement> revoke_stmt
 %type <*Select> select_stmt
+%type <Statement> savepoint_stmt
 %type <Statement> set_stmt
 %type <Statement> show_stmt
 %type <Statement> transaction_stmt
@@ -296,7 +298,8 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
 
-%type <str>   name opt_name
+%type <str>   name opt_name opt_to_savepoint
+%type <str>   savepoint_name
 
 // %type <empty> subquery_op
 %type <*QualifiedName> func_name
@@ -501,7 +504,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   HAVING HIGH HOUR
 
 %token <str>   IF IFNULL IN
-%token <str>   INDEX INDEXES INITIALLY INTENT
+%token <str>   INDEX INDEXES INITIALLY 
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
@@ -527,10 +530,10 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   RENAME REPEATABLE
-%token <str>   RELEASE RESTRICT RESTART RETRY RETURNING REVOKE RIGHT ROLLBACK ROLLUP
+%token <str>   RELEASE RESTRICT RETURNING REVOKE RIGHT ROLLBACK ROLLUP
 %token <str>   ROW ROWS RSHIFT
 
-%token <str>   SEARCH SECOND SELECT
+%token <str>   SAVEPOINT SEARCH SECOND SELECT
 %token <str>   SERIALIZABLE SESSION SESSION_USER SET SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SNAPSHOT SOME SQL
 %token <str>   START STRICT STRING STORING SUBSTRING
@@ -656,6 +659,7 @@ stmt:
 | insert_stmt
 | rename_stmt
 | revoke_stmt
+| savepoint_stmt
 | select_stmt
   {
     $$.val = $1.slct()
@@ -663,6 +667,7 @@ stmt:
 | set_stmt
 | show_stmt
 | transaction_stmt
+| release_stmt
 | truncate_stmt
 | update_stmt
 | /* EMPTY */
@@ -1628,6 +1633,18 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
+release_stmt:
+ RELEASE savepoint_name
+ {
+  $$.val = &ReleaseSavepoint{Savepoint: $2}
+ }
+
+savepoint_stmt:
+ SAVEPOINT savepoint_name
+ {
+  $$.val = &Savepoint{Name: $2}
+ }
+
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
   BEGIN opt_transaction opt_transaction_mode_list
@@ -1646,27 +1663,46 @@ transaction_stmt:
   {
     $$.val = &CommitTransaction{}
   }
-| ROLLBACK opt_transaction
+| ROLLBACK opt_to_savepoint
   {
-    $$.val = &RollbackTransaction{}
-  }
-| RELEASE opt_transaction
-  {
-    $$.val = &ReleaseTransaction{}
-  }
-| RESTART opt_transaction
-  {
-    $$.val = &RestartTransaction{}
-  }
-| RETRY INTENT
-  {
-    $$.val = &RetryIntent{}
+    if $2 != "" {
+      $$.val = &RollbackToSavepoint{Savepoint: $2}
+    } else {
+      $$.val = &RollbackTransaction{}
+    }
   }
 
 opt_transaction:
   TRANSACTION {}
 | /* EMPTY */ {}
 
+opt_to_savepoint:
+  TRANSACTION 
+  {
+    $$ = ""
+  }
+| TRANSACTION TO savepoint_name 
+  {
+    $$ = $3
+  }
+| TO savepoint_name 
+  {
+    $$ = $2
+  }
+| /* EMPTY */ 
+  {
+    $$ = "" 
+  }
+
+savepoint_name:
+  SAVEPOINT name 
+  {
+    $$ = $2
+  }
+| name 
+  {
+    $$ = $1
+  }
 
 opt_transaction_mode_list:
   transaction_iso_level
@@ -3877,7 +3913,6 @@ unreserved_keyword:
 | HOUR
 | INDEXES
 | INSERT
-| INTENT
 | ISOLATION
 | KEY
 | KEYS
@@ -3909,13 +3944,12 @@ unreserved_keyword:
 | RELEASE
 | RENAME
 | REPEATABLE
-| RESTART
 | RESTRICT
-| RETRY
 | REVOKE
 | ROLLBACK
 | ROLLUP
 | ROWS
+| SAVEPOINT
 | SEARCH
 | SECOND
 | SERIALIZABLE

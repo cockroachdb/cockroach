@@ -310,12 +310,13 @@ func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
 		t.Fatal(err)
 	}
 	// TODO(andrei): make the priority deterministic here once Radu introduces that syntax.
-	if _, err := tx.Exec("RETRY INTENT; SET TRANSACTION PRIORITY LOW;"); err != nil {
+	if _, err := tx.Exec(
+		"SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY LOW;"); err != nil {
 		t.Fatal(err)
 	}
 
 	for fn(tx) {
-		if _, err := tx.Exec("RESTART TRANSACTION"); err != nil {
+		if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -348,7 +349,7 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 		*injectReleaseError = false
 		abortTxn(t, sqlDB, 0)
 	}
-	_, err = tx.Exec("RELEASE TRANSACTION")
+	_, err = tx.Exec("RELEASE SAVEPOINT cockroach_restart")
 	if retriesNeeded {
 		if err == nil {
 			t.Fatal("expected RELEASE to fail")
@@ -474,7 +475,8 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("RETRY INTENT; RELEASE;"); err != nil {
+	if _, err := tx.Exec(
+		"SAVEPOINT cockroach_restart; RELEASE cockroach_restart;"); err != nil {
 		t.Fatal(err)
 	}
 	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'sentinel');")
@@ -507,7 +509,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 	// TODO(andrei): make the priority deterministic here once Radu introduces that syntax.
-	if _, err := tx.Exec("RETRY INTENT; SET TRANSACTION PRIORITY LOW;"); err != nil {
+	if _, err := tx.Exec("SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY LOW;"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'sentinel');"); err != nil {
@@ -534,34 +536,39 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	rows.Close()
 }
 
-// TestRestartStatement tests that issuing a RESTART outside of a txn produces
-// the proper error.
-func TestRestartStatement(t *testing.T) {
+// TestRollbackToSavepointStatement tests that issuing a RESTART outside of a
+// txn produces the proper error.
+func TestRollbackToSavepointStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	server, sqlDB, _ := setup(t)
 	defer cleanup(server, sqlDB)
 
-	// RESTART without a transaction
-	_, err := sqlDB.Exec("RESTART TRANSACTION")
+	// ROLLBACK TO SAVEPOINT without a transaction
+	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
 	if !testutils.IsError(err, "the transaction is not in a retriable state") {
 		t.Fatal("expected to fail here. err: ", err)
 	}
+	// ROLLBACK TO SAVEPOINT with a wrong name
+	_, err = sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
+	if !testutils.IsError(err, "SAVEPOINT not supported except for COCKROACH_RESTART") {
+		t.Fatal("expected to fail here. err: ", err)
+	}
 
-	// RESTART in a non-retriable transaction
+	// ROLLBACK TO SAVEPOINT in a non-retriable transaction
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("RETRY INTENT"); err != nil {
+	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tx.Exec("BOGUS SQL STATEMENT"); err == nil {
 		t.Fatalf("expected to fail here. err: %s", err)
 	}
-	_, err = tx.Exec("RESTART TRANSACTION")
+	_, err = tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
 	if !testutils.IsError(err,
-		"RETRY INTENT has not been used or a non-retriable error was encountered") {
+		"SAVEPOINT COCKROACH_RESTART has not been used or a non-retriable error was encountered") {
 		t.Fatal("expected to fail here. err: ", err)
 	}
 }
@@ -586,7 +593,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if tx, err = sqlDB.Begin(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("RETRY INTENT"); err != nil {
+	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test')"); err != nil {
@@ -596,9 +603,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if !testutils.IsError(err, "duplicate key value") {
 		t.Errorf("expected duplicate key error. Got: %s", err)
 	}
-	if _, err := tx.Exec("RESTART TRANSACTION"); !testutils.IsError(
+	if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); !testutils.IsError(
 		err, "current transaction is aborted, commands ignored until end of "+
-			"transaction block; RETRY INTENT has not been used or a "+
+			"transaction block; SAVEPOINT COCKROACH_RESTART has not been used or a "+
 			"non-retriable error was encountered.") {
 		t.Fatal(err)
 	}
