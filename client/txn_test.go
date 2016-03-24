@@ -450,6 +450,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		{&roachpb.TransactionAbortedError{}, true},
 		{&roachpb.TransactionPushError{}, true},
 		{&roachpb.TransactionRetryError{}, true},
+		{&roachpb.WriteTooOldError{}, true},
 		{&roachpb.RangeNotFoundError{}, false},
 		{&roachpb.RangeKeyMismatchError{}, false},
 		{&roachpb.TransactionStatusError{}, false},

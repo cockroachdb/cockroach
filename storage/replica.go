@@ -834,10 +834,10 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *r
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
+		timestamp := ba.Timestamp
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if updatesTimestampCache(args) {
-				timestamp := ba.Timestamp
 				readTSCache := true
 				key := args.Header().Key
 				txnID := ba.GetTxnID()
@@ -850,9 +850,6 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *r
 					// EndTransaction adds to the write timestamp cache to ensure
 					// replays create a transaction record with WriteTooOld set.
 					// We set txnID=nil because we want hits for same txn ID.
-					if txnID == nil {
-						continue
-					}
 					key = keys.TransactionKey(key, txnID)
 					txnID = nil
 					readTSCache = false
@@ -1668,6 +1665,38 @@ func (r *Replica) executeBatch(
 		if pErr != nil {
 			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.WriteTooOldError:
+				// WriteTooOldErrors may be the product of raft replays. If
+				// timestamp of the request matches exactly with the existing
+				// value, maybe propagate the WriteTooOldError to let client
+				// retry at a higher timestamp. Keep in mind that this replay
+				// protection is best effort only. If replays come out of
+				// order, we'd expect them to succeed as the timestamps which
+				// would match on a successive replay won't match if the replay
+				// is delivered only after another raft command has been applied
+				// to the same key.
+				if ba.Timestamp.Next().Equal(tErr.ActualTimestamp) {
+					// If in a txn, propagate WriteTooOldError immediately. In
+					// a txn, intents from earlier commands in the same batch
+					// won't return a WriteTooOldError.
+					if ba.Txn != nil {
+						return nil, intents, pErr
+					}
+					// If not in a txn, need to make sure we don't propagate the
+					// error unless there are no earlier commands in the batch
+					// which might have written the same key.
+					var overlap bool
+					if ba.Txn == nil {
+						for _, union := range ba.Requests[:index] {
+							if union.GetInner().Header().Overlaps(args.Header()) {
+								overlap = true
+								break
+							}
+						}
+					}
+					if !overlap {
+						return nil, intents, pErr
+					}
+				}
 				// On WriteTooOldError, we've written a new value or an intent
 				// at a too-high timestamp and we must forward the batch txn or
 				// timestamp as appropriate so that it's returned.
@@ -1675,27 +1704,6 @@ func (r *Replica) executeBatch(
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
 					ba.Txn.WriteTooOld = true
 				} else {
-					// WriteTooOldErrors may be the product of raft replays. We
-					// offer no certain protection from them on non-transactional
-					// writes. However, if the timestamps match exactly and no earlier
-					// write in this batch overlapped this write, we propagate a
-					// WriteTooOldError to mitigate replay issues, which are limited
-					// in relevance primarily to increments. If there are intervening
-					// raft commands between replays that overlap, replays will succeed.
-					if ba.Timestamp.Next().Equal(tErr.ActualTimestamp) {
-						var overlap bool
-						for _, union := range ba.Requests[:index] {
-							if union.GetInner().Header().Overlaps(args.Header()) {
-								overlap = true
-								break
-							}
-						}
-						// No overlap, but existing version with exact timestamp,
-						// return WriteTooOldError for retry as a likely replay.
-						if !overlap {
-							return nil, intents, pErr
-						}
-					}
 					ba.Timestamp.Forward(tErr.ActualTimestamp)
 				}
 				// Clear the WriteTooOldError; we're done processing it by having

@@ -450,7 +450,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	// with WriteTooOldError).
 	incVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(2, 0), nil, 1)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
-		t.Fatal("unexpectedly not WriteTooOld: %s", err)
+		t.Fatalf("unexpectedly not WriteTooOld: %s", err)
 	} else if !wtoErr.ActualTimestamp.Equal(makeTS(3, 1)) {
 		t.Fatalf("expected write too old error with actual ts %s; got %s", makeTS(1, 1), wtoErr.ActualTimestamp)
 	}
@@ -1485,7 +1485,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	// Write value4 with an old timestamp without txn...should get a write too old error.
 	err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value4, &value3, nil)
 	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
-		t.Fatal("expected write too old error; got %s", err)
+		t.Fatalf("expected write too old error; got %s", err)
 	}
 	expTS := txn.Timestamp.Next()
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(expTS) {

@@ -654,7 +654,6 @@ func TestMakePriorityLimits(t *testing.T) {
 	}
 }
 
-// TestSpanOverlaps verifies overlap checking on spans
 func TestSpanOverlaps(t *testing.T) {
 	sA := Span{Key: []byte("a")}
 	sD := Span{Key: []byte("d")}

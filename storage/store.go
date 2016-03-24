@@ -1654,9 +1654,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
-			if ba.Txn != nil {
-				log.Infof("%s: write intent error (retry %d): %s", ba.Txn.Short(), r.CurrentAttempt(), t.Intents[0].Txn)
-			}
 			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
@@ -1673,7 +1670,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
 			if ba.Txn != nil {
-				if pErr := s.maybeUpdateTransaction(ba.Header.Txn, now); pErr != nil {
+				if pErr := s.maybeUpdateTransaction(&ba.Header, now); pErr != nil {
 					return nil, pErr
 				}
 			}
@@ -1701,18 +1698,18 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 //
 // The supplied transaction is updated with the results of the
 // "touch" push if possible.
-func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Timestamp) *roachpb.Error {
+func (s *Store) maybeUpdateTransaction(h *roachpb.Header, now roachpb.Timestamp) *roachpb.Error {
 	// Attempt to push the transaction which created the intent.
-	b := &client.Batch{}
+	b := client.Batch{}
 	b.InternalAddRequest(&roachpb.PushTxnRequest{
 		Span: roachpb.Span{
-			Key: txn.Key,
+			Key: h.Txn.Key,
 		},
 		Now:       now,
-		PusheeTxn: txn.TxnMeta,
+		PusheeTxn: h.Txn.TxnMeta,
 		PushType:  roachpb.PUSH_UPDATE,
 	})
-	br, pErr := s.db.RunWithResponse(b)
+	br, pErr := s.db.RunWithResponse(&b)
 	if pErr != nil {
 		return pErr
 	}
@@ -1724,7 +1721,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		case roachpb.ABORTED:
 			return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &updatedTxn)
 		}
-		*txn = updatedTxn
+		h.Txn = &updatedTxn
 	}
 	return nil
 }
