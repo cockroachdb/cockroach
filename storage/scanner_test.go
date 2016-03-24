@@ -305,15 +305,15 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
-	s := newReplicaScanner(1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(time.Hour, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	s.Start(clock, stopper)
-	time.Sleep(3 * time.Millisecond)
-	if count := s.Count(); count > 3 {
-		t.Errorf("expected three loops; got %d", count)
+	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
+	if count := s.Count(); count > 1 {
+		t.Errorf("expected at most one loop, but got %d", count)
 	}
 }
