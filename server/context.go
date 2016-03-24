@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Context defaults.
@@ -277,9 +276,6 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 // resolvers.
 func (ctx *Context) InitNode() error {
 	ctx.readEnvironmentVariables()
-
-	// Avoid reporting time jumps below 10% of MaxOffset.
-	timeutil.SetMonotonicityCheckThreshold(ctx.MaxOffset / 10)
 
 	// Initialize attributes.
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)

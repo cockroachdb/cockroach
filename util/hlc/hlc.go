@@ -56,6 +56,13 @@ type Clock struct {
 	// clock (and cluster time) the wall time can be.
 	// See SetMaxOffset.
 	maxOffset time.Duration
+
+	// monotonicityErrorsCount indicate how often this clock was
+	// observed to jump backwards.
+	monotonicityErrorsCount int32
+	// lastPhysicalTime reports the last measured physical time. This
+	// is used to detect clock jumps.
+	lastPhysicalTime int64
 }
 
 // ManualClock is a convenience type to facilitate
@@ -147,6 +154,23 @@ func (c *Clock) timestamp() roachpb.Timestamp {
 	}
 }
 
+// getPhysicalClock returns the current physical clock and checks for
+// time jumps.
+func (c *Clock) getPhysicalClock() int64 {
+	newTime := c.physicalClock()
+
+	if c.lastPhysicalTime != 0 {
+		interval := c.lastPhysicalTime - newTime
+		if interval > int64(c.maxOffset/10) {
+			c.monotonicityErrorsCount++
+			log.Warningf("backward time jump detected (%f seconds)", float64(newTime-c.lastPhysicalTime)/1e9)
+		}
+	}
+
+	c.lastPhysicalTime = newTime
+	return newTime
+}
+
 // Now returns a timestamp associated with an event from
 // the local machine that may be sent to other members
 // of the distributed network. This is the counterpart
@@ -156,7 +180,7 @@ func (c *Clock) Now() roachpb.Timestamp {
 	c.Lock()
 	defer c.Unlock()
 
-	physicalClock := c.physicalClock()
+	physicalClock := c.getPhysicalClock()
 	if c.state.WallTime >= physicalClock {
 		// The wall time is ahead, so the logical clock ticks.
 		c.state.Logical++
@@ -171,7 +195,9 @@ func (c *Clock) Now() roachpb.Timestamp {
 // PhysicalNow returns the local wall time. It corresponds to the physicalClock
 // provided at instantiation. For a timestamp value, use Now() instead.
 func (c *Clock) PhysicalNow() int64 {
-	wallTime := c.physicalClock()
+	c.Lock()
+	defer c.Unlock()
+	wallTime := c.getPhysicalClock()
 	return wallTime
 }
 
@@ -192,7 +218,7 @@ func (c *Clock) PhysicalTime() time.Time {
 func (c *Clock) Update(rt roachpb.Timestamp) roachpb.Timestamp {
 	c.Lock()
 	defer c.Unlock()
-	physicalClock := c.physicalClock()
+	physicalClock := c.getPhysicalClock()
 
 	if physicalClock > c.state.WallTime && physicalClock > rt.WallTime {
 		// Our physical clock is ahead of both wall times. It is used
