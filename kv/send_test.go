@@ -180,8 +180,8 @@ func TestUnretryableError(t *testing.T) {
 		Context:         context.Background(),
 	}
 
-	sendOneFn = func(_ batchClient, _ time.Duration,
-		_ *rpc.Context, done chan batchCall) {
+	sendOneFn = func(_ SendOptions, _ *rpc.Context,
+		_ batchClient, done chan batchCall) {
 		done <- batchCall{
 			reply: &roachpb.BatchResponse{},
 			err:   errors.New("unretryable"),
@@ -341,8 +341,8 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		// Mock sendOne.
-		sendOneFn = func(client batchClient, _ time.Duration,
-			_ *rpc.Context, done chan batchCall) {
+		sendOneFn = func(_ SendOptions, _ *rpc.Context,
+			client batchClient, done chan batchCall) {
 			addrID := -1
 			for serverAddrID, serverAddr := range serverAddrs {
 				if serverAddr.String() == client.remoteAddr {
