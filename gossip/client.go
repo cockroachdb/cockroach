@@ -195,8 +195,9 @@ func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stop
 	addr := g.is.NodeAddr
 	g.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(grpcutil.AddVersionNumber(context.Background()))
 	defer cancel()
+
 	stream, err := gossipClient.Gossip(ctx)
 	if err != nil {
 		return err

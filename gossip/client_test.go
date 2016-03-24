@@ -24,7 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -436,5 +440,96 @@ func TestClientForwardUnresolved(t *testing.T) {
 	}
 	if !reflect.DeepEqual(client.forwardAddr, &newAddr) {
 		t.Fatalf("unexpected forward address %v, expected %v", client.forwardAddr, &newAddr)
+	}
+}
+
+// TestServerRequiresVersion ensures that all gossip connections must contain a
+// version number.
+func TestServerRequiresVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Setup and start the remote gossip.
+	remote := startGossip(1, stopper, t)
+	remote.mu.Lock()
+	rAddr := remote.is.NodeAddr
+	remote.mu.Unlock()
+
+	// Get the local gossip ready, but don't start it.
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	server := rpc.NewServer(rpcContext)
+	ln, err := util.ListenAndServeGRPC(stopper, server, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lAddr := ln.Addr()
+	local := New(rpcContext, nil, stopper)
+	local.SetNodeID(2)
+	if err := local.SetNodeDescriptor(&roachpb.NodeDescriptor{
+		NodeID:  2,
+		Address: util.MakeUnresolvedAddr(lAddr.Network(), lAddr.String()),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := local.rpcContext.GRPCDial(rAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	openStreamAndRequestGossip := func(ctx context.Context) error {
+		gossipClient := NewGossipClient(conn)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stream, err := gossipClient.Gossip(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		client := newClient(&rAddr)
+		err = client.requestGossip(local, rAddr, stream)
+
+		_, err = stream.Recv()
+		return err
+	}
+
+	// no metadata
+	ctx := context.Background()
+	if err := openStreamAndRequestGossip(ctx); !testutils.IsError(err, "no metadata found in the context") {
+		t.Fatalf("expected err 'no metadata found in the context', got %s", err)
+	}
+
+	// no version number
+	md := metadata.Pairs("something", "something")
+	ctx = metadata.NewContext(context.Background(), md)
+	if err := openStreamAndRequestGossip(ctx); !testutils.IsError(err, "no version number in the RPC context") {
+		t.Fatalf("no version number in the RPC context', got %s", err)
+	}
+
+	// too many version numbers
+	md = metadata.Pairs(grpcutil.RPCVersionKey, grpcutil.RPCVersion, grpcutil.RPCVersionKey, grpcutil.RPCVersion)
+	ctx = metadata.NewContext(context.Background(), md)
+	if err := openStreamAndRequestGossip(ctx); !testutils.IsError(err, "expected only 1 RPC context version number, got 2") {
+		t.Fatalf("expected err 'expected only 1 RPC context version number, got 2', got '%s'", err)
+	}
+
+	// incorrect version number
+	md = metadata.Pairs(grpcutil.RPCVersionKey, "wrong")
+	ctx = metadata.NewContext(context.Background(), md)
+	if err := openStreamAndRequestGossip(ctx); !testutils.IsError(err, "RPC version numbers do not match expected: 1, received: wrong") {
+		t.Fatalf("expected err 'RPC version numbers do not match expected: 1, received: wrong', got %s", err)
+	}
+
+	// the correct version number
+	ctx = grpcutil.AddVersionNumber(context.Background())
+	if err := openStreamAndRequestGossip(ctx); err != nil {
+		t.Fatal(err)
 	}
 }

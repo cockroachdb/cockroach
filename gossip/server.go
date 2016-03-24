@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -70,6 +71,11 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
+
+	if err := grpcutil.CheckVersionNumber(ctx); err != nil {
+		return err
+	}
+
 	syncChan := make(chan struct{}, 1)
 	send := func(reply *Response) error {
 		select {
