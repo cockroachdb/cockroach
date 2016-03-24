@@ -17,15 +17,26 @@
 package grpcutil
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
 	"golang.org/x/net/context"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/transport"
 
 	"github.com/cockroachdb/cockroach/util"
+)
+
+const (
+	// RPCVersion is used in all GRPC context's metadata to ensure that
+	// messages from different versions don't conflict.
+	RPCVersion = "1"
+	// RPCVersionKey is the key used to store and retrieve the version from an
+	// RPC context's metadata.
+	RPCVersionKey = "ver"
 )
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
@@ -40,4 +51,34 @@ func IsClosedConnection(err error) bool {
 		return true
 	}
 	return util.IsClosedConnection(err)
+}
+
+// WithVersionNumber adds the current RPC version number to a context for use
+// by GRPC.
+func WithVersionNumber(ctx context.Context) context.Context {
+	md := metadata.Pairs(RPCVersionKey, RPCVersion)
+	return metadata.NewContext(ctx, md)
+}
+
+var errNoMetadata = errors.New("no metadata found in the context")
+var errNoVersionNumber = errors.New("no version number in the RPC context")
+
+// CheckVersionNumber checks that the number supplied in an GRPC context is
+// the correct one.
+func CheckVersionNumber(ctx context.Context) error {
+	md, ok := metadata.FromContext(ctx)
+	if !ok {
+		return errNoMetadata
+	}
+	versionNumber, ok := md[RPCVersionKey]
+	if !ok {
+		return errNoVersionNumber
+	}
+	if len(versionNumber) != 1 {
+		return fmt.Errorf("expected only 1 RPC context version number, got %d", len(versionNumber))
+	}
+	if versionNumber[0] != RPCVersion {
+		return fmt.Errorf("RPC version numbers do not match expected: %s, received: %s", RPCVersion, versionNumber[0])
+	}
+	return nil
 }
