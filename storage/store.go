@@ -1699,7 +1699,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 // because they have different information about their own txns.
 //
 // The supplied transaction is updated with the results of the
-// "touch" push if possible.
+// "query" push if possible.
 func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
 	// Attempt to push the transaction which created the intent.
 	b := client.Batch{}
@@ -1709,14 +1709,14 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		},
 		Now:       now,
 		PusheeTxn: txn.TxnMeta,
-		PushType:  roachpb.PUSH_UPDATE,
+		PushType:  roachpb.PUSH_QUERY,
 	})
 	br, pErr := s.db.RunWithResponse(&b)
 	if pErr != nil {
 		return nil, pErr
 	}
-	updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-	if updatedTxn.ID != nil { // can be nil if no BeginTransaction has been sent
+	// ID can be nil if no BeginTransaction has been sent yet.
+	if updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn; updatedTxn.ID != nil {
 		switch updatedTxn.Status {
 		case roachpb.COMMITTED:
 			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
