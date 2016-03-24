@@ -4506,6 +4506,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	id := uuid.MakeV4()
 	args := roachpb.ComputeChecksumRequest{
 		ChecksumID: id,
+		Version:    replicaChecksumVersion,
 	}
 	_, err := rng.ComputeChecksum(nil, nil, roachpb.Header{}, args)
 	if err != nil {
@@ -4554,6 +4555,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// Sending a VerifyChecksum with a bad checksum is a noop.
 	verifyArgs = roachpb.VerifyChecksumRequest{
 		ChecksumID: id,
+		Version:    replicaChecksumVersion,
 		Checksum:   []byte("bad checksum"),
 	}
 	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
