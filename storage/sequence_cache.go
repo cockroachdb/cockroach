@@ -234,6 +234,7 @@ func (sc *SequenceCache) Put(
 	epoch, seq uint32,
 	txnKey roachpb.Key,
 	txnTS roachpb.Timestamp,
+	txnPri int32,
 	pErr *roachpb.Error,
 ) error {
 	if seq <= 0 || txnID == nil {
@@ -245,7 +246,7 @@ func (sc *SequenceCache) Put(
 
 	// Write the response value to the engine.
 	key := keys.SequenceCacheKey(sc.rangeID, txnID, epoch, seq)
-	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS}
+	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS, Priority: txnPri}
 	return engine.MVCCPutProto(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
 }
 

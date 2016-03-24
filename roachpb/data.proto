@@ -223,6 +223,7 @@ message TxnMeta {
   // The proposed timestamp for the transaction. This starts as
   // the current wall time on the txn coordinator.
   optional Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  optional int32 priority = 6 [(gogoproto.nullable) = false];
 }
 
 // A Transaction is a unit of work performed on the database.
@@ -241,7 +242,6 @@ message Transaction {
   optional TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // A free-text identifier for debug purposes.
   optional string name = 2 [(gogoproto.nullable) = false];
-  optional int32 priority = 3 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
   // The last heartbeat timestamp.
   optional Timestamp last_heartbeat = 5;
@@ -312,4 +312,6 @@ message SequenceCacheEntry {
   optional bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The original timestamp of the associated transaction.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // The priority of the associated transaction. 0 unless pushed or aborted.
+  optional int32 priority = 3 [(gogoproto.nullable) = false];
 }
