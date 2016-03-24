@@ -235,9 +235,13 @@ func NewNode(ctx storage.StoreContext, recorder *status.MetricsRecorder, stopper
 	return n
 }
 
-// context returns a context encapsulating the NodeID.
-func (n *Node) context() context.Context {
-	return log.Add(context.Background(), log.NodeID, n.Descriptor.NodeID)
+// context returns a context encapsulating the NodeID, derived from the
+// supplied context (which is not allowed to be nil).
+func (n *Node) context(ctx context.Context) context.Context {
+	if ctx == nil {
+		panic("ctx cannot be nil")
+	}
+	return log.Add(ctx, log.NodeID, n.Descriptor.NodeID)
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -330,7 +334,7 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 	// Record node started event.
 	n.recordJoinEvent()
 
-	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
+	log.Infoc(n.context(context.TODO()), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
 
@@ -703,6 +707,8 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		// back with the response. This is more expensive, but then again,
 		// those are individual requests traced by users, so they can be.
 		if sp.BaggageItem(tracing.Snowball) != "" {
+			sp.LogEvent("delegating to snowball tracing")
+			sp.Finish()
 			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
@@ -715,14 +721,14 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 			}
 		}
 		defer sp.Finish()
-		ctx := opentracing.ContextWithSpan((*Node)(n).context(), sp)
+		traceCtx := opentracing.ContextWithSpan(n.context(ctx), sp)
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *args)
+		br, pErr = n.stores.Send(traceCtx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
+			log.Trace(traceCtx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))

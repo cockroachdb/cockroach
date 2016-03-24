@@ -19,6 +19,8 @@ package storage
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -89,6 +91,7 @@ func (*splitQueue) shouldQueue(now roachpb.Timestamp, rng *Replica,
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	sysCfg config.SystemConfig) error {
+	ctx := rng.context(context.TODO())
 
 	// First handle case of splitting due to zone config maps.
 	desc := rng.Desc()
@@ -111,7 +114,7 @@ func (sq *splitQueue) process(now roachpb.Timestamp, rng *Replica,
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(rng.stats.GetSize())/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof("splitting %s size=%d max=%d", rng, rng.stats.GetSize(), zone.RangeMaxBytes)
-		if _, pErr := client.SendWrapped(rng, rng.context(), &roachpb.AdminSplitRequest{
+		if _, pErr := client.SendWrapped(rng, ctx, &roachpb.AdminSplitRequest{
 			Span: roachpb.Span{Key: desc.StartKey.AsRawKey()},
 		}); pErr != nil {
 			return pErr.GoError()
