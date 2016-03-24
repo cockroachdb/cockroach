@@ -110,15 +110,16 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	stopper    *stop.Stopper
-	ClusterID  uuid.UUID              // UUID for Cockroach cluster
-	Descriptor roachpb.NodeDescriptor // Node ID, network/physical topology
-	ctx        storage.StoreContext   // Context to use and pass to stores
-	stores     *storage.Stores        // Access to node-local stores
-	metrics    nodeMetrics
-	recorder   *status.MetricsRecorder
-	startedAt  int64
-	txnMetrics *kv.TxnMetrics
+	stopper     *stop.Stopper
+	ClusterID   uuid.UUID              // UUID for Cockroach cluster
+	Descriptor  roachpb.NodeDescriptor // Node ID, network/physical topology
+	ctx         storage.StoreContext   // Context to use and pass to stores
+	stores      *storage.Stores        // Access to node-local stores
+	metrics     nodeMetrics
+	recorder    *status.MetricsRecorder
+	startedAt   int64
+	initialBoot bool // True if this is the first time this node has started.
+	txnMetrics  *kv.TxnMetrics
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -294,6 +295,7 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(engines, n.stopper); err != nil {
 		if err == errNeedsBootstrap {
+			n.initialBoot = true
 			// This node has no initialized stores and no way to connect to
 			// an existing cluster, so we bootstrap it.
 			clusterID, err := bootstrapCluster(engines, n.txnMetrics)
@@ -324,6 +326,9 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 
 	n.startComputePeriodicMetrics(n.stopper)
 	n.startGossip(n.stopper)
+
+	// Record node started event.
+	n.recordJoinEvent()
 
 	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
@@ -399,6 +404,7 @@ func (n *Node) initStores(engines []engine.Engine, stopper *stop.Stopper) error 
 	// supplying 0 to initNodeID.
 	if n.Descriptor.NodeID == 0 {
 		n.initNodeID(0)
+		n.initialBoot = true
 	}
 
 	// Bootstrap any uninitialized stores asynchronously.
@@ -615,6 +621,47 @@ func (n *Node) writeSummaries() error {
 		}
 	})
 	return err
+}
+
+// recordJoinEvent begins an asynchronous task which attempts to log a "node
+// join" or "node restart" event. This query will retry until it succeeds or the
+// server stops.
+func (n *Node) recordJoinEvent() {
+	if !n.ctx.LogRangeEvents {
+		return
+	}
+	n.stopper.RunWorker(func() {
+		complete := false
+		for !complete {
+			n.stopper.RunTask(func() {
+				logEventType := sql.EventLogNodeRestart
+				if n.initialBoot {
+					logEventType = sql.EventLogNodeJoin
+				}
+				if err := n.ctx.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+					return sql.MakeEventLogger(n.ctx.SQLExecutor.LeaseManager).InsertEventRecord(txn,
+						logEventType,
+						int32(n.Descriptor.NodeID),
+						int32(n.Descriptor.NodeID),
+						struct {
+							Descriptor roachpb.NodeDescriptor
+							ClusterID  uuid.UUID
+							StartedAt  int64
+						}{n.Descriptor, n.ClusterID, n.startedAt},
+					)
+				}); err != nil {
+					log.Warningc(n.context(), "unable to log %s event for node %d: %s", logEventType, n.Descriptor.NodeID, err)
+				}
+				complete = true
+			})
+			select {
+			case <-n.stopper.ShouldStop():
+				return
+			case <-time.After(time.Second):
+				// Break.
+			}
+		}
+	})
 }
 
 // Batch implements the roachpb.KVServer interface.
