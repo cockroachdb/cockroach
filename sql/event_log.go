@@ -39,6 +39,11 @@ const (
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
+	// EventLogNodeJoin is recorded when a node joins the cluster.
+	EventLogNodeJoin EventLogType = "node_join"
+	// EventLogNodeRestart is recorded when an existing node rejoins the cluster
+	// after being offline.
+	EventLogNodeRestart EventLogType = "node_restart"
 )
 
 // eventTableSchema describes the schema of the event log table.
@@ -72,9 +77,9 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 	}}
 }
 
-// insertEventRecord inserts a single event into the event log as part of the
+// InsertEventRecord inserts a single event into the event log as part of the
 // provided transaction.
-func (ev EventLogger) insertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) *roachpb.Error {
+func (ev EventLogger) InsertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) *roachpb.Error {
 	const insertEventTableStmt = `
 INSERT INTO system.eventlog (
   timestamp, eventType, targetID, reportingID, info
