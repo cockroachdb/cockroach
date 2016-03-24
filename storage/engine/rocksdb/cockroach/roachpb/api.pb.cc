@@ -1703,14 +1703,14 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "\004 \003(\014\022/\n\003now\030\005 \001(\0132\034.cockroach.roachpb.T"
     "imestampB\004\310\336\037\000:\004\230\240\037\000*L\n\023ReadConsistencyT"
     "ype\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014IN"
-    "CONSISTENT\020\002\032\004\210\243\036\000*X\n\013PushTxnType\022\022\n\016PUS"
+    "CONSISTENT\020\002\032\004\210\243\036\000*W\n\013PushTxnType\022\022\n\016PUS"
     "H_TIMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPUSH_TO"
-    "UCH\020\002\022\017\n\013PUSH_UPDATE\020\003\032\004\210\243\036\0002X\n\010Internal"
-    "\022L\n\005Batch\022\037.cockroach.roachpb.BatchReque"
-    "st\032 .cockroach.roachpb.BatchResponse\"\0002X"
-    "\n\010External\022L\n\005Batch\022\037.cockroach.roachpb."
-    "BatchRequest\032 .cockroach.roachpb.BatchRe"
-    "sponse\"\000B\tZ\007roachpbX\004", 10421);
+    "UCH\020\002\022\016\n\nPUSH_QUERY\020\003\032\004\210\243\036\0002X\n\010Internal\022"
+    "L\n\005Batch\022\037.cockroach.roachpb.BatchReques"
+    "t\032 .cockroach.roachpb.BatchResponse\"\0002X\n"
+    "\010External\022L\n\005Batch\022\037.cockroach.roachpb.B"
+    "atchRequest\032 .cockroach.roachpb.BatchRes"
+    "ponse\"\000B\tZ\007roachpbX\004", 10420);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
