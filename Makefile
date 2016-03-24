@@ -28,10 +28,9 @@ STATIC :=
 PKG          := ./...
 TAGS         :=
 TESTS        := .
-# TODO(radu): restore timeouts to 1m10s, 5m, 5m after #5376 is fixed.
-TESTTIMEOUT  := 3m
-RACETIMEOUT  := 10m
-BENCHTIMEOUT := 10m
+TESTTIMEOUT  := 1m10s
+RACETIMEOUT  := 5m
+BENCHTIMEOUT := 5m
 TESTFLAGS    :=
 STRESSFLAGS  := -stderr -maxfails 1
 DUPLFLAGS    := -t 100
