@@ -235,8 +235,11 @@ func NewNode(ctx storage.StoreContext, recorder *status.MetricsRecorder, stopper
 }
 
 // context returns a context encapsulating the NodeID.
-func (n *Node) context() context.Context {
-	return log.Add(context.Background(), log.NodeID, n.Descriptor.NodeID)
+func (n *Node) context(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return log.Add(ctx, log.NodeID, n.Descriptor.NodeID)
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -325,7 +328,7 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 	n.startComputePeriodicMetrics(n.stopper)
 	n.startGossip(n.stopper)
 
-	log.Infoc(n.context(), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
+	log.Infoc(n.context(nil), "Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
 
@@ -667,7 +670,7 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 			}
 		}
 		defer sp.Finish()
-		ctx := opentracing.ContextWithSpan((*Node)(n).context(), sp)
+		ctx := opentracing.ContextWithSpan(n.context(ctx), sp)
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
