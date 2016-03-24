@@ -152,12 +152,12 @@ module Components {
               let yAxisDomain: AxisDomain = new AxisDomain();
               let xAxisDomain: AxisDomain = new AxisDomain();
 
-              function computeFullAxisDomain(domain: AxisDomain, values: number[]): AxisDomain {
+              let computeFullAxisDomain = (domain: AxisDomain, values: number[]): AxisDomain => {
                 return new AxisDomain(
                   Math.min(domain.min, ...values),
                   Math.max(domain.max, ...values)
                 );
-              }
+              };
 
               this.vm.axis.selectors().forEach((s: Models.Metrics.Select.Selector) => {
                 let key: string = Models.Metrics.QueryInfoKey(s.request());
