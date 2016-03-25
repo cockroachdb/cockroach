@@ -20,7 +20,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	// This is imported for its side-effect of registering expvar
 	// endpoints with the http.DefaultServeMux.
 	_ "expvar"
@@ -87,6 +86,10 @@ const (
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.
 	apiEventLimit = 1000
+
+	// serverUIDataKeyPrefix must precede all UIData keys that are read from the
+	// server.
+	serverUIDataKeyPrefix = "server."
 )
 
 var (
@@ -608,7 +611,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 }
 
 // SetUIData is an endpoint that stores the given key/value pairs in the
-// system.ui table.
+// system.ui table. See GetUIData for more details on semantics.
 func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetUIDataResponse, error) {
 	if len(req.KeyValues) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
@@ -617,19 +620,6 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.sqlExecutor, nil)
 
 	for key, val := range req.KeyValues {
-		// If the opt-in to reporting is set, flip the setting in system kv.
-		//
-		// TODO(cdo): replace this with something nicer when we separate "optin"
-		// into its own uidata key.
-		m := struct {
-			OptIn bool `json:"optin"`
-		}{}
-		if err := json.Unmarshal(val, &m); err == nil {
-			if err := s.db.Put(keys.UpdateCheckReportUsage, m.OptIn); err != nil {
-				log.Warning(err)
-			}
-		}
-
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		br := s.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
@@ -679,6 +669,10 @@ func (s *adminServer) SetUIData(_ context.Context, req *SetUIDataRequest) (*SetU
 
 // GetUIData returns data associated with the given keys, which was stored
 // earlier through SetUIData.
+//
+// The stored values are meant to be opaque to the server. In the rare case that
+// the server code needs to call this method, it should only read from keys that
+// have the prefix `serverUIDataKeyPrefix`.
 func (s *adminServer) GetUIData(_ context.Context, req *GetUIDataRequest) (*GetUIDataResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.sqlExecutor, nil)
 

@@ -277,6 +277,10 @@ service Admin {
   //
   // Note that all keys are quoted strings and that all values are base64-
   // encoded.
+  //
+  // Together, SetUIData and GetUIData provide access to a "cookie jar" for the
+  // admin UI. The structure of the underlying data is meant to be opaque to the
+  // server. 
   rpc SetUIData(SetUIDataRequest) returns (SetUIDataResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/uidata"

@@ -421,14 +421,19 @@ type AdminClient interface {
 	//
 	// Note that all keys are quoted strings and that all values are base64-
 	// encoded.
+	//
+	// Together, SetUIData and GetUIData provide access to a "cookie jar" for the
+	// admin UI. The structure of the underlying data is meant to be opaque to the
+	// server.
 	SetUIData(ctx context.Context, in *SetUIDataRequest, opts ...grpc.CallOption) (*SetUIDataResponse, error)
 	// Example URLs:
 	// - /_admin/v1/uidata?keys=MYKEY
 	// - /_admin/v1/uidata?keys=MYKEY1&keys=MYKEY2
 	//
 	// Yes, it's a little odd that the query parameter is named "keys" instead of
-	// "key". I would've preferred that the URL parameter be named "key", but
-	// it's more accurate for the protobuf field to be named "keys."
+	// "key". I would've preferred that the URL parameter be named "key". However,
+	// it's clearer for the protobuf field to be named "keys," which makes the URL
+	// parameter "keys" as well.
 	GetUIData(ctx context.Context, in *GetUIDataRequest, opts ...grpc.CallOption) (*GetUIDataResponse, error)
 }
 
@@ -530,14 +535,19 @@ type AdminServer interface {
 	//
 	// Note that all keys are quoted strings and that all values are base64-
 	// encoded.
+	//
+	// Together, SetUIData and GetUIData provide access to a "cookie jar" for the
+	// admin UI. The structure of the underlying data is meant to be opaque to the
+	// server.
 	SetUIData(context.Context, *SetUIDataRequest) (*SetUIDataResponse, error)
 	// Example URLs:
 	// - /_admin/v1/uidata?keys=MYKEY
 	// - /_admin/v1/uidata?keys=MYKEY1&keys=MYKEY2
 	//
 	// Yes, it's a little odd that the query parameter is named "keys" instead of
-	// "key". I would've preferred that the URL parameter be named "key", but
-	// it's more accurate for the protobuf field to be named "keys."
+	// "key". I would've preferred that the URL parameter be named "key". However,
+	// it's clearer for the protobuf field to be named "keys," which makes the URL
+	// parameter "keys" as well.
 	GetUIData(context.Context, *GetUIDataRequest) (*GetUIDataResponse, error)
 }
 
