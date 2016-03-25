@@ -19,6 +19,9 @@ module Models {
     export const UPDATES: string = "updates";
     export const LASTUPDATED: string = "lastUpdated";
 
+    const KEY_HELPUS: string = "helpus";
+    const KEY_OPTIN: string = "optin";
+
     // Help Us flow is shown by default
     export function helpUsFlag(): boolean {
       return true;
@@ -38,11 +41,12 @@ module Models {
     }
 
     function getHelpUsData(): MithrilPromise<OptInAttributes> {
+      // Query the optin and helpus uidata and merge them into OptInAttributes.
       let d: MithrilDeferred<OptInAttributes> = m.deferred();
-      const helpusKey: string = "helpus";
-      Models.API.getUIData([helpusKey]).then((response: GetUIDataResponse): void => {
+      Models.API.getUIData([KEY_HELPUS, KEY_OPTIN]).then((response: GetUIDataResponse): void => {
         try {
-          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[helpusKey].value));
+          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[KEY_HELPUS].value));
+          attributes.optin = <boolean>JSON.parse(atob(response.key_values[KEY_OPTIN].value));
           d.resolve(attributes);
         } catch (e) {
           d.reject(e);
@@ -54,7 +58,14 @@ module Models {
     }
 
     function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
-      return Models.API.setUIData({"helpus": btoa(JSON.stringify(attrs))});
+      // Store "optin" separately from the rest of OptInAttributes, so that
+      // the server can query that separately.
+      let optin: boolean = attrs.optin;
+      let helpus: Object = _.omit(attrs, KEY_OPTIN);
+      let keyValues: {[key: string]: string} = {};
+      keyValues[KEY_HELPUS] = btoa(JSON.stringify(helpus));
+      keyValues[KEY_OPTIN] = btoa(JSON.stringify(optin));
+      return Models.API.setUIData(keyValues);
     }
 
     export class UserOptIn {
