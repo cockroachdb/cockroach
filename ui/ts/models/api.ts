@@ -94,9 +94,12 @@ module Models {
       });
     }
 
-    export function getUIData(key: string): MithrilPromise<GetUIDataResponse> {
+    export function getUIData(keys: string[]): MithrilPromise<GetUIDataResponse> {
+      let queryStr: string = _.map(keys, function(key: string): string {
+        return "keys=" + key;
+      }).join("&");
       return m.request<GetUIDataResponse>({
-        url: `/_admin/v1/uidata?key=${key}`,
+        url: `/_admin/v1/uidata?` + queryStr,
         config: Utils.Http.XHRConfig,
         background: true,
       });

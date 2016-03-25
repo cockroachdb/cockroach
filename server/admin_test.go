@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -511,33 +512,54 @@ func TestAdminAPIUIData(t *testing.T) {
 		}
 	}
 
-	expectValueEquals := func(key string, expVal []byte) {
+	expectKeyValues := func(expKeyValues map[string][]byte) {
 		var resp GetUIDataResponse
-		url := fmt.Sprintf("uidata?key=%s", key)
+		queryValues := make(url.Values)
+		for key := range expKeyValues {
+			queryValues.Add("keys", key)
+		}
+		url := fmt.Sprintf("uidata?%s", queryValues.Encode())
 		if err := apiGet(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(resp.Value, expVal) {
-			t.Fatalf("value for key %s = %v != expected %v", key, resp.Value, expVal)
+		// Do a two-way comparison. We can't use reflect.DeepEqual(), because
+		// resp.KeyValues and expKeyValues are different types.
+		for key, actualVal := range resp.KeyValues {
+			if a, e := actualVal.Value, expKeyValues[key]; !bytes.Equal(a, e) {
+				t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
+			}
+		}
+		for key, expVal := range expKeyValues {
+			if a, e := resp.KeyValues[key].Value, expVal; !bytes.Equal(a, e) {
+				t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
+			}
 		}
 
 		// Sanity check LastUpdated.
-		now := timeutil.Now()
-		lastUpdated := time.Unix(resp.LastUpdated.Sec, int64(resp.LastUpdated.Nsec))
-		if lastUpdated.Before(start) {
-			t.Fatalf("lastUpdated %s < start %s", lastUpdated, start)
+		for _, val := range resp.KeyValues {
+			now := timeutil.Now()
+			lastUpdated := time.Unix(val.LastUpdated.Sec, int64(val.LastUpdated.Nsec))
+			if lastUpdated.Before(start) {
+				t.Fatalf("lastUpdated %s < start %s", lastUpdated, start)
+			}
+			if lastUpdated.After(now) {
+				t.Fatalf("lastUpdated %s > now %s", lastUpdated, now)
+			}
 		}
-		if lastUpdated.After(now) {
-			t.Fatalf("lastUpdated %s > now %s", lastUpdated, now)
-		}
+	}
+
+	expectValueEquals := func(key string, expVal []byte) {
+		expectKeyValues(map[string][]byte{key: expVal})
 	}
 
 	expectKeyNotFound := func(key string) {
 		var resp GetUIDataResponse
-		url := fmt.Sprintf("uidata?key=%s", key)
-		expErr := "key " + key + " not found"
-		if err := apiGet(s, url, &resp); !testutils.IsError(err, expErr) {
-			t.Fatalf("unexpected error: %s", err)
+		url := fmt.Sprintf("uidata?keys=%s", key)
+		if err := apiGet(s, url, &resp); err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.KeyValues) != 0 {
+			t.Fatal("key unexpectedly found")
 		}
 	}
 
@@ -549,6 +571,7 @@ func TestAdminAPIUIData(t *testing.T) {
 
 	mustSetUIData(map[string][]byte{"k1": []byte("v1")})
 	expectValueEquals("k1", []byte("v1"))
+
 	expectKeyNotFound("NON_EXISTENT_KEY")
 
 	mustSetUIData(map[string][]byte{
@@ -557,8 +580,16 @@ func TestAdminAPIUIData(t *testing.T) {
 	})
 	expectValueEquals("k2", []byte("v2"))
 	expectValueEquals("k3", []byte("v3"))
+	expectKeyValues(map[string][]byte{
+		"k2": []byte("v2"),
+		"k3": []byte("v3"),
+	})
+
 	mustSetUIData(map[string][]byte{"k2": []byte("v2-updated")})
-	expectValueEquals("k2", []byte("v2-updated"))
+	expectKeyValues(map[string][]byte{
+		"k2": []byte("v2-updated"),
+		"k3": []byte("v3"),
+	})
 
 	// Write a binary blob with all possible byte values, then verify it.
 	var buf bytes.Buffer
