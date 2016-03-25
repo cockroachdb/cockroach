@@ -176,6 +176,7 @@ func (s *Server) checkForUpdates() {
 		if log.V(2) {
 			log.Warning("Error checking for updates: ", err)
 		}
+		return
 	}
 	defer res.Body.Close()
 
