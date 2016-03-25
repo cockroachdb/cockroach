@@ -1,9 +1,13 @@
 package sql_test
 
 import (
+	"bytes"
+	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -85,45 +89,52 @@ func TestQueryCounts(t *testing.T) {
 
 func TestAbortCountConflictingWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, sqlDB, _ := setup(t)
+
+	ctx, cmdFilters := createTestServerContext()
+	s, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(s, sqlDB)
 
 	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec("CREATE TABLE db.t (n INTEGER PRIMARY KEY)"); err != nil {
+	if _, err := sqlDB.Exec("CREATE TABLE db.t (k TEXT PRIMARY KEY, v TEXT)"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Within a transaction, start an INSERT but don't COMMIT it.
+	// Inject errors on the INSERT below.
+	var lock sync.Mutex
+	restarted := false
+	cmdFilters.AppendFilter(func(args storageutils.FilterArgs) error {
+		lock.Lock()
+		defer lock.Unlock()
+		switch req := args.Req.(type) {
+		case *roachpb.ConditionalPutRequest:
+			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
+				restarted = true
+				return roachpb.NewTransactionAbortedError()
+			}
+		}
+		return nil
+	}, false)
+
 	txn, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := txn.Exec("INSERT INTO db.t VALUES (1)"); err != nil {
-		t.Error(err)
-		return
-	}
-
-	// Outside the transaction, do a conflicting INSERT.
-	if _, err := sqlDB.Exec("INSERT INTO db.t VALUES (1)"); err != nil {
+	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
+	if !testutils.IsError(err, "aborted") {
 		t.Fatal(err)
 	}
 
-	// The earlier transaction loses.
-	// TODO(cdo): This is not exactly right and could take a while. Fix this when there's
-	// a better test to model this after.
-	if err := txn.Commit(); !testutils.IsError(err, "aborted|timed out") {
-		t.Fatalf("unexpected error: %s", err)
+	if err = txn.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 
 	checkCounterEQ(t, s, "txn.abort.count", 1)
 	checkCounterEQ(t, s, "txn.begin.count", 1)
 	checkCounterEQ(t, s, "txn.rollback.count", 0)
-	checkCounterEQ(t, s, "txn.commit.count", 1)
-	// We don't know how many times the second txn had to retry until it succeeded
-	// in aborting txn1.
-	checkCounterGE(t, s, "insert.count", 2)
+	checkCounterEQ(t, s, "txn.commit.count", 0)
+	checkCounterEQ(t, s, "insert.count", 1)
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
