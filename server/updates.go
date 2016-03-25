@@ -159,7 +159,7 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 }
 
 func (s *Server) checkForUpdates() {
-	// TestServer.Start nils these out to prevent tests possibly phoning home.
+	// Don't phone home in tests (SetupReportingURLs is called in cli/start.go).
 	if s.parsedUpdatesURL == nil {
 		return
 	}
@@ -238,7 +238,7 @@ func (s *Server) getReportingInfo() reportingInfo {
 }
 
 func (s *Server) reportUsage() {
-	// TestServer.Start nils these out to prevent tests possibly phoning home.
+	// Don't phone home in tests (SetupReportingURLs is called in cli/start.go).
 	if s.parsedReportingURL == nil {
 		return
 	}
