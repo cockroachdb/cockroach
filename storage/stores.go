@@ -232,7 +232,9 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 
 // RangeLookup implements the RangeDescriptorDB interface. It looks up
 // the descriptors for the given (meta) key.
-func (ls *Stores) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+func (ls *Stores) RangeLookup(
+	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{

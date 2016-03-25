@@ -217,7 +217,9 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 // DistSender's Send() method, so there is no error inspection and
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
-func (ds *DistSender) RangeLookup(key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+func (ds *DistSender) RangeLookup(
+	key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -371,7 +373,9 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
-func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
+func (ds *DistSender) getDescriptors(
+	rs roachpb.RSpan, considerIntents, useReverseScan bool,
+) (*roachpb.RangeDescriptor, bool, func(), *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var pErr *roachpb.Error
 	var descKey roachpb.RKey
@@ -402,7 +406,9 @@ func (ds *DistSender) getDescriptors(rs roachpb.RSpan, considerIntents, useRever
 }
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
-func (ds *DistSender) sendSingleRange(ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ds *DistSender) sendSingleRange(
+	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	log.Trace(ctx, fmt.Sprintf("sending RPC to [%s, %s)", desc.StartKey, desc.EndKey))
 
 	leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID))

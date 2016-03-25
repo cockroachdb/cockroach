@@ -235,7 +235,9 @@ func isSysLocal(key roachpb.Key) bool {
 // updateStatsForInline updates stat counters for an inline value.
 // These are simpler as they don't involve intents or multiple
 // versions.
-func updateStatsForInline(ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64) {
+func updateStatsForInline(
+	ms *MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
+) {
 	sys := isSysLocal(key)
 	// Remove counts for this key if the original size is non-zero.
 	if origMetaKeySize != 0 {
@@ -456,7 +458,9 @@ func updateStatsOnAbort(key roachpb.Key, origMetaKeySize, origMetaValSize,
 // value counts, and updating the GC'able bytes age. If meta is
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
-func updateStatsOnGC(key roachpb.Key, keySize, valSize int64, meta *MVCCMetadata, fromNS, toNS int64) MVCCStats {
+func updateStatsOnGC(
+	key roachpb.Key, keySize, valSize int64, meta *MVCCMetadata, fromNS, toNS int64,
+) MVCCStats {
 	var ms MVCCStats
 	ms.AgeTo(fromNS)
 	sys := isSysLocal(key)
@@ -496,7 +500,14 @@ func MVCCSetRangeStats(engine Engine, rangeID roachpb.RangeID, ms *MVCCStats) er
 // consistent=false, we return the error and the decoded result; for
 // all other errors (or when consistent=true) the decoded value is
 // invalid.
-func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction, msg proto.Message) (bool, error) {
+func MVCCGetProto(
+	engine Engine,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	msg proto.Message,
+) (bool, error) {
 	// TODO(tschottdorf) Consider returning skipped intents to the caller.
 	value, _, mvccGetErr := MVCCGet(engine, key, timestamp, consistent, txn)
 	found := value != nil
@@ -514,7 +525,9 @@ func MVCCGetProto(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, c
 
 // MVCCPutProto sets the given key to the protobuf-serialized byte
 // string of msg and the provided timestamp.
-func MVCCPutProto(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, msg proto.Message) error {
+func MVCCPutProto(
+	engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, msg proto.Message,
+) error {
 	value := roachpb.Value{}
 	if err := value.SetProto(msg); err != nil {
 		return err
@@ -554,14 +567,18 @@ var getBufferPool = sync.Pool{
 // WriteIntentErrors. If set to false, a possible intent on the key will be
 // ignored for reading the value (but returned via the roachpb.Intent slice);
 // the previous value (if any) is read instead.
-func MVCCGet(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction) (*roachpb.Value, []roachpb.Intent, error) {
+func MVCCGet(
+	engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction,
+) (*roachpb.Value, []roachpb.Intent, error) {
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
 	return mvccGetUsingIter(iter, key, timestamp, consistent, txn)
 }
 
-func mvccGetUsingIter(iter Iterator, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction) (*roachpb.Value, []roachpb.Intent, error) {
+func mvccGetUsingIter(
+	iter Iterator, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txn *roachpb.Transaction,
+) (*roachpb.Value, []roachpb.Intent, error) {
 	if len(key) == 0 {
 		return nil, nil, emptyKeyError()
 	}
@@ -589,7 +606,9 @@ func mvccGetUsingIter(iter Iterator, key roachpb.Key, timestamp roachpb.Timestam
 // only for reading intents of a transaction when only its metadata is known
 // and should rarely be used.
 // The read is carried out without the chance of uncertainty restarts.
-func MVCCGetAsTxn(engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txnMeta roachpb.TxnMeta) (*roachpb.Value, []roachpb.Intent, error) {
+func MVCCGetAsTxn(
+	engine Engine, key roachpb.Key, timestamp roachpb.Timestamp, consistent bool, txnMeta roachpb.TxnMeta,
+) (*roachpb.Value, []roachpb.Intent, error) {
 	txn := &roachpb.Transaction{
 		TxnMeta:       txnMeta,
 		Priority:      roachpb.MakePriority(roachpb.MinUserPriority),
@@ -816,8 +835,10 @@ var putBufferPool = sync.Pool{
 // single row and never accumulate more than a single value. Successive
 // zero timestamp writes to a key replace the value and deletes clear
 // the value. In addition, zero timestamp values may be merged.
-func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	value roachpb.Value, txn *roachpb.Transaction) error {
+func MVCCPut(
+	engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
+	value roachpb.Value, txn *roachpb.Transaction,
+) error {
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
@@ -826,8 +847,13 @@ func MVCCPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Ti
 
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
-func MVCCDelete(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	txn *roachpb.Transaction) error {
+func MVCCDelete(
+	engine Engine,
+	ms *MVCCStats,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	txn *roachpb.Transaction,
+) error {
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
@@ -868,8 +894,17 @@ func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.K
 // to write or an error. If valueFn is supplied, value should be nil
 // and vice versa. valueFn can delete by returning nil. Returning
 // []byte{} will write an empty value, not delete.
-func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp,
-	value []byte, txn *roachpb.Transaction, buf *putBuffer, valueFn func(*roachpb.Value) ([]byte, error)) error {
+func mvccPutInternal(
+	engine Engine,
+	iter Iterator,
+	ms *MVCCStats,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	value []byte,
+	txn *roachpb.Transaction,
+	buf *putBuffer,
+	valueFn func(*roachpb.Value) ([]byte, error),
+) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -1040,7 +1075,9 @@ func mvccPutInternal(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.Ke
 //
 // An initial value is read from the key using the same operational
 // timestamp as we use to write a value.
-func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, inc int64) (int64, error) {
+func MVCCIncrement(
+	engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, txn *roachpb.Transaction, inc int64,
+) (int64, error) {
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
@@ -1074,8 +1111,10 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roac
 //
 // The condition check reads a value from the key using the same operational
 // timestamp as we use to write a value.
-func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value,
-	expVal *roachpb.Value, txn *roachpb.Transaction) error {
+func MVCCConditionalPut(
+	engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value,
+	expVal *roachpb.Value, txn *roachpb.Transaction,
+) error {
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
@@ -1100,7 +1139,9 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp
 // concatenates undifferentiated byte slice values, and efficiently
 // combines time series observations if the roachpb.Value tag value
 // indicates the value byte slice is of type TIMESERIES.
-func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value) error {
+func MVCCMerge(
+	engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.Timestamp, value roachpb.Value,
+) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -1128,7 +1169,9 @@ func MVCCMerge(engine Engine, ms *MVCCStats, key roachpb.Key, timestamp roachpb.
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction, returnKeys bool) ([]roachpb.Key, error) {
+func MVCCDeleteRange(
+	engine Engine, ms *MVCCStats, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp, txn *roachpb.Transaction, returnKeys bool,
+) ([]roachpb.Key, error) {
 	var keys []roachpb.Key
 	num := int64(0)
 	buf := putBufferPool.Get().(*putBuffer)
@@ -1220,8 +1263,10 @@ func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (M
 // mvccScanInternal scans the key range [start,end) up to some maximum number
 // of results. Specify max=0 for unbounded scans. Specify reverse=true to scan
 // in descending instead of ascending order.
-func mvccScanInternal(engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
-	consistent bool, txn *roachpb.Transaction, reverse bool) ([]roachpb.KeyValue, []roachpb.Intent, error) {
+func mvccScanInternal(
+	engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
+	consistent bool, txn *roachpb.Transaction, reverse bool,
+) ([]roachpb.KeyValue, []roachpb.Intent, error) {
 	var res []roachpb.KeyValue
 	intents, err := MVCCIterate(engine, key, endKey, timestamp, consistent, txn, reverse,
 		func(kv roachpb.KeyValue) (bool, error) {
@@ -1240,16 +1285,20 @@ func mvccScanInternal(engine Engine, key, endKey roachpb.Key, max int64, timesta
 
 // MVCCScan scans the key range [start,end) key up to some maximum number of
 // results in ascending order. Specify max=0 for unbounded scans.
-func MVCCScan(engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
-	consistent bool, txn *roachpb.Transaction) ([]roachpb.KeyValue, []roachpb.Intent, error) {
+func MVCCScan(
+	engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
+	consistent bool, txn *roachpb.Transaction,
+) ([]roachpb.KeyValue, []roachpb.Intent, error) {
 	return mvccScanInternal(engine, key, endKey, max, timestamp,
 		consistent, txn, false /* !reverse */)
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum number of
 // results in descending order. Specify max=0 for unbounded scans.
-func MVCCReverseScan(engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
-	consistent bool, txn *roachpb.Transaction) ([]roachpb.KeyValue, []roachpb.Intent, error) {
+func MVCCReverseScan(
+	engine Engine, key, endKey roachpb.Key, max int64, timestamp roachpb.Timestamp,
+	consistent bool, txn *roachpb.Transaction,
+) ([]roachpb.KeyValue, []roachpb.Intent, error) {
 	return mvccScanInternal(engine, key, endKey, max, timestamp,
 		consistent, txn, true /* reverse */)
 }
@@ -1426,12 +1475,19 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, intent roachpb.Intent)
 
 // MVCCResolveWriteIntentUsingIter is a variant of MVCCResolveWriteIntent that
 // uses iterator and buffer passed as parameters (e.g. when used in a loop).
-func MVCCResolveWriteIntentUsingIter(engine Engine, iterAndBuf IterAndBuf, ms *MVCCStats, intent roachpb.Intent) error {
+func MVCCResolveWriteIntentUsingIter(
+	engine Engine, iterAndBuf IterAndBuf, ms *MVCCStats, intent roachpb.Intent,
+) error {
 	return mvccResolveWriteIntent(engine, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 }
 
-func mvccResolveWriteIntent(engine Engine, iter Iterator, ms *MVCCStats,
-	intent roachpb.Intent, buf *putBuffer) error {
+func mvccResolveWriteIntent(
+	engine Engine,
+	iter Iterator,
+	ms *MVCCStats,
+	intent roachpb.Intent,
+	buf *putBuffer,
+) error {
 	if len(intent.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -1638,7 +1694,9 @@ func (b IterAndBuf) Cleanup() {
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64) (int64, error) {
+func MVCCResolveWriteIntentRange(
+	engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64,
+) (int64, error) {
 	buf := putBufferPool.Get().(*putBuffer)
 	defer putBufferPool.Put(buf)
 
@@ -1652,7 +1710,9 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, intent roachpb.In
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func MVCCResolveWriteIntentRangeUsingIter(engine Engine, iterAndBuf IterAndBuf, ms *MVCCStats, intent roachpb.Intent, max int64) (int64, error) {
+func MVCCResolveWriteIntentRangeUsingIter(
+	engine Engine, iterAndBuf IterAndBuf, ms *MVCCStats, intent roachpb.Intent, max int64,
+) (int64, error) {
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
 	nextKey := encKey
@@ -1702,7 +1762,9 @@ func MVCCResolveWriteIntentRangeUsingIter(engine Engine, iterAndBuf IterAndBuf, 
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration.
 // The timestamp parameter is used to compute the intent age on GC.
-func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_GCKey, timestamp roachpb.Timestamp) error {
+func MVCCGarbageCollect(
+	engine Engine, ms *MVCCStats, keys []roachpb.GCRequest_GCKey, timestamp roachpb.Timestamp,
+) error {
 	iter := engine.NewIterator(nil)
 	defer iter.Close()
 	// Iterate through specified GC keys.
@@ -1800,7 +1862,13 @@ func IsValidSplitKey(key roachpb.Key) bool {
 //
 // debugFn, if not nil, is used to print informational log messages about
 // the key finding process.
-func MVCCFindSplitKey(engine Engine, rangeID roachpb.RangeID, key, endKey roachpb.RKey, debugFn func(msg string, args ...interface{})) (roachpb.Key, error) {
+func MVCCFindSplitKey(
+	engine Engine,
+	rangeID roachpb.RangeID,
+	key,
+	endKey roachpb.RKey,
+	debugFn func(msg string, args ...interface{}),
+) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
 		key = keys.Addr(keys.LocalMax)
 	}

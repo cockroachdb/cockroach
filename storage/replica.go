@@ -1036,7 +1036,9 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
-func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+func (r *Replica) addWriteCmd(
+	ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	signal := func() {
 		if wg != nil {
 			wg.Done()

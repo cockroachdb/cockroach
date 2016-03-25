@@ -57,7 +57,9 @@ func ListenAndServeGRPC(stopper *stop.Stopper, server *grpc.Server,
 // ServeHandler serves the handler on the listener and returns a function that
 // serves an additional listener using a function that takes a connection. The
 // returned function can be called multiple times.
-func ServeHandler(stopper *stop.Stopper, handler http.Handler, ln net.Listener, tlsConfig *tls.Config) func(net.Listener, func(net.Conn)) error {
+func ServeHandler(
+	stopper *stop.Stopper, handler http.Handler, ln net.Listener, tlsConfig *tls.Config,
+) func(net.Listener, func(net.Conn)) error {
 	var mu sync.Mutex
 	activeConns := make(map[net.Conn]struct{})
 

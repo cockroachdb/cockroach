@@ -189,7 +189,12 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 // OneShot runs a container, expecting it to successfully run to completion
 // and die, after which it is removed. Not goroutine safe: only one OneShot
 // can be running at once.
-func (l *LocalCluster) OneShot(ipo types.ImagePullOptions, containerConfig container.Config, hostConfig container.HostConfig, name string) error {
+func (l *LocalCluster) OneShot(
+	ipo types.ImagePullOptions,
+	containerConfig container.Config,
+	hostConfig container.HostConfig,
+	name string,
+) error {
 	if err := pullImage(l, ipo); err != nil {
 		return err
 	}

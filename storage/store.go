@@ -1166,7 +1166,9 @@ func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.ctx.TestingKnobs }
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates new
 // replica IDs to fill out the supplied replicas.
-func (s *Store) NewRangeDescriptor(start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor) (*roachpb.RangeDescriptor, error) {
+func (s *Store) NewRangeDescriptor(
+	start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
+) (*roachpb.RangeDescriptor, error) {
 	id, err := s.rangeIDAlloc.Allocate()
 	if err != nil {
 		return nil, err

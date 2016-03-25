@@ -65,7 +65,13 @@ type Cluster struct {
 
 // createCluster generates a new cluster using the provided stopper and the
 // number of nodes supplied. Each node will have one store to start.
-func createCluster(stopper *stop.Stopper, nodeCount int, epochWriter, actionWriter io.Writer, script Script, rand *rand.Rand) *Cluster {
+func createCluster(
+	stopper *stop.Stopper,
+	nodeCount int,
+	epochWriter, actionWriter io.Writer,
+	script Script,
+	rand *rand.Rand,
+) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, nil, stopper)
