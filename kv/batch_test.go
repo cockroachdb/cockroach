@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -27,6 +28,9 @@ import (
 // TestBatchPrevNext tests batch.{Prev,Next}.
 func TestBatchPrevNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	loc := func(s string) string {
+		return string(keys.RangeDescriptorKey(roachpb.RKey(s)))
+	}
 	span := func(strs ...string) []roachpb.Span {
 		var r []roachpb.Span
 		for i, str := range strs {
@@ -52,6 +56,8 @@ func TestBatchPrevNext(t *testing.T) {
 		{spans: abc, key: "b\x00", expFW: "c", expBW: "b\x00"},
 		{spans: abc, key: "bb", expFW: "c", expBW: "b"},
 		{spans: span(), key: "whatevs", expFW: max, expBW: min},
+		{spans: span(loc("a"), loc("c")), key: "c", expFW: "c", expBW: "c"},
+		{spans: span(loc("a"), loc("c")), key: "c\x00", expFW: max, expBW: "c\x00"},
 	}
 
 	for i, test := range testCases {

@@ -260,7 +260,7 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 
 func (ds *DistSender) optimizeReplicaOrder(replicas ReplicaSlice) orderingPolicy {
 	// Unless we know better, send the RPCs randomly.
-	order := orderingPolicy(orderRandom)
+	order := orderRandom
 	nodeDesc := ds.getNodeDescriptor()
 	// If we don't know which node we're on, don't optimize anything.
 	if nodeDesc == nil {
@@ -411,8 +411,6 @@ func (ds *DistSender) sendSingleRange(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	log.Trace(ctx, fmt.Sprintf("sending RPC to [%s, %s)", desc.StartKey, desc.EndKey))
 
-	leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID))
-
 	// Try to send the call.
 	replicas := newReplicaSlice(ds.gossip, desc)
 
@@ -423,11 +421,12 @@ func (ds *DistSender) sendSingleRange(
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front.
-	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) &&
-		leader.StoreID > 0 {
-		if i := replicas.FindReplica(leader.StoreID); i >= 0 {
-			replicas.MoveToFront(i)
-			order = orderStable
+	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
+		if leader := ds.leaderCache.Lookup(roachpb.RangeID(desc.RangeID)); leader.StoreID > 0 {
+			if i := replicas.FindReplica(leader.StoreID); i >= 0 {
+				replicas.MoveToFront(i)
+				order = orderStable
+			}
 		}
 	}
 
@@ -668,8 +667,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if trErr != nil {
 					return nil, roachpb.NewError(trErr)
 				}
-				truncBA.MaxScanResults = ba.MaxScanResults
-
 				return ds.sendSingleRange(ctx, truncBA, desc)
 			}()
 			// If sending succeeded, break this loop.

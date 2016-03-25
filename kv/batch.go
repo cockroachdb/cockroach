@@ -50,29 +50,39 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			return true, header, nil
 		}
 		// We're dealing with a range-spanning request.
+		local := false
 		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
 		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
-			if !rs.ContainsKeyRange(keyAddr, endKeyAddr) {
-				return false, emptySpan, util.Errorf("local key range must not span ranges")
-			}
 			if !l || !r {
 				return false, emptySpan, util.Errorf("local key mixed with global key in range")
 			}
-			// Range-local local key range.
-			return true, header, nil
+			local = true
 		}
-		// Below, {end,}keyAddr equals header.{End,}Key, so nothing is local.
 		if keyAddr.Less(rs.Key) {
-			header.Key = rs.Key.AsRawKey() // "key" can't be local
-			keyAddr = rs.Key
+			// rs.Key can't be local because it contains range split points, which
+			// are never local.
+			if !local {
+				header.Key = rs.Key.AsRawKey()
+			} else {
+				// The local start key should be truncated to the boundary of local keys which
+				// address to rs.Key.
+				header.Key = keys.MakeRangeKeyPrefix(rs.Key)
+			}
 		}
 		if !endKeyAddr.Less(rs.EndKey) {
-			header.EndKey = rs.EndKey.AsRawKey() // "endKey" can't be local
-			endKeyAddr = rs.EndKey
+			// rs.EndKey can't be local because it contains range split points, which
+			// are never local.
+			if !local {
+				header.EndKey = rs.EndKey.AsRawKey()
+			} else {
+				// The local end key should be truncated to the boundary of local keys which
+				// address to rs.EndKey.
+				header.EndKey = keys.MakeRangeKeyPrefix(rs.EndKey)
+			}
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.
-		if !keyAddr.Less(endKeyAddr) {
+		if header.Key.Compare(header.EndKey) >= 0 {
 			return false, emptySpan, nil
 		}
 		return true, header, nil
@@ -119,7 +129,7 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
 		addr := keys.Addr(h.Key)
-		eAddr := keys.Addr(h.EndKey)
+		eAddr := keys.AddrUpperBound(h.EndKey)
 		if len(eAddr) == 0 {
 			eAddr = addr.ShallowNext()
 		}
@@ -149,7 +159,7 @@ func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 		h := union.GetInner().Header()
 		addr := keys.Addr(h.Key)
 		if addr.Less(k) {
-			if eAddr := keys.Addr(h.EndKey); k.Less(eAddr) {
+			if eAddr := keys.AddrUpperBound(h.EndKey); k.Less(eAddr) {
 				// Starts below k, but continues beyond. Need to stay at k.
 				return k
 			}
