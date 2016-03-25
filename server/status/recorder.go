@@ -38,9 +38,6 @@ const (
 	// nodeTimeSeriesPrefix is the common prefix for time series keys which
 	// record node-specific data.
 	nodeTimeSeriesPrefix = "cr.node.%s"
-	// runtimeStatTimeSeriesFmt is the current format for time series keys which
-	// record runtime system stats on a node.
-	runtimeStatTimeSeriesNameFmt = "cr.node.sys.%s"
 )
 
 type quantile struct {
@@ -291,6 +288,8 @@ func extractValue(mtr interface{}) (float64, error) {
 		return float64(mtr.Count()), nil
 	case *metric.Gauge:
 		return float64(mtr.Value()), nil
+	case *metric.GaugeFloat64:
+		return mtr.Value(), nil
 	default:
 		return 0, util.Errorf("cannot extract value for type %T", mtr)
 	}

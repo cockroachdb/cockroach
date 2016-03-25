@@ -84,6 +84,7 @@ module Models {
      * CockroachDB.
      */
     export module MetricConstants {
+      // Store level metrics.
       export var replicas: string = "replicas";
       export var leaderRanges: string = "ranges.leader";
       export var replicatedRanges: string = "ranges.replicated";
@@ -103,6 +104,12 @@ module Models {
       export var availableCapacity: string = "capacity.available";
       export var sysBytes: string = "sysbytes";
       export var sysCount: string = "syscount";
+
+      // Node level metrics.
+      export var userCPUPercent: string = "sys.cpu.user.percent";
+      export var sysCPUPercent: string = "sys.cpu.sys.percent";
+      export var allocBytes: string = "sys.allocbytes";
+      export var sqlConns: string = "sql.conns";
     }
 
     /**

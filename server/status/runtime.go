@@ -17,16 +17,13 @@
 package status
 
 import (
-	"fmt"
 	"runtime"
-	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 const (
@@ -46,16 +43,15 @@ const (
 // have implementations for all OSes.
 var logOSStats func()
 
-// RuntimeStatRecorder is used to periodically persist useful runtime statistics
-// as time series data. "Runtime statistics" include OS-level statistics (such as
-// memory and CPU usage) and Go runtime statistics (e.g. count of Goroutines).
-type RuntimeStatRecorder struct {
-	nodeID        roachpb.NodeID
-	clock         *hlc.Clock
-	source        string
-	lastDataCount int
+// RuntimeStatSampler is used to periodically sample the runtime environment
+// for useful statistics, performing some rudimentary calculations and storing
+// the resulting information in a format that can be easily consumed by status
+// logging systems.
+type RuntimeStatSampler struct {
+	clock    *hlc.Clock
+	registry *metric.Registry
 
-	// The last recorded values of some statistics are kept to compute
+	// The last sampled values of some statistics are kept only to compute
 	// derivative statistics.
 	lastNow       int64
 	lastUtime     int64
@@ -63,48 +59,53 @@ type RuntimeStatRecorder struct {
 	lastPauseTime uint64
 	lastCgoCall   int64
 	lastNumGC     uint32
+
+	// Metric gauges maintained by the sampler.
+	cgoCalls       *metric.Gauge
+	goroutines     *metric.Gauge
+	allocBytes     *metric.Gauge
+	gcCount        *metric.Gauge
+	gcPauseNS      *metric.Gauge
+	gcPausePercent *metric.GaugeFloat64
+	cpuUserNS      *metric.Gauge
+	cpuUserPercent *metric.GaugeFloat64
+	cpuSysNS       *metric.Gauge
+	cpuSysPercent  *metric.GaugeFloat64
 }
 
-// NewRuntimeStatRecorder instantiates a runtime status recorder for the
-// supplied node ID.
-func NewRuntimeStatRecorder(nodeID roachpb.NodeID, clock *hlc.Clock) *RuntimeStatRecorder {
-	return &RuntimeStatRecorder{
-		nodeID: nodeID,
-		clock:  clock,
-		source: strconv.FormatInt(int64(nodeID), 10),
+// MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
+func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
+	reg := metric.NewRegistry()
+	return RuntimeStatSampler{
+		registry:       reg,
+		clock:          clock,
+		cgoCalls:       reg.Gauge(nameCgoCalls),
+		goroutines:     reg.Gauge(nameGoroutines),
+		allocBytes:     reg.Gauge(nameAllocBytes),
+		gcCount:        reg.Gauge(nameGCCount),
+		gcPauseNS:      reg.Gauge(nameGCPauseNS),
+		gcPausePercent: reg.GaugeFloat64(nameGCPausePercent),
+		cpuUserNS:      reg.Gauge(nameCPUUserNS),
+		cpuUserPercent: reg.GaugeFloat64(nameCPUUserPercent),
+		cpuSysNS:       reg.Gauge(nameCPUSysNS),
+		cpuSysPercent:  reg.GaugeFloat64(nameCPUSysPercent),
 	}
 }
 
-// recordFloat records a single float64 value recorded from a runtime statistic as a
-// ts.TimeSeriesData object.
-func (rsr *RuntimeStatRecorder) record(timestampNanos int64, name string,
-	data float64) ts.TimeSeriesData {
-	return ts.TimeSeriesData{
-		Name:   fmt.Sprintf(runtimeStatTimeSeriesNameFmt, name),
-		Source: rsr.source,
-		Datapoints: []*ts.TimeSeriesDatapoint{
-			{
-				TimestampNanos: timestampNanos,
-				Value:          data,
-			},
-		},
-	}
+// Registry returns the metric.Registry object in which the runtime recorder
+// stores its metric gauges.
+func (rsr RuntimeStatSampler) Registry() *metric.Registry {
+	return rsr.registry
 }
 
-// GetTimeSeriesData returns a slice of TimeSeriesData updates based on current
-// runtime statistics.
+// SampleEnvironment queries the runtime system for various interesting metrics,
+// storing the resulting values in the set of metric gauges maintained by
+// RuntimeStatSampler. This makes runtime statistics more convenient for
+// consumption by the time series and status systems.
 //
-// Calling this method will query various system packages for runtime statistics
-// and convert the information to time series data. This is currently done in
-// one method because it is convenient; however, in the future querying and
-// recording can be easily separated, similar to the way that NodeStatus is
-// separated into a monitor and a recorder.
-//
-// TODO(tschottdorf): turn various things here into gauges and register them
-// with the metrics registry.
-func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
-	data := make([]ts.TimeSeriesData, 0, rsr.lastDataCount)
-
+// This method should be called periodically by a higher level system in order
+// to keep runtime statistics current.
+func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	// Record memory and call stats from the runtime package.
 	// TODO(mrtracy): memory statistics will not include usage from RocksDB.
 	// Determine an appropriate way to compute total memory usage.
@@ -151,16 +152,14 @@ func (rsr *RuntimeStatRecorder) GetTimeSeriesData() []ts.TimeSeriesData {
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC
 
-	data = append(data, rsr.record(now, nameCgoCalls, float64(numCgoCall)))
-	data = append(data, rsr.record(now, nameGoroutines, float64(numGoroutine)))
-	data = append(data, rsr.record(now, nameAllocBytes, float64(ms.Alloc)))
-	data = append(data, rsr.record(now, nameGCCount, float64(ms.NumGC)))
-	data = append(data, rsr.record(now, nameGCPauseNS, float64(ms.PauseTotalNs)))
-	data = append(data, rsr.record(now, nameGCPausePercent, pausePerc))
-	data = append(data, rsr.record(now, nameCPUUserNS, float64(newUtime)))
-	data = append(data, rsr.record(now, nameCPUUserPercent, uPerc))
-	data = append(data, rsr.record(now, nameCPUSysNS, float64(newStime)))
-	data = append(data, rsr.record(now, nameCPUSysPercent, sPerc))
-	rsr.lastDataCount = len(data)
-	return data
+	rsr.cgoCalls.Update(numCgoCall)
+	rsr.goroutines.Update(int64(numGoroutine))
+	rsr.allocBytes.Update(int64(ms.Alloc))
+	rsr.gcCount.Update(int64(ms.NumGC))
+	rsr.gcPauseNS.Update(int64(ms.PauseTotalNs))
+	rsr.gcPausePercent.Update(pausePerc)
+	rsr.cpuUserNS.Update(newUtime)
+	rsr.cpuUserPercent.Update(uPerc)
+	rsr.cpuSysNS.Update(newStime)
+	rsr.cpuSysPercent.Update(sPerc)
 }

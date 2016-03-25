@@ -24,6 +24,7 @@ module AdminViews {
   import Metrics = Models.Metrics;
   import Table = Components.Table;
   import NodeStatus = Models.Proto.NodeStatus;
+  import MetricNames = Models.Proto.MetricConstants;
   import Moment = moment.Moment;
   import MithrilVirtualElement = _mithril.MithrilVirtualElement;
   import MithrilComponent = _mithril.MithrilComponent;
@@ -47,6 +48,10 @@ module AdminViews {
       return "cr.node.sys." + metric;
     }
 
+    function totalCpu(metrics: Models.Proto.StatusMetrics): number {
+      return metrics[MetricNames.sysCPUPercent] + metrics[MetricNames.userCPUPercent];
+    }
+
     export module NodeOverviewReroute {
       export function controller(): any {
         // passing in null to m.route.param() preserves the querystring
@@ -63,7 +68,6 @@ module AdminViews {
      * NodesPage show a list of all the available nodes.
      */
     export module NodesPage {
-      import MetricNames = Models.Proto.MetricConstants;
 
       let aggregateByteKeys = [MetricNames.liveBytes, MetricNames.intentBytes, MetricNames.sysBytes];
       let byteSum = (s: NodeStatus): number => {
@@ -157,21 +161,36 @@ module AdminViews {
           // TODO: add more stats
           {
             title: "Connections",
-            view: (status: NodeStatus): string => "",
+            view: (status: NodeStatus): string => {
+              return status.metrics[MetricNames.sqlConns].toString();
+            },
             sortable: true,
-            sortValue: (status: NodeStatus): number => 0,
+            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.sqlConns],
+            rollup: function(rows: NodeStatus[]): string {
+              return _.sumBy(rows, (r: NodeStatus) => r.metrics[MetricNames.sqlConns]).toString();
+            },
           },
           {
             title: "CPU Usage",
-            view: (status: NodeStatus): string => "",
+            view: (status: NodeStatus): string => {
+              return d3.format(".2%")(totalCpu(status.metrics));
+            },
             sortable: true,
-            sortValue: (status: NodeStatus): number => 0,
+            sortValue: (status: NodeStatus): number => totalCpu(status.metrics),
+            rollup: function(rows: NodeStatus[]): string {
+              return d3.format(".2%")(_.sumBy(rows, (r: NodeStatus) => totalCpu(r.metrics)) / rows.length);
+            },
           },
           {
             title: "Mem Usage",
-            view: (status: NodeStatus): string => "",
+            view: (status: NodeStatus): string => {
+              return Utils.Format.Bytes(status.metrics[MetricNames.allocBytes]);
+            },
             sortable: true,
-            sortValue: (status: NodeStatus): number => 0,
+            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.allocBytes],
+            rollup: function(rows: NodeStatus[]): string {
+              return Utils.Format.Bytes(_.sumBy(rows, (r: NodeStatus) => r.metrics[MetricNames.allocBytes]));
+            },
           },
           {
             title: "Logs",
