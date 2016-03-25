@@ -60,6 +60,13 @@ type SendOptions struct {
 	Timeout time.Duration
 }
 
+func (so SendOptions) contextWithTimeout() (context.Context, func()) {
+	if so.Timeout != 0 {
+		return context.WithTimeout(so.Context, so.Timeout)
+	}
+	return so.Context, func() {}
+}
+
 // An rpcError indicates a failure to send the RPC. rpcErrors are
 // retryable.
 type rpcError struct {
@@ -151,7 +158,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	// node will be able to order the healthy replicas based on latency.
 
 	// Send the first request.
-	sendOneFn(orderedClients[0], opts.Timeout, rpcContext, done)
+	sendOneFn(opts, rpcContext, orderedClients[0], done)
 	orderedClients = orderedClients[1:]
 
 	var errors, retryableErrors int
@@ -167,7 +174,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			// On successive RPC timeouts, send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				log.Trace(opts.Context, "timeout, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, rpcContext, done)
+				sendOneFn(opts, rpcContext, orderedClients[0], done)
 				orderedClients = orderedClients[1:]
 			}
 
@@ -202,7 +209,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
 				log.Trace(opts.Context, "error, trying next peer")
-				sendOneFn(orderedClients[0], opts.Timeout, rpcContext, done)
+				sendOneFn(opts, rpcContext, orderedClients[0], done)
 				orderedClients = orderedClients[1:]
 			}
 		}
@@ -243,26 +250,25 @@ var sendOneFn = sendOne
 //
 // Do not call directly, but instead use sendOneFn. Tests mock out this method
 // via sendOneFn in order to test various error cases.
-func sendOne(client batchClient, timeout time.Duration,
-	rpcContext *rpc.Context, done chan batchCall) {
+func sendOne(opts SendOptions, rpcContext *rpc.Context, client batchClient, done chan batchCall) {
 	addr := client.remoteAddr
 	if log.V(2) {
 		log.Infof("sending request to %s: %+v", addr, client.args)
 	}
 
-	// TODO(tamird/tschottdorf): pass this in from DistSender.
-	ctx := context.TODO()
-	if timeout != 0 {
-		ctx, _ = context.WithTimeout(ctx, timeout)
-	}
-
 	if localServer := rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
+		ctx, cancel := opts.contextWithTimeout()
+		defer cancel()
+
 		reply, err := localServer.Batch(ctx, &client.args)
 		done <- batchCall{reply: reply, err: err}
 		return
 	}
 
 	go func() {
+		ctx, cancel := opts.contextWithTimeout()
+		defer cancel()
+
 		c := client.conn
 		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
 			if err != nil {
