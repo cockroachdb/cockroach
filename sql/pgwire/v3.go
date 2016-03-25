@@ -24,8 +24,6 @@ import (
 	"reflect"
 	"strconv"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -171,9 +169,6 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 }
 
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	if authenticationHook != nil {
 		if err := authenticationHook(c.session.User, true /* public */); err != nil {
 			return c.sendInternalError(err.Error())
@@ -265,14 +260,14 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 
 		case clientMsgSimpleQuery:
 			c.doingExtendedQueryMessage = false
-			err = c.handleSimpleQuery(ctx, &c.readBuf)
+			err = c.handleSimpleQuery(&c.readBuf)
 
 		case clientMsgTerminate:
 			return nil
 
 		case clientMsgParse:
 			c.doingExtendedQueryMessage = true
-			err = c.handleParse(ctx, &c.readBuf)
+			err = c.handleParse(&c.readBuf)
 
 		case clientMsgDescribe:
 			c.doingExtendedQueryMessage = true
@@ -288,7 +283,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 
 		case clientMsgExecute:
 			c.doingExtendedQueryMessage = true
-			err = c.handleExecute(ctx, &c.readBuf)
+			err = c.handleExecute(&c.readBuf)
 
 		default:
 			err = c.sendInternalError(fmt.Sprintf("unrecognized client message type %s", typ))
@@ -299,16 +294,16 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	}
 }
 
-func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 	query, err := buf.getString()
 	if err != nil {
 		return err
 	}
 
-	return c.executeStatements(ctx, query, nil, nil, true, 0)
+	return c.executeStatements(query, nil, nil, true, 0)
 }
 
-func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleParse(buf *readBuffer) error {
 	name, err := buf.getString()
 	if err != nil {
 		return err
@@ -347,7 +342,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		}
 		args[fmt.Sprint(i+1)] = v
 	}
-	cols, pErr := c.executor.Prepare(ctx, query, c.session, args)
+	cols, pErr := c.executor.Prepare(query, c.session, args)
 	if pErr != nil {
 		return c.sendPError(pErr)
 	}
@@ -569,7 +564,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
+func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	portalName, err := buf.getString()
 	if err != nil {
 		return err
@@ -583,12 +578,12 @@ func (c *v3Conn) handleExecute(ctx context.Context, buf *readBuffer) error {
 		return err
 	}
 
-	return c.executeStatements(ctx, portal.stmt.query, portal.params, portal.outFormats, false, limit)
+	return c.executeStatements(portal.stmt.query, portal.params, portal.outFormats, false, limit)
 }
 
-func (c *v3Conn) executeStatements(ctx context.Context, stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
+func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(ctx, c.session, stmts, params)
+	results := c.executor.ExecuteStatements(c.session, stmts, params)
 
 	tracing.AnnotateTrace()
 	if results.Empty {

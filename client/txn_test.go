@@ -150,7 +150,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		return br, nil
 	}))
 
-	txn := NewTxn(context.Background(), *db)
+	txn := NewTxn(*db)
 
 	for testIdx = range testCases {
 		if _, pErr := txn.db.sender.Send(context.Background(), ba); pErr != nil {
@@ -166,7 +166,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 		return nil, roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, ba.Txn)
 	}, nil))
 
-	txn := NewTxn(context.Background(), *db)
+	txn := NewTxn(*db)
 	_, pErr := txn.db.sender.Send(context.Background(), testPut())
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
@@ -523,7 +523,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			return ba.CreateReply(), nil
 		}, nil))
 
-		txn := NewTxn(context.Background(), *db)
+		txn := NewTxn(*db)
 		if pErr := txn.Put("a", "b"); pErr != nil {
 			t.Fatalf("put failed: %s", pErr)
 		}
@@ -550,7 +550,7 @@ func TestTransactionStatus(t *testing.T) {
 	db := NewDB(newTestSender(nil, nil))
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
-			txn := NewTxn(context.Background(), *db)
+			txn := NewTxn(*db)
 
 			if _, pErr := txn.Get("a"); pErr != nil {
 				t.Fatal(pErr)
@@ -582,7 +582,7 @@ func TestTransactionStatus(t *testing.T) {
 func TestCommitInBatchWithResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
-	txn := NewTxn(context.Background(), *db)
+	txn := NewTxn(*db)
 	b := &Batch{}
 	if _, pErr := txn.CommitInBatchWithResponse(b); pErr == nil {
 		t.Error("this batch should not be committed")
@@ -594,7 +594,7 @@ func TestCommitInBatchWithResponse(t *testing.T) {
 func TestTimestampSelectionInOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := newDB(newTestSender(nil, nil))
-	txn := NewTxn(context.Background(), *db)
+	txn := NewTxn(*db)
 
 	var execOpt TxnExecOptions
 	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
@@ -638,7 +638,7 @@ func TestSetPriority(t *testing.T) {
 
 	// Verify the normal priority setting path.
 	expected = roachpb.HighUserPriority
-	txn := NewTxn(context.Background(), *db)
+	txn := NewTxn(*db)
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
@@ -648,7 +648,7 @@ func TestSetPriority(t *testing.T) {
 
 	// Verify the internal (fixed value) priority setting path.
 	expected = roachpb.UserPriority(-13)
-	txn = NewTxn(context.Background(), *db)
+	txn = NewTxn(*db)
 	txn.InternalSetPriority(13)
 	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
