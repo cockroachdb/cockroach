@@ -22,6 +22,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -175,9 +177,9 @@ type txnState struct {
 }
 
 // reset creates a new Txn and initializes it using the session defaults.
-func (ts *txnState) reset(e *Executor, s *Session) {
+func (ts *txnState) reset(ctx context.Context, e *Executor, s *Session) {
 	*ts = txnState{}
-	ts.txn = client.NewTxn(*e.ctx.DB)
+	ts.txn = client.NewTxn(ctx, *e.ctx.DB)
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.tr = s.Trace
 	// Discard the old schemaChangers, if any.
