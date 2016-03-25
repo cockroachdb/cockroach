@@ -437,14 +437,19 @@ func (r *Replica) newNotLeaderError(l *roachpb.Lease, originStoreID roachpb.Stor
 // lease for this replica. Unless an error is returned, the obtained
 // lease will be valid for a time interval containing the requested
 // timestamp. Only a single lease request may be pending at a time.
-func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachpb.Error {
+func (r *Replica) requestLeaderLease(ctx context.Context, timestamp roachpb.Timestamp) (<-chan *roachpb.Error, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	llChan := make(chan *roachpb.Error, 1)
 	if len(r.mu.llChans) > 0 {
 		r.mu.llChans = append(r.mu.llChans, llChan)
-		return llChan
+		return llChan, func() {}
+	}
+
+	abandonChan := make(chan struct{}, 1)
+	tryAbandonReq := func() {
+		close(abandonChan)
 	}
 
 	r.store.Stopper().RunWorker(func() {
@@ -479,7 +484,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 			// checks from normal request machinery, (e.g. the command queue).
 			// Note that the command itself isn't traced, but usually the caller
 			// waiting for the result has an active Trace.
-			cmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
+			cmd, err := r.proposeRaftCommand(ctx, ba)
 			if err != nil {
 				return roachpb.NewError(err)
 			}
@@ -493,9 +498,27 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 					}
 				}
 				return c.Err
+			case <-abandonChan:
+				// Cancellation is somewhat tricky since we can't prevent the
+				// Raft command from executing at some point in the future.
+				// We try to remove the pending command, but if the processRaft
+				// goroutine has already grabbed it (as would typically be the
+				// case right as it executes), it's too late and we're still
+				// going to have to wait until the command returns (which would
+				// typically be right away).
+				// A typical outcome of a bug here would be use-after-free of
+				// the trace of this client request; we finish it when
+				// returning from here, but the Raft execution also uses it.
+				if r.tryAbandon(cmd.idKey) {
+					// TODO(tschottdorf): the command will still execute at
+					// some process, so maybe this should be a structured error
+					// which can be interpreted appropriately upstream.
+				} else {
+					log.Warningf("unable to cancel expired Raft command %s", ba)
+				}
 			case <-r.store.Stopper().ShouldStop():
-				return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
 			}
+			return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
 		}()
 
 		// Send result of leader lease to all waiter channels.
@@ -508,7 +531,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 	})
 
 	r.mu.llChans = append(r.mu.llChans, llChan)
-	return llChan
+	return llChan, tryAbandonReq
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
@@ -544,7 +567,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 		log.Trace(ctx, fmt.Sprintf("request leader lease (attempt #%d)", attempt))
 
 		// Otherwise, no active lease: Request renewal if a renewal is not already pending.
-		llChan := r.requestLeaderLease(timestamp)
+		llChan, tryAbandonReq := r.requestLeaderLease(ctx, timestamp)
 
 		// Wait for the leader lease to finish, or the context to expire.
 		select {
@@ -564,6 +587,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 			}
 			continue
 		case <-ctx.Done():
+			tryAbandonReq()
 		case <-r.store.Stopper().ShouldStop():
 		}
 		return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
