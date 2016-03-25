@@ -39,6 +39,9 @@ func TestPrettyPrint(t *testing.T) {
 	durationDesc, _ := encoding.EncodeDurationDescending(nil, duration)
 	txnID := uuid.NewV4()
 
+	// The following test cases encode keys with a mixture of ascending and descending direction,
+	// but always decode keys in the ascending direction. This is why some of the decoded values
+	// seem bizarre.
 	testCases := []struct {
 		key roachpb.Key
 		exp string
@@ -127,7 +130,7 @@ func TestPrettyPrint(t *testing.T) {
 			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
-			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
+			"/Table/42/Mon Oct 27 12:53:19 UTC 1924"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeDecimalAscending(nil, inf.NewDec(1234, 2)))),
 			"/Table/42/12.34"},
