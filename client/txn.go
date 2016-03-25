@@ -122,6 +122,14 @@ func NewTxn(ctx context.Context, db DB) *Txn {
 	return txn
 }
 
+// IsFinalized returns true if this Txn has been committed or rolled back and
+// should therefore not be used for any more KV operation.
+// Note that a txn is put in a finalized state (status is ABORTED) when
+// Rollback() returns an error.
+func (txn *Txn) IsFinalized() bool {
+	return txn.Proto.Status != roachpb.PENDING
+}
+
 // SetDebugName sets the debug name associated with the transaction which will
 // appear in log files and the web UI. Each transaction starts out with an
 // automatically assigned debug name composed of the file and line number where
@@ -388,10 +396,14 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 }
 
 // Commit sends an EndTransactionRequest with Commit=true.
+// txn should not be used to send any more commands after this call.
 func (txn *Txn) Commit() *roachpb.Error {
 	pErr := txn.commit(nil)
 	if pErr != nil {
 		txn.CleanupOnError(pErr)
+	}
+	if !txn.IsFinalized() {
+		panic("Commit() failed to move txn to a final state")
 	}
 	return pErr
 }
@@ -407,8 +419,20 @@ func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
+// The txn's status is set to ABORTED in case of error. txn is
+// considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() *roachpb.Error {
-	return txn.sendEndTxnReq(false /* commit */, nil)
+	err := txn.sendEndTxnReq(false /* commit */, nil)
+	if err != nil {
+		// TODO(andrei): I'm not completely sure setting the status here is required;
+		// maybe somebody else already does it on the send() return path?
+		txn.Proto.Status = roachpb.ABORTED
+	} else {
+		if !txn.IsFinalized() {
+			panic("txn not in a final state after sending an EndTransaction")
+		}
+	}
+	return err
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) *roachpb.Error {
