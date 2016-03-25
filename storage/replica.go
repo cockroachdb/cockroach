@@ -757,9 +757,11 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		// clients will retry.
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
-	// TODO(tschottdorf): assert nil reply on error.
 	if pErr != nil {
 		log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
+		if br != nil {
+			log.Errorc(r.context(), "batch response was set unexpectedly: %s", br)
+		}
 		return nil, pErr
 	}
 	return br, nil
@@ -1027,6 +1029,9 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		pErr = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
 	}
 	r.store.intentResolver.processIntentsAsync(r, intents)
+	if pErr != nil {
+		return nil, pErr
+	}
 	return br, pErr
 }
 
@@ -1112,6 +1117,10 @@ func (r *Replica) addWriteCmd(ctx context.Context, ba roachpb.BatchRequest, wg *
 		}
 	} else {
 		pErr = roachpb.NewError(err)
+	}
+
+	if pErr != nil {
+		return nil, pErr
 	}
 	return br, pErr
 }
