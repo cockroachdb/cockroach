@@ -61,6 +61,19 @@ tabs). Format your code assuming it will be read in a window 100
 columns wide. Wrap code at 100 characters and comments at 80 unless doing so
 makes the code less legible.
 
+When wrapping function signatures that do not fit on one line,
+put the name, arguments and return types on separate lines, with the closing `)`
+at the same indentation as `func`. Example:
+```go
+func (s *someType) myFunctionName(
+    arg1 somepackage.SomeArgType, arg2 int, arg3 somepackage.SomeOtherType,
+) (somepackage.SomeReturnType, error) {
+    ...
+}
+```
+If the arguments list exceeds 100 characters, switch to one argument per line. 
+If return types need to be wrapped, use the same rules.
+
 ### Code review workflow
 
 + All contributors need to sign the
