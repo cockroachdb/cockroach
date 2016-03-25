@@ -39,9 +39,10 @@ module Models {
 
     function getHelpUsData(): MithrilPromise<OptInAttributes> {
       let d: MithrilDeferred<OptInAttributes> = m.deferred();
-      Models.API.getUIData("helpus").then((response: GetUIDataResponse): void => {
+      const helpusKey: string = "helpus";
+      Models.API.getUIData([helpusKey]).then((response: GetUIDataResponse): void => {
         try {
-          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.value));
+          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[helpusKey].value));
           d.resolve(attributes);
         } catch (e) {
           d.reject(e);
