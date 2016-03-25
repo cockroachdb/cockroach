@@ -338,8 +338,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		// statements or only one, so just pretend there was one.
 		if txnState.txn != nil {
 			// Rollback the txn.
-			txnState.txn.CleanupOnError(pErr)
-			txnState.resetStateAndTxn(Aborted)
+			txnState.updateStateAndCleanupOnErr(pErr, e)
 		}
 		res.ResultList = append(res.ResultList, Result{PErr: pErr})
 		return res
@@ -555,7 +554,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
 				stmtTimestamp, txnState)
 		case Aborted, RestartWait:
-			res, pErr = e.execStmtInAbortedTxn(stmt, txnState)
+			res, pErr = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
 		case CommitWait:
 			res, pErr = e.execStmtInCommitWaitTxn(stmt, txnState)
 		default:
@@ -590,18 +589,19 @@ func (e *Executor) execStmtsInCurrentTxn(
 // Aborted or RestartWait.
 // Everything but COMMIT/ROLLBACK/RESTART causes errors.
 func (e *Executor) execStmtInAbortedTxn(
-	stmt parser.Statement, txnState *txnState) (Result, *roachpb.Error) {
+	stmt parser.Statement, txnState *txnState, planMaker *planner) (
+	Result, *roachpb.Error) {
+
 	if txnState.State != Aborted && txnState.State != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
 	}
 	switch s := stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State == RestartWait {
-			if pErr := txnState.txn.Rollback(); pErr != nil {
-				log.Errorf("failure rolling back transaction: %s", pErr)
-			}
+			return rollbackSQLTransaction(txnState, planMaker), nil
 		}
 		// Reset the state to allow new transactions to start.
+		// The KV txn has already been rolled back when we entered the Aborted state.
 		// Note: postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 		result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 		txnState.resetStateAndTxn(NoTxn)
@@ -690,8 +690,8 @@ func (e *Executor) execStmtInOpenTxn(
 	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
-			txnState.resetStateAndTxn(Aborted)
 			pErr := roachpb.NewError(errTransactionInProgress)
+			txnState.updateStateAndCleanupOnErr(pErr, e)
 			return Result{PErr: pErr}, pErr
 		}
 	case *parser.CommitTransaction:
@@ -742,6 +742,7 @@ func (e *Executor) execStmtInOpenTxn(
 			pErr := roachpb.NewError(util.Errorf(
 				"SAVEPOINT %s needs to be the first statement in a transaction",
 				parser.RestartSavepointName))
+			txnState.updateStateAndCleanupOnErr(pErr, e)
 			return Result{PErr: pErr}, pErr
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
@@ -749,21 +750,23 @@ func (e *Executor) execStmtInOpenTxn(
 		txnState.retryIntent = true
 		return Result{}, nil
 	case *parser.RollbackToSavepoint:
-		if pErr := parser.ValidateRestartCheckpoint(s.Savepoint); pErr != nil {
-			return Result{PErr: pErr}, pErr
+		var pErr *roachpb.Error
+		if nameErr := parser.ValidateRestartCheckpoint(s.Savepoint); nameErr != nil {
+			pErr = nameErr
+		} else {
+			// Can't restart if we didn't get an error first, which would've put the
+			// txn in a different state.
+			pErr = roachpb.NewError(errNotRetriable)
 		}
-		// Can't restart if we didn't get an error first, which would've put the
-		// txn in a different state.
-		txnState.resetStateAndTxn(Aborted)
-		pErr := roachpb.NewError(errNotRetriable)
+		txnState.updateStateAndCleanupOnErr(pErr, e)
 		return Result{PErr: pErr}, pErr
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
 	stmt, err := parser.FillArgs(stmt, &planMaker.params)
 	if err != nil {
-		txnState.resetStateAndTxn(Aborted)
 		pErr := roachpb.NewError(err)
+		txnState.updateStateAndCleanupOnErr(pErr, e)
 		return Result{PErr: pErr}, pErr
 	}
 
@@ -791,9 +794,12 @@ func (e *Executor) execStmtInOpenTxn(
 	return result, pErr
 }
 
+// Clean up after trying to execute a transactional statement while not in a SQL
+// transaction.
 func (e *Executor) noTransactionHelper(txnState *txnState) (Result, *roachpb.Error) {
-	txnState.resetStateAndTxn(Aborted)
 	pErr := roachpb.NewError(errNoTransactionInProgress)
+	// Clean up the KV txn and set the SQL state to Aborted.
+	txnState.updateStateAndCleanupOnErr(pErr, e)
 	return Result{PErr: pErr}, pErr
 }
 

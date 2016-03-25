@@ -191,6 +191,15 @@ func (ts *txnState) willBeRetried() bool {
 }
 
 func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
+	if state != NoTxn && state != Aborted {
+		panic(fmt.Sprintf("resetStateAndTxn called with unsupported state: %s", state))
+	}
+	if ts.txn != nil && !ts.txn.IsFinalized() {
+		panic(fmt.Sprintf(
+			"attempting to move SQL txn to state %s inconsistent with KV txn state: %s",
+			state, ts.txn.Proto.Status))
+	}
+
 	ts.State = state
 	ts.txn = nil
 }
