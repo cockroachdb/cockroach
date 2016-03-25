@@ -757,12 +757,10 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		// clients will retry.
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
-	// TODO(tschottdorf): assert nil reply on error.
 	if pErr != nil {
 		log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
-		return nil, pErr
 	}
-	return br, nil
+	return br, pErr
 }
 
 // TODO(tschottdorf): almost obsolete.
