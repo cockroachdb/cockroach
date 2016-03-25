@@ -192,14 +192,14 @@ message SetUIDataRequest {
 message SetUIDataResponse {
 }
 
-// GETUIDataRequest requests the value of the given key from the system.ui
+// GETUIDataRequest requests the values for the given keys from the system.ui
 // table.
 message GetUIDataRequest {
-  string key = 1;
+  repeated string keys = 1;
 }
 
-// GetUIDataResponse contains the requested value and the time at which
-// the value was last updated.
+// GetUIDataResponse contains the requested values and the times at which
+// the values were last updated.
 message GetUIDataResponse {
   // Timestamp is embedded in each place it's used, because proto3 defines a
   // built-in Timestamp message that we can't use, because gogoprotobuf doesn't
@@ -212,11 +212,17 @@ message GetUIDataResponse {
     uint32 nsec = 2;
   }
 
-  // value is the value of the requested key.
-  bytes value = 1;
+  message Value {
+    // value is the value of the requested key.
+    bytes value = 1;
 
-  // last_updated is the time at which the value was last updated.
-  Timestamp last_updated = 2;
+    // last_updated is the time at which the value was last updated.
+    Timestamp last_updated = 2;
+  }
+
+  // key_values maps keys to their retrieved values. If this doesn't contain a
+  // a requested key, that key was not found.
+  map<string, Value> key_values = 1;
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -278,7 +284,13 @@ service Admin {
     };
   }
 
-  // Example URL: /_admin/v1/uidata?key=MYKEY
+  // Example URLs: 
+  // - /_admin/v1/uidata?keys=MYKEY
+  // - /_admin/v1/uidata?keys=MYKEY1&keys=MYKEY2
+  //
+  // Yes, it's a little odd that the query parameter is named "keys" instead of
+  // "key". That has to do with the automatic way that query parameters are
+  // mapped to protobuf fields.
   rpc GetUIData(GetUIDataRequest) returns (GetUIDataResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/uidata"

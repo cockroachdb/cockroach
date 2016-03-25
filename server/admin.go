@@ -21,7 +21,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	// This is imported for its side-effect of registering expvar
 	// endpoints with the http.DefaultServeMux.
 	_ "expvar"
@@ -91,8 +90,6 @@ const (
 )
 
 var (
-	errUIKeyNotFound = errors.New("key not found")
-
 	// apiServerMessage is the standard body for all HTTP 500 responses.
 	errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error has occurred. Please "+
 		"check your CockroachDB logs for more details.")
@@ -559,36 +556,55 @@ func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsRe
 	return &resp, nil
 }
 
-// getUIData returns the value and timestamp for the given UI key. Returns
-// errUIKeyNotFound if the key was not found.
-func (s *adminServer) getUIData(session *sql.Session, user, key string) ([]byte, GetUIDataResponse_Timestamp, error) {
-	zeroTimestamp := GetUIDataResponse_Timestamp{}
+// getUIData returns the values and timestamps for the given UI keys. Keys
+// that are not found will not be returned.
+func (s *adminServer) getUIData(session *sql.Session, user string, keys []string) (*GetUIDataResponse, error) {
+	if len(keys) == 0 {
+		return &GetUIDataResponse{}, nil
+	}
 
 	// Query database.
-	query := "SELECT value, lastUpdated FROM system.ui WHERE key = $1"
-	params := []parser.Datum{parser.DString(key)}
-	r := s.sqlExecutor.ExecuteStatements(context.Background(), session, query, params)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
-		return nil, zeroTimestamp, s.serverError(err)
+	var query sqlQuery
+	query.Append("SELECT key, value, lastUpdated FROM system.ui WHERE key IN (")
+	for i, key := range keys {
+		if i != 0 {
+			query.Append(",")
+		}
+		query.Append("$", parser.DString(key))
 	}
-	if len(r.ResultList[0].Rows) == 0 {
-		return nil, zeroTimestamp, errUIKeyNotFound
+	query.Append(");")
+	if err := query.Errors(); err != nil {
+		return nil, s.serverErrorf("error constructing query: %v", err)
+	}
+	r := s.sqlExecutor.ExecuteStatements(context.Background(), session, query.String(), query.Params())
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
 	}
 
 	// Marshal results.
-	row := r.ResultList[0].Rows[0]
-	dBytes, ok := row.Values[0].(parser.DBytes)
-	if !ok {
-		return nil, zeroTimestamp, s.serverErrorf("unexpected type for UI value: %T", row.Values[0])
+	var resp GetUIDataResponse
+	resp.KeyValues = make(map[string]*GetUIDataResponse_Value)
+	for _, row := range r.ResultList[0].Rows {
+		dKey, ok := row.Values[0].(parser.DString)
+		if !ok {
+			return nil, s.serverErrorf("unexpected type for UI key: %T", row.Values[0])
+		}
+		dValue, ok := row.Values[1].(parser.DBytes)
+		if !ok {
+			return nil, s.serverErrorf("unexpected type for UI value: %T", row.Values[1])
+		}
+		dLastUpdated, ok := row.Values[2].(parser.DTimestamp)
+		if !ok {
+			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[2])
+		}
+
+		nanos := dLastUpdated.UnixNano()
+		resp.KeyValues[string(dKey)] = &GetUIDataResponse_Value{
+			Value:       []byte(dValue),
+			LastUpdated: &GetUIDataResponse_Timestamp{Sec: nanos / 1e9, Nsec: uint32(nanos % 1e9)},
+		}
 	}
-	dTS, ok := row.Values[1].(parser.DTimestamp)
-	if !ok {
-		return nil, zeroTimestamp,
-			s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[1])
-	}
-	nanos := dTS.UnixNano()
-	ts := GetUIDataResponse_Timestamp{nanos / 1e9, uint32(nanos % 1e9)}
-	return []byte(dBytes), ts, nil
+	return &resp, nil
 }
 
 // SetUIData is an endpoint that stores the given key/value pairs in the
@@ -622,13 +638,11 @@ func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*Se
 		}
 
 		// See if the key already exists.
-		alreadyExists := true
-		if _, _, err := s.getUIData(session, s.getUser(req), key); err != nil {
-			if err != errUIKeyNotFound {
-				return nil, s.serverError(err)
-			}
-			alreadyExists = false
+		resp, err := s.getUIData(session, s.getUser(req), []string{key})
+		if err != nil {
+			return nil, s.serverError(err)
 		}
+		_, alreadyExists := resp.KeyValues[key]
 
 		// INSERT or UPDATE as appropriate.
 		if alreadyExists {
@@ -663,24 +677,21 @@ func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*Se
 	return &SetUIDataResponse{}, nil
 }
 
-// GetUIData returns data associated with the given key, which was stored
+// GetUIData returns data associated with the given keys, which was stored
 // earlier through SetUIData.
 func (s *adminServer) GetUIData(_ context.Context, req *GetUIDataRequest) (*GetUIDataResponse, error) {
 	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.sqlExecutor, nil)
 
-	if len(req.Key) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "key cannot be empty")
+	if len(req.Keys) == 0 {
+		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
 	}
 
-	val, ts, err := s.getUIData(session, s.getUser(req), req.Key)
+	resp, err := s.getUIData(session, s.getUser(req), req.Keys)
 	if err != nil {
-		if err == errUIKeyNotFound {
-			return nil, grpc.Errorf(codes.NotFound, "key %s not found", req.Key)
-		}
 		return nil, s.serverError(err)
 	}
 
-	return &GetUIDataResponse{Value: val, LastUpdated: &ts}, nil
+	return resp, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
