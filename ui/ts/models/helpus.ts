@@ -19,6 +19,11 @@ module Models {
     export const UPDATES: string = "updates";
     export const LASTUPDATED: string = "lastUpdated";
 
+    const KEY_HELPUS: string = "helpus";
+    // NOTE: If KEY_OPTIN changes, the server updating code must be updated as
+    // well.
+    const KEY_OPTIN: string = "optin";
+
     // Help Us flow is shown by default
     export function helpUsFlag(): boolean {
       return true;
@@ -38,11 +43,11 @@ module Models {
     }
 
     function getHelpUsData(): MithrilPromise<OptInAttributes> {
+      // Query the optin and helpus uidata and merge them into OptInAttributes.
       let d: MithrilDeferred<OptInAttributes> = m.deferred();
-      const helpusKey: string = "helpus";
-      Models.API.getUIData([helpusKey]).then((response: GetUIDataResponse): void => {
+      Models.API.getUIData([KEY_HELPUS]).then((response: GetUIDataResponse): void => {
         try {
-          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[helpusKey].value));
+          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[KEY_HELPUS].value));
           d.resolve(attributes);
         } catch (e) {
           d.reject(e);
@@ -54,7 +59,13 @@ module Models {
     }
 
     function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
-      return Models.API.setUIData({"helpus": btoa(JSON.stringify(attrs))});
+      // Clone "optin" into a separate key, so that the server can query that
+      // separately and cleanly.
+      let keyValues: {[key: string]: string} = {
+        [KEY_HELPUS]: btoa(JSON.stringify(attrs)),
+        [KEY_OPTIN]: btoa(JSON.stringify(attrs.optin)),
+      };
+      return Models.API.setUIData(keyValues);
     }
 
     export class UserOptIn {

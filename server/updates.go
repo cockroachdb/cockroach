@@ -21,7 +21,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -36,6 +39,8 @@ const baseReportingURL = `https://register.cockroachdb.com/api/report`
 const updateCheckFrequency = time.Hour * 24
 const updateCheckJitterSeconds = 120
 const updateCheckRetryFrequency = time.Hour
+
+const optinKey = "optin"
 
 type versionInfo struct {
 	Version string `json:"version"`
@@ -197,12 +202,26 @@ func (s *Server) checkForUpdates() {
 }
 
 func (s *Server) usageReportingEnabled() bool {
-	resp, err := s.db.Get(keys.UpdateCheckReportUsage)
+	// Grab the optin value from the database.
+	var ctx context.Context
+	req := &GetUIDataRequest{Keys: []string{optinKey}}
+	resp, err := s.admin.GetUIData(ctx, req)
 	if err != nil {
 		log.Warning(err)
 		return false
 	}
-	return resp.Exists() && resp.ValueInt() != 0
+
+	val, ok := resp.KeyValues[optinKey]
+	if !ok {
+		// Key wasn't found, so we opt out by default.
+		return false
+	}
+	optin, err := strconv.ParseBool(string(val.Value))
+	if err != nil {
+		log.Warningf("could not parse optin value (%v): %v", val.Value, err)
+		return false
+	}
+	return optin
 }
 
 func (s *Server) maybeReportUsage(running time.Duration) time.Duration {

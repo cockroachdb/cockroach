@@ -521,7 +521,7 @@ func TestAdminAPIUIData(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Do a two-way comparison. We can't use reflect.DeepEqual(), because
-		// resp.KeyValues and expKeyValues are different types.
+		// resp.KeyValues has timestamps and expKeyValues doesn't.
 		for key, actualVal := range resp.KeyValues {
 			if a, e := actualVal.Value, expKeyValues[key]; !bytes.Equal(a, e) {
 				t.Fatalf("key %s: value = %v, expected = %v", key, a, e)
