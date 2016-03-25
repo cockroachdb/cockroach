@@ -367,9 +367,13 @@ module Models {
       key: string;
     }
 
-    export interface GetUIDataResponse {
+    interface UIDataValue {
       value: string; // base64 encoded value
       last_updated: Timestamp;
+    }
+
+    export interface GetUIDataResponse {
+      key_values: {[key: string]: UIDataValue};
     }
   }
 }

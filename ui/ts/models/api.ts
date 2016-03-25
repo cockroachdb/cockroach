@@ -94,9 +94,14 @@ module Models {
       });
     }
 
-    export function getUIData(key: string): MithrilPromise<GetUIDataResponse> {
+    export function getUIData(keys: string[]): MithrilPromise<GetUIDataResponse> {
+      // Create the URL, which looks like this:
+      // /_admin/v1/uidata?keys=KEY1&keys=KEY2&...&keys=LAST_KEY
+      let queryStr: string = _.map(keys, function(key: string): string {
+        return "keys=" + encodeURIComponent(key);
+      }).join("&");
       return m.request<GetUIDataResponse>({
-        url: `/_admin/v1/uidata?key=${key}`,
+        url: "/_admin/v1/uidata?" + queryStr,
         config: Utils.Http.XHRConfig,
         background: true,
       });

@@ -19,6 +19,11 @@ module Models {
     export const UPDATES: string = "updates";
     export const LASTUPDATED: string = "lastUpdated";
 
+    const KEY_HELPUS: string = "helpus";
+    // The "server." prefix denotes that this key is shared with the server, so
+    // changes to this key must be synchronized with the server code.
+    const KEY_OPTIN: string = "server.optin-reporting";
+
     // Help Us flow is shown by default
     export function helpUsFlag(): boolean {
       return true;
@@ -38,10 +43,11 @@ module Models {
     }
 
     function getHelpUsData(): MithrilPromise<OptInAttributes> {
+      // Query the optin and helpus uidata and merge them into OptInAttributes.
       let d: MithrilDeferred<OptInAttributes> = m.deferred();
-      Models.API.getUIData("helpus").then((response: GetUIDataResponse): void => {
+      Models.API.getUIData([KEY_HELPUS]).then((response: GetUIDataResponse): void => {
         try {
-          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.value));
+          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[KEY_HELPUS].value));
           d.resolve(attributes);
         } catch (e) {
           d.reject(e);
@@ -53,7 +59,18 @@ module Models {
     }
 
     function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
-      return Models.API.setUIData({"helpus": btoa(JSON.stringify(attrs))});
+      // Clone "optin" into a separate key, so that the server can query that
+      // separately and cleanly. This is needed, because uidata is essentially
+      // an opaque cookie jar for the admin UI. KEY_OPTIN is a special case,
+      // because the server takes action based on the value for that key. So,
+      // cloning "optin" allows the server to read the data from a well-defined
+      // place while allowing the admin UI code to use uidata mostly
+      // independently of the server.
+      let keyValues: {[key: string]: string} = {
+        [KEY_HELPUS]: btoa(JSON.stringify(attrs)),
+        [KEY_OPTIN]: btoa(JSON.stringify(attrs.optin)),
+      };
+      return Models.API.setUIData(keyValues);
     }
 
     export class UserOptIn {
