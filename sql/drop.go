@@ -109,7 +109,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	}
 
 	// Log Drop Database event.
-	if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+	if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
 		EventLogDropDatabase,
 		int32(dbDesc.ID),
 		int32(p.evalCtx.NodeID),
@@ -202,7 +202,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewUErrorf("table %q does not exist", n.Names[i].Table())
 		}
 		// Log a Drop Table event for this table.
-		if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
 			EventLogDropTable,
 			int32(droppedDesc.ID),
 			int32(p.evalCtx.NodeID),

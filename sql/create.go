@@ -44,7 +44,7 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 	}
 	if created {
 		// Log Create Database event.
-		if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
 			int32(p.evalCtx.NodeID),
@@ -174,7 +174,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 
 	if created {
 		// Log Create Table event.
-		if pErr := MakeEventLogger(p.leaseMgr).insertEventRecord(p.txn,
+		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
 			EventLogCreateTable,
 			int32(desc.ID),
 			int32(p.evalCtx.NodeID),
