@@ -18,11 +18,7 @@ module Models {
     export const COMPANY: string = "company";
     export const UPDATES: string = "updates";
     export const LASTUPDATED: string = "lastUpdated";
-
-    const KEY_HELPUS: string = "helpus";
-    // NOTE: If KEY_OPTIN changes, the server updating code must be updated as
-    // well.
-    const KEY_OPTIN: string = "optin";
+    let optInFields: string[] = [];
 
     // Help Us flow is shown by default
     export function helpUsFlag(): boolean {
@@ -34,20 +30,50 @@ module Models {
      */
     export class OptInAttributes {
       email: string = "";
+      // NOTE: if the name of the "optin" field changes, the server usage
+      // reporting code must change too.
       optin: boolean = null; // Did the user opt in/out of reporting usage
       dismissed: number = null; // How many times did the user dismiss the banner/modal without opting in/out
       firstname: string = "";
       lastname: string = "";
       company: string = "";
       updates: boolean = null; // Did the user sign up for product/feature updates
+
+      // fields returns a list of non-function fields for this class.
+      static fields(): string[] {
+        if (optInFields.length === 0) {
+          let attrs: OptInAttributes = new OptInAttributes();
+          for (let p in attrs) {
+            if (attrs.hasOwnProperty(p) && !_.isFunction(attrs[p])) {
+              optInFields.push(p);
+            }
+          }
+        }
+        return optInFields;
+      }
+
+      // fromGetUIDataResponse returns a new OptInAttributes parsed from the
+      // given GetUIDataResponse. Any missing fields are silently ignored and
+      // remain at their default values.
+      static fromGetUIDataResponse(resp: GetUIDataResponse): OptInAttributes {
+        let attrs: OptInAttributes = new OptInAttributes();
+        for (let field of OptInAttributes.fields()) {
+          if (field in resp.key_values) {
+            attrs[field] = JSON.parse(atob(resp.key_values[field].value));
+          }
+        }
+        return attrs;
+      }
     }
 
     function getHelpUsData(): MithrilPromise<OptInAttributes> {
-      // Query the optin and helpus uidata and merge them into OptInAttributes.
+      // Query for all fields in OptInAttributes and merge them into a new
+      // OptInAttributes instance.
       let d: MithrilDeferred<OptInAttributes> = m.deferred();
-      Models.API.getUIData([KEY_HELPUS]).then((response: GetUIDataResponse): void => {
+      let keys: string[] = OptInAttributes.fields();
+      Models.API.getUIData(keys).then((response: GetUIDataResponse): void => {
         try {
-          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[KEY_HELPUS].value));
+          let attributes: OptInAttributes = OptInAttributes.fromGetUIDataResponse(response);
           d.resolve(attributes);
         } catch (e) {
           d.reject(e);
@@ -59,12 +85,13 @@ module Models {
     }
 
     function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
-      // Clone "optin" into a separate key, so that the server can query that
-      // separately and cleanly.
-      let keyValues: {[key: string]: string} = {
-        [KEY_HELPUS]: btoa(JSON.stringify(attrs)),
-        [KEY_OPTIN]: btoa(JSON.stringify(attrs.optin)),
-      };
+      // Store each field of OptInAttributes as a separate key.
+      let keyValues: {[key: string]: string} = {};
+      for (let fieldName in attrs) {
+        if (attrs.hasOwnProperty(fieldName)) {
+          keyValues[fieldName] = btoa(JSON.stringify(attrs[fieldName]));
+        }
+      }
       return Models.API.setUIData(keyValues);
     }
 
