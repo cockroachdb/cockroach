@@ -490,11 +490,21 @@ func TestAdminAPIUIData(t *testing.T) {
 
 	start := timeutil.Now()
 
-	mustSetUIData := func(key string, val []byte) {
+	mustSetUIData := func(keyValues map[string][]byte) {
 		var resp struct{}
-		b64Val := base64.StdEncoding.EncodeToString(val)
-		reqBody := fmt.Sprintf(`{"key": "%s", "value": "%s"}`, key, b64Val)
-		if err := apiPost(s, "uidata", reqBody, &resp); err != nil {
+		b64KeyValues := make(map[string]string)
+		for k, v := range keyValues {
+			b64KeyValues[k] = base64.StdEncoding.EncodeToString(v)
+		}
+		reqBody := map[string]map[string]string{
+			"key_values": b64KeyValues,
+		}
+		reqBodyBytes, err := json.Marshal(reqBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := apiPost(s, "uidata", string(reqBodyBytes), &resp); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -530,15 +540,29 @@ func TestAdminAPIUIData(t *testing.T) {
 	}
 
 	// Basic tests.
-	mustSetUIData("k1", []byte("v1"))
+	var badResp GetUIDataResponse
+	if err := apiGet(s, "uidata", &badResp); !testutils.IsError(err, "400 Bad Request") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mustSetUIData(map[string][]byte{"k1": []byte("v1")})
 	expectValueEquals("k1", []byte("v1"))
 	expectKeyNotFound("NON_EXISTENT_KEY")
+
+	mustSetUIData(map[string][]byte{
+		"k2": []byte("v2"),
+		"k3": []byte("v3"),
+	})
+	expectValueEquals("k2", []byte("v2"))
+	expectValueEquals("k3", []byte("v3"))
+	mustSetUIData(map[string][]byte{"k2": []byte("v2-updated")})
+	expectValueEquals("k2", []byte("v2-updated"))
 
 	// Write a binary blob with all possible byte values, then verify it.
 	var buf bytes.Buffer
 	for i := 0; i < 997; i++ {
 		buf.WriteByte(byte(i % 256))
 	}
-	mustSetUIData("bin", buf.Bytes())
+	mustSetUIData(map[string][]byte{"bin": buf.Bytes()})
 	expectValueEquals("bin", buf.Bytes())
 }
