@@ -341,6 +341,7 @@ func TestCommonMethods(t *testing.T) {
 		key{txnType, "CleanupOnError"}:            {},
 		key{txnType, "DebugName"}:                 {},
 		key{txnType, "InternalSetPriority"}:       {},
+		key{txnType, "IsFinalized"}:               {},
 		key{txnType, "NewBatch"}:                  {},
 		key{txnType, "Exec"}:                      {},
 		key{txnType, "Run"}:                       {},
