@@ -54,7 +54,9 @@ type idAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func newIDAllocator(idKey roachpb.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper) (*idAllocator, error) {
+func newIDAllocator(
+	idKey roachpb.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper,
+) (*idAllocator, error) {
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
 	if minID == 0 {

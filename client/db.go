@@ -263,7 +263,12 @@ func (db *DB) Inc(key interface{}, value int64) (KeyValue, *roachpb.Error) {
 	return runOneRow(db, b)
 }
 
-func (db *DB) scan(begin, end interface{}, maxRows int64, isReverse bool, readConsistency roachpb.ReadConsistencyType) ([]KeyValue, *roachpb.Error) {
+func (db *DB) scan(
+	begin, end interface{},
+	maxRows int64,
+	isReverse bool,
+	readConsistency roachpb.ReadConsistencyType,
+) ([]KeyValue, *roachpb.Error) {
 	b := db.NewBatch()
 	b.ReadConsistency = readConsistency
 	if !isReverse {

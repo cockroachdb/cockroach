@@ -505,7 +505,9 @@ func (t *tableState) acquireWait() {
 	<-acquiring
 }
 
-func (t *tableState) acquireNodeLease(txn *client.Txn, minVersion DescriptorVersion, store LeaseStore) (*LeaseState, *roachpb.Error) {
+func (t *tableState) acquireNodeLease(
+	txn *client.Txn, minVersion DescriptorVersion, store LeaseStore,
+) (*LeaseState, *roachpb.Error) {
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()

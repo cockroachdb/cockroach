@@ -94,7 +94,9 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 }
 
 // NewSchemaChangerForTesting only for tests.
-func NewSchemaChangerForTesting(tableID ID, mutationID MutationID, nodeID roachpb.NodeID, db client.DB, leaseMgr *LeaseManager) SchemaChanger {
+func NewSchemaChangerForTesting(
+	tableID ID, mutationID MutationID, nodeID roachpb.NodeID, db client.DB, leaseMgr *LeaseManager,
+) SchemaChanger {
 	return SchemaChanger{tableID: tableID, mutationID: mutationID, nodeID: nodeID, db: db, leaseMgr: leaseMgr}
 }
 
@@ -133,7 +135,9 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 	return lease, err
 }
 
-func (sc *SchemaChanger) findTableWithLease(txn *client.Txn, lease TableDescriptor_SchemaChangeLease) (*TableDescriptor, *roachpb.Error) {
+func (sc *SchemaChanger) findTableWithLease(
+	txn *client.Txn, lease TableDescriptor_SchemaChangeLease,
+) (*TableDescriptor, *roachpb.Error) {
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
@@ -163,7 +167,9 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) e
 }
 
 // ExtendLease for the current leaser.
-func (sc *SchemaChanger) ExtendLease(existingLease TableDescriptor_SchemaChangeLease) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+func (sc *SchemaChanger) ExtendLease(
+	existingLease TableDescriptor_SchemaChangeLease,
+) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
 	var lease TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		tableDesc, err := sc.findTableWithLease(txn, existingLease)

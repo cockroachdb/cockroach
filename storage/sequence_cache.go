@@ -134,7 +134,9 @@ func (sc *SequenceCache) GetAllTransactionID(e engine.Engine, txnID *uuid.UUID) 
 // Iterate walks through the sequence cache, invoking the given callback for
 // each unmarshaled entry with the key, the transaction ID and the decoded
 // entry.
-func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, *uuid.UUID, roachpb.SequenceCacheEntry)) {
+func (sc *SequenceCache) Iterate(
+	e engine.Engine, f func([]byte, *uuid.UUID, roachpb.SequenceCacheEntry),
+) {
 	_, _ = engine.MVCCIterate(e, sc.min, sc.max, roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
@@ -151,7 +153,12 @@ func (sc *SequenceCache) Iterate(e engine.Engine, f func([]byte, *uuid.UUID, roa
 		})
 }
 
-func copySeqCache(e engine.Engine, ms *engine.MVCCStats, srcID, dstID roachpb.RangeID, keyMin, keyMax engine.MVCCKey) (int, error) {
+func copySeqCache(
+	e engine.Engine,
+	ms *engine.MVCCStats,
+	srcID, dstID roachpb.RangeID,
+	keyMin, keyMax engine.MVCCKey,
+) (int, error) {
 	var scratch [64]byte
 	var count int
 	err := e.Iterate(keyMin, keyMax,
@@ -220,7 +227,15 @@ func (sc *SequenceCache) Del(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.
 }
 
 // Put writes a sequence number for the specified transaction ID.
-func (sc *SequenceCache) Put(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID, epoch, seq uint32, txnKey roachpb.Key, txnTS roachpb.Timestamp, pErr *roachpb.Error) error {
+func (sc *SequenceCache) Put(
+	e engine.Engine,
+	ms *engine.MVCCStats,
+	txnID *uuid.UUID,
+	epoch, seq uint32,
+	txnKey roachpb.Key,
+	txnTS roachpb.Timestamp,
+	pErr *roachpb.Error,
+) error {
 	if seq <= 0 || txnID == nil {
 		return errEmptyTxnID
 	}

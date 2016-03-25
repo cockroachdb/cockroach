@@ -581,7 +581,13 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	return c.executeStatements(portal.stmt.query, portal.params, portal.outFormats, false, limit)
 }
 
-func (c *v3Conn) executeStatements(stmts string, params []parser.Datum, formatCodes []formatCode, sendDescription bool, limit int32) error {
+func (c *v3Conn) executeStatements(
+	stmts string,
+	params []parser.Datum,
+	formatCodes []formatCode,
+	sendDescription bool,
+	limit int32,
+) error {
 	tracing.AnnotateTrace()
 	results := c.executor.ExecuteStatements(c.session, stmts, params)
 

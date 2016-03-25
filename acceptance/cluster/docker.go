@@ -104,7 +104,12 @@ func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
 // and must be started explicitly. Note that the passed-in hostConfig
 // will be augmented with the necessary settings to use the network
 // defined by l.createNetwork().
-func createContainer(l *LocalCluster, containerConfig container.Config, hostConfig container.HostConfig, containerName string) (*Container, error) {
+func createContainer(
+	l *LocalCluster,
+	containerConfig container.Config,
+	hostConfig container.HostConfig,
+	containerName string,
+) (*Container, error) {
 	hostConfig.NetworkMode = container.NetworkMode(l.networkID)
 	// Disable DNS search under the host machine's domain. This can
 	// catch upstream wildcard DNS matching and result in odd behavior.

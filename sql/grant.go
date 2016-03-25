@@ -22,7 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
-func (p *planner) changePrivileges(targets parser.TargetList, grantees parser.NameList, changePrivilege func(*PrivilegeDescriptor, string)) (planNode, *roachpb.Error) {
+func (p *planner) changePrivileges(
+	targets parser.TargetList,
+	grantees parser.NameList,
+	changePrivilege func(*PrivilegeDescriptor, string),
+) (planNode, *roachpb.Error) {
 	descriptors, err := p.getDescriptorsFromTargetList(targets)
 	if err != nil {
 		return nil, err

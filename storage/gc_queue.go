@@ -139,7 +139,14 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 // aborted, and in the second case we may have to resolve the intents success-
 // fully before GCing the entry. The transaction records which can be gc'ed are
 // returned separately and are not added to txnMap nor intentSpanMap.
-func processTransactionTable(snap engine.Engine, desc *roachpb.RangeDescriptor, txnMap map[uuid.UUID]*roachpb.Transaction, cutoff roachpb.Timestamp, infoMu *lockableGCInfo, resolveIntents resolveFunc) ([]roachpb.GCRequest_GCKey, error) {
+func processTransactionTable(
+	snap engine.Engine,
+	desc *roachpb.RangeDescriptor,
+	txnMap map[uuid.UUID]*roachpb.Transaction,
+	cutoff roachpb.Timestamp,
+	infoMu *lockableGCInfo,
+	resolveIntents resolveFunc,
+) ([]roachpb.GCRequest_GCKey, error) {
 	infoMu.Lock()
 	defer infoMu.Unlock()
 
@@ -221,7 +228,14 @@ func processTransactionTable(snap engine.Engine, desc *roachpb.RangeDescriptor, 
 // pushing the transactions (in cleanup mode) for those entries which appear
 // to be old enough. In case the transaction indicates that it's terminated,
 // the sequence cache keys are included in the result.
-func processSequenceCache(snap engine.Engine, rangeID roachpb.RangeID, now, cutoff roachpb.Timestamp, prevTxns map[uuid.UUID]*roachpb.Transaction, infoMu *lockableGCInfo, pushTxn pushFunc) []roachpb.GCRequest_GCKey {
+func processSequenceCache(
+	snap engine.Engine,
+	rangeID roachpb.RangeID,
+	now, cutoff roachpb.Timestamp,
+	prevTxns map[uuid.UUID]*roachpb.Transaction,
+	infoMu *lockableGCInfo,
+	pushTxn pushFunc,
+) []roachpb.GCRequest_GCKey {
 	txns := make(map[uuid.UUID]*roachpb.Transaction)
 	idToKeys := make(map[uuid.UUID][]roachpb.GCRequest_GCKey)
 	seqCache := NewSequenceCache(rangeID)

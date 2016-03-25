@@ -323,7 +323,9 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.R
 // is perfectly fine, as other stores in the cluster will also be
 // doing their probabilistic best to rebalance. This helps prevent
 // a stampeding herd targeting an abnormally under-utilized store.
-func (a Allocator) RebalanceTarget(storeID roachpb.StoreID, required roachpb.Attributes, existing []roachpb.ReplicaDescriptor) *roachpb.StoreDescriptor {
+func (a Allocator) RebalanceTarget(
+	storeID roachpb.StoreID, required roachpb.Attributes, existing []roachpb.ReplicaDescriptor,
+) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil
 	}

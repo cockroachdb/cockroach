@@ -195,7 +195,14 @@ var _ client.Sender = &TxnCoordSender{}
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
-func NewTxnCoordSender(wrapped client.Sender, clock *hlc.Clock, linearizable bool, tracer opentracing.Tracer, stopper *stop.Stopper, txnMetrics *TxnMetrics) *TxnCoordSender {
+func NewTxnCoordSender(
+	wrapped client.Sender,
+	clock *hlc.Clock,
+	linearizable bool,
+	tracer opentracing.Tracer,
+	stopper *stop.Stopper,
+	txnMetrics *TxnMetrics,
+) *TxnCoordSender {
 	if tracer == nil {
 		panic("nil tracer supplied")
 	}
@@ -681,7 +688,9 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 // error cases, applying those updates to the corresponding txnMeta
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
-func (tc *TxnCoordSender) updateState(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+func (tc *TxnCoordSender) updateState(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) *roachpb.Error {
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	if pErr == nil {
