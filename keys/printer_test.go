@@ -26,6 +26,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -33,6 +34,9 @@ import (
 func TestPrettyPrint(t *testing.T) {
 
 	tm, _ := time.Parse(time.UnixDate, "Sat Mar  7 11:06:39 UTC 2015")
+	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
+	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
+	durationDesc, _ := encoding.EncodeDurationDescending(nil, duration)
 	txnID := uuid.NewV4()
 
 	testCases := []struct {
@@ -130,6 +134,12 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeDecimalDescending(nil, inf.NewDec(1234, 2)))),
 			"/Table/42/-12.34"},
+		{makeKey(MakeTablePrefix(42),
+			roachpb.RKey(durationAsc)),
+			"/Table/42/1m1d1s"},
+		{makeKey(MakeTablePrefix(42),
+			roachpb.RKey(durationDesc)),
+			"/Table/42/-2m-2d743h59m58.999999999s"},
 
 		// others
 		{makeKey([]byte("")), "/Min"},

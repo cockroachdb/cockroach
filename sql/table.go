@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -454,9 +455,9 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 		return encoding.EncodeTimeDescending(b, t.Time), nil
 	case parser.DInterval:
 		if dir == encoding.Ascending {
-			return encoding.EncodeVarintAscending(b, int64(t.Duration)), nil
+			return encoding.EncodeDurationAscending(b, t.Duration)
 		}
-		return encoding.EncodeVarintDescending(b, int64(t.Duration)), nil
+		return encoding.EncodeDurationDescending(b, t.Duration)
 	}
 	return nil, util.Errorf("unable to encode table key: %T", val)
 }
@@ -641,13 +642,13 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		}
 		return parser.DTimestamp{Time: t}, rkey, err
 	case parser.DInterval:
-		var d int64
+		var d duration.Duration
 		if dir == encoding.Ascending {
-			rkey, d, err = encoding.DecodeVarintAscending(key)
+			rkey, d, err = encoding.DecodeDurationAscending(key)
 		} else {
-			rkey, d, err = encoding.DecodeVarintDescending(key)
+			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
-		return parser.DInterval{Duration: time.Duration(d)}, rkey, err
+		return parser.DInterval{Duration: d}, rkey, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
@@ -868,11 +869,11 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		}
 		return parser.DTimestamp{Time: v}, nil
 	case ColumnType_INTERVAL:
-		v, err := value.GetInt()
+		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DInterval{Duration: time.Duration(v)}, nil
+		return parser.DInterval{Duration: d}, nil
 	default:
 		return nil, util.Errorf("unsupported column type: %s", kind)
 	}

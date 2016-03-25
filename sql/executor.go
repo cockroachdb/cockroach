@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -999,7 +1000,7 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	case time.Time:
 		return parser.DTimestamp{Time: t}, true
 	case time.Duration:
-		return parser.DInterval{Duration: t}, true
+		return parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}, true
 	case *inf.Dec:
 		dd := &parser.DDecimal{}
 		dd.Set(t)
