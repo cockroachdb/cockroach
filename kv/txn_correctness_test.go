@@ -216,7 +216,7 @@ func writeCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 
 // commitCmd commits the transaction.
 func commitCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
-	return txn.CommitNoCleanup()
+	return txn.Commit()
 }
 
 type cmdSpec struct {

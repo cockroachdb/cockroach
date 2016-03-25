@@ -527,7 +527,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 		if pErr := txn.Put("a", "b"); pErr != nil {
 			t.Fatalf("put failed: %s", pErr)
 		}
-		if pErr := txn.Commit(); pErr == nil {
+		if pErr := txn.CommitOrCleanup(); pErr == nil {
 			t.Fatalf("unexpected commit success")
 		}
 
@@ -561,7 +561,7 @@ func TestTransactionStatus(t *testing.T) {
 				}
 			}
 			if commit {
-				if pErr := txn.Commit(); pErr != nil {
+				if pErr := txn.CommitOrCleanup(); pErr != nil {
 					t.Fatal(pErr)
 				}
 				if a, e := txn.Proto.Status, roachpb.COMMITTED; a != e {

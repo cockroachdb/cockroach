@@ -373,7 +373,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			switch i {
 			case 0:
 				// No deadline.
-				pErr = txn.Commit()
+				pErr = txn.CommitOrCleanup()
 			case 1:
 				// Past deadline.
 				pErr = txn.CommitBy(txn.Proto.Timestamp.Prev())
@@ -468,14 +468,14 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
-	pErr := txn1.Commit()
+	pErr := txn1.CommitOrCleanup()
 	switch pErr.GetDetail().(type) {
 	case *roachpb.TransactionAbortedError:
 		// Expected
 	default:
 		t.Fatalf("expected transaction aborted error; got %s", pErr)
 	}
-	if pErr := txn2.Commit(); pErr != nil {
+	if pErr := txn2.CommitOrCleanup(); pErr != nil {
 		t.Fatal(pErr)
 	}
 	verifyCleanup(key, s.Sender, s.Eng, t)
@@ -985,7 +985,7 @@ func TestTxnCommit(t *testing.T) {
 			return pErr
 		}
 
-		if pErr := txn.Commit(); pErr != nil {
+		if pErr := txn.CommitOrCleanup(); pErr != nil {
 			return pErr
 		}
 
@@ -1134,7 +1134,7 @@ func TestTxnRestartCount(t *testing.T) {
 	}
 
 	// Commit (should cause restart metric to increase).
-	pErr := txn.Commit()
+	pErr := txn.CommitOrCleanup()
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Errorf("expected transaction retry err; got %s", pErr)
 	}

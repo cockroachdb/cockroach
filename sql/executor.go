@@ -838,7 +838,7 @@ func commitSQLTransaction(txnState *txnState, p *planner,
 	if commitType == commit {
 		txnState.commitSeen = true
 	}
-	pErr := txnState.txn.CommitNoCleanup()
+	pErr := txnState.txn.Commit()
 	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
 	if pErr != nil {
 		txnState.updateStateAndCleanupOnErr(pErr, e)
