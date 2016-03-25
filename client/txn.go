@@ -109,6 +109,8 @@ type Txn struct {
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
 	retrying            bool
+	// see IsFinalized()
+	finalized bool
 }
 
 // NewTxn returns a new txn.
@@ -120,6 +122,13 @@ func NewTxn(ctx context.Context, db DB) *Txn {
 	}
 	txn.db.sender = (*txnSender)(txn)
 	return txn
+}
+
+// IsFinalized returns true if this Txn has been committed or rolled back and
+// should therefore not be used for any more KV operations.
+// Note that a txn is finalized state when Rollback() returns an error.
+func (txn *Txn) IsFinalized() bool {
+	return txn.finalized
 }
 
 // SetDebugName sets the debug name associated with the transaction which will
@@ -346,7 +355,11 @@ func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Erro
 }
 
 func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
-	return txn.sendEndTxnReq(true /* commit */, deadline)
+	pErr := txn.sendEndTxnReq(true /* commit */, deadline)
+	if pErr == nil {
+		txn.finalized = true
+	}
+	return pErr
 }
 
 // CleanupOnError cleans up the transaction as a result of an error.
@@ -371,6 +384,9 @@ func (txn *Txn) CommitNoCleanup() *roachpb.Error {
 // optional, but more efficient than relying on the implicit commit
 // performed when the transaction function returns without error.
 // The batch must be created by this transaction.
+// If an error is not returned, txn is considered finalized and should not be
+// used to send more commands. If an error is returned, it's the caller's
+// responsibility to cleanup.
 func (txn *Txn) CommitInBatch(b *Batch) *roachpb.Error {
 	_, pErr := txn.CommitInBatchWithResponse(b)
 	return pErr
@@ -384,14 +400,22 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 	}
 	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemConfigTrigger()))
 	b.initResult(1, 0, nil)
-	return txn.RunWithResponse(b)
+	resp, pErr := txn.RunWithResponse(b)
+	if pErr == nil {
+		txn.finalized = true
+	}
+	return resp, pErr
 }
 
 // Commit sends an EndTransactionRequest with Commit=true.
+// txn should not be used to send any more commands after this call.
 func (txn *Txn) Commit() *roachpb.Error {
 	pErr := txn.commit(nil)
 	if pErr != nil {
 		txn.CleanupOnError(pErr)
+	}
+	if !txn.IsFinalized() {
+		panic("Commit() failed to move txn to a final state")
 	}
 	return pErr
 }
@@ -407,8 +431,12 @@ func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
+// The txn's status is set to ABORTED in case of error. txn is
+// considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() *roachpb.Error {
-	return txn.sendEndTxnReq(false /* commit */, nil)
+	err := txn.sendEndTxnReq(false /* commit */, nil)
+	txn.finalized = true
+	return err
 }
 
 func (txn *Txn) sendEndTxnReq(commit bool, deadline *roachpb.Timestamp) *roachpb.Error {
@@ -548,8 +576,9 @@ RetryLoop:
 func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsistencyType, reqs ...roachpb.Request) (
 	*roachpb.BatchResponse, *roachpb.Error) {
 
-	if txn.Proto.Status != roachpb.PENDING {
-		return nil, roachpb.NewErrorf("attempting to use %s transaction", txn.Proto.Status)
+	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
+		return nil, roachpb.NewErrorf(
+			"attempting to use transaction with wrong status or finalized: ", txn.Proto.Status)
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
@@ -620,6 +649,7 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 		} else {
 			txn.Proto.Status = roachpb.ABORTED
 		}
+		txn.finalized = true
 	}
 
 	// If we inserted a begin transaction request, remove it here.
