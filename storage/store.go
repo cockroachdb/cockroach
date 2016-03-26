@@ -120,7 +120,14 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 		return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 	}
 	{
-		sAddr, eAddr := keys.Addr(start), keys.Addr(end)
+		sAddr, err := keys.Addr(start)
+		if err != nil {
+			return err
+		}
+		eAddr, err := keys.Addr(end)
+		if err != nil {
+			return err
+		}
 		if !sAddr.Less(eAddr) {
 			return util.Errorf("end key %q must be greater than start %q", end, start)
 		}
@@ -1103,7 +1110,11 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	// Range addressing for meta1.
-	meta1Key := keys.RangeMetaKey(keys.Addr(meta2Key))
+	meta2KeyAddr, err := keys.Addr(meta2Key)
+	if err != nil {
+		return err
+	}
+	meta1Key := keys.RangeMetaKey(meta2KeyAddr)
 	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}

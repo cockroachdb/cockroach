@@ -696,7 +696,10 @@ func (r *Replica) RangeLookup(
 ) (roachpb.RangeLookupResponse, []roachpb.Intent, error) {
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
-	key := keys.Addr(args.Key)
+	key, err := keys.Addr(args.Key)
+	if err != nil {
+		return reply, nil, err
+	}
 	if !key.Equal(args.Key) {
 		return reply, nil, util.Errorf("illegal lookup of range-local key")
 	}
@@ -772,7 +775,11 @@ func (r *Replica) RangeLookup(
 			if err := v.GetProto(&r); err != nil {
 				return nil, err
 			}
-			if !keys.Addr(keys.RangeMetaKey(r.StartKey)).Less(key) {
+			startKeyAddr, err := keys.Addr(keys.RangeMetaKey(r.StartKey))
+			if err != nil {
+				return nil, err
+			}
+			if !startKeyAddr.Less(key) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
 				return nil, nil
@@ -781,7 +788,11 @@ func (r *Replica) RangeLookup(
 			return &r, nil
 		}
 
-		if key.Less(keys.Addr(keys.Meta2KeyMax)) {
+		meta2KeyMaxAddr, err := keys.Addr(keys.Meta2KeyMax)
+		if err != nil {
+			return reply, nil, err
+		}
+		if key.Less(meta2KeyMaxAddr) {
 			startKey, endKey, err := keys.MetaScanBounds(key)
 			if err != nil {
 				return reply, nil, err
@@ -1653,7 +1664,10 @@ func (r *Replica) AdminSplit(
 			return reply, roachpb.NewErrorf("cannot split range at key %s: %v", splitKey, err)
 		}
 
-		splitKey = keys.Addr(foundSplitKey)
+		splitKey, err = keys.Addr(foundSplitKey)
+		if err != nil {
+			return reply, roachpb.NewError(err)
+		}
 		if !splitKey.Equal(foundSplitKey) {
 			return reply, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
 		}

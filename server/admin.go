@@ -468,9 +468,15 @@ func (s *adminServer) TableDetails(_ context.Context, req *TableDetailsRequest) 
 		}); pErr != nil {
 			return nil, s.serverError(pErr.GoError())
 		}
-		tableRSpan := roachpb.RSpan{
-			Key:    keys.Addr(tableSpan.Key),
-			EndKey: keys.Addr(tableSpan.EndKey),
+		tableRSpan := roachpb.RSpan{}
+		var err error
+		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+		if err != nil {
+			return nil, s.serverError(err)
 		}
 		rangeCount, pErr := s.distSender.CountRanges(tableRSpan)
 		if pErr != nil {

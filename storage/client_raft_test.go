@@ -246,8 +246,14 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
 	util.SucceedsSoon(t, func() error {
-		meta2 := keys.Addr(keys.RangeMetaKey(roachpb.RKeyMax))
-		meta1 := keys.Addr(keys.RangeMetaKey(meta2))
+		meta2, err := keys.Addr(keys.RangeMetaKey(roachpb.RKeyMax))
+		if err != nil {
+			t.Fatal(err)
+		}
+		meta1, err := keys.Addr(keys.RangeMetaKey(meta2))
+		if err != nil {
+			t.Fatal(err)
+		}
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
 			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
@@ -626,7 +632,11 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 		}
 	}
 	// Replicate the new range to all five stores.
-	replica := store0.LookupReplica(keys.Addr(rightKey), nil)
+	rightKeyAddr, err := keys.Addr(rightKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replica := store0.LookupReplica(rightKeyAddr, nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 3, 4)
 
@@ -648,7 +658,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 			t.Fatalf("Failed to achieve proper replication within 10 seconds")
 		case <-time.After(10 * time.Millisecond):
 			mtc.expireLeaderLeases()
-			rangeDesc := getRangeMetadata(keys.Addr(rightKey), mtc, t)
+			rangeDesc := getRangeMetadata(rightKeyAddr, mtc, t)
 			if count := len(rangeDesc.Replicas); count < 3 {
 				t.Fatalf("Removed too many replicas; expected at least 3 replicas, found %d", count)
 			} else if count == 3 {

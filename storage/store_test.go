@@ -90,7 +90,10 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.
-	rs := keys.Range(ba)
+	rs, err := keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	rng := db.store.LookupReplica(rs.Key, rs.EndKey)
 	if rng == nil {
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
@@ -1737,7 +1740,11 @@ func TestStoreBadRequests(t *testing.T) {
 	args4 := scanArgs(roachpb.Key("b"), roachpb.Key("a"))
 
 	args5 := scanArgs(roachpb.RKeyMin, roachpb.Key("a"))
-	args6 := scanArgs(keys.RangeTreeNodeKey(keys.Addr(keys.RangeTreeRoot)), roachpb.Key("a"))
+	rangeTreeRootAddr, err := keys.Addr(keys.RangeTreeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args6 := scanArgs(keys.RangeTreeNodeKey(rangeTreeRootAddr), roachpb.Key("a"))
 
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)
 	tArgs1, _ := heartbeatArgs(txn)

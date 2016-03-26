@@ -52,7 +52,11 @@ func meta2Key(key roachpb.RKey) []byte {
 }
 
 func metaKey(key roachpb.RKey) []byte {
-	return keys.Addr(keys.RangeMetaKey(key))
+	rk, err := keys.Addr(keys.RangeMetaKey(key))
+	if err != nil {
+		panic(err)
+	}
+	return rk
 }
 
 // TestUpdateRangeAddressing verifies range addressing records are
