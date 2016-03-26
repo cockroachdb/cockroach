@@ -614,7 +614,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			ctx.TestingKnobs.TestingCommandFilter =
 				func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
-						return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
+						return roachpb.NewError(util.Errorf("boom"))
 					}
 					return nil
 				}
