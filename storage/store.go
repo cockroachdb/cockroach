@@ -1554,13 +1554,13 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 				pErr.OriginNode = ba.Replica.NodeID
 				txn := pErr.GetTxn()
 				if txn == nil {
-					txn = &roachpb.Transaction{}
+					txn = ba.Txn
 				}
 				txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 				pErr.SetTxn(txn)
 			} else {
 				if br.Txn == nil {
-					br.Txn = &roachpb.Transaction{}
+					br.Txn = ba.Txn
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 				// Update our clock with the outgoing response txn timestamp.

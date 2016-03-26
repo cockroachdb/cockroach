@@ -67,9 +67,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
 		filterArgs := storageutils.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
-		err := filter(filterArgs)
-		if err != nil {
-			pErr := roachpb.NewErrorWithTxn(err, h.Txn)
+		if pErr := filter(filterArgs); pErr != nil {
 			log.Infof("test injecting error: %s", pErr)
 			return nil, nil, pErr
 		}

@@ -579,8 +579,8 @@ func TestStoreObservedTimestamp(t *testing.T) {
 					t.Fatal("expected an error")
 				}
 				txn := pErr.GetTxn()
-				if txn == nil {
-					t.Fatalf("expected transaction in %s", pErr)
+				if txn == nil || txn.ID == nil {
+					t.Fatalf("expected nontrivial transaction in %s", pErr)
 				}
 				if ts, _ := txn.GetObservedTimestamp(desc.NodeID); ts.WallTime != wallTime {
 					t.Fatalf("unexpected observed timestamps, expected %d->%d but got map %+v",
@@ -598,7 +598,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 					t.Fatal(pErr)
 				}
 				txn := pReply.Header().Txn
-				if txn == nil {
+				if txn == nil || txn.ID == nil {
 					t.Fatal("expected transactional response")
 				}
 				obs, _ := txn.GetObservedTimestamp(desc.NodeID)
@@ -612,9 +612,9 @@ func TestStoreObservedTimestamp(t *testing.T) {
 		func() {
 			ctx := TestStoreContext()
 			ctx.TestingKnobs.TestingCommandFilter =
-				func(filterArgs storageutils.FilterArgs) error {
+				func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
-						return fmt.Errorf("boom")
+						return roachpb.NewError(util.Errorf("boom"))
 					}
 					return nil
 				}
@@ -674,9 +674,9 @@ func TestStoreAnnotateNow(t *testing.T) {
 			func() {
 				ctx := TestStoreContext()
 				ctx.TestingKnobs.TestingCommandFilter =
-					func(filterArgs storageutils.FilterArgs) error {
+					func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 						if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
-							return fmt.Errorf("boom")
+							return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
 						}
 						return nil
 					}
@@ -1079,13 +1079,13 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	var stopper *stop.Stopper
 	ctx := TestStoreContext()
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) error {
+		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
 				return nil
 			}
 			if exp, act := mc.UnixNano(), pr.PushTo.WallTime; exp > act {
-				return fmt.Errorf("expected PushTo >= WallTime, but got %d < %d:\n%+v", act, exp, pr)
+				return roachpb.NewError(fmt.Errorf("expected PushTo >= WallTime, but got %d < %d:\n%+v", act, exp, pr))
 			}
 			return nil
 		}
@@ -1551,7 +1551,7 @@ func TestStoreScanIntents(t *testing.T) {
 	countPtr := &count
 
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) error {
+		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ScanRequest); ok {
 				atomic.AddInt32(countPtr, 1)
 			}
@@ -1668,10 +1668,10 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	intercept.Store(true)
 	ctx := TestStoreContext()
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) error {
+		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
 			if ok && intercept.Load().(bool) {
-				return util.Errorf("error on purpose")
+				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 			return nil
 		}
