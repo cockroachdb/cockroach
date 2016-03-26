@@ -379,11 +379,11 @@ func sequenceCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roach
 	var err error
 	input = mustShiftSlash(input)
 	_, input = mustShift(input[:len(input)-1])
+	if len(input) != len(uuid.EmptyUUID.String()) {
+		panic(&errUglifyUnsupported{errors.New("epoch or sequence not supported")})
+	}
 	id, err := uuid.FromString(input)
-	if err != nil || len(input) != uuid.EmptyUUID.Size() {
-		if err == nil {
-			err = errors.New("epoch/sequence not supported")
-		}
+	if err != nil {
 		panic(&errUglifyUnsupported{err})
 	}
 	return "", SequenceCacheKeyPrefix(rangeID, id)
