@@ -355,12 +355,17 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	g, stopper := gossipForTest(t)
 	defer stopper.Stop()
 
+	dataMaxAddr, err := keys.Addr(keys.SystemConfigTableDataMax)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// This range can never be split due to zone configs boundaries.
 	neverSplits := &Replica{RangeID: 1}
 	if err := neverSplits.setDesc(&roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
-		EndKey:   keys.Addr(keys.SystemConfigTableDataMax),
+		EndKey:   dataMaxAddr,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +374,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	willSplit := &Replica{RangeID: 2}
 	if err := willSplit.setDesc(&roachpb.RangeDescriptor{
 		RangeID:  2,
-		StartKey: keys.Addr(keys.SystemConfigTableDataMax),
+		StartKey: dataMaxAddr,
 		EndKey:   roachpb.RKeyMax,
 	}); err != nil {
 		t.Fatal(err)
