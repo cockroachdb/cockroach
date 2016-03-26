@@ -52,13 +52,13 @@ func (f *FilterArgs) InRaftCmd() bool {
 // nil to continue with regular processing or non-nil to terminate processing
 // with the returned error. Note that in a multi-replica test this filter will
 // be run once for each replica and must produce consistent results each time.
-type ReplicaCommandFilter func(args FilterArgs) error
+type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
 
 // ReplayProtectionFilterWrapper wraps a CommandFilter and assures protection
 // from Raft replays.
 type ReplayProtectionFilterWrapper struct {
 	sync.RWMutex
-	processedCommands map[raftCmdIDAndIndex]error
+	processedCommands map[raftCmdIDAndIndex]*roachpb.Error
 	filter            ReplicaCommandFilter
 }
 
@@ -67,14 +67,14 @@ type ReplayProtectionFilterWrapper struct {
 func WrapFilterForReplayProtection(
 	filter ReplicaCommandFilter) ReplicaCommandFilter {
 	wrapper := ReplayProtectionFilterWrapper{
-		processedCommands: make(map[raftCmdIDAndIndex]error),
+		processedCommands: make(map[raftCmdIDAndIndex]*roachpb.Error),
 		filter:            filter,
 	}
 	return wrapper.run
 }
 
 // run executes the wrapped filter.
-func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) error {
+func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) *roachpb.Error {
 
 	c.RLock()
 	defer c.RUnlock()
@@ -87,11 +87,11 @@ func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) error {
 		}
 	}
 
-	err := c.filter(args)
+	pErr := c.filter(args)
 
 	if args.InRaftCmd() {
-		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = err
+		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = pErr
 	}
 
-	return err
+	return pErr
 }

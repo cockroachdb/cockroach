@@ -507,12 +507,13 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	ctx := server.NewTestContext()
 	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
-		func(fArgs storageutils.FilterArgs) error {
+		func(fArgs storageutils.FilterArgs) *roachpb.Error {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
-					return roachpb.NewReadWithinUncertaintyIntervalError(
-						roachpb.ZeroTimestamp, roachpb.ZeroTimestamp)
+					z := roachpb.ZeroTimestamp
+					pErr := roachpb.NewReadWithinUncertaintyIntervalError(z, z)
+					return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
 				}
 			}
 			return nil
