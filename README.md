@@ -18,7 +18,7 @@
 
 CockroachDB is a distributed SQL database built on a transactional and strongly-consistent key-value store. It **scales** horizontally; **survives** disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention; supports **strongly-consistent** ACID transactions; and provides a familiar **SQL** API for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://www.cockroachlabs.com/docs/frequently-asked-questions.html), [documentation](https://www.cockroachlabs.com/docs), and [design overview](#design-overview).
+For more details, see our [FAQ](https://www.cockroachlabs.com/docs/frequently-asked-questions.html), [documentation](https://www.cockroachlabs.com/docs), and [design overview](#overview).
 
 ## Status
 
