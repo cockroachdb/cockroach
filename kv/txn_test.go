@@ -275,6 +275,100 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	}
 }
 
+// TestPriorityRatchetOnAbortOrPush verifies that the priority of
+// a transaction is ratcheted by successive aborts or pushes. In
+// particular, we want to ensure ratcheted priorities when the txn
+// discovers it's been aborted or pushed through a poisoned sequence
+// cache. This happens when a concurrent writer aborts an intent or a
+// concurrent reader pushes an intent.
+func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	const pusheePri = 1
+	const pusherPri = 10 // pusher will win
+
+	pushByReading := func(key roachpb.Key) {
+		if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+			txn.InternalSetPriority(pusherPri)
+			_, pErr := txn.Get(key)
+			return pErr
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+	abortByWriting := func(key roachpb.Key) {
+		if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+			txn.InternalSetPriority(pusherPri)
+			return txn.Put(key, "foo")
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Try all combinations of read/write and snapshot/serializable isolation.
+	for _, read := range []bool{true, false} {
+		for _, iso := range []roachpb.IsolationType{roachpb.SNAPSHOT, roachpb.SERIALIZABLE} {
+			var iteration int
+			if pErr := s.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+				defer func() { iteration++ }()
+				key := roachpb.Key(fmt.Sprintf("read=%t, iso=%s", read, iso))
+
+				// Only set our priority on first try.
+				if iteration == 0 {
+					txn.InternalSetPriority(pusheePri)
+				}
+				if err := txn.SetIsolation(iso); err != nil {
+					t.Fatal(err)
+				}
+
+				// Write to lay down an intent (this will send the begin
+				// transaction which gets the updated priority).
+				if pErr := txn.Put(key, "bar"); pErr != nil {
+					return pErr
+				}
+
+				if iteration == 1 {
+					// Verify our priority has ratcheted to one less than the pusher's priority
+					if pri := txn.Proto.Priority; pri != pusherPri-1 {
+						t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, pusherPri-1, pri)
+					}
+					return nil
+				}
+
+				// Now simulate a concurrent reader or writer. Our txn will
+				// either be pushed or aborted. Then issue a read and verify
+				// sequence cache error.
+				var pErr *roachpb.Error
+				if read {
+					pushByReading(key)
+					_, pErr = txn.Get(key)
+					if iso == roachpb.SNAPSHOT {
+						if pErr != nil {
+							t.Fatalf("%s: expected no error; got %s", key, pErr)
+						}
+					} else {
+						if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+							t.Fatalf("%s: expected transaction retry error; got %s", key, pErr)
+						}
+					}
+				} else {
+					abortByWriting(key)
+					_, pErr = txn.Get(key)
+					if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
+						t.Fatalf("%s: expected transaction aborted error; got %s", key, pErr)
+					}
+				}
+
+				return pErr
+			}); pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
+	}
+}
+
 // disableOwnNodeCertain is used in tests which want to verify uncertainty
 // related logic on single-node installations. In regular operation, trans-
 // actional requests automatically have the "own" NodeID marked as free from

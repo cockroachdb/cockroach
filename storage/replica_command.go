@@ -605,7 +605,8 @@ func (r *Replica) EndTransaction(
 	// BeginTransaction, any push will immediately succeed as a missing
 	// txn record on push sets the transaction to aborted. In both
 	// cases, the txn will be GCd on the slow path.
-	return reply, externalIntents, r.clearSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
+	err := r.clearSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
+	return reply, externalIntents, err
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
@@ -1173,8 +1174,7 @@ func (r *Replica) clearSequenceCache(
 	}
 
 	// The snake bites.
-	return r.sequence.Put(batch, ms, txn.ID, txn.Epoch, poison,
-		txn.Key, txn.Timestamp, nil)
+	return r.sequence.Put(batch, ms, txn.ID, txn.Epoch, poison, txn.Key, txn.Timestamp, txn.Priority, nil)
 }
 
 // ResolveIntent resolves a write intent from the specified key

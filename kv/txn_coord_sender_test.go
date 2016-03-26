@@ -564,7 +564,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// the next attempt.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{},
 				&roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: plus20}, Priority: 10,
+					TxnMeta: roachpb.TxnMeta{Timestamp: plus20, Priority: 10},
 				}),
 			expPri: 10,
 		},
@@ -573,8 +573,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// Additionally, priority ratchets up to just below the pusher's.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 				PusheeTxn: roachpb.Transaction{
-					TxnMeta:  roachpb.TxnMeta{Timestamp: plus10},
-					Priority: int32(10)},
+					TxnMeta: roachpb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
+				},
 			},
 				&roachpb.Transaction{}),
 			expEpoch:  1,
@@ -586,7 +586,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On retry, restart with new epoch, timestamp and priority.
 			pErr: roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{},
 				&roachpb.Transaction{
-					TxnMeta: roachpb.TxnMeta{Timestamp: plus10}, Priority: int32(10)}),
+					TxnMeta: roachpb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
+				},
+			),
 			expEpoch:  1,
 			expPri:    10,
 			expTS:     plus10,

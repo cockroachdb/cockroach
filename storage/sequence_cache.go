@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Tobias Schottdorf (tobias@cockroachlabs.com)
 
 package storage
 
@@ -42,7 +42,7 @@ const (
 var errEmptyTxnID = errors.New("empty Transaction ID used in sequence cache")
 
 // The SequenceCache provides idempotence for request retries. Each
-// transactional request to a range specifies an Transaction ID and sequence number
+// transactional request to a range specifies a Transaction ID and sequence number
 // which uniquely identifies a client command. After commands have
 // been replicated via Raft, they are executed against the state
 // machine and the results are stored in the SequenceCache.
@@ -234,6 +234,7 @@ func (sc *SequenceCache) Put(
 	epoch, seq uint32,
 	txnKey roachpb.Key,
 	txnTS roachpb.Timestamp,
+	txnPri int32,
 	pErr *roachpb.Error,
 ) error {
 	if seq <= 0 || txnID == nil {
@@ -245,7 +246,7 @@ func (sc *SequenceCache) Put(
 
 	// Write the response value to the engine.
 	key := keys.SequenceCacheKey(sc.rangeID, txnID, epoch, seq)
-	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS}
+	sc.scratchEntry = roachpb.SequenceCacheEntry{Key: txnKey, Timestamp: txnTS, Priority: txnPri}
 	return engine.MVCCPutProto(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, &sc.scratchEntry)
 }
 
