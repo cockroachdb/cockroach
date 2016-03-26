@@ -935,6 +935,9 @@ func mvccPutInternal(
 	}
 	// Handle inline put.
 	if putIsInline {
+		if txn != nil {
+			return util.Errorf("%q: inline writes not allowed within transactions", metaKey)
+		}
 		var metaKeySize, metaValSize int64
 		if value, err = maybeGetValue(ok, timestamp); err != nil {
 			return err

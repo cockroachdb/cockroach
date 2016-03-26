@@ -611,7 +611,14 @@ func (n *Node) writeSummaries() error {
 		nodeStatus := n.recorder.GetStatusSummary()
 		if nodeStatus != nil {
 			key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
-			if pErr := n.ctx.DB.Put(key, nodeStatus); pErr != nil {
+			// We use PutInline to store only a single version of the node
+			// status. There's not much point in keeping the historical
+			// versions as we keep all of the constituent data as
+			// timeseries. Further, due to the size of the build info in the
+			// node status, writing one of these every 10s will generate
+			// more versions than will easily fit into a range over the
+			// course of a day.
+			if pErr := n.ctx.DB.PutInline(key, nodeStatus); pErr != nil {
 				err = pErr.GoError()
 				return
 			}

@@ -697,6 +697,38 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	}
 }
 
+func TestMVCCInlineWithTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Put an inline value.
+	if err := MVCCPut(engine, nil, testKey1, roachpb.ZeroTimestamp, value1, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now verify inline get.
+	value, _, err := MVCCGet(engine, testKey1, roachpb.ZeroTimestamp, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(value1, *value) {
+		t.Errorf("the inline value should be %s; got %s", value1, *value)
+	}
+
+	// Verify inline get with txn does still work (this will happen on a
+	// scan if the distributed sender is forced to wrap it in a txn).
+	if _, _, err = MVCCGet(engine, testKey1, roachpb.ZeroTimestamp, true, txn1); err != nil {
+		t.Error(err)
+	}
+
+	// Verify inline put with txn is an error.
+	if err = MVCCPut(engine, nil, testKey2, roachpb.ZeroTimestamp, value2, txn2); !testutils.IsError(err, "writes not allowed within transactions") {
+		t.Errorf("unexpected success")
+	}
+}
+
 func TestMVCCDeleteMissingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

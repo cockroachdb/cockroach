@@ -319,7 +319,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 
 	readZoneConfig := &config.ZoneConfig{}
 	if pErr := db.GetProto(key, readZoneConfig); pErr != nil {
-		t.Fatalf("unable to get proto: %v", pErr)
+		t.Fatalf("unable to get proto: %s", pErr)
 	}
 	if !proto.Equal(zoneConfig, readZoneConfig) {
 		t.Errorf("expected %+v, but found %+v", zoneConfig, readZoneConfig)
@@ -340,10 +340,35 @@ func TestClientGetAndPut(t *testing.T) {
 	}
 	gr, pErr := db.Get(testUser + "/key")
 	if pErr != nil {
-		t.Fatalf("unable to get value: %v", pErr)
+		t.Fatalf("unable to get value: %s", pErr)
 	}
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
+	}
+	if gr.Value.Timestamp.Equal(roachpb.ZeroTimestamp) {
+		t.Fatalf("expected non-zero timestamp; got empty")
+	}
+}
+
+func TestClientPutInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+
+	value := []byte("value")
+	if pErr := db.PutInline(testUser+"/key", value); pErr != nil {
+		t.Fatalf("unable to put value: %s", pErr)
+	}
+	gr, pErr := db.Get(testUser + "/key")
+	if pErr != nil {
+		t.Fatalf("unable to get value: %s", pErr)
+	}
+	if !bytes.Equal(value, gr.ValueBytes()) {
+		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
+	}
+	if ts := gr.Value.Timestamp; !ts.Equal(roachpb.ZeroTimestamp) {
+		t.Fatalf("expected zero timestamp; got %s", ts)
 	}
 }
 
@@ -640,7 +665,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
 		if pErr := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); pErr != nil {
-			t.Fatalf("%d: unable to clean up: %v", k, pErr)
+			t.Fatalf("%d: unable to clean up: %s", k, pErr)
 		}
 		concurrentIncrements(db, t)
 	}

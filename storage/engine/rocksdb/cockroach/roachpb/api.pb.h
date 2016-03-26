@@ -512,18 +512,28 @@ class PutRequest : public ::google::protobuf::Message {
   ::cockroach::roachpb::Value* release_value();
   void set_allocated_value(::cockroach::roachpb::Value* value);
 
+  // optional bool inline = 3;
+  bool has_inline_() const;
+  void clear_inline_();
+  static const int kInlineFieldNumber = 3;
+  bool inline_() const;
+  void set_inline_(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.PutRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
   inline void set_has_value();
   inline void clear_has_value();
+  inline void set_has_inline_();
+  inline void clear_has_inline_();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Span* header_;
   ::cockroach::roachpb::Value* value_;
+  bool inline__;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -6974,6 +6984,30 @@ inline void PutRequest::set_allocated_value(::cockroach::roachpb::Value* value) 
     clear_has_value();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.PutRequest.value)
+}
+
+// optional bool inline = 3;
+inline bool PutRequest::has_inline_() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void PutRequest::set_has_inline_() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void PutRequest::clear_has_inline_() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void PutRequest::clear_inline_() {
+  inline__ = false;
+  clear_has_inline_();
+}
+inline bool PutRequest::inline_() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.PutRequest.inline)
+  return inline__;
+}
+inline void PutRequest::set_inline_(bool value) {
+  set_has_inline_();
+  inline__ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.PutRequest.inline)
 }
 
 // -------------------------------------------------------------------
