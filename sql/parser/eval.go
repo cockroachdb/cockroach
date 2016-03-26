@@ -1577,7 +1577,7 @@ func foldComparisonExpr(op ComparisonOp, dummyLeft, dummyRight Datum) (Compariso
 const (
 	dateFormat                            = "2006-01-02"
 	timestampFormat                       = "2006-01-02 15:04:05.999999999"
-	TimestampWithOffsetZoneFormat         = "2006-01-02 15:04:05.999999999-07:00"
+	timestampWithOffsetZoneFormat         = "2006-01-02 15:04:05.999999999-07:00"
 	timestampWithNamedZoneFormat          = "2006-01-02 15:04:05.999999999 MST"
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05.999999999"
 )
@@ -1589,7 +1589,7 @@ var dateFormats = []string{
 
 var timeFormats = []string{
 	dateFormat,
-	TimestampWithOffsetZoneFormat,
+	timestampWithOffsetZoneFormat,
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	time.RFC3339Nano,

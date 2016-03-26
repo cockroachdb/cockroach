@@ -687,7 +687,7 @@ func (d DTimestamp) IsMin() bool {
 }
 
 func (d DTimestamp) String() string {
-	return d.UTC().Format(TimestampWithOffsetZoneFormat)
+	return d.UTC().Format(timestampWithOffsetZoneFormat)
 }
 
 // DInterval is the interval Datum.
