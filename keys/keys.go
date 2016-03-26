@@ -52,15 +52,6 @@ func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
 }
 
-// StoreStatusKey returns the key for accessing the store status for the
-// specified store ID.
-func StoreStatusKey(storeID int32) roachpb.Key {
-	key := make(roachpb.Key, 0, len(StatusStorePrefix)+9)
-	key = append(key, StatusStorePrefix...)
-	key = encoding.EncodeUvarintAscending(key, uint64(storeID))
-	return key
-}
-
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
 func NodeStatusKey(nodeID int32) roachpb.Key {

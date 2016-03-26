@@ -177,8 +177,6 @@ var (
 
 	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("status-")))
-	// StatusStorePrefix stores all status info for stores.
-	StatusStorePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("store-")))
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
 

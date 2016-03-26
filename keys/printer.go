@@ -101,10 +101,6 @@ var (
 			}},
 		},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
-			{name: "/StatusStore", prefix: StatusStorePrefix,
-				ppFunc: decodeKeyPrint,
-				psFunc: parseUnsupported,
-			},
 			{name: "/StatusNode", prefix: StatusNodePrefix,
 				ppFunc: decodeKeyPrint,
 				psFunc: parseUnsupported,
@@ -485,7 +481,6 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 // /Meta1/[key]                                   "\x02"+[key]
 // /Meta2/[key]                                   "\x03"+[key]
 // /System/...                                    "\x04"
-//		/StatusStore/[key]                          "\x04status-store-"+[key]
 //		/StatusNode/[key]                           "\x04status-node-"+[key]
 // /System/Max                                    "\x05"
 //
