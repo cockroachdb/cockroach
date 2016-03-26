@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -330,6 +332,7 @@ func processSequenceCache(
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) error {
+	ctx := repl.context(context.TODO())
 
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
@@ -346,7 +349,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 			pushTxn(repl, now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) error {
-			return repl.store.intentResolver.resolveIntents(repl.context(), repl, intents, poison, wait)
+			return repl.store.intentResolver.resolveIntents(ctx, repl, intents, poison, wait)
 		})
 
 	if err != nil {
@@ -369,7 +372,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 	ba.RangeID = desc.RangeID
 	ba.Timestamp = now
 	ba.Add(&gcArgs)
-	if _, pErr := repl.Send(repl.context(), ba); pErr != nil {
+	if _, pErr := repl.Send(ctx, ba); pErr != nil {
 		return pErr.GoError()
 	}
 	return nil

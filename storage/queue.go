@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -115,6 +116,7 @@ type queueImpl interface {
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it.
+	// TODO(nvanbenschoten) this should take a context.Context.
 	process(roachpb.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
@@ -414,7 +416,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	// and renew or acquire if necessary.
 	if bq.impl.needsLeaderLease() {
 		sp := repl.store.Tracer().StartSpan(bq.name)
-		ctx := opentracing.ContextWithSpan(repl.context(), sp)
+		ctx := opentracing.ContextWithSpan(repl.context(context.Background()), sp)
 		defer sp.Finish()
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLeaderLease(ctx); err != nil {

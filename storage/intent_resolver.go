@@ -249,7 +249,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 		return
 	}
 	now := r.store.Clock().Now()
-	ctx := r.context()
+	ctx := r.context(context.TODO())
 	stopper := r.store.Stopper()
 
 	for _, item := range intents {

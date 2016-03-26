@@ -625,11 +625,11 @@ func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
-// Context returns a base context to pass along with commands being executed,
-// derived from the supplied context (which is allowed to be nil).
-func (s *Store) Context(ctx context.Context) context.Context {
+// context returns a base context to pass along with commands being executed,
+// derived from the supplied context (which is not allowed to be nil).
+func (s *Store) context(ctx context.Context) context.Context {
 	if ctx == nil {
-		ctx = context.Background()
+		panic("ctx cannot be nil")
 	}
 	return log.Add(ctx,
 		log.NodeID, s.Ident.NodeID,
@@ -836,7 +836,7 @@ func (s *Store) WaitForInit() {
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
 func (s *Store) startGossip() {
-	ctx := s.Context(nil)
+	ctx := s.context(context.TODO())
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
 	s.initComplete.Add(2)
@@ -921,7 +921,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 	// gossip. If an unexpected error occurs (i.e. nobody else seems to
 	// have an active lease but we still failed to obtain it), return
 	// that error.
-	_, pErr := rng.getLeaseForGossip(s.Context(nil))
+	_, pErr := rng.getLeaseForGossip(s.context(context.TODO()))
 	return pErr.GoError()
 }
 
@@ -941,7 +941,7 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore() {
-	ctx := s.Context(nil)
+	ctx := s.context(context.TODO())
 
 	storeDesc, err := s.Descriptor()
 	if err != nil {
@@ -1501,7 +1501,7 @@ func (s *Store) ReplicaCount() int {
 // timestamp (for instance due to the timestamp cache), the response will have
 // a transaction set which should be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	ctx = s.Context(ctx)
+	ctx = s.context(ctx)
 
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
