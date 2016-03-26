@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -774,8 +773,7 @@ func (e *Executor) execStmtInOpenTxn(
 	if txnState.tr != nil {
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
-	result, pErr := e.execStmt(stmt, planMaker, timeutil.Now(),
-		implicitTxn /* autoCommit */)
+	result, pErr := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
 	if pErr != nil {
 		if txnState.tr != nil {
 			txnState.tr.LazyPrintf("ERROR: %v", pErr)
@@ -869,7 +867,7 @@ func commitSQLTransaction(txnState *txnState, p *planner,
 // the current transaction might have been committed/rolled back when this returns.
 func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner,
-	timestamp time.Time, autoCommit bool) (Result, *roachpb.Error) {
+	autoCommit bool) (Result, *roachpb.Error) {
 	var result Result
 	plan, pErr := planMaker.makePlan(stmt, autoCommit)
 	if pErr != nil {
