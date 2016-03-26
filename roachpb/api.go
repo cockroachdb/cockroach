@@ -628,6 +628,19 @@ func NewPut(key Key, value Value) Request {
 	}
 }
 
+// NewPutInline returns a Request initialized to put the value at key
+// using an inline value.
+func NewPutInline(key Key, value Value) Request {
+	value.InitChecksum(key)
+	return &PutRequest{
+		Span: Span{
+			Key: key,
+		},
+		Value:  value,
+		Inline: true,
+	}
+}
+
 // NewConditionalPut returns a Request initialized to put value as a byte
 // slice at key if the existing value at key equals expValueBytes.
 func NewConditionalPut(key Key, value, expValue Value) Request {
