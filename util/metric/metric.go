@@ -135,6 +135,10 @@ func (h *Histogram) Duration() time.Duration {
 	return h.duration
 }
 
+// TODO(pmattis): Histogram.Duration is neither used or tested. Silence unused
+// warning.
+var _ = (*Histogram).Duration
+
 // MarshalJSON outputs to JSON.
 func (h *Histogram) MarshalJSON() ([]byte, error) {
 	return json.Marshal(h.Current().CumulativeDistribution())

@@ -44,7 +44,6 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 	type nodeEventInfo struct {
 		Descriptor roachpb.NodeDescriptor
 		ClusterID  uuid.UUID
-		Started    int64
 	}
 
 	// Verify that a node_join message was logged for each node in the cluster.

@@ -118,17 +118,6 @@ func (n *Network) StartNode(node *Node) error {
 	return nil
 }
 
-// GetNodeFromAddr returns the simulation node associated with
-// provided network address, or nil if there is no such node.
-func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
-	for _, node := range n.Nodes {
-		if node.Addr.String() == addr {
-			return node, true
-		}
-	}
-	return nil, false
-}
-
 // GetNodeFromID returns the simulation node associated with
 // provided node ID, or nil if there is no such node.
 func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {

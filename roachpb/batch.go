@@ -54,11 +54,6 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 	return (ba.flags() & isTxnWrite) != 0
 }
 
-// IsRange returns true iff the BatchRequest contains a range request.
-func (ba *BatchRequest) IsRange() bool {
-	return (ba.flags() & isRange) != 0
-}
-
 // GetArg returns a request of the given type if one is contained in the
 // Batch. The request returned is the first of its kind, with the exception
 // of EndTransaction, where it examines the very last request only.
@@ -89,14 +84,6 @@ func (br *BatchResponse) String() string {
 	return strings.Join(str, ", ")
 }
 
-// First returns the first response of the given type, if possible.
-func (br *BatchResponse) First() Response {
-	if len(br.Responses) > 0 {
-		return br.Responses[0].GetInner()
-	}
-	return nil
-}
-
 // Header returns a pointer to the header.
 func (br *BatchResponse) Header() *BatchResponse_Header {
 	return &br.BatchResponse_Header
@@ -112,18 +99,6 @@ func (ba *BatchRequest) IntentSpanIterate(fn func(key, endKey Key)) {
 		}
 		h := req.Header()
 		fn(h.Key, h.EndKey)
-	}
-}
-
-// ResetAll resets all the contained requests to their original state.
-func (br *BatchResponse) ResetAll() {
-	if br == nil {
-		return
-	}
-	for _, rsp := range br.Responses {
-		// TODO(tschottdorf) `rsp.Reset()` isn't enough because rsp
-		// isn't a pointer.
-		rsp.GetInner().Reset()
 	}
 }
 

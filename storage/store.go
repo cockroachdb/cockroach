@@ -351,10 +351,6 @@ type StoreContext struct {
 	// consistency checks on a range.
 	ConsistencyCheckInterval time.Duration
 
-	// TimeUntilStoreDead is the time after which if there is no new gossiped
-	// information about a store, it can be considered dead.
-	TimeUntilStoreDead time.Duration
-
 	// AllocatorOptions configures how the store will attempt to rebalance its
 	// replicas to other stores.
 	AllocatorOptions AllocatorOptions
@@ -639,11 +635,6 @@ func (s *Store) context(ctx context.Context) context.Context {
 // IsStarted returns true if the Store has been started.
 func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
-}
-
-// StartedAt returns the timestamp at which the store was most recently started.
-func (s *Store) StartedAt() int64 {
-	return s.startedAt
 }
 
 // IterateRangeDescriptors calls the provided function with each descriptor

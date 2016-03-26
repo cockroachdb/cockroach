@@ -105,34 +105,3 @@ func (ths *testHTTPSession) PostProto(relative string, msg proto.Message, out in
 		ths.t.Fatal(err)
 	}
 }
-
-// Get performs an http GET request to the given relative URL. Any response
-// returned from the request will be returned from this method as a byte slice.
-func (ths *testHTTPSession) Get(relative string) []byte {
-	req, err := http.NewRequest("GET", ths.baseURL+relative, nil)
-	if err != nil {
-		ths.t.Fatal(err)
-	}
-
-	// All requests currently accept JSON.
-	req.Header.Set(util.AcceptHeader, util.JSONContentType)
-	resp, err := ths.client.Do(req)
-	if err != nil {
-		ths.t.Fatal(err)
-	}
-
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, body)
-	}
-	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-	if returnedContentType != util.JSONContentType {
-		ths.t.Fatalf("unexpected content type: %v", returnedContentType)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		ths.t.Fatal(err)
-	}
-	return body
-}

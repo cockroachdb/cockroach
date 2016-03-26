@@ -17,14 +17,11 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
@@ -65,11 +62,6 @@ func (a *AdminClient) adminURI() string {
 		a.address, a.configType)
 }
 
-// adminURIWithKey builds a URI for the 'configType' and key.
-func (a *AdminClient) adminURIWithKey(key string) string {
-	return fmt.Sprintf("%s/%s", a.adminURI(), url.QueryEscape(key))
-}
-
 // Get issues a GET and returns the plain-text body. It cannot take a key.
 func (a *AdminClient) Get() (string, error) {
 	body, err := a.do("GET", a.adminURI(), "", util.PlaintextContentType, nil)
@@ -77,68 +69,6 @@ func (a *AdminClient) Get() (string, error) {
 		return "", err
 	}
 	return string(body), nil
-}
-
-// GetJSON issues a GET request and returns a json-encoded response.
-func (a *AdminClient) GetJSON(key string) (string, error) {
-	body, err := a.do("GET", a.adminURIWithKey(key), "", util.JSONContentType, nil)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
-}
-
-// GetYAML issues a GET request and returns a yaml-encoded response.
-func (a *AdminClient) GetYAML(key string) (string, error) {
-	body, err := a.do("GET", a.adminURIWithKey(key), "", util.YAMLContentType, nil)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
-}
-
-// SetJSON issues a POST request for the given key using the json-encoded body.
-func (a *AdminClient) SetJSON(key, body string) error {
-	_, err := a.do("POST", a.adminURIWithKey(key), util.JSONContentType,
-		"", strings.NewReader(body))
-	return err
-}
-
-// SetYAML issues a POST request for the given key using the yaml-encoded body.
-func (a *AdminClient) SetYAML(key, body string) error {
-	_, err := a.do("POST", a.adminURIWithKey(key), util.YAMLContentType,
-		"", strings.NewReader(body))
-	return err
-}
-
-// List issues a GET request to list all configs. Returns a list of keys.
-func (a *AdminClient) List() ([]string, error) {
-	body, err := a.do("GET", a.adminURI(), "", util.JSONContentType, nil)
-	if err != nil {
-		return nil, err
-	}
-	type wrapper struct {
-		Data []string `json:"d"`
-	}
-	var w wrapper
-	if err = json.Unmarshal(body, &w); err != nil {
-		return nil, util.Errorf("unable to parse response %q: %s", body, err)
-	}
-
-	// Make sure we unescape all keys.
-	for i, val := range w.Data {
-		w.Data[i], err = url.QueryUnescape(val)
-		if err != nil {
-			return nil, util.Errorf("unable to unescape %q: %s", val, err)
-		}
-	}
-	return w.Data, nil
-}
-
-// Delete issues a DELETE request for the given key.
-func (a *AdminClient) Delete(key string) error {
-	_, err := a.do("DELETE", a.adminURIWithKey(key), "", "", nil)
-	return err
 }
 
 // do issues the http request to 'url' using 'method'.

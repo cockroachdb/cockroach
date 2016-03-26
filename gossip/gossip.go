@@ -222,15 +222,6 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	return nil
 }
 
-// SetStallInterval sets the interval between periodic checks to
-// determine whether the node is not fully connected to the gossip
-// network.
-func (g *Gossip) SetStallInterval(interval time.Duration) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.stallInterval = interval
-}
-
 // SetBootstrapInterval sets a minimum interval between successive
 // attempts to connect to new hosts in order to join the gossip
 // network.
