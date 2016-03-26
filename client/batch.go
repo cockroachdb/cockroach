@@ -237,14 +237,7 @@ func (b *Batch) Get(key interface{}) {
 	b.initResult(1, 1, nil)
 }
 
-// Put sets the value for a key.
-//
-// A new result will be appended to the batch which will contain a single row
-// and Result.Err will indicate success or failure.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
-func (b *Batch) Put(key, value interface{}) {
+func (b *Batch) put(key, value interface{}, inline bool) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, err)
@@ -255,8 +248,33 @@ func (b *Batch) Put(key, value interface{}) {
 		b.initResult(0, 1, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewPut(k, v))
+	putReq := roachpb.NewPut(k, v)
+	putReq.(*roachpb.PutRequest).Inline = inline
+	b.reqs = append(b.reqs, putReq)
 	b.initResult(1, 1, nil)
+}
+
+// Put sets the value for a key.
+//
+// A new result will be appended to the batch which will contain a single row
+// and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
+func (b *Batch) Put(key, value interface{}) {
+	b.put(key, value, false)
+}
+
+// PutInline sets the value for a key, but does not maintain
+// multi-version values. The most recent value is always overwritten..
+//
+// A new result will be appended to the batch which will contain a single row
+// and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
+func (b *Batch) PutInline(key, value interface{}) {
+	b.put(key, value, true)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal

@@ -236,6 +236,18 @@ func (txn *Txn) Put(key, value interface{}) *roachpb.Error {
 	return pErr
 }
 
+// PutInline sets the value for a key, but does not maintain
+// multi-version values. The most recent value is always overwritten.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc).
+func (txn *Txn) PutInline(key, value interface{}) *roachpb.Error {
+	b := txn.NewBatch()
+	b.PutInline(key, value)
+	_, pErr := runOneResult(txn, b)
+	return pErr
+}
+
 // CPut conditionally sets the value for a key if the existing value is equal
 // to expValue. To conditionally set a value only if there is no existing entry
 // pass nil for expValue. Note that this must be an interface{}(nil), not a

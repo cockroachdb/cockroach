@@ -345,6 +345,31 @@ func TestClientGetAndPut(t *testing.T) {
 	if !bytes.Equal(value, gr.ValueBytes()) {
 		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
 	}
+	if gr.Value.Timestamp.Equal(roachpb.ZeroTimestamp) {
+		t.Fatalf("expected non-zero timestamp; got empty")
+	}
+}
+
+func TestClientPutInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+
+	value := []byte("value")
+	if pErr := db.PutInline(testUser+"/key", value); pErr != nil {
+		t.Fatalf("unable to put value: %s", pErr)
+	}
+	gr, pErr := db.Get(testUser + "/key")
+	if pErr != nil {
+		t.Fatalf("unable to get value: %v", pErr)
+	}
+	if !bytes.Equal(value, gr.ValueBytes()) {
+		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
+	}
+	if ts := gr.Value.Timestamp; !ts.Equal(roachpb.ZeroTimestamp) {
+		t.Fatalf("expected zero timestamp; got %s", ts)
+	}
 }
 
 // TestClientEmptyValues verifies that empty values are preserved

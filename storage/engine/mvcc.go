@@ -680,7 +680,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 
 	meta := &buf.meta
 
-	// If value is inline, return immediately; txn & timestamp are irrelevant.
+	// If value is inline, return immediately; timestamp is irrelevant.
 	if meta.IsInline() {
 		value := &buf.value
 		*value = roachpb.Value{RawBytes: meta.RawBytes}
@@ -942,6 +942,9 @@ func mvccPutInternal(
 	}
 	// Handle inline put.
 	if putIsInline {
+		if txn != nil {
+			return util.Errorf("%q: inline writes not allowed with transactions", metaKey)
+		}
 		var metaKeySize, metaValSize int64
 		if value, err = maybeGetValue(ok, timestamp); err != nil {
 			return err

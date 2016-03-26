@@ -205,8 +205,11 @@ func (r *Replica) Put(
 	batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PutRequest,
 ) (roachpb.PutResponse, error) {
 	var reply roachpb.PutResponse
-
-	return reply, engine.MVCCPut(batch, ms, args.Key, h.Timestamp, args.Value, h.Txn)
+	var ts roachpb.Timestamp
+	if !args.Inline {
+		ts = h.Timestamp
+	}
+	return reply, engine.MVCCPut(batch, ms, args.Key, ts, args.Value, h.Txn)
 }
 
 // ConditionalPut sets the value for a specified key only if

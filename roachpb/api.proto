@@ -67,6 +67,10 @@ message GetResponse {
 message PutRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
+  // Specify as true to put the value without a corresponding
+  // timestamp. This option should be used with care as it precludes
+  // the use of this value with transactions.
+  optional bool inline = 3 [(gogoproto.nullable) = false];
 }
 
 // A PutResponse is the return value from the Put() method.
