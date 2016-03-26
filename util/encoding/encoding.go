@@ -59,10 +59,9 @@ const (
 	decimalTerminator       = 0x00
 
 	bytesMarker          byte = decimalNaNDesc + 1
-	timeMarker           byte = bytesMarker + 1
-	bytesDescMarker      byte = timeMarker + 1
-	timeDescMarker       byte = bytesDescMarker + 1
-	durationBigNegMarker byte = timeDescMarker + 1 // Only used for durations < MinInt64 nanos.
+	bytesDescMarker      byte = bytesMarker + 1
+	timeMarker           byte = bytesDescMarker + 1
+	durationBigNegMarker byte = timeMarker + 1 // Only used for durations < MinInt64 nanos.
 	durationMarker       byte = durationBigNegMarker + 1
 	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
@@ -604,21 +603,20 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 // EncodeTime(b2, t1), Compare(b1, b2) < 0. The time zone offset not
 // included in the encoding.
 func EncodeTimeAscending(b []byte, t time.Time) []byte {
-	// Read the unix absolute time. This is the absolute time and is
-	// not time zone offset dependent.
-	b = append(b, timeMarker)
-	b = EncodeVarintAscending(b, t.Unix())
-	b = EncodeVarintAscending(b, int64(t.Nanosecond()))
-	return b
+	return encodeTime(b, t.Unix(), int64(t.Nanosecond()))
 }
 
 // EncodeTimeDescending is the descending version of EncodeTimeAscending.
 func EncodeTimeDescending(b []byte, t time.Time) []byte {
+	return encodeTime(b, ^t.Unix(), ^int64(t.Nanosecond()))
+}
+
+func encodeTime(b []byte, unix, nanos int64) []byte {
 	// Read the unix absolute time. This is the absolute time and is
 	// not time zone offset dependent.
-	b = append(b, timeDescMarker)
-	b = EncodeVarintDescending(b, t.Unix())
-	b = EncodeVarintDescending(b, int64(t.Nanosecond()))
+	b = append(b, timeMarker)
+	b = EncodeVarintAscending(b, unix)
+	b = EncodeVarintAscending(b, nanos)
 	return b
 }
 
@@ -626,15 +624,7 @@ func EncodeTimeDescending(b []byte, t time.Time) []byte {
 // EncodeTime. The remainder of the input buffer and the decoded
 // time.Time are returned.
 func DecodeTimeAscending(b []byte) ([]byte, time.Time, error) {
-	if PeekType(b) != Time {
-		return nil, time.Time{}, util.Errorf("did not find marker")
-	}
-	b = b[1:]
-	b, sec, err := DecodeVarintAscending(b)
-	if err != nil {
-		return b, time.Time{}, err
-	}
-	b, nsec, err := DecodeVarintAscending(b)
+	b, sec, nsec, err := decodeTime(b)
 	if err != nil {
 		return b, time.Time{}, err
 	}
@@ -643,19 +633,27 @@ func DecodeTimeAscending(b []byte) ([]byte, time.Time, error) {
 
 // DecodeTimeDescending is the descending version of DecodeTimeAscending.
 func DecodeTimeDescending(b []byte) ([]byte, time.Time, error) {
-	if PeekType(b) != TimeDesc {
-		return nil, time.Time{}, util.Errorf("did not find marker")
+	b, sec, nsec, err := decodeTime(b)
+	if err != nil {
+		return b, time.Time{}, err
+	}
+	return b, time.Unix(^sec, ^nsec), nil
+}
+
+func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
+	if PeekType(b) != Time {
+		return nil, 0, 0, util.Errorf("did not find marker")
 	}
 	b = b[1:]
-	b, sec, err := DecodeVarintDescending(b)
+	b, sec, err = DecodeVarintAscending(b)
 	if err != nil {
-		return b, time.Time{}, err
+		return b, 0, 0, err
 	}
-	b, nsec, err := DecodeVarintDescending(b)
+	b, nsec, err = DecodeVarintAscending(b)
 	if err != nil {
-		return b, time.Time{}, err
+		return b, 0, 0, err
 	}
-	return b, time.Unix(sec, nsec), nil
+	return b, sec, nsec, nil
 }
 
 // EncodeDurationAscending encodes a duration.Duration value, appends it to the
@@ -758,7 +756,6 @@ const (
 	Bytes
 	BytesDesc // Bytes encoded descendingly
 	Time
-	TimeDesc // Time encoded descendingly
 	Duration
 )
 
@@ -767,9 +764,9 @@ func PeekType(b []byte) Type {
 	if len(b) >= 1 {
 		m := b[0]
 		switch {
-		case m == encodedNull || m == encodedNullDesc:
+		case m == encodedNull, m == encodedNullDesc:
 			return Null
-		case m == encodedNotNull || m == encodedNotNullDesc:
+		case m == encodedNotNull, m == encodedNotNullDesc:
 			return NotNull
 		case m == bytesMarker:
 			return Bytes
@@ -777,9 +774,7 @@ func PeekType(b []byte) Type {
 			return BytesDesc
 		case m == timeMarker:
 			return Time
-		case m == timeDescMarker:
-			return TimeDesc
-		case m == durationBigNegMarker || m == durationMarker || m == durationBigPosMarker:
+		case m == durationBigNegMarker, m == durationMarker, m == durationBigPosMarker:
 			return Duration
 		case m >= IntMin && m <= IntMax:
 			return Int
@@ -858,13 +853,6 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 	case Time:
 		var t time.Time
 		b, t, err = DecodeTimeAscending(b)
-		if err != nil {
-			return b, "", err
-		}
-		return b, t.UTC().Format(time.UnixDate), nil
-	case TimeDesc:
-		var t time.Time
-		b, t, err = DecodeTimeDescending(b)
 		if err != nil {
 			return b, "", err
 		}
