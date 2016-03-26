@@ -80,7 +80,7 @@ func TestIntentResolution(t *testing.T) {
 			var done bool
 			ctx := NewTestContext()
 			ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
-				func(filterArgs storageutils.FilterArgs) error {
+				func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 					mu.Lock()
 					defer mu.Unlock()
 					header := filterArgs.Req.Header()

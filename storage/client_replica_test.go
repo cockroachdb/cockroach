@@ -195,7 +195,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	defer stopper.Stop()
 	ctx := storage.TestStoreContext()
 	ctx.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) error {
+		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
 				filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
 				filterArgs.Hdr.Txn == nil {
@@ -204,7 +204,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 				// succeeds). Returns an error for the fourth get request to avoid timestamp cache
 				// update after the third get operation pushes the txn timestamp.
 				if atomic.AddInt32(&numGets, 1) == 4 {
-					return util.Errorf("Test")
+					return roachpb.NewErrorWithTxn(util.Errorf("Test"), filterArgs.Hdr.Txn)
 				}
 			}
 			return nil

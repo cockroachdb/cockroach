@@ -61,7 +61,7 @@ type CommandFilters struct {
 
 // runFilters executes the registered filters, stopping at the first one
 // that returns an error.
-func (c *CommandFilters) runFilters(args storageutils.FilterArgs) error {
+func (c *CommandFilters) runFilters(args storageutils.FilterArgs) *roachpb.Error {
 
 	c.RLock()
 	defer c.RUnlock()
@@ -73,10 +73,10 @@ func (c *CommandFilters) runFilters(args storageutils.FilterArgs) error {
 	}
 }
 
-func (c *CommandFilters) runFiltersInternal(args storageutils.FilterArgs) error {
+func (c *CommandFilters) runFiltersInternal(args storageutils.FilterArgs) *roachpb.Error {
 	for _, f := range c.filters {
-		if err := f.filter(args); err != nil {
-			return err
+		if pErr := f.filter(args); pErr != nil {
+			return pErr
 		}
 	}
 	return nil
@@ -137,7 +137,7 @@ func (c *CommandFilters) removeFilter(id int) {
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(args storageutils.FilterArgs) error {
+func checkEndTransactionTrigger(args storageutils.FilterArgs) *roachpb.Error {
 	req, ok := args.Req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil
@@ -170,8 +170,8 @@ func checkEndTransactionTrigger(args storageutils.FilterArgs) error {
 	// For more information, see the related comment at the beginning of
 	// planner.makePlan().
 	if hasSystemKey && !modifiedSystemConfigSpan {
-		return util.Errorf("EndTransaction hasSystemKey=%t, but hasSystemConfigTrigger=%t",
-			hasSystemKey, modifiedSystemConfigSpan)
+		return roachpb.NewError(util.Errorf("EndTransaction hasSystemKey=%t, but hasSystemConfigTrigger=%t",
+			hasSystemKey, modifiedSystemConfigSpan))
 	}
 
 	return nil

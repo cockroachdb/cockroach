@@ -236,8 +236,11 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 		"hooly":     2,
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storageutils.FilterArgs) error {
-			return injectErrors(args.Sid, args.Req, args.Hdr, magicVals)
+		func(args storageutils.FilterArgs) *roachpb.Error {
+			if err := injectErrors(args.Sid, args.Req, args.Hdr, magicVals); err != nil {
+				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+			}
+			return nil
 		}, false)
 
 	// Test that implicit txns - txns for which we see all the statements and prefixes
@@ -279,8 +282,11 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 		"hooly": 2,
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
-		func(args storageutils.FilterArgs) error {
-			return injectErrors(args.Sid, args.Req, args.Hdr, magicVals)
+		func(args storageutils.FilterArgs) *roachpb.Error {
+			if err := injectErrors(args.Sid, args.Req, args.Hdr, magicVals); err != nil {
+				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+			}
+			return nil
 		}, false)
 	defer cleanupFilter()
 
@@ -420,8 +426,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	for _, tc := range testCases {
 		log.Infof("starting test for: %+v", tc)
 		cleanupFilter := cmdFilters.AppendFilter(
-			func(args storageutils.FilterArgs) error {
-				return injectErrors(args.Sid, args.Req, args.Hdr, tc.magicVals)
+			func(args storageutils.FilterArgs) *roachpb.Error {
+				if err := injectErrors(args.Sid, args.Req, args.Hdr, tc.magicVals); err != nil {
+					return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+				}
+				return nil
 			}, false)
 
 		// Also inject an error at RELEASE time, besides the error injected by magicVals.
