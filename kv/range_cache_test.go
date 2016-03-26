@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type testDescriptorDB struct {
@@ -46,7 +45,6 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 }
 
 func (db *testDescriptorDB) getDescriptor(key roachpb.RKey) []roachpb.RangeDescriptor {
-	log.Infof("getDescriptor: %s", key)
 	response := make([]roachpb.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testDescriptorNode{
@@ -131,10 +129,13 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.Range
 	if pErr != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
 	}
-	if !r.ContainsKey(keys.Addr(roachpb.Key(key))) {
+	keyAddr, err := keys.Addr(roachpb.Key(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.ContainsKey(keyAddr) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
-	log.Infof("doLookup: %s %+v", key, r)
 	return r
 }
 

@@ -2362,7 +2362,15 @@ func TestFindValidSplitKeys(t *testing.T) {
 		defer snap.Close()
 		rangeStart := test.keys[0]
 		rangeEnd := test.keys[len(test.keys)-1].Next()
-		splitKey, err := MVCCFindSplitKey(snap, rangeID, keys.Addr(rangeStart), keys.Addr(rangeEnd), nil)
+		rangeStartAddr, err := keys.Addr(rangeStart)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rangeEndAddr, err := keys.Addr(rangeEnd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		splitKey, err := MVCCFindSplitKey(snap, rangeID, rangeStartAddr, rangeEndAddr, nil)
 		if test.expError {
 			if !testutils.IsError(err, "has no valid splits") {
 				t.Errorf("%d: unexpected error: %v", i, err)

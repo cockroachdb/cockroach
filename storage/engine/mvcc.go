@@ -1870,7 +1870,7 @@ func MVCCFindSplitKey(
 	debugFn func(msg string, args ...interface{}),
 ) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
-		key = keys.Addr(keys.LocalMax)
+		key = roachpb.RKey(keys.LocalMax)
 	}
 
 	logf := func(msg string, args ...interface{}) {

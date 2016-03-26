@@ -44,14 +44,25 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			if len(header.EndKey) > 0 {
 				return false, emptySpan, util.Errorf("%T is not a range command, but EndKey is set", args)
 			}
-			if !rs.ContainsKey(keys.Addr(header.Key)) {
+			keyAddr, err := keys.Addr(header.Key)
+			if err != nil {
+				return false, emptySpan, err
+			}
+			if !rs.ContainsKey(keyAddr) {
 				return false, emptySpan, nil
 			}
 			return true, header, nil
 		}
 		// We're dealing with a range-spanning request.
 		local := false
-		keyAddr, endKeyAddr := keys.Addr(header.Key), keys.Addr(header.EndKey)
+		keyAddr, err := keys.Addr(header.Key)
+		if err != nil {
+			return false, emptySpan, err
+		}
+		endKeyAddr, err := keys.Addr(header.EndKey)
+		if err != nil {
+			return false, emptySpan, err
+		}
 		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
 			if !l || !r {
 				return false, emptySpan, util.Errorf("local key mixed with global key in range")
@@ -124,19 +135,25 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
-func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
+func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.Addr(h.Key)
-		eAddr := keys.AddrUpperBound(h.EndKey)
+		addr, err := keys.Addr(h.Key)
+		if err != nil {
+			return nil, err
+		}
+		eAddr, err := keys.AddrUpperBound(h.EndKey)
+		if err != nil {
+			return nil, err
+		}
 		if len(eAddr) == 0 {
 			eAddr = addr.ShallowNext()
 		}
 		if !eAddr.Less(k) {
 			if !k.Less(addr) {
 				// Range contains k, so won't be able to go lower.
-				return k
+				return k, nil
 			}
 			// Range is disjoint from [KeyMin,k).
 			continue
@@ -146,22 +163,29 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 			candidate = addr
 		}
 	}
-	return candidate
+	return candidate, nil
 }
 
 // next gives the left boundary of the union of all requests which don't
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
+func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
-		addr := keys.Addr(h.Key)
+		addr, err := keys.Addr(h.Key)
+		if err != nil {
+			return nil, err
+		}
 		if addr.Less(k) {
-			if eAddr := keys.AddrUpperBound(h.EndKey); k.Less(eAddr) {
+			eAddr, err := keys.AddrUpperBound(h.EndKey)
+			if err != nil {
+				return nil, err
+			}
+			if k.Less(eAddr) {
 				// Starts below k, but continues beyond. Need to stay at k.
-				return k
+				return k, nil
 			}
 			// Affects only [KeyMin,k).
 			continue
@@ -171,5 +195,5 @@ func next(ba roachpb.BatchRequest, k roachpb.RKey) roachpb.RKey {
 			candidate = addr
 		}
 	}
-	return candidate
+	return candidate, nil
 }
