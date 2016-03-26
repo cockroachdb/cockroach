@@ -153,9 +153,12 @@ func checkEndTransactionTrigger(args storageutils.FilterArgs) error {
 
 	var hasSystemKey bool
 	for _, span := range req.IntentSpans {
-		addr := keys.Addr(span.Key)
-		if bytes.Compare(addr, keys.SystemConfigSpan.Key) >= 0 &&
-			bytes.Compare(addr, keys.SystemConfigSpan.EndKey) < 0 {
+		keyAddr, err := keys.Addr(span.Key)
+		if err != nil {
+			return err
+		}
+		if bytes.Compare(keyAddr, keys.SystemConfigSpan.Key) >= 0 &&
+			bytes.Compare(keyAddr, keys.SystemConfigSpan.EndKey) < 0 {
 			hasSystemKey = true
 			break
 		}

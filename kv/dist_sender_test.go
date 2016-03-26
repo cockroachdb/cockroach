@@ -591,7 +591,10 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
 			if !descStale && bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
@@ -787,13 +790,20 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
 		results := []roachpb.KeyValue{}
 		for _, curKV := range existingKVs {
-			if rs.Key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(rs.EndKey) {
+			curKeyAddr, err := keys.Addr(curKV.Key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rs.Key.Less(curKeyAddr.Next()) && curKeyAddr.Less(rs.EndKey) {
 				results = append(results, curKV)
 			}
 		}
@@ -965,7 +975,10 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// "a". The second request should be on "b".
 	first := true
 	sendStub := func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
 				t.Errorf("Unexpected span [%s,%s)", rs.Key, rs.EndKey)
@@ -1265,7 +1278,10 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	var firstSequence uint32
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
 				t.Errorf("unexpected span [%s,%s)", rs.Key, rs.EndKey)

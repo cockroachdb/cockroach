@@ -576,7 +576,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 	// Local addressing has already been resolved.
 	// TODO(tschottdorf): consider rudimentary validation of the batch here
 	// (for example, non-range requests with EndKey, or empty key ranges).
-	rs := keys.Range(ba)
+	rs, err := keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err), false
+	}
 	var br *roachpb.BatchResponse
 
 	// Send the request to one range per iteration.
@@ -892,7 +895,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// We use the StartKey of the current descriptor as opposed to the
 			// EndKey of the previous one since that doesn't have bugs when
 			// stale descriptors come into play.
-			rs.EndKey = prev(ba, desc.StartKey)
+			rs.EndKey, err = prev(ba, desc.StartKey)
 		} else {
 			// In next iteration, query next range.
 			// It's important that we use the EndKey of the current descriptor
@@ -901,7 +904,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// one, and unless both descriptors are stale, the next descriptor's
 			// StartKey would move us to the beginning of the current range,
 			// resulting in a duplicate scan.
-			rs.Key = next(ba, desc.EndKey)
+			rs.Key, err = next(ba, desc.EndKey)
+		}
+		if err != nil {
+			return nil, roachpb.NewError(err), false
 		}
 		log.Trace(ctx, "querying next range")
 	}
