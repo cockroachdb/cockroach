@@ -267,6 +267,7 @@ func (p preparedQueryTest) Error(err string) preparedQueryTest {
 func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var base preparedQueryTest
+
 	queryTests := map[string][]preparedQueryTest{
 		"SELECT $1 > 0": {
 			base.Params(1).Results(true),
@@ -362,6 +363,15 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+			),
+		},
+		"SELECT $1::date, $2::timestamp": {
+			base.Params(
+				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
+			).Results(
+				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.ts VALUES($1, $2) RETURNING *": {
