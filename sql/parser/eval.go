@@ -1582,14 +1582,29 @@ const (
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05.999999999"
 )
 
+var dateFormats = []string{
+	dateFormat,
+	time.RFC3339Nano,
+}
+
+var timeFormats = []string{
+	dateFormat,
+	TimestampWithOffsetZoneFormat,
+	timestampFormat,
+	timestampWithNamedZoneFormat,
+	time.RFC3339Nano,
+	timestampRFC3339NanoWithoutZoneFormat,
+}
+
 // ParseDate parses a date.
 func ParseDate(s DString) (DDate, error) {
 	// No need to ParseInLocation here because we're only parsing dates.
-	t, err := time.Parse(dateFormat, string(s))
-	if err != nil {
-		return DDate(0), err
+	for _, format := range dateFormats {
+		if t, err := time.Parse(format, string(s)); err == nil {
+			return defaultContext.makeDDate(t)
+		}
 	}
-	return defaultContext.makeDDate(t)
+	return DDate(0), fmt.Errorf("could not parse %s in any supported date format", s)
 }
 
 // ParseTimestamp parses the timestamp.
@@ -1604,13 +1619,7 @@ func (ctx EvalContext) ParseTimestamp(s DString) (DTimestamp, error) {
 
 	str := string(s)
 
-	for _, format := range []string{
-		dateFormat,
-		TimestampWithOffsetZoneFormat,
-		timestampFormat,
-		timestampWithNamedZoneFormat,
-		timestampRFC3339NanoWithoutZoneFormat,
-	} {
+	for _, format := range timeFormats {
 		if t, err := time.ParseInLocation(format, str, loc); err == nil {
 			return DTimestamp{Time: t}, nil
 		}
