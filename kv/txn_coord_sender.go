@@ -778,16 +778,21 @@ func (tc *TxnCoordSender) updateState(
 	// unless it is tracking it (on top of it making sense to track it;
 	// after all, it **has** laid down intents and only the coordinator
 	// can augment a potential EndTransaction call). See #3303.
-	var intents []roachpb.Span
-	// TODO(nvanbenschoten): Iterating here to put the intents in a slice for
-	// the sole purpose of later iterating again and calling addKeyRange is a
-	// little wasteful and can likely be avoided.
-	ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
-		intents = append(intents, roachpb.Span{Key: key, EndKey: endKey})
-	})
+	var intentGroup interval.RangeGroup
+	if txnMeta != nil {
+		intentGroup = txnMeta.keys
+	} else if pErr == nil || newTxn.Writing {
+		intentGroup = interval.NewRangeTree()
+	}
+	if intentGroup != nil {
+		// Adding the intents even on error reduces the likelihood of dangling
+		// intents blocking concurrent writers for extended periods of time.
+		// See #3346.
+		ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
+			addKeyRange(intentGroup, key, endKey)
+		})
 
-	if len(intents) > 0 && (pErr == nil || newTxn.Writing) {
-		if txnMeta == nil {
+		if txnMeta == nil && intentGroup.Len() > 0 {
 			if !newTxn.Writing {
 				panic("txn with intents marked as non-writing")
 			}
@@ -801,7 +806,7 @@ func (tc *TxnCoordSender) updateState(
 				log.Trace(ctx, "coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
-					keys:             interval.NewRangeTree(),
+					keys:             intentGroup,
 					firstUpdateNanos: tc.clock.PhysicalNow(),
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,
@@ -822,6 +827,7 @@ func (tc *TxnCoordSender) updateState(
 			}
 		}
 	}
+
 	// Update our record of this transaction, even on error.
 	if txnMeta != nil {
 		txnMeta.txn = *newTxn
@@ -829,12 +835,6 @@ func (tc *TxnCoordSender) updateState(
 			panic("tracking a non-writing txn")
 		}
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
-		// Adding the intents even on error reduces the likelihood of dangling
-		// intents blocking concurrent writers for extended periods of time.
-		// See #3346.
-		for _, intent := range intents {
-			addKeyRange(txnMeta.keys, intent.Key, intent.EndKey)
-		}
 	}
 	if pErr == nil {
 		// For successful transactional requests, always send the updated txn
