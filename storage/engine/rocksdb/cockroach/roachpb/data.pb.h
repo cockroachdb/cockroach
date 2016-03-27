@@ -1920,6 +1920,20 @@ class SequenceCacheEntry : public ::google::protobuf::Message {
   ::google::protobuf::int32 priority() const;
   void set_priority(::google::protobuf::int32 value);
 
+  // optional uint32 epoch = 4;
+  bool has_epoch() const;
+  void clear_epoch();
+  static const int kEpochFieldNumber = 4;
+  ::google::protobuf::uint32 epoch() const;
+  void set_epoch(::google::protobuf::uint32 value);
+
+  // optional uint32 sequence = 5;
+  bool has_sequence() const;
+  void clear_sequence();
+  static const int kSequenceFieldNumber = 5;
+  ::google::protobuf::uint32 sequence() const;
+  void set_sequence(::google::protobuf::uint32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.SequenceCacheEntry)
  private:
   inline void set_has_key();
@@ -1928,6 +1942,10 @@ class SequenceCacheEntry : public ::google::protobuf::Message {
   inline void clear_has_timestamp();
   inline void set_has_priority();
   inline void clear_has_priority();
+  inline void set_has_epoch();
+  inline void clear_has_epoch();
+  inline void set_has_sequence();
+  inline void clear_has_sequence();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1935,6 +1953,8 @@ class SequenceCacheEntry : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::roachpb::Timestamp* timestamp_;
   ::google::protobuf::int32 priority_;
+  ::google::protobuf::uint32 epoch_;
+  ::google::protobuf::uint32 sequence_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -3917,6 +3937,54 @@ inline void SequenceCacheEntry::set_priority(::google::protobuf::int32 value) {
   set_has_priority();
   priority_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.SequenceCacheEntry.priority)
+}
+
+// optional uint32 epoch = 4;
+inline bool SequenceCacheEntry::has_epoch() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void SequenceCacheEntry::set_has_epoch() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void SequenceCacheEntry::clear_has_epoch() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void SequenceCacheEntry::clear_epoch() {
+  epoch_ = 0u;
+  clear_has_epoch();
+}
+inline ::google::protobuf::uint32 SequenceCacheEntry::epoch() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SequenceCacheEntry.epoch)
+  return epoch_;
+}
+inline void SequenceCacheEntry::set_epoch(::google::protobuf::uint32 value) {
+  set_has_epoch();
+  epoch_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SequenceCacheEntry.epoch)
+}
+
+// optional uint32 sequence = 5;
+inline bool SequenceCacheEntry::has_sequence() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void SequenceCacheEntry::set_has_sequence() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void SequenceCacheEntry::clear_has_sequence() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void SequenceCacheEntry::clear_sequence() {
+  sequence_ = 0u;
+  clear_has_sequence();
+}
+inline ::google::protobuf::uint32 SequenceCacheEntry::sequence() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.SequenceCacheEntry.sequence)
+  return sequence_;
+}
+inline void SequenceCacheEntry::set_sequence(::google::protobuf::uint32 value) {
+  set_has_sequence();
+  sequence_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.SequenceCacheEntry.sequence)
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS

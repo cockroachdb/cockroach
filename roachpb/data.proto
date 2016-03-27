@@ -312,6 +312,10 @@ message SequenceCacheEntry {
   optional bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The original timestamp of the associated transaction.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  // The priority of the associated transaction. 0 unless pushed or aborted.
+  // The priority of the transaction. 0 unless pushed or aborted.
   optional int32 priority = 3 [(gogoproto.nullable) = false];
+  // The epoch number of the transaction.
+  optional uint32 epoch = 4 [(gogoproto.nullable) = false];
+  // The sequence number of the transaction.
+  optional uint32 sequence = 5 [(gogoproto.nullable) = false];
 }

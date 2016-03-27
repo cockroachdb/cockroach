@@ -388,7 +388,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		}
 		seqTS := txn.Timestamp
 		seqTS.Forward(*txn.LastHeartbeat)
-		if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, epo, 2*epo, txn.Key, seqTS, 0 /* priority */, nil /* err */); err != nil {
+		entry := roachpb.SequenceCacheEntry{Key: txn.Key, Timestamp: seqTS, Epoch: epo, Sequence: 2 * epo}
+		if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil /* err */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -427,10 +428,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
 					strKey, expIntents, resolved[strKey])
 			}
-			if kvs, err := tc.rng.sequence.GetAllTransactionID(tc.store.Engine(), txns[strKey].ID); err != nil {
+			entry := &roachpb.SequenceCacheEntry{}
+			err = tc.rng.sequence.Get(tc.store.Engine(), txns[strKey].ID, entry)
+			if err != nil && err != errNoCacheEntry {
 				t.Fatal(err)
-			} else if (len(kvs) != 0) == sp.expSeqGC {
-				return fmt.Errorf("%s: expected sequence cache gc: %t, found %+v", strKey, sp.expSeqGC, kvs)
+			}
+			if (err == errNoCacheEntry) != sp.expSeqGC {
+				return fmt.Errorf("%s: expected sequence cache gc: %t, found %+v", strKey, sp.expSeqGC, entry)
 			}
 		}
 		return nil

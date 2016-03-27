@@ -253,7 +253,7 @@ func trySequence(kv engine.MVCCKeyValue) (string, error) {
 	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
 		return "", errors.New("not a sequence cache key")
 	}
-	_, _, _, err := keys.DecodeSequenceCacheKey(kv.Key.Key, nil)
+	_, err := keys.DecodeSequenceCacheKey(kv.Key.Key, nil)
 	if err != nil {
 		return "", err
 	}

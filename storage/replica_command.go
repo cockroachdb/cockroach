@@ -1183,7 +1183,14 @@ func (r *Replica) clearSequenceCache(
 	}
 
 	// The snake bites.
-	return r.sequence.Put(batch, ms, txn.ID, txn.Epoch, poison, txn.Key, txn.Timestamp, txn.Priority, nil)
+	entry := roachpb.SequenceCacheEntry{
+		Key:       txn.Key,
+		Timestamp: txn.Timestamp,
+		Epoch:     txn.Epoch,
+		Sequence:  poison,
+		Priority:  txn.Priority,
+	}
+	return r.sequence.Put(batch, ms, txn.ID, &entry, nil)
 }
 
 // ResolveIntent resolves a write intent from the specified key
