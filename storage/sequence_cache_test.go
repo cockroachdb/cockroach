@@ -30,12 +30,11 @@ import (
 const testTxnEpoch = 5
 
 var (
-	batchR    = roachpb.BatchResponse{}
-	testTxnID *uuid.UUID
-
+	batchR           = roachpb.BatchResponse{}
+	testTxnID        *uuid.UUID
+	testTxnID2       *uuid.UUID
 	testTxnKey       = []byte("a")
 	testTxnTimestamp = roachpb.ZeroTimestamp.Add(123, 456)
-	testEntry        = roachpb.SequenceCacheEntry{Key: testTxnKey, Timestamp: testTxnTimestamp}
 )
 
 func init() {
@@ -46,6 +45,10 @@ func init() {
 
 	var err error
 	testTxnID, err = uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
+	if err != nil {
+		panic(err)
+	}
+	testTxnID2, err = uuid.FromString("9ab49d02-eb45-beef-9212-c23a92bc8211")
 	if err != nil {
 		panic(err)
 	}
@@ -65,30 +68,32 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
 	// Start with a get for an unseen id/sequence combo.
-	if seq, _, readErr := sc.Get(e, testTxnID, nil); seq > 0 {
+	entry := roachpb.SequenceCacheEntry{}
+	if readErr := sc.Get(e, testTxnID, &entry); entry.Sequence > 0 {
 		t.Errorf("expected no response for id %s", testTxnID)
-	} else if readErr != nil {
+	} else if readErr != nil && readErr != errNoCacheEntry {
 		t.Fatalf("unxpected read error: %s", readErr)
 	}
 	// Cache the test response.
 	const seq = 123
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, 0, nil); err != nil {
+	entry = roachpb.SequenceCacheEntry{
+		Key:       testTxnKey,
+		Timestamp: testTxnTimestamp,
+		Epoch:     testTxnEpoch,
+		Sequence:  seq,
+	}
+	if err := sc.Put(e, nil, testTxnID, &entry, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit := func(expSeq, expEpo uint32) {
-		var entry roachpb.SequenceCacheEntry
-		if actEpo, actSeq, readErr := sc.Get(e, testTxnID, &entry); readErr != nil {
+		var actual roachpb.SequenceCacheEntry
+		if readErr := sc.Get(e, testTxnID, &actual); readErr != nil && readErr != errNoCacheEntry {
 			t.Errorf("unexpected failure getting response: %s", readErr)
-		} else if (expSeq > 0 || actSeq > 0) && expSeq != actSeq {
-			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actSeq, expSeq)
-		} else if expSeq > 0 {
-			if !reflect.DeepEqual(testEntry, entry) {
-				t.Fatalf("wanted %v, got %v", testEntry, entry)
-			}
-			if expEpo != actEpo {
-				t.Fatalf("expected epoch %d, got %d", expEpo, actEpo)
-			}
+		} else if (expSeq > 0 || actual.Sequence > 0) && expSeq != actual.Sequence {
+			t.Errorf("wanted hit: %t, got actual %d vs expected %d", expSeq > 0, actual.Sequence, expSeq)
+		} else if expEpo != actual.Epoch {
+			t.Errorf("wanted epoch: %d; got %d", expEpo, actual.Epoch)
 		}
 	}
 
@@ -98,22 +103,30 @@ func TestSequenceCachePutGetClearData(t *testing.T) {
 	}
 	tryHit(0, 0)
 
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, 0, nil); err != nil {
+	entry = roachpb.SequenceCacheEntry{
+		Key:       testTxnKey,
+		Timestamp: testTxnTimestamp,
+		Epoch:     testTxnEpoch,
+		Sequence:  2 * seq,
+	}
+	if err := sc.Put(e, nil, testTxnID, &entry, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	tryHit(2*seq, testTxnEpoch)
 
-	if err := sc.Put(e, nil, testTxnID, 2*testTxnEpoch, 2*seq, testTxnKey, testTxnTimestamp, 0, nil); err != nil {
+	entry.Epoch = 2 * testTxnEpoch
+	if err := sc.Put(e, nil, testTxnID, &entry, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit(2*seq, 2*testTxnEpoch)
 
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch-1, 2*seq, testTxnKey, testTxnTimestamp, 0, nil); err != nil {
+	entry.Epoch = testTxnEpoch - 1
+	if err := sc.Put(e, nil, testTxnID, &entry, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit(2*seq, 2*testTxnEpoch)
+	tryHit(2*seq, testTxnEpoch-1)
 }
 
 // TestSequenceCacheEmptyParams tests operation with empty parameters.
@@ -122,14 +135,21 @@ func TestSequenceCacheEmptyParams(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	sc, e := createTestSequenceCache(t, 1, stopper)
+
+	entry := roachpb.SequenceCacheEntry{
+		Key:       testTxnKey,
+		Timestamp: testTxnTimestamp,
+		Epoch:     testTxnEpoch,
+	}
 	// Put value for test response.
-	if err := sc.Put(e, nil, testTxnID, testTxnEpoch, 0, testTxnKey, testTxnTimestamp, 0, nil); err != errEmptyTxnID {
+	if err := sc.Put(e, nil, testTxnID, &entry, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if err := sc.Put(e, nil, nil, testTxnEpoch, 10, testTxnKey, testTxnTimestamp, 0, nil); err != errEmptyTxnID {
+	entry.Sequence = 10
+	if err := sc.Put(e, nil, nil, &entry, nil); err != errEmptyTxnID {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	if _, _, readErr := sc.Get(e, nil, nil); readErr != errEmptyTxnID {
+	if readErr := sc.Get(e, nil, nil); readErr != errEmptyTxnID {
 		t.Fatalf("unxpected read error: %v", readErr)
 	}
 }
@@ -143,8 +163,15 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 	rc1, e := createTestSequenceCache(t, 1, stopper)
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 123
+
+	entry := roachpb.SequenceCacheEntry{
+		Key:       testTxnKey,
+		Timestamp: testTxnTimestamp,
+		Epoch:     testTxnEpoch,
+		Sequence:  seq,
+	}
 	// Store an increment with new value one in the first cache.
-	if err := rc1.Put(e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, 0, nil); err != nil {
+	if err := rc1.Put(e, nil, testTxnID, &entry, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -154,14 +181,12 @@ func TestSequenceCacheCopyInto(t *testing.T) {
 		t.Errorf("unexpected number of copied entries: %d", count)
 	}
 	for _, cache := range []*SequenceCache{rc1, rc2} {
-		var entry roachpb.SequenceCacheEntry
+		var actual roachpb.SequenceCacheEntry
 		// Get should return 1 for both caches.
-		if _, actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+		if readErr := cache.Get(e, testTxnID, &actual); readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %s", readErr)
-		} else if actSeq != seq {
-			t.Fatalf("unxpected cache miss")
-		} else if !reflect.DeepEqual(testEntry, entry) {
-			t.Fatalf("wanted %v, got %v", testEntry, entry)
+		} else if !reflect.DeepEqual(entry, actual) {
+			t.Fatalf("wanted %v, got %v", entry, actual)
 		}
 	}
 }
@@ -175,8 +200,15 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 	rc1, e := createTestSequenceCache(t, 1, stopper)
 	rc2, _ := createTestSequenceCache(t, 2, stopper)
 	const seq = 321
+
+	entry := roachpb.SequenceCacheEntry{
+		Key:       testTxnKey,
+		Timestamp: testTxnTimestamp,
+		Epoch:     testTxnEpoch,
+		Sequence:  seq,
+	}
 	// Store an increment with new value one in the first cache.
-	if err := rc1.Put(e, nil, testTxnID, testTxnEpoch, seq, testTxnKey, testTxnTimestamp, 0, nil); err != nil {
+	if err := rc1.Put(e, nil, testTxnID, &entry, nil); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
@@ -189,14 +221,74 @@ func TestSequenceCacheCopyFrom(t *testing.T) {
 
 	// Get should hit both caches.
 	for i, cache := range []*SequenceCache{rc1, rc2} {
-		var entry roachpb.SequenceCacheEntry
-		if _, actSeq, readErr := cache.Get(e, testTxnID, &entry); readErr != nil {
+		var actual roachpb.SequenceCacheEntry
+		if readErr := cache.Get(e, testTxnID, &actual); readErr != nil {
 			t.Fatalf("%d: unxpected read error: %s", i, readErr)
-		} else if actSeq != seq {
-			t.Errorf("%d: unexpected cache miss: wanted %d, got %d", i, seq, actSeq)
-		} else if !reflect.DeepEqual(entry, testEntry) {
-			t.Fatalf("expected %v, got %v", testEntry, entry)
+		} else if !reflect.DeepEqual(entry, actual) {
+			t.Fatalf("expected %v, got %v", entry, actual)
 		}
+	}
+}
+
+// TestSequenceCacheCopyWithOverlapping verifies that copying one
+// sequence cache into another correctly resolves overlapping entries
+// such that the highest epoch and or sequence numbers are preserved.
+func TestSequenceCacheCopyWithOverlapping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rc1, e := createTestSequenceCache(t, 1, stopper)
+	rc2, _ := createTestSequenceCache(t, 2, stopper)
+	uuid1, uuid2 := uuid.NewV4(), uuid.NewV4()
+
+	// Add entries to cache 1.
+	rc1Entries := map[*uuid.UUID]roachpb.SequenceCacheEntry{
+		uuid1: {Epoch: 1, Sequence: 1},
+		uuid2: {Epoch: 3, Sequence: 6},
+	}
+	for id, entry := range rc1Entries {
+		if err := rc1.Put(e, nil, id, &entry, nil); err != nil {
+			t.Errorf("unexpected error inserting entry %+v: %s", entry, err)
+		}
+	}
+
+	// Add entries to cache 2.
+	rc2Entries := map[*uuid.UUID]roachpb.SequenceCacheEntry{
+		uuid1: {Epoch: 2, Sequence: 4},
+		uuid2: {Epoch: 3, Sequence: 5},
+	}
+	for id, entry := range rc2Entries {
+		if err := rc2.Put(e, nil, id, &entry, nil); err != nil {
+			t.Errorf("unexpected error inserting entry %+v: %s", entry, err)
+		}
+	}
+
+	// Copy the first cache into the second.
+	if count, err := rc2.CopyFrom(e, nil, rc1.rangeID); err != nil {
+		t.Fatal(err)
+	} else if expCount := 2; count != expCount {
+		t.Errorf("unexpected number of copied entries: %d", count)
+	}
+
+	// Iterate over entries in cache 2. They should match expected entries.
+	expEntries := map[string]roachpb.SequenceCacheEntry{
+		uuid1.String(): {Epoch: 2, Sequence: 4},
+		uuid2.String(): {Epoch: 3, Sequence: 6},
+	}
+	count := 0
+	rc2.Iterate(e, func(key []byte, id *uuid.UUID, entry roachpb.SequenceCacheEntry) {
+		count++
+		expEntry, ok := expEntries[id.String()]
+		if !ok {
+			t.Errorf("unexpected entry %s in rc2 sequence cache", id)
+			return
+		}
+		if !reflect.DeepEqual(expEntry, entry) {
+			t.Errorf("unexpected entry %s in rc2: %+v != %+v", id, entry, expEntry)
+		}
+	})
+	if count != 2 {
+		t.Errorf("expected 2 entries; got %d", count)
 	}
 }
 

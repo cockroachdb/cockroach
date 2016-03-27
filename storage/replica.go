@@ -1595,8 +1595,13 @@ func (r *Replica) applyRaftCommandInBatch(
 			// entry which would then need to be GCed on the slow path.
 			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
 			if (!isEndTxn && ba.IsTransactionWrite()) || pErr != nil {
-				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, ba.Txn.Epoch,
-					ba.Txn.Sequence, ba.Txn.Key, ba.Txn.Timestamp, 0 /* priority */, pErr); putErr != nil {
+				entry := roachpb.SequenceCacheEntry{
+					Key:       ba.Txn.Key,
+					Timestamp: ba.Txn.Timestamp,
+					Epoch:     ba.Txn.Epoch,
+					Sequence:  ba.Txn.Sequence,
+				}
+				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, &entry, pErr); putErr != nil {
 					// TODO(tschottdorf): ReplicaCorruptionError.
 					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
 				}
@@ -1619,33 +1624,29 @@ func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// TODO(spencer): consider passing nil here to Get() to avoid
-	// unmarshalling the sequence cache entry in the common case.
-	// It can be called again below in the event of an error.
 	var entry roachpb.SequenceCacheEntry
-	epoch, sequence, readErr := r.sequence.Get(b, txn.ID, &entry)
-	if readErr != nil {
-		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), readErr))
+	if err := r.sequence.Get(b, txn.ID, &entry); err != nil && err != errNoCacheEntry {
+		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), err))
 	}
 	var err error
 	switch {
-	case txn.Epoch > epoch:
+	case txn.Epoch > entry.Epoch:
 		// No cache hit from current or future epoch, continue.
-	case sequence == SequencePoisonAbort:
+	case entry.Sequence == SequencePoisonAbort:
 		// We were poisoned, which means that our Transaction has been
 		// aborted and learns about that right now.
 		err = roachpb.NewTransactionAbortedError()
-	case sequence == SequencePoisonRestart:
+	case entry.Sequence == SequencePoisonRestart:
 		// Same, but we got restarted.
 		err = roachpb.NewTransactionRetryError()
-	case sequence >= txn.Sequence:
+	case entry.Sequence >= txn.Sequence:
 		err = roachpb.NewTransactionRetryError()
 	}
 	if err != nil {
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
 			log.Infof("found sequence cache entry for %s@epo=%d,seq=%d: epo=%d,seq=%d", txn.Short(),
-				txn.Epoch, txn.Sequence, epoch, sequence)
+				txn.Epoch, txn.Sequence, entry.Epoch, entry.Sequence)
 		}
 		newTxn := txn.Clone()
 		newTxn.Timestamp.Forward(entry.Timestamp)

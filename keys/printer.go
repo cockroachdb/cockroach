@@ -382,11 +382,11 @@ func sequenceCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roach
 	if err != nil {
 		panic(&errUglifyUnsupported{err})
 	}
-	return "", SequenceCacheKeyPrefix(rangeID, id)
+	return "", SequenceCacheKey(rangeID, id)
 }
 
 func sequenceCacheKeyPrint(key roachpb.Key) string {
-	b, id, err := encoding.DecodeBytesAscending([]byte(key), nil)
+	_, id, err := encoding.DecodeBytesAscending([]byte(key), nil)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", key, err)
 	}
@@ -396,21 +396,7 @@ func sequenceCacheKeyPrint(key roachpb.Key) string {
 		return fmt.Sprintf("/%q/err:%v", key, err)
 	}
 
-	if len(b) == 0 {
-		return fmt.Sprintf("/%q", txnID)
-	}
-
-	b, epoch, err := encoding.DecodeUint32Descending(b)
-	if err != nil {
-		return fmt.Sprintf("/%q/err:%v", txnID, err)
-	}
-
-	_, seq, err := encoding.DecodeUint32Descending(b)
-	if err != nil {
-		return fmt.Sprintf("/%q/epoch:%d/err:%v", txnID, epoch, err)
-	}
-
-	return fmt.Sprintf("/%q/epoch:%d/seq:%d", txnID, epoch, seq)
+	return fmt.Sprintf("/%q", txnID)
 }
 
 func print(key roachpb.Key) string {
@@ -461,7 +447,7 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 // /Local/...                                     "\x01"+...
 // 		/Store/...                                  "\x01s"+...
 //		/RangeID/...                                "\x01s"+[rangeid]
-//			/[rangeid]/SequenceCache/[id]/seq:[seq]   "\x01s"+[rangeid]+"res-"+[id]+[seq]
+//			/[rangeid]/SequenceCache/[id]             "\x01s"+[rangeid]+"res-"+[id]
 //			/[rangeid]/RaftLeaderLease                "\x01s"+[rangeid]+"rfll"
 //			/[rangeid]/RaftTombstone                  "\x01s"+[rangeid]+"rftb"
 //			/[rangeid]/RaftHardState						      "\x01s"+[rangeid]+"rfth"

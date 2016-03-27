@@ -1548,12 +1548,8 @@ func TestReplicaSequenceCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite sequence cache entry with garbage for the last op.
-	key := keys.SequenceCacheKey(tc.rng.RangeID, txn.ID, uint32(txn.Epoch), txn.Sequence)
-	// Make garbageKey sort before key (we've chosen Sequence=1 above,
-	// the last byte of which isn't \x00); add an extra byte of garbage.
-	garbageKey := append(roachpb.Key(nil), key[:len(key)-1]...)
-	garbageKey = append(garbageKey, '\x00', '!')
-	err := engine.MVCCPut(tc.engine, nil, garbageKey, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
+	key := keys.SequenceCacheKey(tc.rng.RangeID, txn.ID)
+	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1579,7 +1575,14 @@ func TestReplicaSequenceCacheStoredTxnRetryError(t *testing.T) {
 	for i, pastError := range []error{errors.New("boom"), nil} {
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
 		txn.Sequence = uint32(1 + i)
-		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, 0, roachpb.NewError(pastError))
+		entry := roachpb.SequenceCacheEntry{
+			Key:       txn.Key,
+			Timestamp: txn.Timestamp,
+			Epoch:     txn.Epoch,
+			Sequence:  txn.Sequence,
+			Priority:  0,
+		}
+		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, roachpb.NewError(pastError))
 
 		args := incrementArgs(key, 1)
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), roachpb.Header{
@@ -1680,7 +1683,14 @@ func TestReplicaSequenceCacheOnlyWithIntent(t *testing.T) {
 
 	txn := newTransaction("test", []byte("test"), 10, roachpb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 100
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, uint32(txn.Epoch), txn.Sequence, txn.Key, txn.Timestamp, 0, nil); err != nil {
+	entry := roachpb.SequenceCacheEntry{
+		Key:       txn.Key,
+		Timestamp: txn.Timestamp,
+		Epoch:     txn.Epoch,
+		Sequence:  txn.Sequence,
+		Priority:  0,
+	}
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2462,14 +2472,14 @@ func TestEndTransactionDirectGC(t *testing.T) {
 		}
 
 		var entry roachpb.SequenceCacheEntry
-		if _, seq, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
-		} else if seq > 0 {
+		} else if entry.Sequence > 0 {
 			return util.Errorf("sequence cache still populated: %v", entry)
 		}
-		if _, seq, err := rightRng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if err := rightRng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
-		} else if seq == 0 {
+		} else if entry.Sequence == 0 {
 			t.Fatalf("right-hand side with external intent had its sequence cache cleared")
 		}
 
@@ -2542,9 +2552,9 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			}
 
 			var entry roachpb.SequenceCacheEntry
-			if seq, _, err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+			if err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil && err != errNoCacheEntry {
 				t.Fatal(err)
-			} else if seq > 0 {
+			} else if err == nil && entry.Sequence > 0 {
 				t.Fatalf("commit=%t: sequence cache still populated: %v", commit, entry)
 			}
 		}()
@@ -2715,7 +2725,14 @@ func TestSequenceCacheError(t *testing.T) {
 	// to trigger TransactionRetryError.
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, txn.Sequence+1, key, ts, 0, nil); err != nil {
+	entry := roachpb.SequenceCacheEntry{
+		Key:       key,
+		Timestamp: ts,
+		Epoch:     txn.Epoch,
+		Sequence:  txn.Sequence + 1,
+		Priority:  0,
+	}
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2732,7 +2749,14 @@ func TestSequenceCacheError(t *testing.T) {
 
 	// Poison the sequence cache to trigger TransactionAbortedError.
 	priority := int32(10)
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, txn.Epoch, SequencePoisonAbort, key, ts, priority, nil); err != nil {
+	entry = roachpb.SequenceCacheEntry{
+		Key:       key,
+		Timestamp: ts,
+		Epoch:     txn.Epoch,
+		Sequence:  SequencePoisonAbort,
+		Priority:  priority,
+	}
+	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3286,7 +3310,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 99, KeyBytes: 28, ValBytes: 71, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 147, SysCount: 3, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 99, KeyBytes: 28, ValBytes: 71, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 143, SysCount: 3, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.

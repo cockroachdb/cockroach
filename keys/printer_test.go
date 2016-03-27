@@ -50,8 +50,7 @@ func TestPrettyPrint(t *testing.T) {
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
 		{StoreGossipKey(), "/Local/Store/gossipBootstrap"},
 
-		{SequenceCacheKeyPrefix(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/r/SequenceCache/%q`, txnID)},
-		{SequenceCacheKey(roachpb.RangeID(1000001), txnID, uint32(111), uint32(222)), fmt.Sprintf(`/Local/RangeID/1000001/r/SequenceCache/%q/epoch:111/seq:222`, txnID)},
+		{SequenceCacheKey(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/r/SequenceCache/%q`, txnID)},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftTombstone"},
 		{RaftAppliedIndexKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftAppliedIndex"},
 		{RaftTruncatedStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftTruncatedState"},
