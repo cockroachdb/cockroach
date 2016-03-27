@@ -497,15 +497,17 @@ func (txn *Txn) Exec(
 RetryLoop:
 	for r := retry.Start(retryOptions); r.Next(); {
 		pErr = fn(txn, &opt)
-		if txn != nil {
-			txn.retrying = true
-			defer func() {
-				txn.retrying = false
-			}()
-		}
 		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
 			// fn succeeded, but didn't commit.
 			pErr = txn.CommitNoCleanup()
+		}
+		if txn != nil {
+			txn.retrying = true
+			defer func() {
+				if pErr == nil {
+					txn.retrying = false
+				}
+			}()
 		}
 
 		if pErr == nil {
