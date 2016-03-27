@@ -508,7 +508,8 @@ func (e *AutoCommitError) Error() string {
 // used.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
-	fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
+	fn func(txn *Txn, opt *TxnExecOptions) error,
+) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var retryOptions retry.Options
@@ -533,8 +534,14 @@ func (txn *Txn) Exec(
 	if opt.AutoRetry {
 		retryOptions = txn.db.ctx.TxnRetryOptions
 	}
-RetryLoop:
-	for r := retry.Start(retryOptions); r.Next(); {
+
+	maybeSetRetrying := func() {
+		if txn != nil {
+			txn.retrying = err != nil
+		}
+	}
+
+	for r := retry.Start(retryOptions); r.Next(); maybeSetRetrying() {
 		if txn != nil {
 			// If we're looking at a brand new transaction, then communicate
 			// what should be used as initial timestamp for the KV txn created
@@ -544,31 +551,24 @@ RetryLoop:
 			}
 		}
 
-		err = fn(txn, &opt)
-		if txn != nil {
-			txn.retrying = true
-			defer func() {
-				txn.retrying = false
-			}()
-		}
-		if (err == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+		if err = fn(txn, &opt); err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
-			err = txn.Commit()
-			// Wrap a non-retryable error so that a caller can inspect.
-			if _, retryable := err.(*roachpb.RetryableTxnError); err != nil && !retryable {
-				err = &AutoCommitError{cause: err}
+			if err = txn.Commit(); err != nil {
+				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+					// We can't retry, so let the caller know we tried to
+					// autocommit.
+					err = &AutoCommitError{cause: err}
+				}
 			}
 		}
 
-		if err == nil {
+		if !opt.AutoRetry {
 			break
 		}
 
-		if !opt.AutoRetry {
-			break RetryLoop
-		}
-
-		if retErr, retryable := err.(*roachpb.RetryableTxnError); retryable {
+		if retErr, retryable := err.(*roachpb.RetryableTxnError); !retryable {
+			break
+		} else {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error.
 			if txn.Proto.ID != nil {
@@ -583,8 +583,6 @@ RetryLoop:
 			if !retErr.Backoff {
 				r.Reset()
 			}
-		} else {
-			break RetryLoop
 		}
 		if log.V(2) {
 			log.Infof("automatically retrying transaction: %s because of error: %s",

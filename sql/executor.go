@@ -738,7 +738,6 @@ func (e *Executor) execStmtInAbortedTxn(
 		if txnState.State == RestartWait {
 			// Reset the state. Txn is Open again.
 			txnState.State = Open
-			txnState.retrying = true
 			// TODO(andrei/cdo): add a counter for user-directed retries.
 			return Result{}, nil
 		}
@@ -863,11 +862,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// The executor should not be doing that. But it's also what the planner does for
 		// SET TRANSACTION ISOLATION ... It feels ever more wrong here.
 		// TODO(andrei): find a better way to track this running state.
-		// TODO(andrei): the check for retrying is a hack - we erroneously allow
-		// SAVEPOINT to be issued at any time during a retry, not just in the
-		// beginning. We should figure out how to track whether we started using the
-		// transaction during a retry.
-		if txnState.txn.Proto.IsInitialized() && !txnState.retrying {
+		if txnState.txn.Proto.IsInitialized() {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a transaction",
 				parser.RestartSavepointName)
 			txnState.updateStateAndCleanupOnErr(err, e)
