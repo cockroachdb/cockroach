@@ -146,14 +146,13 @@ func runStart(_ *cobra.Command, _ []string) error {
 
 	log.Info("starting cockroach node")
 	s, err := server.NewServer(&cliContext.Context, stopper)
+	if err != nil {
+		return fmt.Errorf("failed to start Cockroach server: %s", err)
+	}
 
 	// We don't do this in NewServer since we don't want it in tests.
 	if err := s.SetupReportingURLs(); err != nil {
 		return err
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
 
 	if err := s.Start(); err != nil {
