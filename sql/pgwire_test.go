@@ -367,11 +367,11 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SELECT $1::date, $2::timestamp": {
 			base.Params(
-				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
-				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
+				time.Date(2006, 7, 8, 0, 0, 0, 9, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
 			).Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
-				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
+				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
 			),
 		},
 		"INSERT INTO d.ts VALUES($1, $2) RETURNING *": {
@@ -388,6 +388,13 @@ func TestPGPreparedQuery(t *testing.T) {
 		"INSERT INTO d.ts VALUES(STATEMENT_TIMESTAMP(), $1) RETURNING b": {
 			base.Params("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
+			),
+		},
+		"INSERT INTO d.ts (a) VALUES ($1) RETURNING a": {
+			base.Params(
+				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
+			).Results(
+				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
 			),
 		},
 
