@@ -155,7 +155,7 @@ func checkEndTransactionTrigger(args storageutils.FilterArgs) *roachpb.Error {
 	for _, span := range req.IntentSpans {
 		keyAddr, err := keys.Addr(span.Key)
 		if err != nil {
-			return err
+			return roachpb.NewError(err)
 		}
 		if bytes.Compare(keyAddr, keys.SystemConfigSpan.Key) >= 0 &&
 			bytes.Compare(keyAddr, keys.SystemConfigSpan.EndKey) < 0 {
