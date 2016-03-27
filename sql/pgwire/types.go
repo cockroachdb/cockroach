@@ -416,7 +416,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_timestamp:
 		switch code {
 		case formatText:
-			ts, err := pq.ParseTimestamp(nil, string(b))
+			ts, err := parseTimestamp(string(b))
 			if err != nil {
 				return d, fmt.Errorf("could not parse string %q as timestamp", b)
 			}
@@ -427,7 +427,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	case oid.T_date:
 		switch code {
 		case formatText:
-			ts, err := pq.ParseTimestamp(nil, string(b))
+			ts, err := parseTimestamp(string(b))
 			if err != nil {
 				return d, fmt.Errorf("could not parse string %q as date", b)
 			}
@@ -440,4 +440,15 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		return d, fmt.Errorf("unsupported OID: %v", id)
 	}
 	return d, nil
+}
+
+func parseTimestamp(str string) (time.Time, error) {
+	// TODO(dan): The cockroach/pq driver encodes timestamps using
+	// time.RFC3339Nano, yet it cannot parse those timestamps using
+	// pq.ParseTimestamp. We should either fix pq.ParseTimestamp or replace this
+	// comment with one explaining the discrepancy.
+	if ts, err := time.Parse(time.RFC3339Nano, str); err == nil {
+		return ts, nil
+	}
+	return pq.ParseTimestamp(nil, str)
 }
