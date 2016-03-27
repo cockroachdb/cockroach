@@ -88,12 +88,39 @@ func TestKeyAddress(t *testing.T) {
 		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
 		{TransactionKey(roachpb.Key("baz"), uuid.NewV4()), roachpb.RKey("baz")},
 		{TransactionKey(roachpb.KeyMax, uuid.NewV4()), roachpb.RKeyMax},
+		{RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBaz"), uuid.NewV4()))), roachpb.RKey("doubleBaz")},
 		{nil, nil},
 	}
 	for i, test := range testCases {
-		result := Addr(test.key)
-		if !result.Equal(test.expAddress) {
+		if keyAddr, err := Addr(test.key); err != nil {
+			t.Errorf("%d: %v", i, err)
+		} else if !keyAddr.Equal(test.expAddress) {
 			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
+		}
+	}
+}
+
+func TestKeyAddressError(t *testing.T) {
+	testCases := []roachpb.Key{
+		StoreIdentKey(),
+		StoreGossipKey(),
+		SequenceCacheKey(0, uuid.NewV4(), 0, 0),
+		RaftTombstoneKey(0),
+		RaftAppliedIndexKey(0),
+		RaftTruncatedStateKey(0),
+		RangeLeaderLeaseKey(0),
+		RangeStatsKey(0),
+		RaftHardStateKey(0),
+		RaftLastIndexKey(0),
+		RaftLogPrefix(0),
+		RaftLogKey(0, 0),
+		RangeLastReplicaGCTimestampKey(0),
+		RangeLastVerificationTimestampKey(0),
+		RangeDescriptorKey(roachpb.RKey(RangeLastVerificationTimestampKey(0))),
+	}
+	for i, test := range testCases {
+		if addr, err := Addr(test); !testutils.IsError(err, "local key .* malformed; should contain prefix .*") {
+			t.Errorf("%d: expected addressing key %q to throw error, but it returned address %q", i, test, addr)
 		}
 	}
 }
@@ -209,7 +236,6 @@ func TestMetaScanBounds(t *testing.T) {
 }
 
 func TestMetaReverseScanBounds(t *testing.T) {
-
 	testCases := []struct {
 		key              []byte
 		expStart, expEnd []byte
@@ -252,7 +278,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "",
 		},
 		{
-			key:      Addr(Meta2Prefix),
+			key:      mustAddr(Meta2Prefix),
 			expStart: Meta1Prefix,
 			expEnd:   Meta2Prefix.Next(),
 			expError: "",
@@ -363,9 +389,10 @@ func TestBatchRange(t *testing.T) {
 		for _, pair := range c.req {
 			ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1])}})
 		}
-		rs := Range(ba)
-		if actPair := [2]string{string(rs.Key), string(rs.EndKey)}; !reflect.DeepEqual(actPair, c.exp) {
-			t.Fatalf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
+		if rs, err := Range(ba); err != nil {
+			t.Errorf("%d: %v", i, err)
+		} else if actPair := [2]string{string(rs.Key), string(rs.EndKey)}; !reflect.DeepEqual(actPair, c.exp) {
+			t.Errorf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
 		}
 	}
 }
@@ -374,7 +401,7 @@ func TestMakeColumnKey(t *testing.T) {
 	const maxColID = math.MaxUint32
 	key := MakeColumnKey(nil, maxColID)
 	if expected, n := 6, len(key); expected != n {
-		t.Fatalf("expected %d bytes, but got %d: [% x]", expected, n, []byte(key))
+		t.Errorf("expected %d bytes, but got %d: [% x]", expected, n, []byte(key))
 	}
 }
 

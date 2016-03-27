@@ -664,7 +664,11 @@ func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
 	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
 		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
 	}
-	return desc.ContainsKey(keys.Addr(key))
+	keyAddr, err := keys.Addr(key)
+	if err != nil {
+		return false
+	}
+	return desc.ContainsKey(keyAddr)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
@@ -674,7 +678,15 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 }
 
 func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
-	return desc.ContainsKeyRange(keys.Addr(start), keys.Addr(end))
+	startKeyAddr, err := keys.Addr(start)
+	if err != nil {
+		return false
+	}
+	endKeyAddr, err := keys.Addr(end)
+	if err != nil {
+		return false
+	}
+	return desc.ContainsKeyRange(startKeyAddr, endKeyAddr)
 }
 
 // getLastReplicaGCTimestamp reads the timestamp at which the replica was

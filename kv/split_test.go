@@ -104,8 +104,8 @@ func TestRangeSplitMeta(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	splitKeys := []roachpb.RKey{roachpb.RKey("G"), meta(roachpb.RKey("F")),
-		meta(roachpb.RKey("K")), meta(roachpb.RKey("H"))}
+	splitKeys := []roachpb.RKey{roachpb.RKey("G"), mustMeta(roachpb.RKey("F")),
+		mustMeta(roachpb.RKey("K")), mustMeta(roachpb.RKey("H"))}
 
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {

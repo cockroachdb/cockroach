@@ -568,8 +568,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cur := ds.leaderCache.Lookup(1); reflect.DeepEqual(cur, &roachpb.ReplicaDescriptor{}) && !tc.shouldClearLeader {
 			t.Errorf("%d: leader cache eviction: shouldClearLeader=%t, but value is %v", i, tc.shouldClearLeader, cur)
 		}
-		_, cachedDesc := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */)
-		if cachedDesc == nil != tc.shouldClearReplica {
+		if _, cachedDesc, err := ds.rangeCache.getCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */); err != nil {
+			t.Error(err)
+		} else if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
 		}
 	}
@@ -591,7 +592,10 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
 			if !descStale && bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
 				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
@@ -787,13 +791,20 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
 		results := []roachpb.KeyValue{}
 		for _, curKV := range existingKVs {
-			if rs.Key.Less(keys.Addr(curKV.Key).Next()) && keys.Addr(curKV.Key).Less(rs.EndKey) {
+			curKeyAddr, err := keys.Addr(curKV.Key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rs.Key.Less(curKeyAddr.Next()) && curKeyAddr.Less(rs.EndKey) {
 				results = append(results, curKV)
 			}
 		}
@@ -965,7 +976,10 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// "a". The second request should be on "b".
 	first := true
 	sendStub := func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
 				t.Errorf("Unexpected span [%s,%s)", rs.Key, rs.EndKey)
@@ -1265,7 +1279,10 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	var firstSequence uint32
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if first {
 			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
 				t.Errorf("unexpected span [%s,%s)", rs.Key, rs.EndKey)

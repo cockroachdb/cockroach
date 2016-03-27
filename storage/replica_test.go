@@ -3655,7 +3655,11 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 
 	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
-	newDesc.EndKey = keys.Addr(key)
+	var err error
+	newDesc.EndKey, err = keys.Addr(key)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write the new descriptor as an intent.
 	data, err := proto.Marshal(&newDesc)
@@ -3856,6 +3860,14 @@ func TestReplicaLookup(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	mustAddr := func(k roachpb.Key) roachpb.RKey {
+		rk, err := keys.Addr(k)
+		if err != nil {
+			panic(err)
+		}
+		return rk
+	}
+
 	expected := []roachpb.RangeDescriptor{*tc.rng.Desc()}
 	testCases := []struct {
 		key      roachpb.RKey
@@ -3870,10 +3882,10 @@ func TestReplicaLookup(t *testing.T) {
 		{key: roachpb.RKeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		{key: keys.Addr(keys.Meta1KeyMax), reverse: false, expected: expected},
-		{key: keys.Addr(keys.Meta2KeyMax), reverse: false, expected: nil},
-		{key: keys.Addr(keys.Meta1KeyMax), reverse: true, expected: expected},
-		{key: keys.Addr(keys.Meta2KeyMax), reverse: true, expected: expected},
+		{key: mustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
+		{key: mustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
+		{key: mustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
+		{key: mustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
 	}
 
 	for _, c := range testCases {
@@ -4043,7 +4055,11 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	rng := tc.store.LookupReplica(keys.Addr(keys.SystemConfigSpan.Key), nil)
+	scStartSddr, err := keys.Addr(keys.SystemConfigSpan.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rng := tc.store.LookupReplica(scStartSddr, nil)
 	if rng == nil {
 		t.Fatalf("no replica contains the SystemConfig span")
 	}

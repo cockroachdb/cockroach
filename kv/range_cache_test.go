@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type testDescriptorDB struct {
@@ -46,7 +45,6 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 }
 
 func (db *testDescriptorDB) getDescriptor(key roachpb.RKey) []roachpb.RangeDescriptor {
-	log.Infof("getDescriptor: %s", key)
 	response := make([]roachpb.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testDescriptorNode{
@@ -131,16 +129,19 @@ func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.Range
 	if pErr != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
 	}
-	if !r.ContainsKey(keys.Addr(roachpb.Key(key))) {
+	keyAddr, err := keys.Addr(roachpb.Key(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.ContainsKey(keyAddr) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
-	log.Infof("doLookup: %s %+v", key, r)
 	return r
 }
 
 func TestRangeCacheAssumptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	expKeyMin := meta(meta(meta(roachpb.RKey("test"))))
+	expKeyMin := mustMeta(mustMeta(mustMeta(roachpb.RKey("test"))))
 	if !bytes.Equal(expKeyMin, roachpb.RKeyMin) {
 		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)
 	}
@@ -156,7 +157,7 @@ func TestRangeCache(t *testing.T) {
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		db.splitRange(t, roachpb.RKey(string(char)))
 		if i > 0 && i%6 == 0 {
-			db.splitRange(t, meta(roachpb.RKey(string(char))))
+			db.splitRange(t, mustMeta(roachpb.RKey(string(char))))
 		}
 	}
 
@@ -194,7 +195,9 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCount(t, 0, "xx")
 
 	// Evict clears one level 1 and one level 2 cache
-	db.cache.EvictCachedRangeDescriptor(roachpb.RKey("da"), nil, false)
+	if err := db.cache.EvictCachedRangeDescriptor(roachpb.RKey("da"), nil, false); err != nil {
+		t.Fatal(err)
+	}
 	doLookup(t, db.cache, "fa")
 	db.assertLookupCount(t, 0, "fa")
 	doLookup(t, db.cache, "da")
@@ -207,12 +210,16 @@ func TestRangeCache(t *testing.T) {
 
 	// Attempt to compare-and-evict with a descriptor that is not equal to the
 	// cached one; it should not alter the cache.
-	db.cache.EvictCachedRangeDescriptor(roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false)
+	if err := db.cache.EvictCachedRangeDescriptor(roachpb.RKey("cz"), &roachpb.RangeDescriptor{}, false); err != nil {
+		t.Fatal(err)
+	}
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
-	db.cache.EvictCachedRangeDescriptor(roachpb.RKey("cz"), doLookup(t, db.cache, "cz"), false)
+	if err := db.cache.EvictCachedRangeDescriptor(roachpb.RKey("cz"), doLookup(t, db.cache, "cz"), false); err != nil {
+		t.Fatal(err)
+	}
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 2, "cz")
 
@@ -240,22 +247,34 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKeyMax,
 	}
-	cache.clearOverlappingCachedRangeDescriptors(minToBDesc)
-	cache.rangeCache.Add(rangeCacheKey(meta(roachpb.RKey("b"))), minToBDesc)
-	if _, desc := cache.getCachedRangeDescriptor(roachpb.RKey("b"), false); desc != nil {
+	if err := cache.clearOverlappingCachedRangeDescriptors(minToBDesc); err != nil {
+		t.Fatal(err)
+	}
+	cache.rangeCache.Add(rangeCacheKey(mustMeta(roachpb.RKey("b"))), minToBDesc)
+	if _, desc, err := cache.getCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
+		t.Fatal(err)
+	} else if desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
-	cache.clearOverlappingCachedRangeDescriptors(bToMaxDesc)
-	cache.rangeCache.Add(rangeCacheKey(meta(roachpb.RKeyMax)), bToMaxDesc)
-	if _, desc := cache.getCachedRangeDescriptor(roachpb.RKey("b"), false); desc != bToMaxDesc {
+	if err := cache.clearOverlappingCachedRangeDescriptors(bToMaxDesc); err != nil {
+		t.Fatal(err)
+	}
+	cache.rangeCache.Add(rangeCacheKey(mustMeta(roachpb.RKeyMax)), bToMaxDesc)
+	if _, desc, err := cache.getCachedRangeDescriptor(roachpb.RKey("b"), false); err != nil {
+		t.Fatal(err)
+	} else if desc != bToMaxDesc {
 		t.Errorf("expected descriptor %s; got %s", bToMaxDesc, desc)
 	}
 
 	// Add default descriptor back which should remove two split descriptors.
-	cache.clearOverlappingCachedRangeDescriptors(defDesc)
+	if err := cache.clearOverlappingCachedRangeDescriptors(defDesc); err != nil {
+		t.Fatal(err)
+	}
 	cache.rangeCache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
-		if _, desc := cache.getCachedRangeDescriptor(key, false); desc != defDesc {
+		if _, desc, err := cache.getCachedRangeDescriptor(key, false); err != nil {
+			t.Fatal(err)
+		} else if desc != defDesc {
 			t.Errorf("expected descriptor %s for key %s; got %s", defDesc, key, desc)
 		}
 	}
@@ -265,9 +284,13 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
 	}
-	cache.clearOverlappingCachedRangeDescriptors(bToCDesc)
-	cache.rangeCache.Add(rangeCacheKey(meta(roachpb.RKey("c"))), bToCDesc)
-	if _, desc := cache.getCachedRangeDescriptor(roachpb.RKey("c"), true); desc != bToCDesc {
+	if err := cache.clearOverlappingCachedRangeDescriptors(bToCDesc); err != nil {
+		t.Fatal(err)
+	}
+	cache.rangeCache.Add(rangeCacheKey(mustMeta(roachpb.RKey("c"))), bToCDesc)
+	if _, desc, err := cache.getCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
+		t.Fatal(err)
+	} else if desc != bToCDesc {
 		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
 	}
 
@@ -275,9 +298,13 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
 	}
-	cache.clearOverlappingCachedRangeDescriptors(aToBDesc)
-	cache.rangeCache.Add(rangeCacheKey(meta(roachpb.RKey("b"))), aToBDesc)
-	if _, desc := cache.getCachedRangeDescriptor(roachpb.RKey("c"), true); desc != bToCDesc {
+	if err := cache.clearOverlappingCachedRangeDescriptors(aToBDesc); err != nil {
+		t.Fatal(err)
+	}
+	cache.rangeCache.Add(rangeCacheKey(mustMeta(roachpb.RKey("b"))), aToBDesc)
+	if _, desc, err := cache.getCachedRangeDescriptor(roachpb.RKey("c"), true); err != nil {
+		t.Fatal(err)
+	} else if desc != bToCDesc {
 		t.Errorf("expected descriptor %s; got %s", bToCDesc, desc)
 	}
 }
@@ -312,7 +339,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	// Add new range, corresponding to splitting the first range at a meta key.
 	metaSplitDesc := &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
-		EndKey:   meta(roachpb.RKey("foo")),
+		EndKey:   mustMeta(roachpb.RKey("foo")),
 	}
 	func() {
 		defer func() {
@@ -320,7 +347,9 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 				t.Fatalf("invocation of clearOverlappingCachedRangeDescriptors panicked: %v", r)
 			}
 		}()
-		cache.clearOverlappingCachedRangeDescriptors(metaSplitDesc)
+		if err := cache.clearOverlappingCachedRangeDescriptors(metaSplitDesc); err != nil {
+			t.Fatal(err)
+		}
 	}()
 }
 
@@ -378,7 +407,10 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		cacheKey, targetRange := cache.getCachedRangeDescriptor(test.queryKey, true /* inclusive */)
+		cacheKey, targetRange, err := cache.getCachedRangeDescriptor(test.queryKey, true /* inclusive */)
+		if err != nil {
+			t.Error(err)
+		}
 		if !reflect.DeepEqual(targetRange, test.rng) {
 			t.Fatalf("expect range %v, actual get %v", test.rng, targetRange)
 		}

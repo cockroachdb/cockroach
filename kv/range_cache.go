@@ -42,8 +42,16 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 	return bytes.Compare(a, b.(rangeCacheKey))
 }
 
-func meta(k roachpb.RKey) roachpb.RKey {
+func meta(k roachpb.RKey) (roachpb.RKey, error) {
 	return keys.Addr(keys.RangeMetaKey(k))
+}
+
+func mustMeta(k roachpb.RKey) roachpb.RKey {
+	m, err := meta(k)
+	if err != nil {
+		panic(err)
+	}
+	return m
 }
 
 // RangeDescriptorDB is a type which can query range descriptors from an
@@ -118,7 +126,9 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 // the key's data, or an error if any occurred.
 func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 	considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, *roachpb.Error) {
-	if _, r := rdc.getCachedRangeDescriptor(key, useReverseScan); r != nil {
+	if _, r, err := rdc.getCachedRangeDescriptor(key, useReverseScan); err != nil {
+		return nil, roachpb.NewError(err)
+	} else if r != nil {
 		return r, nil
 	}
 
@@ -128,15 +138,20 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
 	rs, pErr := func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+		// metadataKey is sent to rangeLookup to find the
+		// RangeDescriptor which contains key.
+		metadataKey, err := meta(key)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
 		var (
-			// metadataKey is sent to rangeLookup to find the
-			// RangeDescriptor which contains key.
-			metadataKey = meta(key)
 			// desc is the RangeDescriptor for the range which contains
 			// metadataKey.
 			desc *roachpb.RangeDescriptor
 			pErr *roachpb.Error
 		)
+
 		if bytes.Equal(metadataKey, roachpb.RKeyMin) {
 			// In this case, the requested key is stored in the cluster's first
 			// range. Return the first range, which is always gossiped and not
@@ -184,11 +199,16 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
-		rangeKey := meta(rs[i].EndKey)
+		rangeKey, err := meta(rs[i].EndKey)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		if log.V(1) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
-		rdc.clearOverlappingCachedRangeDescriptors(&rs[i])
+		if err := rdc.clearOverlappingCachedRangeDescriptors(&rs[i]); err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
 	rdc.rangeCacheMu.Unlock()
@@ -203,7 +223,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey,
 // compare-and-evict (as pointers); if it is nil, eviction is unconditional
 // but a warning will be logged.
 func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey,
-	seenDesc *roachpb.RangeDescriptor, inclusive bool) {
+	seenDesc *roachpb.RangeDescriptor, inclusive bool) error {
 	if seenDesc == nil {
 		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
 	}
@@ -211,14 +231,17 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey
 	rdc.rangeCacheMu.Lock()
 	defer rdc.rangeCacheMu.Unlock()
 
-	rngKey, cachedDesc := rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+	rngKey, cachedDesc, err := rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+	if err != nil {
+		return err
+	}
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
 	// already evicted previously, and we can save work by not doing it
 	// again (which would prompt another expensive lookup).
 	if seenDesc != nil && seenDesc != cachedDesc {
-		return
+		return nil
 	}
 
 	for {
@@ -232,8 +255,14 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
-		descKey = meta(descKey)
-		rngKey, cachedDesc = rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+		descKey, err = meta(descKey)
+		if err != nil {
+			return err
+		}
+		rngKey, cachedDesc, err = rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+		if err != nil {
+			return err
+		}
 		// TODO(tschottdorf): write a test that verifies that the first descriptor
 		// can also be evicted. This is necessary since the initial range
 		// [KeyMin,KeyMax) may turn into [KeyMin, "something"), after which
@@ -242,6 +271,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey
 			break
 		}
 	}
+	return nil
 }
 
 // getCachedRangeDescriptor is a helper function to retrieve the descriptor of
@@ -252,7 +282,7 @@ func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
 func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key roachpb.RKey, inclusive bool) (
-	rangeCacheKey, *roachpb.RangeDescriptor) {
+	rangeCacheKey, *roachpb.RangeDescriptor, error) {
 	rdc.rangeCacheMu.RLock()
 	defer rdc.rangeCacheMu.RUnlock()
 	return rdc.getCachedRangeDescriptorLocked(key, inclusive)
@@ -262,19 +292,23 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptor(key roachpb.RKey, incl
 // descriptor of the range which contains the given key, if present in the
 // cache. It is assumed that the caller holds a read lock on rdc.rangeCacheMu.
 func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey, inclusive bool) (
-	rangeCacheKey, *roachpb.RangeDescriptor) {
+	rangeCacheKey, *roachpb.RangeDescriptor, error) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inclusive by default.
 	var metaKey roachpb.RKey
+	var err error
 	if !inclusive {
-		metaKey = meta(key.Next())
+		metaKey, err = meta(key.Next())
 	} else {
-		metaKey = meta(key)
+		metaKey, err = meta(key)
+	}
+	if err != nil {
+		return nil, nil, err
 	}
 
 	k, v, ok := rdc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
 	metaEndKey := k.(rangeCacheKey)
 	rd := v.(*roachpb.RangeDescriptor)
@@ -283,24 +317,27 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	if !rd.ContainsKey(key) {
 		// The key is the EndKey and we're inclusive, so just return the range descriptor.
 		if inclusive && key.Equal(rd.EndKey) {
-			return metaEndKey, rd
+			return metaEndKey, rd, nil
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// The key is the StartKey, but we're inclusive and thus need to return the
 	// previous range descriptor, but it is not in the cache yet.
 	if inclusive && key.Equal(rd.StartKey) {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return metaEndKey, rd
+	return metaEndKey, rd, nil
 }
 
 // clearOverlappingCachedRangeDescriptors looks up and clears any
 // cache entries which overlap the specified descriptor.
-func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *roachpb.RangeDescriptor) {
+func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *roachpb.RangeDescriptor) error {
 	key := desc.EndKey
-	metaKey := meta(key)
+	metaKey, err := meta(key)
+	if err != nil {
+		return err
+	}
 
 	// Clear out any descriptors which subsume the key which we're going
 	// to cache. For example, if an existing KeyMin->KeyMax descriptor
@@ -315,6 +352,16 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 			rdc.rangeCache.Del(k.(rangeCacheKey))
 		}
 	}
+
+	startMeta, err := meta(desc.StartKey)
+	if err != nil {
+		return err
+	}
+	endMeta, err := meta(desc.EndKey)
+	if err != nil {
+		return err
+	}
+
 	// Also clear any descriptors which are subsumed by the one we're
 	// going to cache. This could happen on a merge (and also happens
 	// when there's a lot of concurrency). Iterate from the range meta key
@@ -324,6 +371,6 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
 		}
 		rdc.rangeCache.Del(k.(rangeCacheKey))
-	}, rangeCacheKey(meta(desc.StartKey).Next()),
-		rangeCacheKey(meta(desc.EndKey)))
+	}, rangeCacheKey(startMeta.Next()), rangeCacheKey(endMeta))
+	return nil
 }

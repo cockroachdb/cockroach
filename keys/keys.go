@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -305,43 +304,53 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
 func TransactionKey(key roachpb.Key, txnID *uuid.UUID) roachpb.Key {
-	return MakeRangeKey(Addr(key), localTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
+	rk, err := Addr(key)
+	if err != nil {
+		panic(err)
+	}
+	return MakeRangeKey(rk, localTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
 }
 
 // Addr returns the address for the key, used to lookup the range containing
 // the key. In the normal case, this is simply the key's value. However, for
 // local keys, such as transaction records, range-spanning binary tree node
-// pointers, the address is the trailing suffix of the key, with the local key
-// prefix removed. In this way, local keys address to the same range as
-// non-local keys, but are stored separately so that they don't collide with
-// user-space or global system keys.
+// pointers, the address is the inner encoded key, with the local key prefix
+// and the suffix and optional detail removed. This address unwrapping is
+// performed repeatedly in the case of doubly-local keys. In this way, local
+// keys address to the same range as non-local keys, but are stored separately
+// so that they don't collide with user-space or global system keys.
 //
 // However, not all local keys are addressable in the global map. Only range
 // local keys incorporating a range key (start key or transaction key) are
 // addressable (e.g. range metadata and txn records). Range local keys
 // incorporating the Range ID are not (e.g. sequence cache entries, and range
 // stats).
-//
-// TODO(pmattis): Should KeyAddress return an error when the key is malformed?
-func Addr(k roachpb.Key) roachpb.RKey {
+func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	if k == nil {
-		return nil
+		return nil, nil
 	}
 
-	if !bytes.HasPrefix(k, localPrefix) {
-		return roachpb.RKey(k)
-	}
-	if bytes.HasPrefix(k, LocalRangePrefix) {
-		k = k[len(LocalRangePrefix):]
-		_, k, err := encoding.DecodeBytesAscending(k, nil)
-		if err != nil {
-			panic(err)
+	for bytes.HasPrefix(k, localPrefix) {
+		if !bytes.HasPrefix(k, LocalRangePrefix) {
+			return nil, util.Errorf("local key %q malformed; should contain prefix %q",
+				k, LocalRangePrefix)
 		}
-		return roachpb.RKey(k)
+		k = k[len(LocalRangePrefix):]
+		var err error
+		// Decode the encoded key, throw away the suffix and detail.
+		if _, k, err = encoding.DecodeBytesAscending(k, nil); err != nil {
+			return nil, err
+		}
 	}
-	log.Fatalf("local key %q malformed; should contain prefix %q",
-		k, LocalRangePrefix)
-	return nil
+	return roachpb.RKey(k), nil
+}
+
+func mustAddr(k roachpb.Key) roachpb.RKey {
+	rk, err := Addr(k)
+	if err != nil {
+		panic(err)
+	}
+	return rk
 }
 
 // AddrUpperBound returns the address for the key, used to lookup the range containing
@@ -351,14 +360,17 @@ func Addr(k roachpb.Key) roachpb.RKey {
 // of a range-local key, which is guaranteed to be located on the same range. AddrUpperBound()
 // returns the regular key that is just to the right, which may not be on the same range
 // but is suitable for use as the EndKey of a span involving a range-local key.
-func AddrUpperBound(k roachpb.Key) roachpb.RKey {
-	rk := Addr(k)
+func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
+	rk, err := Addr(k)
+	if err != nil {
+		return rk, err
+	}
 	if local := !rk.Equal(k); local {
 		// The upper bound for a range-local key that addresses to key k
 		// is the key directly after k.
 		rk = rk.ShallowNext()
 	}
-	return rk
+	return rk, nil
 }
 
 // RangeMetaKey returns a range metadata (meta1, meta2) indexing key
@@ -533,9 +545,7 @@ func MakeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
-// TODO(tschottdorf): there is no protection for doubly-local keys here;
-// maybe Range should return an error.
-func Range(ba roachpb.BatchRequest) roachpb.RSpan {
+func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
@@ -544,7 +554,10 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 			continue
 		}
 		h := req.Header()
-		key := Addr(h.Key)
+		key, err := Addr(h.Key)
+		if err != nil {
+			return roachpb.RSpan{}, err
+		}
 		if key.Less(from) {
 			// Key is smaller than `from`.
 			from = key
@@ -553,11 +566,14 @@ func Range(ba roachpb.BatchRequest) roachpb.RSpan {
 			// Key.Next() is larger than `to`.
 			to = key.Next()
 		}
-		endKey := AddrUpperBound(h.EndKey)
+		endKey, err := AddrUpperBound(h.EndKey)
+		if err != nil {
+			return roachpb.RSpan{}, err
+		}
 		if to.Less(endKey) {
 			// EndKey is larger than `to`.
 			to = endKey
 		}
 	}
-	return roachpb.RSpan{Key: from, EndKey: to}
+	return roachpb.RSpan{Key: from, EndKey: to}, nil
 }

@@ -132,7 +132,10 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
-		rs := keys.Range(ba)
+		rs, err := keys.Range(ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		rangeID, repl, err := ls.lookupReplica(rs.Key, rs.EndKey)
 		if err != nil {
 			return nil, roachpb.NewError(err)
