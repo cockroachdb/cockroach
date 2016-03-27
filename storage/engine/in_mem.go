@@ -36,3 +36,5 @@ func NewInMem(attrs roachpb.Attributes, cacheSize int64, stopper *stop.Stopper) 
 	}
 	return db
 }
+
+var _ Engine = InMem{}
