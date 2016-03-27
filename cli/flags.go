@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/kr/text"
@@ -39,6 +40,7 @@ var connUser, connHost, connPort, httpPort, connDBName string
 // cliContext is the CLI Context used for the command-line client.
 var cliContext = NewContext()
 var cacheSize *bytesValue
+var insecure *insecureValue
 
 var flagUsage = map[string]string{
 	"attrs": wrapText(`
@@ -100,7 +102,9 @@ Note: when given a path to a unix socket, most postgres clients will
 open "<given path>/.s.PGSQL.<server port>"`),
 
 	"insecure": wrapText(`
-Run over plain HTTP. WARNING: this is strongly discouraged.`),
+Run over non-encrypted (non-TLS) connections. This is strongly discouraged for
+production usage and this flag must be explicitly specified in order for the
+server to listen on an external address in insecure mode.`),
 
 	"key-size": wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
@@ -242,6 +246,46 @@ func (b *bytesValue) String() string {
 	return util.IBytes(*b.val)
 }
 
+type insecureValue struct {
+	val   *bool
+	isSet bool
+}
+
+func newInsecureValue(val *bool) *insecureValue {
+	return &insecureValue{val: val}
+}
+
+func (b *insecureValue) IsBoolFlag() bool {
+	return true
+}
+
+func (b *insecureValue) Set(s string) error {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	b.isSet = true
+	*b.val = v
+	if *b.val {
+		// If --insecure is specified, clear any of the existing security flags if
+		// they were set. This allows composition of command lines where a later
+		// specification of --insecure clears an earlier security specification.
+		cliContext.SSLCA = ""
+		cliContext.SSLCAKey = ""
+		cliContext.SSLCert = ""
+		cliContext.SSLCertKey = ""
+	}
+	return nil
+}
+
+func (b *insecureValue) Type() string {
+	return "bool"
+}
+
+func (b *insecureValue) String() string {
+	return fmt.Sprint(*b.val)
+}
+
 func wrapText(s string) string {
 	return text.Wrap(s, wrapWidth)
 }
@@ -298,7 +342,10 @@ func initFlags(ctx *Context) {
 		_ = f.MarkHidden("socket")
 
 		// Security flags.
-		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
+		ctx.Insecure = true
+		insecure = newInsecureValue(&ctx.Insecure)
+		insecureF := f.VarPF(insecure, "insecure", "", usage("insecure"))
+		insecureF.NoOptDefVal = "true"
 		// Certificates.
 		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
 		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
@@ -353,7 +400,8 @@ func initFlags(ctx *Context) {
 	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		f.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, usage("insecure"))
+		insecureF := f.VarPF(insecure, "insecure", "", usage("insecure"))
+		insecureF.NoOptDefVal = "true"
 		f.StringVar(&connHost, "host", "", usage("client_host"))
 
 		// Certificate flags.
@@ -432,6 +480,14 @@ func init() {
 		visitCmds(cockroachCmd, func(cmd *cobra.Command) {
 			visitFlags(cmd, base.AddToFlagMap)
 		})
+
+		// If any of the security flags have been set, clear the insecure
+		// setting. Note that we do the inverse when the --insecure flag is
+		// set. See insecureValue.Set().
+		if cliContext.SSLCA != "" || cliContext.SSLCAKey != "" ||
+			cliContext.SSLCert != "" || cliContext.SSLCertKey != "" {
+			cliContext.Insecure = false
+		}
 
 		cliContext.Addr = net.JoinHostPort(connHost, connPort)
 		cliContext.HTTPAddr = net.JoinHostPort(connHost, httpPort)
