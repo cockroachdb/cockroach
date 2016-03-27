@@ -198,7 +198,7 @@ statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
 statement error cannot change the isolation level of a running transaction
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
 statement ok
 ROLLBACK
