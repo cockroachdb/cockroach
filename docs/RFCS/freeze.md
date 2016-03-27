@@ -28,7 +28,7 @@ The freeze will proceed in several steps.
 Anything goes; changes to on-disk formats do not require any kind of
 migration path.
 
-### Stage 1: Guaranteed upgrade path (Mar 24, 2016)
+### Stage 1: Guaranteed upgrade path (Date TBD)
 
 In stage 1, we require backwards-compatibility with data written by
 any previous stage 1 build. It should always be possible to upgrade by
