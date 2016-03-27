@@ -390,7 +390,11 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
 		},
-
+		"INSERT INTO d.ts (a) VALUES ($1) RETURNING a": {
+			base.Params(time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0))).Results(
+				time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("", 0)),
+			),
+		},
 		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
 			base.Params(1).Results(1),
 			base.Params(nil).Results(1),
