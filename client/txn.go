@@ -529,15 +529,30 @@ func (txn *Txn) Exec(
 RetryLoop:
 	for r := retry.Start(retryOptions); r.Next(); {
 		pErr = fn(txn, &opt)
-		if txn != nil {
-			txn.retrying = true
-			defer func() {
-				txn.retrying = false
-			}()
-		}
-		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+		if pErr == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			pErr = txn.Commit()
+		}
+
+		// The following state machine shows how `retrying` change its state:
+		//
+		//                          another retry
+		//                          +-----+
+		//                          |     |
+		//                          | +---+
+		//          first try       | v
+		// false------------------>true------------------------+
+		//  ^                       | ^                        |
+		//  |                       | |                        |
+		//  | exit loop w/o error   | | exit loop w/ error     |
+		//  +-----------------------+ +------------------------+
+		if txn != nil && !txn.retrying {
+			txn.retrying = true
+			defer func() {
+				if pErr == nil {
+					txn.retrying = false
+				}
+			}()
 		}
 
 		if pErr == nil {
