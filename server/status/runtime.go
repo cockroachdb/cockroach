@@ -17,13 +17,15 @@
 package status
 
 import (
+	"os"
 	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+
+	"github.com/elastic/gosigar"
 )
 
 const (
@@ -37,7 +39,7 @@ const (
 	nameCPUUserPercent = "cpu.user.percent"
 	nameCPUSysNS       = "cpu.sys.ns"
 	nameCPUSysPercent  = "cpu.sys.percent"
-	nameMaxRSS         = "maxrss"
+	nameMaxRSS         = "maxrss" // TODO(cdo): rename to rss
 )
 
 // logOSStats is a function that logs OS-specific stats. We will not necessarily
@@ -72,7 +74,7 @@ type RuntimeStatSampler struct {
 	cpuUserPercent *metric.GaugeFloat64
 	cpuSysNS       *metric.Gauge
 	cpuSysPercent  *metric.GaugeFloat64
-	maxRSS         *metric.Gauge
+	rss            *metric.Gauge
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
@@ -91,7 +93,7 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		cpuUserPercent: reg.GaugeFloat64(nameCPUUserPercent),
 		cpuSysNS:       reg.Gauge(nameCPUSysNS),
 		cpuSysPercent:  reg.GaugeFloat64(nameCPUSysPercent),
-		maxRSS:         reg.Gauge(nameMaxRSS),
+		rss:            reg.Gauge(nameMaxRSS),
 	}
 }
 
@@ -120,10 +122,15 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	ms := runtime.MemStats{}
 	runtime.ReadMemStats(&ms)
 
-	// Record CPU statistics using syscall package.
-	ru := syscall.Rusage{}
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-		log.Errorf("Getrusage failed: %v", err)
+	// Retrieve Mem and CPU statistics.
+	pid := os.Getpid()
+	mem := gosigar.ProcMem{}
+	if err := mem.Get(pid); err != nil {
+		log.Errorf("unable to get mem usage: %v", err)
+	}
+	cpu := gosigar.ProcTime{}
+	if err := cpu.Get(pid); err != nil {
+		log.Errorf("unable to get cpu usage: %v", err)
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -131,8 +138,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	// if calculated later using downsampled time series data.
 	now := rsr.clock.PhysicalNow()
 	dur := float64(now - rsr.lastNow)
-	newUtime := ru.Utime.Nano()
-	newStime := ru.Stime.Nano()
+	// cpu.{User,Sys} are in milliseconds, convert to nanoseconds.
+	newUtime := int64(cpu.User) * 1e6
+	newStime := int64(cpu.Sys) * 1e6
 	uPerc := float64(newUtime-rsr.lastUtime) / dur
 	sPerc := float64(newStime-rsr.lastStime) / dur
 	pausePerc := float64(ms.PauseTotalNs-rsr.lastPauseTime) / dur
@@ -140,18 +148,13 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.lastUtime = newUtime
 	rsr.lastStime = newStime
 	rsr.lastPauseTime = ms.PauseTotalNs
-	maxRSSBytes := ru.Maxrss
-	if runtime.GOOS == "linux" {
-		// Linux reports RSS in kilobytes.
-		maxRSSBytes *= 1024
-	}
 
 	// Log summary of statistics to console.
-	maxRSSMiB := float64(maxRSSBytes) / (1 << 20)
+	rssMiB := float64(mem.Resident) / (1 << 20)
 	activeMiB := float64(ms.Alloc) / (1 << 20)
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
 	log.Infof("runtime stats: %.2fMiB max RSS, %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-		maxRSSMiB, numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
+		rssMiB, numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
 	if log.V(2) {
 		log.Infof("memstats: %+v", ms)
 	}
@@ -171,8 +174,5 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.cpuUserPercent.Update(uPerc)
 	rsr.cpuSysNS.Update(newStime)
 	rsr.cpuSysPercent.Update(sPerc)
-
-	// We log the max RSS instead of the current RSS, because the getrusage fields
-	// for current RSS are not widely implemented.
-	rsr.maxRSS.Update(maxRSSBytes)
+	rsr.rss.Update(int64(mem.Resident))
 }
