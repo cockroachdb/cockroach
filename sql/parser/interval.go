@@ -67,7 +67,7 @@ func consumeUnit(s string, offset int, skipCharacter byte) (unit string, rem int
 var isoDateUnitMap = map[string]int64{
 	"D": int64(time.Hour) * 24,
 	"M": int64(time.Hour) * 24 * 30,       // ISO 8601 suggests we use 30 days
-	"Y": int64(time.Hour) * 24 * 30 * 365, // Doesn't account for DST, or leap seconds
+	"Y": int64(time.Hour) * 24 * 30 * 365, // Doesn't account for DST, leap seconds, or leap years
 }
 
 var isoTimeUnitMap = map[string]int64{
