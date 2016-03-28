@@ -657,14 +657,27 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      argTypes{intType},
 			returnType: typeFloat,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				if args[0] == DNull {
+					return args[0], nil
+				}
+				// AVG returns a float when given an int argument.
+				return DFloat(args[0].(DInt)), nil
+			},
 		},
 		builtin{
 			types:      argTypes{floatType},
 			returnType: typeFloat,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return args[0], nil
+			},
 		},
 		builtin{
 			types:      argTypes{decimalType},
 			returnType: typeDecimal,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return args[0], nil
+			},
 		},
 	},
 
@@ -678,14 +691,17 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      argTypes{intType},
 			returnType: typeDecimal,
+			fn: funcNull,
 		},
 		builtin{
 			types:      argTypes{decimalType},
 			returnType: typeDecimal,
+			fn: funcNull,
 		},
 		builtin{
 			types:      argTypes{floatType},
 			returnType: typeFloat,
+			fn: funcNull,
 		},
 	},
 
@@ -693,14 +709,17 @@ var builtins = map[string][]builtin{
 		builtin{
 			types:      argTypes{intType},
 			returnType: typeDecimal,
+			fn: funcNull,
 		},
 		builtin{
 			types:      argTypes{decimalType},
 			returnType: typeDecimal,
+			fn: funcNull,
 		},
 		builtin{
 			types:      argTypes{floatType},
 			returnType: typeFloat,
+			fn: funcNull,
 		},
 	},
 
@@ -974,6 +993,10 @@ var builtins = map[string][]builtin{
 	},
 }
 
+func funcNull(_ EvalContext, _ DTuple) (Datum, error) {
+	return DNull, nil
+}
+
 // The aggregate functions all just return their first argument. We don't
 // perform any type checking here either. The bulk of the aggregate function
 // implementation is performed at a higher level in sql.groupNode.
@@ -992,12 +1015,19 @@ func aggregateImpls(types ...reflect.Type) []builtin {
 
 func countImpls() []builtin {
 	var r []builtin
-	types := argTypes{boolType, intType, floatType, stringType, bytesType, dateType, timestampType, intervalType, tupleType}
+	types := argTypes{boolType, intType, floatType, decimalType, stringType, bytesType, dateType, timestampType, intervalType, tupleType}
 	for _, t := range types {
 		r = append(r, builtin{
 			impure:     true, // COUNT(1) is not a const. #5170.
 			types:      argTypes{t},
 			returnType: typeInt,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				if _, ok := args[0].(DInt); ok {
+					return args[0], nil
+				}
+				// COUNT always returns an int.
+				return DummyInt, nil
+			},
 		})
 	}
 	return r
