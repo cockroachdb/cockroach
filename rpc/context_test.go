@@ -276,7 +276,6 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		})
 	}
 
-	const errOffsetGreaterThanMaxOffset = "the true offset is greater than the max offset"
 	for i, nodeCtx := range nodeCtxs {
 		if nodeOffset := nodeCtx.offset; nodeOffset > maxOffset {
 			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); testutils.IsError(err, errOffsetGreaterThanMaxOffset) {

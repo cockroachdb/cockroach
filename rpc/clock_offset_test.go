@@ -18,14 +18,17 @@ package rpc
 
 import (
 	"math"
-	"sort"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
+
+const errOffsetGreaterThanMaxOffset = "fewer than half the known nodes are within the maximum offset"
 
 // TestUpdateOffset tests the three cases that UpdateOffset should or should
 // not update the offset for an addr.
@@ -91,253 +94,38 @@ func TestUpdateOffset(t *testing.T) {
 	monitor.mu.Unlock()
 }
 
-// TestEndpointListSort tests the sort interface for endpointLists.
-func TestEndpointListSort(t *testing.T) {
+func TestVerifyClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	list := endpointList{
-		endpoint{offset: 5, endType: +1},
-		endpoint{offset: 3, endType: -1},
-		endpoint{offset: 3, endType: +1},
-		endpoint{offset: 1, endType: -1},
-		endpoint{offset: 4, endType: +1},
-	}
 
-	sortedList := endpointList{
-		endpoint{offset: 1, endType: -1},
-		endpoint{offset: 3, endType: -1},
-		endpoint{offset: 3, endType: +1},
-		endpoint{offset: 4, endType: +1},
-		endpoint{offset: 5, endType: +1},
-	}
+	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
+	clock.SetMaxOffset(50 * time.Nanosecond)
+	monitor := newRemoteClockMonitor(clock, time.Hour)
 
-	sort.Sort(list)
-	for i := range sortedList {
-		if list[i] != sortedList[i] {
-			t.Errorf("expected index %d of sorted list to be %v, instead %v",
-				i, sortedList[i], list[i])
+	for idx, tc := range []struct {
+		offsets       []RemoteOffset
+		expectedError bool
+	}{
+		// no error if no offsets.
+		{[]RemoteOffset{}, false},
+		// no error when a majority of offests are under the maximum offset.
+		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 58, Uncertainty: 20}, {Offset: 71, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, false},
+		// error when less than a majority of offests are under the maximum offset.
+		{[]RemoteOffset{{Offset: 20, Uncertainty: 10}, {Offset: 58, Uncertainty: 20}, {Offset: 85, Uncertainty: 25}, {Offset: 91, Uncertainty: 31}}, true},
+	} {
+		monitor.mu.offsets = make(map[string]RemoteOffset)
+		for i, offset := range tc.offsets {
+			monitor.mu.offsets[strconv.Itoa(i)] = offset
 		}
-	}
 
-	if len(list) != len(sortedList) {
-		t.Errorf("exptected endpoint list to be size %d, instead %d",
-			len(sortedList), len(list))
-	}
-}
-
-// TestBuildEndpointList tests that the map of RemoteOffsets is correctly
-// manipulated into a list of endpoints used in Marzullo's algorithm.
-func TestBuildEndpointList(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Build the offsets we will turn into an endpoint list.
-	offsets := map[string]RemoteOffset{
-		"0": {Offset: 0, Uncertainty: 10},
-		"1": {Offset: 1, Uncertainty: 10},
-		"2": {Offset: 2, Uncertainty: 10},
-		"3": {Offset: 3, Uncertainty: 10},
-	}
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(5 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	monitor.mu.offsets = offsets
-
-	expectedList := endpointList{
-		endpoint{offset: -10, endType: -1},
-		endpoint{offset: -9, endType: -1},
-		endpoint{offset: -8, endType: -1},
-		endpoint{offset: -7, endType: -1},
-		endpoint{offset: 10, endType: 1},
-		endpoint{offset: 11, endType: 1},
-		endpoint{offset: 12, endType: 1},
-		endpoint{offset: 13, endType: 1},
-	}
-
-	list := monitor.buildEndpointList()
-	sort.Sort(list)
-
-	for i := range expectedList {
-		if list[i] != expectedList[i] {
-			t.Errorf("expected index %d of list to be %v, instead %v",
-				i, expectedList[i], list[i])
+		if tc.expectedError {
+			if err := monitor.VerifyClockOffset(); !testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
+				t.Errorf("%d: unexpected error %v", idx, err)
+			}
+		} else {
+			if err := monitor.VerifyClockOffset(); err != nil {
+				t.Errorf("%d: unexpected error %s", idx, err)
+			}
 		}
-	}
-
-	if len(list) != len(expectedList) {
-		t.Errorf("exptected endpoint list to be size %d, instead %d",
-			len(expectedList), len(list))
-	}
-}
-
-// TestBuildEndpointListRemoveStagnantClocks tests the side effect of removing
-// older offsets when we build an endpoint list.
-func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(5 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0":         {Offset: 0, Uncertainty: 10, MeasuredAt: monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL - 1)).UnixNano()},
-		"stagnant0": {Offset: 1, Uncertainty: 10, MeasuredAt: monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 10)).UnixNano()},
-		"1":         {Offset: 2, Uncertainty: 10, MeasuredAt: monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL - 10)).UnixNano()},
-		"stagnant1": {Offset: 3, Uncertainty: 10, MeasuredAt: monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano()},
-	}
-
-	monitor.buildEndpointList()
-
-	monitor.mu.Lock()
-	defer monitor.mu.Unlock()
-
-	if stagnant, ok := monitor.mu.offsets["stagnant0"]; ok {
-		t.Errorf("expected stagant offset to have been removed, instead found: %v", stagnant)
-	}
-	if stagnant, ok := monitor.mu.offsets["stagnant1"]; ok {
-		t.Errorf("expected stagant offset to have been removed, instead found: %v", stagnant)
-	}
-}
-
-// TestFindOffsetInterval tests that we correctly determine the interval that a
-// majority of remote offsets overlap.
-func TestFindOffsetInterval(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(5 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": {Offset: 20, Uncertainty: 10},
-		"1": {Offset: 58, Uncertainty: 20},
-		"2": {Offset: 71, Uncertainty: 25},
-		"3": {Offset: 91, Uncertainty: 31},
-	}
-
-	expectedInterval := clusterOffsetInterval{lowerbound: 60, upperbound: 78}
-	if interval, err := monitor.findOffsetInterval(); err != nil {
-		t.Errorf("expected interval %v, instead err: %s", expectedInterval, err)
-	} else if interval != expectedInterval {
-		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
-	}
-}
-
-// TestFindOffsetIntervalNoMajorityOverlap tests that, if a majority of offsets
-// do not overlap, an error is returned.
-func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(5 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": {Offset: 0, Uncertainty: 1},
-		"1": {Offset: 1, Uncertainty: 1},
-		"2": {Offset: 3, Uncertainty: 1},
-		"3": {Offset: 4, Uncertainty: 1},
-	}
-
-	_, err := monitor.findOffsetInterval()
-	if _, ok := err.(*majorityIntervalNotFoundError); !ok {
-		t.Errorf("expected a %T, got: %+v", &majorityIntervalNotFoundError{}, err)
-	}
-}
-
-// TestFindOffsetIntervalNoRemotes tests that we measure 0 offset if there are
-// no recent remote clock readings.
-func TestFindOffsetIntervalNoRemotes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(10 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	expectedInterval := clusterOffsetInterval{lowerbound: 0, upperbound: 0}
-	if interval, err := monitor.findOffsetInterval(); err != nil {
-		t.Errorf("expected interval %v, instead err: %s", expectedInterval, err)
-	} else if interval != expectedInterval {
-		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
-	}
-}
-
-// TestFindOffsetIntervalOneClock tests that we return the entire remote offset
-// of the single remote clock.
-func TestFindOffsetIntervalOneClock(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	// The clock interval will be:
-	// [offset - error, offset + error]
-	// MaxOffset does not matter.
-	clock.SetMaxOffset(10 * time.Hour)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": {Offset: 1, Uncertainty: 2},
-	}
-
-	expectedInterval := clusterOffsetInterval{lowerbound: -1, upperbound: 3}
-	if interval, err := monitor.findOffsetInterval(); err != nil {
-		t.Errorf("expected interval %v, instead err: %s", expectedInterval, err)
-	} else if interval != expectedInterval {
-		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
-	}
-}
-
-// TestFindOffsetIntervalTwoClocks tests the edge case of two remote clocks.
-func TestFindOffsetIntervalTwoClocks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(5 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	// Two intervals overlap.
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": {Offset: 0, Uncertainty: 10},
-		"1": {Offset: 20, Uncertainty: 10},
-	}
-
-	expectedInterval := clusterOffsetInterval{lowerbound: 10, upperbound: 10}
-	if interval, err := monitor.findOffsetInterval(); err != nil {
-		t.Errorf("expected interval %v, instead err: %s", expectedInterval, err)
-	} else if interval != expectedInterval {
-		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
-	}
-
-	// Two intervals don't overlap.
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": {Offset: 0, Uncertainty: 10},
-		"1": {Offset: 30, Uncertainty: 10},
-	}
-
-	_, err := monitor.findOffsetInterval()
-	if _, ok := err.(*majorityIntervalNotFoundError); !ok {
-		t.Errorf("expected a %T, got: %+v", &majorityIntervalNotFoundError{}, err)
-	}
-}
-
-// TestFindOffsetWithLargeError tests a case where offset errors are
-// bigger than the max offset (e.g., a case where heartbeat messages
-// to the node are having high latency).
-func TestFindOffsetWithLargeError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	maxOffset := 100 * time.Nanosecond
-
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
-	clock.SetMaxOffset(maxOffset)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
-	// Offsets are bigger than maxOffset, but Errors are also bigger than Offset.
-	monitor.mu.offsets = map[string]RemoteOffset{
-		"0": {Offset: 110, Uncertainty: 300},
-		"1": {Offset: 120, Uncertainty: 300},
-		"2": {Offset: 130, Uncertainty: 300},
-	}
-
-	interval, err := monitor.findOffsetInterval()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedInterval := clusterOffsetInterval{lowerbound: -170, upperbound: 410}
-	if interval != expectedInterval {
-		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
-	}
-	// The interval is still considered healthy.
-	if !isHealthyOffsetInterval(interval, maxOffset) {
-		t.Errorf("expected interval %v for offset %s to be healthy", interval, maxOffset)
 	}
 }
 
@@ -349,22 +137,22 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 	maxOffset := 10 * time.Nanosecond
 
 	for i, tc := range []struct {
-		interval        clusterOffsetInterval
+		offset          RemoteOffset
 		expectedHealthy bool
 	}{
-		{clusterOffsetInterval{}, true},
-		{clusterOffsetInterval{-11, 11}, true},
-		{clusterOffsetInterval{-20, -11}, false},
-		{clusterOffsetInterval{11, 20}, false},
-		{clusterOffsetInterval{math.MaxInt64, math.MaxInt64}, false},
+		{RemoteOffset{}, true},
+		{RemoteOffset{Offset: 0, Uncertainty: 5}, true},
+		{RemoteOffset{Offset: -15, Uncertainty: 4}, false},
+		{RemoteOffset{Offset: 15, Uncertainty: 4}, false},
+		{RemoteOffset{Offset: math.MaxInt64, Uncertainty: 0}, false},
 	} {
-		if isHealthy := isHealthyOffsetInterval(tc.interval, maxOffset); tc.expectedHealthy {
+		if isHealthy := tc.offset.isHealthy(maxOffset); tc.expectedHealthy {
 			if !isHealthy {
-				t.Errorf("%d: expected interval %v for offset %s to be healthy", i, tc.interval, maxOffset)
+				t.Errorf("%d: expected remote offset %s for maximum offset %s to be healthy", i, tc.offset, maxOffset)
 			}
 		} else {
 			if isHealthy {
-				t.Errorf("%d: expected interval %v for offset %s to be unhealthy", i, tc.interval, maxOffset)
+				t.Errorf("%d: expected remote offset %s for maximum offset %s to be unhealthy", i, tc.offset, maxOffset)
 			}
 		}
 	}
@@ -372,6 +160,7 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 
 func TestClockOffsetMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
