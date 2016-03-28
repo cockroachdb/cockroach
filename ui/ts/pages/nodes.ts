@@ -34,7 +34,7 @@ module AdminViews {
    * Nodes is the view for exploring the status of all nodes.
    */
   export module Nodes {
-    let nodeStatuses: Models.Status.Nodes = new Models.Status.Nodes();
+    let nodeStatuses: Models.Status.Nodes = Models.Status.nodeStatusSingleton;
 
     function _nodeMetric(metric: string): string {
       return "cr.node." + metric;
