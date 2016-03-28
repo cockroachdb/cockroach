@@ -109,7 +109,7 @@ func TestInfo(t *testing.T) {
 }
 
 // Test that copyStandardLogTo panics on bad input.
-func TestcopyStandardLogToPanic(t *testing.T) {
+func TestCopyStandardLogToPanic(t *testing.T) {
 	setFlags()
 	defer func() {
 		if s, ok := recover().(string); !ok || !strings.Contains(s, "LOG") {

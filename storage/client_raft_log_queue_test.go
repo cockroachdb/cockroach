@@ -32,7 +32,7 @@ import (
 func TestRaftLogQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := new(multiTestContext)
+	var mtc multiTestContext
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.

@@ -335,7 +335,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		}
 
 		var resolvers []resolver.Resolver
-		resolver, _ := resolver.NewResolver(&RPCContext.Context, gossipAddr)
+		resolver, _ := resolver.NewResolver(RPCContext.Context, gossipAddr)
 		resolvers = append(resolvers, resolver)
 		gnode := New(RPCContext, resolvers, stopper)
 		// node ID must be non-zero
