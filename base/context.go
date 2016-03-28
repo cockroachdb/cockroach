@@ -63,11 +63,30 @@ var (
 // AddToFlagMap adds the provided flag to FlagMap, mapping the flag's
 // value reference to the flag itself.
 func AddToFlagMap(f *pflag.Flag) {
+	tryAddVal := func(val reflect.Value) bool {
+		for _, t := range flagPtrTypes {
+			if val.Type().ConvertibleTo(t) {
+				FlagMap[val.Convert(t).Interface()] = f
+				return true
+			}
+		}
+		return false
+	}
 	val := reflect.ValueOf(f.Value)
-	for _, t := range flagPtrTypes {
-		if val.Type().ConvertibleTo(t) {
-			FlagMap[val.Convert(t).Interface()] = f
-			return
+	if tryAddVal(val) {
+		return
+	}
+	derefVal := val
+	if val.Kind() == reflect.Ptr {
+		derefVal = val.Elem()
+	}
+	if derefVal.Kind() == reflect.Struct {
+		for i := 0; i < derefVal.NumField(); i++ {
+			if field := derefVal.Field(i); field.CanSet() {
+				if tryAddVal(field) {
+					return
+				}
+			}
 		}
 	}
 	FlagMap[val.Interface()] = f

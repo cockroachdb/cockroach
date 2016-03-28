@@ -217,12 +217,12 @@ const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
 
 type bytesValue struct {
-	val   *int64
+	Val   *int64
 	isSet bool
 }
 
 func newBytesValue(val *int64) *bytesValue {
-	return &bytesValue{val: val}
+	return &bytesValue{Val: val}
 }
 
 func (b *bytesValue) Set(s string) error {
@@ -230,7 +230,7 @@ func (b *bytesValue) Set(s string) error {
 	if err != nil {
 		return err
 	}
-	*b.val = v
+	*b.Val = v
 	b.isSet = true
 	return nil
 }
@@ -243,16 +243,16 @@ func (b *bytesValue) String() string {
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000
 	// vs 1024.
-	return util.IBytes(*b.val)
+	return util.IBytes(*b.Val)
 }
 
 type insecureValue struct {
-	val   *bool
+	Val   *bool
 	isSet bool
 }
 
 func newInsecureValue(val *bool) *insecureValue {
-	return &insecureValue{val: val}
+	return &insecureValue{Val: val}
 }
 
 func (b *insecureValue) IsBoolFlag() bool {
@@ -265,8 +265,8 @@ func (b *insecureValue) Set(s string) error {
 		return err
 	}
 	b.isSet = true
-	*b.val = v
-	if *b.val {
+	*b.Val = v
+	if *b.Val {
 		// If --insecure is specified, clear any of the existing security flags if
 		// they were set. This allows composition of command lines where a later
 		// specification of --insecure clears an earlier security specification.
@@ -283,7 +283,7 @@ func (b *insecureValue) Type() string {
 }
 
 func (b *insecureValue) String() string {
-	return fmt.Sprint(*b.val)
+	return fmt.Sprint(*b.Val)
 }
 
 func wrapText(s string) string {
