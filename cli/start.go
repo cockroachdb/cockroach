@@ -97,7 +97,11 @@ uninitialized, specify the --join flag to point to any healthy node
 func initCacheSize() {
 	if !cacheSize.isSet {
 		if size, err := server.GetTotalMemory(); err == nil {
-			cliContext.CacheSize = size / 2
+			// Default the cache size to 1/4 of total memory. A larger cache size
+			// doesn't necessarily improve performance as this is memory that is
+			// dedicated to uncompressed blocks in RocksDB. A larger value here will
+			// compete with the OS buffer cache which holds compressed blocks.
+			cliContext.CacheSize = size / 4
 		}
 	}
 }
