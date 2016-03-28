@@ -53,7 +53,7 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		switch NormalizeName(string(s)) {
+		switch NormalizeName(s) {
 		case NormalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
 		case NormalizeName(parser.Traditional.String()):
