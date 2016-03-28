@@ -38,9 +38,9 @@ func (f SenderFunc) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb
 }
 
 // SendWrappedWith is a convenience function which wraps the request in a batch
-// and sends it via the provided Sender at the given timestamp. It returns the
-// unwrapped response or an error. It's valid to pass a `nil` context;
-// context.Background() is used in that case.
+// and sends it via the provided Sender and headers. It returns the unwrapped
+// response or an error. It's valid to pass a `nil` context; an empty one is
+// used in that case.
 func SendWrappedWith(
 	sender Sender, ctx context.Context, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {

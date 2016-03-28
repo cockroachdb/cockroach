@@ -1513,19 +1513,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		}
 	}
 
-	if ba.Txn == nil {
-		// When not transactional, allow empty timestamp and simply use
-		// local clock.
-		if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
-			ba.Timestamp.Forward(s.Clock().Now())
-		}
-	} else if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
-		return nil, roachpb.NewErrorf("transactional request must not set batch timestamp")
-	} else {
-		// Always use the original timestamp for reads and writes, even
-		// though some intents may be written at higher timestamps in the
-		// event of a WriteTooOldError.
-		ba.Timestamp = ba.Txn.OrigTimestamp
+	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	if s.Clock().MaxOffset() > 0 {
@@ -1547,6 +1536,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	now := s.ctx.Clock.Update(ba.Timestamp)
 
 	defer func() {
+		if r := recover(); r != nil {
+			panic(r)
+		}
 		if ba.Txn != nil {
 			// We're in a Txn, so we can reduce uncertainty restarts by attaching
 			// the above timestamp to the returned response or error. The caller
