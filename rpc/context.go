@@ -53,7 +53,7 @@ func NewServer(ctx *Context) *grpc.Server {
 // Context contains the fields required by the rpc framework.
 type Context struct {
 	// Embed the base context.
-	base.Context
+	*base.Context
 
 	localClock   *hlc.Clock
 	Stopper      *stop.Stopper
@@ -75,12 +75,8 @@ type Context struct {
 func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) *Context {
 	var ctx *Context
 	if baseCtx != nil {
-		// TODO(tamird): This form fools `go vet`; `baseCtx` contains several
-		// `sync.Mutex`s, and this deference copies them, which is bad. The problem
-		// predates this comment, so I'm kicking the can down the road for now, but
-		// we should fix this.
 		ctx = &Context{
-			Context: *baseCtx,
+			Context: baseCtx,
 		}
 	} else {
 		ctx = new(Context)

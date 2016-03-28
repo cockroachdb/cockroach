@@ -94,11 +94,10 @@ func TestGossipStorage(t *testing.T) {
 
 	// Set storage for each of the nodes.
 	addresses := make(unresolvedAddrSlice, len(network.Nodes))
-	stores := make([]*testStorage, len(network.Nodes))
+	stores := make([]testStorage, len(network.Nodes))
 	for i, n := range network.Nodes {
 		addresses[i] = util.MakeUnresolvedAddr(n.Addr.Network(), n.Addr.String())
-		stores[i] = new(testStorage)
-		if err := n.Gossip.SetStorage(stores[i]); err != nil {
+		if err := n.Gossip.SetStorage(&stores[i]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -108,7 +107,9 @@ func TestGossipStorage(t *testing.T) {
 
 	// Wait long enough for storage to get the expected number of addresses.
 	util.SucceedsSoon(t, func() error {
-		for _, p := range stores {
+		for i := range stores {
+			p := &stores[i]
+
 			if p.Len() != 2 {
 				return util.Errorf("incorrect number of addresses: expected 2; got %d", p.Len())
 			}
@@ -116,7 +117,9 @@ func TestGossipStorage(t *testing.T) {
 		return nil
 	})
 
-	for i, p := range stores {
+	for i := range stores {
+		p := &stores[i]
+
 		if !p.isRead() {
 			t.Errorf("%d: expected read from storage", i)
 		}
