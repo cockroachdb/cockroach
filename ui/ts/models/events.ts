@@ -76,6 +76,20 @@ module Models {
           content: m("span", [`User ${eventRow.info.User} `, m("strong", "dropped table "), eventRow.info.TableName]),
         };
       },
+      "node_join": (eventRow: ClusterEvent): NormalizedRow => {
+        return {
+          icon: Icon.INFO,
+          timestamp: moment.utc(eventRow.timestamp),
+          content: m("span", [`Node ${eventRow.target_id} `, m("strong", "joined the cluster")]),
+        };
+      },
+      "node_restart": (eventRow: ClusterEvent): NormalizedRow => {
+        return {
+          icon: Icon.INFO,
+          timestamp: moment.utc(eventRow.timestamp),
+          content: m("span", [`Node ${eventRow.target_id} `, m("strong", "rejoined the cluster")]),
+        };
+      },
     };
 
     export class Events {
@@ -103,7 +117,8 @@ module Models {
 
       convertToNormalizedRows(events: ClusterEvent[]): NormalizedRow[] {
         let normalizedEvents: NormalizedRow[] = _.map(events, (e: ClusterEvent): NormalizedRow => {
-          return eventTemplates[e.event_type](e) || {icon: Icon.WARNING, timestamp: moment.utc(e.timestamp), content: m("span", "Unknown event type: " + e.event_type)};
+          return eventTemplates[e.event_type] && eventTemplates[e.event_type](e)
+            || {icon: Icon.WARNING, timestamp: moment.utc(e.timestamp), content: m("span", "Unknown event type: " + e.event_type)};
         });
 
         return _.orderBy(normalizedEvents, ["timestamp"], ["desc"]);

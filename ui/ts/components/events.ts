@@ -17,7 +17,10 @@ module Components {
 
     export function view(ctrl: any, limit: number): MithrilVirtualElement {
       if (!Models.Events.eventSingleton.loaded) {
-        Models.Events.eventSingleton.refresh();
+        Models.Events.eventSingleton.refresh().then((): void => {
+          m.redraw();
+        });
+        return m("");
       }
 
       if (Models.Events.eventSingleton.loaded) {
@@ -33,7 +36,7 @@ module Components {
           })))),
         ]);
       } else {
-        return null;
+        return m("");
       }
     }
   }
