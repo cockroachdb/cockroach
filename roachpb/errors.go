@@ -101,6 +101,9 @@ func NewErrorf(format string, a ...interface{}) *Error {
 
 // String implements fmt.Stringer.
 func (e *Error) String() string {
+	if e == nil {
+		return "<nil>"
+	}
 	return e.Message
 }
 
