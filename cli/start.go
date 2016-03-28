@@ -116,7 +116,7 @@ func initInsecure() error {
 		if !addr.IP.IsLoopback() {
 			return fmt.Errorf("specify --insecure to listen on external address %s", connHost)
 		}
-	} else if connHost == "" {
+	} else {
 		cliContext.Addr = net.JoinHostPort("localhost", connPort)
 		cliContext.HTTPAddr = net.JoinHostPort("localhost", httpPort)
 	}
