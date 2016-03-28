@@ -1045,8 +1045,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
 
   rocksdb::Slice key() const override {
-    return current_at_base_ ? base_iterator_->key()
-                            : delta_iterator_->Entry().key;
+    return current_at_base_ ? base_iterator_->key() : delta_key_;
   }
 
   rocksdb::Slice value() const override {
@@ -1124,9 +1123,12 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   }
   bool ProcessDelta() {
     IteratorGetter base(equal_keys_ ? base_iterator_.get() : NULL);
+    // The contents of WBWIIterator.Entry() are only valid until the
+    // next mutation to the write batch. So keep a copy of the key
+    // we're pointing at.
+    delta_key_ = delta_iterator_->Entry().key.ToString();
     DBStatus status = ProcessDeltaKey(&base, delta_iterator_.get(),
-                                      delta_iterator_->Entry().key.ToString(),
-                                      &merged_);
+                                      delta_key_, &merged_);
     if (status.data != NULL) {
       status_ = rocksdb::Status::Corruption("unable to merge records");
       free(status.data);
@@ -1245,6 +1247,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   mutable DBString merged_;
   std::unique_ptr<rocksdb::Iterator> base_iterator_;
   std::unique_ptr<rocksdb::WBWIIterator> delta_iterator_;
+  std::string delta_key_;
   const rocksdb::Slice* upper_bound_;
 };
 
