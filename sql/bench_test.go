@@ -637,40 +637,35 @@ func runBenchmarkScanFilter(b *testing.B, db *sql.DB, count1, count2 int, limit 
 	}
 }
 
+func filterLimitBenchFn(limit int) func(*testing.B, *sql.DB) {
+	return func(b *testing.B, db *sql.DB) {
+		runBenchmarkScanFilter(b, db, 25, 400, limit,
+			`a IN (1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 20, 21, 23) AND b < 10*a`)
+	}
+}
+
 func BenchmarkScan10000FilterLimit1_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) {
-		runBenchmarkScanFilter(b, db, 10, 1000, 1, `a IN (1, 3, 5, 7) AND b < 10*a`)
-	})
+	benchmarkCockroach(b, filterLimitBenchFn(1))
 }
 
 func BenchmarkScan10000FilterLimit1_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) {
-		runBenchmarkScanFilter(b, db, 10, 1000, 1, `a IN (1, 3, 5, 7) AND b < 10*a`)
-	})
+	benchmarkPostgres(b, filterLimitBenchFn(1))
 }
 
 func BenchmarkScan10000FilterLimit10_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) {
-		runBenchmarkScanFilter(b, db, 10, 1000, 10, `a IN (1, 3, 5, 7) AND b < 10*a`)
-	})
+	benchmarkCockroach(b, filterLimitBenchFn(10))
 }
 
 func BenchmarkScan10000FilterLimit10_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) {
-		runBenchmarkScanFilter(b, db, 10, 1000, 10, `a IN (1, 3, 5, 7) AND b < 10*a`)
-	})
+	benchmarkPostgres(b, filterLimitBenchFn(10))
 }
 
 func BenchmarkScan10000FilterLimit50_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) {
-		runBenchmarkScanFilter(b, db, 10, 1000, 50, `a IN (1, 3, 5, 7) AND b < 10*a`)
-	})
+	benchmarkCockroach(b, filterLimitBenchFn(50))
 }
 
 func BenchmarkScan10000FilterLimit50_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) {
-		runBenchmarkScanFilter(b, db, 10, 1000, 50, `a IN (1, 3, 5, 7) AND b < 10*a`)
-	})
+	benchmarkPostgres(b, filterLimitBenchFn(50))
 }
 
 // runBenchmarkOrderBy benchmarks scanning a table and sorting the results.
