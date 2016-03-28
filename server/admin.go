@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func init() {
@@ -106,6 +107,7 @@ type adminServer struct {
 	sqlExecutor *sql.Executor
 	*http.ServeMux
 	distSender *kv.DistSender
+	node       *Node
 
 	// Mux provided by grpc-gateway to handle HTTP/gRPC proxying.
 	gwMux *gwruntime.ServeMux
@@ -119,13 +121,14 @@ type adminServer struct {
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db *client.DB, stopper *stop.Stopper, sqlExecutor *sql.Executor, ds *kv.DistSender) *adminServer {
+func newAdminServer(db *client.DB, stopper *stop.Stopper, sqlExecutor *sql.Executor, ds *kv.DistSender, node *Node) *adminServer {
 	server := &adminServer{
 		db:          db,
 		stopper:     stopper,
 		sqlExecutor: sqlExecutor,
 		ServeMux:    http.NewServeMux(),
 		distSender:  ds,
+		node:        node,
 	}
 
 	// Register HTTP handlers.
@@ -692,6 +695,17 @@ func (s *adminServer) GetUIData(_ context.Context, req *GetUIDataRequest) (*GetU
 	}
 
 	return resp, nil
+}
+
+// Cluster returns cluster metadata.
+func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterResponse, error) {
+	clusterID := s.node.ClusterID
+	if uuid.Equal(clusterID, *uuid.EmptyUUID) {
+		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
+	}
+	var resp ClusterResponse
+	resp.ClusterID = clusterID.String()
+	return &resp, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
