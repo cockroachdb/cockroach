@@ -700,7 +700,7 @@ func runBenchmarkOrderBy(b *testing.B, db *sql.DB, count int, limit int, distinc
 	}
 	query := fmt.Sprintf(`SELECT %sv FROM bench.sort`, dist)
 	if limit != 0 {
-		query = fmt.Sprintf(`%s ORDER BY v DESC, w ASC, k DESC LIMIT %d`, query, limit)
+		query = fmt.Sprintf(`%s ORDER BY v ASC, w ASC, k DESC LIMIT %d`, query, limit)
 	}
 
 	b.ResetTimer()
