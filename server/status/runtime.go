@@ -37,6 +37,7 @@ const (
 	nameCPUUserPercent = "cpu.user.percent"
 	nameCPUSysNS       = "cpu.sys.ns"
 	nameCPUSysPercent  = "cpu.sys.percent"
+	nameMaxRSS         = "maxrss"
 )
 
 // logOSStats is a function that logs OS-specific stats. We will not necessarily
@@ -71,6 +72,7 @@ type RuntimeStatSampler struct {
 	cpuUserPercent *metric.GaugeFloat64
 	cpuSysNS       *metric.Gauge
 	cpuSysPercent  *metric.GaugeFloat64
+	maxRSS         *metric.Gauge
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
@@ -89,6 +91,7 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		cpuUserPercent: reg.GaugeFloat64(nameCPUUserPercent),
 		cpuSysNS:       reg.Gauge(nameCPUSysNS),
 		cpuSysPercent:  reg.GaugeFloat64(nameCPUSysPercent),
+		maxRSS:         reg.Gauge(nameMaxRSS),
 	}
 }
 
@@ -137,12 +140,18 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.lastUtime = newUtime
 	rsr.lastStime = newStime
 	rsr.lastPauseTime = ms.PauseTotalNs
+	maxRSSBytes := ru.Maxrss
+	if runtime.GOOS == "linux" {
+		// Linux reports RSS in kilobytes.
+		maxRSSBytes *= 1024
+	}
 
-	// Log summary of statistics to console, if requested.
+	// Log summary of statistics to console.
+	maxRSSMiB := float64(maxRSSBytes) / (1 << 20)
 	activeMiB := float64(ms.Alloc) / (1 << 20)
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-	log.Infof("runtime stats: %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-		numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
+	log.Infof("runtime stats: %.2fMiB max RSS, %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+		maxRSSMiB, numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
 	if log.V(2) {
 		log.Infof("memstats: %+v", ms)
 	}
@@ -162,4 +171,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.cpuUserPercent.Update(uPerc)
 	rsr.cpuSysNS.Update(newStime)
 	rsr.cpuSysPercent.Update(sPerc)
+
+	// We log the max RSS instead of the current RSS, because the getrusage fields
+	// for current RSS are not widely implemented.
+	rsr.maxRSS.Update(maxRSSBytes)
 }

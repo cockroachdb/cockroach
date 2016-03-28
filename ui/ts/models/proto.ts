@@ -110,6 +110,7 @@ module Models {
       export var sysCPUPercent: string = "sys.cpu.sys.percent";
       export var allocBytes: string = "sys.allocbytes";
       export var sqlConns: string = "sql.conns";
+      export var maxRSS: string = "sys.maxrss";
     }
 
     /**
