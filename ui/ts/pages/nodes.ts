@@ -184,12 +184,12 @@ module AdminViews {
           {
             title: "Mem Usage",
             view: (status: NodeStatus): string => {
-              return Utils.Format.Bytes(status.metrics[MetricNames.allocBytes]);
+              return Utils.Format.Bytes(status.metrics[MetricNames.maxRSS]);
             },
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.allocBytes],
+            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.maxRSS],
             rollup: function(rows: NodeStatus[]): string {
-              return Utils.Format.Bytes(_.sumBy(rows, (r: NodeStatus) => r.metrics[MetricNames.allocBytes]));
+              return Utils.Format.Bytes(_.sumBy(rows, (r: NodeStatus) => r.metrics[MetricNames.maxRSS]));
             },
           },
           {
@@ -309,8 +309,10 @@ module AdminViews {
             this.systemAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
-                .title("Memory allocated")
-            ).format(Utils.Format.Bytes).title("Memory Allocated")
+                .title("Go Memory"),
+              Metrics.Select.Avg(_sysMetric("maxrss"))
+                .title("RSS")
+            ).format(Utils.Format.Bytes).title("Memory Usage")
           );
           this._addChart(
             this.systemAxes,
@@ -350,8 +352,12 @@ module AdminViews {
             this.internalsAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.usage"))
-                .title("Block Cache Size")
-            ).format(Utils.Format.Bytes).title("Block Cache Size")
+                .title("Block Cache"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.pinned-usage"))
+                .title("Iterators"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.memtable.total-size"))
+                .title("Memtable")
+            ).format(Utils.Format.Bytes).title("Engine Memory Usage")
           );
           this._addChart(
             this.internalsAxes,
@@ -404,8 +410,9 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("gc.pause.ns"))
                 .nonNegativeRate()
                 .title("Time")
-            ).format(d3.format(",d")).title("Garbage Collection")
-            .label("Nanoseconds")
+            ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
+            .title("GC Pause Time")
+            .label("Milliseconds")
           );
 
           this.exec = new Metrics.Executor(this._query);
@@ -828,8 +835,11 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
                 .sources([this._nodeId])
-                .title("Memory allocated")
-            ).format(Utils.Format.Bytes).title("Memory Allocated")
+                .title("Go Memory"),
+              Metrics.Select.Avg(_sysMetric("maxrss"))
+                .sources([this._nodeId])
+                .title("RSS")
+            ).format(Utils.Format.Bytes).title("Memory Usage")
           );
           this._addChart(
             this.systemAxes,
@@ -875,8 +885,14 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.usage"))
                 .sources(this._storeIds)
-                .title("Block Cache Size")
-            ).format(Utils.Format.Bytes).title("Block Cache Size")
+                .title("Block Cache"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.pinned-usage"))
+                .sources(this._storeIds)
+                .title("Iterators"),
+              Metrics.Select.Avg(_storeMetric("rocksdb.memtable.total-size"))
+                .sources(this._storeIds)
+                .title("Memtable")
+            ).format(Utils.Format.Bytes).title("Engine Memory Usage")
           );
           this._addChart(
             this.internalsAxes,
@@ -938,8 +954,9 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("Time")
-            ).format(d3.format(",d")).title("Garbage Collection")
-            .label("Nanoseconds")
+            ).format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
+            .title("GC Pause Time")
+            .label("Milliseconds")
           );
         }
 
