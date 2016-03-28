@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -229,7 +230,11 @@ func (n *sortNode) ExplainPlan() (name, description string, children []planNode)
 	switch ss := n.sortStrategy.(type) {
 	case *iterativeSortStrategy:
 		description = fmt.Sprintf("%s (iterative)", description)
+	case *iterativeSortStrategy2:
+		description = fmt.Sprintf("%s (iterative)", description)
 	case *sortTopKStrategy:
+		description = fmt.Sprintf("%s (top %d)", description, ss.topK)
+	case *sortTopKStrategy2:
 		description = fmt.Sprintf("%s (top %d)", description, ss.topK)
 	}
 
@@ -243,9 +248,11 @@ func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	} else {
 		v := &valuesNode{ordering: n.ordering}
 		if soft {
-			n.sortStrategy = newIterativeSortStrategy(v)
+			n.sortStrategy = newIterativeSortStrategy2(v, numRows)
+			// n.sortStrategy = newIterativeSortStrategy(v)
 		} else {
-			n.sortStrategy = newSortTopKStrategy(v, numRows)
+			n.sortStrategy = newSortTopKStrategy2(v, numRows)
+			// n.sortStrategy = newSortTopKStrategy(v, numRows)
 		}
 	}
 }
@@ -454,7 +461,68 @@ func (ss *iterativeSortStrategy) DebugValues() debugValues {
 	return debugValues{
 		rowIdx: ss.nextRowIdx - 1,
 		key:    strconv.Itoa(ss.nextRowIdx - 1),
-		value:  ss.lastVal.String(),
+		value:  ss.Values().String(),
+		output: debugValueRow,
+	}
+}
+
+type iterativeSortStrategy2 struct {
+	vNode      *valuesNode
+	nextRowIdx int
+	topK       int
+	curChunk   []parser.DTuple
+}
+
+func newIterativeSortStrategy2(vNode *valuesNode, topK int64) sortingStrategy {
+	return &iterativeSortStrategy2{
+		vNode: vNode,
+		topK:  int(topK),
+	}
+}
+
+func (ss *iterativeSortStrategy2) Add(values parser.DTuple) {
+	valuesCopy := make(parser.DTuple, len(values))
+	copy(valuesCopy, values)
+	ss.vNode.rows = append(ss.vNode.rows, valuesCopy)
+}
+
+func (ss *iterativeSortStrategy2) Finish() {}
+
+func (ss *iterativeSortStrategy2) Next() bool {
+	if len(ss.curChunk) < 2 {
+		if ss.vNode.Len() == 0 {
+			return false
+		}
+		if ss.vNode.Len() > ss.topK {
+			util.MoveTopKToFront(ss.vNode, ss.topK)
+			rest := ss.vNode.rows[ss.topK:]
+			ss.vNode.rows = ss.vNode.rows[:ss.topK]
+			ss.vNode.SortAll()
+			ss.curChunk = ss.vNode.rows
+			ss.vNode.rows = rest
+			ss.topK *= 2
+		} else {
+			ss.vNode.SortAll()
+			ss.curChunk = ss.vNode.rows
+			ss.vNode.rows = ss.vNode.rows[:0]
+		}
+		ss.nextRowIdx++
+		return true
+	}
+	ss.curChunk = ss.curChunk[1:]
+	ss.nextRowIdx++
+	return true
+}
+
+func (ss *iterativeSortStrategy2) Values() parser.DTuple {
+	return ss.curChunk[0]
+}
+
+func (ss *iterativeSortStrategy2) DebugValues() debugValues {
+	return debugValues{
+		rowIdx: ss.nextRowIdx - 1,
+		key:    strconv.Itoa(ss.nextRowIdx - 1),
+		value:  ss.Values().String(),
 		output: debugValueRow,
 	}
 }
@@ -529,6 +597,58 @@ func (ss *sortTopKStrategy) Values() parser.DTuple {
 }
 
 func (ss *sortTopKStrategy) DebugValues() debugValues {
+	return ss.vNode.DebugValues()
+}
+
+// Average case complexity: O(n + k*log(k))
+// Worst case complexity: O(n*k + k*log(k))
+type sortTopKStrategy2 struct {
+	vNode *valuesNode
+	topK  int64
+}
+
+func newSortTopKStrategy2(vNode *valuesNode, topK int64) sortingStrategy {
+	ss := &sortTopKStrategy2{
+		vNode: vNode,
+		topK:  topK,
+	}
+	return ss
+}
+
+func (ss *sortTopKStrategy2) Add(values parser.DTuple) {
+	valuesCopy := make(parser.DTuple, len(values))
+	copy(valuesCopy, values)
+	ss.vNode.rows = append(ss.vNode.rows, valuesCopy)
+
+	// RADU 5 seems to have the best performance here, but this can be
+	// tuned.
+	const sortThresholdFactor = 5
+	if ss.vNode.Len() == int(sortThresholdFactor*ss.topK) {
+		ss.trimToTopK()
+	}
+}
+
+func (ss *sortTopKStrategy2) Finish() {
+	if ss.vNode.Len() > int(ss.topK) {
+		ss.trimToTopK()
+	}
+	ss.vNode.SortAll()
+}
+
+func (ss *sortTopKStrategy2) trimToTopK() {
+	util.MoveTopKToFront(ss.vNode, int(ss.topK))
+	ss.vNode.rows = ss.vNode.rows[:int(ss.topK)]
+}
+
+func (ss *sortTopKStrategy2) Next() bool {
+	return ss.vNode.Next()
+}
+
+func (ss *sortTopKStrategy2) Values() parser.DTuple {
+	return ss.vNode.Values()
+}
+
+func (ss *sortTopKStrategy2) DebugValues() debugValues {
 	return ss.vNode.DebugValues()
 }
 

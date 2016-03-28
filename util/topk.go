@@ -41,6 +41,20 @@ func moveTopKToFront(data sort.Interface, start, end, k int, rng *rand.Rand) {
 	// elements > pivot and further refine the first region if necessary.
 
 	// Choose a random pivot and move it to the front.
+	// RADU: I think we can improve the performance of sorting a random ordering of values
+	// using our new sortTopKStrategy2 with a small change here. In the outermost recursive
+	// call to this function, there is a high probability that the majority of the top k
+	// will already be in place because we've been filtering them throughout the sorting
+	// process. I think we can take advantage of that here by setting the pivot to
+	// k on the outermost call, instead of forgetting what we've already filtered and randomly
+	// picking a pivot. Obviously this wouldnt be optimal for sorting a reverse sorted stream
+	// of values.
+	//
+	// In a similar fashion, this is why sortTopKStrategy will almost always have a better
+	// complexity than its worst case of O(n + n log k). As we filter values to the top k
+	// (given a random ordering) the chance that each successive value will need to be
+	// inserted into the priority queue decreases. So again, this will only see worst case
+	// complexity on a reverse sorted stream of values.
 	data.Swap(start, start+rng.Intn(end-start))
 	pivot := start
 	l, r := start+1, end
