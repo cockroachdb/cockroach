@@ -350,7 +350,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(rs, false /*considerIntents*/, false /*useReverseScan*/)
+		desc, needAnother, _, pErr := ds.getDescriptors(rs, nil, false /*considerIntents*/, false /*useReverseScan*/)
 		if pErr != nil {
 			return -1, pErr
 		}
@@ -374,7 +374,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
 func (ds *DistSender) getDescriptors(
-	rs roachpb.RSpan, considerIntents, useReverseScan bool,
+	rs roachpb.RSpan, stale *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, bool, func() error, *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var pErr *roachpb.Error
@@ -384,7 +384,7 @@ func (ds *DistSender) getDescriptors(
 	} else {
 		descKey = rs.EndKey
 	}
-	desc, pErr = ds.rangeCache.LookupRangeDescriptor(descKey, considerIntents, useReverseScan)
+	desc, pErr = ds.rangeCache.LookupRangeDescriptor(descKey, nil, considerIntents, useReverseScan)
 
 	if pErr != nil {
 		return nil, false, nil, pErr
@@ -598,7 +598,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		considerIntents := false
 		var curReply *roachpb.BatchResponse
-		var desc *roachpb.RangeDescriptor
+		var desc, stale *roachpb.RangeDescriptor
 		var needAnother bool
 		var pErr *roachpb.Error
 		var finished bool
@@ -607,8 +607,16 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			log.Trace(ctx, "meta descriptor lookup")
-			var evictDesc func() error
-			desc, needAnother, evictDesc, pErr = ds.getDescriptors(rs, considerIntents, isReverse)
+			var evictDescript func() error
+			desc, needAnother, evictDescript, pErr = ds.getDescriptors(rs, stale, considerIntents, isReverse)
+			stale = nil
+			evictDesc := func() error {
+				if err := evictDescript(); err != nil {
+					return err
+				}
+				stale = desc
+				return nil
+			}
 
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.

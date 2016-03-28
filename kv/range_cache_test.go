@@ -19,7 +19,9 @@ package kv
 import (
 	"bytes"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
@@ -32,6 +34,7 @@ type testDescriptorDB struct {
 	data        llrb.Tree
 	cache       *rangeDescriptorCache
 	lookupCount int
+	pauseChan   chan struct{}
 }
 
 type testDescriptorNode struct {
@@ -70,6 +73,7 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Err
 }
 
 func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, _, _ bool) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+	<-db.pauseChan
 	db.lookupCount++
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return db.getDescriptor(key[len(keys.Meta2Prefix):]), nil
@@ -100,8 +104,18 @@ func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.RKey) {
 	})
 }
 
+func (db *testDescriptorDB) pauseRangeLookups() {
+	db.pauseChan = make(chan struct{})
+}
+
+func (db *testDescriptorDB) resumeRangeLookups() {
+	close(db.pauseChan)
+}
+
 func newTestDescriptorDB() *testDescriptorDB {
-	db := &testDescriptorDB{}
+	db := &testDescriptorDB{
+		pauseChan: make(chan struct{}),
+	}
 	db.data.Insert(testDescriptorNode{
 		&roachpb.RangeDescriptor{
 			StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMin),
@@ -114,6 +128,7 @@ func newTestDescriptorDB() *testDescriptorDB {
 			EndKey:   roachpb.RKeyMax,
 		},
 	})
+	db.resumeRangeLookups()
 	return db
 }
 
@@ -125,7 +140,7 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 }
 
 func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) *roachpb.RangeDescriptor {
-	r, pErr := rc.LookupRangeDescriptor(roachpb.RKey(key), false /* considerIntents */, false /* useReverseScan */)
+	r, pErr := rc.LookupRangeDescriptor(roachpb.RKey(key), nil, false /* considerIntents */, false /* useReverseScan */)
 	if pErr != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
 	}
@@ -222,7 +237,43 @@ func TestRangeCache(t *testing.T) {
 	}
 	doLookup(t, db.cache, "cz")
 	db.assertLookupCount(t, 2, "cz")
+}
 
+// TestRangeCacheCoalescedRequests verifies that concurrent lookups for
+// the same key will be coalesced onto the same database lookup.
+func TestRangeCacheCoalescedRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := newTestDescriptorDB()
+	for i, char := range "abcdefghijklmnopqrstuvwx" {
+		db.splitRange(t, roachpb.RKey(string(char)))
+		if i > 0 && i%6 == 0 {
+			db.splitRange(t, mustMeta(roachpb.RKey(string(char))))
+		}
+	}
+
+	db.cache = newRangeDescriptorCache(db, 2<<10)
+
+	pauseLookupResumeAndAsserts := func(key string, expected int) {
+		var wg sync.WaitGroup
+		db.pauseRangeLookups()
+		for i := 0; i < 3; i++ {
+			wg.Add(1)
+			go func() {
+				doLookup(t, db.cache, key)
+				wg.Done()
+			}()
+		}
+		time.Sleep(10 * time.Millisecond)
+		db.resumeRangeLookups()
+		wg.Wait()
+		db.assertLookupCount(t, expected, key)
+	}
+
+	pauseLookupResumeAndAsserts("aa", 2)
+
+	// Metadata two ranges weren't cached, same metadata 1 range.
+	pauseLookupResumeAndAsserts("d", 1)
+	pauseLookupResumeAndAsserts("fa", 0)
 }
 
 // TestRangeCacheClearOverlapping verifies that existing, overlapping
