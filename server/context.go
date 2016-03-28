@@ -49,7 +49,7 @@ const (
 	defaultHTTPAddr                 = ":" + base.DefaultHTTPPort
 	defaultMaxOffset                = 250 * time.Millisecond
 	defaultCacheSize                = 512 << 20 // 512 MB
-	defaultMemtableBudget           = 512 << 20 // 512 MB
+	defaultMemtableBudget           = 16 << 20  // 16 MB
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 5 * time.Second
