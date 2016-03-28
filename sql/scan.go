@@ -111,9 +111,11 @@ func (n *scanNode) DebugValues() debugValues {
 }
 
 func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
-	// TODO(radu): maybe make the limitHint higher if soft is true or there is
-	// no filter? (#5267)
 	n.limitHint = numRows
+	if soft || n.filter != nil {
+		// Read a multiple of the limit if the limit is "soft".
+		n.limitHint *= 2
+	}
 }
 
 // nextKey gets the next key and sets kv and kvEnd. Returns false on errors.
@@ -350,9 +352,9 @@ func (n *scanNode) initScan() bool {
 		}
 	}
 
-	// If we have a limit hint, we limit the first batch size. Subsequent batches use the normal
-	// size, to avoid making things too slow (e.g. in case we have a very restrictive filter and
-	// actually have to retrieve a lot of rows).
+	// If we have a limit hint, we limit the first batch size. Subsequent
+	// batches get larger to avoid making things too slow (e.g. in case we have
+	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := n.limitHint
 	if firstBatchLimit != 0 {
 		// For a secondary index, we have one key per row.

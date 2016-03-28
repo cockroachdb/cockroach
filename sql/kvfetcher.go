@@ -93,10 +93,10 @@ func prettySpans(spans []span, skip int) string {
 // On a single node, 1000 was enough to avoid any performance degradation. On multi-node clusters,
 // we want bigger chunks to make up for the higher latency.
 // TODO(radu): parameters like this should be configurable
-var kvBatchSize = 10000
+var kvBatchSize int64 = 10000
 
 // SetKVBatchSize changes the kvFetcher batch size, and returns a function that restores it.
-func SetKVBatchSize(val int) func() {
+func SetKVBatchSize(val int64) func() {
 	oldVal := kvBatchSize
 	kvBatchSize = val
 	return func() { kvBatchSize = oldVal }
@@ -110,10 +110,50 @@ type kvFetcher struct {
 	reverse         bool
 	firstBatchLimit int64
 
+	batchIdx     int
 	fetchEnd     bool
 	kvs          []client.KeyValue
 	kvIndex      int
 	totalFetched int64
+}
+
+// getBatchSize returns the max size of the next batch.
+func (f *kvFetcher) getBatchSize() int64 {
+	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
+		return kvBatchSize
+	}
+
+	// We grab the first batch according to the limit. If it turns out that we
+	// need another batch, we grab a bigger batch. If that's still not enough,
+	// we revert to the default batch size.
+	switch f.batchIdx {
+	case 0:
+		return f.firstBatchLimit
+
+	case 1:
+		// Make the second batch 10 times larger (but at most the default batch
+		// size and at least 1/10 of the default batch size). Sample
+		// progressions of batch sizes:
+		//
+		//  First batch | Second batch | Subsequent batches
+		//  -----------------------------------------------
+		//         1    |     1,000     |     10,000
+		//       100    |     1,000     |     10,000
+		//       500    |     5,000     |     10,000
+		//      1000    |    10,000     |     10,000
+		secondBatch := f.firstBatchLimit * 10
+		switch {
+		case secondBatch < kvBatchSize/10:
+			return kvBatchSize / 10
+		case secondBatch > kvBatchSize:
+			return kvBatchSize
+		default:
+			return secondBatch
+		}
+
+	default:
+		return kvBatchSize
+	}
 }
 
 // makeKVFetcher initializes a kvFetcher for the given spans. If non-zero, firstBatchLimit limits
@@ -127,11 +167,7 @@ func makeKVFetcher(txn *client.Txn, spans spans, reverse bool, firstBatchLimit i
 
 // fetch retrieves spans from the kv
 func (f *kvFetcher) fetch() *roachpb.Error {
-	// Retrieve all the spans.
-	batchSize := int64(kvBatchSize)
-	if f.firstBatchLimit != 0 && len(f.kvs) == 0 && f.firstBatchLimit < batchSize {
-		batchSize = f.firstBatchLimit
-	}
+	batchSize := f.getBatchSize()
 
 	b := &client.Batch{MaxScanResults: batchSize}
 
@@ -212,6 +248,7 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 		f.kvs = append(f.kvs, result.Rows...)
 	}
 
+	f.batchIdx++
 	f.totalFetched += int64(len(f.kvs))
 	f.kvIndex = 0
 
