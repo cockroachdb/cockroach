@@ -2026,6 +2026,8 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	tc.manualClock.Set(1)
 	txn := newTransaction("test", roachpb.Key(""), 1, roachpb.SERIALIZABLE, tc.clock)
 
+	doesNotExist := roachpb.TransactionStatus(-1)
+
 	testCases := []struct {
 		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
@@ -2033,12 +2035,13 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTS      roachpb.Timestamp
 		expErrRegexp string
 	}{
+		{roachpb.Key("a"), doesNotExist, txn.Epoch, txn.Timestamp, "does not exist"},
 		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
 		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
 		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
 		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, `txn "test" id=.*: timestamp regression: 0.000000001,\d+`},
 	}
-	for _, test := range testCases {
+	for i, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
 		existTxn := txn.Clone()
 		existTxn.Key = test.key
@@ -2046,9 +2049,12 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
 		txnKey := keys.TransactionKey(test.key, txn.ID)
-		if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
-			nil, &existTxn); err != nil {
-			t.Fatal(err)
+
+		if test.existStatus != doesNotExist {
+			if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, txnKey, roachpb.ZeroTimestamp,
+				nil, &existTxn); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		// End the transaction, verify expected error.
@@ -2057,7 +2063,10 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.Sequence++
 
 		if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
-			t.Errorf("expected error:\n%s\nto match:\n%s", pErr, test.expErrRegexp)
+			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
+		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == nil {
+			// Prevent regression of #5591.
+			t.Fatalf("%d: received empty Transaction proto in error", i)
 		}
 	}
 }

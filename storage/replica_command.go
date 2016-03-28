@@ -386,7 +386,9 @@ func (r *Replica) EndTransaction(
 	if ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, reply.Txn); err != nil {
 		return reply, nil, err
 	} else if !ok {
-		return reply, nil, roachpb.NewTransactionStatusError("does not exist")
+		// Return a fresh empty reply because there's an empty Transaction
+		// proto in our existing one.
+		return roachpb.EndTransactionResponse{}, nil, roachpb.NewTransactionStatusError("does not exist")
 	}
 
 	if args.Deadline != nil && args.Deadline.Less(h.Timestamp) {
