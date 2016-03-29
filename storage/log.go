@@ -96,6 +96,18 @@ VALUES(
 		args[5] = *event.info
 	}
 
+	// Update range event metrics. We do this close to the insertion of the
+	// corresponding range log entry to reduce potential skew between metrics and
+	// range log.
+	switch event.eventType {
+	case RangeEventLogSplit:
+		s.metrics.rangeSplits.Inc(1)
+	case RangeEventLogAdd:
+		s.metrics.rangeAdds.Inc(1)
+	case RangeEventLogRemove:
+		s.metrics.rangeRemoves.Inc(1)
+	}
+
 	rows, err := s.ctx.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err

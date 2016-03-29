@@ -373,6 +373,22 @@ module AdminViews {
           this._addChart(
             this.internalsAxes,
             Metrics.NewAxis(
+              Metrics.Select.Avg(_storeMetric("range.splits"))
+                .nonNegativeRate()
+                .title("Splits"),
+              Metrics.Select.Avg(_storeMetric("range.adds"))
+                .nonNegativeRate()
+                .title("Adds"),
+              Metrics.Select.Avg(_storeMetric("range.removes"))
+                .nonNegativeRate()
+                .title("Removes")
+            ).format(d3.format(".1f"))
+            .title("Range Events")
+            .stacked(true)
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
               Metrics.Select.Avg(_storeMetric("rocksdb.flushes"))
                 .nonNegativeRate()
                 .title("Flushes"),
@@ -906,6 +922,25 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Cache Misses")
             ).format(d3.format("d")).title("Block Cache Hits/Misses").stacked(true)
+          );
+          this._addChart(
+            this.internalsAxes,
+            Metrics.NewAxis(
+              Metrics.Select.Avg(_storeMetric("range.splits"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Splits"),
+              Metrics.Select.Avg(_storeMetric("range.adds"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Adds"),
+              Metrics.Select.Avg(_storeMetric("range.removes"))
+                .sources(this._storeIds)
+                .nonNegativeRate()
+                .title("Removes")
+            ).format(d3.format(".1f"))
+            .title("Range Events")
+            .stacked(true)
           );
           this._addChart(
             this.internalsAxes,
