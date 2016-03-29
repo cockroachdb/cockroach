@@ -33,8 +33,8 @@ module AdminViews {
             ];
           } else {
             return ["We appreciate your support. ",
-            "Feel free to reach out to us on ",
-              m("a", {href: "http://www.github.com/cockroachdb/cockroach"}, "GitHub"),
+            "Reach out to us on ",
+              m("a", {href: "https://gitter.im/cockroachdb/cockroach"}, "Gitter"),
               " or our ",
               m("a", {href: "https://groups.google.com/forum/#!forum/cockroach-db"}, "Google Group"),
               ".",
