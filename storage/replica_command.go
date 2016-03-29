@@ -1595,7 +1595,11 @@ func (r *Replica) VerifyChecksum(
 			p()
 		} else {
 			// Replication consistency problem!
-			log.Fatalf("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
+			logFunc := log.Errorf
+			if r.store.ctx.ConsistencyCheckPanicOnFailure {
+				logFunc = log.Fatalf
+			}
+			logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 		}
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
