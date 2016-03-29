@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 
+	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
 
@@ -153,11 +154,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.lastPauseTime = ms.PauseTotalNs
 
 	// Log summary of statistics to console.
-	rssMiB := float64(mem.Resident) / (1 << 20)
-	activeMiB := float64(ms.Alloc) / (1 << 20)
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-	log.Infof("runtime stats: %.2fMiB max RSS, %d goroutines, %.2fMiB active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
-		rssMiB, numGoroutine, activeMiB, cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
+	log.Infof("runtime stats: %s RSS, %d goroutines, %s active, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+		humanize.IBytes(mem.Resident), numGoroutine, humanize.IBytes(ms.Alloc),
+		cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
 	if log.V(2) {
 		log.Infof("memstats: %+v", ms)
 	}
