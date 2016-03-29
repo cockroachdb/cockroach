@@ -102,13 +102,13 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 
 	// Inject errors on the INSERT below.
 	restarted := false
-	cmdFilters.AppendFilter(func(args storageutils.FilterArgs) error {
+	cmdFilters.AppendFilter(func(args storageutils.FilterArgs) *roachpb.Error {
 		switch req := args.Req.(type) {
 		// SQL INSERT generates ConditionalPuts for unique indexes (such as the PK).
 		case *roachpb.ConditionalPutRequest:
 			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
 				restarted = true
-				return roachpb.NewTransactionAbortedError()
+				return roachpb.NewError(roachpb.NewTransactionAbortedError())
 			}
 		}
 		return nil
