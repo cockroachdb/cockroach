@@ -78,6 +78,11 @@ module Models {
        */
       loadPromise: MithrilPromise<void> = null;
 
+      /**
+       * showRequired tracks whether there has been a failed submit, in which case we show the "required" indicator on any invalid inputs
+       */
+      showRequired: boolean = false;
+
       constructor() {
         this.loadPromise = this.load();
       }

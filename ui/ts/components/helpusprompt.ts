@@ -72,7 +72,7 @@ module Components {
       modalSubmit(e: Event): void {
         let target: HTMLButtonElement = <HTMLButtonElement>e.target;
         if (target.form.checkValidity()) {
-
+          this.userData.showRequired = false;
           this.userData.save().then(() => {
             // Change the modal size from the "Sign Up" to the "Thanks" size
             this.stage = Stage.ThanksSize;
@@ -84,6 +84,8 @@ module Components {
               },
               400);
           });
+        } else {
+          this.userData.showRequired = true;
         }
       }
 
@@ -169,7 +171,7 @@ module Components {
                   m(".inputs", [
                     m("input[name=firstname]", {placeholder: "First Name"}), m("span.status"),
                     m("input[name=lastname]", {placeholder: "Last Name"}), m("span.status"),
-                    m("input[name=email][type=email][required=true]", {placeholder: "Email*"}), m("span.status"),
+                    m("input[name=email][type=email][required=true]" + (ctrl.userData.showRequired ? ".show-required" : ""), {placeholder: "Email*"}), m("span.status"),
                     m("input[name=company]", {placeholder: "Company (optional)"}), m("span.status"),
                     m("", [
                       m("input[type=checkbox][name=optin][required=true]", {id: "optin", checked: true}),
