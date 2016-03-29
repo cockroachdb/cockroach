@@ -28,8 +28,10 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log/logflags"
 )
 
 var maxResults int64
@@ -43,7 +45,7 @@ var cacheSize *bytesValue
 var insecure *insecureValue
 
 var flagUsage = map[string]string{
-	"attrs": wrapText(`
+	cliflags.AttrsName: wrapText(`
 An ordered, colon-separated list of node attributes. Attributes are
 arbitrary strings specifying topography or machine
 capabilities. Topography might include datacenter designation
@@ -57,30 +59,30 @@ nodes. For example:`) + `
   --attrs=us-west-1b:gpu
 `,
 
-	"cache": wrapText(`
+	cliflags.CacheName: wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
 
-	"client_host": wrapText(`
+	forClient(cliflags.HostName): wrapText(`
 Database server host to connect to.`),
 
-	"client_port": wrapText(`
+	forClient(cliflags.PortName): wrapText(`
 Database server port to connect to.`),
 
-	"client_http_port": wrapText(`
+	forClient(cliflags.HTTPPortName): wrapText(`
 Database server port to connect to for HTTP requests.`),
 
-	"database": wrapText(`
+	cliflags.DatabaseName: wrapText(`
 The name of the database to connect to.`),
 
-	"execute": wrapText(`
+	cliflags.ExecuteName: wrapText(`
 Execute the SQL statement(s) on the command line, then exit. This flag may be
 specified multiple times and each value may contain multiple semicolon
 separated statements. If an error occurs in any statement, the command exits
 with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`),
 
-	"join": wrapText(`
+	cliflags.JoinName: wrapText(`
 A comma-separated list of addresses to use when a new node is joining
 an existing cluster. For the first node in a cluster, --join should
 NOT be specified. Each address in the list has an optional type:
@@ -92,49 +94,49 @@ is one of:`) + `
              http(s)://<address>/_status/details/local
 `,
 
-	"server_host": wrapText(`
+	forServer(cliflags.HostName): wrapText(`
 The address to listen on. The node will also advertise itself using this
 hostname; it must resolve from other nodes in the cluster.`),
 
-	"socket": wrapText(`
+	forServer(cliflags.PortName): wrapText(`
+The port to bind to.`),
+
+	forServer(cliflags.HTTPPortName): wrapText(`
+The port to bind to for HTTP requests.`),
+
+	cliflags.SocketName: wrapText(`
 Unix socket file, postgresql protocol only.
 Note: when given a path to a unix socket, most postgres clients will
 open "<given path>/.s.PGSQL.<server port>"`),
 
-	"insecure": wrapText(`
+	cliflags.InsecureName: wrapText(`
 Run over non-encrypted (non-TLS) connections. This is strongly discouraged for
 production usage and this flag must be explicitly specified in order for the
 server to listen on an external address in insecure mode.`),
 
-	"key-size": wrapText(`
+	cliflags.KeySizeName: wrapText(`
 Key size in bits for CA/Node/Client certificates.`),
 
-	"max-results": wrapText(`
+	cliflags.MaxResultsName: wrapText(`
 Define the maximum number of results that will be retrieved.`),
 
-	"password": wrapText(`
+	cliflags.PasswordName: wrapText(`
 The created user's password. If provided, disables prompting. Pass '-' to
 provide the password on standard input.`),
 
-	"server_port": wrapText(`
-The port to bind to.`),
-
-	"server_http_port": wrapText(`
-The port to bind to for HTTP requests.`),
-
-	"ca-cert": wrapText(`
+	cliflags.CACertName: wrapText(`
 Path to the CA certificate. Needed by clients and servers in secure mode.`),
 
-	"ca-key": wrapText(`
+	cliflags.CAKeyName: wrapText(`
 Path to the key protecting --ca-cert. Only needed when signing new certificates.`),
 
-	"cert": wrapText(`
+	cliflags.CertName: wrapText(`
 Path to the client or server certificate. Needed in secure mode.`),
 
-	"key": wrapText(`
+	cliflags.KeyName: wrapText(`
 Path to the key protecting --cert. Needed in secure mode.`),
 
-	"store": wrapText(`
+	cliflags.StoreName: wrapText(`
 The file path to a storage device. This flag must be specified separately for
 each storage device, for example:`) + `
 
@@ -192,29 +194,58 @@ Adjusts the timeout for stores. If there's been no gossiped update
 from a store after this time, the store is considered unavailable.
 Replicas on an unavailable store will be moved to available ones.`),
 
-	"url": wrapText(`
+	cliflags.URLName: wrapText(`
 Connection url. eg: postgresql://myuser@localhost:26257/mydb
 If left empty, the connection flags are used (host, port, user,
 database, insecure, certs).`),
 
-	"user": wrapText(`
+	cliflags.UserName: wrapText(`
 Database user name.`),
 
-	"from": wrapText(`
+	cliflags.FromName: wrapText(`
 Start key in pretty-printed format. See also --raw.`),
 
-	"to": wrapText(`
+	cliflags.ToName: wrapText(`
 Exclusive end key in pretty-printed format. See also --raw.`),
 
-	"raw": wrapText(`
+	cliflags.RawName: wrapText(`
 Interpret keys as raw bytes.`),
 
-	"values": wrapText(`
+	cliflags.ValuesName: wrapText(`
 Print values along with their associated key.`),
 }
 
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
+
+func wrapText(s string) string {
+	return text.Wrap(s, wrapWidth)
+}
+
+// usage returns the usage information for a given flag identifier. The
+// identifier is always the flag's name, except in the case where a client/server
+// distinction for the same flag is required.
+func usage(flagID string) string {
+	s, ok := flagUsage[flagID]
+	if !ok {
+		panic(fmt.Sprintf("flag usage not defined for %q", flagID))
+	}
+	s = "\n" + strings.TrimSpace(s) + "\n"
+	// github.com/spf13/pflag appends the default value after the usage text. Add
+	// the correct indentation (7 spaces) here. This is admittedly fragile.
+	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
+		strings.Repeat(" ", usageIndentation-1)
+}
+
+// forServer maps a general flag name into a server-specific flag identifier.
+func forServer(name string) string {
+	return fmt.Sprintf("server-%s", name)
+}
+
+// forClient maps a general flag name into a client-specific flag identifier.
+func forClient(name string) string {
+	return fmt.Sprintf("client-%s", name)
+}
 
 type bytesValue struct {
 	val   *int64
@@ -286,28 +317,12 @@ func (b *insecureValue) String() string {
 	return fmt.Sprint(*b.val)
 }
 
-func wrapText(s string) string {
-	return text.Wrap(s, wrapWidth)
-}
-
-func usage(name string) string {
-	s, ok := flagUsage[name]
-	if !ok {
-		panic(fmt.Sprintf("flag usage not defined for %q", name))
-	}
-	s = "\n" + strings.TrimSpace(s) + "\n"
-	// github.com/spf13/pflag appends the default value after the usage text. Add
-	// the correct indentation (7 spaces) here. This is admittedly fragile.
-	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
-		strings.Repeat(" ", usageIndentation-1)
-}
-
 // initFlags sets the cli.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
 func initFlags(ctx *Context) {
 	// Change the logging defaults for the main cockroach binary.
-	if err := flag.Lookup("logtostderr").Value.Set("false"); err != nil {
+	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
 		panic(err)
 	}
 
@@ -320,57 +335,57 @@ func initFlags(ctx *Context) {
 
 	// The --log-dir default changes depending on the command. Avoid confusion by
 	// simply clearing it.
-	pf.Lookup("log-dir").DefValue = ""
+	pf.Lookup(logflags.LogDirName).DefValue = ""
 	// If no value is specified for --alsologtostderr output everything.
-	pf.Lookup("alsologtostderr").NoOptDefVal = "INFO"
+	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
 
 	{
 		f := startCmd.Flags()
 
 		// Server flags.
-		f.StringVar(&connHost, "host", "", usage("server_host"))
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("server_http_port"))
-		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
-		f.VarP(&ctx.Stores, "store", "s", usage("store"))
+		f.StringVar(&connHost, cliflags.HostName, "", usage(forServer(cliflags.HostName)))
+		f.StringVarP(&connPort, cliflags.PortName, "p", base.DefaultPort, usage(forServer(cliflags.PortName)))
+		f.StringVar(&httpPort, cliflags.HTTPPortName, base.DefaultHTTPPort, usage(forServer(cliflags.HTTPPortName)))
+		f.StringVar(&ctx.Attrs, cliflags.AttrsName, ctx.Attrs, usage(cliflags.AttrsName))
+		f.VarP(&ctx.Stores, cliflags.StoreName, "s", usage(cliflags.StoreName))
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		f.StringVar(&ctx.SocketFile, "socket", "", usage("socket"))
-		_ = f.MarkHidden("socket")
+		f.StringVar(&ctx.SocketFile, cliflags.SocketName, "", usage(cliflags.SocketName))
+		_ = f.MarkHidden(cliflags.SocketName)
 
 		// Security flags.
 		ctx.Insecure = true
 		insecure = newInsecureValue(&ctx.Insecure)
-		insecureF := f.VarPF(insecure, "insecure", "", usage("insecure"))
+		insecureF := f.VarPF(insecure, cliflags.InsecureName, "", usage(cliflags.InsecureName))
 		insecureF.NoOptDefVal = "true"
 		// Certificates.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
+		f.StringVar(&ctx.SSLCA, cliflags.CACertName, ctx.SSLCA, usage(cliflags.CACertName))
+		f.StringVar(&ctx.SSLCert, cliflags.CertName, ctx.SSLCert, usage(cliflags.CertName))
+		f.StringVar(&ctx.SSLCertKey, cliflags.KeyName, ctx.SSLCertKey, usage(cliflags.KeyName))
 
 		// Cluster joining flags.
-		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usage("join"))
+		f.StringVar(&ctx.JoinUsing, cliflags.JoinName, ctx.JoinUsing, usage(cliflags.JoinName))
 
 		// Engine flags.
 		cacheSize = newBytesValue(&ctx.CacheSize)
-		f.Var(cacheSize, "cache", usage("cache"))
+		f.Var(cacheSize, cliflags.CacheName, usage(cliflags.CacheName))
 
 		// Clear the cache default value. This flag does have a default, but
 		// it is set only when the "start" command is run.
-		f.Lookup("cache").DefValue = ""
+		f.Lookup(cliflags.CacheName).DefValue = ""
 
-		if err := startCmd.MarkFlagRequired("store"); err != nil {
+		if err := startCmd.MarkFlagRequired(cliflags.StoreName); err != nil {
 			panic(err)
 		}
 	}
 
 	{
 		f := exterminateCmd.Flags()
-		f.Var(&ctx.Stores, "store", usage("store"))
-		if err := exterminateCmd.MarkFlagRequired("store"); err != nil {
+		f.Var(&ctx.Stores, cliflags.StoreName, usage(cliflags.StoreName))
+		if err := exterminateCmd.MarkFlagRequired(cliflags.StoreName); err != nil {
 			panic(err)
 		}
 	}
@@ -378,17 +393,17 @@ func initFlags(ctx *Context) {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCAKey, "ca-key", ctx.SSLCAKey, usage("ca-key"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
-		f.IntVar(&keySize, "key-size", defaultKeySize, usage("key-size"))
-		if err := cmd.MarkFlagRequired("key-size"); err != nil {
+		f.StringVar(&ctx.SSLCA, cliflags.CACertName, ctx.SSLCA, usage(cliflags.CACertName))
+		f.StringVar(&ctx.SSLCAKey, cliflags.CAKeyName, ctx.SSLCAKey, usage(cliflags.CAKeyName))
+		f.StringVar(&ctx.SSLCert, cliflags.CertName, ctx.SSLCert, usage(cliflags.CertName))
+		f.StringVar(&ctx.SSLCertKey, cliflags.KeyName, ctx.SSLCertKey, usage(cliflags.KeyName))
+		f.IntVar(&keySize, cliflags.KeySizeName, defaultKeySize, usage(cliflags.KeySizeName))
+		if err := cmd.MarkFlagRequired(cliflags.KeySizeName); err != nil {
 			panic(err)
 		}
 	}
 
-	setUserCmd.Flags().StringVar(&password, "password", "", usage("password"))
+	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, "", usage(cliflags.PasswordName))
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, exterminateCmd, quitCmd, /* startCmd is covered above */
@@ -400,19 +415,19 @@ func initFlags(ctx *Context) {
 	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		insecureF := f.VarPF(insecure, "insecure", "", usage("insecure"))
+		insecureF := f.VarPF(insecure, cliflags.InsecureName, "", usage(cliflags.InsecureName))
 		insecureF.NoOptDefVal = "true"
-		f.StringVar(&connHost, "host", "", usage("client_host"))
+		f.StringVar(&connHost, cliflags.HostName, "", usage(forClient(cliflags.HostName)))
 
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
+		f.StringVar(&ctx.SSLCA, cliflags.CACertName, ctx.SSLCA, usage(cliflags.CACertName))
+		f.StringVar(&ctx.SSLCert, cliflags.CertName, ctx.SSLCert, usage(cliflags.CertName))
+		f.StringVar(&ctx.SSLCertKey, cliflags.KeyName, ctx.SSLCertKey, usage(cliflags.KeyName))
 	}
 
 	{
 		f := sqlShellCmd.Flags()
-		f.VarP(&ctx.execStmts, "execute", "e", usage("execute"))
+		f.VarP(&ctx.execStmts, cliflags.ExecuteName, "e", usage(cliflags.ExecuteName))
 	}
 
 	// Commands that need the cockroach port.
@@ -421,7 +436,7 @@ func initFlags(ctx *Context) {
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
+		f.StringVarP(&connPort, cliflags.PortName, "p", base.DefaultPort, usage(forClient(cliflags.PortName)))
 	}
 
 	// Commands that need an http port.
@@ -429,7 +444,7 @@ func initFlags(ctx *Context) {
 	httpCmds = append(httpCmds, nodeCmds...)
 	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("client_http_port"))
+		f.StringVar(&httpPort, cliflags.HTTPPortName, base.DefaultHTTPPort, usage(forClient(cliflags.HTTPPortName)))
 	}
 
 	// Commands that establish a SQL connection.
@@ -438,49 +453,33 @@ func initFlags(ctx *Context) {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connURL, "url", "", usage("url"))
+		f.StringVar(&connURL, cliflags.URLName, "", usage(cliflags.URLName))
 
-		f.StringVarP(&connUser, "user", "u", security.RootUser, usage("user"))
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
-		f.StringVarP(&connDBName, "database", "d", "", usage("database"))
+		f.StringVarP(&connUser, cliflags.UserName, "u", security.RootUser, usage(cliflags.UserName))
+		f.StringVarP(&connPort, cliflags.PortName, "p", base.DefaultPort, usage(forClient(cliflags.PortName)))
+		f.StringVarP(&connDBName, cliflags.DatabaseName, "d", "", usage(cliflags.DatabaseName))
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
 	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd, lsRangesCmd} {
 		f := cmd.Flags()
-		f.Int64Var(&maxResults, "max-results", 1000, usage("max-results"))
+		f.Int64Var(&maxResults, cliflags.MaxResultsName, 1000, usage(cliflags.MaxResultsName))
 	}
 
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		f.StringVar(&cliContext.debug.startKey, "from", "", usage("from"))
-		f.StringVar(&cliContext.debug.endKey, "to", "", usage("to"))
-		f.BoolVar(&cliContext.debug.raw, "raw", false, usage("raw"))
-		f.BoolVar(&cliContext.debug.values, "values", false, usage("values"))
+		f.StringVar(&cliContext.debug.startKey, cliflags.FromName, "", usage(cliflags.FromName))
+		f.StringVar(&cliContext.debug.endKey, cliflags.ToName, "", usage(cliflags.ToName))
+		f.BoolVar(&cliContext.debug.raw, cliflags.RawName, false, usage(cliflags.RawName))
+		f.BoolVar(&cliContext.debug.values, cliflags.ValuesName, false, usage(cliflags.ValuesName))
 	}
-}
-
-func visitCmds(cmd *cobra.Command, fn func(*cobra.Command)) {
-	fn(cmd)
-	for _, sub := range cmd.Commands() {
-		visitCmds(sub, fn)
-	}
-}
-
-func visitFlags(cmd *cobra.Command, fn func(*pflag.Flag)) {
-	cmd.PersistentFlags().VisitAll(fn)
-	cmd.Flags().VisitAll(fn)
 }
 
 func init() {
 	initFlags(cliContext)
 
 	cobra.OnInitialize(func() {
-		visitCmds(cockroachCmd, func(cmd *cobra.Command) {
-			visitFlags(cmd, base.AddToFlagMap)
-		})
-
 		// If any of the security flags have been set, clear the insecure
 		// setting. Note that we do the inverse when the --insecure flag is
 		// set. See insecureValue.Set().
