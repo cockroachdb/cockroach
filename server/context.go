@@ -147,6 +147,10 @@ type Context struct {
 	// ConsistencyCheckInterval
 	ConsistencyCheckInterval time.Duration
 
+	// ConsistencyCheckPanicOnFailure allows the node to panic when it detects a
+	// replication consistency check failure.
+	ConsistencyCheckPanicOnFailure bool
+
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
@@ -318,14 +322,26 @@ func parseDurationEnv(env, internalName string, duration *time.Duration) {
 // when NewContext is called.
 func (ctx *Context) readEnvironmentVariables() {
 	// cockroach-linearizable
-	if linearizableString := os.Getenv("COCKROACH_LINEARIZABLE"); len(linearizableString) != 0 {
-		if linearizable, err := strconv.ParseBool(linearizableString); err != nil {
-			log.Errorf("could not parse environment variable COCKROACH_LINEARIZABLE=%s, setting to default of %t, error: %s",
-				linearizableString, ctx.Linearizable, err)
+	linearizableEnv := "COCKROACH_LINEARIZABLE"
+	if value := os.Getenv(linearizableEnv); len(value) != 0 {
+		if linearizable, err := strconv.ParseBool(value); err != nil {
+			log.Errorf("could not parse environment variable %s=%s, setting to default of %t, error: %s",
+				linearizableEnv, value, ctx.Linearizable, err)
 		} else {
 			ctx.Linearizable = linearizable
-			log.Infof("\"linearizable\" set to %t based on COCKROACH_LINEARIZABLE environment variable", ctx.Linearizable)
+			log.Infof("\"linearizable\" set to %t based on %s environment variable", ctx.Linearizable, linearizableEnv)
 		}
+	}
+
+	consistencyFailureEnv := "COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE"
+	if value := os.Getenv(consistencyFailureEnv); len(value) != 0 {
+		var err error
+		ctx.ConsistencyCheckPanicOnFailure, err = strconv.ParseBool(value)
+		if err != nil {
+			log.Errorf("could not parse environment variable %s=%s, setting to default of %t, error: %s",
+				consistencyFailureEnv, value, ctx.ConsistencyCheckPanicOnFailure, err)
+		}
+		log.Infof("\"consistency check panic on failure\" set to %t based on %s environment variable", ctx.ConsistencyCheckPanicOnFailure, consistencyFailureEnv)
 	}
 
 	parseDurationEnv("COCKROACH_MAX_OFFSET", "max offset", &ctx.MaxOffset)
@@ -334,6 +350,7 @@ func (ctx *Context) readEnvironmentVariables() {
 	parseDurationEnv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "consistency check interval", &ctx.ConsistencyCheckInterval)
 	parseDurationEnv("COCKROACH_SCAN_MAX_IDLE_TIME", "scan max idle time", &ctx.ScanMaxIdleTime)
 	parseDurationEnv("COCKROACH_TIME_UNTIL_STORE_DEAD", "time until store dead", &ctx.TimeUntilStoreDead)
+
 }
 
 // AdminURL returns the URL for the admin UI.

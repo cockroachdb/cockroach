@@ -94,10 +94,13 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Unsetenv("COCKROACH_SCAN_MAX_IDLE_TIME"); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_SCAN_MAX_IDLE_TIME"); err != nil {
+		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE"); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Unsetenv("COCKROACH_TIME_UNTIL_STORE_DEAD"); err != nil {
@@ -134,14 +137,18 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctxExpected.ScanInterval = time.Hour * 48
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "48h"); err != nil {
-		t.Fatal(err)
-	}
-	ctxExpected.ConsistencyCheckInterval = time.Hour * 48
 	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "100ns"); err != nil {
 		t.Fatal(err)
 	}
 	ctxExpected.ScanMaxIdleTime = time.Nanosecond * 100
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "48h"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ConsistencyCheckInterval = time.Hour * 48
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "true"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ConsistencyCheckPanicOnFailure = true
 	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "10ms"); err != nil {
 		t.Fatal(err)
 	}
@@ -169,10 +176,13 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "abcd"); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "abcd"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "abcd"); err != nil {
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "abcd"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "abcd"); err != nil {
