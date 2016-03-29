@@ -607,11 +607,11 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 			Isolation: isolation,
 			Timestamp: now,
 			Priority:  priority,
+			Sequence:  1,
 		},
 		Name:          name,
 		OrigTimestamp: now,
 		MaxTimestamp:  max,
-		Sequence:      1,
 	}
 }
 

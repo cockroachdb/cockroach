@@ -128,7 +128,7 @@ var (
 		ppFunc func(key roachpb.Key) string
 		psFunc func(rangeID roachpb.RangeID, input string) (string, roachpb.Key)
 	}{
-		{name: "SequenceCache", suffix: LocalSequenceCacheSuffix, ppFunc: sequenceCacheKeyPrint, psFunc: sequenceCacheKeyParse},
+		{name: "AbortCache", suffix: LocalAbortCacheSuffix, ppFunc: abortCacheKeyPrint, psFunc: abortCacheKeyParse},
 		{name: "RaftTombstone", suffix: localRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: localRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: localRaftAppliedIndexSuffix},
@@ -371,21 +371,21 @@ func (euu *errUglifyUnsupported) Error() string {
 	return fmt.Sprintf("unsupported pretty key: %s", euu.wrapped)
 }
 
-func sequenceCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
+func abortCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
 	var err error
 	input = mustShiftSlash(input)
 	_, input = mustShift(input[:len(input)-1])
 	if len(input) != len(uuid.EmptyUUID.String()) {
-		panic(&errUglifyUnsupported{errors.New("epoch or sequence not supported")})
+		panic(&errUglifyUnsupported{errors.New("txn id not available")})
 	}
 	id, err := uuid.FromString(input)
 	if err != nil {
 		panic(&errUglifyUnsupported{err})
 	}
-	return "", SequenceCacheKey(rangeID, id)
+	return "", AbortCacheKey(rangeID, id)
 }
 
-func sequenceCacheKeyPrint(key roachpb.Key) string {
+func abortCacheKeyPrint(key roachpb.Key) string {
 	_, id, err := encoding.DecodeBytesAscending([]byte(key), nil)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", key, err)
@@ -447,7 +447,7 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 // /Local/...                                     "\x01"+...
 // 		/Store/...                                  "\x01s"+...
 //		/RangeID/...                                "\x01s"+[rangeid]
-//			/[rangeid]/SequenceCache/[id]             "\x01s"+[rangeid]+"res-"+[id]
+//			/[rangeid]/AbortCache/[id]                "\x01s"+[rangeid]+"abc-"+[id]
 //			/[rangeid]/RaftLeaderLease                "\x01s"+[rangeid]+"rfll"
 //			/[rangeid]/RaftTombstone                  "\x01s"+[rangeid]+"rftb"
 //			/[rangeid]/RaftHardState						      "\x01s"+[rangeid]+"rfth"

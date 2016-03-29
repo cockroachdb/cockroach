@@ -1181,7 +1181,7 @@ func TestSequenceUpdate(t *testing.T) {
 		}, nil
 	})
 
-	var expSequence uint32
+	var expSequence int32
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		expSequence++
 		if expSequence != ba.Txn.Sequence {
@@ -1276,7 +1276,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	// second request will be incremented by one from that of the
 	// first request.
 	first := true
-	var firstSequence uint32
+	var firstSequence int32
 	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
 		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)

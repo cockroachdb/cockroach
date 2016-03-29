@@ -53,15 +53,15 @@ func TestMakeKey(t *testing.T) {
 	}
 }
 
-func TestSequenceCacheEncodeDecode(t *testing.T) {
+func TestAbortCacheEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const rangeID = 123
 	testTxnID, err := uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	if err != nil {
 		panic(err)
 	}
-	key := SequenceCacheKey(rangeID, testTxnID)
-	txnID, err := DecodeSequenceCacheKey(key, nil)
+	key := AbortCacheKey(rangeID, testTxnID)
+	txnID, err := DecodeAbortCacheKey(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestKeyAddressError(t *testing.T) {
 	testCases := []roachpb.Key{
 		StoreIdentKey(),
 		StoreGossipKey(),
-		SequenceCacheKey(0, uuid.NewV4(), 0, 0),
+		AbortCacheKey(0, uuid.NewV4()),
 		RaftTombstoneKey(0),
 		RaftAppliedIndexKey(0),
 		RaftTruncatedStateKey(0),
