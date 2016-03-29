@@ -17,7 +17,10 @@
 package engine
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"math/rand"
+	"os"
 	"strconv"
 	"testing"
 
@@ -138,4 +141,63 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 		iter.Seek(key)
 		iter.Close()
 	}
+}
+
+// TestRocksDBOpenWithVersions verifies the version checking in Open()
+// functions correctly.
+func TestRocksDBOpenWithVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		hasFile     bool
+		ver         Version
+		expectedErr string
+	}{
+		{false, Version{}, ""},
+		{true, Version{versionCurrent}, ""},
+		{true, Version{versionMinimum}, ""},
+		{true, Version{-1}, "incompatible rocksdb data version, current:1, on disk:-1, minimum:0"},
+		{true, Version{2}, "incompatible rocksdb data version, current:1, on disk:2, minimum:0"},
+	}
+
+	for i, testCase := range testCases {
+		err := openRocksDBWithVersion(t, testCase.hasFile, testCase.ver)
+		if err == nil && len(testCase.expectedErr) == 0 {
+			continue
+		}
+		if !testutils.IsError(err, testCase.expectedErr) {
+			t.Errorf("%d: expected error '%s', actual '%s'", i, testCase.expectedErr, err)
+		}
+	}
+}
+
+// openRocksDBWithVersion attempts to open a rocks db instance, optionally with
+// the supplied Version struct.
+func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	dir, err := ioutil.TempDir("", "testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if hasVersionFile {
+		b, err := json.Marshal(ver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(getVersionFilename(dir), b, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rocksdb := NewRocksDB(roachpb.Attributes{}, dir, 0, minMemtableBudget, 0, stopper)
+	defer rocksdb.Close()
+	return rocksdb.Open()
 }
