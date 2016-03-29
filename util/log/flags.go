@@ -29,5 +29,5 @@ func init() {
 	// We define this flag here because stderrThreshold has the type Severity
 	// which we can't pass to logflags without creating an import cycle.
 	flag.Var(&logging.stderrThreshold,
-		"alsologtostderr", "logs at or above this threshold go to stderr")
+		logflags.AlsoLogToStderrName, "logs at or above this threshold go to stderr")
 }

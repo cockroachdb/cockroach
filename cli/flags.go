@@ -21,15 +21,15 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 
-	"github.com/kr/text"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/base"
+	cflag "github.com/cockroachdb/cockroach/cli/flag"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log/logflags"
 )
 
 var maxResults int64
@@ -41,180 +41,6 @@ var connUser, connHost, connPort, httpPort, connDBName string
 var cliContext = NewContext()
 var cacheSize *bytesValue
 var insecure *insecureValue
-
-var flagUsage = map[string]string{
-	"attrs": wrapText(`
-An ordered, colon-separated list of node attributes. Attributes are
-arbitrary strings specifying topography or machine
-capabilities. Topography might include datacenter designation
-(e.g. "us-west-1a", "us-west-1b", "us-east-1c"). Machine capabilities
-might include specialized hardware or number of cores (e.g. "gpu",
-"x16c"). The relative geographic proximity of two nodes is inferred
-from the common prefix of the attributes list, so topographic
-attributes should be specified first and in the same order for all
-nodes. For example:`) + `
-
-  --attrs=us-west-1b:gpu
-`,
-
-	"cache": wrapText(`
-Total size in bytes for caches, shared evenly if there are multiple
-storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).`),
-
-	"client_host": wrapText(`
-Database server host to connect to.`),
-
-	"client_port": wrapText(`
-Database server port to connect to.`),
-
-	"client_http_port": wrapText(`
-Database server port to connect to for HTTP requests.`),
-
-	"database": wrapText(`
-The name of the database to connect to.`),
-
-	"execute": wrapText(`
-Execute the SQL statement(s) on the command line, then exit. This flag may be
-specified multiple times and each value may contain multiple semicolon
-separated statements. If an error occurs in any statement, the command exits
-with a non-zero status code and further statements are not executed. The
-results of each SQL statement are printed on the standard output.`),
-
-	"join": wrapText(`
-A comma-separated list of addresses to use when a new node is joining
-an existing cluster. For the first node in a cluster, --join should
-NOT be specified. Each address in the list has an optional type:
-[type=]<address>. An unspecified type means ip address or dns. Type
-is one of:`) + `
-
-  - tcp: (default if type is omitted): plain ip address or hostname.
-  - http-lb: HTTP load balancer: we query
-             http(s)://<address>/_status/details/local
-`,
-
-	"server_host": wrapText(`
-The address to listen on. The node will also advertise itself using this
-hostname; it must resolve from other nodes in the cluster.`),
-
-	"socket": wrapText(`
-Unix socket file, postgresql protocol only.
-Note: when given a path to a unix socket, most postgres clients will
-open "<given path>/.s.PGSQL.<server port>"`),
-
-	"insecure": wrapText(`
-Run over non-encrypted (non-TLS) connections. This is strongly discouraged for
-production usage and this flag must be explicitly specified in order for the
-server to listen on an external address in insecure mode.`),
-
-	"key-size": wrapText(`
-Key size in bits for CA/Node/Client certificates.`),
-
-	"max-results": wrapText(`
-Define the maximum number of results that will be retrieved.`),
-
-	"password": wrapText(`
-The created user's password. If provided, disables prompting. Pass '-' to
-provide the password on standard input.`),
-
-	"server_port": wrapText(`
-The port to bind to.`),
-
-	"server_http_port": wrapText(`
-The port to bind to for HTTP requests.`),
-
-	"ca-cert": wrapText(`
-Path to the CA certificate. Needed by clients and servers in secure mode.`),
-
-	"ca-key": wrapText(`
-Path to the key protecting --ca-cert. Only needed when signing new certificates.`),
-
-	"cert": wrapText(`
-Path to the client or server certificate. Needed in secure mode.`),
-
-	"key": wrapText(`
-Path to the key protecting --cert. Needed in secure mode.`),
-
-	"store": wrapText(`
-The file path to a storage device. This flag must be specified separately for
-each storage device, for example:`) + `
-
-  --store=/mnt/ssd01 --store=/mnt/ssd02 --store=/mnt/hda1
-
-` + wrapText(`
-For each store, the "attrs" and "size" fields can be used to specify device
-attributes and a maximum store size (see below). When one or both of these
-fields are set, the "path" field label must be used for the path to the storage
-device, for example:`) + `
-
-  --store=path=/mnt/ssd01,attrs=ssd,size=20GiB
-
-` + wrapText(`
-In most cases, node-level attributes are preferable to store-level attributes.
-However, the "attrs" field can be used to match capabilities for storage of
-individual databases or tables. For example, an OLTP database would probably
-want to allocate space for its tables only on solid state devices, whereas
-append-only time series might prefer cheaper spinning drives. Typical
-attributes include whether the store is flash (ssd), spinny disk (hdd), or
-in-memory (mem), as well as speeds and other specs. Attributes can be arbitrary
-strings separated by colons, for example: :`) + `
-
-  --store=path=/mnt/hda1,attrs=hdd:7200rpm
-
-` + wrapText(`
-The store size in the "size" field is not a guaranteed maximum but is used when
-calculating free space for rebalancing purposes. The size can be specified
-either in a bytes-based unit or as a percentage of hard drive space,
-for example: :`) + `
-
-  --store=path=/mnt/ssd01,size=10000000000     -> 10000000000 bytes
-  --store-path=/mnt/ssd01,size=20GB            -> 20000000000 bytes
-  --store-path=/mnt/ssd01,size=20GiB           -> 21474836480 bytes
-  --store-path=/mnt/ssd01,size=0.02TiB         -> 21474836480 bytes
-  --store=path=/mnt/ssd01,size=20%             -> 20% of available space
-  --store=path=/mnt/ssd01,size=0.2             -> 20% of available space
-  --store=path=/mnt/ssd01,size=.2              -> 20% of available space
-
-` + wrapText(`
-For an in-memory store, the "type" and "size" fields are required, and the
-"path" field is forbidden. The "type" field must be set to "mem", and the
-"size" field must be set to the true maximum bytes or percentage of available
-memory that the store may consume, for example:`) + `
-
-  --store=type=mem,size=20GiB
-  --store=type=mem,size=90%
-
-` + wrapText(`
-Commas are forbidden in all values, since they are used to separate fields.
-Also, if you use equal signs in the file path to a store, you must use the
-"path" field label.`),
-	"time-until-store-dead": wrapText(`
-Adjusts the timeout for stores. If there's been no gossiped update
-from a store after this time, the store is considered unavailable.
-Replicas on an unavailable store will be moved to available ones.`),
-
-	"url": wrapText(`
-Connection url. eg: postgresql://myuser@localhost:26257/mydb
-If left empty, the connection flags are used (host, port, user,
-database, insecure, certs).`),
-
-	"user": wrapText(`
-Database user name.`),
-
-	"from": wrapText(`
-Start key in pretty-printed format. See also --raw.`),
-
-	"to": wrapText(`
-Exclusive end key in pretty-printed format. See also --raw.`),
-
-	"raw": wrapText(`
-Interpret keys as raw bytes.`),
-
-	"values": wrapText(`
-Print values along with their associated key.`),
-}
-
-const usageIndentation = 8
-const wrapWidth = 79 - usageIndentation
 
 type bytesValue struct {
 	val   *int64
@@ -286,28 +112,12 @@ func (b *insecureValue) String() string {
 	return fmt.Sprint(*b.val)
 }
 
-func wrapText(s string) string {
-	return text.Wrap(s, wrapWidth)
-}
-
-func usage(name string) string {
-	s, ok := flagUsage[name]
-	if !ok {
-		panic(fmt.Sprintf("flag usage not defined for %q", name))
-	}
-	s = "\n" + strings.TrimSpace(s) + "\n"
-	// github.com/spf13/pflag appends the default value after the usage text. Add
-	// the correct indentation (7 spaces) here. This is admittedly fragile.
-	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
-		strings.Repeat(" ", usageIndentation-1)
-}
-
 // initFlags sets the cli.Context values to flag values.
 // Keep in sync with "server/context.go". Values in Context should be
 // settable here.
 func initFlags(ctx *Context) {
 	// Change the logging defaults for the main cockroach binary.
-	if err := flag.Lookup("logtostderr").Value.Set("false"); err != nil {
+	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
 		panic(err)
 	}
 
@@ -320,57 +130,57 @@ func initFlags(ctx *Context) {
 
 	// The --log-dir default changes depending on the command. Avoid confusion by
 	// simply clearing it.
-	pf.Lookup("log-dir").DefValue = ""
+	pf.Lookup(logflags.LogDirName).DefValue = ""
 	// If no value is specified for --alsologtostderr output everything.
-	pf.Lookup("alsologtostderr").NoOptDefVal = "INFO"
+	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
 
 	{
 		f := startCmd.Flags()
 
 		// Server flags.
-		f.StringVar(&connHost, "host", "", usage("server_host"))
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("server_port"))
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("server_http_port"))
-		f.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, usage("attrs"))
-		f.VarP(&ctx.Stores, "store", "s", usage("store"))
+		f.StringVar(&connHost, cflag.HostName, "", cflag.Usage(cflag.ForServer(cflag.HostName)))
+		f.StringVarP(&connPort, cflag.PortName, "p", base.DefaultPort, cflag.Usage(cflag.ForServer(cflag.PortName)))
+		f.StringVar(&httpPort, cflag.HTTPPortName, base.DefaultHTTPPort, cflag.Usage(cflag.ForServer(cflag.HTTPPortName)))
+		f.StringVar(&ctx.Attrs, cflag.AttrsName, ctx.Attrs, cflag.Usage(cflag.AttrsName))
+		f.VarP(&ctx.Stores, cflag.StoreName, "s", cflag.Usage(cflag.StoreName))
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		f.StringVar(&ctx.SocketFile, "socket", "", usage("socket"))
-		_ = f.MarkHidden("socket")
+		f.StringVar(&ctx.SocketFile, cflag.SocketName, "", cflag.Usage(cflag.SocketName))
+		_ = f.MarkHidden(cflag.SocketName)
 
 		// Security flags.
 		ctx.Insecure = true
 		insecure = newInsecureValue(&ctx.Insecure)
-		insecureF := f.VarPF(insecure, "insecure", "", usage("insecure"))
+		insecureF := f.VarPF(insecure, cflag.InsecureName, "", cflag.Usage(cflag.InsecureName))
 		insecureF.NoOptDefVal = "true"
 		// Certificates.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
+		f.StringVar(&ctx.SSLCA, cflag.CACertName, ctx.SSLCA, cflag.Usage(cflag.CACertName))
+		f.StringVar(&ctx.SSLCert, cflag.CertName, ctx.SSLCert, cflag.Usage(cflag.CertName))
+		f.StringVar(&ctx.SSLCertKey, cflag.KeyName, ctx.SSLCertKey, cflag.Usage(cflag.KeyName))
 
 		// Cluster joining flags.
-		f.StringVar(&ctx.JoinUsing, "join", ctx.JoinUsing, usage("join"))
+		f.StringVar(&ctx.JoinUsing, cflag.JoinName, ctx.JoinUsing, cflag.Usage(cflag.JoinName))
 
 		// Engine flags.
 		cacheSize = newBytesValue(&ctx.CacheSize)
-		f.Var(cacheSize, "cache", usage("cache"))
+		f.Var(cacheSize, cflag.CacheName, cflag.Usage(cflag.CacheName))
 
 		// Clear the cache default value. This flag does have a default, but
 		// it is set only when the "start" command is run.
-		f.Lookup("cache").DefValue = ""
+		f.Lookup(cflag.CacheName).DefValue = ""
 
-		if err := startCmd.MarkFlagRequired("store"); err != nil {
+		if err := startCmd.MarkFlagRequired(cflag.StoreName); err != nil {
 			panic(err)
 		}
 	}
 
 	{
 		f := exterminateCmd.Flags()
-		f.Var(&ctx.Stores, "store", usage("store"))
-		if err := exterminateCmd.MarkFlagRequired("store"); err != nil {
+		f.Var(&ctx.Stores, cflag.StoreName, cflag.Usage(cflag.StoreName))
+		if err := exterminateCmd.MarkFlagRequired(cflag.StoreName); err != nil {
 			panic(err)
 		}
 	}
@@ -378,17 +188,17 @@ func initFlags(ctx *Context) {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCAKey, "ca-key", ctx.SSLCAKey, usage("ca-key"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
-		f.IntVar(&keySize, "key-size", defaultKeySize, usage("key-size"))
-		if err := cmd.MarkFlagRequired("key-size"); err != nil {
+		f.StringVar(&ctx.SSLCA, cflag.CACertName, ctx.SSLCA, cflag.Usage(cflag.CACertName))
+		f.StringVar(&ctx.SSLCAKey, cflag.CAKeyName, ctx.SSLCAKey, cflag.Usage(cflag.CAKeyName))
+		f.StringVar(&ctx.SSLCert, cflag.CertName, ctx.SSLCert, cflag.Usage(cflag.CertName))
+		f.StringVar(&ctx.SSLCertKey, cflag.KeyName, ctx.SSLCertKey, cflag.Usage(cflag.KeyName))
+		f.IntVar(&keySize, cflag.KeySizeName, defaultKeySize, cflag.Usage(cflag.KeySizeName))
+		if err := cmd.MarkFlagRequired(cflag.KeySizeName); err != nil {
 			panic(err)
 		}
 	}
 
-	setUserCmd.Flags().StringVar(&password, "password", "", usage("password"))
+	setUserCmd.Flags().StringVar(&password, cflag.PasswordName, "", cflag.Usage(cflag.PasswordName))
 
 	clientCmds := []*cobra.Command{
 		sqlShellCmd, exterminateCmd, quitCmd, /* startCmd is covered above */
@@ -400,19 +210,19 @@ func initFlags(ctx *Context) {
 	clientCmds = append(clientCmds, nodeCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		insecureF := f.VarPF(insecure, "insecure", "", usage("insecure"))
+		insecureF := f.VarPF(insecure, cflag.InsecureName, "", cflag.Usage(cflag.InsecureName))
 		insecureF.NoOptDefVal = "true"
-		f.StringVar(&connHost, "host", "", usage("client_host"))
+		f.StringVar(&connHost, cflag.HostName, "", cflag.Usage(cflag.ForClient(cflag.HostName)))
 
 		// Certificate flags.
-		f.StringVar(&ctx.SSLCA, "ca-cert", ctx.SSLCA, usage("ca-cert"))
-		f.StringVar(&ctx.SSLCert, "cert", ctx.SSLCert, usage("cert"))
-		f.StringVar(&ctx.SSLCertKey, "key", ctx.SSLCertKey, usage("key"))
+		f.StringVar(&ctx.SSLCA, cflag.CACertName, ctx.SSLCA, cflag.Usage(cflag.CACertName))
+		f.StringVar(&ctx.SSLCert, cflag.CertName, ctx.SSLCert, cflag.Usage(cflag.CertName))
+		f.StringVar(&ctx.SSLCertKey, cflag.KeyName, ctx.SSLCertKey, cflag.Usage(cflag.KeyName))
 	}
 
 	{
 		f := sqlShellCmd.Flags()
-		f.VarP(&ctx.execStmts, "execute", "e", usage("execute"))
+		f.VarP(&ctx.execStmts, cflag.ExecuteName, "e", cflag.Usage(cflag.ExecuteName))
 	}
 
 	// Commands that need the cockroach port.
@@ -421,7 +231,7 @@ func initFlags(ctx *Context) {
 	simpleCmds = append(simpleCmds, rangeCmds...)
 	for _, cmd := range simpleCmds {
 		f := cmd.PersistentFlags()
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
+		f.StringVarP(&connPort, cflag.PortName, "p", base.DefaultPort, cflag.Usage(cflag.ForClient(cflag.PortName)))
 	}
 
 	// Commands that need an http port.
@@ -429,7 +239,7 @@ func initFlags(ctx *Context) {
 	httpCmds = append(httpCmds, nodeCmds...)
 	for _, cmd := range httpCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&httpPort, "http-port", base.DefaultHTTPPort, usage("client_http_port"))
+		f.StringVar(&httpPort, cflag.HTTPPortName, base.DefaultHTTPPort, cflag.Usage(cflag.ForClient(cflag.HTTPPortName)))
 	}
 
 	// Commands that establish a SQL connection.
@@ -438,49 +248,33 @@ func initFlags(ctx *Context) {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		f.StringVar(&connURL, "url", "", usage("url"))
+		f.StringVar(&connURL, cflag.URLName, "", cflag.Usage(cflag.URLName))
 
-		f.StringVarP(&connUser, "user", "u", security.RootUser, usage("user"))
-		f.StringVarP(&connPort, "port", "p", base.DefaultPort, usage("client_port"))
-		f.StringVarP(&connDBName, "database", "d", "", usage("database"))
+		f.StringVarP(&connUser, cflag.UserName, "u", security.RootUser, cflag.Usage(cflag.UserName))
+		f.StringVarP(&connPort, cflag.PortName, "p", base.DefaultPort, cflag.Usage(cflag.ForClient(cflag.PortName)))
+		f.StringVarP(&connDBName, cflag.DatabaseName, "d", "", cflag.Usage(cflag.DatabaseName))
 	}
 
 	// Max results flag for scan, reverse scan, and range list.
 	for _, cmd := range []*cobra.Command{scanCmd, reverseScanCmd, lsRangesCmd} {
 		f := cmd.Flags()
-		f.Int64Var(&maxResults, "max-results", 1000, usage("max-results"))
+		f.Int64Var(&maxResults, cflag.MaxResultsName, 1000, cflag.Usage(cflag.MaxResultsName))
 	}
 
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		f.StringVar(&cliContext.debug.startKey, "from", "", usage("from"))
-		f.StringVar(&cliContext.debug.endKey, "to", "", usage("to"))
-		f.BoolVar(&cliContext.debug.raw, "raw", false, usage("raw"))
-		f.BoolVar(&cliContext.debug.values, "values", false, usage("values"))
+		f.StringVar(&cliContext.debug.startKey, cflag.FromName, "", cflag.Usage(cflag.FromName))
+		f.StringVar(&cliContext.debug.endKey, cflag.ToName, "", cflag.Usage(cflag.ToName))
+		f.BoolVar(&cliContext.debug.raw, cflag.RawName, false, cflag.Usage(cflag.RawName))
+		f.BoolVar(&cliContext.debug.values, cflag.ValuesName, false, cflag.Usage(cflag.ValuesName))
 	}
-}
-
-func visitCmds(cmd *cobra.Command, fn func(*cobra.Command)) {
-	fn(cmd)
-	for _, sub := range cmd.Commands() {
-		visitCmds(sub, fn)
-	}
-}
-
-func visitFlags(cmd *cobra.Command, fn func(*pflag.Flag)) {
-	cmd.PersistentFlags().VisitAll(fn)
-	cmd.Flags().VisitAll(fn)
 }
 
 func init() {
 	initFlags(cliContext)
 
 	cobra.OnInitialize(func() {
-		visitCmds(cockroachCmd, func(cmd *cobra.Command) {
-			visitFlags(cmd, base.AddToFlagMap)
-		})
-
 		// If any of the security flags have been set, clear the insecure
 		// setting. Note that we do the inverse when the --insecure flag is
 		// set. See insecureValue.Set().
