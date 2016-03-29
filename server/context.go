@@ -57,7 +57,7 @@ const (
 	// changes to this value.
 	defaultMemtableBudget           = 16 << 20 // 16 MB
 	defaultScanInterval             = 10 * time.Minute
-	defaultConsistencyCheckInterval = 24 * time.Hour
+	defaultConsistencyCheckInterval = 10 * time.Minute
 	defaultScanMaxIdleTime          = 5 * time.Second
 	defaultMetricsFrequency         = 10 * time.Second
 	defaultTimeUntilStoreDead       = 5 * time.Minute
