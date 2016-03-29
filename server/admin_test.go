@@ -388,7 +388,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 		t.Fatal(err)
 	}
 	expResult := UsersResponse{
-		Users: []*UsersResponse_User{
+		Users: []UsersResponse_User{
 			{"admin"},
 			{"bob"},
 		},
@@ -456,7 +456,7 @@ func TestAdminAPIEvents(t *testing.T) {
 
 		// Ensure we don't have blank / nonsensical fields.
 		for _, e := range resp.Events {
-			if *e.Timestamp == zeroTimestamp {
+			if e.Timestamp == zeroTimestamp {
 				t.Errorf("%d: missing/empty timestamp", i)
 			}
 
