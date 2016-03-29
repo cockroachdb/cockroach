@@ -184,12 +184,12 @@ module AdminViews {
           {
             title: "Mem Usage",
             view: (status: NodeStatus): string => {
-              return Utils.Format.Bytes(status.metrics[MetricNames.maxRSS]);
+              return Utils.Format.Bytes(status.metrics[MetricNames.rss]);
             },
             sortable: true,
-            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.maxRSS],
+            sortValue: (status: NodeStatus): number => status.metrics[MetricNames.rss],
             rollup: function(rows: NodeStatus[]): string {
-              return Utils.Format.Bytes(_.sumBy(rows, (r: NodeStatus) => r.metrics[MetricNames.maxRSS]));
+              return Utils.Format.Bytes(_.sumBy(rows, (r: NodeStatus) => r.metrics[MetricNames.rss]));
             },
           },
           {
@@ -309,8 +309,10 @@ module AdminViews {
             this.systemAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
-                .title("Go Memory"),
-              Metrics.Select.Avg(_sysMetric("maxrss"))
+                .title("Go Inuse"),
+              Metrics.Select.Avg(_sysMetric("sysbytes"))
+                .title("Go Sys"),
+              Metrics.Select.Avg(_sysMetric("rss"))
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")
           );
@@ -835,8 +837,11 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
                 .sources([this._nodeId])
-                .title("Go Memory"),
-              Metrics.Select.Avg(_sysMetric("maxrss"))
+                .title("Go Inuse"),
+              Metrics.Select.Avg(_sysMetric("sysbytes"))
+                .sources([this._nodeId])
+                .title("Go Sys"),
+              Metrics.Select.Avg(_sysMetric("rss"))
                 .sources([this._nodeId])
                 .title("RSS")
             ).format(Utils.Format.Bytes).title("Memory Usage")

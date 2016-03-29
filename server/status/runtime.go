@@ -32,6 +32,7 @@ const (
 	nameCgoCalls       = "cgocalls"
 	nameGoroutines     = "goroutines"
 	nameAllocBytes     = "allocbytes"
+	nameSysBytes       = "sysbytes"
 	nameGCCount        = "gc.count"
 	nameGCPauseNS      = "gc.pause.ns"
 	nameGCPausePercent = "gc.pause.percent"
@@ -39,7 +40,7 @@ const (
 	nameCPUUserPercent = "cpu.user.percent"
 	nameCPUSysNS       = "cpu.sys.ns"
 	nameCPUSysPercent  = "cpu.sys.percent"
-	nameRSS            = "maxrss" // TODO(cdo): rename to rss
+	nameRSS            = "rss"
 )
 
 // logOSStats is a function that logs OS-specific stats. We will not necessarily
@@ -67,6 +68,7 @@ type RuntimeStatSampler struct {
 	cgoCalls       *metric.Gauge
 	goroutines     *metric.Gauge
 	allocBytes     *metric.Gauge
+	sysBytes       *metric.Gauge
 	gcCount        *metric.Gauge
 	gcPauseNS      *metric.Gauge
 	gcPausePercent *metric.GaugeFloat64
@@ -86,6 +88,7 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		cgoCalls:       reg.Gauge(nameCgoCalls),
 		goroutines:     reg.Gauge(nameGoroutines),
 		allocBytes:     reg.Gauge(nameAllocBytes),
+		sysBytes:       reg.Gauge(nameSysBytes),
 		gcCount:        reg.Gauge(nameGCCount),
 		gcPauseNS:      reg.Gauge(nameGCPauseNS),
 		gcPausePercent: reg.GaugeFloat64(nameGCPausePercent),
@@ -167,6 +170,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.cgoCalls.Update(numCgoCall)
 	rsr.goroutines.Update(int64(numGoroutine))
 	rsr.allocBytes.Update(int64(ms.Alloc))
+	rsr.sysBytes.Update(int64(ms.Sys))
 	rsr.gcCount.Update(int64(ms.NumGC))
 	rsr.gcPauseNS.Update(int64(ms.PauseTotalNs))
 	rsr.gcPausePercent.Update(pausePerc)
