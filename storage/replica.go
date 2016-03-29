@@ -174,9 +174,9 @@ type replicaChecksum struct {
 type Replica struct {
 	RangeID      roachpb.RangeID // Should only be set by the constructor.
 	store        *Store
-	stats        *rangeStats    // Range statistics
-	systemDBHash []byte         // sha1 hash of the system config @ last gossip
-	sequence     *SequenceCache // Provides txn replay protection
+	stats        *rangeStats // Range statistics
+	systemDBHash []byte      // sha1 hash of the system config @ last gossip
+	abortCache   *AbortCache // Avoids anomalous reads after abort
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
@@ -227,9 +227,9 @@ var _ client.Sender = &Replica{}
 // descriptor.
 func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID) (*Replica, error) {
 	r := &Replica{
-		store:    store,
-		sequence: NewSequenceCache(desc.RangeID),
-		RangeID:  desc.RangeID,
+		store:      store,
+		abortCache: NewAbortCache(desc.RangeID),
+		RangeID:    desc.RangeID,
 	}
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
@@ -1019,10 +1019,10 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	br, intents, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
-		// Checking the sequence cache on reads makes sure that when our
-		// transaction has already been aborted, we don't experience anomalous
-		// conditions as described in #2231.
-		pErr = r.checkSequenceCache(r.store.Engine(), *ba.Txn)
+		// Checking whether the transaction has been aborted on reads
+		// makes sure that we don't experience anomalous conditions as
+		// described in #2231.
+		pErr = r.checkIfTxnAborted(r.store.Engine(), *ba.Txn)
 	}
 	r.store.intentResolver.processIntentsAsync(r, intents)
 	return br, pErr
@@ -1512,14 +1512,11 @@ func (r *Replica) applyRaftCommandInBatch(
 	// Create a new batch for the command to ensure all or nothing semantics.
 	btch := r.store.Engine().NewBatch()
 
-	// Check the sequence for this batch. Only applies to transactional
+	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
-	// hindered by this). On a cache hit, the transaction is instructed to
-	// restart. The epoch check allows us to poison the sequence cache to avoid
-	// anomalies when we know that the transaction has been aborted or pushed,
-	// but it itself does not.
+	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
-		if pErr := r.checkSequenceCache(btch, *ba.Txn); pErr != nil {
+		if pErr := r.checkIfTxnAborted(btch, *ba.Txn); pErr != nil {
 			return btch, nil, nil, pErr
 		}
 	}
@@ -1541,13 +1538,6 @@ func (r *Replica) applyRaftCommandInBatch(
 			// since reads are served locally by the lease holder without going
 			// through Raft, a read which was not taken into account may have been
 			// served. Hence, we must retry at the current leader.
-			//
-			// It's crucial that we don't update the sequence cache for the
-			// error returned below since the request is going to be retried
-			// with the same sequence number and would get the distributed
-			// sender stuck in an infinite loop, retrieving a stale
-			// NotLeaderError over and over again, even when proposing at the
-			// correct replica.
 			return btch, nil, nil, roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 		}
 	}
@@ -1561,10 +1551,6 @@ func (r *Replica) applyRaftCommandInBatch(
 	// readOnlyCmdMu via a batch.Defer).
 	br, intents, pErr := r.executeBatch(ctx, idKey, btch, ms, ba)
 
-	// Regardless of error, add result to the sequence cache if this is
-	// a write method. This must be done as part of the execution of
-	// raft commands so that every replica maintains the same responses
-	// to continue request idempotence, even if leadership changes.
 	if ba.IsWrite() {
 		if pErr != nil {
 			// If the batch failed with a TransactionRetryError, any
@@ -1586,74 +1572,36 @@ func (r *Replica) applyRaftCommandInBatch(
 				}
 			}
 		}
-
-		if ba.Txn != nil {
-			// Only transactional requests which leave intents have replay
-			// protection. In the particular case of a txn which just ended
-			// (via a successful EndTransaction call), it has purged its
-			// sequence cache state and would prefer if we didn't write an
-			// entry which would then need to be GCed on the slow path.
-			_, isEndTxn := ba.GetArg(roachpb.EndTransaction)
-			if (!isEndTxn && ba.IsTransactionWrite()) || pErr != nil {
-				entry := roachpb.SequenceCacheEntry{
-					Key:       ba.Txn.Key,
-					Timestamp: ba.Txn.Timestamp,
-					Epoch:     ba.Txn.Epoch,
-					Sequence:  ba.Txn.Sequence,
-				}
-				if putErr := r.sequence.Put(btch, ms, ba.Txn.ID, &entry, pErr); putErr != nil {
-					// TODO(tschottdorf): ReplicaCorruptionError.
-					log.Fatalc(ctx, "putting a sequence cache entry in a batch should never fail: %s", putErr)
-				}
-			}
-		}
 	}
 
 	return btch, br, intents, pErr
 }
 
-// checkSequenceCache checks the sequence cache for the given transaction for
-// entries newer or of the same age as our current operation's. In case of a
-// replay violation or if the transaction has been aborted, transaction retry
-// or transaction abort error is returned, respectively.
-// checkSequenceCache locks the replica.
-func (r *Replica) checkSequenceCache(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
-	if r.store.ctx.TestingKnobs.DisableSequenceCache {
+// checkIfTxnAborted checks the txn abort cache for the given
+// transaction. In case the transaction has been aborted, return a
+// transaction abort error. Locks the replica.
+func (r *Replica) checkIfTxnAborted(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
+	if r.store.ctx.TestingKnobs.DisableAbortCache {
 		return nil
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var entry roachpb.SequenceCacheEntry
-	if err := r.sequence.Get(b, txn.ID, &entry); err != nil && err != errNoCacheEntry {
-		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from sequence cache"), err))
-	}
-	var err error
-	switch {
-	case txn.Epoch > entry.Epoch:
-		// No cache hit from current or future epoch, continue.
-	case entry.Sequence == SequencePoisonAbort:
-		// We were poisoned, which means that our Transaction has been
-		// aborted and learns about that right now.
-		err = roachpb.NewTransactionAbortedError()
-	case entry.Sequence == SequencePoisonRestart:
-		// Same, but we got restarted.
-		err = roachpb.NewTransactionRetryError()
-	case entry.Sequence >= txn.Sequence:
-		err = roachpb.NewTransactionRetryError()
-	}
+	var entry roachpb.AbortCacheEntry
+	aborted, err := r.abortCache.Get(b, txn.ID, &entry)
 	if err != nil {
+		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from abort cache"), err))
+	}
+	if aborted {
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
-			log.Infof("found sequence cache entry for %s@epo=%d,seq=%d: epo=%d,seq=%d", txn.Short(),
-				txn.Epoch, txn.Sequence, entry.Epoch, entry.Sequence)
+			log.Infof("found abort cache entry for %s with priority %d", txn.Short(), entry.Priority)
 		}
 		newTxn := txn.Clone()
-		newTxn.Timestamp.Forward(entry.Timestamp)
 		if entry.Priority > newTxn.Priority {
 			newTxn.Priority = entry.Priority
 		}
-		return roachpb.NewErrorWithTxn(err, &newTxn)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &newTxn)
 	}
 	return nil
 }
@@ -1680,6 +1628,9 @@ func (r *Replica) executeBatch(
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
+		if ba.Txn != nil {
+			ba.Txn.BatchIndex = int32(index)
+		}
 		reply, curIntents, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, remScanResults, args)
 
 		// Collect intents skipped over the course of execution.

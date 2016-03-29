@@ -475,12 +475,14 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: TxnMeta{
-		Isolation: SNAPSHOT,
-		Key:       Key("foo"),
-		ID:        uuid.NewV4(),
-		Epoch:     2,
-		Timestamp: makeTS(20, 21),
-		Priority:  957356782,
+		Isolation:  SNAPSHOT,
+		Key:        Key("foo"),
+		ID:         uuid.NewV4(),
+		Epoch:      2,
+		Timestamp:  makeTS(20, 21),
+		Priority:   957356782,
+		Sequence:   123,
+		BatchIndex: 1,
 	},
 	Name:               "name",
 	Status:             COMMITTED,
@@ -490,7 +492,6 @@ var nonZeroTxn = Transaction{
 	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
 	Writing:            true,
 	WriteTooOld:        true,
-	Sequence:           123,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 }
 

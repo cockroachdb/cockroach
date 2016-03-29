@@ -251,7 +251,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 
 // TestStoreRangeSplit executes a split of a range and verifies that the
 // resulting ranges respond to the right key ranges and that their stats
-// and sequence cache have been properly accounted for.
+// have been properly accounted for and requests can't be replayed.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer config.TestingDisableTableSplits()()
@@ -271,21 +271,24 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Increments are a good way of testing the sequence cache. Up here, we
-	// address them to the original range, then later to the one that contains
-	// the key.
+	// Increments are a good way of testing idempotency. Up here, we
+	// address them to the original range, then later to the one that
+	// contains the key.
 	txn := roachpb.NewTransaction("test", []byte("c"), 10, roachpb.SERIALIZABLE,
 		store.Clock().Now(), 0)
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
+	lTxn := *txn
+	lTxn.Sequence++
 	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		Txn: txn,
+		Txn: &lTxn,
 	}, &lIncArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
-	txn.Sequence++
+	rTxn := *txn
+	rTxn.Sequence++
 	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		Txn: txn,
+		Txn: &rTxn,
 	}, &rIncArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -344,20 +347,20 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Send out an increment request copied from above (same txn/sequence)
 	// which remains in the old range.
 	_, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		Txn: txn,
+		Txn: &lTxn,
 	}, &lIncArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("unexpected sequence cache miss: %v", pErr)
+		t.Fatalf("unexpected idempotency failure: %v", pErr)
 	}
 
 	// Send out the same increment copied from above (same txn/sequence), but
 	// now to the newly created range (which should hold that key).
 	_, pErr = client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		RangeID: newRng.RangeID,
-		Txn:     txn,
+		Txn:     &rTxn,
 	}, &rIncArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("unexpected sequence cache miss: %v", pErr)
+		t.Fatalf("unexpected idempotency failure: %v", pErr)
 	}
 
 	// Compare stats of split ranges to ensure they are non zero and

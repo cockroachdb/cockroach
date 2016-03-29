@@ -84,7 +84,7 @@
 		Transaction
 		Intent
 		Lease
-		SequenceCacheEntry
+		AbortCacheEntry
 		NotLeaderError
 		NodeUnavailableError
 		RangeNotFoundError
