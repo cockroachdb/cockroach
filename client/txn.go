@@ -114,11 +114,11 @@ type Txn struct {
 }
 
 // NewTxn returns a new txn.
-func NewTxn(db DB) *Txn {
+func NewTxn(ctx context.Context, db DB) *Txn {
 	txn := &Txn{
 		db:      db,
 		wrapped: db.sender,
-		Context: context.Background(),
+		Context: ctx,
 	}
 	txn.db.sender = (*txnSender)(txn)
 	return txn

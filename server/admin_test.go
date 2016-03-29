@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -160,7 +162,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, s.sqlExecutor, nil)
 	query := "CREATE DATABASE " + testdb
-	createRes := s.sqlExecutor.ExecuteStatements(session, query, nil)
+	createRes := s.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
 	if createRes.ResultList[0].PErr != nil {
 		t.Fatal(createRes.ResultList[0].PErr)
 	}
@@ -187,7 +189,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	grantRes := s.sqlExecutor.ExecuteStatements(session, grantQuery, nil)
+	grantRes := s.sqlExecutor.ExecuteStatements(context.Background(), session, grantQuery, nil)
 	if grantRes.ResultList[0].PErr != nil {
 		t.Fatal(grantRes.ResultList[0].PErr)
 	}
@@ -294,7 +296,7 @@ CREATE TABLE test.tbl (
 	}
 
 	for _, q := range setupQueries {
-		res := s.sqlExecutor.ExecuteStatements(session, q, nil)
+		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
 		if res.ResultList[0].PErr != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].PErr)
 		}
@@ -375,7 +377,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	query := `
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
-	res := s.sqlExecutor.ExecuteStatements(session, query, nil)
+	res := s.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
 	if a, e := len(res.ResultList), 1; a != e {
 		t.Fatalf("len(results) %d != %d", a, e)
 	} else if res.ResultList[0].PErr != nil {
@@ -418,7 +420,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		"DROP TABLE api_test.tbl2",
 	}
 	for _, q := range setupQueries {
-		res := s.sqlExecutor.ExecuteStatements(session, q, nil)
+		res := s.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
 		if res.ResultList[0].PErr != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].PErr)
 		}
