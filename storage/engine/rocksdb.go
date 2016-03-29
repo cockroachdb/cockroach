@@ -116,9 +116,24 @@ func (r *RocksDB) Open() error {
 			humanize.IBytes(minMemtableBudget), util.IBytes(r.memtableBudget))
 	}
 
+	var ver Version
 	if len(r.dir) != 0 {
 		log.Infof("opening rocksdb instance at %q", r.dir)
+
+		// Check the version number.
+		var err error
+		if ver, err = getVersions(r.dir); err != nil {
+			return err
+		}
+		if ver.RocksDBData != versionNoFile && (ver.RocksDBData < versionRocksDBMinimum ||
+			ver.RocksDBData > versionRocksDBCurrent) {
+			// Instead of an error, we should call a migration if possible when
+			// one is needed immediately following the DBOpen call.
+			return fmt.Errorf("incompatible rocksdb data version, current:%d, on disk:%d, minimum:%d",
+				versionRocksDBCurrent, ver.RocksDBData, versionRocksDBMinimum)
+		}
 	}
+
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache_size:      C.uint64_t(r.cacheSize),
@@ -126,9 +141,15 @@ func (r *RocksDB) Open() error {
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 		})
-	err := statusToError(status)
-	if err != nil {
+	if err := statusToError(status); err != nil {
 		return util.Errorf("could not open rocksdb instance: %s", err)
+	}
+
+	// Write the version file if none exists.
+	if len(r.dir) > 0 && ver.RocksDBData == versionNoFile {
+		if err := writeVersionFile(r.dir); err != nil {
+			return err
+		}
 	}
 
 	// Start a goroutine that will finish when the underlying handle
