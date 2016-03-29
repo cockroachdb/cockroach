@@ -38,8 +38,8 @@ module Components {
       show: boolean = false;
 
       constructor() {
-        this.userData.loadPromise.then((): void => {
-          if (Models.HelpUs.helpUsFlag() && this.userData.showHelpUs()) {
+        Models.OptInAttributes.loadPromise.then((): void => {
+          if (this.userData.showHelpUs()) {
             this.stage = Stage.Banner;
             this.show = true;
           } else {
@@ -57,7 +57,7 @@ module Components {
         // Adds the modal with opacity 0.
         this.stage = Stage.ModalStart;
         // set optin value to correspond with pre-checked input in modal
-        this.userData.attributes.optin = true;
+        this.userData.attributes().optin = true;
         // At the next tick, set the modal opacity to 1 and trigger a redraw so it will fade in.
         setTimeout(
           () => {
@@ -71,7 +71,7 @@ module Components {
       modalSubmit(e: Event): void {
         let target: HTMLButtonElement = <HTMLButtonElement>e.target;
         if (target.form.checkValidity()) {
-
+          this.userData.showRequired = false;
           this.userData.save().then(() => {
             // Change the modal size from the "Sign Up" to the "Thanks" size
             this.stage = Stage.ThanksSize;
@@ -83,6 +83,8 @@ module Components {
               },
               400);
           });
+        } else {
+          this.userData.showRequired = true;
         }
       }
 
@@ -105,8 +107,8 @@ module Components {
       // form was submitted, then we save with optin as false
       // and increment the number of dismisses.
       dismiss: () => void = (): void => {
-        this.userData.attributes.dismissed = (this.userData.attributes.dismissed ? this.userData.attributes.dismissed + 1 : 1);
-        this.userData.attributes.optin = false;
+        this.userData.attributes().dismissed = (this.userData.attributes().dismissed ? this.userData.attributes().dismissed + 1 : 1);
+        this.userData.attributes().optin = false;
         this.userData.save()
           .then(this.fadeOut)
           .catch(this.fadeOut);
@@ -168,10 +170,10 @@ module Components {
                   m(".inputs", [
                     m("input[name=firstname]", {placeholder: "First Name"}), m("span.status"),
                     m("input[name=lastname]", {placeholder: "Last Name"}), m("span.status"),
-                    m("input[name=email][type=email][required=true]", {placeholder: "Email*"}), m("span.status"),
+                    m("input[name=email][type=email][required=true]" + (ctrl.userData.showRequired ? ".show-required" : ""), {placeholder: "Email*"}), m("span.status"),
                     m("input[name=company]", {placeholder: "Company (optional)"}), m("span.status"),
                     m("", [
-                      m("input[type=checkbox][name=optin][required=true]", {id: "optin", checked: true}),
+                      m("input[type=checkbox][name=optin]" + (ctrl.userData.savedAttributes().optin ? "" : "[required=true]"), {id: "optin", checked: true}),
                       m("label", {for: "optin"}, "Share data with Cockroach Labs"),
                     ]),
                     m(".optin-text", [`By enabling this feature, you are agreeing to send us anonymous,

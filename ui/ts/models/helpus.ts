@@ -1,124 +1,57 @@
-// source: pages/nodes.ts
+// source: models/helpus.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
-/// <reference path="./optinattributes.ts" />
-/// <reference path="./cockroachlabs.ts" />
+/// <reference path="optinattributes.ts" />
+/// <reference path="cockroachlabs.ts" />
 
 module Models {
   "use strict";
 
   export module HelpUs {
     import MithrilPromise = _mithril.MithrilPromise;
-    import MithrilAttributes = _mithril.MithrilAttributes;
-    import GetUIDataResponse = Models.Proto.GetUIDataResponse;
     import MithrilDeferred = _mithril.MithrilDeferred;
-    import OptInAttributes = Models.OptInAttributes;
-
-    const KEY_HELPUS: string = "helpus";
-    // The "server." prefix denotes that this key is shared with the server, so
-    // changes to this key must be synchronized with the server code.
-    const KEY_OPTIN: string = "server.optin-reporting";
-
-    // Help Us flow is shown by default
-    export function helpUsFlag(): boolean {
-      return true;
-    }
-
-    function getHelpUsData(): MithrilPromise<OptInAttributes> {
-      // Query the optin and helpus uidata and merge them into OptInAttributes.
-      let d: MithrilDeferred<OptInAttributes> = m.deferred();
-      Models.API.getUIData([KEY_HELPUS]).then((response: GetUIDataResponse): void => {
-        try {
-          let attributes: OptInAttributes = <OptInAttributes>JSON.parse(atob(response.key_values[KEY_HELPUS].value));
-          d.resolve(attributes);
-        } catch (e) {
-          d.reject(e);
-        }
-      }).catch((e: Error) => {
-        d.reject(e);
-      });
-      return d.promise;
-    }
-
-    function setHelpUsData(attrs: OptInAttributes): MithrilPromise<any> {
-      // Clone "optin" into a separate key, so that the server can query that
-      // separately and cleanly. This is needed, because uidata is essentially
-      // an opaque cookie jar for the admin UI. KEY_OPTIN is a special case,
-      // because the server takes action based on the value for that key. So,
-      // cloning "optin" allows the server to read the data from a well-defined
-      // place while allowing the admin UI code to use uidata mostly
-      // independently of the server.
-      let keyValues: {[key: string]: string} = {
-        [KEY_HELPUS]: btoa(JSON.stringify(attrs)),
-        [KEY_OPTIN]: btoa(JSON.stringify(attrs.optin)),
-      };
-      return Models.API.setUIData(keyValues);
-    }
+    import MithrilAttributes = _mithril.MithrilAttributes;
+    import OptInAttributes = Models.OptInAttributes.OptInAttributes;
 
     export class UserOptIn {
 
-      /**
-       * savedAttributes are the values we originally received when we fetch SYSTEM.REPORTING.
-       * They are updated when we save.
-       */
-      savedAttributes: OptInAttributes = new OptInAttributes();
-
-      /**
-       * attributes is populated with the values from SYSTEM.REPORTING.
-       * They are updated whenever the user modifies form fields.
-       */
-      attributes: OptInAttributes = new OptInAttributes();
-
-      /**
-       * loaded is true once the original load completes
-       */
-      loaded: boolean = false;
-
-      /**
-       * loadPromise stores the original load request promise, so that any function can wait on the original load to complete
-       */
-      loadPromise: MithrilPromise<void> = null;
-
       constructor() {
-        this.loadPromise = this.load();
-
-        this.loadPromise.then(() => {
+        Models.OptInAttributes.loadPromise.then(() => {
           Models.CockroachLabs.cockroachLabsSingleton.loadingPromise.then(() => {
             if (!Models.CockroachLabs.cockroachLabsSingleton.synchronized) {
-              Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes);
+              Models.CockroachLabs.cockroachLabsSingleton.save(this.savedAttributes());
             }
           });
         });
       }
 
-      save(): MithrilPromise<void> {
-        // Make sure we loaded the data first
-        // TODO: check timestamp on the backend to prevent overwriting data without loading first
-        if (this.loaded) {
-          // save the data both to the backend and the Cockroach Labs servers
-          return m.sync([Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes), setHelpUsData(this.attributes)])
-          .then(() => {
-            this.savedAttributes = _.clone(this.attributes);
-          });
-        }
+      // only show the "required" text after we attempt to submit
+      showRequired: boolean = false;
+
+      // attributes saved to the cluster
+      savedAttributes(): OptInAttributes {
+        return Models.OptInAttributes.savedAttributes;
       }
 
-      load(): MithrilPromise<void> {
-        let d: MithrilDeferred<any> = m.deferred();
-        getHelpUsData()
-          .then((attributes: OptInAttributes): void => {
-            this.attributes = attributes;
-            this.loaded = true;
-            this.savedAttributes = _.clone(this.attributes);
-            d.resolve();
-          })
-          // no helpus data found
-          .catch(() => {
-            this.loaded = true;
-            this.attributes = new OptInAttributes();
-            this.savedAttributes = _.clone(this.attributes);
-            d.resolve();
-          });
-        return d.promise;
+      // current attributes in the UI
+      attributes(): OptInAttributes {
+        return Models.OptInAttributes.currentAttributes;
+      }
+
+      // save opt in data and sync with cockroach labs server
+      save(): MithrilPromise<any> {
+        // Make sure we loaded the data first
+        if (Models.OptInAttributes.loaded) {
+          // save the data both to the backend and the Cockroach Labs servers
+          return m.sync([/*Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes()),*/ Models.OptInAttributes.save()]).then(() => {
+            Models.CockroachLabs.cockroachLabsSingleton.uploadUsageStats();
+            return;
+          }
+          );
+        } else {
+          let d: MithrilDeferred<any> = m.deferred();
+          d.reject("Can't save until OptIn attributes have been loaded from the cluster.");
+          return d.promise;
+        }
       }
 
       /**
@@ -126,7 +59,7 @@ module Models {
        * @returns {boolean}
        */
       showHelpUs(): boolean {
-        return (this.attributes.dismissed < 1) && !this.attributes.optin;
+        return (this.attributes().dismissed < 1) && !this.attributes().optin;
       }
 
       /**
@@ -134,7 +67,7 @@ module Models {
        * @returns {boolean}
        */
       optedIn(): boolean {
-        return this.savedAttributes.optin && !!this.savedAttributes.email;
+        return this.savedAttributes() && this.savedAttributes().optin && !!this.savedAttributes().email;
       }
 
       // Data binding helper function for form data.
@@ -143,9 +76,13 @@ module Models {
           onchange: (e: Event): void => {
             let target: HTMLInputElement = <HTMLInputElement>e.target;
             if (target.type !== "checkbox") {
-              this.attributes[target.name] = target.value;
+              this.attributes()[target.name] = target.value;
             } else {
-              this.attributes[target.name] = target.checked;
+              this.attributes()[target.name] = target.checked;
+              // If they interact with the opt-in checkbox, dismiss the banner
+              if (target.name === "optin") {
+                this.attributes().dismissed = this.attributes().dismissed ? this.attributes().dismissed + 1 : 1;
+              }
             }
           },
           onsubmit: (e: Event): boolean => {

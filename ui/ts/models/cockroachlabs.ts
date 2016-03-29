@@ -16,6 +16,7 @@ module Models {
     import Nodes = Models.Status.Nodes;
     import nodeStatusSingleton = Models.Status.nodeStatusSingleton;
     import GetUIDataResponse = Models.Proto.GetUIDataResponse;
+    import OptInAttributes = Models.OptInAttributes.OptInAttributes;
 
     // milliseconds in 1 day
     const DAY = 1000 * 60 * 60 * 24;
@@ -25,6 +26,9 @@ module Models {
 
     // tracks whether the latest registration data has been synchronized with the Cockroach Labs servers
     export const REGISTRATION_SYNCHRONIZED_KEY = "registration_synchronized";
+
+    // tracks the last known time usage statistics were uploaded
+    const LAST_STATS_UPLOAD_KEY = "last_stats_upload";
 
     // Address of the Cockroach Labs servers.
     const COCKROACHLABS_ADDR = "https://register.cockroachdb.com";
@@ -65,12 +69,16 @@ module Models {
       loading: boolean = true;
       loadingPromise: MithrilPromise<any>;
 
+      lastStatsUpload: number;
+
+      private timeout: number;
+
       // TODO: create using a factory to better handle promises/errors
       constructor() {
         // TODO: get rid of double nodestatus refresh on cluster/nodes pages
         this.loadingPromise = m.sync([
           this.nodes.refresh(),
-          Models.API.getUIData([VERSION_DISMISSED_KEY, REGISTRATION_SYNCHRONIZED_KEY]),
+          Models.API.getUIData([VERSION_DISMISSED_KEY, REGISTRATION_SYNCHRONIZED_KEY, LAST_STATS_UPLOAD_KEY]),
           Models.API.getClusterID(),
         ]).then((data: [any, GetUIDataResponse]): void => {
 
@@ -81,6 +89,10 @@ module Models {
 
               let synchronizedRaw: string = _.get<string>(data, `1.key_values.${REGISTRATION_SYNCHRONIZED_KEY}.value`);
               this.synchronized = synchronizedRaw && (atob(synchronizedRaw).toLowerCase() === "true") || false;
+
+              let lastStatsUploadRaw: string = _.get<string>(data, `1.key_values.${LAST_STATS_UPLOAD_KEY}.value`);
+              this.lastStatsUpload = lastStatsUploadRaw && parseInt(atob(lastStatsUploadRaw), 10);
+
             } catch (e) {
               console.warn(e);
             }
@@ -89,6 +101,7 @@ module Models {
 
             this.loading = false;
             this.versionCheck();
+            this.uploadUsageStats();
           }).catch((e: Error) => {
             console.error(e);
           });
@@ -198,16 +211,19 @@ module Models {
       }
 
       register(data: RegisterData): MithrilPromise<any> {
-        return m.request<VersionList>({
+        return m.request({
           url: `${COCKROACHLABS_ADDR}/api/clusters/register?uuid=${this.clusterID}`,
           method: "POST",
           data: data,
           config: Utils.Http.XHRConfig,
+        }).then(() => {
+          // after registering, attempt to upload usage stats
+          this.uploadUsageStats();
         });
       }
 
       unregister(): MithrilPromise<any> {
-        return m.request<VersionList>({
+        return m.request({
           url: `${COCKROACHLABS_ADDR}/api/clusters/unregister?uuid=${this.clusterID}`,
           method: "DELETE",
           config: Utils.Http.XHRConfig,
@@ -217,6 +233,48 @@ module Models {
       saveSync(synchronized: boolean): MithrilPromise<any> {
         this.synchronized = synchronized;
         return Models.API.setUIData({[REGISTRATION_SYNCHRONIZED_KEY]: btoa(JSON.stringify(synchronized))});
+      }
+
+      uploadUsageStats(): MithrilPromise<any> {
+        if (this.timeout) {
+          clearTimeout(this.timeout);
+        }
+        let d: MithrilDeferred<any> = m.deferred();
+        if (this.loading) {
+          this.loadingPromise.then(() => {
+            this.uploadUsageStats().then(() => {
+              d.resolve();
+            }).catch((e: Error) => {
+              d.reject(e);
+            });
+          });
+        }
+
+        if ((!this.lastStatsUpload || (Date.now() - this.lastStatsUpload > DAY)) &&
+          !Models.OptInAttributes.currentAttributes.optin &&
+          !Models.OptInAttributes.savedAttributes.optin
+        ) {
+          // proactively set the last uploaded time
+          Models.API.setUIData({[LAST_STATS_UPLOAD_KEY]: btoa(JSON.stringify(Date.now()))}).then(() => {
+            m.request<VersionList>({
+              url: `${COCKROACHLABS_ADDR}/api/clusters/report?uuid=${this.clusterID}`,
+              method: "POST",
+              data: { nodes: this.nodes.allStatuses() },
+              config: Utils.Http.XHRConfig,
+            }).then(() => {
+              d.resolve();
+            }).catch(() => {
+              d.reject();
+            });
+          });
+          this.timeout = setTimeout(this.uploadUsageStats, DAY);
+        } else {
+          if (this.lastStatsUpload && (Date.now() - this.lastStatsUpload < DAY)) {
+            this.timeout = setTimeout(this.uploadUsageStats, this.lastStatsUpload + DAY);
+          }
+          d.reject();
+        }
+        return d.promise;
       }
     }
 
