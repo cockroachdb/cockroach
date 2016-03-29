@@ -88,6 +88,9 @@ type rangeDescriptorCache struct {
 		sync.Mutex
 		inflight map[lookupRequestKey]lookupRequest
 	}
+	// splitPrefetchSync sets whether prefetching the updated half of a split
+	// when a split is detected should be synchronous or completed in the background.
+	splitPrefetchSync bool
 }
 
 type lookupRequest struct {
@@ -104,13 +107,38 @@ type lookupResult struct {
 
 type lookupRequestKey struct {
 	key             string
+	evictedPrev     bool
 	considerIntents bool
 	useReverseScan  bool
 }
 
-func makeLookupRequestKey(key roachpb.RKey, considerIntents, useReverseScan bool) lookupRequestKey {
+func makeLookupRequestKey(key roachpb.RKey, prevDesc *roachpb.RangeDescriptor, evictedPrev, considerIntents, useReverseScan bool) lookupRequestKey {
+	// If the prevDesc is not nil and we had a cache miss, there are three possible
+	// events that may have happened. For each of these, we try to coalesce all
+	// requests that will end up on the same range post-event together.
+	// - Split:  for a split, only the right half of the split will attempt to evict
+	//           the stale descriptor because only the right half will be sending to
+	//           the wrong range. Once this stale descriptor is evicted, keys from
+	//           both halves of the split will miss the cache. We set the key to hash
+	//           to the start of the stale descriptor for lookup requests to both the
+	//           left and the right half of the split, but let the evictedPrev assure
+	//           that these requests are mapped to two separate lookupRequest.
+	// - Merges: for a merge, the left half of the merge will never notice. The right
+	//           half of the merge will suddenly find its descriptor to be stale, so
+	//           it will evict and lookup the new descriptor. We set the key to hash
+	//           to the start of the stale descriptor for lookup requests to the right
+	//           half of the merge so that all requests will be coalesced to the same
+	//           lookupRequest.
+	// - Rebal:  for a rebalance, the entire descriptor will suddenly go stale and
+	//           requests to it will evict the descriptor. We set the key to hash to
+	//           the start of the stale descriptor for lookup requests to the rebalanced
+	//           descriptor so that all requests will be coalesced to the same lookupRequest.
+	if prevDesc != nil {
+		key = prevDesc.StartKey
+	}
 	return lookupRequestKey{
 		key:             string(key),
+		evictedPrev:     evictedPrev,
 		considerIntents: considerIntents,
 		useReverseScan:  useReverseScan,
 	}
@@ -160,8 +188,8 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, stale *roachpb.RangeDescriptor,
-	considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, prevDesc *roachpb.RangeDescriptor,
+	evictedPrev, considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, *roachpb.Error) {
 	rdc.rangeCacheMu.RLock()
 	if _, r, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCacheMu.RUnlock()
@@ -171,10 +199,6 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, stale *
 		return r, nil
 	}
 
-	if stale != nil {
-		key = stale.StartKey
-	}
-
 	if log.V(2) {
 		log.Infof("lookup range descriptor: key=%s\n%s", key, rdc)
 	} else if log.V(1) {
@@ -182,7 +206,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, stale *
 	}
 
 	var res lookupResult
-	requestKey := makeLookupRequestKey(key, considerIntents, useReverseScan)
+	requestKey := makeLookupRequestKey(key, prevDesc, evictedPrev, considerIntents, useReverseScan)
 	rdc.lookupRequests.Lock()
 	if req, inflight := rdc.lookupRequests.inflight[requestKey]; inflight {
 		resC := make(chan lookupResult, 1)
@@ -214,8 +238,8 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, stale *
 		}
 
 		// rdc.lookupRequests does not need to be locked here because we hold an exclusive
-		// write lock on rdc.rangeCacheMu. Still it's left here commented out to help
-		// reason about the desired behavior.
+		// write lock on rdc.rangeCacheMu. However, it's been left here as a comment to
+		// help reason about the desired behavior.
 		// rdc.lookupRequests.Lock()
 		for _, observer := range rdc.lookupRequests.inflight[requestKey].observers {
 			observer <- res
@@ -223,6 +247,21 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, stale *
 		delete(rdc.lookupRequests.inflight, requestKey)
 		// rdc.lookupRequests.Unlock()
 		rdc.rangeCacheMu.Unlock()
+
+		// Detect if we are the right half of a split. If so, launch a lookup for the left half,
+		// which will only be detected because we evicted the entire previous range.
+		if prevDesc != nil && evictedPrev {
+			if res.desc != nil && prevDesc.StartKey.Less(res.desc.StartKey) {
+				prefetchSplitLeft := func() {
+					rdc.LookupRangeDescriptor(prevDesc.StartKey, prevDesc, false, considerIntents, useReverseScan)
+				}
+				if rdc.splitPrefetchSync {
+					prefetchSplitLeft()
+				} else {
+					go prefetchSplitLeft()
+				}
+			}
+		}
 	}
 	return res.desc, res.pErr
 }
@@ -258,7 +297,8 @@ func (rdc *rangeDescriptorCache) performRangeLookup(key roachpb.RKey, considerIn
 	default:
 		// Look up desc from the cache, which will recursively call into
 		// this function if it is not cached.
-		if desc, pErr = rdc.LookupRangeDescriptor(metadataKey, nil, considerIntents, useReverseScan); pErr != nil {
+		if desc, pErr = rdc.LookupRangeDescriptor(metadataKey, nil, /* prevDesc */
+			false /* evictedPrev */, considerIntents, useReverseScan); pErr != nil {
 			return nil, pErr
 		}
 	}

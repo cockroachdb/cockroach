@@ -350,7 +350,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(rs, nil, false /*considerIntents*/, false /*useReverseScan*/)
+		desc, needAnother, _, pErr := ds.getDescriptors(rs, evictionToken{}, false /*considerIntents*/, false /*useReverseScan*/)
 		if pErr != nil {
 			return -1, pErr
 		}
@@ -363,19 +363,35 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	return count, nil
 }
 
+// evictionToken holds eviction state between calls to getDescriptors.
+type evictionToken struct {
+	do       func() error
+	evicted  bool
+	prevDesc *roachpb.RangeDescriptor
+}
+
+func (et *evictionToken) evict() error {
+	et.evicted = true
+	return et.do()
+}
+
 // getDescriptors looks up the range descriptor to use for a query over the
-// key range span rs, with the given LookupOptions. The range descriptor
-// which contains the range in which the request should start its query is
-// returned first; the returned bool is true in case the given range reaches
-// outside the first descriptor.
-// In case either of the descriptors is discovered stale, the returned closure
-// should be called; it evicts the cache appropriately.
+// key range span rs with the given options. The lookup takes into consideration
+// the last range descriptor that the caller had used for this key range span,
+// if any, and if the last range descriptor has been evicted because it was
+// found to be stale, which is all managed through the evictionToken. The range
+// descriptor which contains the range in which the request should start its
+// query is returned first; the returned bool is true in case the given range
+// reaches outside the first descriptor.
+//
+// In case the descriptor is discovered stale, the returned evictionToken's evict
+// method should be called; it evicts the cache appropriately.
 // Note that `from` and `to` are not necessarily Key and EndKey from a
 // RequestHeader; it's assumed that they've been translated to key addresses
 // already (via KeyAddress).
 func (ds *DistSender) getDescriptors(
-	rs roachpb.RSpan, stale *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
-) (*roachpb.RangeDescriptor, bool, func() error, *roachpb.Error) {
+	rs roachpb.RSpan, evictToken evictionToken, considerIntents, useReverseScan bool,
+) (*roachpb.RangeDescriptor, bool, evictionToken, *roachpb.Error) {
 	var desc *roachpb.RangeDescriptor
 	var pErr *roachpb.Error
 	var descKey roachpb.RKey
@@ -384,25 +400,29 @@ func (ds *DistSender) getDescriptors(
 	} else {
 		descKey = rs.EndKey
 	}
-	desc, pErr = ds.rangeCache.LookupRangeDescriptor(descKey, nil, considerIntents, useReverseScan)
 
+	desc, pErr = ds.rangeCache.LookupRangeDescriptor(descKey, evictToken.prevDesc, evictToken.evicted, considerIntents, useReverseScan)
 	if pErr != nil {
-		return nil, false, nil, pErr
+		return nil, false, evictionToken{}, pErr
 	}
 
-	// Checks whether need to get next range descriptor. If so, returns true.
-	needAnother := func(desc *roachpb.RangeDescriptor, isReverse bool) bool {
-		if isReverse {
-			return rs.Key.Less(desc.StartKey)
-		}
-		return desc.EndKey.Less(rs.EndKey)
+	// Checks whether need to get next range descriptor.
+	needAnother := false
+	if useReverseScan {
+		needAnother = rs.Key.Less(desc.StartKey)
+	} else {
+		needAnother = desc.EndKey.Less(rs.EndKey)
 	}
 
-	evict := func() error {
-		return ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, useReverseScan)
+	// Construct evictionToken to manage eviction state.
+	evictToken = evictionToken{
+		do: func() error {
+			return ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, useReverseScan)
+		},
+		prevDesc: desc,
 	}
 
-	return desc, needAnother(desc, useReverseScan), evict, nil
+	return desc, needAnother, evictToken, nil
 }
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
@@ -598,7 +618,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		considerIntents := false
 		var curReply *roachpb.BatchResponse
-		var desc, stale *roachpb.RangeDescriptor
+		var desc *roachpb.RangeDescriptor
+		var evictToken evictionToken
 		var needAnother bool
 		var pErr *roachpb.Error
 		var finished bool
@@ -607,16 +628,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			log.Trace(ctx, "meta descriptor lookup")
-			var evictDescript func() error
-			desc, needAnother, evictDescript, pErr = ds.getDescriptors(rs, stale, considerIntents, isReverse)
-			stale = nil
-			evictDesc := func() error {
-				if err := evictDescript(); err != nil {
-					return err
-				}
-				stale = desc
-				return nil
-			}
+			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, considerIntents, isReverse)
 
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
@@ -658,7 +670,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// returns descriptor [c,d) -> [d,g) is never scanned.
 			// We evict and retry in such a case.
 			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, rs.EndKey)) || (!isReverse && !desc.ContainsKeyRange(rs.Key, desc.EndKey)) {
-				if err := evictDesc(); err != nil {
+				if err := evictToken.evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				continue
@@ -708,7 +720,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// TODO(tschottdorf): If a replica group goes dead, this
 				// will cause clients to put high read pressure on the first
 				// range, so there should be some rate limiting here.
-				if err := evictDesc(); err != nil {
+				if err := evictToken.evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				if tErr.CanRetry() {
@@ -716,7 +728,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 			case *roachpb.RangeNotFoundError, *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it.
-				if err := evictDesc(); err != nil {
+				if err := evictToken.evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
@@ -744,7 +756,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 						if log.V(1) {
 							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
 						}
-						if err := evictDesc(); err != nil {
+						if err := evictToken.evict(); err != nil {
 							return nil, roachpb.NewError(err), false
 						}
 					}
@@ -759,7 +771,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					// another node (at a lower level), and then if it reaches
 					// this level then we know we've exhausted our options and
 					// must clear the cache.
-					if err := evictDesc(); err != nil {
+					if err := evictToken.evict(); err != nil {
 						return nil, roachpb.NewError(err), false
 					}
 					newLeader = &roachpb.ReplicaDescriptor{}
