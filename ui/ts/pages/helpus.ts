@@ -33,8 +33,8 @@ module AdminViews {
             ];
           } else {
             return ["We appreciate your support. ",
-            "Feel free to reach out to us on ",
-              m("a", {href: "http://www.github.com/cockroachdb/cockroach"}, "GitHub"),
+            "Reach out to us on ",
+              m("a", {href: "https://gitter.im/cockroachdb/cockroach"}, "Gitter"),
               " or our ",
               m("a", {href: "https://groups.google.com/forum/#!forum/cockroach-db"}, "Google Group"),
               ".",
@@ -49,6 +49,7 @@ module AdminViews {
         submit(e: Event): void {
           let target: HTMLButtonElement = <HTMLButtonElement>e.target;
           if (target.form.checkValidity()) {
+            this.userData.showRequired = false;
             this.saving = true;
             m.redraw();
             this.userData.save()
@@ -60,6 +61,8 @@ module AdminViews {
                 this.saving = false;
                 this.saveFailed = true;
               });
+          } else {
+            this.userData.showRequired = true;
           }
         }
       }
@@ -79,7 +82,7 @@ module AdminViews {
               m("form", ctrl.userData.bindForm(), [
                 m("input[name=firstname]", {placeholder: "First Name", value: ctrl.userData.attributes.firstname}), m("span.status"),
                 m("input[name=lastname]", {placeholder: "Last Name", value: ctrl.userData.attributes.lastname}), m("span.status"),
-                m("input[name=email][type=email][required=true]", {placeholder: "Email*", value: ctrl.userData.attributes.email}), m("span.status"),
+                m("input[name=email][type=email][required=true]" + (ctrl.userData.showRequired ? ".show-required" : ""), {placeholder: "Email*", value: ctrl.userData.attributes.email}), m("span.status"),
                 m("input[name=company]", {placeholder: "Company", value: ctrl.userData.attributes.company}), m("span.status"),
                 m("", [
                   m("input[type=checkbox][name=optin]" + (ctrl.userData.savedAttributes.optin ? "" : "[required=true]"), {id: "optin", checked: ctrl.userData.attributes.optin}),

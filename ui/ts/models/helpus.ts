@@ -78,6 +78,11 @@ module Models {
        */
       loadPromise: MithrilPromise<void> = null;
 
+      /**
+       * showRequired tracks whether there has been a failed submit, in which case we show the "required" indicator on any invalid inputs
+       */
+      showRequired: boolean = false;
+
       constructor() {
         this.loadPromise = this.load();
       }
@@ -137,6 +142,9 @@ module Models {
               this.attributes[target.name] = target.value;
             } else {
               this.attributes[target.name] = target.checked;
+              if (target.name === "optin") {
+                this.attributes.dismissed = this.attributes.dismissed ? this.attributes.dismissed + 1 : 1;
+              }
             }
           },
           onsubmit: (e: Event): boolean => {
