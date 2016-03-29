@@ -25,6 +25,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"unsafe"
 
 	"github.com/dustin/go-humanize"
@@ -572,6 +573,12 @@ type rocksDBIterator struct {
 	value  C.DBSlice
 }
 
+var iterPool = sync.Pool{
+	New: func() interface{} {
+		return &rocksDBIterator{}
+	},
+}
+
 // newRocksDBIterator returns a new iterator over the supplied RocksDB
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
@@ -581,10 +588,10 @@ func newRocksDBIterator(rdb *C.DBEngine, prefix roachpb.Key, engine Engine) *roc
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
-	return &rocksDBIterator{
-		iter:   C.DBNewIter(rdb, goToCSlice(prefix)),
-		engine: engine,
-	}
+	i := iterPool.Get().(*rocksDBIterator)
+	i.iter = C.DBNewIter(rdb, goToCSlice(prefix))
+	i.engine = engine
+	return i
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
@@ -596,6 +603,9 @@ func (r *rocksDBIterator) checkEngineOpen() {
 // The following methods implement the Iterator interface.
 func (r *rocksDBIterator) Close() {
 	C.DBIterDestroy(r.iter)
+	r.valid = false
+	r.iter = nil
+	iterPool.Put(r)
 }
 
 func (r *rocksDBIterator) Seek(key MVCCKey) {
