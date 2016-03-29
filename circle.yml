@@ -54,7 +54,6 @@ deployment:
 deployment:
   docker:
     tag: /beta-[0-9]+/
-    branch: master
     commands:
       - aws configure set region us-east-1
       - build/build-static-binaries.sh
