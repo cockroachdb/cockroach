@@ -575,7 +575,7 @@ type rocksDBIterator struct {
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine, prefix roachpb.Key, engine Engine) *rocksDBIterator {
+func newRocksDBIterator(rdb *C.DBEngine, prefix roachpb.Key, engine Engine) Iterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
