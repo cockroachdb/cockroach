@@ -88,12 +88,13 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 // in tests.
 func TestStoreContext() StoreContext {
 	return StoreContext{
-		Tracer:                     tracing.NewTracer(),
-		RaftTickInterval:           100 * time.Millisecond,
-		RaftHeartbeatIntervalTicks: 1,
-		RaftElectionTimeoutTicks:   2,
-		ScanInterval:               10 * time.Minute,
-		ConsistencyCheckInterval:   10 * time.Minute,
+		Tracer:                         tracing.NewTracer(),
+		RaftTickInterval:               100 * time.Millisecond,
+		RaftHeartbeatIntervalTicks:     1,
+		RaftElectionTimeoutTicks:       2,
+		ScanInterval:                   10 * time.Minute,
+		ConsistencyCheckInterval:       10 * time.Minute,
+		ConsistencyCheckPanicOnFailure: true,
 	}
 }
 
@@ -357,6 +358,10 @@ type StoreContext struct {
 	// ConsistencyCheckInterval is the default time period in between consecutive
 	// consistency checks on a range.
 	ConsistencyCheckInterval time.Duration
+
+	// ConsistencyCheckPanicOnFailure causes the node to panic when it detects a
+	// replication consistency check failure.
+	ConsistencyCheckPanicOnFailure bool
 
 	// AllocatorOptions configures how the store will attempt to rebalance its
 	// replicas to other stores.

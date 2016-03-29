@@ -1591,12 +1591,16 @@ func (r *Replica) VerifyChecksum(
 		return roachpb.VerifyChecksumResponse{}, nil
 	}
 	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-		if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
-			p()
-		} else {
-			// Replication consistency problem!
-			log.Fatalf("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
+		// Replication consistency problem!
+		logFunc := log.Errorf
+		if r.store.ctx.ConsistencyCheckPanicOnFailure {
+			if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
+				p()
+			} else {
+				logFunc = log.Fatalf
+			}
 		}
+		logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
 }
