@@ -50,15 +50,26 @@ func (ab *atomicBool) Set(s string) error {
 
 var _ flag.Value = &atomicBool{}
 
+// LogToStderrName and others are flag names.
+const (
+	LogToStderrName     = "logtostderr"
+	AlsoLogToStderrName = "alsologtostderr"
+	NoColorName         = "no-color"
+	VerbosityName       = "verbosity"
+	VModuleName         = "vmodule"
+	LogBacktraceAtName  = "log-backtrace-at"
+	LogDirName          = "log-dir"
+)
+
 // InitFlags creates logging flags which update the given variables. The passed mutex is
 // locked while the boolean variables are accessed during flag updates.
 func InitFlags(mu sync.Locker, toStderr *bool, logDir flag.Value,
 	nocolor *bool, verbosity, vmodule, traceLocation flag.Value) {
 	*toStderr = true // wonky way of specifying a default
-	flag.Var(&atomicBool{Locker: mu, b: toStderr}, "logtostderr", "log to standard error instead of files")
-	flag.BoolVar(nocolor, "no-color", *nocolor, "disable standard error log colorization")
-	flag.Var(verbosity, "verbosity", "log level for V logs")
-	flag.Var(vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
-	flag.Var(traceLocation, "log-backtrace-at", "when logging hits line file:N, emit a stack trace")
-	flag.Var(logDir, "log-dir", "if non-empty, write log files in this directory")
+	flag.Var(&atomicBool{Locker: mu, b: toStderr}, LogToStderrName, "log to standard error instead of files")
+	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
+	flag.Var(verbosity, VerbosityName, "log level for V logs")
+	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging")
+	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
+	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
 }
