@@ -545,8 +545,7 @@ func newGetBuffer() *getBuffer {
 }
 
 func (b *getBuffer) release() {
-	b.meta.Reset()
-	b.value.Reset()
+	*b = getBuffer{}
 	getBufferPool.Put(b)
 }
 
@@ -830,9 +829,7 @@ func newPutBuffer() *putBuffer {
 }
 
 func (b *putBuffer) release() {
-	b.meta.Reset()
-	b.newMeta.Reset()
-	b.newTxn.Reset()
+	*b = putBuffer{}
 	putBufferPool.Put(b)
 }
 
