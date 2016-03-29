@@ -36,8 +36,9 @@ const _ = proto.GoGoProtoPackageIsVersion1
 
 // StoreConfig holds the configuration of a collection of similar stores.
 type StoreConfig struct {
-	Count     int32 `protobuf:"varint,1,opt,name=count" json:"count"`
-	MaxRanges int32 `protobuf:"varint,2,opt,name=max_ranges,json=maxRanges" json:"max_ranges"`
+	Count            int32  `protobuf:"varint,1,opt,name=count" json:"count"`
+	MaxRanges        int32  `protobuf:"varint,2,opt,name=max_ranges,json=maxRanges" json:"max_ranges"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *StoreConfig) Reset()                    { *m = StoreConfig{} }
@@ -47,8 +48,9 @@ func (*StoreConfig) Descriptor() ([]byte, []int) { return fileDescriptorTestconf
 
 // NodeConfig holds the configuration of a collection of similar nodes.
 type NodeConfig struct {
-	Count  int32         `protobuf:"varint,1,opt,name=count" json:"count"`
-	Stores []StoreConfig `protobuf:"bytes,2,rep,name=stores" json:"stores"`
+	Count            int32         `protobuf:"varint,1,opt,name=count" json:"count"`
+	Stores           []StoreConfig `protobuf:"bytes,2,rep,name=stores" json:"stores"`
+	XXX_unrecognized []byte        `json:"-"`
 }
 
 func (m *NodeConfig) Reset()                    { *m = NodeConfig{} }
@@ -61,7 +63,8 @@ type TestConfig struct {
 	Nodes []NodeConfig `protobuf:"bytes,2,rep,name=nodes" json:"nodes"`
 	// Duration is the total time that the test should run for. Important for
 	// tests such as TestPut that will run indefinitely.
-	Duration time.Duration `protobuf:"varint,3,opt,name=duration,casttype=time.Duration" json:"duration"`
+	Duration         time.Duration `protobuf:"varint,3,opt,name=duration,casttype=time.Duration" json:"duration"`
+	XXX_unrecognized []byte        `json:"-"`
 }
 
 func (m *TestConfig) Reset()                    { *m = TestConfig{} }
@@ -95,6 +98,9 @@ func (m *StoreConfig) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintTestconfig(data, i, uint64(m.MaxRanges))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -127,6 +133,9 @@ func (m *NodeConfig) MarshalTo(data []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -165,6 +174,9 @@ func (m *TestConfig) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintTestconfig(data, i, uint64(m.Duration))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -200,6 +212,9 @@ func (m *StoreConfig) Size() (n int) {
 	_ = l
 	n += 1 + sovTestconfig(uint64(m.Count))
 	n += 1 + sovTestconfig(uint64(m.MaxRanges))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -212,6 +227,9 @@ func (m *NodeConfig) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTestconfig(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -228,6 +246,9 @@ func (m *TestConfig) Size() (n int) {
 		}
 	}
 	n += 1 + sovTestconfig(uint64(m.Duration))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -323,6 +344,7 @@ func (m *StoreConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -423,6 +445,7 @@ func (m *NodeConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -552,6 +575,7 @@ func (m *TestConfig) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -667,7 +691,7 @@ var (
 )
 
 var fileDescriptorTestconfig = []byte{
-	// 296 bytes of a gzipped FileDescriptorProto
+	// 292 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0xd2, 0x4d, 0xce, 0x4f, 0xce,
 	0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x4f, 0x4c, 0x4e, 0x4e, 0x2d, 0x28, 0x49, 0xcc, 0x4b, 0x4e,
 	0xd5, 0x4f, 0xce, 0x29, 0x2d, 0x2e, 0x49, 0x2d, 0xd2, 0x2f, 0x49, 0x2d, 0x2e, 0x49, 0xce, 0xcf,
@@ -683,8 +707,8 @@ var fileDescriptorTestconfig = []byte{
 	0x6c, 0x25, 0x27, 0x54, 0x29, 0x58, 0x44, 0xc8, 0x85, 0x8b, 0x35, 0x0f, 0xe8, 0x36, 0x98, 0x85,
 	0x1a, 0xf8, 0x2d, 0x44, 0x78, 0x03, 0xe6, 0x6e, 0xb0, 0x66, 0x21, 0x43, 0x2e, 0x8e, 0x94, 0xd2,
 	0xa2, 0xc4, 0x92, 0xcc, 0xfc, 0x3c, 0x09, 0x66, 0xa0, 0x1d, 0xcc, 0x4e, 0xa2, 0x20, 0xe9, 0x5f,
-	0xf7, 0xe4, 0x79, 0x4b, 0x32, 0x73, 0x53, 0xf5, 0x5c, 0xa0, 0x92, 0x41, 0x70, 0x65, 0x4e, 0x8a,
+	0xf7, 0xe4, 0x79, 0x4b, 0x32, 0x73, 0x53, 0xf5, 0x5c, 0xa0, 0x92, 0x41, 0x70, 0x65, 0x4e, 0xb2,
 	0x27, 0x1e, 0xca, 0x31, 0x9c, 0x78, 0x24, 0xc7, 0x78, 0x01, 0x88, 0x6f, 0x00, 0xf1, 0x03, 0x20,
-	0x9e, 0xf0, 0x58, 0x8e, 0x21, 0x8a, 0x1d, 0x6a, 0x5b, 0x04, 0x03, 0x20, 0x00, 0x00, 0xff, 0xff,
-	0xb2, 0xde, 0x6b, 0x3f, 0xed, 0x01, 0x00, 0x00,
+	0x8e, 0x62, 0x87, 0xda, 0x14, 0xc1, 0x00, 0x08, 0x00, 0x00, 0xff, 0xff, 0xd3, 0xb1, 0xe9, 0x6c,
+	0xe9, 0x01, 0x00, 0x00,
 }

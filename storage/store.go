@@ -1986,7 +1986,8 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 // cacheReplicaDescriptorLocked requires that the store lock is held.
 func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
 	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{groupID, replica.ReplicaID}); ok {
-		if old != replica {
+		oldReplica := old.(roachpb.ReplicaDescriptor)
+		if !proto.Equal(&oldReplica, &replica) {
 			log.Fatalf("%s replicaDescCache: clobbering %s with %s", s, old, replica)
 		}
 		return

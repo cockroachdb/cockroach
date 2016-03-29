@@ -820,6 +820,9 @@ func (t *Transaction) Update(o *Transaction) {
 	//   a new request. Update is called in many situations and shouldn't
 	//   reset anything.
 	t.WriteTooOld = o.WriteTooOld
+	// If there is anything unrecognized on this transaction, we're probably
+	// better off using the "new" one.
+	t.XXX_unrecognized = o.XXX_unrecognized
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}

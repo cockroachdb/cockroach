@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -227,7 +229,7 @@ func TestLogRebalances(t *testing.T) {
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
 			t.Errorf("recorded wrong updated descriptor %s for add replica of range %d", info.UpdatedDesc, rangeID)
 		}
-		if a, e := info.AddReplica, desc.Replicas[0]; a != e {
+		if a, e := info.AddReplica, desc.Replicas[0]; !proto.Equal(&a, &e) {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
@@ -271,7 +273,7 @@ func TestLogRebalances(t *testing.T) {
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
 			t.Errorf("recorded wrong updated descriptor %s for remove replica of range %d", info.UpdatedDesc, rangeID)
 		}
-		if a, e := info.RemovedReplica, desc.Replicas[0]; a != e {
+		if a, e := info.RemovedReplica, desc.Replicas[0]; !proto.Equal(&a, &e) {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
 				a, rangeID, e)
 		}

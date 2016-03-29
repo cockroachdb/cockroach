@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -113,6 +115,8 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 	return &r
 }
 
+var emptyOffset RemoteOffset
+
 // UpdateOffset is a thread-safe way to update the remote clock measurements.
 //
 // It only updates the offset for addr if one the following three cases holds:
@@ -133,8 +137,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var emptyOffset RemoteOffset
-	if offset == emptyOffset {
+	if proto.Equal(&offset, &emptyOffset) {
 		return
 	}
 

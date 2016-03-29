@@ -43,7 +43,8 @@ const _ = proto.GoGoProtoPackageIsVersion1
 type UserPrivileges struct {
 	User string `protobuf:"bytes,1,opt,name=user" json:"user"`
 	// privileges is a bitfield of 1<<Privilege values.
-	Privileges uint32 `protobuf:"varint,2,opt,name=privileges" json:"privileges"`
+	Privileges       uint32 `protobuf:"varint,2,opt,name=privileges" json:"privileges"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *UserPrivileges) Reset()                    { *m = UserPrivileges{} }
@@ -54,7 +55,8 @@ func (*UserPrivileges) Descriptor() ([]byte, []int) { return fileDescriptorPrivi
 // PrivilegeDescriptor describes a list of users and attached
 // privileges. The list should be sorted by user for fast access.
 type PrivilegeDescriptor struct {
-	Users []*UserPrivileges `protobuf:"bytes,1,rep,name=users" json:"users,omitempty"`
+	Users            []*UserPrivileges `protobuf:"bytes,1,rep,name=users" json:"users,omitempty"`
+	XXX_unrecognized []byte            `json:"-"`
 }
 
 func (m *PrivilegeDescriptor) Reset()                    { *m = PrivilegeDescriptor{} }
@@ -88,6 +90,9 @@ func (m *UserPrivileges) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintPrivilege(data, i, uint64(m.Privileges))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -117,6 +122,9 @@ func (m *PrivilegeDescriptor) MarshalTo(data []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -154,6 +162,9 @@ func (m *UserPrivileges) Size() (n int) {
 	l = len(m.User)
 	n += 1 + l + sovPrivilege(uint64(l))
 	n += 1 + sovPrivilege(uint64(m.Privileges))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -165,6 +176,9 @@ func (m *PrivilegeDescriptor) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovPrivilege(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -271,6 +285,7 @@ func (m *UserPrivileges) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -352,6 +367,7 @@ func (m *PrivilegeDescriptor) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -467,7 +483,7 @@ var (
 )
 
 var fileDescriptorPrivilege = []byte{
-	// 193 bytes of a gzipped FileDescriptorProto
+	// 189 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0x92, 0x4d, 0xce, 0x4f, 0xce,
 	0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x2f, 0x2e, 0xcc, 0xd1, 0x2f, 0x28, 0xca, 0x2c, 0xcb, 0xcc,
 	0x49, 0x4d, 0x4f, 0xd5, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x85, 0x4b, 0xeb, 0x01, 0xa5,
@@ -477,8 +493,7 @@ var fileDescriptorPrivilege = []byte{
 	0x0a, 0x17, 0x17, 0xdc, 0x8e, 0x62, 0x09, 0x26, 0xa0, 0x3c, 0x2f, 0x54, 0x1e, 0x49, 0x5c, 0xc9,
 	0x8b, 0x4b, 0x18, 0x6e, 0x9a, 0x4b, 0x6a, 0x71, 0x72, 0x51, 0x66, 0x41, 0x49, 0x7e, 0x91, 0x90,
 	0x31, 0x17, 0x2b, 0xc8, 0x90, 0x62, 0xa0, 0xb9, 0xcc, 0x1a, 0xdc, 0x46, 0xb2, 0x7a, 0x28, 0xae,
-	0xd3, 0x43, 0x75, 0x44, 0x10, 0x44, 0xad, 0x93, 0xec, 0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e, 0xc9,
-	0x31, 0x5e, 0x00, 0xe2, 0x1b, 0x40, 0xfc, 0x00, 0x88, 0x27, 0x3c, 0x96, 0x63, 0x88, 0x62, 0x06,
-	0x6a, 0x8a, 0x60, 0x00, 0x04, 0x00, 0x00, 0xff, 0xff, 0xff, 0x4c, 0x8c, 0xb3, 0x03, 0x01, 0x00,
-	0x00,
+	0xd3, 0x43, 0x75, 0x44, 0x10, 0x44, 0xad, 0x93, 0xe4, 0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e, 0xc9,
+	0x31, 0x5e, 0x00, 0xe2, 0x1b, 0x40, 0xfc, 0x00, 0x88, 0xa3, 0x98, 0x81, 0x1a, 0x22, 0x18, 0x00,
+	0x01, 0x00, 0x00, 0xff, 0xff, 0xb6, 0xdf, 0xa9, 0xd2, 0xff, 0x00, 0x00, 0x00,
 }

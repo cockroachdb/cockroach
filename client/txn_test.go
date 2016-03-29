@@ -610,7 +610,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	}
 
 	// Check the timestamp was preserved.
-	if txn.Proto.OrigTimestamp != refTimestamp {
+	if !txn.Proto.OrigTimestamp.Equal(refTimestamp) {
 		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
 	}
 }
