@@ -33,12 +33,16 @@ html
 body
   height 100%
   background-color $secondary-gray-4
-  min-width 650px
+  min-width 700px
+
+#page-container
+  position relative
+  min-height 100vh
 
 #root
   position relative
   padding-left $nav-width
-  min-height 100% // TODO or calc(100% - 4rem)
+  min-height calc(100vh - $footer-height) // TODO or calc(100% - 4rem)
 
   &:after
     content ""
@@ -544,3 +548,18 @@ a.toggle
 table
   td:first-child
     padding-left 3rem
+
+#footer
+  height $footer-height
+  padding-left 80px
+  border-top 1px solid $secondary-gray-1
+
+  .links
+    width 600px
+    margin auto
+    a
+      line-height $footer-height
+      margin 20px
+      text-decoration none
+      color $main-gray
+
