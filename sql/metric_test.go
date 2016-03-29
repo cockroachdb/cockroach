@@ -108,7 +108,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		case *roachpb.ConditionalPutRequest:
 			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
 				restarted = true
-				return roachpb.NewError(roachpb.NewTransactionAbortedError())
+				return roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionAbortedError(), args.Hdr.Txn)
 			}
 		}
 		return nil
