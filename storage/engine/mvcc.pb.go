@@ -7,10 +7,12 @@
 
 	It is generated from these files:
 		cockroach/storage/engine/mvcc.proto
+		cockroach/storage/engine/version.proto
 
 	It has these top-level messages:
 		MVCCMetadata
 		MVCCStats
+		Version
 */
 package engine
 
