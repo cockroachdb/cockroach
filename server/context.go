@@ -330,6 +330,7 @@ func (ctx *Context) readEnvironmentVariables() {
 	parseDurationEnv("COCKROACH_MAX_OFFSET", "max offset", &ctx.MaxOffset)
 	parseDurationEnv("COCKROACH_METRICS_FREQUENCY", "metrics frequency", &ctx.MetricsFrequency)
 	parseDurationEnv("COCKROACH_SCAN_INTERVAL", "scan interval", &ctx.ScanInterval)
+	parseDurationEnv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "consistency check interval", &ctx.ConsistencyCheckInterval)
 	parseDurationEnv("COCKROACH_SCAN_MAX_IDLE_TIME", "scan max idle time", &ctx.ScanMaxIdleTime)
 	parseDurationEnv("COCKROACH_TIME_UNTIL_STORE_DEAD", "time until store dead", &ctx.TimeUntilStoreDead)
 }

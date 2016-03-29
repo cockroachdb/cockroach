@@ -94,6 +94,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL"); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.Unsetenv("COCKROACH_SCAN_MAX_IDLE_TIME"); err != nil {
 			t.Fatal(err)
 		}
@@ -131,6 +134,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctxExpected.ScanInterval = time.Hour * 48
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "48h"); err != nil {
+		t.Fatal(err)
+	}
+	ctxExpected.ConsistencyCheckInterval = time.Hour * 48
 	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "100ns"); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +167,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "abcd"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "abcd"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "abcd"); err != nil {
