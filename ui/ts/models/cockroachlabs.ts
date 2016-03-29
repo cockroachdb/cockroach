@@ -23,6 +23,12 @@ module Models {
     // tracks when the version check was last dismissed
     const VERSION_DISMISSED_KEY = "version_dismissed";
 
+    // tracks whether the latest registration data has been synchronized with the Cockroach Labs servers
+    export const REGISTRATION_SYNCHRONIZED_KEY = "registration_synchronized";
+
+    // Address of the Cockroach Labs servers.
+    const COCKROACHLABS_ADDR = "https://register.cockroachdb.com";
+
     export interface Version {
       version: string;
       detail: string;
@@ -54,18 +60,30 @@ module Models {
         laterVersions: null,
       };
       nodes: Nodes = nodeStatusSingleton;
+      synchronized: boolean;
+
+      loading: boolean = true;
+      loadingPromise: MithrilPromise<any>;
 
       constructor(clusterID: string) {
         // TODO: get cluster ID from the node
         this.clusterID = "00000000-0000-0000-0000-000000000000";
         // TODO: get rid of double nodestatus refresh on cluster/nodes pages
-        m.sync([this.nodes.refresh(), Models.API.getUIData([VERSION_DISMISSED_KEY])]).then((data: [any, GetUIDataResponse]): void => {
+        this.loadingPromise = m.sync([
+          this.nodes.refresh(),
+          Models.API.getUIData([VERSION_DISMISSED_KEY, REGISTRATION_SYNCHRONIZED_KEY]),
+        ]).then((data: [any, GetUIDataResponse]): void => {
           try {
             let dismissedCheckRaw: string = _.get<string>(data, `1.key_values.${VERSION_DISMISSED_KEY}.value`);
             this.dismissedCheck = dismissedCheckRaw && parseInt(atob(dismissedCheckRaw), 10);
+
+            let synchronizedRaw: string = _.get<string>(data, `1.key_values.${REGISTRATION_SYNCHRONIZED_KEY}.value`);
+            this.synchronized = synchronizedRaw && (atob(synchronizedRaw).toLowerCase() === "true") || false;
           } catch (e) {
             console.warn(e);
           }
+
+          this.loading = false;
           this.versionCheck();
         });
       }
@@ -102,7 +120,7 @@ module Models {
           } else {
             // contact Cockroach Labs to check latest version
             m.request<VersionList>({
-              url: `https://register.cockroachdb.com/api/clusters/updates?uuid=${this.clusterID}&version=${nodeStatuses[0].build_info.tag}`,
+              url: `${COCKROACHLABS_ADDR}/api/clusters/updates?uuid=${this.clusterID}&version=${nodeStatuses[0].build_info.tag}`,
               config: Utils.Http.XHRConfig,
             }).then((laterVersions: VersionList) => {
               if (!_.isEmpty(laterVersions.details)) {
@@ -143,6 +161,56 @@ module Models {
           m.redraw();
         });
       };
+
+      // save saves the latest user optin values to the Cockroach Labs server.
+      // If the user has opted in, it uses the registration endpoint.
+      // If the user has not opted in or has opted it, it uses the unregistration endpoint.
+      // It then saves the synchronization status to the current cluster.
+      save(data?: OptInAttributes): MithrilPromise<void> {
+        let d: MithrilDeferred<any> = m.deferred();
+        let p: MithrilPromise<any>;
+        if (data && data.optin) {
+          p = this.register({
+            first_name: data.firstname,
+            last_name: data.lastname,
+            company: data.company,
+            email: data.email,
+          });
+        } else {
+          p = this.unregister();
+        }
+
+        p.then(() => {
+            this.saveSync(true).then(() => d.resolve());
+          })
+          .catch(() => {
+            this.saveSync(false).then(() => d.resolve());
+          });
+
+        return p;
+      }
+
+      register(data: RegisterData): MithrilPromise<any> {
+        return m.request<VersionList>({
+          url: `${COCKROACHLABS_ADDR}/api/clusters/register?uuid=${this.clusterID}`,
+          method: "POST",
+          data: data,
+          config: Utils.Http.XHRConfig,
+        });
+      }
+
+      unregister(): MithrilPromise<any> {
+        return m.request<VersionList>({
+          url: `${COCKROACHLABS_ADDR}/api/clusters/unregister?uuid=${this.clusterID}`,
+          method: "DELETE",
+          config: Utils.Http.XHRConfig,
+        });
+      }
+
+      saveSync(synchronized: boolean): MithrilPromise<any> {
+        this.synchronized = synchronized;
+        return Models.API.setUIData({[REGISTRATION_SYNCHRONIZED_KEY]: btoa(JSON.stringify(synchronized))});
+      }
     }
 
     export let cockroachLabsSingleton = new CockroachLabs(null);
