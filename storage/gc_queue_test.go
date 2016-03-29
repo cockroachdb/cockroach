@@ -317,7 +317,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
-		expSeqGC    bool                      // expect sequence cache entries removed?
+		expAbortGC  bool                      // expect abort cache entries removed?
 	}
 	// Describes the state of the Txn table before the test.
 	testCases := map[string]spec{
@@ -328,7 +328,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		"b": {roachpb.PENDING, 0, tTxnThreshold + 1, roachpb.PENDING, false, false, false},
 		// Old, pending and abandoned. Should push and abort it successfully,
 		// but not GC it just yet (this is an artifact of the implementation).
-		// The sequence cache gets cleaned up though.
+		// The abort cache gets cleaned up though.
 		"c": {roachpb.PENDING, tTxnThreshold - 1, 0, roachpb.ABORTED, false, false, true},
 		// Old and aborted, should delete.
 		"d": {roachpb.ABORTED, tTxnThreshold - 1, 0, -1, false, true, true},
@@ -370,9 +370,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
 
 	txns := map[string]roachpb.Transaction{}
-	var epo uint32
 	for strKey, test := range testCases {
-		epo++
 		baseKey := roachpb.Key(strKey)
 		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.ts)).UnixNano)
 		txn := newTransaction("txn1", baseKey, 1, roachpb.SERIALIZABLE, txnClock)
@@ -386,10 +384,10 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		seqTS := txn.Timestamp
-		seqTS.Forward(*txn.LastHeartbeat)
-		entry := roachpb.SequenceCacheEntry{Key: txn.Key, Timestamp: seqTS, Epoch: epo, Sequence: 2 * epo}
-		if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil /* err */); err != nil {
+		abortTS := txn.Timestamp
+		abortTS.Forward(*txn.LastHeartbeat)
+		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: abortTS}
+		if err := tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -428,13 +426,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
 					strKey, expIntents, resolved[strKey])
 			}
-			entry := &roachpb.SequenceCacheEntry{}
-			err = tc.rng.sequence.Get(tc.store.Engine(), txns[strKey].ID, entry)
-			if err != nil && err != errNoCacheEntry {
+			entry := &roachpb.AbortCacheEntry{}
+			abortExists, err := tc.rng.abortCache.Get(tc.store.Engine(), txns[strKey].ID, entry)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if (err == errNoCacheEntry) != sp.expSeqGC {
-				return fmt.Errorf("%s: expected sequence cache gc: %t, found %+v", strKey, sp.expSeqGC, entry)
+			if (abortExists == false) != sp.expAbortGC {
+				return fmt.Errorf("%s: expected abort cache gc: %t, found %+v", strKey, sp.expAbortGC, entry)
 			}
 		}
 		return nil

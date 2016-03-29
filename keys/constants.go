@@ -31,7 +31,7 @@ var (
 	// the store and/or ranges which they refer to. Storing this
 	// information in the normal system keyspace would place the data on
 	// an arbitrary set of stores, with no guarantee of collocation.
-	// Local data includes store metadata, range metadata, sequence
+	// Local data includes store metadata, range metadata, abort
 	// cache values, transaction records, range-spanning binary tree
 	// node pointers, and message queues.
 	//
@@ -40,7 +40,7 @@ var (
 	// via the meta range addressing indexes.
 	//
 	// Some local data are not replicated, such as the store's 'ident'
-	// record. Most local data are replicated, such as sequence cache
+	// record. Most local data are replicated, such as abort cache
 	// entries and transaction rows, but are not addressable as normal
 	// MVCC values as part of transactions. Finally, some local data are
 	// stored as MVCC values and are addressable as part of distributed
@@ -71,7 +71,7 @@ var (
 	// encoded using EncodeUvarint. The specific sort of per-range
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
-	// case of sequence cache entry.
+	// case of abort cache entry.
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
@@ -83,9 +83,9 @@ var (
 	// same Range ID, so they can be manipulated either together or individually
 	// in a single scan.
 	localRangeIDReplicatedInfix = []byte("r")
-	// LocalSequenceCacheSuffix is the suffix used for the replay protection
-	// mechanism.
-	LocalSequenceCacheSuffix = []byte("res-")
+	// LocalAbortCacheSuffix is the suffix used to protect transactions
+	// from re-reading intents which were actually aborted by other txns.
+	LocalAbortCacheSuffix = []byte("abc-")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
 	localRaftTombstoneSuffix = []byte("rftb")
 	// localRaftAppliedIndexSuffix is the suffix for the raft applied index.
