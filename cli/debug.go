@@ -79,7 +79,7 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 	} else {
 		fmt.Printf("%q: ", kv.Key.Key)
 	}
-	for _, decoder := range []func(kv engine.MVCCKeyValue) (string, error){tryRaftLogEntry, tryRangeDescriptor, tryMeta, trySequence, tryTxn} {
+	for _, decoder := range []func(kv engine.MVCCKeyValue) (string, error){tryRaftLogEntry, tryRangeDescriptor, tryMeta, tryAbort, tryTxn} {
 		out, err := decoder(kv)
 		if err != nil {
 			continue
@@ -249,19 +249,19 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 	return txn.String() + "\n", nil
 }
 
-func trySequence(kv engine.MVCCKeyValue) (string, error) {
+func tryAbort(kv engine.MVCCKeyValue) (string, error) {
 	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
-		return "", errors.New("not a sequence cache key")
+		return "", errors.New("not an abort cache key")
 	}
-	_, _, _, err := keys.DecodeSequenceCacheKey(kv.Key.Key, nil)
+	_, err := keys.DecodeAbortCacheKey(kv.Key.Key, nil)
 	if err != nil {
 		return "", err
 	}
-	var dest roachpb.SequenceCacheEntry
+	var dest roachpb.AbortCacheEntry
 	if err := maybeUnmarshalInline(kv.Value, &dest); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("ts=%s, key=%q\n", dest.Timestamp, dest.Key), nil
+	return fmt.Sprintf("key=%q, pri=%d\n", dest.Key, dest.Priority), nil
 }
 
 func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {

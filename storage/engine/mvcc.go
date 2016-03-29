@@ -985,6 +985,11 @@ func mvccPutInternal(
 			} else if txn.Epoch < meta.Txn.Epoch {
 				return util.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
+			} else if txn.Sequence < meta.Txn.Sequence ||
+				(txn.Sequence == meta.Txn.Sequence && txn.BatchIndex <= meta.Txn.BatchIndex) {
+				// Replay error if we encounter an older sequence number or
+				// the same (or earlier) batch index for the same sequence.
+				return roachpb.NewTransactionRetryError()
 			}
 			// Make sure we process valueFn before clearing any earlier
 			// version.  For example, a conditional put within same

@@ -342,11 +342,13 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	}
 
 	// Put operation with earlier wall time. Will NOT be ignored.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1); err != nil {
+	txn := *txn1
+	txn.Sequence++
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, &txn); err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
+	value, _, err := MVCCGet(engine, testKey1, makeTS(3, 0), true, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,12 +358,13 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 	}
 
 	// Another put operation with earlier logical time. Will NOT be ignored.
-	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, txn1)
+	txn.Sequence++
+	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value2, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, _, err = MVCCGet(engine, testKey1, makeTS(3, 0), true, txn1)
+	value, _, err = MVCCGet(engine, testKey1, makeTS(3, 0), true, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,8 +413,10 @@ func TestMVCCIncrementTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
+	txn := *txn1
 	for i := 1; i <= 2; i++ {
-		newVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(0, 1), txn1, 1)
+		txn.Sequence++
+		newVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(0, 1), &txn, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -533,11 +538,13 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	txn := *txn1
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err != nil {
+	txn.Sequence++
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -750,22 +757,25 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err != nil {
+	txn := *txn1
+	txn.Sequence++
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 
-	if value, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, txn1); err != nil {
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, &txn); err != nil {
 		t.Fatal(err)
 	} else if value == nil {
 		t.Fatal("the value should not be empty")
 	}
 
-	if err := MVCCDelete(engine, nil, testKey1, makeTS(3, 0), txn1); err != nil {
+	txn.Sequence++
+	if err := MVCCDelete(engine, nil, testKey1, makeTS(3, 0), &txn); err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	if value, _, err := MVCCGet(engine, testKey1, makeTS(4, 0), true, txn1); err != nil {
+	if value, _, err := MVCCGet(engine, testKey1, makeTS(4, 0), true, &txn); err != nil {
 		t.Fatal(err)
 	} else if value != nil {
 		t.Fatal("the value should be empty")
@@ -1366,9 +1376,12 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
+	txn := *txn1
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, txn1)
-	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, txn1)
+	txn.Sequence++
+	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, &txn)
+	txn.Sequence++
+	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, &txn)
 	err = MVCCPut(engine, nil, testKey4, makeTS(1, 0), value4, nil)
 
 	_, err = MVCCDeleteRange(engine, nil, testKey2, testKey4, 0, makeTS(1, 0), nil, false)
@@ -1376,7 +1389,8 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 
-	_, err = MVCCDeleteRange(engine, nil, testKey2, testKey4, 0, makeTS(1, 0), txn1, false)
+	txn.Sequence++
+	_, err = MVCCDeleteRange(engine, nil, testKey2, testKey4, 0, makeTS(1, 0), &txn, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1503,20 +1517,27 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
 
 	// Write value1.
-	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value1, nil, txn1); err != nil {
+	txn := *txn1
+	txn.Sequence++
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value1, nil, &txn); err != nil {
 		t.Fatal(err)
 	}
 	// Now, overwrite value1 with value2 from same txn; should see value1 as pre-existing value.
-	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value2, &value1, txn1); err != nil {
+	txn.Sequence++
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value2, &value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 	// Writing value3 from a new epoch should see nil again.
-	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value3, nil, txn1e2); err != nil {
+	txn.Sequence++
+	txn.Epoch = 2
+	if err := MVCCConditionalPut(engine, nil, testKey1, clock.Now(), value3, nil, &txn); err != nil {
 		t.Fatal(err)
 	}
 	// Commit value3.
-	txn := makeTxn(*txn1e2Commit, makeTS(1, 0))
-	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+	txnCommit := txn
+	txnCommit.Status = roachpb.COMMITTED
+	txnCommit.Timestamp = makeTS(1, 0)
+	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txnCommit.Status, Txn: txnCommit.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
 	// Write value4 with an old timestamp without txn...should get a write too old error.
@@ -1524,7 +1545,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Fatalf("expected write too old error; got %s", err)
 	}
-	expTS := txn.Timestamp.Next()
+	expTS := txnCommit.Timestamp.Next()
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || !wtoErr.ActualTimestamp.Equal(expTS) {
 		t.Fatalf("expected wto error with actual timestamp = %s; got %s", expTS, wtoErr)
 	}
@@ -1835,28 +1856,37 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	// Start with epoch 1.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
+	txn := *txn1
+	txn.Sequence++
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, &txn); err != nil {
 		t.Fatal(err)
 	}
 	// Now write with greater timestamp and epoch 2.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1e2); err != nil {
+	txne2 := txn
+	txne2.Sequence++
+	txne2.Epoch = 2
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, &txne2); err != nil {
 		t.Fatal(err)
 	}
 	// Try a write with an earlier timestamp; this is just ignored.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1e2); err != nil {
+	txne2.Sequence++
+	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, &txne2); err != nil {
 		t.Fatal(err)
 	}
 	// Try a write with an earlier epoch; again ignored.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1); err == nil {
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, &txn); err == nil {
 		t.Fatal("unexpected success of a write with an earlier epoch")
 	}
 	// Try a write with different value using both later timestamp and epoch.
-	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value3, txn1e2); err != nil {
+	txne2.Sequence++
+	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value3, &txne2); err != nil {
 		t.Fatal(err)
 	}
 	// Resolve the intent.
-	txn := makeTxn(*txn1e2Commit, makeTS(1, 0))
-	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+	txne2Commit := txne2
+	txne2Commit.Status = roachpb.COMMITTED
+	txne2Commit.Timestamp = makeTS(1, 0)
+	if err := MVCCResolveWriteIntent(engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Status: txne2Commit.Status, Txn: txne2Commit.TxnMeta}); err != nil {
 		t.Fatal(err)
 	}
 	// Now try writing an earlier value without a txn--should get WriteTooOldError.
@@ -1964,6 +1994,54 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 	_, _, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, txn1)
 	if err == nil {
 		t.Fatalf("unexpected success of get")
+	}
+}
+
+// TestMVCCWriteWithSequenceAndBatchIndex verifies that retry errors
+// are thrown in the event that earlier sequence numbers are
+// encountered or if the same sequence and an earlier or same batch
+// index.
+func TestMVCCWriteWithSequenceAndBatchIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	testCases := []struct {
+		sequence   int32
+		batchIndex int32
+		expRetry   bool
+	}{
+		{1, 0, true},  // old sequence old batch index
+		{1, 1, true},  // old sequence, same batch index
+		{1, 2, true},  // old sequence, new batch index
+		{2, 0, true},  // same sequence, old batch index
+		{2, 1, true},  // same sequence, same batch index
+		{2, 2, false}, // same sequence, new batch index
+		{3, 0, false}, // new sequence, old batch index
+		{3, 1, false}, // new sequence, same batch index
+		{3, 2, false}, // new sequence, new batch index
+	}
+
+	ts := makeTS(0, 1)
+	for i, tc := range testCases {
+		key := roachpb.Key(fmt.Sprintf("key-%d", i))
+		// Start with sequence 2, batch index 1.
+		txn := *txn1
+		txn.Sequence = 2
+		txn.BatchIndex = 1
+		if err := MVCCPut(engine, nil, key, ts, value1, &txn); err != nil {
+			t.Fatal(err)
+		}
+
+		txn.Sequence, txn.BatchIndex = tc.sequence, tc.batchIndex
+		err := MVCCPut(engine, nil, key, ts, value2, &txn)
+		_, ok := err.(*roachpb.TransactionRetryError)
+		if !tc.expRetry && ok {
+			t.Fatalf("%d: unexpected error: %s", i, err)
+		} else if ok != tc.expRetry {
+			t.Fatalf("%d: expected retry %t but got %s", i, tc.expRetry, err)
+		}
 	}
 }
 

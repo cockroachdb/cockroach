@@ -339,19 +339,14 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 
 				// Now simulate a concurrent reader or writer. Our txn will
 				// either be pushed or aborted. Then issue a read and verify
-				// sequence cache error.
+				// that if we've been pushed, no error is returned and if we
+				// have been aborted, we get an aborted error.
 				var pErr *roachpb.Error
 				if read {
 					pushByReading(key)
 					_, pErr = txn.Get(key)
-					if iso == roachpb.SNAPSHOT {
-						if pErr != nil {
-							t.Fatalf("%s: expected no error; got %s", key, pErr)
-						}
-					} else {
-						if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-							t.Fatalf("%s: expected transaction retry error; got %s", key, pErr)
-						}
+					if pErr != nil {
+						t.Fatalf("%s: expected no error; got %s", key, pErr)
 					}
 				} else {
 					abortByWriting(key)

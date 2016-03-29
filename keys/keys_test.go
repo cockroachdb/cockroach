@@ -53,28 +53,20 @@ func TestMakeKey(t *testing.T) {
 	}
 }
 
-func TestSequenceCacheEncodeDecode(t *testing.T) {
+func TestAbortCacheEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const rangeID = 123
-	const testTxnEpoch = 5
-	const expSeq = 987
 	testTxnID, err := uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	if err != nil {
 		panic(err)
 	}
-	key := SequenceCacheKey(rangeID, testTxnID, testTxnEpoch, expSeq)
-	txnID, epoch, seq, err := DecodeSequenceCacheKey(key, nil)
+	key := AbortCacheKey(rangeID, testTxnID)
+	txnID, err := DecodeAbortCacheKey(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !roachpb.TxnIDEqual(txnID, testTxnID) {
 		t.Fatalf("expected txnID %q, got %q", testTxnID, txnID)
-	}
-	if epoch != testTxnEpoch {
-		t.Fatalf("expected epoch %d, got %d", testTxnEpoch, epoch)
-	}
-	if seq != expSeq {
-		t.Fatalf("expected sequence %d, got %d", expSeq, seq)
 	}
 }
 
@@ -104,7 +96,7 @@ func TestKeyAddressError(t *testing.T) {
 	testCases := []roachpb.Key{
 		StoreIdentKey(),
 		StoreGossipKey(),
-		SequenceCacheKey(0, uuid.NewV4(), 0, 0),
+		AbortCacheKey(0, uuid.NewV4()),
 		RaftTombstoneKey(0),
 		RaftAppliedIndexKey(0),
 		RaftTruncatedStateKey(0),

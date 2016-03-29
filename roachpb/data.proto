@@ -224,6 +224,15 @@ message TxnMeta {
   // the current wall time on the txn coordinator.
   optional Timestamp timestamp = 5 [(gogoproto.nullable) = false];
   optional int32 priority = 6 [(gogoproto.nullable) = false];
+  // A one-indexed sequence number which is increased on each batch
+  // sent as part of the transaction. Used to prevent replay and
+  // out-of-order application protection (by means of a transaction
+  // retry).
+  optional int32 sequence = 7 [(gogoproto.nullable) = false];
+  // A zero-indexed sequence number indicating the index of a
+  // command within a batch. This disambiguate Raft replays of a batch
+  // from multiple commands in a batch which modify the same key.
+  optional int32 batch_index = 8 [(gogoproto.nullable) = false];
 }
 
 // A Transaction is a unit of work performed on the database.
@@ -275,10 +284,6 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   optional bool write_too_old = 12 [(gogoproto.nullable) = false];
-  // A one-indexed sequence number which is increased on each batch sent as
-  // part of the transaction. Used to prevent replay and out-of-order
-  // application protection (by means of a transaction retry).
-  optional uint32 sequence = 10 [(gogoproto.nullable) = false];
   repeated Span intents = 11 [(gogoproto.nullable) = false];
 }
 
@@ -304,14 +309,17 @@ message Lease {
   optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }
 
-// SequenceCacheEntry holds information which together with the key at which
-// it is stored suffices to reconstruct the location of the original transaction
-// record along with its approximate age.
-message SequenceCacheEntry {
+// AbortCacheEntry contains information about a transaction which has
+// been aborted. It's written to a range's abort cache if the range
+// may have contained intents of the aborted txn. In the event that
+// the same transaction attempts to read keys it may have written
+// previously, this entry informs the transaction that it has aborted
+// and must start fresh with an updated priority.
+message AbortCacheEntry {
   // The key of the associated transaction.
   optional bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The original timestamp of the associated transaction.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  // The priority of the associated transaction. 0 unless pushed or aborted.
+  // The priority of the transaction.
   optional int32 priority = 3 [(gogoproto.nullable) = false];
 }
