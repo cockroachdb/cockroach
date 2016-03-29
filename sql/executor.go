@@ -595,6 +595,7 @@ func (e *Executor) execStmtInAbortedTxn(
 	if txnState.State != Aborted && txnState.State != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
 	}
+	// TODO(andrei/cuongdo): Figure out what statements to count here.
 	switch s := stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State == RestartWait {
@@ -636,6 +637,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 	if txnState.State != CommitWait {
 		panic("execStmtInCommitWaitTxn called outside of an aborted txn")
 	}
+	e.updateStmtCounts(stmt)
 	switch stmt.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		// Reset the state to allow new transactions to start.
