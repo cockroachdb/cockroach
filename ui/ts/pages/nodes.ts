@@ -221,7 +221,7 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Client Connections")
-            ).format(d3.format("d")).title("SQL Connections")
+            ).format(d3.format(".1")).title("SQL Connections")
           );
           this._addChart(
             this.activityAxes,
@@ -240,7 +240,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.query.count"))
                 .nonNegativeRate()
                 .title("Queries/sec")
-            ).format(d3.format("d")).title("Queries Per Second")
+            ).format(d3.format(".1")).title("Queries Per Second")
           );
           this._addChart(
             this.activityAxes,
@@ -256,7 +256,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format("d")).title("Reads")
+            ).format(d3.format(".1")).title("Reads")
            );
           this._addChart(
             this.sqlAxes,
@@ -270,7 +270,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .nonNegativeRate()
                 .title("Deletes")
-            ).format(d3.format("d")).title("Writes")
+            ).format(d3.format(".1")).title("Writes")
           );
           this._addChart(
             this.sqlAxes,
@@ -284,7 +284,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.txn.abort.count"))
                 .nonNegativeRate()
                 .title("Aborts")
-            ).format(d3.format("d")).title("Transactions")
+            ).format(d3.format(".1")).title("Transactions")
           );
           this._addChart(
             this.sqlAxes,
@@ -292,7 +292,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.ddl.count"))
                 .nonNegativeRate()
                 .title("DDL Statements")
-            ).format(d3.format("d")).title("Schema Changes")
+            ).format(d3.format(".1")).title("Schema Changes")
           );
 
           // System resource graphs
@@ -321,7 +321,7 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("goroutines"))
                 .title("goroutine count")
-            ).format(d3.format("d")).title("goroutine Count")
+            ).format(d3.format(".1")).title("goroutine Count")
           );
           this._addChart(
             this.systemAxes,
@@ -329,7 +329,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("cgocalls"))
                 .nonNegativeRate()
                 .title("cgo Calls")
-            ).format(d3.format("d")).title("cgo Calls")
+            ).format(d3.format(".1")).title("cgo Calls")
           );
 
           // Graphs for internals, such as RocksDB
@@ -370,7 +370,7 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("rocksdb.block.cache.misses"))
                 .nonNegativeRate()
                 .title("Cache Misses")
-            ).format(d3.format("d")).title("Block Cache Hits/Misses").stacked(true)
+            ).format(d3.format(".1")).title("Block Cache Hits/Misses").stacked(true)
           );
           this._addChart(
             this.internalsAxes,
@@ -397,7 +397,7 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("rocksdb.compactions"))
                 .nonNegativeRate()
                 .title("Compactions")
-            ).format(d3.format("d")).title("Flushes and Compactions")
+            ).format(d3.format(".1")).title("Flushes and Compactions")
           );
           this._addChart(
             this.internalsAxes,
@@ -408,7 +408,7 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("rocksdb.bloom.filter.prefix.useful"))
                 .nonNegativeRate()
                 .title("Useful")
-            ).format(d3.format("d")).title("Bloom Filter Prefix")
+            ).format(d3.format(".1")).title("Bloom Filter Prefix")
           );
           let fmt: (v: number) => string = d3.format(".1f");
           this._addChart(
@@ -750,7 +750,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .sources([this._nodeId])
                 .title("Client Connections")
-            ).format(d3.format("d")).title("SQL Connections")
+            ).format(d3.format(".1")).title("SQL Connections")
           );
           this._addChart(
             this.activityAxes,
@@ -772,7 +772,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("Queries/sec")
-            ).format(d3.format("d")).title("Queries Per Second")
+            ).format(d3.format(".1")).title("Queries Per Second")
           );
           this._addChart(
             this.activityAxes,
@@ -790,7 +790,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format("d")).title("Reads")
+            ).format(d3.format(".1")).title("Reads")
            );
           this._addChart(
             this.sqlAxes,
@@ -807,7 +807,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("Deletes")
-            ).format(d3.format("d")).title("Writes")
+            ).format(d3.format(".1")).title("Writes")
           );
           this._addChart(
             this.sqlAxes,
@@ -824,7 +824,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("Aborts")
-            ).format(d3.format("d")).title("Transactions")
+            ).format(d3.format(".1")).title("Transactions")
           );
           this._addChart(
             this.sqlAxes,
@@ -833,7 +833,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("DDL Statements")
-            ).format(d3.format("d")).title("Schema Changes")
+            ).format(d3.format(".1")).title("Schema Changes")
           );
 
           // System resource graphs
@@ -868,7 +868,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("goroutines"))
                 .sources([this._nodeId])
                 .title("goroutine count")
-            ).format(d3.format("d")).title("goroutine Count")
+            ).format(d3.format(".1")).title("goroutine Count")
           );
           this._addChart(
             this.systemAxes,
@@ -877,7 +877,7 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("cgo Calls")
-            ).format(d3.format("d")).title("cgo Calls")
+            ).format(d3.format(".1")).title("cgo Calls")
           );
 
           // Graphs for internals, such as RocksDB
@@ -926,7 +926,7 @@ module AdminViews {
                 .sources(this._storeIds)
                 .nonNegativeRate()
                 .title("Cache Misses")
-            ).format(d3.format("d")).title("Block Cache Hits/Misses").stacked(true)
+            ).format(d3.format(".1")).title("Block Cache Hits/Misses").stacked(true)
           );
           this._addChart(
             this.internalsAxes,
@@ -958,7 +958,7 @@ module AdminViews {
                 .sources(this._storeIds)
                 .nonNegativeRate()
                 .title("Compactions")
-            ).format(d3.format("d")).title("Flushes and Compactions")
+            ).format(d3.format(".1")).title("Flushes and Compactions")
           );
           this._addChart(
             this.internalsAxes,
@@ -971,7 +971,7 @@ module AdminViews {
                 .sources(this._storeIds)
                 .nonNegativeRate()
                 .title("Useful")
-            ).format(d3.format("d")).title("Bloom Filter Prefix")
+            ).format(d3.format(".1")).title("Bloom Filter Prefix")
           );
           let fmt: (v: number) => string = d3.format(".1f");
           this._addChart(
