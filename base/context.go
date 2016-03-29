@@ -73,6 +73,15 @@ func AddToFlagMap(f *pflag.Flag) {
 	FlagMap[val.Interface()] = f
 }
 
+// GetFlagName takes a flag value reference and looks it up in the flag map.
+// If not found, it returns the passed in default value.
+func GetFlagName(key interface{}, defaultName string) string {
+	if val, ok := FlagMap[key]; ok {
+		return val.Name
+	}
+	return defaultName
+}
+
 type lazyTLSConfig struct {
 	once      sync.Once
 	tlsConfig *tls.Config
@@ -167,12 +176,8 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 				ctx.serverTLSConfig.err = util.Errorf("error setting up client TLS config: %s", ctx.serverTLSConfig.err)
 			}
 		} else {
-			insecureFlag := "insecure"
-			certFlag := "cert"
-			if len(FlagMap) > 0 {
-				insecureFlag = FlagMap[&ctx.Insecure].Name
-				certFlag = FlagMap[&ctx.SSLCert].Name
-			}
+			insecureFlag := GetFlagName(&ctx.Insecure, "insecure")
+			certFlag := GetFlagName(&ctx.SSLCert, "cert")
 			ctx.serverTLSConfig.err = util.Errorf("--%s=false, but --%s is empty. Certificates must be specified.", insecureFlag, certFlag)
 		}
 	})
