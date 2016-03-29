@@ -125,5 +125,22 @@ module Models {
         },
       });
     }
+
+    interface ClusterID {
+      cluster_id: string;
+    }
+
+    let clusterID: string;
+
+    export function getClusterID(): MithrilPromise<string> {
+      let d: MithrilDeferred<string> = m.deferred();
+      if (clusterID) {
+        d.resolve(clusterID);
+      } else {
+        m.request<ClusterID>({url: "/_admin/v1/cluster", config: Utils.Http.XHRConfig})
+          .then((data: ClusterID) => d.resolve(data.cluster_id));
+      }
+      return d.promise;
+    }
   }
 }
