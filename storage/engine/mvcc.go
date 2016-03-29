@@ -545,8 +545,7 @@ func newGetBuffer() *getBuffer {
 }
 
 func (b *getBuffer) release() {
-	b.meta.Reset()
-	b.value.Reset()
+	*b = getBuffer{}
 	getBufferPool.Put(b)
 }
 
@@ -830,9 +829,7 @@ func newPutBuffer() *putBuffer {
 }
 
 func (b *putBuffer) release() {
-	b.meta.Reset()
-	b.newMeta.Reset()
-	b.newTxn.Reset()
+	*b = putBuffer{}
 	putBufferPool.Put(b)
 }
 
@@ -1712,13 +1709,10 @@ func (b IterAndBuf) Cleanup() {
 func MVCCResolveWriteIntentRange(
 	engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64,
 ) (int64, error) {
-	buf := newPutBuffer()
-	defer buf.release()
+	iterAndBuf := GetIterAndBuf(engine)
+	defer iterAndBuf.Cleanup()
 
-	iter := engine.NewIterator(nil)
-	defer iter.Close()
-
-	return MVCCResolveWriteIntentRangeUsingIter(engine, IterAndBuf{buf, iter}, ms, intent, max)
+	return MVCCResolveWriteIntentRangeUsingIter(engine, iterAndBuf, ms, intent, max)
 }
 
 // MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back) the

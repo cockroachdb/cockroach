@@ -305,7 +305,7 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsR
 			privilegesCol = "Privileges"
 		)
 
-		scanner := newResultScanner(r.ResultList[0].Columns)
+		scanner := makeResultScanner(r.ResultList[0].Columns)
 		for _, row := range r.ResultList[0].Rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant DatabaseDetailsResponse_Grant
@@ -317,14 +317,14 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *DatabaseDetailsR
 				return nil, err
 			}
 			grant.Privileges = strings.Split(privileges, ",")
-			resp.Grants = append(resp.Grants, &grant)
+			resp.Grants = append(resp.Grants, grant)
 		}
 	}
 
 	// Marshal table names.
 	{
 		const tableCol = "Table"
-		scanner := newResultScanner(r.ResultList[1].Columns)
+		scanner := makeResultScanner(r.ResultList[1].Columns)
 		if a, e := len(r.ResultList[1].Columns), 1; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
@@ -376,7 +376,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 			nullCol    = "Null"
 			defaultCol = "Default"
 		)
-		scanner := newResultScanner(r.ResultList[0].Columns)
+		scanner := makeResultScanner(r.ResultList[0].Columns)
 		for _, row := range r.ResultList[0].Rows {
 			var col TableDetailsResponse_Column
 			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
@@ -397,7 +397,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 					return nil, err
 				}
 			}
-			resp.Columns = append(resp.Columns, &col)
+			resp.Columns = append(resp.Columns, col)
 		}
 	}
 
@@ -411,7 +411,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 			directionCol = "Direction"
 			storingCol   = "Storing"
 		)
-		scanner := newResultScanner(r.ResultList[1].Columns)
+		scanner := makeResultScanner(r.ResultList[1].Columns)
 		for _, row := range r.ResultList[1].Rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var index TableDetailsResponse_Index
@@ -433,7 +433,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 			if err := scanner.Scan(row, storingCol, &index.Storing); err != nil {
 				return nil, err
 			}
-			resp.Indexes = append(resp.Indexes, &index)
+			resp.Indexes = append(resp.Indexes, index)
 		}
 	}
 
@@ -443,7 +443,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 			userCol       = "User"
 			privilegesCol = "Privileges"
 		)
-		scanner := newResultScanner(r.ResultList[2].Columns)
+		scanner := makeResultScanner(r.ResultList[2].Columns)
 		for _, row := range r.ResultList[2].Rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant TableDetailsResponse_Grant
@@ -455,7 +455,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 				return nil, err
 			}
 			grant.Privileges = strings.Split(privileges, ",")
-			resp.Grants = append(resp.Grants, &grant)
+			resp.Grants = append(resp.Grants, grant)
 		}
 	}
 
@@ -502,7 +502,7 @@ func (s *adminServer) Users(ctx context.Context, req *UsersRequest) (*UsersRespo
 
 	var resp UsersResponse
 	for _, row := range r.ResultList[0].Rows {
-		resp.Users = append(resp.Users, &UsersResponse_User{string(row.Values[0].(parser.DString))})
+		resp.Users = append(resp.Users, UsersResponse_User{string(row.Values[0].(parser.DString))})
 	}
 	return &resp, nil
 }
@@ -538,15 +538,14 @@ func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsRe
 
 	// Marshal response.
 	var resp EventsResponse
-	scanner := newResultScanner(r.ResultList[0].Columns)
+	scanner := makeResultScanner(r.ResultList[0].Columns)
 	for _, row := range r.ResultList[0].Rows {
 		var event EventsResponse_Event
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, err
 		}
-		nanos := ts.UnixNano()
-		event.Timestamp = &EventsResponse_Event_Timestamp{Sec: nanos / 1e9, Nsec: uint32(nanos % 1e9)}
+		event.Timestamp = EventsResponse_Event_Timestamp{Sec: ts.Unix(), Nsec: uint32(ts.Nanosecond())}
 		if err := scanner.ScanIndex(row, 1, &event.EventType); err != nil {
 			return nil, err
 		}
@@ -563,7 +562,7 @@ func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsRe
 			return nil, err
 		}
 
-		resp.Events = append(resp.Events, &event)
+		resp.Events = append(resp.Events, event)
 	}
 	return &resp, nil
 }
@@ -595,8 +594,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 	}
 
 	// Marshal results.
-	var resp GetUIDataResponse
-	resp.KeyValues = make(map[string]*GetUIDataResponse_Value)
+	resp := GetUIDataResponse{KeyValues: make(map[string]GetUIDataResponse_Value)}
 	for _, row := range r.ResultList[0].Rows {
 		dKey, ok := row.Values[0].(parser.DString)
 		if !ok {
@@ -611,10 +609,9 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[2])
 		}
 
-		nanos := dLastUpdated.UnixNano()
-		resp.KeyValues[string(dKey)] = &GetUIDataResponse_Value{
+		resp.KeyValues[string(dKey)] = GetUIDataResponse_Value{
 			Value:       []byte(dValue),
-			LastUpdated: &GetUIDataResponse_Timestamp{Sec: nanos / 1e9, Nsec: uint32(nanos % 1e9)},
+			LastUpdated: GetUIDataResponse_Timestamp{Sec: dLastUpdated.Unix(), Nsec: uint32(dLastUpdated.Nanosecond())},
 		}
 	}
 	return &resp, nil
@@ -704,9 +701,7 @@ func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterR
 	if uuid.Equal(clusterID, *uuid.EmptyUUID) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
-	var resp ClusterResponse
-	resp.ClusterID = clusterID.String()
-	return &resp, nil
+	return &ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
@@ -780,19 +775,19 @@ type resultScanner struct {
 	colNameToIdx map[string]int
 }
 
-func newResultScanner(cols []sql.ResultColumn) *resultScanner {
+func makeResultScanner(cols []sql.ResultColumn) resultScanner {
 	rs := resultScanner{
 		colNameToIdx: make(map[string]int),
 	}
 	for i, col := range cols {
 		rs.colNameToIdx[col.Name] = i
 	}
-	return &rs
+	return rs
 }
 
 // IsNull returns whether the specified column of the given row contains
 // a SQL NULL value.
-func (rs *resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
+func (rs resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
 	idx, ok := rs.colNameToIdx[col]
 	if !ok {
 		return false, util.Errorf("result is missing column %s", col)
@@ -801,7 +796,7 @@ func (rs *resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
 }
 
 // ScanIndex scans the given column index of the given row into dst.
-func (rs *resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{}) error {
+func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{}) error {
 	src := row.Values[index]
 
 	switch d := dst.(type) {
@@ -864,7 +859,7 @@ func (rs *resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{}
 }
 
 // Scan scans the column with the given name from the given row into dst.
-func (rs *resultScanner) Scan(row sql.ResultRow, colName string, dst interface{}) error {
+func (rs resultScanner) Scan(row sql.ResultRow, colName string, dst interface{}) error {
 	idx, ok := rs.colNameToIdx[colName]
 	if !ok {
 		return util.Errorf("result is missing column %s", colName)
