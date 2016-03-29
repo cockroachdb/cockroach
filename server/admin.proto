@@ -49,7 +49,7 @@ message DatabaseDetailsResponse {
   }
 
   // grants are the results of SHOW GRANTS for this database.
-  repeated Grant grants = 1;
+  repeated Grant grants = 1 [(gogoproto.nullable) = false];
 
   // table_names contains the names of all tables (SHOW TABLES) in this
   // database.
@@ -111,9 +111,9 @@ message TableDetailsResponse {
     bool storing = 6;
   }
 
-  repeated Grant grants = 1;
-  repeated Column columns = 2;
-  repeated Index indexes = 3;
+  repeated Grant grants = 1 [(gogoproto.nullable) = false];
+  repeated Column columns = 2 [(gogoproto.nullable) = false];
+  repeated Index indexes = 3 [(gogoproto.nullable) = false];
 
   // range_count is the size of the table in ranges. This provides a rough
   // estimate of the storage requirements for the table.
@@ -132,7 +132,7 @@ message UsersResponse {
   }
 
   // usernames is a list of users for the CockroachDB cluster.
-  repeated User users = 1;
+  repeated User users = 1 [(gogoproto.nullable) = false];
 }
 
 // EventsRequest is a request for event log entries, optionally filtered
@@ -159,7 +159,7 @@ message EventsResponse {
     }
 
     // timestamp is the time at which the event occurred.
-    Timestamp timestamp = 1;
+    Timestamp timestamp = 1 [(gogoproto.nullable) = false];
 
     // event_type is the type of the event (e.g. "create_table", "drop_table".
     string event_type = 2;
@@ -178,7 +178,7 @@ message EventsResponse {
     bytes unique_id = 6 [(gogoproto.customname) = "UniqueID"];
   }
 
-  repeated Event events = 1;
+  repeated Event events = 1 [(gogoproto.nullable) = false];
 }
 
 // SetUIDataRequest stores the given key/value pairs in the system.ui table.
@@ -217,12 +217,12 @@ message GetUIDataResponse {
     bytes value = 1;
 
     // last_updated is the time at which the value was last updated.
-    Timestamp last_updated = 2;
+    Timestamp last_updated = 2 [(gogoproto.nullable) = false];
   }
 
   // key_values maps keys to their retrieved values. If this doesn't contain a
   // a requested key, that key was not found.
-  map<string, Value> key_values = 1;
+  map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
 
 // ClusterRequest requests metadata for the cluster.
@@ -289,7 +289,7 @@ service Admin {
   //
   // Together, SetUIData and GetUIData provide access to a "cookie jar" for the
   // admin UI. The structure of the underlying data is meant to be opaque to the
-  // server. 
+  // server.
   rpc SetUIData(SetUIDataRequest) returns (SetUIDataResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/uidata"
@@ -297,7 +297,7 @@ service Admin {
     };
   }
 
-  // Example URLs: 
+  // Example URLs:
   // - /_admin/v1/uidata?keys=MYKEY
   // - /_admin/v1/uidata?keys=MYKEY1&keys=MYKEY2
   //
