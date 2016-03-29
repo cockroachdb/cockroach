@@ -1709,13 +1709,10 @@ func (b IterAndBuf) Cleanup() {
 func MVCCResolveWriteIntentRange(
 	engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64,
 ) (int64, error) {
-	buf := newPutBuffer()
-	defer buf.release()
+	iterAndBuf := GetIterAndBuf(engine)
+	defer iterAndBuf.Cleanup()
 
-	iter := engine.NewIterator(nil)
-	defer iter.Close()
-
-	return MVCCResolveWriteIntentRangeUsingIter(engine, IterAndBuf{buf, iter}, ms, intent, max)
+	return MVCCResolveWriteIntentRangeUsingIter(engine, iterAndBuf, ms, intent, max)
 }
 
 // MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back) the
