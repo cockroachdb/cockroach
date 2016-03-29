@@ -340,6 +340,15 @@ func (v Value) Verify(key []byte) error {
 	return nil
 }
 
+// ShallowClone returns a shallow clone of the receiver.
+func (v *Value) ShallowClone() *Value {
+	if v == nil {
+		return nil
+	}
+	t := *v
+	return &t
+}
+
 // MakeValueFromString returns a value with bytes and tag set.
 func MakeValueFromString(s string) Value {
 	v := Value{}

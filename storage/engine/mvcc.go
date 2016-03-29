@@ -1118,12 +1118,12 @@ func MVCCConditionalPut(
 			// Every type flows through here, so we can't use the typed getters.
 			if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
 				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal,
+					ActualValue: existVal.ShallowClone(),
 				}
 			}
 		} else if expValPresent != existValPresent {
 			return nil, &roachpb.ConditionFailedError{
-				ActualValue: existVal,
+				ActualValue: existVal.ShallowClone(),
 			}
 		}
 		return value.RawBytes, nil
