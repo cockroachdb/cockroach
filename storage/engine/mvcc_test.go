@@ -1445,10 +1445,12 @@ func TestMVCCConditionalPut(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on key already exists")
 	}
+	var actualValue *roachpb.Value
 	switch e := err.(type) {
 	default:
 		t.Fatalf("unexpected error %T", e)
 	case *roachpb.ConditionFailedError:
+		actualValue = e.ActualValue
 		if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				e.ActualValue.RawBytes, value1.RawBytes)
@@ -1464,6 +1466,9 @@ func TestMVCCConditionalPut(t *testing.T) {
 	default:
 		t.Fatalf("unexpected error %T", e)
 	case *roachpb.ConditionFailedError:
+		if actualValue == e.ActualValue {
+			t.Fatalf("unexpected sharing of *roachpb.Value")
+		}
 		if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				e.ActualValue.RawBytes, value1.RawBytes)

@@ -540,6 +540,16 @@ var getBufferPool = sync.Pool{
 	},
 }
 
+func newGetBuffer() *getBuffer {
+	return getBufferPool.Get().(*getBuffer)
+}
+
+func (b *getBuffer) release() {
+	b.meta.Reset()
+	b.value.Reset()
+	getBufferPool.Put(b)
+}
+
 // MVCCGet returns the value for the key specified in the request,
 // while satisfying the given timestamp condition. The key may contain
 // arbitrary bytes. If no value for the key exists, or it has been
@@ -576,8 +586,8 @@ func mvccGetUsingIter(
 		return nil, nil, emptyKeyError()
 	}
 
-	buf := getBufferPool.Get().(*getBuffer)
-	defer getBufferPool.Put(buf)
+	buf := newGetBuffer()
+	defer buf.release()
 
 	metaKey := MakeMVCCMetadataKey(key)
 	ok, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
@@ -815,6 +825,17 @@ var putBufferPool = sync.Pool{
 	},
 }
 
+func newPutBuffer() *putBuffer {
+	return putBufferPool.Get().(*putBuffer)
+}
+
+func (b *putBuffer) release() {
+	b.meta.Reset()
+	b.newMeta.Reset()
+	b.newTxn.Reset()
+	putBufferPool.Put(b)
+}
+
 // MVCCPut sets the value for a specified key. It will save the value
 // with different versions according to its timestamp and update the
 // key metadata. The timestamp must be passed as a parameter; using
@@ -869,13 +890,12 @@ func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.K
 		rawBytes = value.RawBytes
 	}
 
-	buf := putBufferPool.Get().(*putBuffer)
+	buf := newPutBuffer()
 
 	err := mvccPutInternal(engine, iter, ms, key, timestamp, rawBytes, txn, buf, valueFn)
 
-	// Using defer would be more convenient, but it is measurably
-	// slower.
-	putBufferPool.Put(buf)
+	// Using defer would be more convenient, but it is measurably slower.
+	buf.release()
 	return err
 }
 
@@ -916,8 +936,8 @@ func mvccPutInternal(
 		}
 		var exVal *roachpb.Value
 		if exists {
-			getBuf := getBufferPool.Get().(*getBuffer)
-			defer getBufferPool.Put(getBuf)
+			getBuf := newGetBuffer()
+			defer getBuf.release()
 			getBuf.meta = buf.meta // initialize get metadata from what we've already read
 			if exVal, _, err = mvccGetInternal(iter, metaKey, readTS, true /* consistent */, txn, getBuf); err != nil {
 				return nil, err
@@ -1118,12 +1138,12 @@ func MVCCConditionalPut(
 			// Every type flows through here, so we can't use the typed getters.
 			if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
 				return nil, &roachpb.ConditionFailedError{
-					ActualValue: existVal,
+					ActualValue: existVal.ShallowClone(),
 				}
 			}
 		} else if expValPresent != existValPresent {
 			return nil, &roachpb.ConditionFailedError{
-				ActualValue: existVal,
+				ActualValue: existVal.ShallowClone(),
 			}
 		}
 		return value.RawBytes, nil
@@ -1169,7 +1189,7 @@ func MVCCDeleteRange(
 ) ([]roachpb.Key, error) {
 	var keys []roachpb.Key
 	num := int64(0)
-	buf := putBufferPool.Get().(*putBuffer)
+	buf := newPutBuffer()
 	iter := engine.NewIterator(endKey)
 	f := func(kv roachpb.KeyValue) (bool, error) {
 		if err := mvccPutInternal(engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
@@ -1192,7 +1212,7 @@ func MVCCDeleteRange(
 	_, err := MVCCIterate(engine, key, endKey, roachpb.MaxTimestamp, true, txn, false, f)
 
 	iter.Close()
-	putBufferPool.Put(buf)
+	buf.release()
 	return keys, err
 }
 
@@ -1311,8 +1331,8 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 		return nil, emptyKeyError()
 	}
 
-	buf := getBufferPool.Get().(*getBuffer)
-	defer getBufferPool.Put(buf)
+	buf := newGetBuffer()
+	defer buf.release()
 
 	// getMetaFunc is used to get the meta and the meta key of the current
 	// row. encEndKey is used to judge whether iterator exceeds the boundary or
@@ -1459,11 +1479,11 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, intent roachpb.Intent) error {
-	buf := putBufferPool.Get().(*putBuffer)
+	buf := newPutBuffer()
 	iter := engine.NewIterator(intent.Key)
 	err := mvccResolveWriteIntent(engine, iter, ms, intent, buf)
 	// Using defer would be more convenient, but it is measurably slower.
-	putBufferPool.Put(buf)
+	buf.release()
 	iter.Close()
 	return err
 }
@@ -1674,14 +1694,14 @@ type IterAndBuf struct {
 // GetIterAndBuf returns a IterAndBuf for passing into various MVCC* methods.
 func GetIterAndBuf(engine Engine) IterAndBuf {
 	return IterAndBuf{
-		buf:  putBufferPool.Get().(*putBuffer),
+		buf:  newPutBuffer(),
 		iter: engine.NewIterator(nil),
 	}
 }
 
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
-	putBufferPool.Put(b.buf)
+	b.buf.release()
 	b.iter.Close()
 }
 
@@ -1692,8 +1712,8 @@ func (b IterAndBuf) Cleanup() {
 func MVCCResolveWriteIntentRange(
 	engine Engine, ms *MVCCStats, intent roachpb.Intent, max int64,
 ) (int64, error) {
-	buf := putBufferPool.Get().(*putBuffer)
-	defer putBufferPool.Put(buf)
+	buf := newPutBuffer()
+	defer buf.release()
 
 	iter := engine.NewIterator(nil)
 	defer iter.Close()
