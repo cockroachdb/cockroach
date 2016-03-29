@@ -40,27 +40,28 @@ module Utils {
     /**
      * Bytes creates a string representation for a number of bytes. For
      * large numbers of bytes, the value will be converted into a large unit
-     * (e.g. Kibibytes, Mebibytes).
+     * (e.g. Kilobytes, Megabytes, etc.). Note that these values are
+     * denominated in 1024 byte multiples.
      *
      * This function was adapted from
      * https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
      */
-    const kibi: number = 1024;
-    const units: string[] = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+    const kilo: number = 1024;
+    const units: string[] = ["KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
     export interface UnitValue {
       value: number;
       units: string;
     }
 
     export function BytesToUnitValue(bytes: number): UnitValue {
-      if (Math.abs(bytes) < kibi) {
+      if (Math.abs(bytes) < kilo) {
         return {value: bytes, units: "B"};
       }
       let u: number = -1;
       do {
-        bytes /= kibi;
+        bytes /= kilo;
         ++u;
-      } while (Math.abs(bytes) >= kibi && u < units.length - 1);
+      } while (Math.abs(bytes) >= kilo && u < units.length - 1);
       return {
         value: bytes,
         units: units[u],
