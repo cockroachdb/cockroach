@@ -85,13 +85,22 @@ module Models {
 
       constructor() {
         this.loadPromise = this.load();
+
+        this.loadPromise.then(() => {
+          Models.CockroachLabs.cockroachLabsSingleton.loadingPromise.then(() => {
+            if (!Models.CockroachLabs.cockroachLabsSingleton.synchronized) {
+              Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes);
+            }
+          });
+        });
       }
 
       save(): MithrilPromise<void> {
         // Make sure we loaded the data first
         // TODO: check timestamp on the backend to prevent overwriting data without loading first
         if (this.loaded) {
-          return setHelpUsData(this.attributes)
+          // save the data both to the backend and the Cockroach Labs servers
+          return m.sync([Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes), setHelpUsData(this.attributes)])
           .then(() => {
             this.savedAttributes = _.clone(this.attributes);
           });
