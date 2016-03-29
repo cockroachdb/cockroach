@@ -32,6 +32,7 @@ import (
 	"github.com/elastic/gosigar"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
@@ -358,20 +359,21 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 	} else {
 		options.Add("sslmode", "verify-full")
 		requiredFlags := []struct {
-			name  string
-			value *string
+			name     string
+			value    string
+			flagName string
 		}{
-			{"sslcert", &ctx.SSLCert},
-			{"sslkey", &ctx.SSLCertKey},
-			{"sslrootcert", &ctx.SSLCA},
+			{"sslcert", ctx.SSLCert, cliflags.CertName},
+			{"sslkey", ctx.SSLCertKey, cliflags.KeyName},
+			{"sslrootcert", ctx.SSLCA, cliflags.CACertName},
 		}
 		for _, c := range requiredFlags {
-			if *c.value == "" {
-				return nil, fmt.Errorf("missing --%s flag", base.FlagMap[c.value].Name)
+			if c.value == "" {
+				return nil, fmt.Errorf("missing --%s flag", c.flagName)
 			}
-			path := absPath(*c.value)
+			path := absPath(c.value)
 			if _, err := os.Stat(path); err != nil {
-				return nil, fmt.Errorf("file for --%s flag gave error: %v", base.FlagMap[c.value].Name, err)
+				return nil, fmt.Errorf("file for --%s flag gave error: %v", c.flagName, err)
 			}
 			options.Add(c.name, path)
 		}
