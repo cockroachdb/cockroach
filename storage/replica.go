@@ -132,7 +132,8 @@ var updatesTimestampCacheMethods = [...]bool{
 	roachpb.ReverseScan: true,
 	// EndTransaction updates the write timestamp cache to prevent
 	// replays. Replays for the same transaction key and timestamp will
-	// have Txn.WriteTooOld=true and must retry on EndTransaction.
+	// have Txn.WriteTooOld=true and must retry on BeginTransaction or
+	// EndTransaction.
 	roachpb.EndTransaction: true,
 }
 
