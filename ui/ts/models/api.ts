@@ -95,6 +95,8 @@ module Models {
       });
     }
 
+    // TODO: Refactor getUIData and setUIData so they just return <any> and we
+    // don't have to scatter encoding and decoding everywhere they are used.
     export function getUIData(keys: string[]): MithrilPromise<GetUIDataResponse> {
       let d: MithrilDeferred<GetUIDataResponse> = m.deferred();
       // Create the URL, which looks like this:
@@ -124,6 +126,23 @@ module Models {
           key_values: keyValues,
         },
       });
+    }
+
+    interface ClusterID {
+      cluster_id: string;
+    }
+
+    let clusterID: string;
+
+    export function getClusterID(): MithrilPromise<string> {
+      let d: MithrilDeferred<string> = m.deferred();
+      if (clusterID) {
+        d.resolve(clusterID);
+      } else {
+        m.request<ClusterID>({url: "/_admin/v1/cluster", config: Utils.Http.XHRConfig})
+          .then((data: ClusterID) => d.resolve(data.cluster_id));
+      }
+      return d.promise;
     }
   }
 }

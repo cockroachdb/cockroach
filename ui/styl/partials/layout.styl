@@ -131,12 +131,13 @@ input
     padding-bottom 0
     margin-bottom 25px
 
-  &:invalid
-    border-color $secondary-red-2
-  &:invalid + span.status:after
-      content "Required"
-  &:invalid + * + span.icon:after
-    content "\26A0"
+  &.show-required
+    &:invalid
+      border-color $secondary-red-2
+    &:invalid + span.status:after
+        content "Required"
+    &:invalid + * + span.icon:after
+      content "\26A0"
 
 span.status
   position absolute
@@ -306,6 +307,10 @@ a.toggle
       &:first-child
         padding-top 0
 
+// keep the banner height at 73px so we only see the first banner
+#banner
+  max-height 73px
+
 .banner
   width 100%
   background-color $secondary-blue
@@ -323,12 +328,6 @@ a.toggle
 
     &.hidden
       height 0
-
-  // only show the first .banner
-  // any .banner with a previous .banner as a sibling is hidden
-  & ~ &
-    height 0
-    opacity 0
 
   button
     margin-left 15px
