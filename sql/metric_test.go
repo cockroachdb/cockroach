@@ -6,22 +6,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func checkCounterEQ(t *testing.T, s *testServer, key string, e int64) {
-	if a := s.MustGetSQLCounter(key); !(a == e) {
-		t.Error(util.ErrorfSkipFrames(1, "stat %s: actual %d != expected %d", key, a, e))
-	}
-}
-
-func checkCounterGE(t *testing.T, s *testServer, key string, e int64) {
-	if a := s.MustGetSQLCounter(key); !(a >= e) {
-		t.Error(util.ErrorfSkipFrames(1, "stat %s: expected: actual %d >= %d", key, a, e))
-	}
-}
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -68,16 +56,16 @@ func TestQueryCounts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		checkCounterEQ(t, s, "txn.begin.count", tc.txnBeginCount)
-		checkCounterEQ(t, s, "select.count", tc.selectCount)
-		checkCounterEQ(t, s, "update.count", tc.updateCount)
-		checkCounterEQ(t, s, "insert.count", tc.insertCount)
-		checkCounterEQ(t, s, "delete.count", tc.deleteCount)
-		checkCounterEQ(t, s, "ddl.count", tc.ddlCount)
-		checkCounterEQ(t, s, "misc.count", tc.miscCount)
-		checkCounterEQ(t, s, "txn.commit.count", tc.txnCommitCount)
-		checkCounterEQ(t, s, "txn.rollback.count", tc.txnRollbackCount)
-		checkCounterEQ(t, s, "txn.abort.count", 0)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.begin.count", tc.txnBeginCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "select.count", tc.selectCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "update.count", tc.updateCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "insert.count", tc.insertCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "delete.count", tc.deleteCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "ddl.count", tc.ddlCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "misc.count", tc.miscCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.commit.count", tc.txnCommitCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.rollback.count", tc.txnRollbackCount)
+		sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.abort.count", 0)
 
 		// Everything after this query will also fail, so quit now to avoid deluge of errors.
 		if t.Failed() {
@@ -127,11 +115,11 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkCounterEQ(t, s, "txn.abort.count", 1)
-	checkCounterEQ(t, s, "txn.begin.count", 1)
-	checkCounterEQ(t, s, "txn.rollback.count", 0)
-	checkCounterEQ(t, s, "txn.commit.count", 0)
-	checkCounterEQ(t, s, "insert.count", 1)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.abort.count", 1)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.begin.count", 1)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.rollback.count", 0)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.commit.count", 0)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "insert.count", 1)
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
@@ -150,7 +138,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	checkCounterEQ(t, s, "txn.abort.count", 1)
-	checkCounterEQ(t, s, "txn.begin.count", 1)
-	checkCounterEQ(t, s, "select.count", 1)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.abort.count", 1)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "txn.begin.count", 1)
+	sqlutils.CheckCounterEQ(t, &s.TestServer, "select.count", 1)
 }
