@@ -14,7 +14,9 @@
 //
 // Author: Andrei Matei (andreimatei1@gmail.com)
 
-package sqlutils
+// Functions used for testing metrics.
+
+package sql_test
 
 import (
 	"testing"
@@ -24,13 +26,13 @@ import (
 )
 
 func CheckCounterEQ(t *testing.T, s *server.TestServer, key string, e int64) {
-	if a := s.MustGetSQLCounter(key); !(a == e) {
+	if a := s.MustGetSQLCounter(key); a != e {
 		t.Error(util.ErrorfSkipFrames(1, "stat %s: actual %d != expected %d", key, a, e))
 	}
 }
 
 func CheckCounterGE(t *testing.T, s *server.TestServer, key string, e int64) {
-	if a := s.MustGetSQLCounter(key); !(a >= e) {
+	if a := s.MustGetSQLCounter(key); a < e {
 		t.Error(util.ErrorfSkipFrames(1, "stat %s: expected: actual %d >= %d", key, a, e))
 	}
 }
