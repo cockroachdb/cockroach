@@ -145,7 +145,7 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Connections")
-              ).format(d3.format("d")).title("Connections")
+              ).format(d3.format(".1")).title("Connections")
           );
 
           this._addChart(
@@ -164,7 +164,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format("d")).title("SELECTs")
+            ).format(d3.format(".1")).title("SELECTs")
           );
 
           this._addChart(
@@ -178,7 +178,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .nonNegativeRate()
                 .title("Delete")
-            ).format(d3.format("d")).title("INSERTs, UPDATEs, DELETEs")
+            ).format(d3.format(".1")).title("INSERTs, UPDATEs, DELETEs")
           );
 
           this.exec = new Metrics.Executor(this._query);
