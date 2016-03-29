@@ -1524,10 +1524,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	if ba.Txn == nil {
 		// When not transactional, allow empty timestamp and simply use
 		// local clock.
-		if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+		if ba.Timestamp.IsZero() {
 			ba.Timestamp.Forward(s.Clock().Now())
 		}
-	} else if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	} else if !ba.Timestamp.IsZero() {
 		return nil, roachpb.NewErrorf("transactional request must not set batch timestamp")
 	} else {
 		// Always use the original timestamp for reads and writes, even

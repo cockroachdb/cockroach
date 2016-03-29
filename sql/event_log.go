@@ -122,7 +122,7 @@ VALUES(
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
 func (ev EventLogger) selectEventTimestamp(input roachpb.Timestamp) time.Time {
-	if input == roachpb.ZeroTimestamp {
+	if input.IsZero() {
 		return ev.LeaseManager.clock.PhysicalTime()
 	}
 	return input.GoTime()

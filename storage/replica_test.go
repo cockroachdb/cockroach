@@ -2916,7 +2916,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
-		if !test.heartbeat.Equal(roachpb.ZeroTimestamp) {
+		if !test.heartbeat.IsZero() {
 			pushee.LastHeartbeat = &test.heartbeat
 		}
 		_, btH := beginTxnArgs(key, pushee)

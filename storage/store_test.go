@@ -657,7 +657,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				if pErr == nil {
 					t.Fatal("expected an error")
 				}
-				if pErr.Now == roachpb.ZeroTimestamp {
+				if pErr.Now.IsZero() {
 					t.Fatal("timestamp not annotated on error")
 				}
 			}},
@@ -666,7 +666,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				if pErr != nil {
 					t.Fatal(pErr)
 				}
-				if pReply.Now == roachpb.ZeroTimestamp {
+				if pReply.Now.IsZero() {
 					t.Fatal("timestamp not annotated on batch response")
 				}
 			}},

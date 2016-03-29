@@ -213,6 +213,11 @@ func (t Timestamp) Equal(s Timestamp) bool {
 	return t.WallTime == s.WallTime && t.Logical == s.Logical
 }
 
+// IsZero reports whether t represents the zero timestamp.
+func (t Timestamp) IsZero() bool {
+	return t.Equal(ZeroTimestamp)
+}
+
 func (t Timestamp) String() string {
 	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
 }

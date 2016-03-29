@@ -437,9 +437,9 @@ func (ds *DistSender) sendSingleRange(
 	}
 
 	// If the reply contains a timestamp, update the local HLC with it.
-	if br.Error != nil && br.Error.Now != roachpb.ZeroTimestamp {
+	if br.Error != nil && !br.Error.Now.IsZero() {
 		ds.clock.Update(br.Error.Now)
-	} else if br.Now != roachpb.ZeroTimestamp {
+	} else if !br.Now.IsZero() {
 		ds.clock.Update(br.Now)
 	}
 
@@ -465,7 +465,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
-	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp.IsZero() {
 		ba.Timestamp = ds.clock.Now()
 	}
 

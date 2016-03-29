@@ -838,7 +838,7 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	//   This isn't just unittests (which would require revamping the test
 	//   context sender), but also some of the scanner queues place batches
 	//   directly into the local range they're servicing.
-	if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	if ba.Timestamp.IsZero() {
 		if ba.Txn != nil {
 			// TODO(tschottdorf): see if this is already done somewhere else.
 			ba.Timestamp = ba.Txn.OrigTimestamp
@@ -1184,7 +1184,7 @@ func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pending
 		return r.mu.proposeRaftCommandFn(p)
 	}
 
-	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
+	if p.raftCmd.Cmd.Timestamp.IsZero() {
 		return util.Errorf("can't propose Raft command with zero timestamp")
 	}
 
