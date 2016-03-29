@@ -524,8 +524,7 @@ func (r *rocksDBBatch) Flush() error {
 }
 
 func (r *rocksDBBatch) NewIterator(prefix roachpb.Key) Iterator {
-	i := newRocksDBIterator(r.batch, prefix, r)
-	return i
+	return newRocksDBIterator(r.batch, prefix, r)
 }
 
 func (r *rocksDBBatch) NewSnapshot() Engine {
