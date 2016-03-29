@@ -195,7 +195,7 @@ module AdminViews {
           {
             title: "Logs",
             view: (status: NodeStatus): MithrilElement =>
-              m("a", { href: "/logs/" + (nodeId(status) ? nodeId(status) : ""), config: m.route }, nodeId(status) ? "Logs" : ""),
+              m("a", { href: "/nodes/" + nodeId(status) + "/logs" , config: m.route }, nodeId(status) ? "Logs" : ""),
           },
         ];
 
