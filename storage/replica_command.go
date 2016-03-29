@@ -27,6 +27,8 @@ import (
 	"math"
 
 	"math/rand"
+	"os"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
@@ -1614,7 +1616,21 @@ func (r *Replica) VerifyChecksum(
 			p()
 		} else {
 			// Replication consistency problem!
-			log.Fatalf("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
+			shouldPanic := false
+			if env := os.Getenv("COCKROACH_PANIC_ON_CONSISTENCY_FAILURE"); len(env) != 0 {
+				var err error
+				shouldPanic, err = strconv.ParseBool(env)
+				if err != nil {
+					log.Fatalf("could not parse environment variable COCKROACH_PANIC_ON_CONSISTENCY_FAILURE=%s, setting to default of %t, error: %s",
+						env, shouldPanic, err)
+				}
+			}
+			s := fmt.Sprintf("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
+			if shouldPanic {
+				log.Fatal(s)
+			} else {
+				log.Error(s)
+			}
 		}
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
