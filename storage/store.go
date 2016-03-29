@@ -412,6 +412,7 @@ type storeMetrics struct {
 	sysBytes        *metric.Gauge
 	sysCount        *metric.Gauge
 
+	// RocksDB metrics.
 	rdbBlockCacheHits           *metric.Gauge
 	rdbBlockCacheMisses         *metric.Gauge
 	rdbBlockCacheUsage          *metric.Gauge
@@ -424,6 +425,11 @@ type storeMetrics struct {
 	rdbFlushes                  *metric.Gauge
 	rdbCompactions              *metric.Gauge
 	rdbTableReadersMemEstimate  *metric.Gauge
+
+	// Range event metrics.
+	rangeSplits  *metric.Counter
+	rangeAdds    *metric.Counter
+	rangeRemoves *metric.Counter
 
 	// Stats for efficient merges.
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
@@ -458,7 +464,7 @@ func newStoreMetrics() *storeMetrics {
 		sysBytes:             storeRegistry.Gauge("sysbytes"),
 		sysCount:             storeRegistry.Gauge("syscount"),
 
-		// RocksDB stats.
+		// RocksDB metrics.
 		rdbBlockCacheHits:           storeRegistry.Gauge("rocksdb.block.cache.hits"),
 		rdbBlockCacheMisses:         storeRegistry.Gauge("rocksdb.block.cache.misses"),
 		rdbBlockCacheUsage:          storeRegistry.Gauge("rocksdb.block.cache.usage"),
@@ -471,6 +477,11 @@ func newStoreMetrics() *storeMetrics {
 		rdbFlushes:                  storeRegistry.Gauge("rocksdb.flushes"),
 		rdbCompactions:              storeRegistry.Gauge("rocksdb.compactions"),
 		rdbTableReadersMemEstimate:  storeRegistry.Gauge("rocksdb.table-readers-mem-estimate"),
+
+		// Range event metrics.
+		rangeSplits:  storeRegistry.Counter("range.splits"),
+		rangeAdds:    storeRegistry.Counter("range.adds"),
+		rangeRemoves: storeRegistry.Counter("range.removes"),
 	}
 }
 
