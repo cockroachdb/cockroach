@@ -147,6 +147,10 @@ type Context struct {
 	// ConsistencyCheckInterval
 	ConsistencyCheckInterval time.Duration
 
+	// ConsistencyCheckPanicOnFailure allows the node to panic when it detects a
+	// replication consistency check failure.
+	ConsistencyCheckPanicOnFailure bool
+
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
 	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
@@ -299,6 +303,20 @@ func (ctx *Context) InitNode() error {
 	return nil
 }
 
+// parseBoolEnv parses a bool from an environment variable. This
+// function assumes that the default value is already present in boolVar.
+func parseBoolEnv(env, internalName string, boolVar *bool) {
+	if valueString := os.Getenv(env); len(valueString) != 0 {
+		if v, err := strconv.ParseBool(valueString); err != nil {
+			log.Errorf("could not parse environment variable %s=%s, setting to default of %t, error: %s",
+				env, valueString, *boolVar, err)
+		} else {
+			*boolVar = v
+			log.Infof("\"%s\" set to %t based on %s environment variable", internalName, v, env)
+		}
+	}
+}
+
 // parseDurationEnv parses a time.Duration from an environment variable. This
 // function assumes that the default value is already present in duration.
 func parseDurationEnv(env, internalName string, duration *time.Duration) {
@@ -317,17 +335,8 @@ func parseDurationEnv(env, internalName string, duration *time.Duration) {
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (ctx *Context) readEnvironmentVariables() {
-	// cockroach-linearizable
-	if linearizableString := os.Getenv("COCKROACH_LINEARIZABLE"); len(linearizableString) != 0 {
-		if linearizable, err := strconv.ParseBool(linearizableString); err != nil {
-			log.Errorf("could not parse environment variable COCKROACH_LINEARIZABLE=%s, setting to default of %t, error: %s",
-				linearizableString, ctx.Linearizable, err)
-		} else {
-			ctx.Linearizable = linearizable
-			log.Infof("\"linearizable\" set to %t based on COCKROACH_LINEARIZABLE environment variable", ctx.Linearizable)
-		}
-	}
-
+	parseBoolEnv("COCKROACH_LINEARIZABLE", "linearizable", &ctx.Linearizable)
+	parseBoolEnv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "consistency check panic on failure", &ctx.ConsistencyCheckPanicOnFailure)
 	parseDurationEnv("COCKROACH_MAX_OFFSET", "max offset", &ctx.MaxOffset)
 	parseDurationEnv("COCKROACH_METRICS_FREQUENCY", "metrics frequency", &ctx.MetricsFrequency)
 	parseDurationEnv("COCKROACH_SCAN_INTERVAL", "scan interval", &ctx.ScanInterval)

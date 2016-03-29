@@ -458,7 +458,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 			"--logtostderr=false")
 
 	}
-	env := []string{"COCKROACH_SCAN_MAX_IDLE_TIME=200ms"}
+	env := []string{"COCKROACH_SCAN_MAX_IDLE_TIME=200ms", "COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true"}
 	l.createRoach(node, l.vols, env, cmd...)
 	maybePanic(node.Start())
 	log.Infof(`*** started %[1]s ***
