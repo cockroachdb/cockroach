@@ -7,21 +7,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-func checkCounterEQ(t *testing.T, s *testServer, key string, e int64) {
-	if a := s.MustGetSQLCounter(key); !(a == e) {
-		t.Error(util.ErrorfSkipFrames(1, "stat %s: actual %d != expected %d", key, a, e))
-	}
-}
-
-func checkCounterGE(t *testing.T, s *testServer, key string, e int64) {
-	if a := s.MustGetSQLCounter(key); !(a >= e) {
-		t.Error(util.ErrorfSkipFrames(1, "stat %s: expected: actual %d >= %d", key, a, e))
-	}
-}
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
