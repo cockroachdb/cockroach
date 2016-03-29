@@ -225,6 +225,15 @@ message GetUIDataResponse {
   map<string, Value> key_values = 1;
 }
 
+// ClusterRequest requests metadata for the cluster.
+message ClusterRequest {
+}
+
+// ClusterResponse contains metadata for the cluster.
+message ClusterResponse {
+  string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -299,6 +308,13 @@ service Admin {
   rpc GetUIData(GetUIDataRequest) returns (GetUIDataResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/uidata"
+    };
+  }
+
+  // Cluster returns metadata for the cluster.
+  rpc Cluster(ClusterRequest) returns (ClusterResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/cluster"
     };
   }
 }
