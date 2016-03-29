@@ -137,6 +137,9 @@ module Models {
               this.attributes[target.name] = target.value;
             } else {
               this.attributes[target.name] = target.checked;
+              if (target.name === "optin") {
+                this.attributes.dismissed = this.attributes.dismissed ? this.attributes.dismissed + 1 : 1;
+              }
             }
           },
           onsubmit: (e: Event): boolean => {
