@@ -588,3 +588,28 @@ EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 ----
 0 /xyz/zyx/3.0/2/1 NULL  BUFFERED
 0 0                (3.0) ROW
+
+query RRR
+SELECT AVG(1::int), AVG(2::float), AVG(3::decimal)
+----
+1 2 3
+
+query III
+SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
+----
+1 1 1
+
+query IRR
+SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
+----
+1 2 3
+
+query RRR
+SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
+----
+NULL NULL NULL
+
+query RRR
+SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
+----
+NULL NULL NULL
