@@ -594,21 +594,24 @@ func (r *Replica) EndTransaction(
 	}
 
 	// If the transaction just ended (via a successful EndTransaction
-	// call), we can purge the local sequence cache state. Why? We are
-	// on the range to which the transaction is anchored, and replay
-	// protection isn't needed any more. When a transactional write gets
-	// replayed over its own resolved intent, the write will succeed but
-	// only as an intent with a newer timestamp (WriteTooOldError).
-	// However, it cannot be resolved by a replay of this EndTransaction
-	// call because the txn timestamp will be too old. If the replay
-	// included a BeginTransaction, the txn will have to be pushed by
-	// other readers or writers, so that the commit would fail (due to a
-	// too-old commit timestamp). If the replay didn't include a
-	// BeginTransaction, any push will immediately succeed as a missing
-	// txn record on push sets the transaction to aborted. In both
-	// cases, the txn will be GCd on the slow path.
-	err := r.clearSequenceCache(batch, ms, false /* !poison */, reply.Txn.TxnMeta, reply.Txn.Status)
-	return reply, externalIntents, err
+	// call which left the transaction in an aborted state), we can
+	// purge the local abort cache state. Why? We are on the range to
+	// which the transaction is anchored, and replay protection isn't
+	// needed any more. When a transactional write gets replayed over
+	// its own resolved intents, the write will succeed but only as an
+	// intent with a newer timestamp (WriteTooOldError).  However, it
+	// cannot be resolved by a replay of this EndTransaction call
+	// because the txn timestamp will be too old. Replays which include
+	// a BeginTransaction never succeed because EndTransaction inserts
+	// in the write timestamp cache, forcing the BeginTransaction to
+	// fail with a transaction retry error. If the replay didn't include
+	// a BeginTransaction, any push will immediately succeed as a
+	// missing txn record on push sets the transaction to aborted. In
+	// both cases, the txn will be GCd on the slow path.
+	if reply.Txn.Status == roachpb.ABORTED {
+		return reply, externalIntents, r.clearAbortCache(batch, ms, reply.Txn.TxnMeta)
+	}
+	return reply, externalIntents, nil
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
@@ -1142,55 +1145,23 @@ func (r *Replica) PushTxn(
 	return reply, nil
 }
 
-// clearSequenceCache clears out the sequence cache and optionally poisons it
-// (creating a new special entry). shouldPoison should be set when the
-// transaction in question may still be in use, and causes the sequence cache
-// to be "poisoned": the transaction will not be able to access the range again
-// (preventing anomalies as in #2231).
-//
-// Clearing out the sequence cache reduces the work the GC queue and range
-// splits/merges (which need to copy the whole sequence cache) have to carry
-// out.
-// TODO(tschottdorf): early restarts are currently disabled, see TODO within.
-func (r *Replica) clearSequenceCache(
-	batch engine.Engine, ms *engine.MVCCStats, shouldPoison bool, txn roachpb.TxnMeta, status roachpb.TransactionStatus,
-) (err error) {
-	var poison uint32
-	if shouldPoison {
-		switch status {
-		case roachpb.PENDING:
-			// A SNAPSHOT transaction doesn't care if we push its intent.
-			if txn.Isolation != roachpb.SNAPSHOT {
-				poison = SequencePoisonRestart
-			}
-		default:
-			// When committing or aborting, we don't want the transaction (or accidental
-			// replays) to come back.
-			poison = SequencePoisonAbort
-		}
-	}
-
-	// Clear out before (maybe) poisoning unless it's PENDING. No need for old
-	// stuff to accumulate.
-	if status != roachpb.PENDING || poison != 0 {
-		if err := r.sequence.Del(batch, ms, txn.ID); err != nil {
-			return err
-		}
-	}
-
-	if poison == 0 {
-		return nil
-	}
-
-	// The snake bites.
-	entry := roachpb.SequenceCacheEntry{
+// setAbortCache creates an entry for this transaction in the abort
+// cache to prevent future reads or writes from spuriously succeeding
+// on this range.
+func (r *Replica) setAbortCache(batch engine.Engine, ms *engine.MVCCStats, txn roachpb.TxnMeta) error {
+	entry := roachpb.AbortCacheEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
-		Epoch:     txn.Epoch,
-		Sequence:  poison,
 		Priority:  txn.Priority,
 	}
-	return r.sequence.Put(batch, ms, txn.ID, &entry, nil)
+	return r.abortCache.Put(batch, ms, txn.ID, &entry)
+}
+
+// clearAbortCache clears any entry for this transaction from the
+// abort cache. Called when a transaction ends on the local range
+// and when an intent is resolved.
+func (r *Replica) clearAbortCache(batch engine.Engine, ms *engine.MVCCStats, txn roachpb.TxnMeta) error {
+	return r.abortCache.Del(batch, ms, txn.ID)
 }
 
 // ResolveIntent resolves a write intent from the specified key
@@ -1208,7 +1179,12 @@ func (r *Replica) ResolveIntent(
 	if err := engine.MVCCResolveWriteIntent(batch, ms, intent); err != nil {
 		return reply, err
 	}
-	return reply, r.clearSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
+	if args.Poison {
+		return reply, r.setAbortCache(batch, ms, args.IntentTxn)
+	} else if intent.Status == roachpb.ABORTED {
+		return reply, r.clearAbortCache(batch, ms, args.IntentTxn)
+	}
+	return reply, nil
 }
 
 // ResolveIntentRange resolves write intents in the specified
@@ -1226,7 +1202,12 @@ func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	if _, err := engine.MVCCResolveWriteIntentRange(batch, ms, intent, 0); err != nil {
 		return reply, err
 	}
-	return reply, r.clearSequenceCache(batch, ms, args.Poison, args.IntentTxn, intent.Status)
+	if args.Poison {
+		return reply, r.setAbortCache(batch, ms, args.IntentTxn)
+	} else if intent.Status == roachpb.ABORTED {
+		return reply, r.clearAbortCache(batch, ms, args.IntentTxn)
+	}
+	return reply, nil
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
@@ -1761,7 +1742,7 @@ func (r *Replica) AdminSplit(
 }
 
 // splitTrigger is called on a successful commit of an AdminSplit
-// transaction. It copies the sequence cache for the new range and
+// transaction. It copies the abort cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
 func (r *Replica) splitTrigger(
@@ -1817,13 +1798,13 @@ func (r *Replica) splitTrigger(
 		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
-	// Initialize the new range's sequence cache by copying the original's.
-	seqCount, err := r.sequence.CopyInto(batch, &deltaMs, split.NewDesc.RangeID)
+	// Initialize the new range's abort cache by copying the original's.
+	seqCount, err := r.abortCache.CopyInto(batch, &deltaMs, split.NewDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
+		return util.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
-	log.Trace(ctx, fmt.Sprintf("copied sequence cache (%d entries)", seqCount))
+	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
 
 	// Add the new split replica to the store. This step atomically
 	// updates the EndKey of the updated replica and also adds the
@@ -2048,10 +2029,10 @@ func (r *Replica) mergeTrigger(
 	rightMs.SysBytes, rightMs.SysCount = 0, 0
 	mergedMs.Add(rightMs)
 
-	// Copy the subsumed range's sequence cache to the subsuming one.
-	_, err := r.sequence.CopyFrom(batch, &mergedMs, subsumedRangeID)
+	// Copy the subsumed range's abort cache to the subsuming one.
+	_, err := r.abortCache.CopyFrom(batch, &mergedMs, subsumedRangeID)
 	if err != nil {
-		return util.Errorf("unable to copy sequence cache to new split range: %s", err)
+		return util.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 
 	// Remove the subsumed range's metadata. Note that we don't need to

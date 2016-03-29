@@ -74,7 +74,7 @@ const (
 //  - GC of version data via TTL expiration (and more complex schemes
 //    as implemented going forward).
 //  - Resolve extant write intents (pushing their transactions).
-//  - GC of old transaction and sequence cache entries. This should include
+//  - GC of old transaction and abort cache entries. This should include
 //    most committed entries almost immediately and, after a threshold on
 //    inactivity, all others.
 //
@@ -226,11 +226,11 @@ func processTransactionTable(
 	return gcKeys, err
 }
 
-// processSequenceCache iterates through the local sequence cache entries,
-// pushing the transactions (in cleanup mode) for those entries which appear
-// to be old enough. In case the transaction indicates that it's terminated,
-// the sequence cache keys are included in the result.
-func processSequenceCache(
+// processAbortCache iterates through the local abort cache entries,
+// pushing the transactions (in cleanup mode) for those entries which
+// appear to be old enough. In case the transaction indicates that
+// it's terminated, the abort cache keys are included in the result.
+func processAbortCache(
 	snap engine.Engine,
 	rangeID roachpb.RangeID,
 	now, cutoff roachpb.Timestamp,
@@ -240,19 +240,19 @@ func processSequenceCache(
 ) []roachpb.GCRequest_GCKey {
 	txns := make(map[uuid.UUID]*roachpb.Transaction)
 	idToKeys := make(map[uuid.UUID][]roachpb.GCRequest_GCKey)
-	seqCache := NewSequenceCache(rangeID)
+	abortCache := NewAbortCache(rangeID)
 	infoMu.Lock()
-	seqCache.Iterate(snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.SequenceCacheEntry) {
+	abortCache.Iterate(snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.AbortCacheEntry) {
 		txnID := *txnIDPtr
 		// If we've pushed this Txn previously, attempt cleanup (in case the
 		// push was successful). Initiate new pushes only for newly discovered
 		// "old" entries.
-		infoMu.SequenceSpanTotal++
+		infoMu.AbortSpanTotal++
 		if prevTxn, ok := prevTxns[txnID]; ok && prevTxn.Status != roachpb.PENDING {
 			txns[txnID] = prevTxn
 			idToKeys[txnID] = append(idToKeys[txnID], roachpb.GCRequest_GCKey{Key: key})
 		} else if !cutoff.Less(v.Timestamp) {
-			infoMu.SequenceSpanConsidered++
+			infoMu.AbortSpanConsidered++
 			txns[txnID] = &roachpb.Transaction{
 				TxnMeta: roachpb.TxnMeta{ID: txnIDPtr, Key: v.Key},
 				Status:  roachpb.PENDING,
@@ -275,7 +275,7 @@ func processSequenceCache(
 		// Check if the Txn is still alive. If this indicates that the Txn is
 		// aborted and old enough to guarantee that any running coordinator
 		// would have realized that the transaction wasn't running by means
-		// of a heartbeat, then we're free to remove the sequence cache entry.
+		// of a heartbeat, then we're free to remove the abort cache entry.
 		// In the most likely case, there isn't even an entry (which will
 		// be apparent by a zero timestamp and nil last heartbeat).
 		sem <- struct{}{}
@@ -299,9 +299,9 @@ func processSequenceCache(
 			ts.Forward(*txn.LastHeartbeat)
 		}
 		if !cutoff.Less(ts) {
-			// This is it, we can delete our sequence cache entries.
+			// This is it, we can delete our abort cache entries.
 			gcKeys = append(gcKeys, idToKeys[txnID]...)
-			infoMu.SequenceSpanGCNum++
+			infoMu.AbortSpanGCNum++
 		}
 	}
 	return gcKeys
@@ -310,15 +310,15 @@ func processSequenceCache(
 // process iterates through all keys in a replica's range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are batched
 // into GC calls. Extant intents are resolved if intents are older than
-// intentAgeThreshold. The transaction and sequence cache records are also
+// intentAgeThreshold. The transaction and abort cache records are also
 // scanned and old entries evicted. During normal operation, both of these
 // records are cleaned up when their respective transaction finishes, so the
 // amount of work done here is expected to be small.
 //
 // Some care needs to be taken to avoid cyclic recreation of entries during GC:
 // * a Push initiated due to an intent may recreate a transaction entry
-// * resolving an intent may write a new sequence cache entry
-// * obtaining the transaction for a sequence cache entry requires a Push
+// * resolving an intent may write a new abort cache entry
+// * obtaining the transaction for a abort cache entry requires a Push
 //
 // The following order is taken below:
 // 1) collect all intents with sufficiently old txn record
@@ -326,8 +326,8 @@ func processSequenceCache(
 // 3) scan the transaction table, collecting abandoned or completed txns
 // 4) push all of these transactions (possibly recreating entries)
 // 5) resolve all intents (unless the txn is still PENDING), which will recreate
-//    sequence cache entries (but with the txn timestamp; i.e. likely gc'able)
-// 6) scan the sequence table for old entries
+//    abort cache entries (but with the txn timestamp; i.e. likely gc'able)
+// 6) scan the abort cache table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
@@ -393,15 +393,15 @@ type GCInfo struct {
 	// Summary of transactions which were found GCable (assuming that
 	// potentially necessary intent resolutions did not fail).
 	TransactionSpanGCAborted, TransactionSpanGCCommitted, TransactionSpanGCPending int
-	// SequenceSpanTotal is the total number of transactions present in the sequence cache.
-	SequenceSpanTotal int
-	// SequenceSpanConsidered is the number of sequence cache entries old enough to be
+	// AbortSpanTotal is the total number of transactions present in the abort cache.
+	AbortSpanTotal int
+	// AbortSpanConsidered is the number of abort cache entries old enough to be
 	// considered for removal. An "entry" corresponds to one transaction;
 	// more than one key-value pair may be associated with it.
-	SequenceSpanConsidered int
-	// SequenceSpanGCNum is the number of sequence cache entries fit for removal (due
+	AbortSpanConsidered int
+	// AbortSpanGCNum is the number of abort cache entries fit for removal (due
 	// to their transactions having terminated).
-	SequenceSpanGCNum int
+	AbortSpanGCNum int
 	// PushTxn is the total number of pushes attempted in this cycle.
 	PushTxn int
 	// ResolveTotal is the total number of attempted intent resolutions in
@@ -420,7 +420,7 @@ type lockableGCInfo struct {
 // Engine (which is not mutated). It uses the provided functions pushTxn and
 // resolveIntents to clarify the true status of and clean up after encountered
 // transactions. It returns a slice of gc'able keys from the data, transaction,
-// and sequence spans.
+// and abort spans.
 func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timestamp, policy config.GCPolicy,
 	pushTxn pushFunc, resolveIntents resolveFunc) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
 
@@ -589,10 +589,9 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 		return nil, GCInfo{}, err
 	}
 
-	// Deal with any leftover sequence cache keys. There shouldn't be many of
-	// them.
-	leftoverSeqCacheKeys := processSequenceCache(snap, desc.RangeID, now, txnExp, txnMap, &infoMu, pushTxn)
-	gcKeys = append(gcKeys, leftoverSeqCacheKeys...)
+	// Deal with any leftover abort cache keys.
+	leftoverAbortCacheKeys := processAbortCache(snap, desc.RangeID, now, txnExp, txnMap, &infoMu, pushTxn)
+	gcKeys = append(gcKeys, leftoverAbortCacheKeys...)
 	return gcKeys, infoMu.GCInfo, nil
 }
 

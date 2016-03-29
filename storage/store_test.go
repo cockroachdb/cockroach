@@ -1046,6 +1046,7 @@ func TestStoreLongTxnStarvation(t *testing.T) {
 			}
 
 			// Within the transaction, write same key.
+			txn.Sequence++
 			var ba roachpb.BatchRequest
 			bt, btH := beginTxnArgs(key, txn)
 			put := putArgs(key, []byte("value"))

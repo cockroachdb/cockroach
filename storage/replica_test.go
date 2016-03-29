@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -1527,10 +1526,10 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 }
 
-// TestReplicaSequenceCacheReadError verifies that an error is returned to the
-// client in the event that a sequence cache entry is found but is not
-// decodable.
-func TestReplicaSequenceCacheReadError(t *testing.T) {
+// TestReplicaAbortCacheReadError verifies that an error is returned
+// to the client in the event that a abort cache entry is found but is
+// not decodable.
+func TestReplicaAbortCacheReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1547,8 +1546,8 @@ func TestReplicaSequenceCacheReadError(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Overwrite sequence cache entry with garbage for the last op.
-	key := keys.SequenceCacheKey(tc.rng.RangeID, txn.ID)
+	// Overwrite Abort cache entry with garbage for the last op.
+	key := keys.AbortCacheKey(tc.rng.RangeID, txn.ID)
 	err := engine.MVCCPut(tc.engine, nil, key, roachpb.ZeroTimestamp, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1563,33 +1562,31 @@ func TestReplicaSequenceCacheReadError(t *testing.T) {
 	}
 }
 
-// TestReplicaSequenceCacheStoredError verifies that if a cached entry is present,
-// a transaction restart error is returned.
-func TestReplicaSequenceCacheStoredTxnRetryError(t *testing.T) {
+// TestReplicaAbortCacheStoredTxnRetryError verifies that if a cached
+// entry is present, a transaction restart error is returned.
+func TestReplicaAbortCacheStoredTxnRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
 	key := []byte("a")
-	for i, pastError := range []error{errors.New("boom"), nil} {
+	{
 		txn := newTransaction("test", key, 10, roachpb.SERIALIZABLE, tc.clock)
-		txn.Sequence = uint32(1 + i)
-		entry := roachpb.SequenceCacheEntry{
+		txn.Sequence = int32(1)
+		entry := roachpb.AbortCacheEntry{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
-			Epoch:     txn.Epoch,
-			Sequence:  txn.Sequence,
 			Priority:  0,
 		}
-		_ = tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, roachpb.NewError(pastError))
+		_ = tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry)
 
 		args := incrementArgs(key, 1)
 		_, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), roachpb.Header{
 			Txn: txn,
 		}, &args)
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-			t.Fatalf("%d: unexpected error %v", i, pErr)
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
+			t.Fatalf("unexpected error %v", pErr)
 		}
 	}
 
@@ -1618,6 +1615,7 @@ func TestReplicaSequenceCacheStoredTxnRetryError(t *testing.T) {
 
 	//  Pretend we restarted by increasing the epoch. That's all that's needed.
 	txn.Epoch++
+	txn.Sequence++
 	if pErr := try(); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1672,10 +1670,10 @@ func TestTransactionRetryLeavesIntents(t *testing.T) {
 	}
 }
 
-// TestReplicaSequenceCacheOnlyWithIntent verifies that a transactional command
+// TestReplicaAbortCacheOnlyWithIntent verifies that a transactional command
 // which goes through Raft but is not a transactional write (i.e. does not
-// leave intents) passes the sequence cache unhindered.
-func TestReplicaSequenceCacheOnlyWithIntent(t *testing.T) {
+// leave intents) passes the abort cache unhindered.
+func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -1683,19 +1681,17 @@ func TestReplicaSequenceCacheOnlyWithIntent(t *testing.T) {
 
 	txn := newTransaction("test", []byte("test"), 10, roachpb.SERIALIZABLE, tc.clock)
 	txn.Sequence = 100
-	entry := roachpb.SequenceCacheEntry{
+	entry := roachpb.AbortCacheEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
-		Epoch:     txn.Epoch,
-		Sequence:  txn.Sequence,
 		Priority:  0,
 	}
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil); err != nil {
+	if err := tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
 	args, h := heartbeatArgs(txn)
-	// If the sequence cache were active for this request, we'd catch a txn retry.
+	// If the abort cache were active for this request, we'd catch a txn retry.
 	// Instead, we expect the error from heartbeating a nonexistent txn.
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), h, &args); !testutils.IsPError(pErr, "record not present") {
 		t.Fatal(pErr)
@@ -2195,9 +2191,6 @@ func TestRaftReplayProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	ctx := TestStoreContext()
-	// The sequence cache provides some replay protection and can make this
-	// test flaky when the fake replay below is preceded by an actual replay.
-	ctx.TestingKnobs.DisableSequenceCache = true
 	tc := testContext{}
 	tc.StartWithStoreContext(t, ctx)
 	defer tc.Stop()
@@ -2385,7 +2378,8 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	}
 }
 
-func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey roachpb.RKey) (*Replica, *roachpb.Transaction) {
+func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
+	splitKey roachpb.RKey, commit bool) (*Replica, *roachpb.Transaction) {
 	// Split the range and create an intent at splitKey and key.
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
@@ -2407,7 +2401,7 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key, splitKey
 	}
 
 	// End the transaction and resolve the intents.
-	args, h := endTxnArgs(txn, true /* commit */)
+	args, h := endTxnArgs(txn, commit)
 	args.IntentSpans = []roachpb.Span{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
 	txn.Sequence++
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), h, &args); pErr != nil {
@@ -2436,7 +2430,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
 
-	newRng, txn := setupResolutionTest(t, tc, key, splitKey)
+	newRng, txn := setupResolutionTest(t, tc, key, splitKey, true /* commit */)
 
 	// Check if the intent in the other range has not yet been resolved.
 	gArgs := getArgs(splitKey)
@@ -2461,17 +2455,16 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 
 // TestEndTransactionDirectGC verifies that after successfully resolving the
 // external intents of a transaction after EndTransaction, the transaction and
-// sequence cache records are purged on the local range (and only there).
+// abort cache records are purged on both the local range and non-local range.
 func TestEndTransactionDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(tschottdorf): #5088")
 	tc := testContext{}
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tc.Start(t)
 	defer tc.Stop()
 
-	rightRng, txn := setupResolutionTest(t, tc, key, splitKey)
+	rightRng, txn := setupResolutionTest(t, tc, key, splitKey, false /* generate abort cache entry */)
 
 	util.SucceedsSoon(t, func() error {
 		if gr, _, err := tc.rng.Get(tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
@@ -2480,16 +2473,16 @@ func TestEndTransactionDirectGC(t *testing.T) {
 			return util.Errorf("txn entry still there: %+v", gr)
 		}
 
-		var entry roachpb.SequenceCacheEntry
-		if err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		var entry roachpb.AbortCacheEntry
+		if aborted, err := tc.rng.abortCache.Get(tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
-		} else if entry.Sequence > 0 {
-			return util.Errorf("sequence cache still populated: %v", entry)
+		} else if aborted {
+			return util.Errorf("abort cache still populated: %v", entry)
 		}
-		if err := rightRng.sequence.Get(tc.engine, txn.ID, &entry); err != nil {
+		if aborted, err := rightRng.abortCache.Get(tc.engine, txn.ID, &entry); err != nil {
 			t.Fatal(err)
-		} else if entry.Sequence == 0 {
-			t.Fatalf("right-hand side with external intent had its sequence cache cleared")
+		} else if aborted {
+			t.Fatalf("right-hand side abort cache still populated: %v", entry)
 		}
 
 		return nil
@@ -2519,7 +2512,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
 
-	setupResolutionTest(t, tc, key, splitKey)
+	setupResolutionTest(t, tc, key, splitKey, true /* commit */)
 
 	// Now test that no GCRequest is issued. We can't test that directly (since
 	// it's completely asynchronous), so we first make sure ResolveIntent
@@ -2560,11 +2553,11 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 				t.Fatalf("commit=%t: %s", commit, err)
 			}
 
-			var entry roachpb.SequenceCacheEntry
-			if err := tc.rng.sequence.Get(tc.engine, txn.ID, &entry); err != nil && err != errNoCacheEntry {
+			var entry roachpb.AbortCacheEntry
+			if aborted, err := tc.rng.abortCache.Get(tc.engine, txn.ID, &entry); err != nil {
 				t.Fatal(err)
-			} else if err == nil && entry.Sequence > 0 {
-				t.Fatalf("commit=%t: sequence cache still populated: %v", commit, entry)
+			} else if aborted {
+				t.Fatalf("commit=%t: abort cache still populated: %v", commit, entry)
 			}
 		}()
 	}
@@ -2588,7 +2581,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
 	splitKey := roachpb.RKey("aa")
-	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey)
+	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
 	txn := newTransaction("name", key, 1, roachpb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
 	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng,
@@ -2607,10 +2600,10 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	})
 }
 
-// TestSequenceCachePoisonOnResolve verifies that when an intent is pushed into
-// the future or aborted, the sequence cache on the respective Range is
-// poisoned and the pushee is presented with a txn retry or abort on its next
-// contact with the Range in the same epoch.
+// TestAbortCachePoisonOnResolve verifies that when an intent is
+// aborted, the abort cache on the respective Range is poisoned and
+// the pushee is presented with a txn abort on its next contact with
+// the Range in the same epoch.
 func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	key := roachpb.Key("a")
@@ -2656,8 +2649,8 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
-		// Have the pusher run into the intent. That pushes our pushee and resolves
-		// the intent, which in turn should poison the sequence cache.
+		// Have the pusher run into the intent. That pushes our pushee and
+		// resolves the intent, which in turn should poison the abort cache.
 		var assert func(*roachpb.Error)
 		if abort {
 			// Write/Write conflict will abort pushee.
@@ -2669,28 +2662,16 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 					t.Fatalf("abort=%t, iso=%s: expected txn abort, got %s", abort, iso, pErr)
 				}
 			}
-		} else if iso == roachpb.SNAPSHOT {
-			// At SNAPSHOT, we shouldn't be restart-poisoned.
+		} else {
+			// Verify we're not poisoned.
 			assert = func(pErr *roachpb.Error) {
 				if pErr != nil {
 					t.Fatalf("abort=%t, iso=%s: unexpected: %s", abort, iso, pErr)
 				}
 			}
-		} else {
-			// Trigger a Read/Write conflict which pushes pushee's timestamp.
-			if pErr := get(pusher, key); pErr != nil {
-				t.Fatal(pErr)
-			}
-			assert = func(pErr *roachpb.Error) {
-				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-					t.Fatalf("abort=%t, iso=%s: expected txn retry, got %s",
-						abort, iso, pErr)
-				}
-			}
 		}
 
-		// We shouldn't be able to read or write within the transaction on this
-		// Range.
+		// Our assert should be true for any reads or writes.
 		pErr := get(pushee, key)
 		assert(pErr)
 		_, pErr = inc(pushee, key)
@@ -2701,13 +2682,11 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 		_, pErr = inc(pushee, key.Next())
 		assert(pErr)
 
-		// Pretend we're coming back. This works regardless of retry or restart,
-		// but obviously in practice only on a retry would the Txn actually come
-		// back with an increased epoch.
+		// Pretend we're coming back. Increasing the epoch on an abort should
+		// still fail obviously, while on no abort will succeed.
 		pushee.Epoch++
-		if _, pErr := inc(pushee, roachpb.Key("b")); pErr != nil {
-			t.Fatal(pErr)
-		}
+		_, pErr = inc(pushee, roachpb.Key("b"))
+		assert(pErr)
 	}
 
 	for _, abort := range []bool{false, true} {
@@ -2716,9 +2695,9 @@ func TestSequenceCachePoisonOnResolve(t *testing.T) {
 	}
 }
 
-// TestSequenceCacheError verifies that roachpb.Errors returned by checkSequenceCache
+// TestAbortCacheError verifies that roachpb.Errors returned by checkIfTxnAborted
 // have txns that are identical to txns stored in Transaction{Retry,Aborted}Error.
-func TestSequenceCacheError(t *testing.T) {
+func TestAbortCacheError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
@@ -2730,52 +2709,25 @@ func TestSequenceCacheError(t *testing.T) {
 	txn.Sequence = 1
 	txn.Timestamp = roachpb.Timestamp{WallTime: 1}
 
-	// Populate the sequence cache with a higher sequence number
-	// to trigger TransactionRetryError.
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
-	entry := roachpb.SequenceCacheEntry{
-		Key:       key,
-		Timestamp: ts,
-		Epoch:     txn.Epoch,
-		Sequence:  txn.Sequence + 1,
-		Priority:  0,
-	}
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	pErr := tc.rng.checkSequenceCache(tc.engine, txn)
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok {
-		expected := txn.Clone()
-		expected.Timestamp = ts
-		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
-			t.Errorf("txn does not match: %s v.s. %s", pErr.GetTxn(), expected)
-		}
-	} else {
-		t.Errorf("unexpected error: %s", pErr)
-	}
-
-	// Poison the sequence cache to trigger TransactionAbortedError.
 	priority := int32(10)
-	entry = roachpb.SequenceCacheEntry{
+	entry := roachpb.AbortCacheEntry{
 		Key:       key,
 		Timestamp: ts,
-		Epoch:     txn.Epoch,
-		Sequence:  SequencePoisonAbort,
 		Priority:  priority,
 	}
-	if err := tc.rng.sequence.Put(tc.engine, nil, txn.ID, &entry, nil); err != nil {
+	if err := tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
-	pErr = tc.rng.checkSequenceCache(tc.engine, txn)
+	pErr := tc.rng.checkIfTxnAborted(tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
-		expected.Timestamp = ts
+		expected.Timestamp = txn.Timestamp
 		expected.Priority = priority
 		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
-			t.Errorf("txn does not match: %s v.s. %s", pErr.GetTxn(), expected)
+			t.Errorf("txn does not match: %s vs. %s", pErr.GetTxn(), expected)
 		}
 	} else {
 		t.Errorf("unexpected error: %s", pErr)
@@ -3314,12 +3266,13 @@ func TestReplicaStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	txn := newTransaction("test", pArgs.Key, 1, roachpb.SERIALIZABLE, tc.clock)
+	txn.Priority = 123 // So we don't have random values messing with the byte counts on encoding
 	txn.ID = uuid
 
 	if _, pErr := client.SendWrappedWith(tc.Sender(), tc.rng.context(context.Background()), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 99, KeyBytes: 28, ValBytes: 71, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 143, SysCount: 3, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
