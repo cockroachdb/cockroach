@@ -106,10 +106,9 @@ module Models {
               config: Utils.Http.XHRConfig,
             }).then((laterVersions: VersionList) => {
               if (!_.isEmpty(laterVersions.details)) {
-                let newerVersions: number = laterVersions.details.length;
                 setVersionStatusAndResolve({
                   error: true,
-                  message: `Found ${newerVersions} newer ${newerVersions === 1 ? "version" : "versions"} of CockroachDB.`,
+                  message: `There is a newer version of CockroachDB available.`,
                   laterVersions: laterVersions,
                 });
               } else {
