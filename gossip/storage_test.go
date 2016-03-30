@@ -191,4 +191,9 @@ func TestGossipStorage(t *testing.T) {
 			return true
 		}
 	})
+
+	if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
+		t.Fatalf("expected %v, got %v (info: %#v)", expected, actual, ts2.info.Addresses)
+	}
+
 }
