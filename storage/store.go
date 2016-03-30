@@ -1887,6 +1887,15 @@ func (s *Store) processRaft() {
 				}
 				s.processRaftMu.Unlock()
 
+			case st := <-s.ctx.Transport.SnapshotStatusChan:
+				s.processRaftMu.Lock()
+				s.mu.Lock()
+				if r, ok := s.mu.replicas[st.Req.GroupID]; ok {
+					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
+				}
+				s.mu.Unlock()
+				s.processRaftMu.Unlock()
+
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
 				s.processRaftMu.Lock()
