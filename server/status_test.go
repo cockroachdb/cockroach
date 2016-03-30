@@ -49,22 +49,18 @@ func TestStatusLocalStacks(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(testContext.HTTPRequestScheme() + "://" + s.HTTPAddr() + "/_status/stacks/local")
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
-	if !re.Match(body) {
+
+	if body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + "/_status/stacks/local"); err != nil {
+		t.Fatal(err)
+	} else if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
 	}
 
-	body, err = getText(testContext.HTTPRequestScheme() + "://" + s.HTTPAddr() + "/_status/stacks/1")
-	if err != nil {
+	if body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + "/_status/stacks/1"); err != nil {
 		t.Fatal(err)
-	}
-	// Verify match with at least two goroutine stacks.
-	if !re.Match(body) {
+	} else if !re.Match(body) {
 		t.Errorf("expected %s to match %s", body, re)
 	}
 }
@@ -105,14 +101,14 @@ func TestStatusJson(t *testing.T) {
 	testCases = append(testCases, TestCase{"/_status/details/local", expectedResult})
 	testCases = append(testCases, TestCase{"/_status/details/1", expectedResult})
 
-	httpClient, err := testContext.GetHTTPClient()
+	httpClient, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, spec := range testCases {
 		contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 		for _, contentType := range contentTypes {
-			req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.HTTPAddr()+spec.keyPrefix, nil)
+			req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+spec.keyPrefix, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -156,13 +152,13 @@ func TestStatusGossipJson(t *testing.T) {
 		} `json:"infos"`
 	}
 
-	httpClient, err := testContext.GetHTTPClient()
+	httpClient, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 	contentTypes := []string{util.JSONContentType, util.ProtoContentType, util.YAMLContentType}
 	for _, contentType := range contentTypes {
-		req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.HTTPAddr()+"/_status/gossip/local", nil)
+		req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+"/_status/gossip/local", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -212,12 +208,12 @@ var retryOptions = retry.Options{
 // getRequest returns the results of a get request to the test server with
 // the given path.  It returns the contents of the body of the result.
 func getRequest(t *testing.T, ts TestServer, path string) []byte {
-	httpClient, err := testContext.GetHTTPClient()
+	httpClient, err := ts.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	url := testContext.HTTPRequestScheme() + "://" + ts.HTTPAddr() + path
+	url := ts.Ctx.HTTPRequestScheme() + "://" + ts.HTTPAddr() + path
 	for r := retry.Start(retryOptions); r.Next(); {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
