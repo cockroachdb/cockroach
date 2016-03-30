@@ -999,7 +999,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
-// clear via the read queue.
+// clear via the command queue.
 func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// If the read is consistent, the read requires the leader lease.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -1044,7 +1044,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 // to the command queue. Next, the timestamp cache is checked to determine if
 // any newer accesses to this command's affected keys have been made. If so,
 // the command's timestamp is moved forward. Finally, the command is submitted
-// to Raft. Upon completion, the write is removed from the read queue and any
+// to Raft. Upon completion, the write is removed from the command queue and any
 // error returned. If a WaitGroup is supplied, it is signaled when the command
 // enters Raft or the function returns with a preprocessing error, whichever
 // happens earlier.
