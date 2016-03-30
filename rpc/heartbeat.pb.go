@@ -51,7 +51,8 @@ type RemoteOffset struct {
 	// The maximum error of the measured offset, in nanoseconds.
 	Uncertainty int64 `protobuf:"varint,2,opt,name=uncertainty" json:"uncertainty"`
 	// Measurement time, in nanoseconds from unix epoch.
-	MeasuredAt int64 `protobuf:"varint,3,opt,name=measured_at,json=measuredAt" json:"measured_at"`
+	MeasuredAt       int64  `protobuf:"varint,3,opt,name=measured_at,json=measuredAt" json:"measured_at"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *RemoteOffset) Reset()                    { *m = RemoteOffset{} }
@@ -66,7 +67,8 @@ type PingRequest struct {
 	// The last offset the client measured with the server.
 	Offset RemoteOffset `protobuf:"bytes,2,opt,name=offset" json:"offset"`
 	// The address of the client.
-	Addr string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
+	Addr             string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *PingRequest) Reset()                    { *m = PingRequest{} }
@@ -77,8 +79,9 @@ func (*PingRequest) Descriptor() ([]byte, []int) { return fileDescriptorHeartbea
 // A PingResponse contains the echoed ping request string.
 type PingResponse struct {
 	// An echo of value sent with PingRequest.
-	Pong       string `protobuf:"bytes,1,opt,name=pong" json:"pong"`
-	ServerTime int64  `protobuf:"varint,2,opt,name=server_time,json=serverTime" json:"server_time"`
+	Pong             string `protobuf:"bytes,1,opt,name=pong" json:"pong"`
+	ServerTime       int64  `protobuf:"varint,2,opt,name=server_time,json=serverTime" json:"server_time"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *PingResponse) Reset()                    { *m = PingResponse{} }
@@ -177,6 +180,9 @@ func (m *RemoteOffset) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x18
 	i++
 	i = encodeVarintHeartbeat(data, i, uint64(m.MeasuredAt))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -211,6 +217,9 @@ func (m *PingRequest) MarshalTo(data []byte) (int, error) {
 	i++
 	i = encodeVarintHeartbeat(data, i, uint64(len(m.Addr)))
 	i += copy(data[i:], m.Addr)
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -236,6 +245,9 @@ func (m *PingResponse) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x10
 	i++
 	i = encodeVarintHeartbeat(data, i, uint64(m.ServerTime))
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -272,6 +284,9 @@ func (m *RemoteOffset) Size() (n int) {
 	n += 1 + sovHeartbeat(uint64(m.Offset))
 	n += 1 + sovHeartbeat(uint64(m.Uncertainty))
 	n += 1 + sovHeartbeat(uint64(m.MeasuredAt))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -284,6 +299,9 @@ func (m *PingRequest) Size() (n int) {
 	n += 1 + l + sovHeartbeat(uint64(l))
 	l = len(m.Addr)
 	n += 1 + l + sovHeartbeat(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -293,6 +311,9 @@ func (m *PingResponse) Size() (n int) {
 	l = len(m.Pong)
 	n += 1 + l + sovHeartbeat(uint64(l))
 	n += 1 + sovHeartbeat(uint64(m.ServerTime))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -407,6 +428,7 @@ func (m *RemoteOffset) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -545,6 +567,7 @@ func (m *PingRequest) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -643,6 +666,7 @@ func (m *PingResponse) Unmarshal(data []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -758,7 +782,7 @@ var (
 )
 
 var fileDescriptorHeartbeat = []byte{
-	// 322 bytes of a gzipped FileDescriptorProto
+	// 318 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0x92, 0x4d, 0xce, 0x4f, 0xce,
 	0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0, 0x2f, 0x2a, 0x48, 0xd6, 0xcf, 0x48, 0x4d, 0x2c, 0x2a, 0x49,
 	0x4a, 0x4d, 0x2c, 0xd1, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x85, 0x4b, 0xeb, 0x01, 0xa5,
@@ -776,8 +800,7 @@ var fileDescriptorHeartbeat = []byte{
 	0xfa, 0x7c, 0x0c, 0xeb, 0x81, 0x22, 0x20, 0x4f, 0x15, 0xa7, 0x16, 0x95, 0xa5, 0x16, 0xc5, 0x97,
 	0x64, 0xe6, 0xa6, 0xa2, 0x78, 0x9e, 0x0b, 0x22, 0x11, 0x02, 0x14, 0x37, 0xf2, 0xe3, 0xe2, 0xf4,
 	0x80, 0x45, 0x85, 0x90, 0x23, 0x17, 0x0b, 0xc8, 0x74, 0x21, 0x29, 0x34, 0xa7, 0x22, 0x79, 0x58,
-	0x4a, 0x1a, 0xab, 0x1c, 0xc4, 0x39, 0x4a, 0x0c, 0x4e, 0xb2, 0x27, 0x1e, 0xca, 0x31, 0x9c, 0x78,
-	0x24, 0xc7, 0x78, 0x01, 0x88, 0x6f, 0x00, 0xf1, 0x03, 0x20, 0x9e, 0xf0, 0x58, 0x8e, 0x21, 0x8a,
-	0x19, 0xa8, 0x3a, 0x82, 0x01, 0x10, 0x00, 0x00, 0xff, 0xff, 0x2f, 0x33, 0x9e, 0xfd, 0x08, 0x02,
-	0x00, 0x00,
+	0x4a, 0x1a, 0xab, 0x1c, 0xc4, 0x39, 0x4a, 0x0c, 0x4e, 0x92, 0x27, 0x1e, 0xca, 0x31, 0x9c, 0x78,
+	0x24, 0xc7, 0x78, 0x01, 0x88, 0x6f, 0x00, 0xf1, 0x03, 0x20, 0x8e, 0x62, 0x06, 0xaa, 0x8c, 0x60,
+	0x00, 0x04, 0x00, 0x00, 0xff, 0xff, 0xdf, 0xb7, 0xd5, 0x45, 0x04, 0x02, 0x00, 0x00,
 }

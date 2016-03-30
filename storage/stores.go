@@ -96,7 +96,7 @@ func (ls *Stores) AddStore(s *Store) {
 	ls.storeMap[s.Ident.StoreID] = s
 	// If we've already read the gossip bootstrap info, ensure that
 	// all stores have the most recent values.
-	if !ls.biLatestTS.Equal(roachpb.ZeroTimestamp) {
+	if !ls.biLatestTS.IsZero() {
 		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
 			log.Errorf("failed to update bootstrap info on newly added store: %s", err)
 		}

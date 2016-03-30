@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -612,7 +614,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, e := targetRepl, replicas[2]; a != e {
+	if a, e := targetRepl, replicas[2]; !proto.Equal(&a, &e) {
 		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
 	}
 
@@ -646,7 +648,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, e := targetRepl, replicas[1]; a != e {
+	if a, e := targetRepl, replicas[1]; !proto.Equal(&a, &e) {
 		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
 	}
 }

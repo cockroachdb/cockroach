@@ -74,7 +74,7 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 }
 
 func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
-	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
+	if !kv.Key.Timestamp.IsZero() {
 		fmt.Printf("%s %q: ", kv.Key.Timestamp, kv.Key.Key)
 	} else {
 		fmt.Printf("%q: ", kv.Key.Key)
@@ -250,11 +250,10 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 }
 
 func tryAbort(kv engine.MVCCKeyValue) (string, error) {
-	if kv.Key.Timestamp != roachpb.ZeroTimestamp {
+	if !kv.Key.Timestamp.IsZero() {
 		return "", errors.New("not an abort cache key")
 	}
-	_, err := keys.DecodeAbortCacheKey(kv.Key.Key, nil)
-	if err != nil {
+	if _, err := keys.DecodeAbortCacheKey(kv.Key.Key, nil); err != nil {
 		return "", err
 	}
 	var dest roachpb.AbortCacheEntry

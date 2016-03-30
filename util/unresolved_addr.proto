@@ -23,6 +23,7 @@ import weak "gogoproto/gogo.proto";
 // / UnresolvedAddr is an unresolved version of net.Addr.
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.goproto_unrecognized) = false;
 
   optional string network_field = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "network"];
   optional string address_field = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "address"];

@@ -513,20 +513,26 @@ func Example_zone() {
 	// system
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
+	//   xxx_unrecognized: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
+	//   xxx_unrecognized: []
+	// xxx_unrecognized: []
 	// zone set system range_max_bytes: 134217728
 	// UPDATE 1
 	// zone get system
 	// system
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
+	//   xxx_unrecognized: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	//   xxx_unrecognized: []
+	// xxx_unrecognized: []
 	// zone rm system
 	// DELETE 1
 	// zone ls
@@ -539,10 +545,13 @@ func Example_zone() {
 	// .default
 	// replicas:
 	// - attrs: []
+	//   xxx_unrecognized: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	//   xxx_unrecognized: []
+	// xxx_unrecognized: []
 }
 
 func Example_sql() {

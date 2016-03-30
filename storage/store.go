@@ -1529,10 +1529,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	if ba.Txn == nil {
 		// When not transactional, allow empty timestamp and simply use
 		// local clock.
-		if ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+		if ba.Timestamp.IsZero() {
 			ba.Timestamp.Forward(s.Clock().Now())
 		}
-	} else if !ba.Timestamp.Equal(roachpb.ZeroTimestamp) {
+	} else if !ba.Timestamp.IsZero() {
 		return nil, roachpb.NewErrorf("transactional request must not set batch timestamp")
 	} else {
 		// Always use the original timestamp for reads and writes, even
@@ -2000,7 +2000,8 @@ func (s *Store) replicaDescriptorLocked(groupID roachpb.RangeID, replicaID roach
 // cacheReplicaDescriptorLocked requires that the store lock is held.
 func (s *Store) cacheReplicaDescriptorLocked(groupID roachpb.RangeID, replica roachpb.ReplicaDescriptor) {
 	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{groupID, replica.ReplicaID}); ok {
-		if old != replica {
+		oldReplica := old.(roachpb.ReplicaDescriptor)
+		if !proto.Equal(&oldReplica, &replica) {
 			log.Fatalf("%s replicaDescCache: clobbering %s with %s", s, old, replica)
 		}
 		return

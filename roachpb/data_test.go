@@ -486,13 +486,14 @@ var nonZeroTxn = Transaction{
 	},
 	Name:               "name",
 	Status:             COMMITTED,
-	LastHeartbeat:      &Timestamp{1, 2},
+	LastHeartbeat:      &Timestamp{WallTime: 1, Logical: 2},
 	OrigTimestamp:      makeTS(30, 31),
 	MaxTimestamp:       makeTS(40, 41),
 	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},
 	Writing:            true,
 	WriteTooOld:        true,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	XXX_unrecognized:   []byte("hello"),
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -531,8 +532,14 @@ func TestTransactionClone(t *testing.T) {
 	expFields := []string{
 		"Intents.EndKey",
 		"Intents.Key",
+		"Intents.XXX_unrecognized",
+		"MaxTimestamp.XXX_unrecognized",
+		"OrigTimestamp.XXX_unrecognized",
+		"Timestamp.XXX_unrecognized",
 		"TxnMeta.ID",
 		"TxnMeta.Key",
+		"TxnMeta.XXX_unrecognized",
+		"XXX_unrecognized",
 	}
 	if !reflect.DeepEqual(expFields, fields) {
 		t.Fatalf("%s != %s", expFields, fields)

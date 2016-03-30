@@ -204,7 +204,7 @@ func (s *Store) logChange(txn *client.Txn, changeType roachpb.ReplicaChangeType,
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
 func selectEventTimestamp(s *Store, input roachpb.Timestamp) time.Time {
-	if input == roachpb.ZeroTimestamp {
+	if input.IsZero() {
 		return s.Clock().PhysicalTime()
 	}
 	return input.GoTime()

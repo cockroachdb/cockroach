@@ -213,6 +213,11 @@ func (t Timestamp) Equal(s Timestamp) bool {
 	return t.WallTime == s.WallTime && t.Logical == s.Logical
 }
 
+// IsZero reports whether t represents the zero timestamp.
+func (t Timestamp) IsZero() bool {
+	return t.Equal(ZeroTimestamp)
+}
+
 func (t Timestamp) String() string {
 	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
 }
@@ -815,6 +820,9 @@ func (t *Transaction) Update(o *Transaction) {
 	//   a new request. Update is called in many situations and shouldn't
 	//   reset anything.
 	t.WriteTooOld = o.WriteTooOld
+	// If there is anything unrecognized on this transaction, we're probably
+	// better off using the "new" one.
+	t.XXX_unrecognized = o.XXX_unrecognized
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}

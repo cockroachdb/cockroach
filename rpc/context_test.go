@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -78,7 +79,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		context.RemoteClocks.mu.Lock()
 		defer context.RemoteClocks.mu.Unlock()
 
-		if o := context.RemoteClocks.mu.offsets[remoteAddr]; o != expectedOffset {
+		if o := context.RemoteClocks.mu.offsets[remoteAddr]; !proto.Equal(&o, &expectedOffset) {
 			return util.Errorf("expected:\n%v\nactual:\n%v", expectedOffset, o)
 		}
 		return nil

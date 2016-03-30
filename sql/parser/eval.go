@@ -773,7 +773,7 @@ func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
 func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.txnTimestamp == roachpb.ZeroTimestamp {
+	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return ctx.txnTimestamp

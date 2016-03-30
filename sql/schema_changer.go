@@ -21,6 +21,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -145,7 +147,7 @@ func (sc *SchemaChanger) findTableWithLease(
 	if tableDesc.Lease == nil {
 		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
 	}
-	if *tableDesc.Lease != lease {
+	if !proto.Equal(tableDesc.Lease, &lease) {
 		return nil, roachpb.NewErrorf("table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
 	}
 	return tableDesc, nil

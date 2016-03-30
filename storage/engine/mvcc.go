@@ -60,7 +60,7 @@ func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
 // Next returns the next key.
 func (k MVCCKey) Next() MVCCKey {
 	ts := k.Timestamp.Prev()
-	if ts == roachpb.ZeroTimestamp {
+	if ts.IsZero() {
 		return MVCCKey{
 			Key: k.Key.ShallowNext(),
 		}
@@ -84,12 +84,12 @@ func (k MVCCKey) Less(l MVCCKey) bool {
 
 // Equal returns whether two keys are identical.
 func (k MVCCKey) Equal(l MVCCKey) bool {
-	return k.Key.Compare(l.Key) == 0 && k.Timestamp == l.Timestamp
+	return k.Key.Compare(l.Key) == 0 && k.Timestamp.Equal(l.Timestamp)
 }
 
 // IsValue returns true iff the timestamp is non-zero.
 func (k MVCCKey) IsValue() bool {
-	return k.Timestamp != roachpb.ZeroTimestamp
+	return !k.Timestamp.IsZero()
 }
 
 // EncodedSize returns the size of the MVCCKey when encoded.
@@ -756,7 +756,7 @@ func mvccGetInternal(iter Iterator, metaKey MVCCKey,
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
-		if seekKey.Timestamp == roachpb.ZeroTimestamp {
+		if seekKey.Timestamp.IsZero() {
 			return nil, ignoredIntents, nil
 		}
 	}
@@ -881,7 +881,7 @@ func mvccPutUsingIter(engine Engine, iter Iterator, ms *MVCCStats, key roachpb.K
 	valueFn func(*roachpb.Value) ([]byte, error)) error {
 	var rawBytes []byte
 	if valueFn == nil {
-		if value.Timestamp != roachpb.ZeroTimestamp {
+		if !value.Timestamp.IsZero() {
 			return util.Errorf("cannot have timestamp set in value on Put")
 		}
 		rawBytes = value.RawBytes
@@ -944,7 +944,7 @@ func mvccPutInternal(
 	}
 
 	// Verify we're not mixing inline and non-inline values.
-	putIsInline := timestamp.Equal(roachpb.ZeroTimestamp)
+	putIsInline := timestamp.IsZero()
 	if ok && putIsInline != buf.meta.IsInline() {
 		return util.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
@@ -1167,7 +1167,7 @@ func MVCCMerge(
 	// Encode and merge the MVCC metadata with inlined value.
 	meta := &MVCCMetadata{RawBytes: value.RawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
-	if !timestamp.Equal(roachpb.ZeroTimestamp) {
+	if !timestamp.IsZero() {
 		meta.MergeTimestamp = &timestamp
 	}
 	data, err := proto.Marshal(meta)

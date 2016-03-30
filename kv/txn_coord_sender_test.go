@@ -178,10 +178,10 @@ func TestTxnInitialTimestamp(t *testing.T) {
 	if err := txn.Put(key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if txn.Proto.OrigTimestamp != refTimestamp {
+	if !txn.Proto.OrigTimestamp.Equal(refTimestamp) {
 		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
 	}
-	if txn.Proto.Timestamp != refTimestamp {
+	if !txn.Proto.Timestamp.Equal(refTimestamp) {
 		t.Errorf("expected txn ts to be %s; got %s", refTimestamp, txn.Proto.Timestamp)
 	}
 }

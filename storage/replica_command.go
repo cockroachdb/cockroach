@@ -1080,7 +1080,7 @@ func (r *Replica) PushTxn(
 	if reply.PusheeTxn.LastHeartbeat == nil {
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
-	if args.Now.Equal(roachpb.ZeroTimestamp) {
+	if args.Now.IsZero() {
 		return reply, util.Errorf("the field Now must be provided")
 	}
 	// Compute heartbeat expiration (all replicas must see the same result).

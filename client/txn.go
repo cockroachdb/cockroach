@@ -518,7 +518,7 @@ func (txn *Txn) Exec(
 		// If we're looking at a brand new transaction, then communicate
 		// what should be used as initial timestamp for the KV txn created
 		// by TxnCoordSender.
-		if txn.Proto.OrigTimestamp == roachpb.ZeroTimestamp {
+		if txn.Proto.OrigTimestamp.IsZero() {
 			txn.Proto.OrigTimestamp = opt.MinInitialTimestamp
 		}
 	}

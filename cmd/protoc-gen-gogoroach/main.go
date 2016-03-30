@@ -66,7 +66,8 @@ func main() {
 		// Something something extensions; we don't use 'em currently.
 		// vanity.TurnOffGoExtensionsMapAll,
 
-		vanity.TurnOffGoUnrecognizedAll,
+		// We need to keep unrecognized fields for forward-compatibility.
+		// vanity.TurnOffGoUnrecognizedAll,
 
 		// Adds unnecessary dependency on golang/protobuf.
 		// vanity.TurnOffGogoImport,
