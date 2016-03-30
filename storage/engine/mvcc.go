@@ -1762,10 +1762,8 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			}
 		}
 
-		// nextKey is already a metadata key. We append a 0 byte which is the same
-		// as roachpb.Key.Next but without creating a new copy.
-		keyBuf = append(keyBuf, 0)
-		nextKey.Key = keyBuf
+		// nextKey is already a metadata key.
+		nextKey.Key = key.Key.ShallowNext()
 	}
 
 	return num, nil
