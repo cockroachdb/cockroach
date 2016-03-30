@@ -32,16 +32,19 @@ type UUID struct {
 }
 
 // String returns the canonical representation of the UUID. For nil UUIDs,
-// returns xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
+// returns <nil>.
 func (u *UUID) String() string {
 	if u == nil {
-		u = EmptyUUID
+		return "<nil>"
 	}
 	return u.UUID.String()
 }
 
 // Short returns the first eight characters of the output of String().
 func (u *UUID) Short() string {
+	if u == nil {
+		return u.String()
+	}
 	return u.String()[:8]
 }
 
