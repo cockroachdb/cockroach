@@ -150,6 +150,11 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 			if err != nil {
 				return roachpb.NewError(err)
 			}
+			if !index.Unique {
+				// We can get what looks like a uniqueness violation on a
+				// non-unique index because of a duplicate primary key.
+				index = &tableDesc.PrimaryIndex
+			}
 			valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
 			if err != nil {
 				return roachpb.NewError(err)

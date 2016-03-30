@@ -388,3 +388,20 @@ INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.*, a + b
 a b a + b
 1 2 3
 3 4 7
+
+statement ok
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  INDEX a (a)
+)
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 10)
+
+# Verify we get the correct message, even though internally we may hit a
+# ConditionalPut error when trying to insert the key for the *index*.
+statement error pgcode 23505 duplicate key value \(a,b\)=\(1,2\) violates unique constraint "primary"
+INSERT INTO abc VALUES (1, 2, 20)
