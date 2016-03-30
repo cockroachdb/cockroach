@@ -31,6 +31,20 @@ type UUID struct {
 	uuid.UUID
 }
 
+// String returns the canonical representation of the UUID. For nil UUIDs,
+// returns xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
+func (u *UUID) String() string {
+	if u == nil {
+		u = EmptyUUID
+	}
+	return u.UUID.String()
+}
+
+// Short returns the first eight characters of the output of String().
+func (u *UUID) Short() string {
+	return u.String()[:8]
+}
+
 // Bytes shadows (*github.com/satori/go.uuid.UUID).Bytes() to prevent confusing
 // our default proto stringer.
 // TODO(tschottdorf): fix upstream.
