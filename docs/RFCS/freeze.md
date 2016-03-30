@@ -23,12 +23,12 @@ need to stop before beta for obvious reasons.
 
 The freeze will proceed in several steps.
 
-### Stage 0 (now)
+### Stage 0 (pre-beta)
 
 Anything goes; changes to on-disk formats do not require any kind of
 migration path.
 
-### Stage 1: Guaranteed upgrade path (Date TBD)
+### Stage 1: Guaranteed upgrade path (Mar 30, 2016)
 
 In stage 1, we require backwards-compatibility with data written by
 any previous stage 1 build. It should always be possible to upgrade by
