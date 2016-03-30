@@ -70,20 +70,6 @@ const (
 	AllocatorRemoveDead
 )
 
-// A BalanceMode is a configurable mode which effects how the allocator makes
-// rebalancing decisions.
-type BalanceMode int
-
-const (
-	// BalanceModeUsage balances ranges between stores by primarily
-	// considering disk space usage, but also considers range counts in nascent
-	// clusters.
-	BalanceModeUsage BalanceMode = iota
-	// BalanceModeRangeCount balances ranges by considering the total range
-	// count of each node.
-	BalanceModeRangeCount
-)
-
 func pluralize(n int) string {
 	if n == 1 {
 		return ""
@@ -139,10 +125,6 @@ type AllocatorOptions struct {
 	// replicas to other stores.
 	AllowRebalance bool
 
-	// Mode determines the strategy that will be used to locate stores for
-	// allocation decisions in a way that balances load across the cluster.
-	Mode BalanceMode
-
 	// Deterministic makes allocation decisions deterministic, based on
 	// current cluster statistics. If this flag is not set, allocation operations
 	// will have random behavior. This flag is intended to be set for testing
@@ -181,23 +163,13 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
-	a := Allocator{
+	randGen := makeAllocatorRand(randSource)
+	return Allocator{
 		storePool: storePool,
 		options:   options,
-		randGen:   makeAllocatorRand(randSource),
+		randGen:   randGen,
+		balancer:  usageBalancer{randGen},
 	}
-
-	// Instantiate balancer based on provided options.
-	switch options.Mode {
-	case BalanceModeUsage:
-		a.balancer = usageBalancer{a.randGen}
-	case BalanceModeRangeCount:
-		a.balancer = rangeCountBalancer{a.randGen}
-	default:
-		panic(fmt.Sprintf("AllocatorOptions specified invalid BalanceMode %d", options.Mode))
-	}
-
-	return a
 }
 
 // ComputeAction determines the exact operation needed to repair the supplied
