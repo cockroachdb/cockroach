@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -648,7 +649,7 @@ func (n *Node) recordJoinEvent() {
 	}
 
 	n.stopper.RunWorker(func() {
-		for {
+		for r := retry.Start(retry.Options{Closer: n.stopper.ShouldStop()}); r.Next(); {
 			if err := n.ctx.DB.Txn(func(txn *client.Txn) *roachpb.Error {
 				return sql.MakeEventLogger(n.ctx.SQLExecutor.LeaseManager).InsertEventRecord(txn,
 					logEventType,
@@ -664,13 +665,6 @@ func (n *Node) recordJoinEvent() {
 				log.Warningc(n.context(context.TODO()), "unable to log %s event for node %d: %s", logEventType, n.Descriptor.NodeID, err)
 			} else {
 				return
-			}
-
-			select {
-			case <-n.stopper.ShouldStop():
-				return
-			default:
-				// Break.
 			}
 		}
 	})
