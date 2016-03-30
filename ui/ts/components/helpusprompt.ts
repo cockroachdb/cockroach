@@ -43,12 +43,6 @@ module Components {
             this.stage = Stage.Banner;
             this.show = true;
             m.redraw(); // the banner wasn't being drawn on the helpus page, probably because this promise is used twice
-          } else {
-            let routeParts: string[] = m.route().split("?");
-            let route: string = routeParts[0];
-            let params: Object = m.route.parseQueryString(routeParts[1]);
-            delete params["help-us"];
-            m.route(route, params);
           }
         });
       }
