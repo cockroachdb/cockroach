@@ -1,7 +1,7 @@
 ![logo](/resource/doc/cockroach_db.png?raw=true "Cockroach Labs logo")
 
 
-[![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-alpha-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-beta-red.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ## A Scalable, Survivable, Strongly-Consistent SQL Database
 
@@ -22,7 +22,7 @@ For more details, see our [FAQ](https://www.cockroachlabs.com/docs/frequently-as
 
 ## Status
 
-CockroachDB is currently in alpha. See our
+CockroachDB is currently in beta. See our
 [Roadmap](https://github.com/cockroachdb/cockroach/issues/2132) and
 [Issues](https://github.com/cockroachdb/cockroach/issues) for a list of features planned or in development.
 
