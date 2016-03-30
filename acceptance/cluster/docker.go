@@ -293,12 +293,14 @@ func (cli resilientDockerClient) ContainerCreate(
 	networkingConfig *network.NetworkingConfig, containerName string,
 ) (types.ContainerCreateResponse, error) {
 	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
-	if err != nil && strings.Contains(err.Error(), "already in us") {
-		log.Infof("Already had a container named %s", containerName)
+	if err != nil && strings.Contains(err.Error(), "already in use") {
+		log.Infof("unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{All: true})
 		if cerr != nil {
+			log.Infof("unable to list containers: %v", cerr)
 			return types.ContainerCreateResponse{}, err
 		}
+		// The listed container names begin with a "/".
 		cn := "/" + containerName
 		for _, c := range containers {
 			for _, n := range c.Names {
@@ -310,6 +312,7 @@ func (cli resilientDockerClient) ContainerCreate(
 						Force:         true,
 					}
 					if rerr := cli.ContainerRemove(ctx, roptions); rerr != nil {
+						log.Infof("unable to remove container: %v", rerr)
 						return types.ContainerCreateResponse{}, err
 					}
 					return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
@@ -323,6 +326,7 @@ func (cli resilientDockerClient) ContainerCreate(
 
 func (cli resilientDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
 	err := cli.APIClient.ContainerRemove(ctx, options)
+	// TODO(dan): Is the "No such container" error happening in practice?
 	if err != nil && strings.Contains(err.Error(), "No such container") {
 		return nil
 	}
@@ -355,13 +359,10 @@ func (cli retryingDockerClient) ContainerCreate(
 	for i := 0; i < cli.attempts; i++ {
 		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
 		ret, err := cli.APIClient.ContainerCreate(timeoutCtx, config, hostConfig, networkingConfig, containerName)
-		if err == nil {
-			return ret, nil
-		} else if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+		if err == context.DeadlineExceeded {
 			continue
-		} else {
-			return types.ContainerCreateResponse{}, err
 		}
+		return ret, err
 	}
 	err := fmt.Errorf("exceeded %d tries of ContainerCreate with a %s timeout", cli.attempts, cli.timeout)
 	return types.ContainerCreateResponse{}, err
