@@ -42,7 +42,7 @@ body
 #root
   position relative
   padding-left $nav-width
-  min-height calc(100vh - $footer-height) // TODO or calc(100% - 4rem)
+  min-height "calc(100vh - %s)" % $footer-height
 
   &:after
     content ""
