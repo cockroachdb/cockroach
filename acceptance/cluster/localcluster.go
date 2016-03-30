@@ -125,7 +125,7 @@ type testNode struct {
 // cluster is composed of a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
 type LocalCluster struct {
-	client               *client.Client
+	client               client.APIClient
 	stopper              chan struct{}
 	mu                   sync.Mutex // Protects the fields below
 	vols                 *Container
@@ -159,8 +159,15 @@ func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalClu
 	cli, err := client.NewEnvClient()
 	maybePanic(err)
 
+	resilientClient := resilientDockerClient{APIClient: cli}
+	retryingClient := retryingDockerClient{
+		APIClient: resilientClient,
+		attempts:  3,
+		timeout:   time.Minute,
+	}
+
 	return &LocalCluster{
-		client:  cli,
+		client:  retryingClient,
 		stopper: stopper,
 		config:  cfg,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
@@ -354,9 +361,12 @@ func (l *LocalCluster) initCluster() {
 		"volumes",
 	)
 	maybePanic(err)
+	// Make sure this assignment to l.vols is before the calls to Start and Wait.
+	// Otherwise, if they trigger maybePanic, this container won't get cleaned up
+	// and it'll get in the way of future runs.
+	l.vols = c
 	maybePanic(c.Start())
 	maybePanic(c.Wait())
-	l.vols = c
 }
 
 func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string, cmd ...string) {
