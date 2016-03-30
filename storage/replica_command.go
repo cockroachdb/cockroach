@@ -992,6 +992,10 @@ func (r *Replica) PushTxn(
 ) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
+	if args.Now.Equal(roachpb.ZeroTimestamp) {
+		return reply, util.Errorf("the field Now must be provided")
+	}
+
 	if args.PusherTxn.ID != nil {
 		reply.Txn = &args.PusherTxn
 	}
@@ -1073,22 +1077,14 @@ func (r *Replica) PushTxn(
 
 	priority := args.PusherTxn.Priority
 
-	// Check for txn timeout.
-	if reply.PusheeTxn.LastHeartbeat == nil {
-		// TODO(tschottdorf): LastHeartbeat should only be updated by
-		// heartbeats or repeated pushes could move this forward successively
-		// even though the client has abandoned the transaction.
-		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
-	}
-	if args.Now.Equal(roachpb.ZeroTimestamp) {
-		return reply, util.Errorf("the field Now must be provided")
-	}
-	// Compute heartbeat expiration (all replicas must see the same result).
-	expiry := args.Now
-	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
-
 	pusherWins, reason := func() (_ bool, reason string) {
-		if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
+		// Check for txn timeout.
+		lastActive := reply.PusheeTxn.OrigTimestamp
+		if realHB := reply.PusheeTxn.LastHeartbeat; realHB != nil {
+			lastActive.Forward(*realHB)
+		}
+		// Check for expired pushee.
+		if lastActive.Less(args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)) {
 			reason = "pushee is expired"
 			// When cleaning up, actually clean up (as opposed to simply pushing
 			// the garbage in the path of future writers).
