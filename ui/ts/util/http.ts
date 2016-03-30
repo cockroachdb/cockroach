@@ -2,6 +2,10 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
+m.deferred.onerror = (e: Error) => {
+  console.error(e);
+};
+
 module Utils {
   "use strict";
 
