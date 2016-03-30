@@ -533,7 +533,7 @@ func (r *Replica) EndTransaction(
 		var err error
 		if txnAutoGC && len(externalIntents) == 0 {
 			if log.V(1) {
-				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.Short(), len(args.IntentSpans))
+				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.ID.Short(), len(args.IntentSpans))
 			}
 			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 		} else {

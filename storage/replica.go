@@ -1604,7 +1604,7 @@ func (r *Replica) checkIfTxnAborted(b engine.Engine, txn roachpb.Transaction) *r
 	if aborted {
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
-			log.Infof("found abort cache entry for %s with priority %d", txn.Short(), entry.Priority)
+			log.Infof("found abort cache entry for %s with priority %d", txn.ID.Short(), entry.Priority)
 		}
 		newTxn := txn.Clone()
 		if entry.Priority > newTxn.Priority {
