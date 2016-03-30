@@ -308,3 +308,73 @@ func TestInOrderDelivery(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	nodeRPCContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
+	g := gossip.New(nodeRPCContext, nil, stopper)
+
+	grpcServer := rpc.NewServer(nodeRPCContext)
+	ln, err := util.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const numMessages = 3
+	const numSnaps = 2
+	msgTypes := []raftpb.MessageType{raftpb.MsgSnap, raftpb.MsgApp, raftpb.MsgSnap}
+
+	nodeID := roachpb.NodeID(roachpb.NodeID(2))
+	serverTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), grpcServer, nodeRPCContext)
+	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
+	serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage)
+	addr := ln.Addr()
+	// Have to set gossip.NodeID before call gossip.AddInofXXX.
+	g.SetNodeID(nodeID)
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
+		&roachpb.NodeDescriptor{
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		},
+		time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	clientNodeID := roachpb.NodeID(2)
+	clientTransport := storage.NewRaftTransport(storage.GossipAddressResolver(g), nil, nodeRPCContext)
+
+	for i, typ := range msgTypes {
+		req := &storage.RaftMessageRequest{
+			GroupID: 1,
+			Message: raftpb.Message{
+				To:   uint64(nodeID),
+				From: uint64(clientNodeID),
+				Type: typ,
+			},
+			ToReplica: roachpb.ReplicaDescriptor{
+				NodeID:    nodeID,
+				StoreID:   roachpb.StoreID(nodeID),
+				ReplicaID: roachpb.ReplicaID(nodeID),
+			},
+			FromReplica: roachpb.ReplicaDescriptor{
+				NodeID:    clientNodeID,
+				StoreID:   roachpb.StoreID(clientNodeID),
+				ReplicaID: roachpb.ReplicaID(clientNodeID),
+			},
+		}
+		if err := clientTransport.Send(req); err != nil {
+			t.Errorf("failed to send message %d: %s", i, err)
+		}
+	}
+
+	for i := 0; i < numSnaps; i++ {
+		st := <-clientTransport.SnapshotStatusChan
+		if st.Err != nil {
+			t.Fatalf("unexpected error: %s", st.Err)
+		}
+	}
+	for i := 0; i < numMessages; i++ {
+		<-serverChannel.ch
+	}
+}

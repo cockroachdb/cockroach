@@ -1387,22 +1387,23 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		FromReplica: fromReplica,
 		Message:     msg,
 	})
-	snapStatus := raft.SnapshotFinish
 	if err != nil {
 		log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
 			r.store.StoreID(), toReplica.StoreID, err)
 		r.mu.Lock()
 		r.mu.raftGroup.ReportUnreachable(msg.To)
 		r.mu.Unlock()
+	}
+}
+
+func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
+	snapStatus := raft.SnapshotFinish
+	if snapErr != nil {
 		snapStatus = raft.SnapshotFailure
 	}
-	if msg.Type == raftpb.MsgSnap {
-		// TODO(bdarnell): add an ack for snapshots and don't report status until
-		// ack, error, or timeout.
-		r.mu.Lock()
-		r.mu.raftGroup.ReportSnapshot(msg.To, snapStatus)
-		r.mu.Unlock()
-	}
+	r.mu.Lock()
+	r.mu.raftGroup.ReportSnapshot(to, snapStatus)
+	r.mu.Unlock()
 }
 
 // processRaftCommand processes a raft command by unpacking the command

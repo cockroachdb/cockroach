@@ -56,10 +56,18 @@ func GossipAddressResolver(gossip *gossip.Gossip) NodeAddressResolver {
 	}
 }
 
+// RaftSnapshotStatus contains a MsgSnap message and its resulting
+// error, for asynchronous notification of completion.
+type RaftSnapshotStatus struct {
+	Req *RaftMessageRequest
+	Err error
+}
+
 // RaftTransport handles the rpc messages for raft.
 type RaftTransport struct {
-	resolver   NodeAddressResolver
-	rpcContext *rpc.Context
+	resolver           NodeAddressResolver
+	rpcContext         *rpc.Context
+	SnapshotStatusChan chan RaftSnapshotStatus
 
 	mu struct {
 		sync.Mutex
@@ -75,10 +83,12 @@ func NewDummyRaftTransport() *RaftTransport {
 }
 
 // NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
+// Callers are responsible for monitoring RaftTransport.SnapshotStatusChan.
 func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpcContext *rpc.Context) *RaftTransport {
 	t := &RaftTransport{
-		resolver:   resolver,
-		rpcContext: rpcContext,
+		resolver:           resolver,
+		rpcContext:         rpcContext,
+		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
 	t.mu.queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
@@ -235,10 +245,15 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 					return
 				}
 				t.rpcContext.Stopper.RunAsyncTask(func() {
-					if err := snapStream.Send(req); err != nil {
+					err := snapStream.Send(req)
+					if err != nil {
 						log.Errorf("failed to send Raft snapshot to node %d at %s: %s", nodeID, addr, err)
 					} else if log.V(1) {
 						log.Infof("successfully sent a Raft snapshot to node %d at %s", nodeID, addr)
+					}
+					select {
+					case t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}:
+					case <-t.rpcContext.Stopper.ShouldDrain():
 					}
 				})
 			} else {
