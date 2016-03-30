@@ -31,7 +31,7 @@ test:
         parallel: true
 
 deployment:
-  docker:
+  master:
     branch: master
     commands:
       - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resource/deploy_templates/.dockercfg.template" > ~/.dockercfg
@@ -50,9 +50,7 @@ deployment:
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
       - build/build-osx.sh
       - build/push-aws.sh
-
-deployment:
-  docker:
+  release:
     tag: /beta-[0-9]+/
     commands:
       - aws configure set region us-east-1
