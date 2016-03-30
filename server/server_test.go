@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-var testContext = NewTestContext()
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
@@ -59,8 +58,8 @@ func TestHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
-	url := testContext.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
-	httpClient, err := testContext.GetHTTPClient()
+	url := s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
+	httpClient, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,48 +87,34 @@ func TestPlainHTTPServer(t *testing.T) {
 	ctx.Addr = "127.0.0.1:0"
 	ctx.HTTPAddr = "127.0.0.1:0"
 	ctx.Insecure = true
-	// TestServer.Start does not override the context if set.
-	s := &TestServer{Ctx: ctx}
+	s := TestServer{Ctx: ctx}
 	if err := s.Start(); err != nil {
 		t.Fatalf("could not start plain http server: %v", err)
 	}
 	defer s.Stop()
 
-	// Get a plain http client using the same context.
-	if ctx.HTTPRequestScheme() != "http" {
-		t.Fatalf("expected context.HTTPRequestScheme == \"http\", got: %s", ctx.HTTPRequestScheme())
-	}
-	url := ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
 	httpClient, err := ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		t.Fatalf("error requesting health at %s: %s", url, err)
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("could not read response body: %s", err)
-	}
-	expected := "ok"
-	if !strings.Contains(string(b), expected) {
-		t.Errorf("expected body to contain %q, got %q", expected, string(b))
+
+	httpURL := "http://" + s.HTTPAddr() + healthPath
+	if resp, err := httpClient.Get(httpURL); err != nil {
+		t.Fatalf("error requesting health at %s: %s", httpURL, err)
+	} else {
+		defer resp.Body.Close()
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("could not read response body: %s", err)
+		}
+		if expected := "ok"; !strings.Contains(string(b), expected) {
+			t.Errorf("expected body to contain %q, got %q", expected, string(b))
+		}
 	}
 
-	// Try again with a https client (testContext is one)
-	if testContext.HTTPRequestScheme() != "https" {
-		t.Fatalf("expected context.HTTPRequestScheme == \"http\", got: %s", testContext.HTTPRequestScheme())
-	}
-	url = testContext.HTTPRequestScheme() + "://" + s.HTTPAddr() + healthPath
-	httpClient, err = ctx.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err = httpClient.Get(url)
-	if err == nil {
-		t.Fatalf("unexpected success fetching %s", url)
+	httpsURL := "https://" + s.HTTPAddr() + healthPath
+	if _, err := httpClient.Get(httpsURL); err == nil {
+		t.Fatalf("unexpected success fetching %s", httpsURL)
 	}
 }
 
@@ -140,7 +125,7 @@ func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
-	client, err := testContext.GetHTTPClient()
+	client, err := s.Ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +155,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", testContext.HTTPRequestScheme()+"://"+s.HTTPAddr()+healthPath, nil)
+		req, err := http.NewRequest("GET", s.Ctx.HTTPRequestScheme()+"://"+s.HTTPAddr()+healthPath, nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}
@@ -210,7 +195,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RPCContext:      s.RPCContext(),
 		RPCRetryOptions: &retryOpts,
 	}, s.Gossip())
-	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, tracing.NewTracer(),
+	tds := kv.NewTxnCoordSender(ds, s.Clock(), s.Ctx.Linearizable, tracing.NewTracer(),
 		s.stopper, kv.NewTxnMetrics(metric.NewRegistry()))
 
 	if err := s.node.ctx.DB.AdminSplit("m"); err != nil {
@@ -306,7 +291,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			RPCContext:      s.RPCContext(),
 			RPCRetryOptions: &retryOpts,
 		}, s.Gossip())
-		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, tracing.NewTracer(),
+		tds := kv.NewTxnCoordSender(ds, s.Clock(), s.Ctx.Linearizable, tracing.NewTracer(),
 			s.stopper, kv.NewTxnMetrics(metric.NewRegistry()))
 
 		for _, sk := range tc.splitKeys {

@@ -65,7 +65,8 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(nodeRPCContext, testContext.GossipBootstrapResolvers, stopper)
+	serverCtx := NewTestContext()
+	g := gossip.New(nodeRPCContext, serverCtx.GossipBootstrapResolvers, stopper)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
