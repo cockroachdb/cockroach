@@ -118,6 +118,33 @@ func TestPlainHTTPServer(t *testing.T) {
 	}
 }
 
+func TestSecureHTTPRedirect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	httpClient, err := s.Ctx.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, scheme := range []string{"http", "https"} {
+		url := scheme + "://" + s.HTTPAddr() + healthPath
+		if resp, err := httpClient.Get(url); err != nil {
+			t.Fatalf("error requesting health at %s: %s", url, err)
+		} else {
+			defer resp.Body.Close()
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("could not read response body: %s", err)
+			}
+			if expected := "ok"; !strings.Contains(string(b), expected) {
+				t.Errorf("expected body to contain %q, got %q", expected, string(b))
+			}
+		}
+	}
+}
+
 // TestAcceptEncoding hits the health endpoint while explicitly
 // disabling decompression on a custom client's Transport and setting
 // it conditionally via the request's Accept-Encoding headers.
