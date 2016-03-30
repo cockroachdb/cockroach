@@ -1338,7 +1338,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		incArgs := incrementArgs([]byte("a"), 23)
 		startWG.Done()
 		defer finishWG.Done()
-		if _, err := client.SendWrapped(rng, nil, &incArgs); err == nil {
+		if _, err := client.SendWrappedWith(rng, nil, roachpb.Header{Timestamp: mtc.stores[2].Clock().Now()}, &incArgs); err == nil {
 			t.Fatal("expected error during shutdown")
 		}
 	}()
@@ -1533,7 +1533,9 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 			EndKey: []byte("aa"),
 		},
 	}
-	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &checkArgs); err != nil {
+	if _, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{
+		Timestamp: mtc.stores[0].Clock().Now(),
+	}, &checkArgs); err != nil {
 		t.Fatal(err)
 	}
 }

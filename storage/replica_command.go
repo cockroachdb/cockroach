@@ -1388,6 +1388,7 @@ func (r *Replica) CheckConsistency(
 			ChecksumID: id,
 		}
 		ba.Add(checkArgs)
+		ba.Timestamp = r.store.Clock().Now()
 		_, pErr := r.Send(ctx, ba)
 		if pErr != nil {
 			return roachpb.CheckConsistencyResponse{}, pErr
@@ -1419,6 +1420,7 @@ func (r *Replica) CheckConsistency(
 			Checksum:   c.checksum,
 		}
 		ba.Add(checkArgs)
+		ba.Timestamp = r.store.Clock().Now()
 		_, pErr := r.Send(ctx, ba)
 		if pErr != nil {
 			return roachpb.CheckConsistencyResponse{}, pErr

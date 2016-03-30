@@ -22,6 +22,27 @@ import (
 	"strings"
 )
 
+// SetActiveTimestamp sets the correct timestamp at which the request is to be
+// carried out. For transactional requests, ba.Timestamp must be zero initially
+// and it will be set to txn.OrigTimestamp. For non-transactional requests, if
+// no timestamp is specified, nowFn is used to create and set one.
+func (ba *BatchRequest) SetActiveTimestamp(nowFn func() Timestamp) error {
+	if ba.Txn == nil {
+		// When not transactional, allow empty timestamp and  use nowFn instead.
+		if ba.Timestamp.Equal(ZeroTimestamp) {
+			ba.Timestamp.Forward(nowFn())
+		}
+	} else if !ba.Timestamp.Equal(ZeroTimestamp) {
+		return errors.New("transactional request must not set batch timestamp")
+	} else {
+		// Always use the original timestamp for reads and writes, even
+		// though some intents may be written at higher timestamps in the
+		// event of a WriteTooOldError.
+		ba.Timestamp = ba.Txn.OrigTimestamp
+	}
+	return nil
+}
+
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
 	return ba.flags()&isAdmin != 0
