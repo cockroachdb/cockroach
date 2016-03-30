@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -161,7 +162,15 @@ func makePlanner() *planner {
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
 	if txn != nil {
-		p.evalCtx.SetTxnTimestamp(txn.Proto.OrigTimestamp)
+		if txn.Proto.OrigTimestamp == roachpb.ZeroTimestamp {
+			// TODO(knz): Transactions created using client/DB.Txn() will not have
+			// their txn.Proto.OrigTimestamp field set.
+			//
+			// panic("zero transaction timestamp in EvalContext")
+			p.evalCtx.SetTxnTimestamp(roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		} else {
+			p.evalCtx.SetTxnTimestamp(txn.Proto.OrigTimestamp)
+		}
 	} else {
 		p.evalCtx.SetTxnTimestamp(roachpb.ZeroTimestamp)
 		p.evalCtx.SetStmtTimestamp(roachpb.ZeroTimestamp)
