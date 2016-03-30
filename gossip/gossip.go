@@ -258,26 +258,22 @@ func (g *Gossip) SetStorage(storage Storage) error {
 
 	// Merge the stored bootstrap info addresses with any we've become
 	// aware of through gossip.
-	if len(g.bootstrapInfo.Addresses) > 0 {
-		existing := map[string]struct{}{}
-		makeKey := func(a util.UnresolvedAddr) string { return fmt.Sprintf("%s,%s", a.Network(), a.String()) }
-		for _, addr := range g.bootstrapInfo.Addresses {
-			existing[makeKey(addr)] = struct{}{}
+	existing := map[string]struct{}{}
+	makeKey := func(a util.UnresolvedAddr) string { return fmt.Sprintf("%s,%s", a.Network(), a.String()) }
+	for _, addr := range g.bootstrapInfo.Addresses {
+		existing[makeKey(addr)] = struct{}{}
+	}
+	for _, addr := range storedBI.Addresses {
+		// If the address is new, and isn't our own address, add it.
+		if _, ok := existing[makeKey(addr)]; !ok && addr != g.is.NodeAddr {
+			g.maybeAddBootstrapAddress(addr)
 		}
-		for _, addr := range storedBI.Addresses {
-			// If the address is new, and isn't our own address, add it.
-			if _, ok := existing[makeKey(addr)]; !ok && addr != g.is.NodeAddr {
-				g.maybeAddBootstrapAddress(addr)
-			}
+	}
+	// Persist merged addresses.
+	if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
+		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+			log.Error(err)
 		}
-		// Persist merged addresses.
-		if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
-			if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-				log.Error(err)
-			}
-		}
-	} else {
-		g.bootstrapInfo = storedBI
 	}
 
 	// Cycle through all persisted bootstrap hosts and add resolvers for
