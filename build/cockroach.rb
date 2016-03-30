@@ -4,8 +4,8 @@ class Cockroach < Formula
   desc "Distributed SQL database"
   homepage "https://www.cockroachlabs.com"
   url "https://github.com/cockroachdb/cockroach.git",
-      :tag => "v0.1-alpha",
-      :revision => "26088f81e5ecfb2fd63f8f15f524102c9a0c1c05"
+      :tag => "beta-20160329",
+      :revision => "7d356a93316165f36c3f772f80caabaa2dd29749"
   head "https://github.com/cockroachdb/cockroach.git"
 
   depends_on "go" => :build
@@ -30,11 +30,50 @@ class Cockroach < Formula
     system "xcrun", "make", "GOFLAGS=-v", "-C",
            "src/github.com/cockroachdb/cockroach", "build"
     bin.install "src/github.com/cockroachdb/cockroach/cockroach" => "cockroach"
+
+    # TODO(pmattis): Debug the launchctl stuff
+    # (prefix+'com.cockroachlabs.cockroachdb.plist').write startup_plist
+    # (prefix+'com.cockroachlabs.cockroachdb.plist').chmod 0644
+  end
+
+  def caveats
+    <<-EOS.undent
+    Start the cockroach server:
+        cockroach start --store=#{var}/cockroach
+    EOS
   end
 
   test do
     system "#{bin}/cockroach", "version"
   end
 
-  # TODO(peter): Need to figure out how set cockroach to running.
+  #   def startup_plist
+  #     return <<-EOS
+  # <?xml version="1.0" encoding="UTF-8"?>
+  # <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  # <plist version="1.0">
+  # <dict>
+  #   <key>Label</key>
+  #   <string>com.cockroachlabs.cockroachdb</string>
+  #   <key>ProgramArguments</key>
+  #   <array>
+  #     <string>#{bin}/cockroach</string>
+  #     <string>start</string>
+  #   </array>
+  #   <key>RunAtLoad</key>
+  #   <true/>
+  #   <key>KeepAlive</key>
+  #   <false/>
+  #   <key>UserName</key>
+  #   <string>#{`whoami`.chomp}</string>
+  #   <key>WorkingDirectory</key>
+  #   <string>#{HOMEBREW_PREFIX}</string>
+  #   <key>StandardErrorPath</key>
+  #   <string>#{var}/log/cockroachdb/output.log</string>
+  #   <key>StandardOutPath</key>
+  #   <string>#{var}/log/cockroachdb/output.log</string>
+  # </dict>
+  # </plist>
+  # EOS
+  #   end
 end
