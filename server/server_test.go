@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -115,6 +116,50 @@ func TestPlainHTTPServer(t *testing.T) {
 	httpsURL := "https://" + s.HTTPAddr() + healthPath
 	if _, err := httpClient.Get(httpsURL); err == nil {
 		t.Fatalf("unexpected success fetching %s", httpsURL)
+	}
+}
+
+func TestSecureHTTPRedirect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	httpClient, err := s.Ctx.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	origURL := "http://" + s.HTTPAddr()
+	expURL := url.URL{Scheme: "https", Host: s.HTTPAddr(), Path: "/"}
+
+	if resp, err := httpClient.Get(origURL); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		if resp.StatusCode != 308 {
+			t.Errorf("expected status code %s; got %s", 308, resp.StatusCode)
+		}
+		if redirectURL, err := resp.Location(); err != nil {
+			t.Error(err)
+		} else if a, e := redirectURL.String(), expURL.String(); a != e {
+			t.Errorf("expected location %s; got %s", e, a)
+		}
+	}
+
+	if resp, err := httpClient.Post(origURL, "text/plain; charset=utf-8", nil); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		if resp.StatusCode != 308 {
+			t.Errorf("expected status code %s; got %s", 308, resp.StatusCode)
+		}
+		if redirectURL, err := resp.Location(); err != nil {
+			t.Error(err)
+		} else if a, e := redirectURL.String(), expURL.String(); a != e {
+			t.Errorf("expected location %s; got %s", e, a)
+		}
 	}
 }
 
