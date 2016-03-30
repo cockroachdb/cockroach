@@ -286,7 +286,19 @@ func (s *Server) Start() error {
 	})
 
 	if tlsConfig != nil {
-		httpLn = tls.NewListener(httpLn, tlsConfig)
+		httpMux := cmux.New(httpLn)
+		clearL := httpMux.Match(cmux.HTTP1Fast())
+		tlsL := httpMux.Match(cmux.Any())
+
+		s.stopper.RunWorker(func() {
+			util.FatalIfUnexpected(httpMux.Serve())
+		})
+
+		util.ServeHandler(s.stopper, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
+		}), clearL, tlsConfig)
+
+		httpLn = tls.NewListener(tlsL, tlsConfig)
 	}
 
 	serveConn := util.ServeHandler(s.stopper, s, httpLn, tlsConfig)
