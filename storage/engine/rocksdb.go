@@ -593,106 +593,106 @@ func newRocksDBIterator(rdb *C.DBEngine, prefix roachpb.Key, engine Engine) Iter
 	return i
 }
 
-func (r *rocksDBIterator) checkEngineOpen() {
-	if r.engine.Closed() {
+func (i *rocksDBIterator) checkEngineOpen() {
+	if i.engine.Closed() {
 		panic("iterator used after backing engine closed")
 	}
 }
 
 // The following methods implement the Iterator interface.
-func (r *rocksDBIterator) Close() {
-	C.DBIterDestroy(r.iter)
-	*r = rocksDBIterator{}
-	iterPool.Put(r)
+func (i *rocksDBIterator) Close() {
+	C.DBIterDestroy(i.iter)
+	*i = rocksDBIterator{}
+	iterPool.Put(i)
 }
 
-func (r *rocksDBIterator) Seek(key MVCCKey) {
-	r.checkEngineOpen()
+func (i *rocksDBIterator) Seek(key MVCCKey) {
+	i.checkEngineOpen()
 	if len(key.Key) == 0 {
 		// start=Key("") needs special treatment since we need
 		// to access start[0] in an explicit seek.
-		r.setState(C.DBIterSeekToFirst(r.iter))
+		i.setState(C.DBIterSeekToFirst(i.iter))
 	} else {
 		// We can avoid seeking if we're already at the key we seek.
-		if r.valid && key.Equal(r.unsafeKey()) {
+		if i.valid && key.Equal(i.unsafeKey()) {
 			return
 		}
-		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
+		i.setState(C.DBIterSeek(i.iter, goToCKey(key)))
 	}
 }
 
-func (r *rocksDBIterator) Valid() bool {
-	return r.valid
+func (i *rocksDBIterator) Valid() bool {
+	return i.valid
 }
 
-func (r *rocksDBIterator) Next() {
-	r.checkEngineOpen()
-	r.setState(C.DBIterNext(r.iter))
+func (i *rocksDBIterator) Next() {
+	i.checkEngineOpen()
+	i.setState(C.DBIterNext(i.iter))
 }
 
-func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
-	r.checkEngineOpen()
+func (i *rocksDBIterator) SeekReverse(key MVCCKey) {
+	i.checkEngineOpen()
 	if len(key.Key) == 0 {
-		r.setState(C.DBIterSeekToLast(r.iter))
+		i.setState(C.DBIterSeekToLast(i.iter))
 	} else {
-		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
+		i.setState(C.DBIterSeek(i.iter, goToCKey(key)))
 		// Maybe the key sorts after the last key in RocksDB.
-		if !r.Valid() {
-			r.setState(C.DBIterSeekToLast(r.iter))
+		if !i.Valid() {
+			i.setState(C.DBIterSeekToLast(i.iter))
 		}
-		if !r.Valid() {
+		if !i.Valid() {
 			return
 		}
 		// Make sure the current key is <= the provided key.
-		if key.Less(r.Key()) {
-			r.Prev()
+		if key.Less(i.Key()) {
+			i.Prev()
 		}
 	}
 }
 
-func (r *rocksDBIterator) Prev() {
-	r.checkEngineOpen()
-	r.setState(C.DBIterPrev(r.iter))
+func (i *rocksDBIterator) Prev() {
+	i.checkEngineOpen()
+	i.setState(C.DBIterPrev(i.iter))
 }
 
-func (r *rocksDBIterator) Key() MVCCKey {
+func (i *rocksDBIterator) Key() MVCCKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
 	// by the iterator, so it is copied instead of freed.
-	return cToGoKey(r.key)
+	return cToGoKey(i.key)
 }
 
-func (r *rocksDBIterator) Value() []byte {
-	return cSliceToGoBytes(r.value)
+func (i *rocksDBIterator) Value() []byte {
+	return cSliceToGoBytes(i.value)
 }
 
-func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
-	if r.value.len <= 0 {
+func (i *rocksDBIterator) ValueProto(msg proto.Message) error {
+	if i.value.len <= 0 {
 		return nil
 	}
-	return proto.Unmarshal(r.unsafeValue(), msg)
+	return proto.Unmarshal(i.unsafeValue(), msg)
 }
 
-func (r *rocksDBIterator) unsafeKey() MVCCKey {
-	return cToUnsafeGoKey(r.key)
+func (i *rocksDBIterator) unsafeKey() MVCCKey {
+	return cToUnsafeGoKey(i.key)
 }
 
-func (r *rocksDBIterator) unsafeValue() []byte {
-	return cSliceToUnsafeGoBytes(r.value)
+func (i *rocksDBIterator) unsafeValue() []byte {
+	return cSliceToUnsafeGoBytes(i.value)
 }
 
-func (r *rocksDBIterator) Error() error {
-	return statusToError(C.DBIterError(r.iter))
+func (i *rocksDBIterator) Error() error {
+	return statusToError(C.DBIterError(i.iter))
 }
 
-func (r *rocksDBIterator) setState(state C.DBIterState) {
-	r.valid = bool(state.valid)
-	r.key = state.key
-	r.value = state.value
+func (i *rocksDBIterator) setState(state C.DBIterState) {
+	i.valid = bool(state.valid)
+	i.key = state.key
+	i.value = state.value
 }
 
-func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error) {
-	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+func (i *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (MVCCStats, error) {
+	result := C.MVCCComputeStats(i.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	ms := MVCCStats{}
 	if err := statusToError(result.status); err != nil {
 		return ms, err
