@@ -26,8 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-
-	"math/rand"
 	"time"
 
 	"golang.org/x/net/context"
@@ -831,17 +829,38 @@ func (r *Replica) RangeLookup(
 		intents = append(intents, revIntents...)
 	}
 
-	var rds []roachpb.RangeDescriptor // corresponding unmarshaled descriptors
-	if args.ConsiderIntents && len(intents) > 0 && rand.Intn(2) == 0 {
+	// Decode all scanned range descriptors which haven't been unmarshaled yet.
+	for i, kv := range kvs {
+		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
+		rd, err := checkAndUnmarshal(kv.Value)
+		if err != nil {
+			return reply, nil, err
+		}
+		if rd != nil {
+			// Add the first valid descriptor to the desired range descriptor
+			// list in the response, add all others to the prefetched list.
+			if i == 0 || len(reply.Ranges) == 0 {
+				reply.Ranges = append(reply.Ranges, *rd)
+			} else {
+				reply.PrefetchedRanges = append(reply.PrefetchedRanges, *rd)
+			}
+		}
+	}
+
+	if args.ConsiderIntents && len(intents) > 0 {
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
 		// split-related intents or a txn record colocated with a replica
 		// involved in the split. Since we cannot know the correct answer, we
-		// choose randomly between the pre- and post- transaction values when
-		// the ConsiderIntents flag is set (typically after retrying on
-		// addressing-related errors). If we guess wrong, the client will try
-		// again and get the other value (within a few tries).
+		// reply with both the pre- and post- transaction values when the
+		// ConsiderIntents flag is set.
+		//
+		// This does not count against a maximum range count because they are
+		// possible versions of the same descriptor. In other words, both the
+		// current live descriptor and a potentially valid descriptor from
+		// observed intents could be returned when MaxRanges is set to 1 and
+		// the ConsiderIntents flag is set.
 		for _, intent := range intents {
 			val, _, err := engine.MVCCGetAsTxn(batch, intent.Key, intent.Txn.Timestamp, true, intent.Txn)
 			if err != nil {
@@ -856,39 +875,31 @@ func (r *Replica) RangeLookup(
 			if err != nil {
 				return reply, nil, err
 			}
-			// If this is a descriptor we're allowed to return,
-			// do just that and call it a day.
+			// If this is a descriptor we're allowed to return, add that
+			// to the lookup response slice and stop searching in intents.
 			if rd != nil {
-				kvs = []roachpb.KeyValue{{Key: intent.Key, Value: *val}}
-				rds = []roachpb.RangeDescriptor{*rd}
+				reply.Ranges = append(reply.Ranges, *rd)
 				break
 			}
 		}
 	}
 
-	// Decode all scanned range descriptors which haven't been unmarshaled yet.
-	for _, kv := range kvs[len(rds):] {
-		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
-		rd, err := checkAndUnmarshal(kv.Value)
-		if err != nil {
-			return reply, nil, err
-		}
-		if rd != nil {
-			rds = append(rds, *rd)
-		}
-	}
-
-	if count := int64(len(rds)); count == 0 {
+	if len(reply.Ranges) == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
 		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
-	} else if count > rangeCount {
+	} else if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
 		// We've possibly picked up an extra descriptor if we're in reverse
 		// mode due to the initial forward scan.
-		rds = rds[:rangeCount]
+		//
+		// Here, we only count the desired range descriptors as a single
+		// descriptor against the rangeCount limit, even if multiple versions
+		// of the same descriptor were found in intents. In practice, we should
+		// only get multiple desired range descriptors when prefetching is disabled
+		// anyway (see above), so this should never actually matter.
+		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
 	}
 
-	reply.Ranges = rds
 	return reply, intents, nil
 }
 

@@ -305,9 +305,9 @@ message RangeLookupRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
   // consider_intents indicates whether or not intents encountered
-  // while looking up the range info should randomly be returned
-  // to the caller. This is intended to be used when retrying due
-  // to range addressing errors.
+  // while looking up the range info should be returned to the caller.
+  // This is intended to be used when retrying due to range addressing
+  // errors.
   optional bool consider_intents = 3 [(gogoproto.nullable) = false];
   // Use a reverse scan to pre-fill the range descriptor cache instead
   // of an ascending scan.
@@ -322,6 +322,7 @@ message RangeLookupRequest {
 message RangeLookupResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
+  repeated RangeDescriptor prefetched_ranges = 3 [(gogoproto.nullable) = false];
 }
 
 // A HeartbeatTxnRequest is arguments to the HeartbeatTxn()

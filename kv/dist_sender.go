@@ -219,7 +219,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
 	key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -237,12 +237,13 @@ func (ds *DistSender) RangeLookup(
 	// caused this lookup.
 	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if br.Error != nil {
-		return nil, br.Error
+		return nil, nil, br.Error
 	}
-	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
+	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
+	return resp.Ranges, resp.PrefetchedRanges, nil
 }
 
 // FirstRange returns the RangeDescriptor for the first range on the cluster,
@@ -392,8 +393,6 @@ func (et *evictionToken) evict() error {
 func (ds *DistSender) getDescriptors(
 	rs roachpb.RSpan, evictToken evictionToken, considerIntents, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, bool, evictionToken, *roachpb.Error) {
-	var desc *roachpb.RangeDescriptor
-	var pErr *roachpb.Error
 	var descKey roachpb.RKey
 	if !useReverseScan {
 		descKey = rs.Key
@@ -401,7 +400,7 @@ func (ds *DistSender) getDescriptors(
 		descKey = rs.EndKey
 	}
 
-	desc, pErr = ds.rangeCache.LookupRangeDescriptor(descKey, evictToken.prevDesc, evictToken.evicted, considerIntents, useReverseScan)
+	desc, evict, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken.prevDesc, evictToken.evicted, considerIntents, useReverseScan)
 	if pErr != nil {
 		return nil, false, evictionToken{}, pErr
 	}
@@ -416,9 +415,7 @@ func (ds *DistSender) getDescriptors(
 
 	// Construct evictionToken to manage eviction state.
 	evictToken = evictionToken{
-		do: func() error {
-			return ds.rangeCache.EvictCachedRangeDescriptor(descKey, desc, useReverseScan)
-		},
+		do:       evict,
 		prevDesc: desc,
 	}
 

@@ -237,7 +237,7 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 // the descriptors for the given (meta) key.
 func (ls *Stores) RangeLookup(
 	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -251,9 +251,10 @@ func (ls *Stores) RangeLookup(
 	})
 	br, pErr := ls.Send(context.TODO(), ba)
 	if pErr != nil {
-		return nil, pErr
+		return nil, nil, pErr
 	}
-	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
+	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
+	return resp.Ranges, resp.PrefetchedRanges, nil
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
