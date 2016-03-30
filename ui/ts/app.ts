@@ -9,8 +9,10 @@
 /// <reference path="pages/events.ts" />
 /// <reference path="pages/databases.ts" />
 /// <reference path="pages/banner.ts" />
+/// <reference path="pages/footer.ts" />
 
 m.mount(document.getElementById("header"), AdminViews.SubModules.TitleBar);
+m.mount(document.getElementById("footer"), AdminViews.SubModules.Footer);
 
 m.route.mode = "hash";
 m.route(document.getElementById("root"), "/cluster", {
