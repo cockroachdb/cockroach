@@ -368,8 +368,9 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 	// Test cases.
 	testCases := []struct {
-		request  *roachpb.RangeLookupRequest
-		expected []roachpb.RangeDescriptor
+		request     *roachpb.RangeLookupRequest
+		expected    []roachpb.RangeDescriptor
+		expectedPre []roachpb.RangeDescriptor
 	}{
 		// Test key in the middle of the range.
 		{
@@ -377,6 +378,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			// ["e","g") and ["c","e").
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("e"), EndKey: roachpb.RKey("g")},
+			},
+			expectedPre: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
 			},
 		},
@@ -386,6 +389,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			// ["e","g"), ["c","e") and ["a","c").
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("e"), EndKey: roachpb.RKey("g")},
+			},
+			expectedPre: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
 				{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
 			},
@@ -395,6 +400,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			// ["c","e") and ["a","c").
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
+			},
+			expectedPre: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
 			},
 		},
@@ -404,6 +411,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			// ["e","g") and ["g","\xff\xff")
 			expected: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("\xff\xff")},
+			},
+			expectedPre: []roachpb.RangeDescriptor{
 				{StartKey: roachpb.RKey("e"), EndKey: roachpb.RKey("g")},
 			},
 		},
@@ -417,23 +426,30 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 
-	for _, test := range testCases {
+	for testIdx, test := range testCases {
 		resp, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, test.request)
 		if pErr != nil {
-			t.Fatalf("RangeLookup error: %s", pErr)
+			t.Fatalf("%d: RangeLookup error: %s", testIdx, pErr)
 		}
 
 		rlReply := resp.(*roachpb.RangeLookupResponse)
 		// Checks the results count.
-		if int32(len(rlReply.Ranges)) != test.request.MaxRanges {
-			t.Fatalf("returned results count, expected %d,but got %d", test.request.MaxRanges, len(rlReply.Ranges))
+		if int32(len(rlReply.Ranges))+int32(len(rlReply.PrefetchedRanges)) != test.request.MaxRanges {
+			t.Fatalf("%d: returned results count, expected %d,but got %d", testIdx, test.request.MaxRanges, len(rlReply.Ranges))
 		}
 		// Checks the range descriptors.
-		for i, rng := range test.expected {
-			if !(rng.StartKey.Equal(rlReply.Ranges[i].StartKey) && rng.EndKey.Equal(rlReply.Ranges[i].EndKey)) {
-				t.Fatalf("returned range is not correct, expected %v ,but got %v", rng, rlReply.Ranges[i])
+		for _, rngSlice := range []struct {
+			expect, reply []roachpb.RangeDescriptor
+		}{
+			{test.expected, rlReply.Ranges},
+			{test.expectedPre, rlReply.PrefetchedRanges},
+		} {
+			for i, rng := range rngSlice.expect {
+				if !(rng.StartKey.Equal(rngSlice.reply[i].StartKey) && rng.EndKey.Equal(rngSlice.reply[i].EndKey)) {
+					t.Fatalf("%d: returned range is not correct, expected %v ,but got %v", testIdx, rng, rngSlice.reply[i])
+				}
 			}
 		}
 	}

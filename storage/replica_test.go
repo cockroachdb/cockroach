@@ -3702,27 +3702,25 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Fatalf("expected WriteIntentError, not %s", pErr)
 	}
 
-	// Try 100 lookups with IgnoreIntents. Expect to see each descriptor at least once.
+	// Try a single lookup with IgnoreIntents. Expect to see both descriptors.
 	// First, try this consistently, which should not be allowed.
 	rlArgs.ConsiderIntents = true
 	_, pErr = tc.SendWrapped(rlArgs)
 	if !testutils.IsPError(pErr, "can not read consistently and special-case intents") {
 		t.Fatalf("wanted specific error, not %s", pErr)
 	}
+
 	// After changing back to inconsistent lookups, should be good to go.
 	var origSeen, newSeen bool
-
-	for !(origSeen && newSeen) {
-		clonedRLArgs := *rlArgs
-
-		reply, pErr = tc.SendWrappedWith(roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, &clonedRLArgs)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		rlReply = reply.(*roachpb.RangeLookupResponse)
-		seen := rlReply.Ranges[0]
+	clonedRLArgs := *rlArgs
+	reply, pErr = tc.SendWrappedWith(roachpb.Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, &clonedRLArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	rlReply = reply.(*roachpb.RangeLookupResponse)
+	for _, seen := range rlReply.Ranges {
 		if reflect.DeepEqual(seen, origDesc) {
 			origSeen = true
 		} else if reflect.DeepEqual(seen, newDesc) {
@@ -3730,6 +3728,9 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		} else {
 			t.Errorf("expected orig/new descriptor %s/%s; got %s", &origDesc, &newDesc, &seen)
 		}
+	}
+	if !origSeen || !newSeen {
+		t.Errorf("expected to see both original and new descriptor; saw original = %t, saw new = %t", origSeen, newSeen)
 	}
 }
 

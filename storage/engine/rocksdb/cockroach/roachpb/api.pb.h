@@ -3058,6 +3058,18 @@ class RangeLookupResponse : public ::google::protobuf::Message {
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
       ranges() const;
 
+  // repeated .cockroach.roachpb.RangeDescriptor prefetched_ranges = 3;
+  int prefetched_ranges_size() const;
+  void clear_prefetched_ranges();
+  static const int kPrefetchedRangesFieldNumber = 3;
+  const ::cockroach::roachpb::RangeDescriptor& prefetched_ranges(int index) const;
+  ::cockroach::roachpb::RangeDescriptor* mutable_prefetched_ranges(int index);
+  ::cockroach::roachpb::RangeDescriptor* add_prefetched_ranges();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+      mutable_prefetched_ranges();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+      prefetched_ranges() const;
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeLookupResponse)
  private:
   inline void set_has_header();
@@ -3068,6 +3080,7 @@ class RangeLookupResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::roachpb::ResponseHeader* header_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor > ranges_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor > prefetched_ranges_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto();
@@ -8900,6 +8913,36 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDe
 RangeLookupResponse::ranges() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.ranges)
   return ranges_;
+}
+
+// repeated .cockroach.roachpb.RangeDescriptor prefetched_ranges = 3;
+inline int RangeLookupResponse::prefetched_ranges_size() const {
+  return prefetched_ranges_.size();
+}
+inline void RangeLookupResponse::clear_prefetched_ranges() {
+  prefetched_ranges_.Clear();
+}
+inline const ::cockroach::roachpb::RangeDescriptor& RangeLookupResponse::prefetched_ranges(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupResponse.prefetched_ranges)
+  return prefetched_ranges_.Get(index);
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::mutable_prefetched_ranges(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupResponse.prefetched_ranges)
+  return prefetched_ranges_.Mutable(index);
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::add_prefetched_ranges() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeLookupResponse.prefetched_ranges)
+  return prefetched_ranges_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+RangeLookupResponse::mutable_prefetched_ranges() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeLookupResponse.prefetched_ranges)
+  return &prefetched_ranges_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+RangeLookupResponse::prefetched_ranges() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.prefetched_ranges)
+  return prefetched_ranges_;
 }
 
 // -------------------------------------------------------------------
