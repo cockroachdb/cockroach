@@ -191,4 +191,8 @@ func TestGossipStorage(t *testing.T) {
 			return true
 		}
 	})
+	if expected, actual := 3, ts2.Len(); expected != actual {
+		t.Fatalf("expected %v, got %v (info: %#v)", expected, actual, ts2.info.Addresses)
+	}
+
 }
