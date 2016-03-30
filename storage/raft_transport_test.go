@@ -179,6 +179,15 @@ func TestSendAndReceive(t *testing.T) {
 					t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 				}
 
+				// Each MsgSnap should have a corresponding entry on the
+				// sender's SnapshotStatusChan.
+				if req.Message.Type == raftpb.MsgSnap {
+					st := <-transports[req.FromReplica.NodeID].SnapshotStatusChan
+					if st.Err != nil {
+						t.Errorf("unexpected error sending snapshot: %s", st.Err)
+					}
+				}
+
 				if typeCounts, ok := messageTypeCounts[toStoreID]; ok {
 					if _, ok := typeCounts[req.Message.Type]; ok {
 						typeCounts[req.Message.Type]--
@@ -264,7 +273,7 @@ func TestInOrderDelivery(t *testing.T) {
 	serverChannel := newChannelServer(numMessages, 10*time.Millisecond)
 	serverTransport.Listen(roachpb.StoreID(nodeID), serverChannel.RaftMessage)
 	addr := ln.Addr()
-	// Have to set gossip.NodeID before call gossip.AddInofXXX.
+	// Have to set gossip.NodeID before calling gossip.AddInfoXXX.
 	g.SetNodeID(nodeID)
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
 		&roachpb.NodeDescriptor{
