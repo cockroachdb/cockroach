@@ -206,6 +206,18 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			return nil, roachpb.NewError(eErr)
 		}
 
+		// Write the row sentinel. We want to write the sentinel first in case
+		// we are trying to insert a duplicate primary key: if we write the
+		// secondary indexes first, we may get an error that looks like a
+		// uniqueness violation on a non-unique index.
+		sentinelKey := keys.MakeNonColumnKey(primaryIndexKey)
+		if log.V(2) {
+			log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
+		}
+		// This is subtle: An interface{}(nil) deletes the value, so we pass in
+		// []byte{} as a non-nil value.
+		b.CPut(sentinelKey, []byte{}, nil)
+
 		// Write the secondary indexes.
 		indexes := tableDesc.Indexes
 		// Also include the secondary indexes in mutation state WRITE_ONLY.
@@ -229,15 +241,6 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
 		}
-
-		// Write the row sentinel.
-		sentinelKey := keys.MakeNonColumnKey(primaryIndexKey)
-		if log.V(2) {
-			log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
-		}
-		// This is subtle: An interface{}(nil) deletes the value, so we pass in
-		// []byte{} as a non-nil value.
-		b.CPut(sentinelKey, []byte{}, nil)
 
 		// Write the row columns.
 		for i, val := range rowVals {
