@@ -36,7 +36,7 @@ module AdminViews {
             "Reach out to us on ",
               m("a", {href: "https://gitter.im/cockroachdb/cockroach"}, "Gitter"),
               " or our ",
-              m("a", {href: "https://groups.google.com/forum/#!forum/cockroach-db"}, "Google Group"),
+              m("a", {href: "https://groups.google.com/forum/#!forum/cockroachdb-users"}, "Google Group"),
               ".",
               m("br"),
               m("br"),
