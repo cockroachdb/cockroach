@@ -51,6 +51,7 @@ const (
 	clientMsgClose       clientMessageType = 'C'
 	clientMsgBind        clientMessageType = 'B'
 	clientMsgExecute     clientMessageType = 'E'
+	clientMsgFlush       clientMessageType = 'H'
 
 	serverMsgAuth                 serverMessageType = 'R'
 	serverMsgCommandComplete      serverMessageType = 'C'
@@ -236,11 +237,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
 				return err
 			}
-		}
-		// If the buffer is empty (which is the case if ignoring messages),
-		// this does nothing.
-		if err := c.wr.Flush(); err != nil {
-			return err
+			// We only flush on every message if not doing an extended query.
+			// If we are, wait for an explicit Flush message. See:
+			// http://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY.
+			if err := c.wr.Flush(); err != nil {
+				return err
+			}
 		}
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.bytesInCount.Inc(int64(n))
@@ -289,6 +291,10 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		case clientMsgExecute:
 			c.doingExtendedQueryMessage = true
 			err = c.handleExecute(ctx, &c.readBuf)
+
+		case clientMsgFlush:
+			c.doingExtendedQueryMessage = true
+			err = c.wr.Flush()
 
 		default:
 			err = c.sendInternalError(fmt.Sprintf("unrecognized client message type %s", typ))
