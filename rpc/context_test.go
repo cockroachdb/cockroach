@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,86 +47,97 @@ func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.L
 	return s, ln
 }
 
+func TestHeartbeatCB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	serverClock := hlc.NewClock(time.Unix(0, 20).UnixNano)
+	serverCtx := newNodeTestContext(serverClock, stopper)
+	s, ln := newTestServer(t, serverCtx, true)
+	remoteAddr := ln.Addr().String()
+
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              serverClock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+	})
+
+	// Clocks don't matter in this test.
+	clientCtx := newNodeTestContext(serverClock, stopper)
+
+	var once sync.Once
+	ch := make(chan struct{})
+
+	clientCtx.HeartbeatCB = func() {
+		once.Do(func() {
+			close(ch)
+		})
+	}
+
+	_, err := clientCtx.GRPCDial(remoteAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-ch
+}
+
 func TestOffsetMeasurement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	serverManual := hlc.NewManualClock(10)
-	serverClock := hlc.NewClock(serverManual.UnixNano)
-	ctx := newNodeTestContext(serverClock, stopper)
-	s, ln := newTestServer(t, ctx, true)
+	serverTime := time.Unix(0, 20)
+	serverClock := hlc.NewClock(serverTime.UnixNano)
+	serverCtx := newNodeTestContext(serverClock, stopper)
+	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              serverClock,
-		remoteClockMonitor: ctx.RemoteClocks,
+		remoteClockMonitor: serverCtx.RemoteClocks,
 	})
 
-	// Create a client that is 10 nanoseconds behind the server.
-	// Use the server context (heartbeat is node-to-node).
-	advancing := AdvancingClock{time: 0, advancementInterval: 10}
-	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := newNodeTestContext(clientClock, stopper)
-	_, err := context.GRPCDial(remoteAddr)
-	if err != nil {
+	// Create a client clock that is behind the server clock.
+	clientAdvancing := AdvancingClock{time: time.Unix(0, 10)}
+	clientClock := hlc.NewClock(clientAdvancing.UnixNano)
+	clientClock.SetMaxOffset(time.Millisecond)
+	clientCtx := newNodeTestContext(clientClock, stopper)
+	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.advancementInterval
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedOffset := RemoteOffset{Offset: 5, Uncertainty: 5, MeasuredAt: 10}
+	expectedOffset := RemoteOffset{Offset: 10, Uncertainty: 0, MeasuredAt: 10}
 	util.SucceedsSoon(t, func() error {
-		context.RemoteClocks.mu.Lock()
-		defer context.RemoteClocks.mu.Unlock()
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
 
-		if o := context.RemoteClocks.mu.offsets[remoteAddr]; o != expectedOffset {
+		if o, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; !ok {
+			return util.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
+		} else if o != expectedOffset {
 			return util.Errorf("expected:\n%v\nactual:\n%v", expectedOffset, o)
 		}
 		return nil
 	})
-}
 
-// TestDelayedOffsetMeasurement tests that the client will record a
-// zero offset if the heartbeat reply exceeds the
-// maximumClockReadingDelay, but not the heartbeat timeout.
-func TestDelayedOffsetMeasurement(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	// Change the client such that it receives a heartbeat right after the
+	// maximum clock reading delay.
+	clientAdvancing.Lock()
+	clientAdvancing.advancementInterval = maximumPingDurationMult*clientClock.MaxOffset() + 1*time.Nanosecond
+	clientAdvancing.Unlock()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
+	util.SucceedsSoon(t, func() error {
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
 
-	serverManual := hlc.NewManualClock(10)
-	serverClock := hlc.NewClock(serverManual.UnixNano)
-	ctx := newNodeTestContext(serverClock, stopper)
-	s, ln := newTestServer(t, ctx, true)
-	remoteAddr := ln.Addr().String()
-
-	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              serverClock,
-		remoteClockMonitor: ctx.RemoteClocks,
+		if o, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; ok {
+			return util.Errorf("expected offset to have been cleared, but found %s", o)
+		}
+		return nil
 	})
-
-	// Create a client that receives a heartbeat right after the
-	// maximumClockReadingDelay.
-	advancing := AdvancingClock{
-		time:                0,
-		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
-	}
-	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := newNodeTestContext(clientClock, stopper)
-	_, err := context.GRPCDial(remoteAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Since the reply took too long, we should have a zero offset, even
-	// though the client is still healthy because it received a heartbeat
-	// reply.
-	context.RemoteClocks.mu.Lock()
-	if o, ok := context.RemoteClocks.mu.offsets[remoteAddr]; ok {
-		t.Errorf("expected offset to not exist, but found %v", o)
-	}
-	context.RemoteClocks.mu.Unlock()
 }
 
 func TestFailedOffsetMeasurement(t *testing.T) {
@@ -135,10 +147,9 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	defer stopper.Stop()
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(hlc.NewManualClock(1).UnixNano)
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
 
 	serverCtx := newNodeTestContext(clock, stopper)
-	serverCtx.RemoteClocks.monitorInterval = 100 * time.Millisecond
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
@@ -155,8 +166,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// Increase the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
 	clientCtx.HeartbeatTimeout = 20 * clientCtx.HeartbeatInterval
-	_, err := clientCtx.GRPCDial(remoteAddr)
-	if err != nil {
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
@@ -183,14 +193,17 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 }
 
 type AdvancingClock struct {
-	time                int64
-	advancementInterval int64
+	sync.Mutex
+	time                time.Time
+	advancementInterval time.Duration
 }
 
 func (ac *AdvancingClock) UnixNano() int64 {
+	ac.Lock()
 	time := ac.time
-	ac.time = time + ac.advancementInterval
-	return time
+	ac.time = time.Add(ac.advancementInterval)
+	ac.Unlock()
+	return time.UnixNano()
 }
 
 func TestRemoteOffsetUnhealthy(t *testing.T) {
@@ -218,10 +231,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		{offset: 0},
 		{offset: 0},
 		{offset: 0},
-		// Due to measurement uncertainty being at least equal to maxOffset (see
-		// comments in clock_offset.go), this is the minimum offset that actually
-		// triggers node death.
-		{offset: maxOffset*2 + 1},
+		// The minimum offset that actually triggers node death.
+		{offset: maxOffset + 1},
 	}
 
 	for i := range nodeCtxs {
@@ -230,10 +241,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 
 		clock.SetMaxOffset(maxOffset)
 		nodeCtxs[i].ctx = newNodeTestContext(clock, stopper)
-		nodeCtxs[i].ctx.RemoteClocks.monitorInterval = maxOffset / 2
-		// Apparently heartbeats must happen more frequently than monitor events.
-		// Good thing this is documented.
-		nodeCtxs[i].ctx.HeartbeatInterval = nodeCtxs[i].ctx.RemoteClocks.monitorInterval / 2
+		nodeCtxs[i].ctx.HeartbeatInterval = maxOffset
 
 		s, ln := newTestServer(t, nodeCtxs[i].ctx, true)
 		RegisterHeartbeatServer(s, &HeartbeatService{
@@ -255,16 +263,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		}
 	}
 
-	// Wait until all nodes are connected to all other nodes. We do this before
-	// starting the clock monitors to prevent the case where a node is connected
-	// e.g. only to the outlier node at the time of the first clock monitor
-	// event. This would cause that node to incorrectly deduce that it is offset
-	// from the cluster and commit suicide.
-	//
-	// TODO(tamird): The code responsible for this should be made more resilient (e.g.
-	// don't commit suicide if there are only two known nodes). This is likely
-	// not a problem in practice, since the clock monitor interval is quite
-	// large.
+	// Wait until all nodes are connected to all other nodes.
 	for _, nodeCtx := range nodeCtxs {
 		util.SucceedsSoon(t, func() error {
 			nodeCtx.ctx.RemoteClocks.mu.Lock()
@@ -277,36 +276,17 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		})
 	}
 
-	// Now that all the nodes are connected, start the clock monitors.
-	for _, nodeCtx := range nodeCtxs {
-		// Asynchronously closing over a range variable is unsafe.
-		ctx := nodeCtx.ctx
-		errChan := nodeCtx.errChan
-		stopper.RunWorker(func() {
-			errChan <- ctx.RemoteClocks.MonitorRemoteOffsets(stopper)
-		})
-	}
-
-	const errOffsetGreaterThanMaxOffset = "the true offset is greater than the max offset"
 	for i, nodeCtx := range nodeCtxs {
-		waitTime := nodeCtx.ctx.RemoteClocks.monitorInterval * 5
-
 		if nodeOffset := nodeCtx.offset; nodeOffset > maxOffset {
-			select {
-			case err := <-nodeCtx.errChan:
-				if testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
-					t.Logf("max offset: %s - node %d with excessive clock offset of %s returned expected error: %s", maxOffset, i, nodeOffset, err)
-				} else {
-					t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %s", maxOffset, i, nodeOffset, err)
-				}
-			case <-time.After(waitTime):
-				t.Errorf("max offset: %s - node %d with excessive clock offset of %s should have return an error, but did not", maxOffset, i, nodeOffset)
+			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
+				t.Logf("max offset: %s - node %d with excessive clock offset of %s returned expected error: %s", maxOffset, i, nodeOffset, err)
+			} else {
+				t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %s", maxOffset, i, nodeOffset, err)
 			}
 		} else {
-			select {
-			case err := <-nodeCtx.errChan:
+			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); err != nil {
 				t.Errorf("max offset: %s - node %d with acceptable clock offset of %s returned unexpected error: %s", maxOffset, i, nodeOffset, err)
-			case <-time.After(waitTime):
+			} else {
 				t.Logf("max offset: %s - node %d with acceptable clock offset of %s did not return an error, as expected", maxOffset, i, nodeOffset)
 			}
 		}

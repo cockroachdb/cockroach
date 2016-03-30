@@ -23,11 +23,9 @@ func init() {
 
 const (
 	defaultHeartbeatInterval = 3 * time.Second
-
-	// Affects maximum error in reading the clock of the remote. 1.5 seconds is
-	// the longest NTP allows for a remote clock reading. After 1.5 seconds, we
-	// assume that the offset from the clock is infinite.
-	maximumClockReadingDelay = 1500 * time.Millisecond
+	// The coefficient by which the maximum offset is multiplied to determine the
+	// maximum acceptable measurement latency.
+	maximumPingDurationMult = 2
 )
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
@@ -60,6 +58,7 @@ type Context struct {
 
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
+	HeartbeatCB       func()
 
 	localInternalServer roachpb.InternalServer
 	localAddr           string
@@ -81,7 +80,7 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 		ctx.localClock = hlc.NewClock(hlc.UnixNano)
 	}
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(clock)
+	ctx.RemoteClocks = newRemoteClockMonitor(clock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 
@@ -172,18 +171,18 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 	var heartbeatTimer util.Timer
 	defer heartbeatTimer.Stop()
 	for {
-		sendTime := ctx.localClock.PhysicalNow()
+		sendTime := ctx.localClock.PhysicalTime()
 		goCtx, cancel := context.WithTimeout(context.Background(), ctx.HeartbeatTimeout)
 		response, err := heartbeatClient.Ping(goCtx, &request)
 		if err != nil {
 			cancel()
 			return err
 		}
-		receiveTime := ctx.localClock.PhysicalNow()
+		receiveTime := ctx.localClock.PhysicalTime()
 
 		// Only update the clock offset measurement if we actually got a
 		// successful response from the server.
-		if receiveTime > sendTime+maximumClockReadingDelay.Nanoseconds() {
+		if pingDuration := receiveTime.Sub(sendTime); pingDuration > maximumPingDurationMult*ctx.localClock.MaxOffset() {
 			request.Offset.Reset()
 		} else {
 			// Offset and error are measured using the remote clock reading
@@ -191,11 +190,15 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 			// However, we assume that drift and min message delay are 0, for
 			// now.
-			request.Offset.MeasuredAt = receiveTime
-			request.Offset.Uncertainty = (receiveTime - sendTime) / 2
-			remoteTimeNow := response.ServerTime + request.Offset.Uncertainty
-			request.Offset.Offset = remoteTimeNow - receiveTime
-			ctx.RemoteClocks.UpdateOffset(remoteAddr, request.Offset)
+			request.Offset.MeasuredAt = receiveTime.UnixNano()
+			request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
+			remoteTimeNow := time.Unix(0, response.ServerTime).Add(pingDuration / 2)
+			request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+		}
+		ctx.RemoteClocks.UpdateOffset(remoteAddr, request.Offset)
+
+		if cb := ctx.HeartbeatCB; cb != nil {
+			cb()
 		}
 
 		// Wait after the heartbeat so that the first iteration gets a wait-free
