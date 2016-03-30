@@ -51,6 +51,7 @@ const (
 	clientMsgClose       clientMessageType = 'C'
 	clientMsgBind        clientMessageType = 'B'
 	clientMsgExecute     clientMessageType = 'E'
+	clientMsgFlush       clientMessageType = 'H'
 
 	serverMsgAuth                 serverMessageType = 'R'
 	serverMsgCommandComplete      serverMessageType = 'C'
@@ -289,6 +290,9 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		case clientMsgExecute:
 			c.doingExtendedQueryMessage = true
 			err = c.handleExecute(ctx, &c.readBuf)
+
+		case clientMsgFlush:
+			// No-op.
 
 		default:
 			err = c.sendInternalError(fmt.Sprintf("unrecognized client message type %s", typ))
