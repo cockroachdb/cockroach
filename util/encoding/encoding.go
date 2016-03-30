@@ -856,7 +856,7 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		if err != nil {
 			return b, "", err
 		}
-		return b, t.UTC().Format(time.UnixDate), nil
+		return b, t.UTC().Format(time.RFC3339Nano), nil
 	case Duration:
 		var d duration.Duration
 		b, d, err = DecodeDurationAscending(b)
