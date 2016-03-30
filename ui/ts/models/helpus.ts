@@ -100,9 +100,10 @@ module Models {
         // TODO: check timestamp on the backend to prevent overwriting data without loading first
         if (this.loaded) {
           // save the data both to the backend and the Cockroach Labs servers
-          return m.sync([Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes), setHelpUsData(this.attributes)])
+          return setHelpUsData(this.attributes)
           .then(() => {
             this.savedAttributes = _.clone(this.attributes);
+            Models.CockroachLabs.cockroachLabsSingleton.save(this.attributes);
           });
         }
       }
