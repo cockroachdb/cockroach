@@ -128,6 +128,7 @@ module Models {
             m.request<VersionList>({
               url: `${COCKROACHLABS_ADDR}/api/clusters/updates?uuid=${this.clusterID}&version=${nodeStatuses[0].build_info.tag}`,
               config: Utils.Http.XHRConfig,
+              background: true,
             }).then((laterVersions: VersionList) => {
               if (!_.isEmpty(laterVersions.details)) {
                 setVersionStatusAndResolve({
