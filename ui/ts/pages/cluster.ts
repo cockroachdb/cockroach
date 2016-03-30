@@ -104,7 +104,14 @@ module AdminViews {
             visualizationArguments: {
               format: "0.1%",
               dataFn: function (allStats: Models.Proto.NodeStatus[], totalStats: Models.Proto.StatusMetrics): { value: number; } {
-                return {value: totalStats[MetricNames.liveBytes] / totalStats[MetricNames.capacity] }; },
+                let capacity: number = totalStats[MetricNames.capacity];
+                if (capacity === 0) {
+                  // This usually happens, because the overall capacity is not
+                  // yet known.
+                  return {value: 0.0};
+                }
+                return {value: totalStats[MetricNames.liveBytes] /  capacity};
+              },
               zoom: "50%",
             },
           });
@@ -130,7 +137,7 @@ module AdminViews {
                 .title("CPU User %"),
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
                 .title("CPU Sys %")
-            ).format(d3.format(".2%")).title("CPU").stacked(true)
+            ).format(d3.format(".2%")).title("CPU Usage").stacked(true)
           );
 
           // TODO: get total/average memory from all machines
@@ -138,14 +145,14 @@ module AdminViews {
             Metrics.NewAxis(
               Metrics.Select.Avg(_sysMetric("allocbytes"))
                 .title("Memory")
-            ).format(Utils.Format.Bytes).title("Memory")
+            ).format(Utils.Format.Bytes).title("Memory Usage")
           );
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Connections")
-              ).format(d3.format(".1")).title("Connections")
+              ).format(d3.format(".1")).title("SQL Connections")
           );
 
           this._addChart(
@@ -156,7 +163,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
                 .nonNegativeRate()
                 .title("Bytes Out")
-            ).format(Utils.Format.Bytes).title("data")
+            ).format(Utils.Format.Bytes).title("SQL Traffic")
           );
 
           this._addChart(
@@ -164,7 +171,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format(".1")).title("SELECTs")
+            ).format(d3.format(".1")).title("Reads")
           );
 
           this._addChart(
@@ -178,7 +185,7 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .nonNegativeRate()
                 .title("Delete")
-            ).format(d3.format(".1")).title("INSERTs, UPDATEs, DELETEs")
+            ).format(d3.format(".1")).title("Writes")
           );
 
           this.exec = new Metrics.Executor(this._query);
