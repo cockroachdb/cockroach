@@ -67,7 +67,7 @@ EXPLAIN (DEBUG) SELECT * FROM kv@a
 8  /kv/a/'f'  /'e'     ROW
 
 statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
-INSERT INTO kv VALUES ('e', 'f')
+INSERT INTO kv VALUES ('h', 'f')
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv
@@ -388,3 +388,20 @@ INSERT INTO return VALUES (1, 2), (3, 4) RETURNING return.*, a + b
 a b a + b
 1 2 3
 3 4 7
+
+statement ok
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b),
+  INDEX a (a)
+)
+
+statement ok
+INSERT INTO abc VALUES (1, 2, 10)
+
+# Verify we get the correct message, even though internally the ConditionalPut
+# for the index key will also fail.
+statement error pgcode 23505 duplicate key value \(a,b\)=\(1,2\) violates unique constraint "primary"
+INSERT INTO abc VALUES (1, 2, 20)
