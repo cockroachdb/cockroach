@@ -85,6 +85,7 @@ const (
 // testContext{}. Any fields which are initialized to non-nil values
 // will be used as-is.
 type testContext struct {
+	testing.TB
 	transport     *RaftTransport
 	store         *Store
 	rng           *Replica
@@ -107,6 +108,7 @@ func (tc *testContext) Start(t testing.TB) {
 // StartWithStoreContext initializes the test context with a single
 // range covering the entire keyspace.
 func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
+	tc.TB = t
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
 	}
@@ -192,6 +194,11 @@ func (tc *testContext) Sender() client.Sender {
 	return client.Wrap(tc.rng, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 		if ba.RangeID != 0 {
 			ba.RangeID = 1
+		}
+		if ba.Timestamp == roachpb.ZeroTimestamp {
+			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+				tc.Fatal(err)
+			}
 		}
 		return ba
 	})
@@ -2263,6 +2270,9 @@ func TestReplayProtection(t *testing.T) {
 		ba.Header = btH
 		ba.Add(&bt)
 		ba.Add(&put)
+		if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+			t.Fatal(err)
+		}
 		br, pErr := tc.Sender().Send(tc.rng.context(context.Background()), ba)
 		if pErr != nil {
 			t.Fatalf("%d: unexpected error: %s", i, pErr)
@@ -2407,10 +2417,18 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 		t.Fatal(pErr)
 	}
 
-	pArgs = putArgs(splitKey.AsRawKey(), []byte("value"))
-	txn.Sequence++
-	if _, pErr := client.SendWrappedWith(newRng, newRng.context(context.Background()), h, &pArgs); pErr != nil {
-		t.Fatal(pErr)
+	{
+		var ba roachpb.BatchRequest
+		ba.Header = h
+		if err := ba.SetActiveTimestamp(newRng.store.Clock().Now); err != nil {
+			t.Fatal(err)
+		}
+		pArgs := putArgs(splitKey.AsRawKey(), []byte("value"))
+		ba.Add(&pArgs)
+		txn.Sequence++
+		if _, pErr := newRng.Send(newRng.context(context.Background()), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	// End the transaction and resolve the intents.
@@ -2446,10 +2464,17 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	newRng, txn := setupResolutionTest(t, tc, key, splitKey, true /* commit */)
 
 	// Check if the intent in the other range has not yet been resolved.
-	gArgs := getArgs(splitKey)
-	_, pErr := client.SendWrapped(newRng, newRng.context(context.Background()), &gArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
-		t.Errorf("expected write intent error, but got %s", pErr)
+	{
+		var ba roachpb.BatchRequest
+		gArgs := getArgs(splitKey)
+		ba.Add(&gArgs)
+		if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+			t.Fatal(err)
+		}
+		_, pErr := newRng.Send(newRng.context(context.Background()), ba)
+		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+			t.Errorf("expected write intent error, but got %s", pErr)
+		}
 	}
 
 	txn.Sequence++
@@ -2562,7 +2587,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			var ba roachpb.BatchRequest
 			ba.Header = etH
 			ba.Add(&bt, &put, &et)
-			if _, err := tc.rng.Send(context.Background(), ba); err != nil {
+			if _, err := tc.Sender().Send(context.Background(), ba); err != nil {
 				t.Fatalf("commit=%t: %s", commit, err)
 			}
 
@@ -4375,7 +4400,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	// the request for the incorrect key will be silently dropped.
 	gKey := gcKey(key, ts1)
 	gcReq := gcArgs(rng1.Desc().StartKey, rng1.Desc().EndKey, gKey)
-	if _, pErr := client.SendWrapped(rng1, rng1.context(context.Background()), &gcReq); pErr != nil {
+	if _, pErr := client.SendWrappedWith(rng1, rng1.context(context.Background()), roachpb.Header{Timestamp: tc.clock.Now()}, &gcReq); pErr != nil {
 		t.Errorf("unexpected pError on garbage collection request to incorrect range: %s", pErr)
 	}
 
@@ -4389,7 +4414,7 @@ func TestGCIncorrectRange(t *testing.T) {
 
 	// Send GC request to range 2 for the same key.
 	gcReq = gcArgs(rng2.Desc().StartKey, rng2.Desc().EndKey, gKey)
-	if _, pErr := client.SendWrapped(rng2, rng2.context(context.Background()), &gcReq); pErr != nil {
+	if _, pErr := client.SendWrappedWith(rng2, rng2.context(context.Background()), roachpb.Header{Timestamp: tc.clock.Now()}, &gcReq); pErr != nil {
 		t.Errorf("unexpected pError on garbage collection request to correct range: %s", pErr)
 	}
 
@@ -4437,6 +4462,9 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ba.Add(&roachpb.GetRequest{
 				Span: roachpb.Span{Key: key},
 			})
+			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+				t.Fatal(err)
+			}
 			br, pErr := tc.rng.addWriteCmd(ctx, ba, nil /* wg */)
 			if pErr == nil {
 				if !cancelEarly {

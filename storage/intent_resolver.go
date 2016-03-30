@@ -312,6 +312,8 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// We successfully resolved the intents, so we're able to GC from
 				// the txn span directly.
 				var ba roachpb.BatchRequest
+				ba.Timestamp = now
+
 				txn := item.intents[0].Txn
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{
@@ -349,6 +351,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}
+	baLocal.Timestamp = ir.store.Clock().Now()
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		var resolveArgs roachpb.Request
