@@ -440,7 +440,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	if tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof("%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+				log.Infof("%v: waiting %s on EndTransaction for linearizability", br.Txn.ID.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
 			}
 			time.Sleep(sleepNS)
 		}()
