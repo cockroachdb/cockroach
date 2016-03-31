@@ -116,7 +116,7 @@ func (r *RocksDB) Open() error {
 			humanize.IBytes(minMemtableBudget), util.IBytes(r.memtableBudget))
 	}
 
-	var ver int
+	var ver storageVersion
 	if len(r.dir) != 0 {
 		log.Infof("opening rocksdb instance at %q", r.dir)
 

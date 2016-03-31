@@ -22,18 +22,24 @@ import (
 	"path/filepath"
 )
 
+type storageVersion int
+
+const (
+	versionNoFile storageVersion = iota
+	versionBeta20160331
+)
+
 const (
 	versionFilename     = "COCKROACHDB_VERSION"
 	versionFilenameTemp = "COCKROACHDB_VERSION_TEMP"
-	versionNoFile       = 0
-	versionCurrent      = 1
 	versionMinimum      = versionNoFile
+	versionCurrent      = versionBeta20160331
 )
 
 // Version stores all the version information for all stores and is used as
 // the format for the version file.
 type Version struct {
-	Version int
+	Version storageVersion
 }
 
 // getVersionFilename returns the filename for the version file stored in the
@@ -45,7 +51,7 @@ func getVersionFilename(dir string) string {
 // getVersion returns the current on disk cockroach version from the version
 // file in the passed in directory. If there is no version file yet, it
 // returns 0.
-func getVersion(dir string) (int, error) {
+func getVersion(dir string) (storageVersion, error) {
 	filename := getVersionFilename(dir)
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
