@@ -351,7 +351,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(rs, evictionToken{}, false /*considerIntents*/, false /*useReverseScan*/)
+		desc, needAnother, _, pErr := ds.getDescriptors(rs, evictionToken{}, false /*useReverseScan*/)
 		if pErr != nil {
 			return -1, pErr
 		}
@@ -379,7 +379,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // returned bool is true in case the given range reaches outside the first
 // descriptor.
 func (ds *DistSender) getDescriptors(
-	rs roachpb.RSpan, evictToken evictionToken, considerIntents, useReverseScan bool,
+	rs roachpb.RSpan, evictToken evictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, bool, evictionToken, *roachpb.Error) {
 	var descKey roachpb.RKey
 	if !useReverseScan {
@@ -387,6 +387,21 @@ func (ds *DistSender) getDescriptors(
 	} else {
 		descKey = rs.EndKey
 	}
+
+	// When a previous descriptor has been used (when not warming
+	// the cache), allow [uncommitted] intents on range descriptor
+	// lookups to be returned in addition to live range descriptors.
+	// We cannot know with complete certainty whether a current
+	// intent or a previously committed value should be used to
+	// direct requests, but by looking up both, we can try both out
+	// without issuing as second lookup. This balances between
+	// the two cases where an intent's txn hasn't yet been
+	// committed (the previous value is correct), or an intent's
+	// txn has been committed (the intent value is correct).
+	//
+	// Note that with the current implementation of replica.RangeLookup,
+	// this will disable prefetching.
+	considerIntents := evictToken.prevDesc != nil
 
 	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
@@ -595,7 +610,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		//   cache we could be in for a busy loop.
 		ba.SetNewRequest()
 
-		considerIntents := false
 		var curReply *roachpb.BatchResponse
 		var desc *roachpb.RangeDescriptor
 		var evictToken evictionToken
@@ -607,7 +621,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
 			log.Trace(ctx, "meta descriptor lookup")
-			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, considerIntents, isReverse)
+			desc, needAnother, evictToken, pErr = ds.getDescriptors(rs, evictToken, isReverse)
 
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
@@ -652,6 +666,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if err := evictToken.evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
+				// On addressing errors, don't backoff; retry immediately.
+				r.Reset()
 				continue
 			}
 
@@ -712,16 +728,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if log.V(1) {
 					log.Warning(tErr)
 				}
-				// On retries, allow [uncommitted] intents on range descriptor
-				// lookups to be returned in addition to live range descriptors.
-				// We cannot know with complete certainty whether the current
-				// intent or the previously committed value should be used to
-				// direct requests, but by looking up both, we can try both out
-				// without issuing as second lookup. This balances between
-				// the two cases where the intent's txn hasn't yet been
-				// committed (the previous value is correct), or the intent's
-				// txn has been committed (the intent value is correct).
-				considerIntents = true
 				continue
 			case *roachpb.NotLeaderError:
 				newLeader := tErr.Leader
