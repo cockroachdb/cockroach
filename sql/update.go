@@ -252,6 +252,11 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			rowVals[colIDtoRowIndex[col.ID]] = val
 		}
 
+		// Ensure that the values honor the specified column widths.
+		for i := range newVals {
+			constrainValue(cols[i], &newVals[i])
+		}
+
 		// Check that the new value types match the column types. This needs to
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.

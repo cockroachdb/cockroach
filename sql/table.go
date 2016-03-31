@@ -878,3 +878,30 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		return nil, util.Errorf("unsupported column type: %s", kind)
 	}
 }
+
+// constrainValue constrains the width (for strings/byte arrays) and
+// scale (for decimals) to fit the specified column type.
+// Used by INSERT and UPDATE.
+func constrainValue(col ColumnDescriptor, val *parser.Datum) {
+	switch col.Type.Kind {
+	case ColumnType_STRING, ColumnType_BYTES:
+		switch (*val).(type) {
+		case parser.DString:
+			v := (*val).(parser.DString)
+			if col.Type.Width > 0 && len(v) > int(col.Type.Width) {
+				*val = parser.DString(v[:col.Type.Width])
+			}
+		case parser.DBytes:
+			v := (*val).(parser.DBytes)
+			if col.Type.Width > 0 && len(v) > int(col.Type.Width) {
+				*val = parser.DBytes(v[:col.Type.Width])
+			}
+		}
+	case ColumnType_DECIMAL:
+		if v, ok := (*val).(*parser.DDecimal); ok {
+			if col.Type.Width > 0 {
+				v.Dec.Round(&v.Dec, inf.Scale(col.Type.Width), inf.RoundHalfEven)
+			}
+		}
+	}
+}
