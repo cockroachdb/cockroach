@@ -1454,7 +1454,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "ttl_seconds",
                             "id": 1,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.customname)": "TTLSeconds"
                             }
                         }
@@ -1479,7 +1478,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "range_min_bytes",
                             "id": 2,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.moretags)": "yaml:\\\"range_min_bytes\\\""
                             }
                         },
@@ -1489,7 +1487,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "range_max_bytes",
                             "id": 3,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.moretags)": "yaml:\\\"range_max_bytes\\\""
                             }
                         },
