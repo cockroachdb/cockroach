@@ -365,10 +365,11 @@ func (db *DB) AdminSplit(splitKey interface{}) *roachpb.Error {
 }
 
 // CheckConsistency runs a consistency check on all the ranges containing
-// the key span.
-func (db *DB) CheckConsistency(begin, end interface{}) *roachpb.Error {
+// the key span. It logs a diff of all the keys that are inconsistent
+// when withDiff is set to true.
+func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) *roachpb.Error {
 	b := db.NewBatch()
-	b.CheckConsistency(begin, end)
+	b.CheckConsistency(begin, end, withDiff)
 	_, pErr := runOneResult(db, b)
 	return pErr
 }

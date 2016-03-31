@@ -385,7 +385,7 @@ type StoreTestingKnobs struct {
 	TestingCommandFilter storageutils.ReplicaCommandFilter
 	// A callback to be called instead of panicking due to a
 	// checksum mismatch in VerifyChecksum()
-	BadChecksumPanic func()
+	BadChecksumPanic func([]ReplicaSnapshotDiff)
 }
 
 type storeMetrics struct {

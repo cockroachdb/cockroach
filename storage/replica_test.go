@@ -4609,7 +4609,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	}
 	// Set a callback for checksum mismatch panics.
 	var panicked bool
-	rng.store.ctx.TestingKnobs.BadChecksumPanic = func() { panicked = true }
+	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) { panicked = true }
 
 	// First test that sending a Verification request with a bad version and
 	// bad checksum will return without panicking because of a bad checksum.
@@ -4625,8 +4625,23 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	if panicked {
 		t.Fatal("VerifyChecksum panicked")
 	}
-	// Setting the correct version results in a panic.
+	// Setting the correct version will verify the checksum see a
+	// checksum mismatch and trigger a rerun of the consistency check,
+	// but the second consistency check will succeed because the checksum
+	// provided in the second consistency check is the correct one.
 	verifyArgs.Version = replicaChecksumVersion
+	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if panicked {
+		t.Fatal("VerifyChecksum panicked")
+	}
+
+	// Repeat the same but provide a snapshot this time. This will
+	// result in the checksum failure not running the second consistency
+	// check; it will panic.
+	verifyArgs.Snapshot = &roachpb.RaftSnapshotData{}
 	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
 	if err != nil {
 		t.Fatal(err)
@@ -4652,6 +4667,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		ChecksumID: id,
 		Version:    replicaChecksumVersion,
 		Checksum:   []byte("bad checksum"),
+		Snapshot:   &roachpb.RaftSnapshotData{},
 	}
 	_, err = rng.VerifyChecksum(nil, nil, roachpb.Header{}, verifyArgs)
 	if err != nil {
@@ -4671,5 +4687,79 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 	err = newReplicaCorruptionError(nil, nil, nil)
 	if exp, act := `error_msg:""`, err.String(); !strings.Contains(act, exp) {
 		t.Fatalf("expected '%s' contained in '%s'", exp, act)
+	}
+}
+
+func TestDiffRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if diff := diffRange(nil, nil); diff != nil {
+		t.Fatalf("diff of nils =  %v", diff)
+	}
+
+	timestamp := roachpb.Timestamp{WallTime: 1729, Logical: 1}
+	value := []byte("foo")
+
+	// Construct the two snapshots.
+	leaderSnapshot := &roachpb.RaftSnapshotData{
+		KV: []roachpb.RaftSnapshotData_KeyValue{
+			{Key: []byte("a"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcd"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
+			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
+			{Key: []byte("x"), Timestamp: timestamp, Value: value},
+			{Key: []byte("y"), Timestamp: timestamp, Value: value},
+		},
+	}
+
+	// No diff works.
+	if diff := diffRange(leaderSnapshot, leaderSnapshot); diff != nil {
+		t.Fatalf("diff of similar snapshots = %v", diff)
+	}
+
+	replicaSnapshot := &roachpb.RaftSnapshotData{
+		KV: []roachpb.RaftSnapshotData_KeyValue{
+			{Key: []byte("ab"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
+			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
+			{Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
+			{Key: []byte("z"), Timestamp: timestamp, Value: value},
+		},
+	}
+
+	// The expected diff.
+	eDiff := []ReplicaSnapshotDiff{
+		{Leader: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
+		{Leader: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
+		{Leader: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
+		{Leader: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
+		{Leader: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
+		{Leader: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
+		{Leader: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
+		{Leader: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
+		{Leader: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
+		{Leader: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
+	}
+
+	diff := diffRange(leaderSnapshot, replicaSnapshot)
+	if diff == nil {
+		t.Fatalf("differing snapshots didn't reveal diff %v", diff)
+	}
+	if len(eDiff) != len(diff) {
+		t.Fatalf("expected diff length different from diff (%d vs %d) , %v vs %v", len(eDiff), len(diff), eDiff, diff)
+	}
+
+	for i, e := range eDiff {
+		v := diff[i]
+		if e.Leader != v.Leader || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
+			t.Fatalf("diff varies at row %d, %v vs %v", i, e, v)
+		}
 	}
 }

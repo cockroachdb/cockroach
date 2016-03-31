@@ -63,7 +63,9 @@ func Consistent(t *testing.T, c Cluster) {
 	// Always connect to the first node in the cluster.
 	kvClient, kvStopper := c.NewClient(t, 0)
 	defer kvStopper.Stop()
-	if pErr := kvClient.CheckConsistency(keys.LocalMax, keys.MaxKey); pErr != nil {
+	// Set withDiff to false because any failure results in a second consistency check
+	// being called with withDiff=true.
+	if pErr := kvClient.CheckConsistency(keys.LocalMax, keys.MaxKey, false /* withDiff*/); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
