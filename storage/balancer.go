@@ -28,26 +28,6 @@ func makeNodeIDSet(nodeIDs ...roachpb.NodeID) nodeIDSet {
 	return nodeSet
 }
 
-// A Balancer is an object that makes decisions on how to move ranges between
-// nodes on the cluster, based on collected statistics, in order to optimally
-// balance the workload across the cluster.
-type balancer interface {
-	// selectGood attempts to select a store from the supplied store list that
-	// it considers to be 'Good' relative to the other stores in the list. Any
-	// nodes in the supplied 'exclude' list will be disqualified from selection.
-	// Returns the selected store or nil if no such store can be found.
-	selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor
-	// selectBad attempts to select a store from the supplied store list that it
-	// considers to be 'Bad' relative to the other stores in the list. Returns
-	// the selected store or nil if no such store can be found.
-	selectBad(sl StoreList) *roachpb.StoreDescriptor
-	// improve attempts to select an improvement over the given store from the
-	// stores in the given store list. Any nodes in the supplied 'exclude' list
-	// will be disqualified from selection. Returns the selected store, or nil if no
-	// such store can be found.
-	improve(store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor
-}
-
 // rangeCountBalancer attempts to balance ranges across the cluster while
 // considering only the number of ranges being serviced each store.
 type rangeCountBalancer struct {
@@ -71,7 +51,6 @@ func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roac
 }
 
 func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	// Consider a random sample of stores from the store list.
 	var worst *roachpb.StoreDescriptor
 	for _, candidate := range sl.stores {
 		if worst == nil {
@@ -161,41 +140,6 @@ func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl Store
 		return candidate
 	}
 	return nil
-}
-
-// usageBalancer is the default rebalancer currently used by Cockroach. It
-// multiplexes rangeCountBalancer and usedCapacityBalancer, preferring the
-// latter but using rangeCountBalancer on clusters with very low average disk
-// usage.
-type usageBalancer struct {
-	rand allocatorRand
-}
-
-func (db usageBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	if sl.used.mean < minFractionUsedThreshold {
-		rcb := rangeCountBalancer{db.rand}
-		return rcb.selectGood(sl, excluded)
-	}
-	ucb := usedCapacityBalancer{db.rand}
-	return ucb.selectGood(sl, excluded)
-}
-
-func (db usageBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	if sl.used.mean < minFractionUsedThreshold {
-		rcb := rangeCountBalancer{db.rand}
-		return rcb.selectBad(sl)
-	}
-	ucb := usedCapacityBalancer{db.rand}
-	return ucb.selectBad(sl)
-}
-
-func (db usageBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	if sl.used.mean < minFractionUsedThreshold {
-		rcb := rangeCountBalancer{db.rand}
-		return rcb.improve(store, sl, excluded)
-	}
-	ucb := usedCapacityBalancer{db.rand}
-	return ucb.improve(store, sl, excluded)
 }
 
 // selectRandom chooses up to count random store descriptors from the given
