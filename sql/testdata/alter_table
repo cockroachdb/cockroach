@@ -128,3 +128,67 @@ INSERT INTO t VALUES (4, 1)
 
 statement error duplicate key value \(d\)=\(1\) violates unique constraint \"t_d_key\"
 INSERT INTO t VALUES (5, 1)
+
+# Add a column with no default value
+statement ok
+ALTER TABLE t ADD COLUMN x DECIMAL
+
+# Add a non NULL column with a default value
+statement ok
+ALTER TABLE t ADD COLUMN y DECIMAL NOT NULL DEFAULT (DECIMAL '1.3')
+
+# Add a non NULL column with no default value
+statement error column q contains null values
+ALTER TABLE t ADD COLUMN q DECIMAL NOT NULL
+
+statement ok
+ALTER TABLE t ADD COLUMN z DECIMAL DEFAULT (DECIMAL '1.4')
+
+statement ok
+INSERT INTO t VALUES (11, 12, DECIMAL '1.0')
+
+statement ok
+INSERT INTO t (a, d) VALUES (13, 14)
+
+statement ok
+INSERT INTO t (a, d, y) VALUES (21, 22, DECIMAL '1.0')
+
+statement ok
+INSERT INTO t (a, d) VALUES (23, 24)
+
+statement ok
+INSERT INTO t VALUES (31, 32)
+
+statement ok
+INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECIMAL '2.2')
+
+query IITTT colnames
+SELECT * FROM t
+----
+a   d     x     y     z
+1   NULL  NULL  1.3   1.4
+2   NULL  NULL  1.3   1.4
+3   NULL  NULL  1.3   1.4
+4   1     NULL  1.3   1.4
+11  12    1     1.3   1.4
+13  14    NULL  1.3   1.4
+21  22    NULL  1     1.4
+23  24    NULL  1.3   1.4
+31  32    NULL  1.3   1.4
+33  34    2     2.1   2.2
+
+# Subsequent operations succeed because the table is empty
+statement ok
+CREATE TABLE tt (a INT PRIMARY KEY)
+
+# Add a non NULL column with no default value
+statement ok
+ALTER TABLE tt ADD COLUMN q DECIMAL NOT NULL
+
+statement ok
+ALTER table tt ADD COLUMN r DECIMAL
+
+query ITT colnames
+SHOW COLUMNS FROM tt
+----
+a  q  r
