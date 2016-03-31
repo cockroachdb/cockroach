@@ -57,7 +57,7 @@ type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
 // ReplayProtectionFilterWrapper wraps a CommandFilter and assures protection
 // from Raft replays.
 type ReplayProtectionFilterWrapper struct {
-	sync.RWMutex
+	sync.Mutex
 	processedCommands map[raftCmdIDAndIndex]*roachpb.Error
 	filter            ReplicaCommandFilter
 }
@@ -73,25 +73,37 @@ func WrapFilterForReplayProtection(
 	return wrapper.run
 }
 
+// Errors are mutated on the Send path, so we must always return copies.
+func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
+	if pErr != nil {
+		pErrCopy := *pErr
+		txnClone := pErrCopy.GetTxn().Clone()
+		pErrCopy.SetTxn(&txnClone)
+		return &pErrCopy
+	}
+
+	return nil
+}
+
 // run executes the wrapped filter.
 func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) *roachpb.Error {
+	mapKey := raftCmdIDAndIndex{args.CmdID, args.Index}
 
-	c.RLock()
-	defer c.RUnlock()
+	c.Lock()
+	defer c.Unlock()
 
 	if args.InRaftCmd() {
-		if err, found :=
-			c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}]; found {
+		if pErr, ok := c.processedCommands[mapKey]; ok {
 			// We've detected a replay.
-			return err
+			return shallowCloneErrorWithTxn(pErr)
 		}
 	}
 
 	pErr := c.filter(args)
 
 	if args.InRaftCmd() {
-		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = pErr
+		c.processedCommands[mapKey] = pErr
 	}
 
-	return pErr
+	return shallowCloneErrorWithTxn(pErr)
 }
