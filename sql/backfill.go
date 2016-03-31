@@ -71,6 +71,7 @@ func (ids indexesByID) Swap(i, j int) {
 func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
+	var newColumnDescs []ColumnDescriptor
 	var newIndexDescs []IndexDescriptor
 	// Mutations are applied in a FIFO order. Only apply the first set
 	// of mutations.
@@ -84,8 +85,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 		case DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *DescriptorMutation_Column:
-				// TODO(vivek): Add column to new columns and use it
-				// to fill in default values.
+				newColumnDescs = append(newColumnDescs, *t.Column)
 
 			case *DescriptorMutation_Index:
 				newIndexDescs = append(newIndexDescs, *t.Index)
@@ -105,12 +105,21 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 	// TODO(vivek): Break these backfill operations into chunks. All of them
 	// will fail on big tables (see #3274).
 
-	// Delete the entire dropped columns.
-	// This used to use SQL UPDATE in the past to update the dropped
-	// column to NULL; but a column in the process of being
-	// dropped is placed in the table descriptor mutations, and
-	// a SQL UPDATE of a column in mutations will fail.
-	if len(droppedColumnDescs) > 0 {
+	defaultExprs, err := p.makeDefaultExprs(newColumnDescs)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+
+	nonNullableColumn := ""
+	// Add the column to the table descriptor.
+	for _, columnDesc := range newColumnDescs {
+		if columnDesc.DefaultExpr == nil && !columnDesc.Nullable {
+			nonNullableColumn = columnDesc.Name
+		}
+		tableDesc.AddColumn(columnDesc)
+	}
+
+	if len(droppedColumnDescs) > 0 || nonNullableColumn != "" || len(defaultExprs) > 0 {
 		// Run a scan across the table using the primary key.
 		start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
 		// Use a different batch to perform the scan.
@@ -119,6 +128,15 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 		if pErr := p.txn.Run(batch); pErr != nil {
 			return pErr
 		}
+
+		if nonNullableColumn != "" {
+			for _, result := range batch.Results {
+				if len(result.Rows) > 0 {
+					return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
+				}
+			}
+		}
+
 		for _, result := range batch.Results {
 			var sentinelKey roachpb.Key
 			for _, kv := range result.Rows {
@@ -127,6 +145,12 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 					// ID. Strip off that suffix to determine the prefix shared with the
 					// other keys for the row.
 					sentinelKey = stripColumnIDLength(kv.Key)
+
+					// Delete the entire dropped columns.
+					// This used to use SQL UPDATE in the past to update the dropped
+					// column to NULL; but a column in the process of being
+					// dropped is placed in the table descriptor mutations, and
+					// a SQL UPDATE of a column in mutations will fail.
 					for _, columnDesc := range droppedColumnDescs {
 						// Delete the dropped column.
 						colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
@@ -134,6 +158,29 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 							log.Infof("Del %s", colKey)
 						}
 						b.Del(colKey)
+					}
+					// Add the new columns and backfill the values.
+					// SQL UPDATE can't be used to fill the new columns, since a column in
+					// the process of being added is placed in the table descriptor mutations,
+					// and a SQL UPDATE of a column in mutations will fail.
+					for i, expr := range defaultExprs {
+						if expr == nil {
+							continue
+						}
+						col := newColumnDescs[i]
+						colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
+						d, err := expr.Eval(p.evalCtx)
+						if err != nil {
+							return roachpb.NewError(err)
+						}
+						val, err := marshalColumnValue(col, d, p.evalCtx.Args)
+						if err != nil {
+							return roachpb.NewError(err)
+						}
+						if log.V(2) {
+							log.Infof("CPut %s -> %v", colKey, val)
+						}
+						b.CPut(colKey, val, nil)
 					}
 				}
 			}
