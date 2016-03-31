@@ -273,8 +273,8 @@ func (*EventsResponse_Event) Descriptor() ([]byte, []int) { return fileDescripto
 
 // Timestamp is embedded in each place it's used, because proto3 defines a
 // built-in Timestamp message that we can't use, because gogoprotobuf
-// doesn't support all proto3 protobuf types yet. See gogoprotobuf issue
-// #113.
+// doesn't support all proto3 protobuf types yet. See
+// https://github.com/gogo/protobuf/issues/155.
 type EventsResponse_Event_Timestamp struct {
 	// The time in seconds since, January 1, 1970 UTC (Unix time).
 	Sec int64 `protobuf:"varint,1,opt,name=sec,proto3" json:"sec,omitempty"`
