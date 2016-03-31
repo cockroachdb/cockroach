@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.util;
 option go_package = "util";
 
@@ -24,6 +24,6 @@ import weak "gogoproto/gogo.proto";
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
 
-  optional string network_field = 1 [(gogoproto.nullable) = false];
-  optional string address_field = 2 [(gogoproto.nullable) = false];
+  string network_field = 1;
+  string address_field = 2;
 }
