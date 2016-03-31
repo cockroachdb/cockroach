@@ -114,7 +114,7 @@ func (db *DB) StoreData(r Resolution, data []TimeSeriesData) error {
 		}
 		for _, idata := range idatas {
 			var value roachpb.Value
-			if err := value.SetProto(idata); err != nil {
+			if err := value.SetProto(&idata); err != nil {
 				return err
 			}
 			kvs = append(kvs, roachpb.KeyValue{
