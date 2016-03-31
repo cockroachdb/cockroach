@@ -364,18 +364,6 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	return count, nil
 }
 
-// evictionToken holds eviction state between calls to getDescriptors.
-type evictionToken struct {
-	do       func() error
-	evicted  bool
-	prevDesc *roachpb.RangeDescriptor
-}
-
-func (et *evictionToken) evict() error {
-	et.evicted = true
-	return et.do()
-}
-
 // getDescriptors looks up the range descriptor to use for a query over the
 // key range span rs with the given options. The lookup takes into consideration
 // the last range descriptor that the caller had used for this key range span,
@@ -400,7 +388,7 @@ func (ds *DistSender) getDescriptors(
 		descKey = rs.EndKey
 	}
 
-	desc, evict, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken.prevDesc, evictToken.evicted, considerIntents, useReverseScan)
+	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
 		return nil, false, evictionToken{}, pErr
 	}
@@ -413,13 +401,7 @@ func (ds *DistSender) getDescriptors(
 		needAnother = desc.EndKey.Less(rs.EndKey)
 	}
 
-	// Construct evictionToken to manage eviction state.
-	evictToken = evictionToken{
-		do:       evict,
-		prevDesc: desc,
-	}
-
-	return desc, needAnother, evictToken, nil
+	return desc, needAnother, returnToken, nil
 }
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
@@ -714,9 +696,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// We may simply not be trying to talk to the up-to-date
 				// replicas, so clearing the descriptor here should be a good
 				// idea.
-				// TODO(tschottdorf): If a replica group goes dead, this
-				// will cause clients to put high read pressure on the first
-				// range, so there should be some rate limiting here.
 				if err := evictToken.evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
