@@ -71,7 +71,6 @@ func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roac
 }
 
 func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	// Consider a random sample of stores from the store list.
 	var worst *roachpb.StoreDescriptor
 	for _, candidate := range sl.stores {
 		if worst == nil {
