@@ -33,7 +33,7 @@ import (
 
 func TestPrettyPrint(t *testing.T) {
 
-	tm, _ := time.Parse(time.UnixDate, "Sat Mar  7 11:06:39 UTC 2015")
+	tm, _ := time.Parse(time.RFC3339Nano, "2016-03-30T13:40:35.053725008Z")
 	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
 	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
 	durationDesc, _ := encoding.EncodeDurationDescending(nil, duration)
@@ -125,10 +125,10 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(encoding.EncodeNotNullAscending(nil))), "/Table/42/#"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeTimeAscending(nil, tm))),
-			"/Table/42/Sat Mar  7 11:06:39 UTC 2015"},
+			"/Table/42/2016-03-30T13:40:35.053725008Z"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeTimeDescending(nil, tm))),
-			"/Table/42/Mon Oct 27 12:53:19 UTC 1924"},
+			"/Table/42/1923-10-04T10:19:23.946274991Z"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeDecimalAscending(nil, inf.NewDec(1234, 2)))),
 			"/Table/42/12.34"},
