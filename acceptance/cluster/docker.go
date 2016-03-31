@@ -358,7 +358,10 @@ func (cli retryingDockerClient) retry(ctx context.Context, timeout time.Duration
 	for i := 0; i < cli.attempts; i++ {
 		timeoutCtx, _ := context.WithTimeout(ctx, timeout)
 		err := f(timeoutCtx)
-		if err != context.DeadlineExceeded {
+		// docker-engine/client wraps the context.DeadlineExceeded with its own
+		// error message, forcing us to detect deadline exceeded by string
+		// matching.
+		if !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
 			if err != nil {
 				log.Infof("%s: %T: %v", name, err, err)
 			}
