@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -71,6 +72,7 @@ func (ids indexesByID) Swap(i, j int) {
 func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
+	var newColumnDescs []ColumnDescriptor
 	var newIndexDescs []IndexDescriptor
 	// Mutations are applied in a FIFO order. Only apply the first set
 	// of mutations.
@@ -84,8 +86,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 		case DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *DescriptorMutation_Column:
-				// TODO(vivek): Add column to new columns and use it
-				// to fill in default values.
+				newColumnDescs = append(newColumnDescs, *t.Column)
 
 			case *DescriptorMutation_Index:
 				newIndexDescs = append(newIndexDescs, *t.Index)
@@ -101,40 +102,80 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			}
 		}
 	}
-
 	// TODO(vivek): Break these backfill operations into chunks. All of them
 	// will fail on big tables (see #3274).
 
-	// Delete the entire dropped columns.
-	// This used to use SQL UPDATE in the past to update the dropped
-	// column to NULL; but a column in the process of being
-	// dropped is placed in the table descriptor mutations, and
-	// a SQL UPDATE of a column in mutations will fail.
-	if len(droppedColumnDescs) > 0 {
-		// Run a scan across the table using the primary key.
-		start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
-		// Use a different batch to perform the scan.
-		batch := &client.Batch{}
-		batch.Scan(start, start.PrefixEnd(), 0)
-		if pErr := p.txn.Run(batch); pErr != nil {
-			return pErr
+	defaultExprs := make(map[ColumnDescriptor]parser.Expr)
+	d, err := p.makeDefaultExprs(newColumnDescs)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+
+	// Run a scan across the table using the primary key.
+	start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
+	// Use a different batch to perform the scan.
+	batch := &client.Batch{}
+	batch.Scan(start, start.PrefixEnd(), 0)
+	if pErr := p.txn.Run(batch); pErr != nil {
+		return pErr
+	}
+
+	// Get number of rows.
+	numRows := 0
+	for _, result := range batch.Results {
+		numRows += len(result.Rows)
+	}
+
+	// Add new columns and Create default expressions.
+	// TODO(seif): this is duplicating code from insert.go and that we should eliminate it.
+	for i, columnDesc := range newColumnDescs {
+		if numRows > 0 && columnDesc.DefaultExpr == nil && !columnDesc.Nullable {
+			return roachpb.NewErrorf("column %s contains null values", columnDesc.Name)
 		}
-		for _, result := range batch.Results {
-			var sentinelKey roachpb.Key
-			for _, kv := range result.Rows {
-				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
-					// Sentinel keys have a 0 suffix indicating 0 bytes of column
-					// ID. Strip off that suffix to determine the prefix shared with the
-					// other keys for the row.
-					sentinelKey = stripColumnIDLength(kv.Key)
-					for _, columnDesc := range droppedColumnDescs {
-						// Delete the dropped column.
-						colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
-						if log.V(2) {
-							log.Infof("Del %s", colKey)
-						}
-						b.Del(colKey)
+		tableDesc.AddColumn(columnDesc)
+		// d will either be nil or have the length of newColumnDescs
+		if d != nil {
+			defaultExprs[columnDesc] = d[i]
+		}
+	}
+
+	for _, result := range batch.Results {
+		var sentinelKey roachpb.Key
+		for _, kv := range result.Rows {
+			if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
+				// Sentinel keys have a 0 suffix indicating 0 bytes of column
+				// ID. Strip off that suffix to determine the prefix shared with the
+				// other keys for the row.
+				sentinelKey = stripColumnIDLength(kv.Key)
+
+				// Delete the entire dropped columns.
+				// This used to use SQL UPDATE in the past to update the dropped
+				// column to NULL; but a column in the process of being
+				// dropped is placed in the table descriptor mutations, and
+				// a SQL UPDATE of a column in mutations will fail.
+				for _, columnDesc := range droppedColumnDescs {
+					// Delete the dropped column.
+					colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
+					if log.V(2) {
+						log.Infof("Del %s", colKey)
 					}
+					b.Del(colKey)
+				}
+				// Add columns.
+				for col, expr := range defaultExprs {
+					colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
+					d, err := expr.Eval(p.evalCtx)
+					if err != nil {
+						return roachpb.NewError(err)
+					}
+					val, err := marshalColumnValue(col, d, p.evalCtx.Args)
+					if err != nil {
+						return roachpb.NewError(err)
+					}
+					if log.V(2) {
+						log.Infof("CPut %s -> %v", colKey, val)
+					}
+					b.CPut(colKey, val, nil)
 				}
 			}
 		}
