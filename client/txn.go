@@ -514,20 +514,20 @@ func (txn *Txn) Exec(
 		panic("asked to retry or commit a txn that is already aborted")
 	}
 
-	if txn != nil {
-		// If we're looking at a brand new transaction, then communicate
-		// what should be used as initial timestamp for the KV txn created
-		// by TxnCoordSender.
-		if txn.Proto.OrigTimestamp == roachpb.ZeroTimestamp {
-			txn.Proto.OrigTimestamp = opt.MinInitialTimestamp
-		}
-	}
-
 	if opt.AutoRetry {
 		retryOptions = txn.db.txnRetryOptions
 	}
 RetryLoop:
 	for r := retry.Start(retryOptions); r.Next(); {
+		if txn != nil {
+			// If we're looking at a brand new transaction, then communicate
+			// what should be used as initial timestamp for the KV txn created
+			// by TxnCoordSender.
+			if txn.Proto.OrigTimestamp == roachpb.ZeroTimestamp {
+				txn.Proto.OrigTimestamp = opt.MinInitialTimestamp
+			}
+		}
+
 		pErr = fn(txn, &opt)
 		if txn != nil {
 			txn.retrying = true
