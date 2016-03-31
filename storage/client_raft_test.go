@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"strings"
@@ -1565,7 +1566,26 @@ func TestCheckInconsistent(t *testing.T) {
 	// The consistency check will panic on store 1. Let it panic only
 	// if the checksums match.
 	notify := make(chan struct{}, 1)
-	mtc.stores[1].TestingKnobs().BadChecksumPanic = func() {
+	mtc.stores[1].TestingKnobs().BadChecksumPanic = func(diff []storage.ReplicaSnapshotDiff) {
+		eDiff := []storage.ReplicaSnapshotDiff{
+			// Range stats become inconsistent because of the inconsitent
+			// write done above.
+			{Leader: true, Key: keys.RangeStatsKey(roachpb.RangeID(1)), Timestamp: roachpb.Timestamp{}},
+			{Leader: false, Key: keys.RangeStatsKey(roachpb.RangeID(1)), Timestamp: roachpb.Timestamp{}},
+			// Don't understand why we have two values for "a" on the replica?
+			{Leader: true, Key: []byte("a"), Timestamp: roachpb.Timestamp{Logical: 65}},
+			{Leader: false, Key: []byte("a"), Timestamp: roachpb.Timestamp{Logical: 70}},
+			{Leader: false, Key: []byte("a"), Timestamp: roachpb.Timestamp{Logical: 69}},
+		}
+		if len(eDiff) != len(diff) {
+			t.Errorf("diff lengths differ (%d vs %d), e = %v vs v = %v", len(eDiff), len(diff), eDiff, diff)
+		}
+		for i, d := range diff {
+			e := eDiff[i]
+			if e.Leader != d.Leader || !bytes.Equal(e.Key, d.Key) || !e.Timestamp.Equal(d.Timestamp) {
+				t.Errorf("e = %v vs v = %v", e, d)
+			}
+		}
 		notify <- struct{}{}
 	}
 	// Run consistency check.
