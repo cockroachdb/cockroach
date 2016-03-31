@@ -17,14 +17,19 @@
 package sql_test
 
 import (
+	dbsql "database/sql"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -229,5 +234,28 @@ func TestGetZoneConfig(t *testing.T) {
 		if !reflect.DeepEqual(zoneCfg, tc.zoneCfg) {
 			t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
 		}
+	}
+}
+
+func TestGetVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestGetVersion")
+	defer cleanupFn()
+
+	db, err := dbsql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var v string
+	if err := db.QueryRow("SELECT version()").Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(v, "CockroachDB") {
+		t.Errorf("version() doesn't identify itself as 'CockroachDB': %q", v)
 	}
 }

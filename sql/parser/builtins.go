@@ -39,6 +39,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -990,6 +991,16 @@ var builtins = map[string][]builtin{
 			dd.Round(x, 0, inf.RoundDown)
 			return dd, nil
 		}),
+	},
+	"version": {
+		builtin{
+			returnType: typeString,
+			types:      argTypes{},
+			impure:     false,
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return DString(util.GetBuildSummary()), nil
+			},
+		},
 	},
 }
 
