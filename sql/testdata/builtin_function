@@ -247,7 +247,7 @@ SELECT overlay('123456789' placing 'xxxx' from 3);
 12xxxx789
 
 query T
-SELECT overlay('123456789' placing 'xxxx' from 3 for 2); 
+SELECT overlay('123456789' placing 'xxxx' from 3 for 2);
 ----
 12xxxx56789
 
@@ -1043,3 +1043,8 @@ query BBBB
 select 1::decimal >= 1.0, 1.0 >= 1::decimal, 1.0 >= 2::decimal, 1::decimal >= 2.0
 ----
 true true false false
+
+query I
+SELECT strpos(version(), 'CockroachDB')
+----
+1

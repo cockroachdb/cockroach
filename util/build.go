@@ -42,6 +42,11 @@ var (
 	buildPlatform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 )
 
+// Short returns a pretty printed build and version summary.
+func (b BuildInfo) Short() string {
+	return fmt.Sprintf("CockroachDB %s (%s, built %s, %s)", b.Tag, b.Platform, b.Time, b.GoVersion)
+}
+
 // GetBuildInfo ...
 func GetBuildInfo() BuildInfo {
 	return BuildInfo{
