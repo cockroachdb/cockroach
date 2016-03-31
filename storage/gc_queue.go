@@ -159,11 +159,7 @@ func processTransactionTable(
 			return err
 		}
 		infoMu.TransactionSpanTotal++
-		ts := txn.Timestamp
-		if heartbeatTS := txn.LastHeartbeat; heartbeatTS != nil {
-			ts.Forward(*heartbeatTS)
-		}
-		if !ts.Less(cutoff) {
+		if !txn.GetLastHeartbeatTimestamp().Less(cutoff) {
 			return nil
 		}
 
@@ -295,11 +291,7 @@ func processAbortCache(
 		if txn.Status == roachpb.PENDING {
 			continue
 		}
-		ts := txn.Timestamp
-		if txn.LastHeartbeat != nil {
-			ts.Forward(*txn.LastHeartbeat)
-		}
-		if !cutoff.Less(ts) {
+		if !cutoff.Less(txn.GetLastHeartbeatTimestamp()) {
 			// This is it, we can delete our abort cache entries.
 			gcKeys = append(gcKeys, idToKeys[txnID]...)
 			infoMu.AbortSpanGCNum++

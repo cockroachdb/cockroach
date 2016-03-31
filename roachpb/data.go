@@ -595,9 +595,6 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)
-	// Compute timestamp and max timestamp.
-	max := now
-	max.WallTime += maxOffset
 
 	return &Transaction{
 		TxnMeta: TxnMeta{
@@ -609,8 +606,9 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 			Sequence:  1,
 		},
 		Name:          name,
+		LastHeartbeat: now,
 		OrigTimestamp: now,
-		MaxTimestamp:  max,
+		MaxTimestamp:  now.Add(maxOffset, 0),
 	}
 }
 
@@ -618,10 +616,6 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 // but does share pieces of memory with the original such as Key, ID and the
 // keys with the intent spans.
 func (t Transaction) Clone() Transaction {
-	if t.LastHeartbeat != nil {
-		h := *t.LastHeartbeat
-		t.LastHeartbeat = &h
-	}
 	mt := t.ObservedTimestamps
 	if mt != nil {
 		t.ObservedTimestamps = make(map[NodeID]Timestamp)
@@ -781,14 +775,9 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Epoch = o.Epoch
 	}
 	t.Timestamp.Forward(o.Timestamp)
+	t.LastHeartbeat.Forward(o.LastHeartbeat)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
-	if o.LastHeartbeat != nil {
-		if t.LastHeartbeat == nil {
-			t.LastHeartbeat = &Timestamp{}
-		}
-		t.LastHeartbeat.Forward(*o.LastHeartbeat)
-	}
 
 	// Absorb the collected clock uncertainty information.
 	for k, v := range o.ObservedTimestamps {
@@ -859,6 +848,20 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS Timestamp) {
 func (t Transaction) GetObservedTimestamp(nodeID NodeID) (Timestamp, bool) {
 	ts, ok := t.ObservedTimestamps[nodeID]
 	return ts, ok
+}
+
+// GetLastHeartbeatTimestamp returns the last heartbeat timestamp for the
+// transaction. This method is transitional; t.LastHeartbeat was once nullable,
+// we most also check t.Timestamp until all nodes are upgraded beyond this
+// version.
+//
+// TODO(tamird): remove this before 1.0.
+func (t Transaction) GetLastHeartbeatTimestamp() Timestamp {
+	ts := t.LastHeartbeat
+	if ts.Less(t.Timestamp) {
+		ts = t.Timestamp
+	}
+	return ts
 }
 
 var _ fmt.Stringer = &Lease{}

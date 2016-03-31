@@ -402,7 +402,6 @@ func TestTransactionString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts1 := makeTS(10, 11)
 	txn := Transaction{
 		TxnMeta: TxnMeta{
 			Isolation: SERIALIZABLE,
@@ -414,7 +413,7 @@ func TestTransactionString(t *testing.T) {
 		},
 		Name:          "name",
 		Status:        COMMITTED,
-		LastHeartbeat: &ts1,
+		LastHeartbeat: makeTS(10, 11),
 		OrigTimestamp: makeTS(30, 31),
 		MaxTimestamp:  makeTS(40, 41),
 	}
@@ -486,7 +485,7 @@ var nonZeroTxn = Transaction{
 	},
 	Name:               "name",
 	Status:             COMMITTED,
-	LastHeartbeat:      &Timestamp{1, 2},
+	LastHeartbeat:      makeTS(1, 2),
 	OrigTimestamp:      makeTS(30, 31),
 	MaxTimestamp:       makeTS(40, 41),
 	ObservedTimestamps: map[NodeID]Timestamp{1: makeTS(1, 2)},

@@ -918,9 +918,6 @@ func (r *Replica) HeartbeatTxn(
 	}
 
 	if txn.Status == roachpb.PENDING {
-		if txn.LastHeartbeat == nil {
-			txn.LastHeartbeat = &roachpb.Timestamp{}
-		}
 		txn.LastHeartbeat.Forward(args.Now)
 		if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err
@@ -1085,12 +1082,10 @@ func (r *Replica) PushTxn(
 	var pusherWins bool
 	var reason string
 
-	lastActive := reply.PusheeTxn.OrigTimestamp
-	if realHB := reply.PusheeTxn.LastHeartbeat; realHB != nil {
-		lastActive.Forward(*realHB)
-	}
+	cutoff := args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)
+
 	switch {
-	case lastActive.Less(args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)):
+	case reply.PusheeTxn.GetLastHeartbeatTimestamp().Less(cutoff):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
