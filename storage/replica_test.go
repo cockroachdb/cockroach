@@ -1025,7 +1025,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 	}, h
 }
 
-// endTxnArgs returns a request and header for a PushTxn RPC for the
+// pushTxnArgs returns a request and header for a PushTxn RPC for the
 // specified key.
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
@@ -1526,7 +1526,7 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 		Status:    roachpb.COMMITTED,
 	}
 	txn.Sequence++
-	if _, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txn, Timestamp: txn.Timestamp}, rArgs); pErr != nil {
+	if _, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: txn.Timestamp}, rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2982,6 +2982,45 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 				t.Errorf("%d: expected aborted transaction, got %s", i, txn)
 			}
 		}
+	}
+}
+
+// TestPushTxnNoTxn makes sure that no Txn is returned from PushTxn and that
+// it and ResolveIntent{,Range} can not be carried out in a transaction.
+func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	b := tc.engine.NewBatch()
+	defer b.Close()
+
+	txn := newTransaction("test", roachpb.Key("test"), 1, roachpb.SERIALIZABLE, tc.clock)
+	txnPushee := txn.Clone()
+	txnPushee.Priority--
+	pa := pushTxnArgs(txn, &txnPushee, roachpb.PUSH_ABORT)
+	var ms engine.MVCCStats
+	var ra roachpb.ResolveIntentRequest
+	var rra roachpb.ResolveIntentRangeRequest
+
+	// Should not be able to push or resolve in a transaction.
+	if _, err := tc.rng.PushTxn(b, &ms, roachpb.Header{Txn: txn}, pa); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
+	}
+	if _, err := tc.rng.ResolveIntent(b, &ms, roachpb.Header{Txn: txn}, ra); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
+	}
+	if _, err := tc.rng.ResolveIntentRange(b, &ms, roachpb.Header{Txn: txn}, rra); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
+	}
+
+	// Should not get a transaction back from PushTxn. It used to erroneously
+	// return args.PusherTxn.
+	if reply, err := tc.rng.PushTxn(b, &ms, roachpb.Header{}, pa); err != nil {
+		t.Fatal(err)
+	} else if reply.Txn != nil {
+		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
 	}
 }
 

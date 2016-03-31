@@ -1633,7 +1633,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			pErr = roachpb.NewError(err)
 			return nil, pErr
 		}
-
+		rng.assert5725(ba)
 		br, pErr = rng.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
@@ -1683,6 +1683,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			}
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
+			rng.assert5725(ba)
 			if ba.Txn != nil {
 				updatedTxn, pErr := s.maybeUpdateTransaction(ba.Txn, now)
 				if pErr != nil {
