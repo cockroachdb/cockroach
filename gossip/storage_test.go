@@ -49,6 +49,12 @@ func (ts *testStorage) isWrite() bool {
 	return ts.write
 }
 
+func (ts *testStorage) Info() gossip.BootstrapInfo {
+	ts.Lock()
+	defer ts.Unlock()
+	return ts.info
+}
+
 func (ts *testStorage) Len() int {
 	ts.Lock()
 	defer ts.Unlock()
@@ -193,7 +199,7 @@ func TestGossipStorage(t *testing.T) {
 	})
 
 	if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
-		t.Fatalf("expected %v, got %v (info: %#v)", expected, actual, ts2.info.Addresses)
+		t.Fatalf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
 	}
 
 }
