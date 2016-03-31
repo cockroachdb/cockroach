@@ -1047,7 +1047,13 @@ func mvccPutInternal(
 			return nil
 		}
 	}
-	buf.newMeta = MVCCMetadata{Txn: txn.GetMeta(), Timestamp: timestamp}
+	{
+		var txnMeta *roachpb.TxnMeta
+		if txn != nil {
+			txnMeta = &txn.TxnMeta
+		}
+		buf.newMeta = MVCCMetadata{Txn: txnMeta, Timestamp: timestamp}
+	}
 	newMeta := &buf.newMeta
 
 	versionKey := metaKey

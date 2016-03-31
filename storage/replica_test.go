@@ -2989,6 +2989,13 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 // priority are pushed; if priorities are equal, then the txns
 // are ordered by txn timestamp, with the more recent timestamp
 // being pushable.
+// TODO(tschottdorf): we should have a randomized version of this test which
+// also simulates the client proto and persisted record diverging. For example,
+// clients may be using a higher timestamp for their push or the persisted
+// record (which they are not using) might have a higher timestamp, and even
+// in the presence of such skewed information, conflicts between two (or more)
+// conflicting transactions must not deadlock (see #5685 for an example of this
+// happening with older code).
 func TestPushTxnPriorities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -3003,23 +3010,25 @@ func TestPushTxnPriorities(t *testing.T) {
 		pushType                       roachpb.PushTxnType
 		expSuccess                     bool
 	}{
-		// Pusher has higher priority succeeds.
+		// Pusher with higher priority succeeds.
+		{2, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
 		{2, 1, ts1, ts1, roachpb.PUSH_ABORT, true},
-		// Pusher has lower priority fails.
+		// Pusher with lower priority fails.
 		{1, 2, ts1, ts1, roachpb.PUSH_ABORT, false},
 		{1, 2, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
-		// Pusher has lower priority fails, even with older txn timestamp.
+		// Pusher with lower priority fails, even with older txn timestamp.
 		{1, 2, ts1, ts2, roachpb.PUSH_ABORT, false},
-		// Pusher has lower priority, but older txn timestamp allows success if !abort.
+		// Pusher has lower priority, but older txn timestamp allows success if
+		// !abort since there's nothing to do.
 		{1, 2, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
-		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, roachpb.PUSH_ABORT, true},
-		// With same priorities, same txn timestamp fails (orders by txn ID).
+		// With same priorities, larger Txn ID wins. Timestamp does not matter
+		// (unless it implies that nothing needs to be pushed in the first
+		// place; see above).
+		// Note: in this test, the pusher has the larger ID.
 		{1, 1, ts1, ts1, roachpb.PUSH_ABORT, true},
 		{1, 1, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
-		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, roachpb.PUSH_ABORT, false},
-		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, false},
+		{1, 1, ts2, ts1, roachpb.PUSH_ABORT, true},
+		{1, 1, ts2, ts1, roachpb.PUSH_TIMESTAMP, true},
 		// When touching, priority never wins.
 		{2, 1, ts1, ts1, roachpb.PUSH_TOUCH, false},
 		{1, 2, ts1, ts1, roachpb.PUSH_TOUCH, false},

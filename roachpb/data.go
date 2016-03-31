@@ -26,7 +26,6 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -615,15 +614,6 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	}
 }
 
-// GetMeta returns the Transaction's metadata, or nil if the transaction
-// is nil.
-func (t *Transaction) GetMeta() *TxnMeta {
-	if t == nil {
-		return nil
-	}
-	return &t.TxnMeta
-}
-
 // Clone creates a copy of the given transaction. The copy is "mostly" deep,
 // but does share pieces of memory with the original such as Key, ID and the
 // keys with the intent spans.
@@ -840,16 +830,8 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t",
-		t.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld)
+		t.ID.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld)
 	return buf.String()
-}
-
-// Short returns the short form of the Transaction's UUID.
-func (t Transaction) Short() string {
-	if t.ID == nil {
-		return strings.Repeat("?", 8)
-	}
-	return t.ID.String()[:8]
 }
 
 // ResetObservedTimestamps clears out all timestamps recorded from individual

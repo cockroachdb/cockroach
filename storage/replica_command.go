@@ -533,7 +533,7 @@ func (r *Replica) EndTransaction(
 		var err error
 		if txnAutoGC && len(externalIntents) == 0 {
 			if log.V(1) {
-				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.Short(), len(args.IntentSpans))
+				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.ID.Short(), len(args.IntentSpans))
 			}
 			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 		} else {
@@ -992,6 +992,10 @@ func (r *Replica) PushTxn(
 ) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
+	if args.Now.Equal(roachpb.ZeroTimestamp) {
+		return reply, util.Errorf("the field Now must be provided")
+	}
+
 	if args.PusherTxn.ID != nil {
 		reply.Txn = &args.PusherTxn
 	}
@@ -1071,51 +1075,49 @@ func (r *Replica) PushTxn(
 		return reply, nil
 	}
 
-	// pusherWins bool is true in the event the pusher prevails.
-	var pusherWins bool
-
 	priority := args.PusherTxn.Priority
 
-	// Check for txn timeout.
-	if reply.PusheeTxn.LastHeartbeat == nil {
-		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
-	}
-	if args.Now.Equal(roachpb.ZeroTimestamp) {
-		return reply, util.Errorf("the field Now must be provided")
-	}
-	// Compute heartbeat expiration (all replicas must see the same result).
-	expiry := args.Now
-	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
+	var pusherWins bool
+	var reason string
 
-	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
-		if log.V(1) {
-			log.Infof("pushing expired txn %s", reply.PusheeTxn)
-		}
-		pusherWins = true
+	lastActive := reply.PusheeTxn.OrigTimestamp
+	if realHB := reply.PusheeTxn.LastHeartbeat; realHB != nil {
+		lastActive.Forward(*realHB)
+	}
+	switch {
+	case lastActive.Less(args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)):
+		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
 		args.PushType = roachpb.PUSH_ABORT
-	} else if reply.PusheeTxn.Isolation == roachpb.SNAPSHOT && args.PushType == roachpb.PUSH_TIMESTAMP {
-		if log.V(1) {
-			log.Infof("pushing timestamp for snapshot isolation txn")
-		}
 		pusherWins = true
-	} else if args.PushType == roachpb.PUSH_TOUCH {
+	case args.PushType == roachpb.PUSH_TOUCH:
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
-	} else if reply.PusheeTxn.Priority < priority ||
-		(reply.PusheeTxn.Priority == priority && args.PusherTxn.ID != nil &&
-			(args.PusherTxn.Timestamp.Less(reply.PusheeTxn.Timestamp) ||
-				(args.PusherTxn.Timestamp.Equal(reply.PusheeTxn.Timestamp) &&
-					bytes.Compare(reply.PusheeTxn.ID.GetBytes(), args.PusherTxn.ID.GetBytes()) < 0))) {
-		// Pusher wins based on priority; if priorities are equal, order
-		// by lower txn timestamp; if priorities & timestamps are equal,
-		// the greater transaction ID wins.
-		if log.V(1) {
-			log.Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
-		}
+	case args.PushType == roachpb.PUSH_TIMESTAMP &&
+		reply.PusheeTxn.Isolation == roachpb.SNAPSHOT:
+		// Can always push a SNAPSHOT txn's timestamp.
+		reason = "pushee is SNAPSHOT"
 		pusherWins = true
+	case reply.PusheeTxn.Priority != priority:
+		reason = "priority"
+		pusherWins = reply.PusheeTxn.Priority < priority
+	case args.PusherTxn.ID == nil:
+		reason = "equal priorities; pusher not transactional"
+		pusherWins = false
+	default:
+		reason = "equal priorities; greater ID wins"
+		pusherWins = bytes.Compare(reply.PusheeTxn.ID.GetBytes(),
+			args.PusherTxn.ID.GetBytes()) < 0
+	}
+
+	if log.V(1) && reason != "" {
+		s := "pushed"
+		if !pusherWins {
+			s = "failed to push"
+		}
+		log.Infof("%s "+s+" %s: %s", args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
 	}
 
 	if !pusherWins {
