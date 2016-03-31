@@ -987,6 +987,9 @@ func (r *Replica) GC(
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
+//
+// If the pusher is non-transactional, args.PusherTxn is an empty
+// proto with only the priority set.
 func (r *Replica) PushTxn(
 	batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest,
 ) (roachpb.PushTxnResponse, error) {
