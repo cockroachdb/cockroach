@@ -93,26 +93,39 @@ func TestKeyAddress(t *testing.T) {
 }
 
 func TestKeyAddressError(t *testing.T) {
-	testCases := []roachpb.Key{
-		StoreIdentKey(),
-		StoreGossipKey(),
-		AbortCacheKey(0, uuid.NewV4()),
-		RaftTombstoneKey(0),
-		RaftAppliedIndexKey(0),
-		RaftTruncatedStateKey(0),
-		RangeLeaderLeaseKey(0),
-		RangeStatsKey(0),
-		RaftHardStateKey(0),
-		RaftLastIndexKey(0),
-		RaftLogPrefix(0),
-		RaftLogKey(0, 0),
-		RangeLastReplicaGCTimestampKey(0),
-		RangeLastVerificationTimestampKey(0),
-		RangeDescriptorKey(roachpb.RKey(RangeLastVerificationTimestampKey(0))),
+	testCases := map[string][]roachpb.Key{
+		"store-local key .* is not addressable": {
+			StoreIdentKey(),
+			StoreGossipKey(),
+		},
+		"local range ID key .* is not addressable": {
+			AbortCacheKey(0, uuid.NewV4()),
+			RaftTombstoneKey(0),
+			RaftAppliedIndexKey(0),
+			RaftTruncatedStateKey(0),
+			RangeLeaderLeaseKey(0),
+			RangeStatsKey(0),
+			RaftHardStateKey(0),
+			RaftLastIndexKey(0),
+			RaftLogPrefix(0),
+			RaftLogKey(0, 0),
+			RangeLastReplicaGCTimestampKey(0),
+			RangeLastVerificationTimestampKey(0),
+			RangeDescriptorKey(roachpb.RKey(RangeLastVerificationTimestampKey(0))),
+		},
+		"local key .* malformed": {
+			makeKey(localPrefix, roachpb.Key("z")),
+		},
 	}
-	for i, test := range testCases {
-		if addr, err := Addr(test); !testutils.IsError(err, "local key .* malformed; should contain prefix .*") {
-			t.Errorf("%d: expected addressing key %q to throw error, but it returned address %q", i, test, addr)
+	for regexp, keyList := range testCases {
+		for _, key := range keyList {
+			if addr, err := Addr(key); err == nil {
+				t.Errorf("expected addressing key %q to throw error, but it returned address %q",
+					key, addr)
+			} else if !testutils.IsError(err, regexp) {
+				t.Errorf("expected addressing key %q to throw error matching %s, but got error %s",
+					key, regexp, err)
+			}
 		}
 	}
 }
