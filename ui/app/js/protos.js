@@ -19,19 +19,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "rule": "optional",
                             "type": "string",
                             "name": "network_field",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 1
                         },
                         {
                             "rule": "optional",
                             "type": "string",
                             "name": "address_field",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 2
                         }
                     ]
                 },
