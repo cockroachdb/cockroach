@@ -3776,7 +3776,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Fatalf("expected WriteIntentError, not %s", pErr)
 	}
 
-	// Try a single lookup with IgnoreIntents. Expect to see both descriptors.
+	// Try a single lookup with ConsiderIntents. Expect to see both descriptors.
 	// First, try this consistently, which should not be allowed.
 	rlArgs.ConsiderIntents = true
 	_, pErr = tc.SendWrapped(rlArgs)

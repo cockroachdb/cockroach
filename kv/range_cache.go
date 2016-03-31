@@ -84,9 +84,10 @@ type rangeDescriptorCache struct {
 	// rangeCacheMu protects rangeCache for concurrent access
 	rangeCacheMu sync.RWMutex
 	// lookupRequests stores all inflight requests retrieving range
-	// descriptors from the database. It allows multiple rangeDescriptorCache
-	// lookup requests for the same (key, considerIntents, useReverseScan)
-	// tuple to be multiplexed onto the same database lookup.
+	// descriptors from the database. It allows multiple RangeDescriptorDB
+	// lookup requests for the same inferred range descriptor to be
+	// multiplexed onto the same database lookup. See makeLookupRequestKey
+	// for details on this inference.
 	lookupRequests struct {
 		sync.Mutex
 		inflight map[lookupRequestKey]lookupRequest
@@ -104,19 +105,23 @@ type lookupRequest struct {
 }
 
 type lookupResult struct {
-	desc  *roachpb.RangeDescriptor
-	evict func() error
-	pErr  *roachpb.Error
+	desc       *roachpb.RangeDescriptor
+	evictToken evictionToken
+	pErr       *roachpb.Error
 }
 
 type lookupRequestKey struct {
-	key             string
+	key string
+	// evictedPrev is useful to distinguish between lookups to the updated and new
+	// halves of a split. This is because only requests to the new half will trigger
+	// an eviction, while requests to the updated half will simply find the descriptor
+	// missing from the cache. See makeLookupRequestKey for more details.
 	evictedPrev     bool
 	considerIntents bool
 	useReverseScan  bool
 }
 
-func makeLookupRequestKey(key roachpb.RKey, prevDesc *roachpb.RangeDescriptor, evictedPrev, considerIntents, useReverseScan bool) lookupRequestKey {
+func makeLookupRequestKey(key roachpb.RKey, evictToken evictionToken, considerIntents, useReverseScan bool) lookupRequestKey {
 	// If the prevDesc is not nil and we had a cache miss, there are three possible
 	// events that may have happened. For each of these, we try to coalesce all
 	// requests that will end up on the same range post-event together.
@@ -137,12 +142,12 @@ func makeLookupRequestKey(key roachpb.RKey, prevDesc *roachpb.RangeDescriptor, e
 	//           requests to it will evict the descriptor. We set the key to hash to
 	//           the start of the stale descriptor for lookup requests to the rebalanced
 	//           descriptor so that all requests will be coalesced to the same lookupRequest.
-	if prevDesc != nil {
-		key = prevDesc.StartKey
+	if evictToken.prevDesc != nil {
+		key = evictToken.prevDesc.StartKey
 	}
 	return lookupRequestKey{
 		key:             string(key),
-		evictedPrev:     evictedPrev,
+		evictedPrev:     evictToken.evictedDesc(),
 		considerIntents: considerIntents,
 		useReverseScan:  useReverseScan,
 	}
@@ -179,9 +184,48 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 	return buf.String()
 }
 
+// evictionToken holds eviction state between calls to LookupRangeDescriptor.
+type evictionToken struct {
+	prevDesc      *roachpb.RangeDescriptor
+	do            func() error // called on eviction.
+	evicted       bool
+	evictedLocker sync.Locker
+}
+
+func makeEvictionToken(prevDesc *roachpb.RangeDescriptor, evict func() error) evictionToken {
+	return evictionToken{
+		prevDesc:      prevDesc,
+		do:            evict,
+		evictedLocker: &sync.Mutex{},
+	}
+}
+
+func (et *evictionToken) evict() error {
+	et.evictedLocker.Lock()
+	defer et.evictedLocker.Unlock()
+	var err error
+	if !et.evicted {
+		err = et.do()
+		et.evicted = true
+	}
+	return err
+}
+
+func (et *evictionToken) evictedDesc() bool {
+	if et.evictedLocker == nil {
+		return false
+	}
+	et.evictedLocker.Lock()
+	defer et.evictedLocker.Unlock()
+	return et.evicted
+}
+
 // LookupRangeDescriptor attempts to locate a descriptor for the range
 // containing the given Key. This is done by querying the two-level
-// lookup table of range descriptors which cockroach maintains.
+// lookup table of range descriptors which cockroach maintains. The
+// function should be provided with an evictionToken if one was
+// acquired from this function on a previous lookup. If not, an
+// empty evictionToken can be provided.
 //
 // This method first looks up the specified key in the first level of
 // range metadata, which returns the location of the key within the
@@ -191,19 +235,20 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 // cached for subsequent lookups.
 //
 // This method returns the RangeDescriptor for the range containing
-// the key's data, or an error if any occurred.
-func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, prevDesc *roachpb.RangeDescriptor,
-	evictedPrev, considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, func() error, *roachpb.Error) {
+// the key's data and a token to manage evicting the RangeDescriptor
+// if it is found to be stale, or an error if any occurred.
+func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictToken evictionToken,
+	considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, evictionToken, *roachpb.Error) {
 	rdc.rangeCacheMu.RLock()
 	if _, desc, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCacheMu.RUnlock()
-		return nil, nil, roachpb.NewError(err)
+		return nil, evictionToken{}, roachpb.NewError(err)
 	} else if desc != nil {
 		rdc.rangeCacheMu.RUnlock()
-		evict := func() error {
+		returnToken := makeEvictionToken(desc, func() error {
 			return rdc.EvictCachedRangeDescriptor(key, desc, useReverseScan)
-		}
-		return desc, evict, nil
+		})
+		return desc, returnToken, nil
 	}
 
 	if log.V(2) {
@@ -213,7 +258,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, prevDes
 	}
 
 	var res lookupResult
-	requestKey := makeLookupRequestKey(key, prevDesc, evictedPrev, considerIntents, useReverseScan)
+	requestKey := makeLookupRequestKey(key, evictToken, considerIntents, useReverseScan)
 	rdc.lookupRequests.Lock()
 	if req, inflight := rdc.lookupRequests.inflight[requestKey]; inflight {
 		resC := make(chan lookupResult, 1)
@@ -239,9 +284,9 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, prevDes
 				desc := &rs[0]
 				res = lookupResult{
 					desc: desc,
-					evict: func() error {
+					evictToken: makeEvictionToken(desc, func() error {
 						return rdc.EvictCachedRangeDescriptor(key, desc, useReverseScan)
-					},
+					}),
 				}
 			case 2:
 				if !considerIntents {
@@ -249,51 +294,50 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, prevDes
 				}
 				desc := &rs[0]
 				nextDesc := rs[1]
-				var once sync.Once
 				res = lookupResult{
 					desc: desc,
-					evict: func() error {
-						var err error
-						once.Do(func() {
-							err = rdc.insertRangeDescriptors(nextDesc)
-						})
-						return err
-					},
+					evictToken: makeEvictionToken(desc, func() error {
+						return rdc.insertRangeDescriptors(nextDesc)
+					}),
 				}
 			default:
 				panic(fmt.Sprintf("more than 2 matching range descriptors returned for %s: %v", key, rs))
 			}
 		}
 
+		// We've released all locks at this point.
 		rdc.rangeCacheMu.Lock()
 		if res.pErr == nil {
-			// These need to be separate because we need to preserve the pointer to rs[0]. An
-			// append could cause a copy, which would change the address of rs[0].
-			if err := rdc.insertRangeDescriptorsLocked(rs...); err != nil {
-				res = lookupResult{pErr: roachpb.NewError(err)}
-			}
+			// These need to be separate because we need to preserve the pointer to rs[0]
+			// so that the seenDesc logic works correctly in EvictCachedRangeDescriptor. An
+			// append could cause a copy, which would change the address of rs[0]. We insert
+			// the prefetced descriptors first to avoid any unintended overwriting.
 			if err := rdc.insertRangeDescriptorsLocked(preRs...); err != nil {
 				log.Warningf("range cache inserting prefetched descriptors failed: %v", err)
 			}
+			if err := rdc.insertRangeDescriptorsLocked(rs...); err != nil {
+				res = lookupResult{pErr: roachpb.NewError(err)}
+			}
+
 		}
 
 		// rdc.lookupRequests does not need to be locked here because we hold an exclusive
-		// write lock on rdc.rangeCacheMu. However, it's been left here as a comment to
-		// help reason about the desired behavior.
-		// rdc.lookupRequests.Lock()
+		// write lock on rdc.rangeCacheMu. However, we do anyway for clarity and future proofing.
+		rdc.lookupRequests.Lock()
 		for _, observer := range rdc.lookupRequests.inflight[requestKey].observers {
 			observer <- res
 		}
 		delete(rdc.lookupRequests.inflight, requestKey)
-		// rdc.lookupRequests.Unlock()
+		rdc.lookupRequests.Unlock()
 		rdc.rangeCacheMu.Unlock()
 
 		// Detect if we are the right half of a split. If so, launch a lookup for the left half,
 		// which will only be detected because we evicted the entire previous range.
-		if prevDesc != nil && evictedPrev {
+		if prevDesc := evictToken.prevDesc; prevDesc != nil && evictToken.evictedDesc() {
 			if res.desc != nil && prevDesc.StartKey.Less(res.desc.StartKey) {
 				prefetchSplitLeft := func() {
-					if _, _, pErr := rdc.LookupRangeDescriptor(prevDesc.StartKey, prevDesc, false, considerIntents, useReverseScan); pErr != nil {
+					prefetchToken := evictionToken{prevDesc: prevDesc}
+					if _, _, pErr := rdc.LookupRangeDescriptor(prevDesc.StartKey, prefetchToken, considerIntents, useReverseScan); pErr != nil {
 						log.Warningf("range cache prefetching updated split descriptor failed: %v", pErr)
 					}
 				}
@@ -305,7 +349,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, prevDes
 			}
 		}
 	}
-	return res.desc, res.evict, res.pErr
+	return res.desc, res.evictToken, res.pErr
 }
 
 // performRangeLookup handles delegating the range lookup to the cache's
@@ -339,8 +383,7 @@ func (rdc *rangeDescriptorCache) performRangeLookup(key roachpb.RKey, considerIn
 	default:
 		// Look up desc from the cache, which will recursively call into
 		// this function if it is not cached.
-		if desc, _, pErr = rdc.LookupRangeDescriptor(metadataKey, nil, /* prevDesc */
-			false /* evictedPrev */, considerIntents, useReverseScan); pErr != nil {
+		if desc, _, pErr = rdc.LookupRangeDescriptor(metadataKey, evictionToken{}, considerIntents, useReverseScan); pErr != nil {
 			return nil, nil, pErr
 		}
 	}
@@ -462,9 +505,9 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	return metaEndKey, rd, nil
 }
 
-// insertRangeDescriptorsLocked is a helper function to insert the provided
-// range descriptors into the rangeDescriptorCache. It is assumed that the
-// caller holds a write lock on rdc.rangeCacheMu.
+// insertRangeDescriptors is a helper function to insert the provided
+// range descriptors into the rangeDescriptorCache. It acquires a write
+// lock on rdc.rangeCacheMu before delegating to insertRangeDescriptorsLocked.
 func (rdc *rangeDescriptorCache) insertRangeDescriptors(rs ...roachpb.RangeDescriptor) error {
 	rdc.rangeCacheMu.Lock()
 	defer rdc.rangeCacheMu.Unlock()
@@ -485,15 +528,15 @@ func (rdc *rangeDescriptorCache) insertRangeDescriptorsLocked(rs ...roachpb.Rang
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
 		// re-inserted due to concurrent range lookups.
+		if err := rdc.clearOverlappingCachedRangeDescriptors(&rs[i]); err != nil {
+			return err
+		}
 		rangeKey, err := meta(rs[i].EndKey)
 		if err != nil {
 			return err
 		}
 		if log.V(1) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
-		}
-		if err := rdc.clearOverlappingCachedRangeDescriptors(&rs[i]); err != nil {
-			return err
 		}
 		rdc.rangeCache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}

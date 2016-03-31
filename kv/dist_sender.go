@@ -364,32 +364,20 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	return count, nil
 }
 
-// evictionToken holds eviction state between calls to getDescriptors.
-type evictionToken struct {
-	do       func() error
-	evicted  bool
-	prevDesc *roachpb.RangeDescriptor
-}
-
-func (et *evictionToken) evict() error {
-	et.evicted = true
-	return et.do()
-}
-
 // getDescriptors looks up the range descriptor to use for a query over the
 // key range span rs with the given options. The lookup takes into consideration
 // the last range descriptor that the caller had used for this key range span,
 // if any, and if the last range descriptor has been evicted because it was
-// found to be stale, which is all managed through the evictionToken. The range
-// descriptor which contains the range in which the request should start its
-// query is returned first; the returned bool is true in case the given range
-// reaches outside the first descriptor.
+// found to be stale, which is all managed through the evictionToken. The
+// function should be provided with an evictionToken if one was acquired from
+// this function on a previous call. If not, an empty evictionToken can be provided.
 //
-// In case the descriptor is discovered stale, the returned evictionToken's evict
-// method should be called; it evicts the cache appropriately.
-// Note that `from` and `to` are not necessarily Key and EndKey from a
-// RequestHeader; it's assumed that they've been translated to key addresses
-// already (via KeyAddress).
+// The range descriptor which contains the range in which the request should
+// start its query is returned first. Next returned is an evictionToken. In
+// case the descriptor is discovered stale, the returned evictionToken's evict
+// method should be called; it evicts the cache appropriately. Finally, the
+// returned bool is true in case the given range reaches outside the first
+// descriptor.
 func (ds *DistSender) getDescriptors(
 	rs roachpb.RSpan, evictToken evictionToken, considerIntents, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, bool, evictionToken, *roachpb.Error) {
@@ -400,7 +388,7 @@ func (ds *DistSender) getDescriptors(
 		descKey = rs.EndKey
 	}
 
-	desc, evict, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken.prevDesc, evictToken.evicted, considerIntents, useReverseScan)
+	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
 		return nil, false, evictionToken{}, pErr
 	}
@@ -413,13 +401,7 @@ func (ds *DistSender) getDescriptors(
 		needAnother = desc.EndKey.Less(rs.EndKey)
 	}
 
-	// Construct evictionToken to manage eviction state.
-	evictToken = evictionToken{
-		do:       evict,
-		prevDesc: desc,
-	}
-
-	return desc, needAnother, evictToken, nil
+	return desc, needAnother, returnToken, nil
 }
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
@@ -714,9 +696,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// We may simply not be trying to talk to the up-to-date
 				// replicas, so clearing the descriptor here should be a good
 				// idea.
-				// TODO(tschottdorf): If a replica group goes dead, this
-				// will cause clients to put high read pressure on the first
-				// range, so there should be some rate limiting here.
 				if err := evictToken.evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
@@ -734,10 +713,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					log.Warning(tErr)
 				}
 				// On retries, allow [uncommitted] intents on range descriptor
-				// lookups to be returned 50% of the time in order to succeed
-				// at finding the transaction record pointed to by the intent
-				// itself. The 50% probability of returning either the current
-				// intent or the previously committed value balances between
+				// lookups to be returned in addition to live range descriptors.
+				// We cannot know with complete certainty whether the current
+				// intent or the previously committed value should be used to
+				// direct requests, but by looking up both, we can try both out
+				// without issuing as second lookup. This balances between
 				// the two cases where the intent's txn hasn't yet been
 				// committed (the previous value is correct), or the intent's
 				// txn has been committed (the intent value is correct).
