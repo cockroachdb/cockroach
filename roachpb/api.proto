@@ -18,9 +18,10 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/roachpb/metadata.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
+import "cockrach/roachpb/internal_raft.proto";
+import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/tracing/span.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -560,6 +561,8 @@ message VerifyChecksumRequest {
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional bytes checksum = 4;
+  // Add a raft snapshot for a better diff output when the verify fails.
+  optional RaftSnapshotData snapshot = 5;
 }
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
@@ -711,6 +714,15 @@ message BatchResponse {
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
+}
+
+// A RaftCommand is a command which can be serialized and sent via
+// raft.
+message RaftCommand {
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  optional ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
+  optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
 }
 
 // The two services below are identical, except that some internal Request
