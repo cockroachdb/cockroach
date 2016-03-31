@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"strings"
@@ -1550,30 +1551,42 @@ func TestCheckInconsistent(t *testing.T) {
 	mtc.replicateRange(1, 1, 2)
 
 	// Write something to the DB.
-	putArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &putArgs); err != nil {
+	pArgs := putArgs([]byte("a"), []byte("b"))
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &pArgs); err != nil {
 		t.Fatal(err)
 	}
-	// Write some arbitrary data only to store 1. Inconsistent key "a"!
-	key := []byte("a")
-	var val roachpb.Value
-	val.SetInt(42)
-	if err := engine.MVCCPut(mtc.stores[1].Engine(), nil, key, mtc.stores[1].Clock().Timestamp(), val, nil); err != nil {
+	pArgs = putArgs([]byte("c"), []byte("d"))
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &pArgs); err != nil {
 		t.Fatal(err)
 	}
 
-	// The consistency check will panic on store 1. Let it panic only
-	// if the checksums match.
+	// Write some arbitrary data only to store 1. Inconsistent key "e"!
+	key := []byte("e")
+	var val roachpb.Value
+	val.SetInt(42)
+	timestamp := mtc.stores[1].Clock().Timestamp()
+	if err := engine.MVCCPut(mtc.stores[1].Engine(), nil, key, timestamp, val, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// The consistency check will panic on store 1.
 	notify := make(chan struct{}, 1)
-	mtc.stores[1].TestingKnobs().BadChecksumPanic = func() {
+	mtc.stores[1].TestingKnobs().BadChecksumPanic = func(diff []storage.ReplicaSnapshotDiff) {
+		if len(diff) != 1 {
+			t.Errorf("diff length = %d, diff = %v", len(diff), diff)
+		}
+		d := diff[0]
+		if d.Leader != false || !bytes.Equal([]byte("e"), d.Key) || !timestamp.Equal(d.Timestamp) {
+			t.Errorf("diff = %v", d)
+		}
 		notify <- struct{}{}
 	}
 	// Run consistency check.
 	checkArgs := roachpb.CheckConsistencyRequest{
 		Span: roachpb.Span{
-			// span of keys that include "a".
+			// span of keys that include "a" & "c".
 			Key:    []byte("a"),
-			EndKey: []byte("aa"),
+			EndKey: []byte("z"),
 		},
 	}
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &checkArgs); err != nil {
