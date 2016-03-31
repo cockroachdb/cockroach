@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"crypto/sha512"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 
@@ -43,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
+
+var errTransactionUnsupported = errors.New("not supported within a transaction")
 
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
 // command. It returns the response, an error, and a slice of intents that were skipped during
@@ -995,12 +998,11 @@ func (r *Replica) PushTxn(
 ) (roachpb.PushTxnResponse, error) {
 	var reply roachpb.PushTxnResponse
 
+	if h.Txn != nil {
+		return reply, errTransactionUnsupported
+	}
 	if args.Now.Equal(roachpb.ZeroTimestamp) {
 		return reply, util.Errorf("the field Now must be provided")
-	}
-
-	if args.PusherTxn.ID != nil {
-		reply.Txn = &args.PusherTxn
 	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
@@ -1172,6 +1174,9 @@ func (r *Replica) ResolveIntent(
 	batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.ResolveIntentRequest,
 ) (roachpb.ResolveIntentResponse, error) {
 	var reply roachpb.ResolveIntentResponse
+	if h.Txn != nil {
+		return reply, errTransactionUnsupported
+	}
 
 	intent := roachpb.Intent{
 		Span:   args.Span,
@@ -1192,6 +1197,9 @@ func (r *Replica) ResolveIntent(
 func (r *Replica) ResolveIntentRange(batch engine.Engine, ms *engine.MVCCStats,
 	h roachpb.Header, args roachpb.ResolveIntentRangeRequest) (roachpb.ResolveIntentRangeResponse, error) {
 	var reply roachpb.ResolveIntentRangeResponse
+	if h.Txn != nil {
+		return reply, errTransactionUnsupported
+	}
 
 	intent := roachpb.Intent{
 		Span:   args.Span,
