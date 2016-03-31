@@ -38,6 +38,9 @@ var testConfig = config.ZoneConfig{
 	},
 	RangeMinBytes: 1 << 20,
 	RangeMaxBytes: 64 << 20,
+	GC: config.GCPolicy{
+		TTLSeconds: 3600,
+	},
 }
 
 var yamlConfig = []byte(`replicas:
@@ -48,7 +51,7 @@ var yamlConfig = []byte(`replicas:
 range_min_bytes: 1048576
 range_max_bytes: 67108864
 gc:
-  ttlseconds: 0
+  ttlseconds: 3600
 `)
 
 var jsonConfig = []byte(`{
@@ -81,7 +84,7 @@ var jsonConfig = []byte(`{
   "range_min_bytes": 1048576,
   "range_max_bytes": 67108864,
   "gc": {
-    "ttl_seconds": 0
+    "ttl_seconds": 3600
   }
 }`)
 
