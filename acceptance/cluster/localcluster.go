@@ -162,8 +162,8 @@ func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalClu
 	resilientClient := resilientDockerClient{APIClient: cli}
 	retryingClient := retryingDockerClient{
 		APIClient: resilientClient,
-		attempts:  3,
-		timeout:   time.Minute,
+		attempts:  10,
+		timeout:   10 * time.Second,
 	}
 
 	return &LocalCluster{

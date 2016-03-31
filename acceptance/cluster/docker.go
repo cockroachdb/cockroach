@@ -307,7 +307,7 @@ func (cli resilientDockerClient) ContainerCreate(
 				if n != containerName {
 					continue
 				}
-				log.Infof("Trying to remove %s", c.ID)
+				log.Infof("trying to remove %s", c.ID)
 				roptions := types.ContainerRemoveOptions{
 					ContainerID:   c.ID,
 					RemoveVolumes: true,
@@ -353,95 +353,71 @@ type retryingDockerClient struct {
 	timeout  time.Duration
 }
 
-func (cli retryingDockerClient) ContainerCreate(
-	ctx context.Context, config *container.Config, hostConfig *container.HostConfig,
-	networkingConfig *network.NetworkingConfig, containerName string,
-) (types.ContainerCreateResponse, error) {
+func (cli retryingDockerClient) retry(ctx context.Context, name string, f func(ctx context.Context) error) error {
 	for i := 0; i < cli.attempts; i++ {
 		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
-		ret, err := cli.APIClient.ContainerCreate(timeoutCtx, config, hostConfig, networkingConfig, containerName)
-		if err == context.DeadlineExceeded {
-			continue
+		err := f(timeoutCtx)
+		if err != context.DeadlineExceeded {
+			return err
 		}
-		return ret, err
+		log.Infof("%s: %v", name, err)
 	}
-	err := fmt.Errorf("exceeded %d tries of ContainerCreate with a %s timeout", cli.attempts, cli.timeout)
-	return types.ContainerCreateResponse{}, err
+	return fmt.Errorf("%s: exceeded %d tries with a %s timeout", name, cli.attempts, cli.timeout)
+}
+
+func (cli retryingDockerClient) ContainerCreate(
+	ctx context.Context, config *container.Config, hostConfig *container.HostConfig,
+	networkingConfig *network.NetworkingConfig, containerName string) (
+	types.ContainerCreateResponse, error) {
+
+	var ret types.ContainerCreateResponse
+	return ret, cli.retry(ctx, "ContainerCreate",
+		func(timeoutCtx context.Context) error {
+			var err error
+			ret, err = cli.APIClient.ContainerCreate(timeoutCtx, config, hostConfig, networkingConfig, containerName)
+			return err
+		})
 }
 
 func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID string) error {
-	for i := 0; i < cli.attempts; i++ {
-		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
-		err := cli.APIClient.ContainerStart(timeoutCtx, containerID)
-		if err == nil {
-			return nil
-		} else if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-			continue
-		} else {
-			return err
-		}
-	}
-	return fmt.Errorf("exceeded %d tries of ContainerStart with a %s timeout", cli.attempts, cli.timeout)
+	return cli.retry(ctx, "ContainerStart",
+		func(timeoutCtx context.Context) error {
+			return cli.APIClient.ContainerStart(timeoutCtx, containerID)
+		})
 }
 
 func (cli retryingDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
-	for i := 0; i < cli.attempts; i++ {
-		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
-		err := cli.APIClient.ContainerRemove(timeoutCtx, options)
-		if err == nil {
-			return nil
-		} else if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-			continue
-		} else {
-			return err
-		}
-	}
-	return fmt.Errorf("exceeded %d tries of ContainerRemove with a %s timeout", cli.attempts, cli.timeout)
+	return cli.retry(ctx, "ContainerRemove",
+		func(timeoutCtx context.Context) error {
+			return cli.APIClient.ContainerRemove(timeoutCtx, options)
+		})
 }
 
 func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
-	for i := 0; i < cli.attempts; i++ {
-		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
-		err := cli.APIClient.ContainerKill(timeoutCtx, containerID, signal)
-		if err == nil {
-			return nil
-		} else if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-			continue
-		} else {
+	return cli.retry(ctx, "ContainerKill",
+		func(timeoutCtx context.Context) error {
+			return cli.APIClient.ContainerKill(timeoutCtx, containerID, signal)
+		})
+}
+
+func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID string) (int, error) {
+	var ret int
+	return ret, cli.retry(ctx, "ContainerWait",
+		func(timeoutCtx context.Context) error {
+			var err error
+			ret, err = cli.APIClient.ContainerWait(timeoutCtx, containerID)
 			return err
-		}
-	}
-	return fmt.Errorf("exceeded %d tries of ContainerKill with a %s timeout", cli.attempts, cli.timeout)
+		})
 }
 
 func (cli retryingDockerClient) ImagePull(
 	ctx context.Context, options types.ImagePullOptions, privilegeFunc client.RequestPrivilegeFunc,
 ) (io.ReadCloser, error) {
-	for i := 0; i < cli.attempts; i++ {
-		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
-		ret, err := cli.APIClient.ImagePull(timeoutCtx, options, privilegeFunc)
-		if err == nil {
-			return ret, nil
-		} else if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-			continue
-		} else {
-			return nil, err
-		}
-	}
-	return nil, fmt.Errorf("exceeded %d tries of ImagePull with a %s timeout", cli.attempts, cli.timeout)
-}
-
-func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID string) (int, error) {
-	for i := 0; i < cli.attempts; i++ {
-		timeoutCtx, _ := context.WithTimeout(ctx, cli.timeout)
-		ret, err := cli.APIClient.ContainerWait(timeoutCtx, containerID)
-		if err == nil {
-			return ret, nil
-		} else if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-			continue
-		} else {
-			return 0, err
-		}
-	}
-	return 0, fmt.Errorf("exceeded %d tries of ContainerWait with a %s timeout", cli.attempts, cli.timeout)
+	var ret io.ReadCloser
+	return ret, cli.retry(ctx, "ImagePull",
+		func(timeoutCtx context.Context) error {
+			var err error
+			ret, err = cli.APIClient.ImagePull(timeoutCtx, options, privilegeFunc)
+			return err
+		})
 }
