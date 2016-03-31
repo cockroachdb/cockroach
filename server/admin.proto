@@ -148,8 +148,8 @@ message EventsResponse {
   message Event {
     // Timestamp is embedded in each place it's used, because proto3 defines a
     // built-in Timestamp message that we can't use, because gogoprotobuf
-    // doesn't support all proto3 protobuf types yet. See gogoprotobuf issue
-    // #113.
+    // doesn't support all proto3 protobuf types yet. See
+    // https://github.com/gogo/protobuf/issues/155.
     message Timestamp {
       // The time in seconds since, January 1, 1970 UTC (Unix time).
       int64 sec = 1;
