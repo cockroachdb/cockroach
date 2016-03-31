@@ -492,34 +492,50 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 	if !ok {
 		return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", statementName))
 	}
+
+	numParams := int16(len(stmt.inTypes))
+	paramFormatCodes := make([]formatCode, numParams)
+
+	// From the docs on number of parameter format codes to bind:
+	// This can be zero to indicate that there are no parameters or that the
+	// parameters all use the default format (text); or one, in which case the
+	// specified format code is applied to all parameters; or it can equal the
+	// actual number of parameters.
+	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
 	numParamFormatCodes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	numParams := len(stmt.inTypes)
-	if int(numParamFormatCodes) > numParams {
-		return c.sendInternalError(fmt.Sprintf("too many format codes specified: %d for %d paramaters", numParamFormatCodes, numParams))
-	}
-	paramFormatCodes := make([]formatCode, numParams)
-	for i := range paramFormatCodes[:numParamFormatCodes] {
+	switch numParamFormatCodes {
+	case 0:
+	case 1:
+		// `1` means read one code and apply it to every param.
 		c, err := buf.getInt16()
 		if err != nil {
 			return err
 		}
-		paramFormatCodes[i] = formatCode(c)
-	}
-	if numParamFormatCodes == 1 {
-		fmtCode := paramFormatCodes[0]
-
+		fmtCode := formatCode(c)
 		for i := range paramFormatCodes {
 			paramFormatCodes[i] = fmtCode
 		}
+	case numParams:
+		// Read one format code for each param and apply it to that param.
+		for i := range paramFormatCodes {
+			c, err := buf.getInt16()
+			if err != nil {
+				return err
+			}
+			paramFormatCodes[i] = formatCode(c)
+		}
+	default:
+		return c.sendInternalError(fmt.Sprintf("wrong number of format codes specified: %d for %d paramaters", numParamFormatCodes, numParams))
 	}
+
 	numValues, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	if int(numValues) != numParams {
+	if numValues != numParams {
 		return c.sendInternalError(fmt.Sprintf("expected %d parameters, got %d", numParams, numValues))
 	}
 	params := make([]parser.Datum, numParams)
@@ -543,27 +559,44 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		params[i] = d
 	}
 
+	numColumns := int16(len(stmt.columns))
+	columnFormatCodes := make([]formatCode, numColumns)
+
+	// From the docs for the number of format codes:
+	// This can be zero to indicate that there are no result columns or that
+	// the result columns should all use the default format (text); or one, in
+	// which case the specified format code is applied to all result columns
+	// (if any); or it can equal the actual number of result columns of the
+	// query.
+	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
 	numColumnFormatCodes, err := buf.getInt16()
 	if err != nil {
 		return err
 	}
-	numColumns := len(stmt.columns)
-	columnFormatCodes := make([]formatCode, numColumns)
-	for i := range columnFormatCodes[:numColumnFormatCodes] {
+	switch numColumnFormatCodes {
+	case 0:
+	case 1:
+		// Read one code and apply it to every column.
 		c, err := buf.getInt16()
 		if err != nil {
 			return err
 		}
-		columnFormatCodes[i] = formatCode(c)
-	}
-	if numColumnFormatCodes == 1 {
-		fmtCode := columnFormatCodes[0]
-
+		fmtCode := formatCode(c)
 		for i := range columnFormatCodes {
 			columnFormatCodes[i] = formatCode(fmtCode)
 		}
+	case numColumns:
+		// Read one format code for each column and apply it to that column.
+		for i := range columnFormatCodes {
+			c, err := buf.getInt16()
+			if err != nil {
+				return err
+			}
+			columnFormatCodes[i] = formatCode(c)
+		}
+	default:
+		return c.sendInternalError(fmt.Sprintf("expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
 	}
-
 	stmt.portalNames[portalName] = struct{}{}
 	c.preparedPortals[portalName] = preparedPortal{
 		stmt:       stmt,

@@ -283,7 +283,7 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 }
 
 const (
-	postgresTestTag = "20160203-140220"
+	postgresTestTag = "20160401-140120"
 )
 
 func testDocker(t *testing.T, name string, cmd []string) error {
