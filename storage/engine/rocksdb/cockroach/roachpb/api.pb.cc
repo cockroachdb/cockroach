@@ -196,6 +196,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* BatchResponse_Header_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   BatchResponse_Header_reflection_ = NULL;
+const ::google::protobuf::Descriptor* RaftCommand_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  RaftCommand_reflection_ = NULL;
 const ::google::protobuf::EnumDescriptor* ReadConsistencyType_descriptor_ = NULL;
 const ::google::protobuf::EnumDescriptor* PushTxnType_descriptor_ = NULL;
 
@@ -1186,6 +1189,23 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fapi_2eproto() {
       sizeof(BatchResponse_Header),
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse_Header, _internal_metadata_),
       -1);
+  RaftCommand_descriptor_ = file->message_type(56);
+  static const int RaftCommand_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, range_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, origin_replica_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, cmd_),
+  };
+  RaftCommand_reflection_ =
+    ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
+      RaftCommand_descriptor_,
+      RaftCommand::default_instance_,
+      RaftCommand_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, _has_bits_[0]),
+      -1,
+      -1,
+      sizeof(RaftCommand),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftCommand, _internal_metadata_),
+      -1);
   ReadConsistencyType_descriptor_ = file->enum_type(0);
   PushTxnType_descriptor_ = file->enum_type(1);
 }
@@ -1316,6 +1336,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
       BatchResponse_descriptor_, &BatchResponse::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
       BatchResponse_Header_descriptor_, &BatchResponse_Header::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+      RaftCommand_descriptor_, &RaftCommand::default_instance());
 }
 
 }  // namespace
@@ -1437,6 +1459,8 @@ void protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto() {
   delete BatchResponse_reflection_;
   delete BatchResponse_Header::default_instance_;
   delete BatchResponse_Header_reflection_;
+  delete RaftCommand::default_instance_;
+  delete RaftCommand_reflection_;
 }
 
 void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
@@ -1445,16 +1469,16 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
   already_here = true;
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-  ::cockroach::roachpb::protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto();
   ::cockroach::roachpb::protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   ::cockroach::roachpb::protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  ::cockroach::roachpb::protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto();
   ::cockroach::util::tracing::protobuf_AddDesc_cockroach_2futil_2ftracing_2fspan_2eproto();
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n\033cockroach/roachpb/api.proto\022\021cockroach"
-    ".roachpb\032 cockroach/roachpb/metadata.pro"
-    "to\032\034cockroach/roachpb/data.proto\032\036cockro"
-    "ach/roachpb/errors.proto\032!cockroach/util"
+    ".roachpb\032\034cockroach/roachpb/data.proto\032\036"
+    "cockroach/roachpb/errors.proto\032 cockroac"
+    "h/roachpb/metadata.proto\032!cockroach/util"
     "/tracing/span.proto\032\024gogoproto/gogo.prot"
     "o\"=\n\016ResponseHeader\022+\n\003txn\030\003 \001(\0132\036.cockr"
     "oach.roachpb.Transaction\"\?\n\nGetRequest\0221"
@@ -1703,16 +1727,20 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
     "\n\003txn\030\003 \001(\0132\036.cockroach.roachpb.Transact"
     "ion\022\027\n\017collected_spans\030\004 \003(\014\022/\n\003now\030\005 \001("
     "\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000:\004\230"
-    "\240\037\000*L\n\023ReadConsistencyType\022\016\n\nCONSISTENT"
-    "\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036"
-    "\000*W\n\013PushTxnType\022\022\n\016PUSH_TIMESTAMP\020\000\022\016\n\n"
-    "PUSH_ABORT\020\001\022\016\n\nPUSH_TOUCH\020\002\022\016\n\nPUSH_QUE"
-    "RY\020\003\032\004\210\243\036\0002X\n\010Internal\022L\n\005Batch\022\037.cockro"
-    "ach.roachpb.BatchRequest\032 .cockroach.roa"
-    "chpb.BatchResponse\"\0002X\n\010External\022L\n\005Batc"
-    "h\022\037.cockroach.roachpb.BatchRequest\032 .coc"
-    "kroach.roachpb.BatchResponse\"\000B\tZ\007roachp"
-    "bX\004", 10443);
+    "\240\037\000\"\263\001\n\013RaftCommand\022,\n\010range_id\030\001 \001(\003B\032\310"
+    "\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\022B\n\016origin_repl"
+    "ica\030\002 \001(\0132$.cockroach.roachpb.ReplicaDes"
+    "criptorB\004\310\336\037\000\0222\n\003cmd\030\003 \001(\0132\037.cockroach.r"
+    "oachpb.BatchRequestB\004\310\336\037\000*L\n\023ReadConsist"
+    "encyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSENSUS\020\001\022"
+    "\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000*W\n\013PushTxnType\022\022"
+    "\n\016PUSH_TIMESTAMP\020\000\022\016\n\nPUSH_ABORT\020\001\022\016\n\nPU"
+    "SH_TOUCH\020\002\022\016\n\nPUSH_QUERY\020\003\032\004\210\243\036\0002X\n\010Inte"
+    "rnal\022L\n\005Batch\022\037.cockroach.roachpb.BatchR"
+    "equest\032 .cockroach.roachpb.BatchResponse"
+    "\"\0002X\n\010External\022L\n\005Batch\022\037.cockroach.roac"
+    "hpb.BatchRequest\032 .cockroach.roachpb.Bat"
+    "chResponse\"\000B\tZ\007roachpbX\004", 10625);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/api.proto", &protobuf_RegisterTypes);
   ResponseHeader::default_instance_ = new ResponseHeader();
@@ -1773,6 +1801,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
   BatchRequest::default_instance_ = new BatchRequest();
   BatchResponse::default_instance_ = new BatchResponse();
   BatchResponse_Header::default_instance_ = new BatchResponse_Header();
+  RaftCommand::default_instance_ = new RaftCommand();
   ResponseHeader::default_instance_->InitAsDefaultInstance();
   GetRequest::default_instance_->InitAsDefaultInstance();
   GetResponse::default_instance_->InitAsDefaultInstance();
@@ -1831,6 +1860,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto() {
   BatchRequest::default_instance_->InitAsDefaultInstance();
   BatchResponse::default_instance_->InitAsDefaultInstance();
   BatchResponse_Header::default_instance_->InitAsDefaultInstance();
+  RaftCommand::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2froachpb_2fapi_2eproto);
 }
 
@@ -27250,6 +27280,443 @@ const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ResponseUnion 
 BatchResponse::responses() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.BatchResponse.responses)
   return responses_;
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int RaftCommand::kRangeIdFieldNumber;
+const int RaftCommand::kOriginReplicaFieldNumber;
+const int RaftCommand::kCmdFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+RaftCommand::RaftCommand()
+  : ::google::protobuf::Message(), _internal_metadata_(NULL) {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.RaftCommand)
+}
+
+void RaftCommand::InitAsDefaultInstance() {
+  origin_replica_ = const_cast< ::cockroach::roachpb::ReplicaDescriptor*>(&::cockroach::roachpb::ReplicaDescriptor::default_instance());
+  cmd_ = const_cast< ::cockroach::roachpb::BatchRequest*>(&::cockroach::roachpb::BatchRequest::default_instance());
+}
+
+RaftCommand::RaftCommand(const RaftCommand& from)
+  : ::google::protobuf::Message(),
+    _internal_metadata_(NULL) {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RaftCommand)
+}
+
+void RaftCommand::SharedCtor() {
+  _cached_size_ = 0;
+  range_id_ = GOOGLE_LONGLONG(0);
+  origin_replica_ = NULL;
+  cmd_ = NULL;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+RaftCommand::~RaftCommand() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.RaftCommand)
+  SharedDtor();
+}
+
+void RaftCommand::SharedDtor() {
+  if (this != default_instance_) {
+    delete origin_replica_;
+    delete cmd_;
+  }
+}
+
+void RaftCommand::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* RaftCommand::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return RaftCommand_descriptor_;
+}
+
+const RaftCommand& RaftCommand::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2froachpb_2fapi_2eproto();
+  return *default_instance_;
+}
+
+RaftCommand* RaftCommand::default_instance_ = NULL;
+
+RaftCommand* RaftCommand::New(::google::protobuf::Arena* arena) const {
+  RaftCommand* n = new RaftCommand;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void RaftCommand::Clear() {
+  if (_has_bits_[0 / 32] & 7u) {
+    range_id_ = GOOGLE_LONGLONG(0);
+    if (has_origin_replica()) {
+      if (origin_replica_ != NULL) origin_replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
+    }
+    if (has_cmd()) {
+      if (cmd_ != NULL) cmd_->::cockroach::roachpb::BatchRequest::Clear();
+    }
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  if (_internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->Clear();
+  }
+}
+
+bool RaftCommand::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.RaftCommand)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int64 range_id = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &range_id_)));
+          set_has_range_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_origin_replica;
+        break;
+      }
+
+      // optional .cockroach.roachpb.ReplicaDescriptor origin_replica = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_origin_replica:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_origin_replica()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_cmd;
+        break;
+      }
+
+      // optional .cockroach.roachpb.BatchRequest cmd = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_cmd:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_cmd()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.RaftCommand)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.RaftCommand)
+  return false;
+#undef DO_
+}
+
+void RaftCommand::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.RaftCommand)
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->range_id(), output);
+  }
+
+  // optional .cockroach.roachpb.ReplicaDescriptor origin_replica = 2;
+  if (has_origin_replica()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, *this->origin_replica_, output);
+  }
+
+  // optional .cockroach.roachpb.BatchRequest cmd = 3;
+  if (has_cmd()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, *this->cmd_, output);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RaftCommand)
+}
+
+::google::protobuf::uint8* RaftCommand::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.roachpb.RaftCommand)
+  // optional int64 range_id = 1;
+  if (has_range_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->range_id(), target);
+  }
+
+  // optional .cockroach.roachpb.ReplicaDescriptor origin_replica = 2;
+  if (has_origin_replica()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, *this->origin_replica_, target);
+  }
+
+  // optional .cockroach.roachpb.BatchRequest cmd = 3;
+  if (has_cmd()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, *this->cmd_, target);
+  }
+
+  if (_internal_metadata_.have_unknown_fields()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.roachpb.RaftCommand)
+  return target;
+}
+
+int RaftCommand::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & 7u) {
+    // optional int64 range_id = 1;
+    if (has_range_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->range_id());
+    }
+
+    // optional .cockroach.roachpb.ReplicaDescriptor origin_replica = 2;
+    if (has_origin_replica()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->origin_replica_);
+    }
+
+    // optional .cockroach.roachpb.BatchRequest cmd = 3;
+    if (has_cmd()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->cmd_);
+    }
+
+  }
+  if (_internal_metadata_.have_unknown_fields()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void RaftCommand::MergeFrom(const ::google::protobuf::Message& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  const RaftCommand* source = 
+      ::google::protobuf::internal::DynamicCastToGenerated<const RaftCommand>(
+          &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void RaftCommand::MergeFrom(const RaftCommand& from) {
+  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_range_id()) {
+      set_range_id(from.range_id());
+    }
+    if (from.has_origin_replica()) {
+      mutable_origin_replica()->::cockroach::roachpb::ReplicaDescriptor::MergeFrom(from.origin_replica());
+    }
+    if (from.has_cmd()) {
+      mutable_cmd()->::cockroach::roachpb::BatchRequest::MergeFrom(from.cmd());
+    }
+  }
+  if (from._internal_metadata_.have_unknown_fields()) {
+    mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+  }
+}
+
+void RaftCommand::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void RaftCommand::CopyFrom(const RaftCommand& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool RaftCommand::IsInitialized() const {
+
+  return true;
+}
+
+void RaftCommand::Swap(RaftCommand* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void RaftCommand::InternalSwap(RaftCommand* other) {
+  std::swap(range_id_, other->range_id_);
+  std::swap(origin_replica_, other->origin_replica_);
+  std::swap(cmd_, other->cmd_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::google::protobuf::Metadata RaftCommand::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = RaftCommand_descriptor_;
+  metadata.reflection = RaftCommand_reflection_;
+  return metadata;
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// RaftCommand
+
+// optional int64 range_id = 1;
+bool RaftCommand::has_range_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void RaftCommand::set_has_range_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void RaftCommand::clear_has_range_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void RaftCommand::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+  clear_has_range_id();
+}
+ ::google::protobuf::int64 RaftCommand::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftCommand.range_id)
+  return range_id_;
+}
+ void RaftCommand::set_range_id(::google::protobuf::int64 value) {
+  set_has_range_id();
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RaftCommand.range_id)
+}
+
+// optional .cockroach.roachpb.ReplicaDescriptor origin_replica = 2;
+bool RaftCommand::has_origin_replica() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void RaftCommand::set_has_origin_replica() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void RaftCommand::clear_has_origin_replica() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void RaftCommand::clear_origin_replica() {
+  if (origin_replica_ != NULL) origin_replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
+  clear_has_origin_replica();
+}
+const ::cockroach::roachpb::ReplicaDescriptor& RaftCommand::origin_replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftCommand.origin_replica)
+  return origin_replica_ != NULL ? *origin_replica_ : *default_instance_->origin_replica_;
+}
+::cockroach::roachpb::ReplicaDescriptor* RaftCommand::mutable_origin_replica() {
+  set_has_origin_replica();
+  if (origin_replica_ == NULL) {
+    origin_replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftCommand.origin_replica)
+  return origin_replica_;
+}
+::cockroach::roachpb::ReplicaDescriptor* RaftCommand::release_origin_replica() {
+  clear_has_origin_replica();
+  ::cockroach::roachpb::ReplicaDescriptor* temp = origin_replica_;
+  origin_replica_ = NULL;
+  return temp;
+}
+void RaftCommand::set_allocated_origin_replica(::cockroach::roachpb::ReplicaDescriptor* origin_replica) {
+  delete origin_replica_;
+  origin_replica_ = origin_replica;
+  if (origin_replica) {
+    set_has_origin_replica();
+  } else {
+    clear_has_origin_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RaftCommand.origin_replica)
+}
+
+// optional .cockroach.roachpb.BatchRequest cmd = 3;
+bool RaftCommand::has_cmd() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void RaftCommand::set_has_cmd() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void RaftCommand::clear_has_cmd() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void RaftCommand::clear_cmd() {
+  if (cmd_ != NULL) cmd_->::cockroach::roachpb::BatchRequest::Clear();
+  clear_has_cmd();
+}
+const ::cockroach::roachpb::BatchRequest& RaftCommand::cmd() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RaftCommand.cmd)
+  return cmd_ != NULL ? *cmd_ : *default_instance_->cmd_;
+}
+::cockroach::roachpb::BatchRequest* RaftCommand::mutable_cmd() {
+  set_has_cmd();
+  if (cmd_ == NULL) {
+    cmd_ = new ::cockroach::roachpb::BatchRequest;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RaftCommand.cmd)
+  return cmd_;
+}
+::cockroach::roachpb::BatchRequest* RaftCommand::release_cmd() {
+  clear_has_cmd();
+  ::cockroach::roachpb::BatchRequest* temp = cmd_;
+  cmd_ = NULL;
+  return temp;
+}
+void RaftCommand::set_allocated_cmd(::cockroach::roachpb::BatchRequest* cmd) {
+  delete cmd_;
+  cmd_ = cmd;
+  if (cmd) {
+    set_has_cmd();
+  } else {
+    clear_has_cmd();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RaftCommand.cmd)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
