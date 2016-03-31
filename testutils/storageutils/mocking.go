@@ -73,25 +73,39 @@ func WrapFilterForReplayProtection(
 	return wrapper.run
 }
 
+// Errors are mutated on the Send path, so we must always return copies.
+func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
+	if pErr == nil {
+		return pErr
+	}
+
+	pErrCopy := *pErr
+	txnClone := pErrCopy.GetTxn().Clone()
+	pErrCopy.SetTxn(&txnClone)
+	return &pErrCopy
+}
+
 // run executes the wrapped filter.
 func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) *roachpb.Error {
-
-	c.RLock()
-	defer c.RUnlock()
+	mapKey := raftCmdIDAndIndex{args.CmdID, args.Index}
 
 	if args.InRaftCmd() {
-		if err, found :=
-			c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}]; found {
+		c.RLock()
+		pErr, ok := c.processedCommands[mapKey]
+		c.RUnlock()
+		if ok {
 			// We've detected a replay.
-			return err
+			return shallowCloneErrorWithTxn(pErr)
 		}
 	}
 
 	pErr := c.filter(args)
 
 	if args.InRaftCmd() {
-		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = pErr
+		c.Lock()
+		c.processedCommands[mapKey] = pErr
+		c.Unlock()
 	}
 
-	return pErr
+	return shallowCloneErrorWithTxn(pErr)
 }
