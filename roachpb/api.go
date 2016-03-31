@@ -693,12 +693,13 @@ func NewScan(key, endKey Key, maxResults int64) Request {
 }
 
 // NewCheckConsistency returns a Request initialized to scan from start to end keys.
-func NewCheckConsistency(key, endKey Key) Request {
+func NewCheckConsistency(key, endKey Key, withDiff bool) Request {
 	return &CheckConsistencyRequest{
 		Span: Span{
 			Key:    key,
 			EndKey: endKey,
 		},
+		WithDiff: withDiff,
 	}
 }
 

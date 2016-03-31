@@ -1399,6 +1399,7 @@ func (r *Replica) CheckConsistency(
 			},
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
+			Snapshot:   args.WithDiff,
 		}
 		ba.Add(checkArgs)
 		ba.Timestamp = r.store.Clock().Now()
@@ -1407,6 +1408,7 @@ func (r *Replica) CheckConsistency(
 			return roachpb.CheckConsistencyResponse{}, pErr
 		}
 	}
+
 	// Get local checksum. This might involving waiting for it.
 	c, ok := r.getChecksum(id)
 	if !ok || c.checksum == nil {
@@ -1419,6 +1421,7 @@ func (r *Replica) CheckConsistency(
 	// computed checksum is available.
 	computeChecksumDuration := time.Since(start)
 	time.Sleep(computeChecksumDuration)
+
 	// Send a VerifyChecksum to all the replicas of the range.
 	{
 		var ba roachpb.BatchRequest
@@ -1431,6 +1434,7 @@ func (r *Replica) CheckConsistency(
 			Version:    replicaChecksumVersion,
 			ChecksumID: id,
 			Checksum:   c.checksum,
+			Snapshot:   c.snapshot,
 		}
 		ba.Add(checkArgs)
 		ba.Timestamp = r.store.Clock().Now()
@@ -1439,6 +1443,7 @@ func (r *Replica) CheckConsistency(
 			return roachpb.CheckConsistencyResponse{}, pErr
 		}
 	}
+
 	return roachpb.CheckConsistencyResponse{}, nil
 }
 
@@ -1471,12 +1476,13 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte) {
+func (r *Replica) computeChecksumDone(id uuid.UUID, sha []byte, snapshot *roachpb.RaftSnapshotData) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
 		c.checksum = sha
 		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
+		c.snapshot = snapshot
 		r.mu.checksums[id] = c
 		// Notify
 		close(c.notify)
@@ -1529,22 +1535,26 @@ func (r *Replica) ComputeChecksum(
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if !stopper.RunAsyncTask(func() {
 		defer snap.Close()
-		sha, err := r.sha512(desc, snap)
+		var snapshot *roachpb.RaftSnapshotData
+		if args.Snapshot {
+			snapshot = &roachpb.RaftSnapshotData{}
+		}
+		sha, err := r.sha512(desc, snap, snapshot)
 		if err != nil {
 			log.Error(err)
 			sha = nil
 		}
-		r.computeChecksumDone(id, sha)
+		r.computeChecksumDone(id, sha, snapshot)
 	}) {
 		defer snap.Close()
 		// Set checksum to nil.
-		r.computeChecksumDone(id, nil)
+		r.computeChecksumDone(id, nil, nil)
 	}
 	return roachpb.ComputeChecksumResponse{}, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
-func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]byte, error) {
+func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine, snapshot *roachpb.RaftSnapshotData) ([]byte, error) {
 	hasher := sha512.New()
 	// Iterate over all the data in the range.
 	iter := newReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
@@ -1552,6 +1562,12 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine) ([]by
 	for ; iter.Valid(); iter.Next() {
 		key := iter.Key()
 		value := iter.Value()
+
+		if snapshot != nil {
+			// Add the k:v into the debug message.
+			snapshot.KV = append(snapshot.KV, roachpb.RaftSnapshotData_KeyValue{Key: key.Key, Value: value, Timestamp: key.Timestamp})
+		}
+
 		// Encode the length of the key and value.
 		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
 			return nil, err
@@ -1607,17 +1623,129 @@ func (r *Replica) VerifyChecksum(
 	}
 	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
 		// Replication consistency problem!
+		// Let's collect some more debug information before we panic.
 		logFunc := log.Errorf
-		if r.store.ctx.ConsistencyCheckPanicOnFailure {
-			if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
-				p()
-			} else {
-				logFunc = log.Fatalf
+		if args.Snapshot == nil {
+			// No debug information; run another consistency check to deliver
+			// more debug information.
+			if !r.store.stopper.RunAsyncTask(func() {
+				desc := r.Desc()
+				startKey := desc.StartKey.AsRawKey()
+				// Can't use a start key less than LocalMax.
+				if bytes.Compare(startKey, keys.LocalMax) < 0 {
+					startKey = keys.LocalMax
+				}
+				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
+					log.Errorf("couldn't rerun consistency check: %s", err)
+				}
+			}) {
+				log.Error("couldn't rerun consistency check as RunAsyncTask")
+			}
+		} else {
+			// Compute diff.
+			diff := diffRange(args.Snapshot, c.snapshot)
+			if diff != nil {
+				for _, d := range diff {
+					l := "leader"
+					if d.Leader {
+						l = "replica"
+					}
+					log.Errorf("inconsistent k:v = (%s (%x), %s, %x) not present on %s",
+						keys.PrettyPrint(roachpb.Key(d.Key)), d.Key, d.Timestamp, d.Value, l)
+				}
+			}
+			if r.store.ctx.ConsistencyCheckPanicOnFailure {
+				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
+					p(diff)
+				} else {
+					logFunc = log.Fatalf
+				}
 			}
 		}
 		logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
+}
+
+// ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
+// two replica snapshots. For now it's only a diff between their KV pairs.
+type ReplicaSnapshotDiff struct {
+	// Leader is set to true of this k:v pair is only present on the leader.
+	Leader    bool
+	Key       []byte
+	Timestamp roachpb.Timestamp
+	Value     []byte
+}
+
+// diffs the two k:v dumps between the leader and the replica.
+func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
+	if l == nil || r == nil {
+		return nil
+	}
+	var diff []ReplicaSnapshotDiff
+	i, j := 0, 0
+	for {
+		var e, v roachpb.RaftSnapshotData_KeyValue
+		if i < len(l.KV) {
+			e = l.KV[i]
+		}
+		if j < len(r.KV) {
+			v = r.KV[j]
+		}
+
+		addLeader := func() {
+			diff = append(diff, ReplicaSnapshotDiff{Leader: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
+			i++
+		}
+		addReplica := func() {
+			diff = append(diff, ReplicaSnapshotDiff{Leader: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
+			j++
+		}
+
+		// Compare keys.
+		var comp int
+		if e.Key == nil {
+			if v.Key == nil {
+				// Done!
+				break
+			} else {
+				// skip over all excess replica keys.
+				comp = 1
+			}
+		} else {
+			if v.Key == nil {
+				// skip over all excess leader keys.
+				comp = -1
+			} else {
+				comp = bytes.Compare(e.Key, v.Key)
+			}
+		}
+		switch comp {
+		case -1:
+			addLeader()
+
+		case 0:
+			if !e.Timestamp.Equal(v.Timestamp) {
+				if v.Timestamp.Less(e.Timestamp) {
+					addLeader()
+				} else {
+					addReplica()
+				}
+			} else if !bytes.Equal(e.Value, v.Value) {
+				addLeader()
+				addReplica()
+			} else {
+				// No diff; skip.
+				i++
+				j++
+			}
+
+		case 1:
+			addReplica()
+
+		}
+	}
+	return diff
 }
 
 // AdminSplit divides the range into into two ranges, using either

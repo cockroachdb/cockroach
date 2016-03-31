@@ -373,8 +373,9 @@ func (b *Batch) ReverseScan(s, e interface{}, maxRows int64) {
 }
 
 // CheckConsistency creates a batch request to check the consistency of the
-// ranges holding the span of keys from s to e.
-func (b *Batch) CheckConsistency(s, e interface{}) {
+// ranges holding the span of keys from s to e. Set withDiff to make
+// it log all the keys that have inconsistencies.
+func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, err)
@@ -385,7 +386,7 @@ func (b *Batch) CheckConsistency(s, e interface{}) {
 		b.initResult(0, 0, err)
 		return
 	}
-	b.reqs = append(b.reqs, roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end)))
+	b.reqs = append(b.reqs, roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
 	b.initResult(1, 0, nil)
 }
 
