@@ -150,11 +150,11 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 
 	now := ir.store.Clock().Now()
 
-	pusherTxn := h.Txn
+	partialPusherTxn := h.Txn
 	// If there's no pusher, we communicate a priority by sending an empty
-	// txn with only the priority set.
-	if pusherTxn == nil {
-		pusherTxn = &roachpb.Transaction{
+	// txn with only the priority set. This is official usage of PushTxn.
+	if partialPusherTxn == nil {
+		partialPusherTxn = &roachpb.Transaction{
 			TxnMeta: roachpb.TxnMeta{
 				Priority: roachpb.MakePriority(h.UserPriority),
 			},
@@ -200,7 +200,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 			Span: roachpb.Span{
 				Key: intent.Txn.Key,
 			},
-			PusherTxn: *pusherTxn,
+			PusherTxn: *partialPusherTxn,
 			PusheeTxn: intent.Txn,
 			PushTo:    h.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
