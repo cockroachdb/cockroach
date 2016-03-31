@@ -45,11 +45,6 @@ const (
 	// is a rebalancing target and can accept new replicas; if usage is above
 	// this range, the store is eligible to rebalance replicas to other stores.
 	rebalanceFromMean = 0.025 // 2.5%
-	// rebalanceShouldRebalanceChance represents a chance that an individual
-	// replica should attempt to rebalance. This helps introduce some
-	// probabilistic "jitter" to shouldRebalance() function: the store will not
-	// take every rebalancing opportunity available.
-	rebalanceShouldRebalanceChance = 0.2
 
 	// priorities for various repair operations.
 	removeDeadReplicaPriority  float64 = 10000
@@ -316,10 +311,6 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !a.options.AllowRebalance {
 		return false
 	}
-	// In production, add some random jitter to shouldRebalance.
-	if a.randomlyIgnoreRebalance() {
-		return false
-	}
 	if log.V(2) {
 		log.Infof("ShouldRebalance from store %d", storeID)
 	}
@@ -337,15 +328,6 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 
 	// ShouldRebalance is true if a suitable replacement can be found.
 	return a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
-}
-
-func (a Allocator) randomlyIgnoreRebalance() bool {
-	if a.options.Deterministic {
-		return false
-	}
-	a.randGen.Lock()
-	defer a.randGen.Unlock()
-	return a.randGen.Float32() > rebalanceShouldRebalanceChance
 }
 
 // selectGood attempts to select a store from the supplied store list that it
