@@ -374,7 +374,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			txnState.autoRetry = true
 			now := e.ctx.Clock.Now()
 			txnState.sqlTimestamp = now
-			execOpt.MinInitialTimestamp = now
+			txnState.txn.MinInitialTimestamp = now
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
