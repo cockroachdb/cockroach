@@ -14,7 +14,7 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.acceptance.cluster;
 option go_package = "cluster";
 
@@ -22,21 +22,21 @@ import weak "gogoproto/gogo.proto";
 
 // StoreConfig holds the configuration of a collection of similar stores.
 message StoreConfig {
-  optional int32 count = 1 [(gogoproto.nullable) = false];
-  optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
+  int32 count = 1;
+  int32 max_ranges = 2;
 }
 
 // NodeConfig holds the configuration of a collection of similar nodes.
 message NodeConfig {
-  optional int32 count = 1 [(gogoproto.nullable) = false];
+  int32 count = 1;
   repeated StoreConfig stores = 2 [(gogoproto.nullable) = false];
 }
 
 message TestConfig {
-  optional string name = 1 [(gogoproto.nullable) = false];
+  string name = 1;
   repeated NodeConfig nodes = 2 [(gogoproto.nullable) = false];
   // Duration is the total time that the test should run for. Important for
   // tests such as TestPut that will run indefinitely.
-  optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
-// TODO(bram): #4559 once defined, add in a collection of chaos agents here.
+  int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
+  // TODO(bram): #4559 once defined, add in a collection of chaos agents here.
 }
