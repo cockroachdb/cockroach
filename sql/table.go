@@ -878,3 +878,35 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		return nil, util.Errorf("unsupported column type: %s", kind)
 	}
 }
+
+// checkValueWidth the width (for strings/byte arrays) and
+// scale (for decimals) to fit the specified column type.
+// Used by INSERT and UPDATE.
+func checkValueWidth(col ColumnDescriptor, val parser.Datum) *roachpb.Error {
+	switch col.Type.Kind {
+	case ColumnType_STRING, ColumnType_BYTES:
+		switch val.(type) {
+		case parser.DString:
+			v := val.(parser.DString)
+			if col.Type.Width > 0 && len(v) > int(col.Type.Width) {
+				return roachpb.NewUErrorf("value too large for column %q", col.Name)
+			}
+		case parser.DBytes:
+			v := val.(parser.DBytes)
+			if col.Type.Width > 0 && len(v) > int(col.Type.Width) {
+				return roachpb.NewUErrorf("value too large for column %q", col.Name)
+			}
+		}
+	case ColumnType_DECIMAL:
+		if v, ok := val.(*parser.DDecimal); ok {
+			if col.Type.Width > 0 {
+				var nd inf.Dec
+				nd.Round(&v.Dec, inf.Scale(col.Type.Width), inf.RoundHalfEven)
+				if nd.Cmp(&v.Dec) != 0 {
+					return roachpb.NewUErrorf("too many decimals for column %q", col.Name)
+				}
+			}
+		}
+	}
+	return nil
+}

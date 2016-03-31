@@ -185,6 +185,13 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
+		// Ensure that the values honor the specified column widths.
+		for i, val := range rowVals {
+			if pErr := checkValueWidth(cols[i], val); pErr != nil {
+				return nil, pErr
+			}
+		}
+
 		// Check that the row value types match the column types. This needs to
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
