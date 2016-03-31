@@ -162,8 +162,8 @@ func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalClu
 	resilientClient := resilientDockerClient{APIClient: cli}
 	retryingClient := retryingDockerClient{
 		APIClient: resilientClient,
-		attempts:  3,
-		timeout:   time.Minute,
+		attempts:  10,
+		timeout:   10 * time.Second,
 	}
 
 	return &LocalCluster{
@@ -667,6 +667,9 @@ func (l *LocalCluster) stop() {
 	}
 	outputLogDir := l.logDir
 	for i, n := range l.Nodes {
+		if n.Container == nil {
+			continue
+		}
 		ci, err := n.Inspect()
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
 		maybePanic(n.Kill())
