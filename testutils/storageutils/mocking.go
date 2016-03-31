@@ -19,6 +19,7 @@ package storageutils
 import (
 	"sync"
 
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -75,23 +76,28 @@ func WrapFilterForReplayProtection(
 
 // run executes the wrapped filter.
 func (c *ReplayProtectionFilterWrapper) run(args FilterArgs) *roachpb.Error {
-
-	c.RLock()
-	defer c.RUnlock()
+	mapKey := raftCmdIDAndIndex{args.CmdID, args.Index}
 
 	if args.InRaftCmd() {
-		if err, found :=
-			c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}]; found {
-			// We've detected a replay.
-			return err
+		c.RLock()
+		pErr, ok := c.processedCommands[mapKey]
+		c.RUnlock()
+		if ok {
+			// We've detected a replay. Return a clone of the original error because
+			// errors may be mutated on the Send path.
+			return proto.Clone(pErr).(*roachpb.Error)
 		}
 	}
 
 	pErr := c.filter(args)
 
 	if args.InRaftCmd() {
-		c.processedCommands[raftCmdIDAndIndex{args.CmdID, args.Index}] = pErr
+		c.Lock()
+		c.processedCommands[mapKey] = pErr
+		c.Unlock()
 	}
 
-	return pErr
+	// Return a clone of the original error because errors may be mutated on the
+	// Send path.
+	return proto.Clone(pErr).(*roachpb.Error)
 }

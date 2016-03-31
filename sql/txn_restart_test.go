@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	_ "github.com/cockroachdb/pq"
 )
@@ -83,14 +82,14 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 	case *roachpb.TransactionAbortedError:
 		// The previous txn should have been aborted, so check that we're running
 		// in a new one.
-		if *failureRec.txn.TxnMeta.ID == *txn.TxnMeta.ID {
+		if failureRec.txn.Equal(txn) {
 			panic(fmt.Sprintf("new transaction for value \"%s\" is the same "+
 				"as the old one", value))
 		}
 	default:
 		// The previous txn should have been restarted, so we should be running in
 		// the same one.
-		if *failureRec.txn.TxnMeta.ID != *txn.TxnMeta.ID {
+		if !failureRec.txn.Equal(txn) {
 			// panic and not t.Fatal because this runs on a different goroutine
 			panic(fmt.Sprintf("new transaction for value \"%s\" (%s) "+
 				"is not the same as the old one (%s)", value,
@@ -102,8 +101,10 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 }
 
 func injectErrors(
-	_ roachpb.StoreID, req roachpb.Request,
-	hdr roachpb.Header, magicVals *filterVals) error {
+	req roachpb.Request,
+	hdr roachpb.Header,
+	magicVals *filterVals,
+) error {
 	magicVals.Lock()
 	defer magicVals.Unlock()
 
@@ -237,11 +238,11 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storageutils.FilterArgs) *roachpb.Error {
-			if err := injectErrors(args.Sid, args.Req, args.Hdr, magicVals); err != nil {
+			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
-		}, false)
+		}, true)
 
 	// Test that implicit txns - txns for which we see all the statements and prefixes
 	// of txns (statements batched together with the BEGIN stmt) - are retried.
@@ -283,11 +284,11 @@ INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
 		func(args storageutils.FilterArgs) *roachpb.Error {
-			if err := injectErrors(args.Sid, args.Req, args.Hdr, magicVals); err != nil {
+			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
-		}, false)
+		}, true)
 	defer cleanupFilter()
 
 	// Start a txn.
@@ -424,14 +425,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 
 	for _, tc := range testCases {
-		log.Infof("starting test for: %+v", tc)
 		cleanupFilter := cmdFilters.AppendFilter(
 			func(args storageutils.FilterArgs) *roachpb.Error {
-				if err := injectErrors(args.Sid, args.Req, args.Hdr, tc.magicVals); err != nil {
+				if err := injectErrors(args.Req, args.Hdr, tc.magicVals); err != nil {
 					return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 				}
 				return nil
-			}, false)
+			}, true)
 
 		// Also inject an error at RELEASE time, besides the error injected by magicVals.
 		injectReleaseError := true
