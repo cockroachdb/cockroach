@@ -17,6 +17,7 @@
 package util
 
 import "runtime"
+import "fmt"
 
 var (
 	// These variables are initialized via the linker -X flag in the
@@ -25,6 +26,11 @@ var (
 	buildTime string // Build time in UTC (year/month/day hour:min:sec)
 	buildDeps string // Git SHAs of dependencies
 )
+
+// GetBuildSummary returns a pretty printed version summary.
+func GetBuildSummary() string {
+    return fmt.Sprintf("CockroachDB %s (built %s, %s)", buildTag, buildTime, runtime.Version())
+}
 
 // GetBuildInfo ...
 func GetBuildInfo() BuildInfo {
