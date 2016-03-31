@@ -373,7 +373,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txn := newTransaction("txn1", baseKey, 1, roachpb.SERIALIZABLE, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
-		txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(test.heartbeatTS)}
+		txn.LastHeartbeat = txn.Timestamp.Add(test.heartbeatTS.Nanoseconds(), 0)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
@@ -382,7 +382,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			}
 		}
 		abortTS := txn.Timestamp
-		abortTS.Forward(*txn.LastHeartbeat)
+		abortTS.Forward(txn.LastHeartbeat)
 		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: abortTS}
 		if err := tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)

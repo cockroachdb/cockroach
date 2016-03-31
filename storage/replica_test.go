@@ -1836,7 +1836,8 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
-		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
+		beginReply, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put)
+		if pErr != nil {
 			t.Fatal(pErr)
 		}
 		txn.Sequence++
@@ -1866,8 +1867,11 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 			t.Error(pErr)
 		}
 		hBR := resp.(*roachpb.HeartbeatTxnResponse)
-		if hBR.Txn.Status != expStatus || hBR.Txn.LastHeartbeat != nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
+		if hBR.Txn.Status != expStatus {
+			t.Errorf("expected transaction status to be %s, but got %s", hBR.Txn.Status, expStatus)
+		}
+		if initHeartbeat := beginReply.Header().Txn.LastHeartbeat; !hBR.Txn.LastHeartbeat.Equal(initHeartbeat) {
+			t.Errorf("expected transaction last heartbeat to be %s, but got %s", reply.Txn.LastHeartbeat, initHeartbeat)
 		}
 		key = roachpb.Key(key).Next()
 	}
@@ -1886,7 +1890,8 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
-		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
+		beginReply, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put)
+		if pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1899,8 +1904,11 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		hBR := resp.(*roachpb.HeartbeatTxnResponse)
-		if hBR.Txn.Status != roachpb.PENDING || hBR.Txn.LastHeartbeat == nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
+		if hBR.Txn.Status != roachpb.PENDING {
+			t.Errorf("expected transaction status to be %s, but got %s", hBR.Txn.Status, roachpb.PENDING)
+		}
+		if initHeartbeat := beginReply.Header().Txn.LastHeartbeat; hBR.Txn.LastHeartbeat.Equal(initHeartbeat) {
+			t.Errorf("expected transaction last heartbeat to advance, but it remained at %s", initHeartbeat)
 		}
 
 		args, h := endTxnArgs(txn, commit)
@@ -1918,7 +1926,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 		}
-		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hBR.Txn.LastHeartbeat) {
+		if !reply.Txn.LastHeartbeat.Equal(hBR.Txn.LastHeartbeat) {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
 				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
 		}
@@ -2871,7 +2879,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		pushee.Timestamp = test.startTS
-		pushee.LastHeartbeat = &test.startTS
+		pushee.LastHeartbeat = test.startTS
 		_, btH := beginTxnArgs(key, pushee)
 		put := putArgs(key, key)
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
@@ -2891,7 +2899,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Epoch = pushee.Epoch // no change
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
-		expTxn.LastHeartbeat = &test.startTS
+		expTxn.LastHeartbeat = test.startTS
 		expTxn.Writing = true
 
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
@@ -2953,7 +2961,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		if !test.heartbeat.Equal(roachpb.ZeroTimestamp) {
-			pushee.LastHeartbeat = &test.heartbeat
+			pushee.LastHeartbeat = test.heartbeat
 		}
 		_, btH := beginTxnArgs(key, pushee)
 		btH.Timestamp = tc.rng.store.Clock().Now()
