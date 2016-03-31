@@ -1041,12 +1041,13 @@ func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnTy
 }
 
 // heartbeatArgs returns request/response pair for HeartbeatTxn RPC.
-func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
+func heartbeatArgs(txn *roachpb.Transaction, now roachpb.Timestamp) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
 		},
+		Now: now,
 	}, h
 }
 
@@ -1710,7 +1711,7 @@ func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args, h := heartbeatArgs(txn)
+	args, h := heartbeatArgs(txn, tc.clock.Now())
 	// If the abort cache were active for this request, we'd catch a txn retry.
 	// Instead, we expect the error from heartbeating a nonexistent txn.
 	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, "record not present") {
@@ -1860,7 +1861,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		// committed txn back, but without last heartbeat timestamp set.
 		txn.Epoch++ // need to fake a higher epoch to sneak past sequence cache
 		txn.Sequence++
-		hBA, h := heartbeatArgs(txn)
+		hBA, h := heartbeatArgs(txn, tc.clock.Now())
 
 		resp, pErr = tc.SendWrappedWith(h, &hBA)
 		if pErr != nil {
@@ -1896,7 +1897,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		}
 
 		// Start out with a heartbeat to the transaction.
-		hBA, h := heartbeatArgs(txn)
+		hBA, h := heartbeatArgs(txn, tc.clock.Now())
 		txn.Sequence++
 
 		resp, pErr := tc.SendWrappedWith(h, &hBA)
@@ -2017,7 +2018,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	txn.Writing = true
 
 	// Start out with a heartbeat to the transaction.
-	hBA, h := heartbeatArgs(txn)
+	hBA, h := heartbeatArgs(txn, tc.clock.Now())
 	txn.Sequence++
 
 	_, pErr := tc.SendWrappedWith(h, &hBA)
@@ -2486,7 +2487,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	}
 
 	txn.Sequence++
-	hbArgs, h := heartbeatArgs(txn)
+	hbArgs, h := heartbeatArgs(txn, tc.clock.Now())
 	reply, pErr := tc.SendWrappedWith(h, &hbArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
