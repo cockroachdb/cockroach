@@ -20,6 +20,7 @@ option go_package = "roachpb";
 
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
+import "cockrach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/tracing/span.proto";
 import weak "gogoproto/gogo.proto";
@@ -560,6 +561,8 @@ message VerifyChecksumRequest {
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
   optional bytes checksum = 4;
+  // Add a raft snapshot for a better diff output when the verify fails.
+  optional RaftSnapshotData snapshot = 5;
 }
 
 // A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
