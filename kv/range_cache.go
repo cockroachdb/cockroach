@@ -112,42 +112,50 @@ type lookupResult struct {
 
 type lookupRequestKey struct {
 	key string
-	// evictedPrev is useful to distinguish between lookups to the updated and new
+	// sawAddrErr is useful to distinguish between lookups to the updated and new
 	// halves of a split. This is because only requests to the new half will trigger
-	// an eviction, while requests to the updated half will simply find the descriptor
-	// missing from the cache. See makeLookupRequestKey for more details.
-	evictedPrev     bool
+	// an eviction due to an addressing error, while requests to the updated half
+	// will simply find the descriptor missing from the cache. See makeLookupRequestKey
+	// for more details.
+	sawAddrErr      bool
 	considerIntents bool
 	useReverseScan  bool
 }
 
+// makeLookupRequestKey constructs a lookupRequestKey with the goal of
+// mapping all requests which are inferred to be looking for the same
+// descriptor onto the same request key to establish request coalescing.
+//
+// If the prevDesc is not nil and we had a cache miss, there are three possible
+// events that may have happened. For each of these, we try to coalesce all
+// requests that will end up on the same range post-event together.
+// - Split:  for a split, only the right half of the split will attempt to evict
+//           the stale descriptor because only the right half will be sending to
+//           the wrong range. Once this stale descriptor is evicted, keys from
+//           both halves of the split will miss the cache. We set the key to hash
+//           to the start of the stale descriptor for lookup requests to both the
+//           left and the right half of the split, but let the sawAddrErr assure
+//           that these requests are mapped to two separate lookupRequest. It's
+//           important that we only infer a request to the right half of a split
+//           on an eviction that sawAddrErr, and not on all evictions, because
+//           there are other reasons why a descriptor may need to be evicted.
+// - Merges: for a merge, the left half of the merge will never notice. The right
+//           half of the merge will suddenly find its descriptor to be stale, so
+//           it will evict and lookup the new descriptor. We set the key to hash
+//           to the start of the stale descriptor for lookup requests to the right
+//           half of the merge so that all requests will be coalesced to the same
+//           lookupRequest.
+// - Rebal:  for a rebalance, the entire descriptor will suddenly go stale and
+//           requests to it will evict the descriptor. We set the key to hash to
+//           the start of the stale descriptor for lookup requests to the rebalanced
+//           descriptor so that all requests will be coalesced to the same lookupRequest.
 func makeLookupRequestKey(key roachpb.RKey, evictToken evictionToken, considerIntents, useReverseScan bool) lookupRequestKey {
-	// If the prevDesc is not nil and we had a cache miss, there are three possible
-	// events that may have happened. For each of these, we try to coalesce all
-	// requests that will end up on the same range post-event together.
-	// - Split:  for a split, only the right half of the split will attempt to evict
-	//           the stale descriptor because only the right half will be sending to
-	//           the wrong range. Once this stale descriptor is evicted, keys from
-	//           both halves of the split will miss the cache. We set the key to hash
-	//           to the start of the stale descriptor for lookup requests to both the
-	//           left and the right half of the split, but let the evictedPrev assure
-	//           that these requests are mapped to two separate lookupRequest.
-	// - Merges: for a merge, the left half of the merge will never notice. The right
-	//           half of the merge will suddenly find its descriptor to be stale, so
-	//           it will evict and lookup the new descriptor. We set the key to hash
-	//           to the start of the stale descriptor for lookup requests to the right
-	//           half of the merge so that all requests will be coalesced to the same
-	//           lookupRequest.
-	// - Rebal:  for a rebalance, the entire descriptor will suddenly go stale and
-	//           requests to it will evict the descriptor. We set the key to hash to
-	//           the start of the stale descriptor for lookup requests to the rebalanced
-	//           descriptor so that all requests will be coalesced to the same lookupRequest.
 	if evictToken.prevDesc != nil {
 		key = evictToken.prevDesc.StartKey
 	}
 	return lookupRequestKey{
 		key:             string(key),
-		evictedPrev:     evictToken.evictedDesc(),
+		sawAddrErr:      evictToken.evictedDueToAddrErr(),
 		considerIntents: considerIntents,
 		useReverseScan:  useReverseScan,
 	}
@@ -188,6 +196,7 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 type evictionToken struct {
 	prevDesc      *roachpb.RangeDescriptor
 	do            func() error // called on eviction.
+	sawAddrErr    bool         // set if an eviction is due to an addressing error.
 	evicted       bool
 	evictedLocker sync.Locker
 }
@@ -200,13 +209,18 @@ func makeEvictionToken(prevDesc *roachpb.RangeDescriptor, evict func() error) ev
 	}
 }
 
-func (et *evictionToken) evict() error {
+// evict instructs the evictionToken to evict the RangeDescriptor it was created
+// with from the rangeDescriptorCache. The method inquires into the cause of the
+// eviction through its sawAddrErr, which should be set to true if the eviction
+// was prompted by an addressing issue, and false otherwise.
+func (et *evictionToken) evict(sawAddrErr bool) error {
 	et.evictedLocker.Lock()
 	defer et.evictedLocker.Unlock()
 	var err error
 	if !et.evicted {
 		err = et.do()
 		et.evicted = true
+		et.sawAddrErr = sawAddrErr
 	}
 	return err
 }
@@ -218,6 +232,15 @@ func (et *evictionToken) evictedDesc() bool {
 	et.evictedLocker.Lock()
 	defer et.evictedLocker.Unlock()
 	return et.evicted
+}
+
+func (et *evictionToken) evictedDueToAddrErr() bool {
+	if et.evictedLocker == nil {
+		return false
+	}
+	et.evictedLocker.Lock()
+	defer et.evictedLocker.Unlock()
+	return et.sawAddrErr
 }
 
 // LookupRangeDescriptor attempts to locate a descriptor for the range
@@ -297,7 +320,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictTo
 				res = lookupResult{
 					desc: desc,
 					evictToken: makeEvictionToken(desc, func() error {
-						return rdc.insertRangeDescriptors(nextDesc)
+						return rdc.InsertRangeDescriptors(nextDesc)
 					}),
 				}
 			default:
@@ -333,7 +356,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictTo
 
 		// Detect if we are the right half of a split. If so, launch a lookup for the left half,
 		// which will only be detected because we evicted the entire previous range.
-		if prevDesc := evictToken.prevDesc; prevDesc != nil && evictToken.evictedDesc() {
+		if prevDesc := evictToken.prevDesc; prevDesc != nil && evictToken.evictedDueToAddrErr() {
 			if res.desc != nil && prevDesc.StartKey.Less(res.desc.StartKey) {
 				prefetchSplitLeft := func() {
 					prefetchToken := evictionToken{prevDesc: prevDesc}
@@ -505,10 +528,10 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	return metaEndKey, rd, nil
 }
 
-// insertRangeDescriptors is a helper function to insert the provided
+// InsertRangeDescriptors is a helper function to insert the provided
 // range descriptors into the rangeDescriptorCache. It acquires a write
 // lock on rdc.rangeCacheMu before delegating to insertRangeDescriptorsLocked.
-func (rdc *rangeDescriptorCache) insertRangeDescriptors(rs ...roachpb.RangeDescriptor) error {
+func (rdc *rangeDescriptorCache) InsertRangeDescriptors(rs ...roachpb.RangeDescriptor) error {
 	rdc.rangeCacheMu.Lock()
 	defer rdc.rangeCacheMu.Unlock()
 	return rdc.insertRangeDescriptorsLocked(rs...)
