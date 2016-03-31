@@ -69,7 +69,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 		table.valNeededForCol[i] = indexScan.valNeededForCol[i]
 
 		// For the index node, we set valNeededForCol for columns that are part of the index.
-		id := indexScan.visibleCols[i].ID
+		id := indexScan.desc.Columns[i].ID
 		_, found := colIDtoRowIndex[id]
 		indexScan.valNeededForCol[i] = found
 	}

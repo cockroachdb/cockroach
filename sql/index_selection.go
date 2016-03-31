@@ -725,7 +725,7 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 
 	for i, needed := range scan.valNeededForCol {
 		if needed {
-			colID := scan.visibleCols[i].ID
+			colID := v.desc.Columns[i].ID
 			if !v.index.containsColumnID(colID) {
 				return false
 			}

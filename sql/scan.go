@@ -40,17 +40,16 @@ type scanNode struct {
 	// Set if an index was explicitly specified.
 	specifiedIndex *IndexDescriptor
 
-	// visibleCols are the columns in the table (a copy of desc.Columns).
-	visibleCols []ColumnDescriptor
-	// There is a 1-1 correspondence between visibleCols and resultColumns.
+	// There is a 1-1 correspondence between desc.Column sand resultColumns.
 	resultColumns []ResultColumn
-	// row contains values for the current row. There is a 1-1 correspondence between resultColumns and vals.
+	// row contains values for the current row. There is a 1-1 correspondence
+	// between resultColumns and vals.
 	row parser.DTuple
-	// for each column in resultColumns, indicates if the value is needed (used as an optimization
-	// when the upper layer doesn't need all values).
+	// for each column in resultColumns, indicates if the value is needed (used
+	// as an optimization when the upper layer doesn't need all values).
 	valNeededForCol []bool
 
-	// Map used to get the index for columns in visibleCols.
+	// Map used to get the index for columns in desc.Columns.
 	colIdxMap map[ColumnID]int
 
 	spans            []span
@@ -265,22 +264,21 @@ func (n *scanNode) setNeededColumns(needed []bool) {
 	copy(n.valNeededForCol, needed)
 }
 
-// Initializes the visibleCols and associated structures.
+// Initializes the column structures.
 func (n *scanNode) initDescDefaults() {
 	n.index = &n.desc.PrimaryIndex
-	visibleCols := n.desc.Columns
-	n.visibleCols = visibleCols
-	n.resultColumns = makeResultColumns(visibleCols)
-	n.colIdxMap = make(map[ColumnID]int, len(visibleCols))
-	for i, c := range visibleCols {
+	cols := n.desc.Columns
+	n.resultColumns = makeResultColumns(cols)
+	n.colIdxMap = make(map[ColumnID]int, len(cols))
+	for i, c := range cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.valNeededForCol = make([]bool, len(visibleCols))
-	for i := range visibleCols {
+	n.valNeededForCol = make([]bool, len(cols))
+	for i := range cols {
 		n.valNeededForCol[i] = true
 	}
-	n.row = make([]parser.Datum, len(visibleCols))
-	n.qvals = make([]scanQValue, len(visibleCols))
+	n.row = make([]parser.Datum, len(cols))
+	n.qvals = make([]scanQValue, len(cols))
 	for i := range n.qvals {
 		n.qvals[i] = n.makeQValue(i)
 	}
@@ -333,7 +331,7 @@ func (n *scanNode) initScan() bool {
 		if !n.isSecondaryIndex {
 			// We have a sentinel key per row plus at most one key per non-PK column. Of course, we
 			// may have other keys due to a schema change, but this is only a hint.
-			firstBatchLimit *= int64(1 + len(n.visibleCols) - len(n.index.ColumnIDs))
+			firstBatchLimit *= int64(1 + len(n.desc.Columns) - len(n.index.ColumnIDs))
 		}
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
@@ -354,7 +352,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 	n.ordering = n.computeOrdering(n.index, exactPrefix, n.reverse)
 }
 
-// computeOrdering calculates ordering information for table columns (visibleCols) assuming that:
+// computeOrdering calculates ordering information for table columns assuming that:
 //    - we scan a given index (potentially in reverse order), and
 //    - the first `exactPrefix` columns of the index each have an exact (single value) match
 //      (see orderingInfo).
@@ -513,7 +511,7 @@ func (n *scanNode) maybeOutputRow() bool {
 		n.indexKey = nil
 
 		// Fill in any missing values with NULLs
-		for i, col := range n.visibleCols {
+		for i, col := range n.desc.Columns {
 			if n.valNeededForCol[i] && n.row[i] == nil {
 				if !col.Nullable {
 					panic("Non-nullable column with no value!")
@@ -589,7 +587,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		n.pErr = roachpb.NewUErrorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
-	kind := n.visibleCols[idx].Type.Kind
+	kind := n.desc.Columns[idx].Type.Kind
 	d, err := unmarshalColumnValue(kind, kv.Value)
 	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil
