@@ -27,7 +27,7 @@ import (
 // #elif defined(__GNUC__) || defined(__GNUG__)
 // 	return "gcc " __VERSION__;
 // #else
-// 	return "unknown";
+// 	return "non-gcc, non-clang (or an unrecognized version)";
 // #endif
 // }
 import "C"
