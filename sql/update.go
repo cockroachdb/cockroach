@@ -243,6 +243,14 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		// Our updated value expressions occur immediately after the plain
 		// columns in the output.
 		newVals := rowVals[len(tableDesc.Columns):]
+
+		// Ensure that the values honor the specified column widths.
+		for i := range newVals {
+			if err := checkValueWidth(cols[i], newVals[i]); err != nil {
+				return nil, roachpb.NewError(err)
+			}
+		}
+
 		// Update the row values.
 		for i, col := range cols {
 			val := newVals[i]
