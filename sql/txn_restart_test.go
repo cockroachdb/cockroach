@@ -215,7 +215,7 @@ func TestTxnRestart(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT, t TIMESTAMP);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -229,6 +229,9 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 		"hooly":     2,
 		"josephine": 2,
 		"laureal":   2,
+	}
+	magicVals.abortCounts = map[string]int{
+		"boulanger": 2,
 	}
 	magicVals.endTxnRestartCounts = map[string]int{
 		"boulanger": 2,
@@ -246,16 +249,18 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 
 	// Test that implicit txns - txns for which we see all the statements and prefixes
 	// of txns (statements batched together with the BEGIN stmt) - are retried.
+	// We also exercise the SQL cluster logical timestamp in here, because
+	// this must be properly propagated across retries.
 	if _, err := sqlDB.Exec(`
-INSERT INTO t.test (k, v) VALUES ('a', 'boulanger');
+INSERT INTO t.test (k, v, t) VALUES ('a', 'boulanger', cluster_logical_timestamp());
 BEGIN;
-INSERT INTO t.test (k, v) VALUES ('c', 'dromedary');
-INSERT INTO t.test (k, v) VALUES ('e', 'fajita');
+INSERT INTO t.test (k, v, t) VALUES ('c', 'dromedary', now());
+INSERT INTO t.test (k, v, t) VALUES ('e', 'fajita', now());
 END;
-INSERT INTO t.test (k, v) VALUES ('g', 'hooly');
+INSERT INTO t.test (k, v, t) VALUES ('g', 'hooly', now());
 BEGIN;
-INSERT INTO t.test (k, v) VALUES ('i', 'josephine');
-INSERT INTO t.test (k, v) VALUES ('k', 'laureal');
+INSERT INTO t.test (k, v, t) VALUES ('i', 'josephine', now());
+INSERT INTO t.test (k, v, t) VALUES ('k', 'laureal', now());
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +305,7 @@ BEGIN;
 	}
 
 	// Continue the txn in a new request, which is not retriable.
-	_, err := sqlDB.Exec("INSERT INTO t.test (k, v) VALUES ('g', 'hooly')")
+	_, err := sqlDB.Exec("INSERT INTO t.test (k, v, t) VALUES ('g', 'hooly', now())")
 	if !testutils.IsError(
 		err, "encountered previous write with future timestamp") {
 		t.Errorf("didn't get expected injected error. Got: %s", err)
