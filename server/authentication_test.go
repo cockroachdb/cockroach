@@ -87,35 +87,40 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", "/index.html", nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, testCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, noCertsContext, true, http.StatusOK},
-		{"GET", "/index.html", nil, insecureContext, false, -1},
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		{"GET", "/index.html", nil, insecureContext, true, 308},
 
 		// /_admin/: server.adminServer: no auth.
 		{"GET", healthPath, nil, rootCertsContext, true, http.StatusOK},
 		{"GET", healthPath, nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", healthPath, nil, testCertsContext, true, http.StatusOK},
 		{"GET", healthPath, nil, noCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, insecureContext, false, -1},
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		{"GET", healthPath, nil, insecureContext, true, 308},
 
 		// /debug/: server.adminServer: no auth.
 		{"GET", debugEndpoint + "vars", nil, rootCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, testCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, noCertsContext, true, http.StatusOK},
-		{"GET", debugEndpoint + "vars", nil, insecureContext, false, -1},
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		{"GET", debugEndpoint + "vars", nil, insecureContext, true, 308},
 
 		// /_status/nodes: server.statusServer: no auth.
 		{"GET", statusNodesPrefix, nil, rootCertsContext, true, http.StatusOK},
 		{"GET", statusNodesPrefix, nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", statusNodesPrefix, nil, testCertsContext, true, http.StatusOK},
 		{"GET", statusNodesPrefix, nil, noCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, insecureContext, false, -1},
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		{"GET", statusNodesPrefix, nil, insecureContext, true, 308},
 
 		// /ts/: ts.Server: no auth.
 		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, nodeCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, testCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
-		{"GET", ts.URLPrefix, nil, insecureContext, false, -1},
+		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
+		{"GET", ts.URLPrefix, nil, insecureContext, true, 308},
 	}
 
 	for tcNum, tc := range testCases {
@@ -126,7 +131,7 @@ func TestSSLEnforcement(t *testing.T) {
 		url := fmt.Sprintf("%s://%s%s", tc.ctx.HTTPRequestScheme(), s.HTTPAddr(), tc.path)
 		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
 		if (err == nil) != tc.success {
-			t.Fatalf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
+			t.Errorf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
 		}
 		if err != nil {
 			continue
