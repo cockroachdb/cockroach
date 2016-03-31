@@ -75,6 +75,9 @@ Database server port to connect to for HTTP requests.`),
 	cliflags.DatabaseName: wrapText(`
 The name of the database to connect to.`),
 
+	cliflags.DepsName: wrapText(`
+Include all dependency versions`),
+
 	cliflags.ExecuteName: wrapText(`
 Execute the SQL statement(s) on the command line, then exit. This flag may be
 specified multiple times and each value may contain multiple semicolon
@@ -473,6 +476,11 @@ func initFlags(ctx *Context) {
 		f.StringVar(&cliContext.debug.endKey, cliflags.ToName, "", usage(cliflags.ToName))
 		f.BoolVar(&cliContext.debug.raw, cliflags.RawName, false, usage(cliflags.RawName))
 		f.BoolVar(&cliContext.debug.values, cliflags.ValuesName, false, usage(cliflags.ValuesName))
+	}
+
+	{
+		f := versionCmd.Flags()
+		f.BoolVar(&versionIncludesDeps, cliflags.DepsName, false, usage(cliflags.DepsName))
 	}
 }
 
