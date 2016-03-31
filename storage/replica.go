@@ -164,6 +164,9 @@ type replicaChecksum struct {
 	// This channel is closed after the checksum is computed, and is used
 	// as a notification.
 	notify chan struct{}
+
+	// Some debug output that can be added to the VerifyChecksumRequest.
+	snapshot *roachpb.RaftSnapshotData
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
