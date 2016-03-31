@@ -46,6 +46,10 @@ func TestKeyNext(t *testing.T) {
 		t.Errorf("expected next key to be greater")
 	}
 
+	extraCap := make([]byte, 2, 4)
+	extraCap[0] = 'x'
+	extraCap[1] = 'o'
+
 	testCases := []struct {
 		key  Key
 		next Key
@@ -55,10 +59,14 @@ func TestKeyNext(t *testing.T) {
 		{Key("test key"), Key("test key\x00")},
 		{Key("\xff"), Key("\xff\x00")},
 		{Key("xoxo\x00"), Key("xoxo\x00\x00")},
+		{Key(extraCap), Key("xo\x00")},
 	}
 	for i, c := range testCases {
 		if !bytes.Equal(c.key.Next(), c.next) {
 			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, c.key.Next())
+		}
+		if !bytes.Equal(c.key.ShallowNext(), c.next) {
+			t.Errorf("%d: unexpected shallow next bytes for %q: %q", i, c.key, c.key.ShallowNext())
 		}
 	}
 }
