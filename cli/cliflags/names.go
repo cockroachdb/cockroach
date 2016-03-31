@@ -21,6 +21,7 @@ const (
 	AttrsName      = "attrs"
 	CacheName      = "cache"
 	DatabaseName   = "database"
+	DepsName       = "deps"
 	ExecuteName    = "execute"
 	JoinName       = "join"
 	HostName       = "host"

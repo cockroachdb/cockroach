@@ -66,6 +66,8 @@ module Models {
       tag: string;
       time: string;
       deps: string;
+      platform: string;
+      cgoCompiler: string;
     }
 
     /*****************************
@@ -114,7 +116,7 @@ module Models {
     }
 
     /**
-     * StoreStatus describes the current status of a store. 
+     * StoreStatus describes the current status of a store.
      */
     export interface StoreStatus {
       desc: StoreDescriptor;
