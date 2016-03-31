@@ -80,13 +80,6 @@ void DBClose(DBEngine* db);
 // complete.
 DBStatus DBFlush(DBEngine* db);
 
-// Compacts the underlying storage for the key range
-// [start,end]. start==NULL is treated as a key before all keys in the
-// database. end==NULL is treated as a key after all keys in the
-// database. DBCompactRange(db, NULL, NULL) will compact the entire
-// database.
-DBStatus DBCompactRange(DBEngine* db, DBKey* start, DBKey* end);
-
 // Returns the approximate file system spaced used by keys in the
 // range [start,end].
 uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end);
