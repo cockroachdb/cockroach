@@ -1748,12 +1748,12 @@ func TestStoreBadRequests(t *testing.T) {
 	args6 := scanArgs(keys.RangeTreeNodeKey(rangeTreeRootAddr), roachpb.Key("a"))
 
 	tArgs0, _ := endTxnArgs(txn, false /* commit */)
-	tArgs1, _ := heartbeatArgs(txn)
+	tArgs1, _ := heartbeatArgs(txn, roachpb.ZeroTimestamp)
 
 	tArgs2, tHeader2 := endTxnArgs(txn, false /* commit */)
 	tHeader2.Txn.Key = tHeader2.Txn.Key.Next()
 
-	tArgs3, tHeader3 := heartbeatArgs(txn)
+	tArgs3, tHeader3 := heartbeatArgs(txn, roachpb.ZeroTimestamp)
 	tHeader3.Txn.Key = tHeader3.Txn.Key.Next()
 
 	tArgs4 := pushTxnArgs(txn, txn, roachpb.PUSH_ABORT)
