@@ -490,6 +490,44 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 	}
 }
 
+// TestAbortedRetryPreservesTimestamp verifies that the minimum timestamp
+// set by the client is preserved across retries of aborted transactions.
+func TestAbortedRetryPreservesTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a TestSender that aborts a transaction 2 times before succeeding.
+	count := 0
+	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if _, ok := ba.GetArg(roachpb.Put); ok {
+			count++
+			if count < 3 {
+				return nil, roachpb.NewError(&roachpb.TransactionAbortedError{})
+			}
+		}
+		return ba.CreateReply(), nil
+	}, nil))
+
+	txnClosure := func(txn *Txn, opt *TxnExecOptions) *roachpb.Error {
+		// Ensure the KV transaction is created.
+		return txn.Put("a", "b")
+	}
+
+	// Request a client-defined timestamp.
+	refTimestamp := roachpb.Timestamp{WallTime: 42, Logical: 69}
+	execOpt := TxnExecOptions{AutoRetry: true, AutoCommit: true, MinInitialTimestamp: refTimestamp}
+
+	// Perform the transaction.
+	txn := NewTxn(context.Background(), *db)
+	if pErr := txn.Exec(execOpt, txnClosure); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Check the timestamp was preserved.
+	if txn.Proto.OrigTimestamp != refTimestamp {
+		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	}
+}
+
 // TestAbortTransactionOnCommitErrors verifies that transactions are
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
