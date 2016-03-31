@@ -1336,26 +1336,6 @@ DBStatus DBFlush(DBEngine* db) {
   return ToDBStatus(db->rep->Flush(options));
 }
 
-DBStatus DBCompactRange(DBEngine* db, DBKey* start, DBKey* end) {
-  std::string sbuf;
-  std::string ebuf;
-  rocksdb::Slice s;
-  rocksdb::Slice e;
-  rocksdb::Slice* sPtr = NULL;
-  rocksdb::Slice* ePtr = NULL;
-  if (start != NULL) {
-    sPtr = &s;
-    sbuf = EncodeKey(*start);
-    s = sbuf;
-  }
-  if (end != NULL) {
-    ePtr = &e;
-    ebuf = EncodeKey(*end);
-    e = ebuf;
-  }
-  return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), sPtr, ePtr));
-}
-
 uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end) {
   std::string s = EncodeKey(start);
   std::string e = EncodeKey(end);
