@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math/big"
 	"time"
 
 	"gopkg.in/inf.v0"
@@ -877,4 +878,50 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 	default:
 		return nil, util.Errorf("unsupported column type: %s", kind)
 	}
+}
+
+// checkValueWidth the width (for strings/byte arrays) and
+// scale (for decimals) to fit the specified column type.
+// Used by INSERT and UPDATE.
+func checkValueWidth(col ColumnDescriptor, val *parser.Datum) error {
+	switch col.Type.Kind {
+	case ColumnType_STRING, ColumnType_BYTES:
+		switch (*val).(type) {
+		case parser.DString:
+			v := (*val).(parser.DString)
+			if col.Type.Width > 0 && len(v) > int(col.Type.Width) {
+				return fmt.Errorf("value too long for type %s (column %q)", col.Type.SQLString(), col.Name)
+			}
+		case parser.DBytes:
+			v := (*val).(parser.DBytes)
+			if col.Type.Width > 0 && len(v) > int(col.Type.Width) {
+				return fmt.Errorf("value too long for type %s (column %q)", col.Type.SQLString(), col.Name)
+			}
+		}
+	case ColumnType_DECIMAL:
+		if v, ok := (*val).(*parser.DDecimal); ok {
+			if col.Type.Precision > 0 && col.Type.Width > 0 {
+				// psql: "If the scale of a value to be stored is greater than
+				// the declared scale of the column, the system will round the
+				// value to the specified number of fractional digits. Then,
+				// if the number of digits to the left of the decimal point
+				// exceeds the declared precision minus the declared scale, an
+				// error is raised."
+				var rounded inf.Dec
+				rounded.Round(&v.Dec, inf.Scale(col.Type.Width), inf.RoundHalfEven)
+
+				// Check that the precision is not exceeded.
+				maxDigitsLeft := big.NewInt(10)
+				maxDigitsLeft.Exp(maxDigitsLeft, big.NewInt(int64(col.Type.Precision-col.Type.Width)), nil)
+
+				var absRounded inf.Dec
+				absRounded.Abs(&rounded)
+				if absRounded.Cmp(inf.NewDecBig(maxDigitsLeft, 0)) != -1 {
+					return fmt.Errorf("too many digits for type %s (column %q)", col.Type.SQLString(), col.Name)
+				}
+				*val = &parser.DDecimal{Dec: rounded}
+			}
+		}
+	}
+	return nil
 }
