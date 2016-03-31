@@ -663,7 +663,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// returns descriptor [c,d) -> [d,g) is never scanned.
 			// We evict and retry in such a case.
 			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, rs.EndKey)) || (!isReverse && !desc.ContainsKeyRange(rs.Key, desc.EndKey)) {
-				if err := evictToken.evict(); err != nil {
+				if err := evictToken.evict(true); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
@@ -712,7 +712,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// We may simply not be trying to talk to the up-to-date
 				// replicas, so clearing the descriptor here should be a good
 				// idea.
-				if err := evictToken.evict(); err != nil {
+				if err := evictToken.evict(false); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				if tErr.CanRetry() {
@@ -720,8 +720,14 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 			case *roachpb.RangeNotFoundError, *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it.
-				if err := evictToken.evict(); err != nil {
+				if err := evictToken.evict(true); err != nil {
 					return nil, roachpb.NewError(err), false
+				}
+				// If we have the new range descriptor, insert it.
+				if rkmErr, ok := tErr.(*roachpb.RangeKeyMismatchError); ok && rkmErr.Range != nil {
+					if err := ds.rangeCache.InsertRangeDescriptors(*rkmErr.Range); err != nil {
+						log.Warningf("could not insert range descriptor from error %v into range cache: %v", rkmErr, err)
+					}
 				}
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
@@ -739,7 +745,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 						if log.V(1) {
 							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
 						}
-						if err := evictToken.evict(); err != nil {
+						if err := evictToken.evict(false); err != nil {
 							return nil, roachpb.NewError(err), false
 						}
 					}
@@ -754,7 +760,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					// another node (at a lower level), and then if it reaches
 					// this level then we know we've exhausted our options and
 					// must clear the cache.
-					if err := evictToken.evict(); err != nil {
+					if err := evictToken.evict(false); err != nil {
 						return nil, roachpb.NewError(err), false
 					}
 					newLeader = &roachpb.ReplicaDescriptor{}

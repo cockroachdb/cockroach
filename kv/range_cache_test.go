@@ -256,7 +256,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCount(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
-	if err := evictToken.evict(); err != nil {
+	if err := evictToken.evict(true); err != nil {
 		t.Fatal(err)
 	}
 	doLookup(t, db.cache, "cz")
@@ -328,7 +328,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	// such that a RangeKeyMismatchError is returned. The stale descriptor
 	// is evicted and a new lookup is initialized.
 	_, evictToken := doLookup(t, db.cache, "az")
-	if err := evictToken.evict(); err != nil {
+	if err := evictToken.evict(true); err != nil {
 		t.Fatal(err)
 	}
 	pauseLookupResumeAndAssert("az", 3, evictToken)
@@ -351,7 +351,7 @@ func TestRangeCacheConsiderIntents(t *testing.T) {
 	// The current descriptor is found to be stale, so it is evicted. The next cache
 	// lookup should return the descriptor from the intents, without performing another
 	// db lookup.
-	if err := evictToken.evict(); err != nil {
+	if err := evictToken.evict(true); err != nil {
 		t.Fatal(err)
 	}
 	abDescIntent, _ := doLookup(t, db.cache, "aa")
