@@ -37,9 +37,10 @@ type scanNode struct {
 	desc    TableDescriptor
 	index   *IndexDescriptor
 
-	// visibleCols are normally a copy of desc.Columns (even when we are using an index). The only
-	// exception is when we are selecting from a specific index (SELECT * from t@abc), in which case
-	// it contains only the columns in the index.
+	// Set if an index was explicitly specified.
+	specifiedIndex *IndexDescriptor
+
+	// visibleCols are the columns in the table (a copy of desc.Columns).
 	visibleCols []ColumnDescriptor
 	// There is a 1-1 correspondence between visibleCols and resultColumns.
 	resultColumns []ResultColumn
@@ -200,60 +201,30 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 	alias := n.desc.Name
 
 	indexName := NormalizeName(tableName.Index())
-	if indexName != "" && NormalizeName(n.desc.PrimaryIndex.Name) != indexName {
-		for i := range n.desc.Indexes {
-			if NormalizeName(n.desc.Indexes[i].Name) == indexName {
-				// Remove all but the matching index from the descriptor.
-				n.desc.Indexes = n.desc.Indexes[i : i+1]
-				n.index = &n.desc.Indexes[0]
-				break
+	if indexName != "" {
+		if indexName == NormalizeName(n.desc.PrimaryIndex.Name) {
+			n.specifiedIndex = &n.desc.PrimaryIndex
+		} else {
+			for i := range n.desc.Indexes {
+				if indexName == NormalizeName(n.desc.Indexes[i].Name) {
+					n.specifiedIndex = &n.desc.Indexes[i]
+					break
+				}
 			}
-		}
-		if n.index == nil {
-			n.pErr = roachpb.NewUErrorf("index \"%s\" not found", indexName)
-			return "", n.pErr
-		}
-		// Use the index name instead of the table name for fully-qualified columns in the
-		// expression.
-		alias = n.index.Name
-		// Strip out any columns from the table that are not present in the
-		// index.
-		visibleCols := make([]ColumnDescriptor, 0, len(n.index.ColumnIDs)+len(n.index.ImplicitColumnIDs))
-		for _, colID := range n.index.ColumnIDs {
-			col, err := n.desc.FindColumnByID(colID)
-			n.pErr = roachpb.NewError(err)
-			if n.pErr != nil {
+			if n.specifiedIndex == nil {
+				n.pErr = roachpb.NewUErrorf("index \"%s\" not found", indexName)
 				return "", n.pErr
 			}
-			visibleCols = append(visibleCols, *col)
 		}
-		for _, colID := range n.index.ImplicitColumnIDs {
-			col, err := n.desc.FindColumnByID(colID)
-			n.pErr = roachpb.NewError(err)
-			if n.pErr != nil {
-				return "", n.pErr
-			}
-			visibleCols = append(visibleCols, *col)
-		}
-		n.isSecondaryIndex = true
-		n.initVisibleCols(visibleCols, len(n.index.ImplicitColumnIDs))
-	} else {
-		n.initDescDefaults()
 	}
-
+	n.initDescDefaults()
 	return alias, nil
 }
 
-func (n *scanNode) initDescDefaults() {
-	n.index = &n.desc.PrimaryIndex
-	n.initVisibleCols(n.desc.Columns, 0)
-}
-
-// makeResultColumns converts ColumnDescriptors to ResultColumns. The last numImplicit columns are
-// marked as hidden.
-func makeResultColumns(colDescs []ColumnDescriptor, numImplicit int) []ResultColumn {
+// makeResultColumns converts ColumnDescriptors to ResultColumns.
+func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
-	for idx, colDesc := range colDescs {
+	for _, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
 		var typ parser.Datum
 
@@ -279,7 +250,7 @@ func makeResultColumns(colDescs []ColumnDescriptor, numImplicit int) []ResultCol
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}
-		hidden := colDesc.Hidden || idx >= len(colDescs)-numImplicit
+		hidden := colDesc.Hidden
 		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
 	}
 	return cols
@@ -294,11 +265,12 @@ func (n *scanNode) setNeededColumns(needed []bool) {
 	copy(n.valNeededForCol, needed)
 }
 
-// Initializes the visibleCols and associated structures (resultColumns, colIdxMap).
-// The last numImplicit columns are marked as hidden.
-func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit int) {
+// Initializes the visibleCols and associated structures.
+func (n *scanNode) initDescDefaults() {
+	n.index = &n.desc.PrimaryIndex
+	visibleCols := n.desc.Columns
 	n.visibleCols = visibleCols
-	n.resultColumns = makeResultColumns(visibleCols, numImplicit)
+	n.resultColumns = makeResultColumns(visibleCols)
 	n.colIdxMap = make(map[ColumnID]int, len(visibleCols))
 	for i, c := range visibleCols {
 		n.colIdxMap[c.ID] = i

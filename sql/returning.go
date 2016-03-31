@@ -44,7 +44,7 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 
 	rh.results.columns = make([]ResultColumn, 0, len(r))
 	table := tableInfo{
-		columns: makeResultColumns(tablecols, 0),
+		columns: makeResultColumns(tablecols),
 		alias:   alias,
 	}
 	rh.qvals = make(qvalMap)
