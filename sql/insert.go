@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"gopkg.in/inf.v0"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -26,6 +28,34 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// constrainValue constraints the width (for strings/byte arrays) and
+// scale (for decimals) to fit the specified column type.
+// Used by INSERT and UPDATE.
+func constrainValue(col ColumnDescriptor, val *parser.Datum) {
+	switch col.Type.Kind {
+	case ColumnType_STRING, ColumnType_BYTES:
+		if v, ok := (*val).(parser.DString); ok {
+			s := string(v)
+			if col.Type.Width > 0 && int32(len(s)) > col.Type.Width {
+				*val = parser.DString(v[0:col.Type.Width])
+			}
+		} else if v, ok := (*val).(parser.DBytes); ok {
+			s := string(v)
+			if col.Type.Width > 0 && int32(len(s)) > col.Type.Width {
+				*val = parser.DBytes(v[0:col.Type.Width])
+			}
+		}
+	case ColumnType_DECIMAL:
+		if v, ok := (*val).(*parser.DDecimal); ok {
+			if col.Type.Width > 0 {
+				var nd inf.Dec
+				nd.Round(&v.Dec, inf.Scale(col.Type.Width), inf.RoundHalfEven)
+				*val = &parser.DDecimal{Dec: nd}
+			}
+		}
+	}
+}
 
 // Insert inserts rows into the database.
 // Privileges: INSERT on table
@@ -183,6 +213,11 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 					return nil, roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 				}
 			}
+		}
+
+		// Ensure that the values honor the specified column widths.
+		for i := range rowVals {
+			constrainValue(cols[i], &rowVals[i])
 		}
 
 		// Check that the row value types match the column types. This needs to
