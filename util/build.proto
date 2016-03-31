@@ -26,4 +26,6 @@ message BuildInfo {
   optional string tag = 2 [(gogoproto.nullable) = false];
   optional string time = 3 [(gogoproto.nullable) = false];
   optional string deps = 4 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "dependencies"];
+  optional string cgoCompiler = 5 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "cgo"];
+  optional string platform = 6 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "platform"];
 }

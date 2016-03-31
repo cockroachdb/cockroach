@@ -30,6 +30,8 @@ import (
 // Proxy to allow overrides in tests.
 var osStderr = os.Stderr
 
+var versionIncludesDeps bool
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "output version information",
@@ -39,11 +41,15 @@ Output build version information.
 	Run: func(cmd *cobra.Command, args []string) {
 		info := util.GetBuildInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(tw, "Build Vers:  %s\n", info.Vers)
 		fmt.Fprintf(tw, "Build Tag:   %s\n", info.Tag)
 		fmt.Fprintf(tw, "Build Time:  %s\n", info.Time)
-		fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
-			strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
+		fmt.Fprintf(tw, "Platform:  %s\n", info.Platform)
+		fmt.Fprintf(tw, "Go Version:  %s\n", info.Vers)
+		fmt.Fprintf(tw, "C Compiler:  %s\n", info.CgoCompiler)
+		if versionIncludesDeps {
+			fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
+				strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
+		}
 		_ = tw.Flush()
 	},
 }

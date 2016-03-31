@@ -45,6 +45,9 @@ var cacheSize *bytesValue
 var insecure *insecureValue
 
 var flagUsage = map[string]string{
+	cliflags.AllName: wrapText(`
+Include all dependency versions`),
+
 	cliflags.AttrsName: wrapText(`
 An ordered, colon-separated list of node attributes. Attributes are
 arbitrary strings specifying topography or machine
@@ -473,6 +476,10 @@ func initFlags(ctx *Context) {
 		f.StringVar(&cliContext.debug.endKey, cliflags.ToName, "", usage(cliflags.ToName))
 		f.BoolVar(&cliContext.debug.raw, cliflags.RawName, false, usage(cliflags.RawName))
 		f.BoolVar(&cliContext.debug.values, cliflags.ValuesName, false, usage(cliflags.ValuesName))
+	}
+	{
+		f := versionCmd.Flags()
+		f.BoolVar(&versionIncludesDeps, cliflags.AllName, false, usage(cliflags.AllName))
 	}
 }
 
