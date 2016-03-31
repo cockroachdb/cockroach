@@ -1025,7 +1025,7 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 	}, h
 }
 
-// endTxnArgs returns a request and header for a PushTxn RPC for the
+// pushTxnArgs returns a request and header for a PushTxn RPC for the
 // specified key.
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
