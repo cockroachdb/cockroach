@@ -328,13 +328,6 @@ func (s *Server) Start() error {
 
 	s.gossip.Start(s.grpc, unresolvedAddr)
 
-	// Register admin service
-	if err := s.admin.RegisterGRPCGateway(s.ctx); err != nil {
-		return err
-	}
-	s.stopper.AddCloser(s.admin)
-	RegisterAdminServer(s.grpc, s.admin)
-
 	if err := s.node.start(unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
@@ -366,7 +359,10 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	return nil
+	// Register admin service. Must happen after serving starts.
+	s.stopper.AddCloser(s.admin)
+	RegisterAdminServer(s.grpc, s.admin)
+	return s.admin.RegisterGRPCGateway(s.ctx)
 }
 
 // startSampleEnvironment begins a worker that periodically instructs the

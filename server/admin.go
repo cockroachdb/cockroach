@@ -156,11 +156,18 @@ func (s *adminServer) RegisterGRPCGateway(serverCtx *Context) error {
 		if err != nil {
 			return err
 		}
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		opts = append(
+			opts,
+			// TODO(tamird): remove this timeout. It is currently necessary because
+			// GRPC will not actually bail on a bad certificate error - it will just
+			// retry indefinitely. See https://github.com/grpc/grpc-go/issues/622.
+			grpc.WithTimeout(time.Second),
+			grpc.WithBlock(),
+			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		)
 	}
-	err := RegisterAdminHandlerFromEndpoint(s.gwCtx, s.gwMux, serverCtx.Addr, opts)
-	if err != nil {
-		return err
+	if err := RegisterAdminHandlerFromEndpoint(s.gwCtx, s.gwMux, serverCtx.Addr, opts); err != nil {
+		return util.Errorf("error constructing grpc-gateway: %s. are your certificates valid?", err)
 	}
 
 	// Pass all requests for gRPC-based API endpoints to the gateway mux.
