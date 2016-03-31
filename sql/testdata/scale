@@ -1,0 +1,79 @@
+statement ok
+CREATE TABLE test (
+  t CHAR(4),
+  UNIQUE INDEX a (t)
+)
+
+statement ok
+INSERT INTO test VALUES ('a')
+
+statement ok
+INSERT INTO test VALUES ('ab')
+
+statement ok
+INSERT INTO test VALUES ('abcd')
+
+statement error value too long for type STRING\(4\) \(column "t"\)
+INSERT INTO test VALUES ('abcdef')
+
+statement ok
+INSERT INTO test VALUES ('áááá')
+
+statement error value too long
+INSERT INTO test VALUES ('ááááß')
+
+statement ok
+UPDATE test SET t = 'b' WHERE t = 'abcde'
+
+statement error value too long
+UPDATE test SET t = 'cdefg' WHERE t = 'ab'
+
+statement ok
+CREATE TABLE td (
+   d DECIMAL(3, 2),
+   UNIQUE INDEX b (d)
+)
+
+statement ok
+INSERT INTO td VALUES (DECIMAL '3.1')
+
+statement ok
+INSERT INTO td VALUES (DECIMAL '3.14')
+
+statement error duplicate
+INSERT INTO td VALUES (DECIMAL '3.1415')
+
+statement error too many digits for type DECIMAL\(3,2\) \(column "d"\)
+INSERT INTO td VALUES (DECIMAL '13.1415')
+
+query R
+SELECT d FROM td
+----
+3.1
+3.14
+
+statement error too many digits
+UPDATE td SET d = DECIMAL '101.414' WHERE d = DECIMAL '3.14'
+
+statement ok
+UPDATE td SET d = DECIMAL '1.414' WHERE d = DECIMAL '3.14'
+
+statement error duplicate
+UPDATE td SET d = DECIMAL '1.41' WHERE d = DECIMAL '3.1'
+
+query R
+SELECT d FROM td
+----
+3.1
+1.41
+
+statement ok
+CREATE TABLE td2 (x DECIMAL(3), y DECIMAL)
+
+statement ok
+INSERT INTO td2 VALUES (DECIMAL '123.1415', DECIMAL '123.1415')
+
+query RR
+select x, y FROM td2
+----
+123.1415 123.1415
