@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -84,6 +85,11 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 		case DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *DescriptorMutation_Column:
+				if t.Column.DefaultExpr == nil && !t.Column.Nullable {
+					return &roachpb.Error{
+						Message: fmt.Sprintf("column %s contains null values", t.Column.Name),
+					}
+				}
 				// TODO(vivek): Add column to new columns and use it
 				// to fill in default values.
 
