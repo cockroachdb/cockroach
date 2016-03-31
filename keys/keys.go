@@ -311,6 +311,12 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	}
 
 	for bytes.HasPrefix(k, localPrefix) {
+		if bytes.HasPrefix(k, localStorePrefix) {
+			return nil, util.Errorf("store-local key %q is not addressable", k)
+		}
+		if bytes.HasPrefix(k, LocalRangeIDPrefix) {
+			return nil, util.Errorf("local range ID key %q is not addressable", k)
+		}
 		if !bytes.HasPrefix(k, LocalRangePrefix) {
 			return nil, util.Errorf("local key %q malformed; should contain prefix %q",
 				k, LocalRangePrefix)
