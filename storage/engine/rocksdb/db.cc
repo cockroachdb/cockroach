@@ -31,7 +31,6 @@
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
-#include "cockroach/roachpb/api.pb.h"
 #include "cockroach/roachpb/data.pb.h"
 #include "cockroach/roachpb/internal.pb.h"
 #include "cockroach/storage/engine/mvcc.pb.h"
