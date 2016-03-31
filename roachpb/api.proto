@@ -18,9 +18,9 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/roachpb/metadata.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
+import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/tracing/span.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -711,6 +711,15 @@ message BatchResponse {
   }
   optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
+}
+
+// A RaftCommand is a command which can be serialized and sent via
+// raft.
+message RaftCommand {
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  optional ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
+  optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
 }
 
 // The two services below are identical, except that some internal Request
