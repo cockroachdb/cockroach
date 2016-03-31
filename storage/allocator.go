@@ -152,7 +152,6 @@ type Allocator struct {
 	storePool *StorePool
 	randGen   allocatorRand
 	options   AllocatorOptions
-	balancer  balancer
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -163,12 +162,10 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
-	randGen := makeAllocatorRand(randSource)
 	return Allocator{
 		storePool: storePool,
 		options:   options,
-		randGen:   randGen,
-		balancer:  usageBalancer{randGen},
+		randGen:   makeAllocatorRand(randSource),
 	}
 }
 
@@ -233,7 +230,7 @@ func (a *Allocator) AllocateTarget(required roachpb.Attributes, existing []roach
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
 		sl, aliveStoreCount := a.storePool.getStoreList(roachpb.Attributes{Attrs: attrs}, a.options.Deterministic)
-		if target := a.balancer.selectGood(sl, existingNodes); target != nil {
+		if target := a.selectGood(sl, existingNodes); target != nil {
 			return target, nil
 		}
 		if len(attrs) == 0 || !relaxConstraints {
@@ -269,7 +266,7 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor) (roachpb.R
 		sl.add(desc)
 	}
 
-	if bad := a.balancer.selectBad(sl); bad != nil {
+	if bad := a.selectBad(sl); bad != nil {
 		for i := range existing {
 			if existing[i].StoreID == bad.StoreID {
 				return existing[i], nil
@@ -307,7 +304,7 @@ func (a Allocator) RebalanceTarget(
 	}
 	storeDesc := a.storePool.getStoreDescriptor(storeID)
 	sl, _ := a.storePool.getStoreList(required, a.options.Deterministic)
-	if replacement := a.balancer.improve(storeDesc, sl, existingNodes); replacement != nil {
+	if replacement := a.improve(storeDesc, sl, existingNodes); replacement != nil {
 		return replacement
 	}
 	return nil
@@ -339,7 +336,7 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	sl, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
 
 	// ShouldRebalance is true if a suitable replacement can be found.
-	return a.balancer.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
+	return a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
 }
 
 func (a Allocator) randomlyIgnoreRebalance() bool {
@@ -349,6 +346,45 @@ func (a Allocator) randomlyIgnoreRebalance() bool {
 	a.randGen.Lock()
 	defer a.randGen.Unlock()
 	return a.randGen.Float32() > rebalanceShouldRebalanceChance
+}
+
+// selectGood attempts to select a store from the supplied store list that it
+// considers to be 'Good' relative to the other stores in the list. Any nodes
+// in the supplied 'exclude' list will be disqualified from selection. Returns
+// the selected store or nil if no such store can be found.
+func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+	if sl.used.mean < minFractionUsedThreshold {
+		rcb := rangeCountBalancer{a.randGen}
+		return rcb.selectGood(sl, excluded)
+	}
+	ucb := usedCapacityBalancer{a.randGen}
+	return ucb.selectGood(sl, excluded)
+}
+
+// selectBad attempts to select a store from the supplied store list that it
+// considers to be 'Bad' relative to the other stores in the list. Returns the
+// selected store or nil if no such store can be found.
+func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
+	if sl.used.mean < minFractionUsedThreshold {
+		rcb := rangeCountBalancer{a.randGen}
+		return rcb.selectBad(sl)
+	}
+	ucb := usedCapacityBalancer{a.randGen}
+	return ucb.selectBad(sl)
+}
+
+// improve attempts to select an improvement over the given store from the
+// stores in the given store list. Any nodes in the supplied 'exclude' list
+// will be disqualified from selection. Returns the selected store, or nil if
+// no such store can be found.
+func (a Allocator) improve(store *roachpb.StoreDescriptor, sl StoreList,
+	excluded nodeIDSet) *roachpb.StoreDescriptor {
+	if sl.used.mean < minFractionUsedThreshold {
+		rcb := rangeCountBalancer{a.randGen}
+		return rcb.improve(store, sl, excluded)
+	}
+	ucb := usedCapacityBalancer{a.randGen}
+	return ucb.improve(store, sl, excluded)
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
