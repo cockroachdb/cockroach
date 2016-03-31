@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	testSeries1 = []*roachpb.InternalTimeSeriesData{
+	testSeries1 = []roachpb.InternalTimeSeriesData{
 		{
 			StartTimestampNanos: 0,
 			SampleDurationNanos: 10,
@@ -72,7 +72,7 @@ var (
 			},
 		},
 	}
-	testSeries2 = []*roachpb.InternalTimeSeriesData{
+	testSeries2 = []roachpb.InternalTimeSeriesData{
 		{
 			StartTimestampNanos: 30,
 			SampleDurationNanos: 10,
@@ -116,7 +116,7 @@ var (
 // TestInterpolation verifies the interpolated average values of a single interpolatingIterator.
 func TestInterpolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	dataSpan := &dataSpan{
+	dataSpan := dataSpan{
 		startNanos:  30,
 		sampleNanos: 10,
 	}
@@ -239,9 +239,15 @@ func TestAggregation(t *testing.T) {
 
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
-func (tm *testModel) assertQuery(name string, sources []string,
-	downsample, agg *TimeSeriesQueryAggregator, derivative *TimeSeriesQueryDerivative,
-	r Resolution, start, end int64, expectedDatapointCount int, expectedSourceCount int) {
+func (tm *testModel) assertQuery(
+	name string,
+	sources []string,
+	downsample, agg *TimeSeriesQueryAggregator,
+	derivative *TimeSeriesQueryDerivative,
+	r Resolution,
+	start, end int64,
+	expectedDatapointCount, expectedSourceCount int,
+) {
 	// Query the actual server.
 	q := Query{
 		Name:             name,
@@ -263,7 +269,7 @@ func (tm *testModel) assertQuery(name string, sources []string,
 	}
 
 	// Construct an expected result for comparison.
-	var expectedDatapoints []*TimeSeriesDatapoint
+	var expectedDatapoints []TimeSeriesDatapoint
 	expectedSources := make([]string, 0, 0)
 	dataSpans := make(map[string]*dataSpan)
 
@@ -304,7 +310,7 @@ func (tm *testModel) assertQuery(name string, sources []string,
 				dataSpans[sourceName] = ds
 				expectedSources = append(expectedSources, sourceName)
 			}
-			if err := ds.addData(&data); err != nil {
+			if err := ds.addData(data); err != nil {
 				tm.t.Fatal(err)
 			}
 		}
@@ -355,8 +361,7 @@ func (tm *testModel) assertQuery(name string, sources []string,
 	}
 	for iters.isValid() && iters.timestamp() <= end {
 		current := currentVal()
-		result := &TimeSeriesDatapoint{}
-		*result = current
+		result := current
 		if isDerivative {
 			dTime := (current.TimestampNanos - last.TimestampNanos) / int64(time.Second)
 			if dTime == 0 {
@@ -395,7 +400,7 @@ func TestQuery(t *testing.T) {
 	tm.storeTimeSeriesData(resolution1ns, []TimeSeriesData{
 		{
 			Name: "test.metric",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(1, 100),
 				datapoint(5, 200),
 				datapoint(15, 300),
@@ -415,7 +420,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.multimetric",
 			Source: "source1",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(1, 100),
 				datapoint(15, 300),
 				datapoint(17, 500),
@@ -425,7 +430,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.multimetric",
 			Source: "source2",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(5, 100),
 				datapoint(16, 300),
 				datapoint(22, 500),
@@ -460,7 +465,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source1",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(1, 9999),
 				datapoint(11, 9999),
 				datapoint(21, 9999),
@@ -470,7 +475,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source2",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(2, 10),
 				datapoint(12, 15),
 				datapoint(22, 25),
@@ -480,7 +485,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source3",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(3, 9999),
 				datapoint(13, 9999),
 				datapoint(23, 9999),
@@ -490,7 +495,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source4",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(4, 15),
 				datapoint(14, 45),
 				datapoint(24, 60),
@@ -500,7 +505,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:   "test.specificmetric",
 			Source: "source5",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(5, 9999),
 				datapoint(15, 9999),
 				datapoint(25, 9999),

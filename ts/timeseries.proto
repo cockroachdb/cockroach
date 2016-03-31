@@ -41,7 +41,7 @@ message TimeSeriesData {
   // A string which identifies the unique source from which the variable was measured.
   optional string source = 2 [(gogoproto.nullable) = false];
   // Datapoints representing one or more measurements taken from the variable.
-  repeated TimeSeriesDatapoint datapoints = 3;
+  repeated TimeSeriesDatapoint datapoints = 3 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesQueryAggregator describes a set of aggregation functions which can
@@ -117,11 +117,11 @@ message TimeSeriesQueryResponse {
   // Result is the data returned from a single metric query over a time span.
   message Result {
     optional Query query = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-    repeated TimeSeriesDatapoint datapoints = 2;
+    repeated TimeSeriesDatapoint datapoints = 2 [(gogoproto.nullable) = false];
   }
 
   // A set of Results; there will be one result for each Query in the matching
   // TimeSeriesQueryRequest, in the same order. A Result will be present for
   // each Query even if there are zero datapoints to return.
-  repeated Result results = 1;
+  repeated Result results = 1 [(gogoproto.nullable) = false];
 }

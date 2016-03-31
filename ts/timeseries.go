@@ -51,8 +51,9 @@ import (
 //
 // For more information on how time series data is stored, see
 // InternalTimeSeriesData and its related structures.
-func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
-	[]*roachpb.InternalTimeSeriesData, error) {
+func (ts TimeSeriesData) ToInternal(
+	keyDuration, sampleDuration int64,
+) ([]roachpb.InternalTimeSeriesData, error) {
 	if keyDuration%sampleDuration != 0 {
 		return nil, fmt.Errorf(
 			"sample duration %d does not evenly divide key duration %d",
@@ -64,8 +65,10 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 			sampleDuration, keyDuration)
 	}
 
-	result := []*roachpb.InternalTimeSeriesData{}
-	resultByKeyTime := map[int64]*roachpb.InternalTimeSeriesData{}
+	// This slice must be preallocated to avoid reallocation on `append`!
+	result := make([]roachpb.InternalTimeSeriesData, 0, len(ts.Datapoints))
+	// Pointers because they need to mutate the stuff in the slice above.
+	resultByKeyTime := make(map[int64]*roachpb.InternalTimeSeriesData)
 
 	for _, dp := range ts.Datapoints {
 		// Determine which InternalTimeSeriesData this datapoint belongs to,
@@ -73,23 +76,21 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 		keyTime := (dp.TimestampNanos / keyDuration) * keyDuration
 		itsd, ok := resultByKeyTime[keyTime]
 		if !ok {
-			itsd = &roachpb.InternalTimeSeriesData{
+			result = append(result, roachpb.InternalTimeSeriesData{
 				StartTimestampNanos: keyTime,
 				SampleDurationNanos: sampleDuration,
-			}
-			result = append(result, itsd)
+			})
+			itsd = &result[len(result)-1]
 			resultByKeyTime[keyTime] = itsd
 		}
 
 		// Create a new sample for this datapoint and place it into the
 		// InternalTimeSeriesData.
-		sampleOffset := int32((dp.TimestampNanos - keyTime) / sampleDuration)
-		sample := roachpb.InternalTimeSeriesSample{
-			Offset: sampleOffset,
+		itsd.Samples = append(itsd.Samples, roachpb.InternalTimeSeriesSample{
+			Offset: int32((dp.TimestampNanos - keyTime) / sampleDuration),
 			Count:  1,
 			Sum:    dp.Value,
-		}
-		itsd.Samples = append(itsd.Samples, sample)
+		})
 	}
 
 	return result, nil

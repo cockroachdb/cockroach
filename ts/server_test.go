@@ -41,7 +41,7 @@ func TestHttpQuery(t *testing.T) {
 		{
 			Name:   "test.metric",
 			Source: "source1",
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -59,7 +59,7 @@ func TestHttpQuery(t *testing.T) {
 		{
 			Name:   "test.metric",
 			Source: "source2",
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -80,7 +80,7 @@ func TestHttpQuery(t *testing.T) {
 		},
 		{
 			Name: "other.metric",
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -100,7 +100,7 @@ func TestHttpQuery(t *testing.T) {
 	}
 
 	expectedResult := &ts.TimeSeriesQueryResponse{
-		Results: []*ts.TimeSeriesQueryResponse_Result{
+		Results: []ts.TimeSeriesQueryResponse_Result{
 			{
 				Query: ts.Query{
 					Name:             "test.metric",
@@ -109,7 +109,7 @@ func TestHttpQuery(t *testing.T) {
 					SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
 					Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
 				},
-				Datapoints: []*ts.TimeSeriesDatapoint{
+				Datapoints: []ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          400.0,
@@ -132,7 +132,7 @@ func TestHttpQuery(t *testing.T) {
 					SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
 					Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
 				},
-				Datapoints: []*ts.TimeSeriesDatapoint{
+				Datapoints: []ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          200.0,
@@ -151,7 +151,7 @@ func TestHttpQuery(t *testing.T) {
 					SourceAggregator: ts.TimeSeriesQueryAggregator_MAX.Enum(),
 					Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
 				},
-				Datapoints: []*ts.TimeSeriesDatapoint{
+				Datapoints: []ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          1.0,

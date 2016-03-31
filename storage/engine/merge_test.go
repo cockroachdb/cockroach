@@ -251,7 +251,6 @@ func TestGoMerge(t *testing.T) {
 
 	for i, c := range testCasesTimeSeries {
 		expectedTS := unmarshalTimeSeries(t, c.expected)
-		existingTS := unmarshalTimeSeries(t, c.existing)
 		updateTS := unmarshalTimeSeries(t, c.update)
 
 		// Directly test the C++ implementation of merging using goMerge.  goMerge
@@ -267,9 +266,10 @@ func TestGoMerge(t *testing.T) {
 		}
 
 		// Test the MergeInternalTimeSeriesData method separately.
-		if existingTS == nil {
+		if c.existing == nil {
 			resultTS, err = MergeInternalTimeSeriesData(updateTS)
 		} else {
+			existingTS := unmarshalTimeSeries(t, c.existing)
 			resultTS, err = MergeInternalTimeSeriesData(existingTS, updateTS)
 		}
 		if err != nil {
@@ -286,10 +286,7 @@ func TestGoMerge(t *testing.T) {
 // unmarshalTimeSeries unmarshals the time series value stored in the given byte
 // array. It is assumed that the time series value was originally marshalled as
 // a MVCCMetadata with an inline value.
-func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData {
-	if b == nil {
-		return nil
-	}
+func unmarshalTimeSeries(t testing.TB, b []byte) roachpb.InternalTimeSeriesData {
 	var meta MVCCMetadata
 	if err := proto.Unmarshal(b, &meta); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
@@ -298,5 +295,5 @@ func unmarshalTimeSeries(t testing.TB, b []byte) *roachpb.InternalTimeSeriesData
 	if err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
-	return &valueTS
+	return valueTS
 }
