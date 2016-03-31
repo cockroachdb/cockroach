@@ -1,0 +1,78 @@
+statement ok
+CREATE TABLE test (
+  t CHAR(4),
+  UNIQUE INDEX a (t)
+)
+
+query T
+SELECT * FROM test
+----
+
+statement ok
+INSERT INTO test VALUES ('a')
+
+statement ok
+INSERT INTO test VALUES ('ab')
+
+statement ok
+INSERT INTO test VALUES ('abcde')
+
+statement error duplicate
+INSERT INTO test VALUES ('abcdef')
+
+query T
+SELECT * FROM test
+----
+a
+ab
+abcd
+
+statement ok
+UPDATE test SET t = 'b' WHERE t = 'abcde'
+
+statement ok
+UPDATE test SET t = 'cdefg' WHERE t = 'ab'
+
+query T
+SELECT * FROM test
+----
+a
+cdef
+abcd
+
+statement ok
+CREATE TABLE td (
+   d DECIMAL(3, 2),
+   UNIQUE INDEX b (d)
+)
+
+query R
+SELECT d::FLOAT FROM td
+----
+
+statement ok
+INSERT INTO td VALUES (3.1::DECIMAL)
+
+statement ok
+INSERT INTO td VALUES (3.1415::DECIMAL)
+
+statement error duplicate
+INSERT INTO td VALUES (3.141592::DECIMAL)
+
+query R
+SELECT d::FLOAT FROM td
+----
+3.1
+3.14
+
+statement ok
+UPDATE td SET d = 1.414::DECIMAL WHERE d = 3.1415::DECIMAL
+
+statement ok
+UPDATE td SET d = 1.414::DECIMAL WHERE d = 3.14::DECIMAL
+
+query R
+SELECT d::FLOAT FROM td
+----
+3.1
+1.41
