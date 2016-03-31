@@ -21,14 +21,14 @@ import basictracer "github.com/opentracing/basictracer-go"
 var _ basictracer.DelegatingCarrier = &Span{}
 
 // SetState implements basictracer.DelegatingCarrier.
-func (sp *Span) SetState(traceID, spanID int64, sampled bool) {
+func (sp *Span) SetState(traceID, spanID uint64, sampled bool) {
 	sp.TraceID = traceID
 	sp.SpanID = spanID
 	sp.Sampled = sampled
 }
 
 // State implements basictracer.DelegatingCarrier.
-func (sp *Span) State() (traceID, spanID int64, sampled bool) {
+func (sp *Span) State() (traceID, spanID uint64, sampled bool) {
 	return sp.TraceID, sp.SpanID, sp.Sampled
 }
 

@@ -1296,13 +1296,11 @@ func (m *EventsResponse_Event) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintAdmin(data, i, uint64(len(m.Info)))
 		i += copy(data[i:], m.Info)
 	}
-	if m.UniqueID != nil {
-		if len(m.UniqueID) > 0 {
-			data[i] = 0x32
-			i++
-			i = encodeVarintAdmin(data, i, uint64(len(m.UniqueID)))
-			i += copy(data[i:], m.UniqueID)
-		}
+	if len(m.UniqueID) > 0 {
+		data[i] = 0x32
+		i++
+		i = encodeVarintAdmin(data, i, uint64(len(m.UniqueID)))
+		i += copy(data[i:], m.UniqueID)
 	}
 	return i, nil
 }
@@ -1514,13 +1512,11 @@ func (m *GetUIDataResponse_Value) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Value != nil {
-		if len(m.Value) > 0 {
-			data[i] = 0xa
-			i++
-			i = encodeVarintAdmin(data, i, uint64(len(m.Value)))
-			i += copy(data[i:], m.Value)
-		}
+	if len(m.Value) > 0 {
+		data[i] = 0xa
+		i++
+		i = encodeVarintAdmin(data, i, uint64(len(m.Value)))
+		i += copy(data[i:], m.Value)
 	}
 	data[i] = 0x12
 	i++
@@ -1841,11 +1837,9 @@ func (m *EventsResponse_Event) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovAdmin(uint64(l))
 	}
-	if m.UniqueID != nil {
-		l = len(m.UniqueID)
-		if l > 0 {
-			n += 1 + l + sovAdmin(uint64(l))
-		}
+	l = len(m.UniqueID)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
 	}
 	return n
 }
@@ -1924,11 +1918,9 @@ func (m *GetUIDataResponse_Timestamp) Size() (n int) {
 func (m *GetUIDataResponse_Value) Size() (n int) {
 	var l int
 	_ = l
-	if m.Value != nil {
-		l = len(m.Value)
-		if l > 0 {
-			n += 1 + l + sovAdmin(uint64(l))
-		}
+	l = len(m.Value)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
 	}
 	l = m.LastUpdated.Size()
 	n += 1 + l + sovAdmin(uint64(l))
