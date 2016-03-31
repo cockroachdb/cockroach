@@ -91,7 +91,7 @@ func TestStoreContext() StoreContext {
 		Tracer:                         tracing.NewTracer(),
 		RaftTickInterval:               100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
-		RaftElectionTimeoutTicks:       2,
+		RaftElectionTimeoutTicks:       3,
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
