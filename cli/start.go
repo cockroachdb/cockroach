@@ -159,7 +159,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	}
 
 	info := util.GetBuildInfo()
-	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.Vers)
+	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.GoVersion)
 
 	// Default user for servers.
 	cliContext.User = security.NodeUser
@@ -194,7 +194,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.Vers)
+	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
 	fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
 	if len(cliContext.SocketFile) != 0 {

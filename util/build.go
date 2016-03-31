@@ -16,22 +16,40 @@
 
 package util
 
-import "runtime"
+import (
+	"fmt"
+	"runtime"
+)
+
+// const char* compilerVersion() {
+// #if defined(__clang__)
+// 	return __VERSION__;
+// #elif defined(__GNUC__) || defined(__GNUG__)
+// 	return "gcc " __VERSION__;
+// #else
+// 	return "unknown";
+// #endif
+// }
+import "C"
 
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	buildTag  string // Tag of this build (git describe)
-	buildTime string // Build time in UTC (year/month/day hour:min:sec)
-	buildDeps string // Git SHAs of dependencies
+	buildTag         string // Tag of this build (git describe)
+	buildTime        string // Build time in UTC (year/month/day hour:min:sec)
+	buildDeps        string // Git SHAs of dependencies
+	buildCgoCompiler = C.GoString(C.compilerVersion())
+	buildPlatform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 )
 
 // GetBuildInfo ...
 func GetBuildInfo() BuildInfo {
 	return BuildInfo{
-		Vers: runtime.Version(),
-		Tag:  buildTag,
-		Time: buildTime,
-		Deps: buildDeps,
+		GoVersion:   runtime.Version(),
+		Tag:         buildTag,
+		Time:        buildTime,
+		Deps:        buildDeps,
+		CgoCompiler: buildCgoCompiler,
+		Platform:    buildPlatform,
 	}
 }

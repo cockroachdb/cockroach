@@ -98,7 +98,9 @@ func TestStatusJson(t *testing.T) {
     "goVersion": "%s",
     "tag": "",
     "time": "",
-    "dependencies": ""
+    "dependencies": "",
+    "cgoCompiler": ".*",
+    "platform": ".*"
   }
 }`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))
 	testCases = append(testCases, TestCase{"/health", expectedResult})
