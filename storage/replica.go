@@ -32,6 +32,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
@@ -736,6 +737,8 @@ func (r *Replica) RaftStatus() *raft.Status {
 // either along the read-only execution path or the read-write Raft
 // command queue.
 func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	r.assert5725(ba)
+
 	var br *roachpb.BatchResponse
 
 	if err := r.checkBatchRequest(ba); err != nil {
@@ -1031,6 +1034,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	br, intents, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
+		r.assert5725(ba)
 		// Checking whether the transaction has been aborted on reads
 		// makes sure that we don't experience anomalous conditions as
 		// described in #2231.
@@ -1038,6 +1042,15 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	}
 	r.store.intentResolver.processIntentsAsync(r, intents)
 	return br, pErr
+}
+
+// TODO(tschottdorf): temporary assertion for #5725, which saw batches with
+// a nonempty but incomplete Txn (i.e. &Transaction{})
+func (r *Replica) assert5725(ba roachpb.BatchRequest) {
+	if ba.Txn != nil && ba.Txn.ID == nil {
+		log.Fatalf("range %d: nontrivial transaction with empty ID: %s\n%s",
+			r.Desc().RangeID, ba.Txn, pretty.Sprint(ba))
+	}
 }
 
 // addWriteCmd first adds the keys affected by this command as pending writes
@@ -1529,6 +1542,7 @@ func (r *Replica) applyRaftCommandInBatch(
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
+		r.assert5725(ba)
 		if pErr := r.checkIfTxnAborted(btch, *ba.Txn); pErr != nil {
 			return btch, nil, nil, pErr
 		}
