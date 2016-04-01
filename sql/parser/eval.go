@@ -747,10 +747,14 @@ type EvalContext struct {
 	// The transaction timestamp. Needs to stay table throughout the
 	// transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
-	txnTimestamp roachpb.Timestamp
-	ReCache      *RegexpCache
-	GetLocation  func() (*time.Location, error)
-	Args         MapArgs
+	txnTimestamp DTimestamp
+	// The cluster timestamp. Needs to be stable throughout the
+	// transaction.  Used for cluster_timestamp().
+	clusterTimestamp roachpb.Timestamp
+
+	ReCache     *RegexpCache
+	GetLocation func() (*time.Location, error)
+	Args        MapArgs
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -768,12 +772,23 @@ func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
 	return ctx.stmtTimestamp
 }
 
-// GetTxnTimestamp retrieves the current transaction timestamp as per
+// GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
+func (ctx *EvalContext) GetClusterTimestamp() roachpb.Timestamp {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.txnTimestamp == roachpb.ZeroTimestamp {
+	if !ctx.PrepareOnly && ctx.clusterTimestamp == roachpb.ZeroTimestamp {
+		panic("zero cluster timestamp in EvalContext")
+	}
+	return ctx.clusterTimestamp
+}
+
+// GetTxnTimestamp retrieves the current transaction timestamp as per
+// the evaluation context. The timestamp is guaranteed to be nonzero.
+func (ctx *EvalContext) GetTxnTimestamp() DTimestamp {
+	// TODO(knz) a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.txnTimestamp.Time.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return ctx.txnTimestamp
@@ -781,12 +796,17 @@ func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts roachpb.Timestamp) {
-	ctx.txnTimestamp = ts
+	ctx.txnTimestamp.Time = ts.GoTime()
 }
 
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetStmtTimestamp(ts roachpb.Timestamp) {
 	ctx.stmtTimestamp.Time = ts.GoTime()
+}
+
+// SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
+func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
+	ctx.clusterTimestamp = ts
 }
 
 var defaultContext = EvalContext{

@@ -538,7 +538,7 @@ var builtins = map[string][]builtin{
 			types:      argTypes{timestampType},
 			returnType: typeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return timestampMinusBinOp.fn(e, DTimestamp{e.GetTxnTimestamp().GoTime()}, args[0])
+				return timestampMinusBinOp.fn(e, e.GetTxnTimestamp(), args[0])
 			},
 		},
 		builtin{
@@ -555,7 +555,7 @@ var builtins = map[string][]builtin{
 			types:      argTypes{},
 			returnType: typeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.makeDDate(e.GetTxnTimestamp().GoTime())
+				return e.makeDDate(e.GetTxnTimestamp().Time)
 			},
 		},
 	},
@@ -563,19 +563,36 @@ var builtins = map[string][]builtin{
 	"now":                   {txnTSImpl},
 	"current_timestamp":     {txnTSImpl},
 	"transaction_timestamp": {txnTSImpl},
-	"transaction_timestamp_unique": {
+	"statement_timestamp": {
+		builtin{
+			types:      argTypes{},
+			returnType: typeTimestamp,
+			impure:     true,
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return e.GetStmtTimestamp(), nil
+			},
+		},
+	},
+	"cluster_timestamp": {
+		builtin{
+			types:      argTypes{},
+			returnType: typeTimestamp,
+			impure:     true,
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return DTimestamp{Time: e.GetClusterTimestamp().GoTime()}, nil
+			},
+		},
+	},
+	"cluster_timestamp_logical": {
 		builtin{
 			types:      argTypes{},
 			returnType: typeInt,
 			impure:     true,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInt(e.GetTxnTimestamp().Logical), nil
+				return DInt(e.GetClusterTimestamp().Logical), nil
 			},
 		},
 	},
-
-	"statement_timestamp": {stmtTSImpl},
-
 	"clock_timestamp": {
 		builtin{
 			types:      argTypes{},
@@ -1115,20 +1132,12 @@ var ceilImpl = []builtin{
 	}),
 }
 
-var stmtTSImpl = builtin{
-	types:      argTypes{},
-	returnType: typeTimestamp,
-	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return e.GetStmtTimestamp(), nil
-	},
-}
-
 var txnTSImpl = builtin{
 	types:      argTypes{},
 	returnType: typeTimestamp,
 	impure:     true,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return DTimestamp{Time: e.GetTxnTimestamp().GoTime()}, nil
+		return e.GetTxnTimestamp(), nil
 	},
 }
 

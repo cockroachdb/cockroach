@@ -141,12 +141,11 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP,
-  l INT
+  v TIMESTAMP
 )
 
 statement ok
-INSERT INTO kv (k,v,l) VALUES ('a', transaction_timestamp(), transaction_timestamp_unique())
+INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp())
 
 query T
 SELECT k FROM kv
@@ -154,7 +153,7 @@ SELECT k FROM kv
 a
 
 query T
-SELECT k FROM kv where v = transaction_timestamp() and l = transaction_timestamp_unique()
+SELECT k FROM kv where v = transaction_timestamp()
 ----
 a
 
@@ -167,29 +166,29 @@ COMMIT TRANSACTION
 # We use, SELECT * FROM kv, to insert delays of more than a nanosecond.
 statement ok
 BEGIN;
-INSERT INTO kv (k,v,l) VALUES ('b', transaction_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
 SELECT * FROM kv;
-INSERT INTO kv (k,v,l) VALUES ('c', transaction_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
 SELECT * FROM kv;
-INSERT INTO kv (k,v,l) VALUES ('d', current_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('d', current_timestamp());
 SELECT * FROM kv;
-INSERT INTO kv (k,v,l) VALUES ('e', current_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('e', current_timestamp());
 SELECT * FROM kv;
-INSERT INTO kv (k,v,l) VALUES ('f', now(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('f', now());
 SELECT * FROM kv;
-INSERT INTO kv (k,v,l) VALUES ('g', now(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('g', now());
 SELECT * FROM kv;
-INSERT INTO kv (k,v,l) VALUES ('h', statement_timestamp(), 0);
+INSERT INTO kv (k,v) VALUES ('h', statement_timestamp());
 SELECT * FROM kv;
 COMMIT;
 SELECT * FROM kv;
 BEGIN;
 SELECT * FROM KV;
-INSERT INTO kv (k,v,l) VALUES ('i', transaction_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
 COMMIT;
 
 query I
-SELECT COUNT(DISTINCT (v,l)) FROM kv
+SELECT COUNT(DISTINCT (v)) FROM kv
 ----
 4
 
@@ -200,24 +199,92 @@ DELETE FROM kv
 
 statement ok
 BEGIN;
-INSERT INTO kv (k,v,l) VALUES ('a', transaction_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('a', transaction_timestamp());
 SELECT * FROM kv;
 
 statement ok
-INSERT INTO kv (k,v,l) VALUES ('b', transaction_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('b', transaction_timestamp());
 SELECT * FROM kv;
 COMMIT;
 
 statement ok
 BEGIN;
 SELECT * FROM KV;
-INSERT INTO kv (k,v,l) VALUES ('c', transaction_timestamp(), transaction_timestamp_unique());
+INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
 COMMIT;
 
 query I
-SELECT COUNT(DISTINCT (v,l)) FROM kv
+SELECT COUNT(DISTINCT (v)) FROM kv
 ----
 2
+
+statement ok
+CREATE TABLE kvl (
+   k INT PRIMARY KEY,
+   v TIMESTAMP,
+   l INT
+)
+
+# Test that cluster_timestamp() is consistent in transactions
+# spanning multiple batches of statements.
+statement ok
+BEGIN;
+INSERT INTO kvl (k,v,l) VALUES (1, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (2, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+COMMIT;
+
+statement ok
+BEGIN;
+SELECT * FROM kvl;
+INSERT INTO kvl (k,v,l) VALUES (3, cluster_timestamp(), cluster_timestamp_logical());
+COMMIT;
+
+query I
+SELECT COUNT(DISTINCT (v,l)) FROM kvl
+----
+2
+
+statement ok
+DELETE FROM kvl
+
+# Test that cluster_timestamp() is monotonic in transaction order
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (1, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (2, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (3, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (4, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (5, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+statement ok
+INSERT INTO kvl (k,v,l) VALUES (6, cluster_timestamp(), cluster_timestamp_logical());
+SELECT * FROM kvl;
+
+query I
+SELECT k FROM kvl ORDER BY (v,l)
+----
+1
+2
+3
+4
+5
+6
 
 
 query I
