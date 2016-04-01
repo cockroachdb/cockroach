@@ -357,8 +357,10 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 }
 
 type testResolver struct {
-	addr  string
-	tries int
+	addr         string
+	numTries     int
+	numFails     int
+	numSuccesses int
 }
 
 func (tr *testResolver) Type() string { return "tcp" }
@@ -366,15 +368,16 @@ func (tr *testResolver) Type() string { return "tcp" }
 func (tr *testResolver) Addr() string { return tr.addr }
 
 func (tr *testResolver) GetAddress() (net.Addr, error) {
-	// Fail 3 times...
-	tr.tries++
-	if tr.tries < 3 {
+	defer func() { tr.numTries++ }()
+	if tr.numTries < tr.numFails || tr.IsExhausted() {
 		return nil, errors.New("bad address")
 	}
 	return util.NewUnresolvedAddr("tcp", tr.addr), nil
 }
 
-func (tr *testResolver) IsExhausted() bool { return tr.tries > 0 }
+func (tr *testResolver) IsExhausted() bool {
+	return tr.numTries > tr.numFails+tr.numSuccesses
+}
 
 // TestClientRetryBootstrap verifies that an initial failure to connect
 // to a bootstrap host doesn't stall the bootstrapping process in the
@@ -395,7 +398,9 @@ func TestClientRetryBootstrap(t *testing.T) {
 	}
 
 	local.SetBootstrapInterval(10 * time.Millisecond)
-	local.SetResolvers([]resolver.Resolver{&testResolver{addr: rAddr.String()}})
+	local.SetResolvers([]resolver.Resolver{
+		&testResolver{addr: rAddr.String(), numFails: 3, numSuccesses: 1},
+	})
 	local.bootstrap()
 	local.manage()
 
