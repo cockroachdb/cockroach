@@ -14,7 +14,7 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-package util
+package humanizeutil
 
 import (
 	"fmt"

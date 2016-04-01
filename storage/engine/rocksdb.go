@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/rocksdb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -114,7 +115,7 @@ func (r *RocksDB) Open() error {
 
 	if r.memtableBudget < minMemtableBudget {
 		return util.Errorf("memtable budget must be at least %s: %s",
-			humanize.IBytes(minMemtableBudget), util.IBytes(r.memtableBudget))
+			humanize.IBytes(minMemtableBudget), humanizeutil.IBytes(r.memtableBudget))
 	}
 
 	var ver storageVersion
@@ -254,11 +255,11 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 
 	if fileSystemUsage.Total > math.MaxInt64 {
 		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Total), util.IBytes(math.MaxInt64))
+			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
 	}
 	if fileSystemUsage.Avail > math.MaxInt64 {
 		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Avail), util.IBytes(math.MaxInt64))
+			humanize.IBytes(fileSystemUsage.Avail), humanizeutil.IBytes(math.MaxInt64))
 	}
 	fsuTotal := int64(fileSystemUsage.Total)
 	fsuAvail := int64(fileSystemUsage.Avail)
