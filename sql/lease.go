@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -87,6 +88,8 @@ func jitteredLeaseDuration() time.Duration {
 }
 
 // Acquire a lease on the most recent version of a table descriptor.
+// If the lease cannot be obtained because the descriptor is in the process of
+// being deleted, the error detail will be DescriptorDeletedError.
 func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, *roachpb.Error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
@@ -105,7 +108,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		return nil, pErr
 	}
 	if values == nil {
-		return nil, roachpb.NewErrorf("table ID %d not found", tableID)
+		return nil, roachpb.NewError(
+			&roachpb.DescriptorNotFoundError{DescriptorId: uint32(tableID)})
 	}
 	desc := &Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
@@ -115,6 +119,9 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
 		return nil, roachpb.NewErrorf("ID %d is not a table", tableID)
+	}
+	if tableDesc.Deleted {
+		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
 	lease.TableDescriptor = *tableDesc
 
@@ -275,8 +282,8 @@ func (s LeaseStore) Publish(
 			now := s.clock.Now()
 			tableDesc.ModificationTime = now
 			if log.V(3) {
-				log.Infof("publish: descID=%d version=%d mtime=%s",
-					tableDesc.ID, tableDesc.Version, now.GoTime())
+				log.Infof("publish: descID=%d (%s) version=%d mtime=%s",
+					tableDesc.ID, tableDesc.Name, tableDesc.Version, now.GoTime())
 			}
 			if err := tableDesc.Validate(); err != nil {
 				return roachpb.NewError(err)
@@ -432,6 +439,10 @@ type tableState struct {
 	// nil if there is no lease acquisition in progress for the table. If
 	// non-nil, the channel will be closed when lease acquisition completes.
 	acquiring chan struct{}
+	// Indicates that the table has been deleted, or has an outstanding deletion.
+	// If set, leases are released from the store as soon as their refcount drops
+	// to 0, as opposed to waiting until they expire.
+	deleted bool
 }
 
 func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store LeaseStore) (*LeaseState, *roachpb.Error) {
@@ -484,27 +495,24 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 				return nil, pErr
 			}
 			t.active.insert(s)
-			if err := t.releaseNonLatest(store); err != nil {
-				log.Warning(err)
-			}
 		}
 
 		// A new lease was added, so loop and perform the lookup again.
 	}
 }
 
-// releaseNonLatest releases all unused non-latest leases.
-func (t *tableState) releaseNonLatest(store LeaseStore) error {
-	// Skip the last lease.
-	for i := 0; i < len(t.active.data)-1; {
-		s := t.active.data[i]
-		if s.Refcount() == 0 {
-			t.active.remove(s)
-			if err := t.releaseNodeLease(s, store); err != nil {
-				return err
-			}
-		} else {
-			i++
+// releaseLeasesIfNotActive releases the leases in `leases` with refcount 0.
+// t.mu must be locked.
+func (t *tableState) releaseLeasesIfNotActive(
+	leases []*LeaseState, store LeaseStore) error {
+
+	for _, s := range leases {
+		if s.Refcount() != 0 {
+			continue
+		}
+		t.active.remove(s)
+		if err := t.releaseNodeLease(s, store); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -519,6 +527,8 @@ func (t *tableState) acquireWait() {
 	<-acquiring
 }
 
+// If the lease cannot be obtained because the descriptor is in the process of
+// being deleted, the error detail will be DescriptorDeletedError.
 func (t *tableState) acquireNodeLease(
 	txn *client.Txn, minVersion DescriptorVersion, store LeaseStore,
 ) (*LeaseState, *roachpb.Error) {
@@ -539,9 +549,13 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 	}
 	s.refcount--
 	if log.V(3) {
-		log.Infof("release: descID=%d version=%d refcount=%d", s.ID, s.Version, s.refcount)
+		log.Infof("release: descID=%d(%q) version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
 	}
 	if s.refcount == 0 {
+		if t.deleted {
+			t.active.remove(s)
+			return t.releaseNodeLease(s, store)
+		}
 		n := t.active.findNewest(0)
 		if s != n {
 			if s.Version < n.Version {
@@ -566,23 +580,88 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error
 	return store.Release(lease)
 }
 
+// purgeOldLeases refreshes the leases on a table. Unused leases older than
+// minVersion will be released.
+// If t has no active leases, nothing is done.
+func (t *tableState) purgeOldLeases(
+	db *client.DB, minVersion DescriptorVersion, store LeaseStore,
+) error {
+	t.mu.Lock()
+	empty := len(t.active.data) == 0
+	t.mu.Unlock()
+	if empty {
+		// We don't currently have a lease on this table, so no need to refresh
+		// anything.
+		return nil
+	}
+
+	// Acquire and release a lease on the table at a version >= minVersion.
+	var lease *LeaseState
+	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		lease, pErr = t.acquire(txn, minVersion, store)
+		if _, deleted := pErr.GetDetail().(*roachpb.DescriptorDeletedError); pErr == nil || deleted {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			// Skip the last lease.
+			var toRelease []*LeaseState
+			if deleted {
+				t.deleted = true
+				// If the table has been deleted, all leases are stale.
+				toRelease = t.active.data
+			} else {
+				// Otherwise, all but the lease we just took are stale.
+				toRelease = t.active.data[:len(t.active.data)-1]
+			}
+			if err := t.releaseLeasesIfNotActive(toRelease, store); err != nil {
+				log.Warningf("error releasing leases: %s", err)
+			}
+			return nil
+		}
+		return pErr
+	})
+	if pErr != nil {
+		return pErr.GoError()
+	}
+	if lease == nil {
+		return nil
+	}
+	return t.release(lease, store)
+}
+
+// LeaseManagerTestingKnobs contains test affordances.
+type LeaseManagerTestingKnobs struct {
+	// A callback called after the leases are refreshed as a result of a gossip update.
+	TestingLeasesRefreshedEvent func(config.SystemConfig)
+}
+
 // LeaseManager manages acquiring and releasing per-table leases. Exported only
 // for testing.
 type LeaseManager struct {
 	LeaseStore
-	mu     sync.Mutex
-	tables map[ID]*tableState
+	mu           sync.Mutex
+	tables       map[ID]*tableState
+	testingKnobs LeaseManagerTestingKnobs
 }
 
 // NewLeaseManager creates a new LeaseManager.
-func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManager {
+// Args:
+//  testingLeasesRefreshedEvent: if not nil, a callback called after the leases
+//  are refreshed as a result of a gossip update.
+func NewLeaseManager(
+	nodeID uint32,
+	db client.DB,
+	clock *hlc.Clock,
+	testingKnobs LeaseManagerTestingKnobs,
+) *LeaseManager {
 	return &LeaseManager{
 		LeaseStore: LeaseStore{
 			db:     db,
 			clock:  clock,
 			nodeID: nodeID,
 		},
-		tables: make(map[ID]*tableState),
+		tables:       make(map[ID]*tableState),
+		testingKnobs: testingKnobs,
 	}
 }
 
@@ -603,6 +682,10 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	}
 	// TODO(pmattis): Can/should we delete from LeaseManager.tables if the
 	// tableState becomes empty?
+	// TODO(andrei): I think we never delete from LeaseManager.tables... which
+	// could be bad if a lot of tables keep being created. I looked into cleaning
+	// up a bit, but it seems tricky to do with the current locking which is split
+	// between LeaseManager and tableState.
 	return t.release(lease, m.LeaseStore)
 }
 
@@ -629,7 +712,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 				cfg, _ := gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info("received a new config %v", cfg)
+					log.Info("received a new config; will refresh leases")
 				}
 
 				// Loop through the configuration to find all the tables.
@@ -651,17 +734,22 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 							continue
 						}
 						if log.V(2) {
-							log.Infof("%s: refreshing lease table: %d, version: %d",
-								kv.Key, table.ID, table.Version)
+							log.Infof("%s: refreshing lease table: %d (%s), version: %d",
+								kv.Key, table.ID, table.Name, table.Version)
 						}
 						// Try to refresh the table lease to one >= this version.
-						if err := m.refreshLease(db, table.ID, table.Version); err != nil {
-							log.Warningf("%s: %v", kv.Key, err)
+						if t := m.findTableState(table.ID, false /* create */); t != nil {
+							if err := t.purgeOldLeases(
+								db, table.Version, m.LeaseStore); err != nil {
+								log.Warningf("%s: %v", kv.Key, err)
+							}
 						}
-
 					case *Descriptor_Database:
 						// Ignore.
 					}
+				}
+				if m.testingKnobs.TestingLeasesRefreshedEvent != nil {
+					m.testingKnobs.TestingLeasesRefreshedEvent(cfg)
 				}
 
 			case <-s.ShouldStop():
@@ -669,28 +757,4 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 			}
 		}
 	})
-}
-
-// refreshLease tries to refresh the node's table lease.
-func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorVersion) error {
-	// Only attempt to update a lease for a table that is already leased.
-	if t := m.findTableState(id, false); t == nil {
-		return nil
-	}
-	// Acquire and release a lease on the table at a version >= minVersion.
-	var lease *LeaseState
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		// Acquire() can only acquire a lease at a version if it has
-		// already been acquired at that version, or that version
-		// is the latest version. If the latest version is > minVersion
-		// then the node acquires a lease at the latest version but
-		// Acquire() itself returns an error. This is okay, because
-		// we want to update the node lease.
-		lease, pErr = m.Acquire(txn, id, minVersion)
-		return pErr
-	}); pErr != nil {
-		return pErr.GoError()
-	}
-	return m.Release(lease)
 }

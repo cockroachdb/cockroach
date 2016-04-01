@@ -128,7 +128,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = csql.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	db := server.DB()
-	leaseMgr := csql.NewLeaseManager(0, *db, hlc.NewClock(hlc.UnixNano))
+	leaseMgr := csql.NewLeaseManager(0, *db, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{})
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *db, leaseMgr)
 
 	if _, err := sqlDB.Exec(`

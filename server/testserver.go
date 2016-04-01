@@ -193,6 +193,11 @@ func (ts *TestServer) DB() *client.DB {
 	return nil
 }
 
+// LeaseManager exposes the LeaseManager used by the TestServer.
+func (ts *TestServer) LeaseManager() *sql.LeaseManager {
+	return ts.leaseMgr
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
