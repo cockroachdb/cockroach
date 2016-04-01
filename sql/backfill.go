@@ -165,7 +165,10 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			desc:    *tableDesc,
 		}
 		scan.initDescDefaults()
-		rows := selectIndex(scan, nil, false)
+		rows, err := selectIndex(scan, nil, false)
+		if err != nil {
+			return roachpb.NewError(err)
+		}
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.

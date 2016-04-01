@@ -39,6 +39,8 @@ type scanNode struct {
 
 	// Set if an index was explicitly specified.
 	specifiedIndex *IndexDescriptor
+	// Set if the NO_INDEX_JOIN hint was given.
+	noIndexJoin bool
 
 	// There is a 1-1 correspondence between desc.Column sand resultColumns.
 	resultColumns []ResultColumn
@@ -216,6 +218,7 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 			}
 		}
 	}
+	n.noIndexJoin = tableName.NoIndexJoin()
 	n.initDescDefaults()
 	return alias, nil
 }
