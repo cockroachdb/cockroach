@@ -173,6 +173,10 @@ type txnState struct {
 	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
 	// passing the Session along everywhere the trace is needed.
 	tr trace.Trace
+
+	// The timestamp to report for current_timestamp(), now() etc.
+	// Must be constant for the lifetime of a SQL transaction.
+	sqlTimestamp roachpb.Timestamp
 }
 
 // reset creates a new Txn and initializes it using the session defaults.

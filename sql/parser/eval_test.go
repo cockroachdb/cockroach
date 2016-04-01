@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 )
 
@@ -472,6 +473,33 @@ func TestSimilarEscape(t *testing.T) {
 		s := SimilarEscape(d.expr)
 		if s != d.expected {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, s)
+		}
+	}
+}
+
+func TestClusterTimestampConversion(t *testing.T) {
+	testData := []struct {
+		walltime int64
+		logical  int32
+		expected string
+	}{
+		{0, 0, "0.0000000000"},
+		{42, 0, "42.0000000000"},
+		{-42, 0, "-42.0000000000"},
+		{42, 69, "42.0000000069"},
+		{42, 2147483647, "42.2147483647"},
+		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
+	}
+
+	ctx := defaultContext
+	ctx.PrepareOnly = true
+	for _, d := range testData {
+		ts := roachpb.Timestamp{WallTime: d.walltime, Logical: d.logical}
+		ctx.SetClusterTimestamp(ts)
+		dec := ctx.GetClusterTimestamp()
+		final := dec.String()
+		if final != d.expected {
+			t.Errorf("expected %s, but found %s", d.expected, final)
 		}
 	}
 }
