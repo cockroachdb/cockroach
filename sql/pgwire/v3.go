@@ -213,13 +213,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			c.writeBuf.initMsg(serverMsgReady)
 			var txnStatus byte
 			switch c.session.TxnState.State {
-			case sql.Aborted:
+			case sql.Aborted, sql.RestartWait:
+				// We send status "InFailedTransaction" also for state RestartWait
+				// because GO's lib/pq freaks out if we invent a new status.
 				txnStatus = 'E'
 			case sql.Open:
 				txnStatus = 'T'
-			case sql.RestartWait:
-				// This state is not part of the Postgres protocol.
-				txnStatus = 'R'
 			case sql.NoTxn:
 				// We're not in a txn (i.e. the last txn was committed).
 				txnStatus = 'I'

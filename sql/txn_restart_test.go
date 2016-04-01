@@ -627,3 +627,53 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 }
+
+// TestRollbackInRestartWait ensures that a ROLLBACK while the txn is in the
+// RetryWait state works.
+func TestRollbackInRestartWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cmdFilters := createTestServerContext()
+	server, sqlDB, _ := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set up error injection that causes retries.
+	magicVals := createFilterVals(nil, nil)
+	magicVals.endTxnRestartCounts = map[string]int{
+		"boulanger": 1,
+	}
+	cmdFilters.AppendFilter(
+		func(args storageutils.FilterArgs) *roachpb.Error {
+			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
+				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+			}
+			return nil
+		}, false)
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(
+		"SAVEPOINT cockroach_restart"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES ('g', 'boulanger')")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("RELEASE SAVEPOINT cockroach_restart"); err == nil {
+		t.Fatal("expected RELEASE to fail")
+	}
+
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
