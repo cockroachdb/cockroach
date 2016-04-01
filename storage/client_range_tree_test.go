@@ -30,11 +30,11 @@ import (
 
 // loadNodes fetches a node and recursively all of its children.
 func loadNodes(t *testing.T, db *client.DB, key roachpb.RKey, nodes map[string]rangetree.RangeTreeNode) {
-	node := new(rangetree.RangeTreeNode)
-	if err := db.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
+	var node rangetree.RangeTreeNode
+	if err := db.GetProto(keys.RangeTreeNodeKey(key), &node); err != nil {
 		t.Fatal(err)
 	}
-	nodes[node.Key.String()] = *node
+	nodes[node.Key.String()] = node
 	if node.LeftKey != nil {
 		loadNodes(t, db, node.LeftKey, nodes)
 	}
@@ -45,9 +45,9 @@ func loadNodes(t *testing.T, db *client.DB, key roachpb.RKey, nodes map[string]r
 
 // loadTree loads the tree root and all of its nodes. It puts all of the nodes
 // into a map.
-func loadTree(t *testing.T, db *client.DB) (*rangetree.RangeTree, map[string]rangetree.RangeTreeNode) {
-	tree := new(rangetree.RangeTree)
-	if err := db.GetProto(keys.RangeTreeRoot, tree); err != nil {
+func loadTree(t *testing.T, db *client.DB) (rangetree.RangeTree, map[string]rangetree.RangeTreeNode) {
+	var tree rangetree.RangeTree
+	if err := db.GetProto(keys.RangeTreeRoot, &tree); err != nil {
 		t.Fatal(err)
 	}
 	nodes := make(map[string]rangetree.RangeTreeNode)
@@ -61,59 +61,41 @@ func loadTree(t *testing.T, db *client.DB) (*rangetree.RangeTree, map[string]ran
 // red-black tree. It does so by checking each of the red-black tree properties.
 // These verify functions are similar to the those found in the range_tree_test
 // but these use a map of nodes instead of a tree context.
-func VerifyTree(t *testing.T, tree *rangetree.RangeTree, nodes map[string]rangetree.RangeTreeNode, testName string) {
+func VerifyTree(t *testing.T, tree rangetree.RangeTree, nodes map[string]rangetree.RangeTreeNode, testName string) {
 	root, ok := nodes[tree.RootKey.String()]
 	if !ok {
 		t.Fatalf("%s: could not find root node with key %s", testName, tree.RootKey)
 	}
 
-	verifyBinarySearchTree(t, nodes, testName, &root, roachpb.RKeyMin, roachpb.RKeyMax)
+	verifyBinarySearchTree(t, nodes, testName, root, roachpb.RKeyMin, roachpb.RKeyMax)
 	// Property 1 is always correct. All nodes are already colored.
-	verifyProperty2(t, testName, &root)
+	verifyProperty2(t, testName, root)
 	// Property 3 is always correct. All leaves are black.
-	verifyProperty4(t, nodes, testName, &root)
-	pathBlackCount := new(int)
-	*pathBlackCount = -1
-	verifyProperty5(t, nodes, testName, &root, 0, pathBlackCount)
+	verifyProperty4(t, nodes, testName, root)
+	verifyProperty5(t, nodes, testName, root)
 }
 
 // isRed will return true only if node exists and is not set to black. This is
 // the same helper function as the one embedded in the range tree.
-func isRed(node *rangetree.RangeTreeNode) bool {
-	if node == nil {
-		return false
-	}
+func isRed(node rangetree.RangeTreeNode) bool {
 	return !node.Black
 }
 
-// getLeftAndRight returns the left and right nodes, if they exist, in order,
-// from the passed in map of nodes.
-func getLeftAndRight(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node *rangetree.RangeTreeNode) (*rangetree.RangeTreeNode, *rangetree.RangeTreeNode) {
-	var left *rangetree.RangeTreeNode
-	var right *rangetree.RangeTreeNode
-	var ok bool
-	if node.LeftKey != nil {
-		left = new(rangetree.RangeTreeNode)
-		if *left, ok = nodes[node.LeftKey.String()]; !ok {
-			t.Errorf("%s: could not locate node with key %s", testName, node.LeftKey)
+func getNode(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, key roachpb.RKey) (rangetree.RangeTreeNode, bool) {
+	if key != nil {
+		if left, ok := nodes[key.String()]; !ok {
+			t.Errorf("%s: could not locate node with key %s", testName, key)
+		} else {
+			return left, ok
 		}
 	}
-	if node.RightKey != nil {
-		right = new(rangetree.RangeTreeNode)
-		if *right, ok = nodes[node.RightKey.String()]; !ok {
-			t.Errorf("%s: could not locate node with key %s", testName, node.RightKey)
-		}
-	}
-	return left, right
+	return rangetree.RangeTreeNode{}, false
 }
 
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
 // greater than it. It recursively walks the tree to perform this same check.
-func verifyBinarySearchTree(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node *rangetree.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
-	if node == nil {
-		return
-	}
+func verifyBinarySearchTree(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node rangetree.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
 	if !node.Key.Less(keyMax) {
 		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
@@ -121,56 +103,60 @@ func verifyBinarySearchTree(t *testing.T, nodes map[string]rangetree.RangeTreeNo
 	if !keyMin.Less(node.Key) && !node.Key.Equal(roachpb.RKeyMin) {
 		t.Errorf("%s: Failed Property BST - The key %s is not greater than %s.", testName, node.Key, keyMin)
 	}
-	left, right := getLeftAndRight(t, nodes, testName, node)
-	verifyBinarySearchTree(t, nodes, testName, left, keyMin, node.Key)
-	verifyBinarySearchTree(t, nodes, testName, right, node.Key, keyMax)
+	if left, ok := getNode(t, nodes, testName, node.LeftKey); ok {
+		verifyBinarySearchTree(t, nodes, testName, left, keyMin, node.Key)
+	}
+	if right, ok := getNode(t, nodes, testName, node.RightKey); ok {
+		verifyBinarySearchTree(t, nodes, testName, right, node.Key, keyMax)
+	}
 }
 
 // verifyProperty2 ensures that the root node is black.
-func verifyProperty2(t *testing.T, testName string, root *rangetree.RangeTreeNode) {
+func verifyProperty2(t *testing.T, testName string, root rangetree.RangeTreeNode) {
 	if e, a := false, isRed(root); e != a {
 		t.Errorf("%s: Failed Property 2 - The root node is not black.", testName)
 	}
 }
 
 // verifyProperty4 ensures that the parent of every red node is black.
-func verifyProperty4(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node *rangetree.RangeTreeNode) {
-	if node == nil {
-		return
-	}
-
-	left, right := getLeftAndRight(t, nodes, testName, node)
-	if isRed(node) {
-		if e, a := false, isRed(left); e != a {
-			t.Errorf("%s: Failed property 4 - Red Node %s's left child %s is also red.", testName, node.Key, left.Key)
+func verifyProperty4(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node rangetree.RangeTreeNode) {
+	if left, ok := getNode(t, nodes, testName, node.LeftKey); ok {
+		if isRed(node) {
+			if e, a := false, isRed(left); e != a {
+				t.Errorf("%s: Failed property 4 - Red Node %s's left child %s is also red.", testName, node.Key, left.Key)
+			}
 		}
-		if e, a := false, isRed(right); e != a {
-			t.Errorf("%s: Failed property 4 - Red Node %s's right child %s is also red.", testName, node.Key, right.Key)
-		}
+		verifyProperty4(t, nodes, testName, left)
 	}
-	verifyProperty4(t, nodes, testName, left)
-	verifyProperty4(t, nodes, testName, right)
+	if right, ok := getNode(t, nodes, testName, node.RightKey); ok {
+		if isRed(node) {
+			if e, a := false, isRed(right); e != a {
+				t.Errorf("%s: Failed property 4 - Red Node %s's right child %s is also red.", testName, node.Key, right.Key)
+			}
+		}
+		verifyProperty4(t, nodes, testName, right)
+	}
 }
 
 // verifyProperty5 ensures that all paths from any given node to its leaf nodes
 // contain the same number of black nodes.
-func verifyProperty5(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node *rangetree.RangeTreeNode, blackCount int, pathBlackCount *int) {
+func verifyProperty5(t *testing.T, nodes map[string]rangetree.RangeTreeNode, testName string, node rangetree.RangeTreeNode) int {
+	var leftBlackCount, rightBlackCount int
+	if left, ok := getNode(t, nodes, testName, node.LeftKey); ok {
+		leftBlackCount = verifyProperty5(t, nodes, testName, left)
+	}
+	if right, ok := getNode(t, nodes, testName, node.RightKey); ok {
+		rightBlackCount = verifyProperty5(t, nodes, testName, right)
+	}
+	if e, a := leftBlackCount, rightBlackCount; e != a {
+		t.Errorf("%s: Failed property 5 - Expected a black count of %d but instead got %d.", testName, e, a)
+	}
+	// Upstream doesn't need to know about local errors.
+	childBlackCound := leftBlackCount
 	if !isRed(node) {
-		blackCount++
+		childBlackCound++
 	}
-	if node == nil {
-		if *pathBlackCount == -1 {
-			*pathBlackCount = blackCount
-		} else {
-			if e, a := *pathBlackCount, blackCount; e != a {
-				t.Errorf("%s: Failed property 5 - Expected a black count of %d but instead got %d.", testName, e, a)
-			}
-		}
-		return
-	}
-	left, right := getLeftAndRight(t, nodes, testName, node)
-	verifyProperty5(t, nodes, testName, left, blackCount, pathBlackCount)
-	verifyProperty5(t, nodes, testName, right, blackCount, pathBlackCount)
+	return childBlackCound
 }
 
 // TestSetup ensures that Setup correctly setups up the range
