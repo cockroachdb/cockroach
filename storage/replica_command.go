@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/rangetree"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -1725,7 +1726,7 @@ func (r *Replica) AdminSplit(
 		}
 		// Update the RangeTree.
 		b = &client.Batch{}
-		if pErr := InsertRange(txn, b, newDesc.StartKey); pErr != nil {
+		if pErr := rangetree.InsertRange(txn, b, newDesc.StartKey); pErr != nil {
 			return pErr
 		}
 		// End the transaction manually, instead of letting RunTransaction
@@ -1983,7 +1984,7 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Update the RangeTree.
-		if pErr := DeleteRange(txn, b, rightDesc.StartKey); pErr != nil {
+		if pErr := rangetree.DeleteRange(txn, b, rightDesc.StartKey); pErr != nil {
 			return pErr
 		}
 

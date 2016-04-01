@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/rangetree"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -1133,7 +1134,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 
 	// Range Tree setup.
-	if err := SetupRangeTree(batch, ms, now, desc.StartKey); err != nil {
+	if err := rangetree.Setup(batch, ms, now, desc.StartKey); err != nil {
 		return err
 	}
 
