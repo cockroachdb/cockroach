@@ -19,6 +19,8 @@ package encoding
 import (
 	"bytes"
 	"math"
+	"math/big"
+	"strings"
 	"testing"
 
 	"gopkg.in/inf.v0"
@@ -121,6 +123,51 @@ func TestEncodeDecimal(t *testing.T) {
 			if dec.Cmp(other) != 0 {
 				t.Errorf("unexpected mismatch for %v. got %v", 1.23, other)
 			}
+		}
+	}
+}
+
+func TestDigitsLookupTable(t *testing.T) {
+	// Make sure all elements in table make sense.
+	two := new(big.Int)
+	prevBorder := big.NewInt(0)
+	for i := 1; i <= tableSize; i++ {
+		elem := digitsLookupTable[i]
+
+		two.SetInt64(2)
+		min := two.Exp(two, big.NewInt(int64(i-1)), nil)
+		if minLen := len(min.String()); minLen != elem.digits {
+			t.Errorf("expected 2^%d to have %d digits, found %d", i, elem.digits, minLen)
+		}
+
+		if zeros := strings.Count(elem.border.String(), "0"); zeros != elem.digits {
+			t.Errorf("the %d digits for digitsLookupTable[%d] does not agree with the border %v", elem.digits, i, &elem.border)
+		}
+
+		if min.Cmp(&elem.border) >= 0 {
+			t.Errorf("expected 2^%d = %v to be less than the border, found %v", i-1, min, &elem.border)
+		}
+
+		if elem.border.Cmp(prevBorder) > 0 {
+			if min.Cmp(prevBorder) <= 0 {
+				t.Errorf("expected 2^%d = %v to be greater than or equal to the border, found %v", i-1, min, prevBorder)
+			}
+			prevBorder = &elem.border
+		}
+	}
+
+	// Throw random big.Ints at the table and make sure the
+	// digit lengths line up.
+	const randomTrials = 100
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < randomTrials; i++ {
+		a := big.NewInt(rng.Int63())
+		b := big.NewInt(rng.Int63())
+		a.Mul(a, b)
+
+		tableDigits, _ := numDigits(a, nil)
+		if actualDigits := len(a.String()); actualDigits != tableDigits {
+			t.Errorf("expected %d digits for %v, found %d", tableDigits, a, actualDigits)
 		}
 	}
 }
