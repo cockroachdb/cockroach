@@ -119,8 +119,6 @@
 		Attributes
 		ReplicaDescriptor
 		RangeDescriptor
-		RangeTree
-		RangeTreeNode
 		StoreCapacity
 		NodeDescriptor
 		StoreDescriptor
