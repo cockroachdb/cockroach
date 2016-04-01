@@ -346,6 +346,7 @@ func (t *logicTest) processTestFile(path string) {
 				//   - I for integer
 				//   - R for floating point
 				//   - B for boolean
+				//   - D for decimal
 				// The sort mode is one of:
 				//   - "nosort" (default)
 				//   - "rowsort"
@@ -616,6 +617,10 @@ func (t *logicTest) execQuery(query logicQuery) {
 				case 'B':
 					if valT != reflect.Bool {
 						t.Fatalf("%s: expected boolean value for column %d, but found %T: %#v", query.pos, i, val, val)
+					}
+				case 'D':
+					if valT != reflect.Slice {
+						t.Fatalf("%s: expected decimal value for column %d, but found %T: %#v", query.pos, i, val, val)
 					}
 				default:
 					t.Fatalf("%s: unknown type in type string: %c in %s", query.pos, colT, query.colTypes)
