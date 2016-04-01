@@ -428,11 +428,16 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 		g.outgoing.setMaxSize(maxPeers)
 	}()
 
-	// Skip if the node has already been seen or it's our own address.
-	if _, ok := g.nodeDescs[desc.NodeID]; ok || desc.Address == g.is.NodeAddr {
+	// Skip if the node has already been seen.
+	if _, ok := g.nodeDescs[desc.NodeID]; ok {
 		return
 	}
 	g.nodeDescs[desc.NodeID] = &desc
+
+	// Skip if it's our own address.
+	if desc.Address == g.is.NodeAddr {
+		return
+	}
 
 	// Add this new node address (if it's not already there) to our list
 	// of resolvers so we can keep connecting to gossip if the original

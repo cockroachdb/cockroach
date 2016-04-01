@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -144,4 +145,80 @@ func TestGossipCullNetwork(t *testing.T) {
 		}
 		return errors.New("no network culling occurred")
 	})
+}
+
+// TestGossipUpdateNodeAddress verifies that how it skip when
+// updateNodeAddress.
+func TestGossipUpdateNodeAddress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create the local gossip and minPeers peers.
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	server := rpc.NewServer(rpcContext)
+	ln, err := util.ListenAndServeGRPC(stopper, server, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr()
+	g := New(rpcContext, nil, stopper)
+	g.SetNodeID(roachpb.NodeID(1))
+	g.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
+	time.Sleep(time.Millisecond)
+
+	nodeDesc1 := roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+	}
+	bytes1, err := proto.Marshal(&nodeDesc1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.updateNodeAddress("", roachpb.MakeValueFromBytes(bytes1))
+
+	addr2 := util.NewUnresolvedAddr("tcp", "192.168.188.159:9088")
+	nodeDesc2 := roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(2),
+		Address: util.MakeUnresolvedAddr(addr2.Network(), addr2.String()),
+	}
+	bytes2, err := proto.Marshal(&nodeDesc2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.updateNodeAddress("", roachpb.MakeValueFromBytes(bytes2))
+
+	if desc, ok := g.nodeDescs[roachpb.NodeID(1)]; !ok || desc.NodeID != roachpb.NodeID(1) || desc.Address.String() != addr.String() {
+		t.Errorf("nodeDescs cache error")
+	}
+	if desc, ok := g.nodeDescs[roachpb.NodeID(2)]; !ok || desc.NodeID != roachpb.NodeID(2) || desc.Address.String() != addr2.String() {
+		t.Errorf("nodeDescs cache error")
+	}
+	hasNew := false
+	for _, bootstrapAddr := range g.bootstrapInfo.Addresses {
+		if bootstrapAddr.String() == addr.String() {
+			t.Errorf("maybeAddBootstrapAddress havn't skip its own nodeAddr")
+		}
+
+		if bootstrapAddr.String() == addr2.String() {
+			hasNew = true
+		}
+	}
+	if !hasNew {
+		t.Errorf("maybeAddBootstrapAddress failed add new address")
+	}
+	hasNew = false
+	for _, resolver := range g.resolvers {
+		if resolver.Addr() == addr.String() {
+			t.Errorf("maybeAddResolver havn't skip its own nodeAddr")
+		}
+
+		if resolver.Addr() == addr2.String() {
+			hasNew = true
+		}
+	}
+	if !hasNew {
+		t.Errorf("maybeAddResolver failed add new address")
+	}
 }
