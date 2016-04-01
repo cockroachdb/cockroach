@@ -82,7 +82,7 @@ func typeForDatum(d parser.Datum) pgType {
 		return pgType{oid.T_date, 8}
 
 	case parser.DTimestamp:
-		return pgType{oid.T_timestamp, 8}
+		return pgType{oid.T_timestamptz, 8}
 
 	case parser.DInterval:
 		return pgType{oid.T_interval, 8}
@@ -257,19 +257,20 @@ func parseTs(str string) (time.Time, error) {
 
 var (
 	oidToDatum = map[oid.Oid]parser.Datum{
-		oid.T_bool:      parser.DummyBool,
-		oid.T_bytea:     parser.DummyBytes,
-		oid.T_date:      parser.DummyDate,
-		oid.T_float4:    parser.DummyFloat,
-		oid.T_float8:    parser.DummyFloat,
-		oid.T_int2:      parser.DummyInt,
-		oid.T_int4:      parser.DummyInt,
-		oid.T_int8:      parser.DummyInt,
-		oid.T_interval:  parser.DummyInterval,
-		oid.T_numeric:   parser.DummyDecimal,
-		oid.T_text:      parser.DummyString,
-		oid.T_timestamp: parser.DummyTimestamp,
-		oid.T_varchar:   parser.DummyString,
+		oid.T_bool:        parser.DummyBool,
+		oid.T_bytea:       parser.DummyBytes,
+		oid.T_date:        parser.DummyDate,
+		oid.T_float4:      parser.DummyFloat,
+		oid.T_float8:      parser.DummyFloat,
+		oid.T_int2:        parser.DummyInt,
+		oid.T_int4:        parser.DummyInt,
+		oid.T_int8:        parser.DummyInt,
+		oid.T_interval:    parser.DummyInterval,
+		oid.T_numeric:     parser.DummyDecimal,
+		oid.T_text:        parser.DummyString,
+		oid.T_timestamp:   parser.DummyTimestamp,
+		oid.T_timestamptz: parser.DummyTimestamp,
+		oid.T_varchar:     parser.DummyString,
 	}
 	// Using reflection to support unhashable types.
 	datumToOid = map[reflect.Type]oid.Oid{
@@ -281,7 +282,7 @@ var (
 		reflect.TypeOf(parser.DummyInterval):  oid.T_interval,
 		reflect.TypeOf(parser.DummyDecimal):   oid.T_numeric,
 		reflect.TypeOf(parser.DummyString):    oid.T_text,
-		reflect.TypeOf(parser.DummyTimestamp): oid.T_timestamp,
+		reflect.TypeOf(parser.DummyTimestamp): oid.T_timestamptz,
 	}
 )
 
@@ -432,7 +433,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		default:
 			return d, fmt.Errorf("unsupported bytea format code: %d", code)
 		}
-	case oid.T_timestamp:
+	case oid.T_timestamp, oid.T_timestamptz:
 		switch code {
 		case formatText:
 			ts, err := parseTs(string(b))
