@@ -453,24 +453,23 @@ var digitsLookupTable [tableSize + 1]tableVal
 
 type tableVal struct {
 	digits int
-	border *big.Int
+	border big.Int
 }
 
 func init() {
-	digitBi := new(big.Int)
-	var bigIntArr [tableSize]big.Int
+	curVal := big.NewInt(1)
+	curExp := new(big.Int)
 	for i := 1; i <= tableSize; i++ {
-		val := int(1 << uint(i-1))
-		digits := 1
-		for ; val > 10; val /= 10 {
-			digits++
+		if i > 1 {
+			curVal.Lsh(curVal, 1)
 		}
 
-		digitBi.SetInt64(int64(digits))
-		digitsLookupTable[i] = tableVal{
-			digits: digits,
-			border: bigIntArr[i-1].Exp(bigInt10, digitBi, nil),
-		}
+		elem := &digitsLookupTable[i]
+		elem.digits = len(curVal.String())
+
+		elem.border.SetInt64(10)
+		curExp.SetInt64(int64(elem.digits))
+		elem.border.Exp(&elem.border, curExp, nil)
 	}
 }
 
@@ -489,7 +488,7 @@ func lookupBits(bitLen int) (tableVal, bool) {
 // is constructed, it will be returned so it can be used again.
 func numDigits(bi *big.Int, tmp []byte) (int, []byte) {
 	if val, ok := lookupBits(bi.BitLen()); ok {
-		if bi.Cmp(val.border) < 0 {
+		if bi.Cmp(&val.border) < 0 {
 			return val.digits, nil
 		}
 		return val.digits + 1, nil
