@@ -809,8 +809,9 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	if p.txn != txnState.txn {
 		panic("rollbackSQLTransaction called on a different txn than the planner's")
 	}
-	if txnState.State != Open {
-		panic(fmt.Sprintf("rollbackSQLTransaction called on non-open txn: %+v", txnState.txn))
+	if txnState.State != Open && txnState.State != RestartWait {
+		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
+			txnState.State, txnState.txn.Proto))
 	}
 	pErr := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
