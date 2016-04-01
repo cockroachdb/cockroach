@@ -987,8 +987,8 @@ func mvccPutInternal(
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
 			} else if txn.Sequence < meta.Txn.Sequence ||
 				(txn.Sequence == meta.Txn.Sequence && txn.BatchIndex <= meta.Txn.BatchIndex) {
-				// Replay error if we encounter an older sequence number or
-				// the same (or earlier) batch index for the same sequence.
+				// Replay error if we encounter a newer sequence number or
+				// the same (or newer) batch index for the same sequence.
 				return roachpb.NewTransactionRetryError()
 			}
 			// Make sure we process valueFn before clearing any earlier
