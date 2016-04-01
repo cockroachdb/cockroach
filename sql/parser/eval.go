@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"regexp"
 	"sort"
@@ -750,13 +751,17 @@ type EvalContext struct {
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
 	stmtTimestamp DTimestamp
-	// The transaction timestamp. Needs to stay table throughout the
-	// transaction. Used for now(), current_timestamp(),
+	// The transaction timestamp. Needs to stay stable for the lifetime
+	// of a transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
-	txnTimestamp roachpb.Timestamp
-	ReCache      *RegexpCache
-	GetLocation  func() (*time.Location, error)
-	Args         MapArgs
+	txnTimestamp DTimestamp
+	// The cluster timestamp. Needs to be stable for the lifetime of the
+	// transaction. Used for cluster_logical_timestamp().
+	clusterTimestamp roachpb.Timestamp
+
+	ReCache     *RegexpCache
+	GetLocation func() (*time.Location, error)
+	Args        MapArgs
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -774,12 +779,41 @@ func (ctx *EvalContext) GetStmtTimestamp() DTimestamp {
 	return ctx.stmtTimestamp
 }
 
-// GetTxnTimestamp retrieves the current transaction timestamp as per
+// GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
+func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.txnTimestamp == roachpb.ZeroTimestamp {
+	if !ctx.PrepareOnly {
+		if ctx.clusterTimestamp == roachpb.ZeroTimestamp {
+			panic("zero cluster timestamp in EvalContext")
+		}
+	}
+
+	// Compute Walltime * 10^10 + Logical.
+	// We need 10 decimals for the Logical field because its maximum
+	// value is 4294967295 (2^32-1), a value with 10 decimal digits.
+	var val, sp big.Int
+	val.SetInt64(ctx.clusterTimestamp.WallTime)
+	val.Mul(&val, tenBillion)
+	sp.SetInt64(int64(ctx.clusterTimestamp.Logical))
+	val.Add(&val, &sp)
+	// Store the result.
+	res := &DDecimal{}
+	res.Dec.SetUnscaledBig(&val)
+	// Shift 10 decimals to the right, so that the logical
+	// field appears as fractional part.
+	res.Dec.SetScale(10)
+
+	return res
+}
+
+// GetTxnTimestamp retrieves the current transaction timestamp as per
+// the evaluation context. The timestamp is guaranteed to be nonzero.
+func (ctx *EvalContext) GetTxnTimestamp() DTimestamp {
+	// TODO(knz) a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.txnTimestamp.Time.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return ctx.txnTimestamp
@@ -787,12 +821,19 @@ func (ctx *EvalContext) GetTxnTimestamp() roachpb.Timestamp {
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts roachpb.Timestamp) {
-	ctx.txnTimestamp = ts
+	ctx.txnTimestamp.Time = ts.GoTime()
 }
 
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetStmtTimestamp(ts roachpb.Timestamp) {
 	ctx.stmtTimestamp.Time = ts.GoTime()
+}
+
+var tenBillion = big.NewInt(1e10)
+
+// SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
+func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
+	ctx.clusterTimestamp = ts
 }
 
 var defaultContext = EvalContext{
