@@ -14,6 +14,8 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
+// Note that there's also lease_internal_test.go, in package sql.
+
 package sql_test
 
 import (
@@ -24,8 +26,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -36,15 +40,17 @@ type leaseTest struct {
 	*testing.T
 	server *testServer
 	db     *sql.DB
+	kvDB   *client.DB
 	nodes  map[uint32]*csql.LeaseManager
 }
 
-func newLeaseTest(t *testing.T) *leaseTest {
-	s, db, _ := setup(t)
+func newLeaseTest(t *testing.T, ctx *server.Context) *leaseTest {
+	s, db, kvDB := setupWithContext(t, ctx)
 	return &leaseTest{
 		T:      t,
 		server: s,
 		db:     db,
+		kvDB:   kvDB,
 		nodes:  map[uint32]*csql.LeaseManager{},
 	}
 }
@@ -132,21 +138,22 @@ func (t *leaseTest) mustPublish(nodeID uint32, descID csql.ID) {
 func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 	mgr := t.nodes[nodeID]
 	if mgr == nil {
-		mgr = csql.NewLeaseManager(nodeID, *t.server.DB(), t.server.Clock())
+		mgr = csql.NewLeaseManager(
+			nodeID, *t.server.DB(), t.server.Clock(), csql.LeaseManagerTestingKnobs{})
 		t.nodes[nodeID] = mgr
 	}
 	return mgr
 }
 
 func TestLeaseManager(testingT *testing.T) {
-	defer leaktest.AfterTest(testingT)
-	t := newLeaseTest(testingT)
+	defer leaktest.AfterTest(testingT)()
+	t := newLeaseTest(testingT, server.NewTestContext())
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
 
 	// We can't acquire a lease on a non-existent table.
-	expected := "table ID 10000 not found"
+	expected := "descriptor ID 10000 not found"
 	if _, err := t.acquire(1, 10000, 0); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -232,8 +239,8 @@ func TestLeaseManager(testingT *testing.T) {
 }
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
-	defer leaktest.AfterTest(testingT)
-	t := newLeaseTest(testingT)
+	defer leaktest.AfterTest(testingT)()
+	t := newLeaseTest(testingT, server.NewTestContext())
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -279,8 +286,8 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
-	defer leaktest.AfterTest(testingT)
-	t := newLeaseTest(testingT)
+	defer leaktest.AfterTest(testingT)()
+	t := newLeaseTest(testingT, server.NewTestContext())
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -338,4 +345,238 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 
 	t.mustAcquire(1, descID, 0)
 	t.expectLeases(descID, "/3/1")
+}
+
+func getDescriptorID(db *client.DB, database string, table string) csql.ID {
+	dbNameKey := csql.MakeNameMetadataKey(keys.RootNamespaceID, database)
+	gr, err := db.Get(dbNameKey)
+	if err != nil {
+		panic(err)
+	}
+	if !gr.Exists() {
+		panic("database missing")
+	}
+	dbDescID := csql.ID(gr.ValueInt())
+
+	tableNameKey := csql.MakeNameMetadataKey(dbDescID, table)
+	gr, err = db.Get(tableNameKey)
+	if err != nil {
+		panic(err)
+	}
+	if !gr.Exists() {
+		panic("table missing")
+	}
+	return csql.ID(gr.ValueInt())
+}
+
+// TODO(andrei): these function are copied from the sql package. Delete them
+// after they're not used any more.
+func getKeysForTableDescriptor(
+	tableDesc *csql.TableDescriptor,
+) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
+	zoneKey = csql.MakeZoneKey(tableDesc.ID)
+	nameKey = csql.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
+	descKey = csql.MakeDescMetadataKey(tableDesc.ID)
+	return
+}
+
+// get the table descriptor for the ID passed in using an existing txn.
+// returns nil if the descriptor doesn't exist.
+func getTableDescFromID(txn *client.Txn, id csql.ID) (*csql.TableDescriptor, *roachpb.Error) {
+	desc := &csql.Descriptor{}
+	descKey := csql.MakeDescMetadataKey(id)
+
+	if pErr := txn.GetProto(descKey, desc); pErr != nil {
+		return nil, pErr
+	}
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		// TODO(andrei): We're theoretically hiding the error where desc exists, but
+		// is not a TableDescriptor.
+		return nil, nil
+	}
+	return tableDesc, nil
+}
+
+// Test that we fail to lease a table that was marked for deletion.
+func TestCantLeaseDeletedTable(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+
+	ctx, _ := createTestServerContext()
+	t := newLeaseTest(testingT, ctx)
+	defer t.cleanup()
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+`
+	_, err := t.db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write the deleted bit.
+	// TODO(andrei): just do a DROP table here once DROP starts setting that bit.
+	tableID := getDescriptorID(t.kvDB, "test", "t")
+	var tableDesc *csql.TableDescriptor
+	pErr := t.kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		tableDesc, pErr = getTableDescFromID(txn, tableID)
+		return pErr
+	})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if tableDesc == nil {
+		t.Fatalf("descriptor missing")
+	}
+	tableDesc.Deleted = true
+	tableDesc.Version++
+	_, _, descKey := getKeysForTableDescriptor(tableDesc)
+	desc := csql.Descriptor{
+		Union: &csql.Descriptor_Table{
+			Table: tableDesc,
+		},
+	}
+	if err := t.kvDB.Put(descKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure we can't get a lease on the descriptor.
+	_, err = t.acquire(1, tableID, tableDesc.Version)
+	if !testutils.IsError(err, "descriptor deleted") {
+		t.Fatalf("got a different error than expected: %s", err)
+	}
+}
+
+func isDeleted(tableID csql.ID, cfg config.SystemConfig) bool {
+	descKey := csql.MakeDescMetadataKey(tableID)
+	val := cfg.GetValue(descKey)
+	if val == nil {
+		return false
+	}
+	var descriptor csql.Descriptor
+	if err := val.GetProto(&descriptor); err != nil {
+		panic("unable to unmarshal table descriptor")
+	}
+	table := descriptor.GetTable()
+	return table.Deleted
+}
+
+func acquire(s server.TestServer, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
+	var lease *csql.LeaseState
+	pErr := s.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		lease, pErr = s.LeaseManager().Acquire(txn, descID, version)
+		return pErr
+	})
+	return lease, pErr.GoError()
+}
+
+// Test that once a table is marked as deleted, a lease's refcount dropping to 0
+// means the lease is released immediately, as opposed to being released only
+// when it expires.
+func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+
+	ctx, _ := createTestServerContext()
+	var mu sync.Mutex
+	var waitTableID csql.ID
+	deleted := make(chan bool)
+	ctx.TestingKnobs.LeaseManagerTestingKnobs.TestingLeasesRefreshedEvent =
+		func(cfg config.SystemConfig) {
+			mu.Lock()
+			defer mu.Unlock()
+			if waitTableID != 0 {
+				if isDeleted(waitTableID, cfg) {
+					close(deleted)
+				}
+			}
+		}
+	s, db, kvDB := setupWithContext(t, ctx)
+	defer cleanup(s, db)
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tableID := getDescriptorID(kvDB, "test", "t")
+
+	lease1, err := acquire(s.TestServer, tableID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease2, err := acquire(s.TestServer, tableID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write the deleted bit.
+	// TODO(andrei): just do a DROP table here once DROP starts setting that bit.
+	var tableDesc *csql.TableDescriptor
+	pErr := kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		tableDesc, pErr = getTableDescFromID(txn, tableID)
+		return pErr
+	})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if tableDesc == nil {
+		t.Fatal("descriptor missing")
+	}
+	tableDesc.Deleted = true
+	tableDesc.Version++
+	_, _, descKey := getKeysForTableDescriptor(tableDesc)
+	desc := csql.Descriptor{
+		Union: &csql.Descriptor_Table{
+			Table: tableDesc,
+		},
+	}
+
+	// Install a way to wait for the config update to be processed.
+	mu.Lock()
+	waitTableID = tableID
+	mu.Unlock()
+
+	if pErr := kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := txn.Put(descKey, &desc); pErr != nil {
+			return pErr
+		}
+		txn.SetSystemConfigTrigger()
+		return nil
+	}); pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Block until the LeaseManager has processed the gossip update.
+	<-deleted
+
+	// We should still be able to acquire, because we have an active lease.
+	lease3, err := acquire(s.TestServer, tableID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Release everything.
+	if err := s.LeaseManager().Release(lease1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LeaseManager().Release(lease2); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LeaseManager().Release(lease3); err != nil {
+		t.Fatal(err)
+	}
+	// Now we shouldn't be able to acquire any more.
+	_, err = acquire(s.TestServer, tableID, 0)
+	if !testutils.IsError(err, "descriptor deleted") {
+		t.Fatalf("got a different error than expected: %s", err)
+	}
 }

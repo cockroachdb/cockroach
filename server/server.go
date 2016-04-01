@@ -158,7 +158,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
-	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock)
+	s.leaseMgr = sql.NewLeaseManager(
+		0, *s.db, s.clock, ctx.TestingKnobs.LeaseManagerTestingKnobs)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 	eCtx := sql.ExecutorContext{
 		DB:           s.db,
