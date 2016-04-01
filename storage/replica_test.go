@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -4658,5 +4659,17 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	}
 	if panicked {
 		t.Fatal("VerifyChecksum panicked")
+	}
+}
+
+func TestNewReplicaCorruptionError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	err := newReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil)
+	if cur, exp := err.String(), `error_msg:"foo (caused by bar)"`; !strings.Contains(cur, exp) {
+		t.Fatalf("expected '%s' contained in '%s'", exp, cur)
+	}
+	err = newReplicaCorruptionError(nil, nil, nil)
+	if exp, act := `error_msg:""`, err.String(); !strings.Contains(act, exp) {
+		t.Fatalf("expected '%s' contained in '%s'", exp, act)
 	}
 }

@@ -1893,6 +1893,9 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 	var errMsg string
 	for i := range errs {
 		err := errs[len(errs)-i-1]
+		if err == nil {
+			continue
+		}
 		if len(errMsg) == 0 {
 			errMsg = err.Error()
 		} else {
