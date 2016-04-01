@@ -87,8 +87,14 @@ func (ae *allocatorError) Error() string {
 	if ae.relaxConstraints {
 		anyAll = "an attribute"
 	}
-	return fmt.Sprintf("0 of %d store%s with %s matching [%s]",
-		ae.aliveStoreCount, pluralize(ae.aliveStoreCount), anyAll, ae.required)
+	var auxInfo string
+	// Whenever the likely problem is not having enough nodes up, make the
+	// message really clear.
+	if ae.relaxConstraints || len(ae.required.Attrs) == 0 {
+		auxInfo = "; likely not enough nodes in cluster"
+	}
+	return fmt.Sprintf("0 of %d store%s with %s matching [%s]%s",
+		ae.aliveStoreCount, pluralize(ae.aliveStoreCount), anyAll, ae.required, auxInfo)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}

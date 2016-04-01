@@ -1081,14 +1081,24 @@ func TestAllocatorError(t *testing.T) {
 		ae       allocatorError
 		expected string
 	}{
-		{allocatorError{attribute, false, 1}, "0 of 1 store with all attributes matching [one]"},
-		{allocatorError{attribute, true, 1}, "0 of 1 store with an attribute matching [one]"},
-		{allocatorError{attribute, false, 2}, "0 of 2 stores with all attributes matching [one]"},
-		{allocatorError{attribute, true, 2}, "0 of 2 stores with an attribute matching [one]"},
-		{allocatorError{attributes, false, 1}, "0 of 1 store with all attributes matching [one,two]"},
-		{allocatorError{attributes, true, 1}, "0 of 1 store with an attribute matching [one,two]"},
-		{allocatorError{attributes, false, 2}, "0 of 2 stores with all attributes matching [one,two]"},
-		{allocatorError{attributes, true, 2}, "0 of 2 stores with an attribute matching [one,two]"},
+		{allocatorError{roachpb.Attributes{}, false, 1},
+			"0 of 1 store with all attributes matching []; likely not enough nodes in cluster"},
+		{allocatorError{attribute, false, 1},
+			"0 of 1 store with all attributes matching [one]"},
+		{allocatorError{attribute, true, 1},
+			"0 of 1 store with an attribute matching [one]; likely not enough nodes in cluster"},
+		{allocatorError{attribute, false, 2},
+			"0 of 2 stores with all attributes matching [one]"},
+		{allocatorError{attribute, true, 2},
+			"0 of 2 stores with an attribute matching [one]; likely not enough nodes in cluster"},
+		{allocatorError{attributes, false, 1},
+			"0 of 1 store with all attributes matching [one,two]"},
+		{allocatorError{attributes, true, 1},
+			"0 of 1 store with an attribute matching [one,two]; likely not enough nodes in cluster"},
+		{allocatorError{attributes, false, 2},
+			"0 of 2 stores with all attributes matching [one,two]"},
+		{allocatorError{attributes, true, 2},
+			"0 of 2 stores with an attribute matching [one,two]; likely not enough nodes in cluster"},
 	}
 
 	for i, testCase := range testCases {
