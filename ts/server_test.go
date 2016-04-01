@@ -21,7 +21,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -29,7 +28,7 @@ import (
 
 func TestHttpQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsrv := &server.TestServer{}
+	var tsrv server.TestServer
 	if err := tsrv.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +40,7 @@ func TestHttpQuery(t *testing.T) {
 		{
 			Name:   "test.metric",
 			Source: "source1",
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -59,7 +58,7 @@ func TestHttpQuery(t *testing.T) {
 		{
 			Name:   "test.metric",
 			Source: "source2",
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -80,7 +79,7 @@ func TestHttpQuery(t *testing.T) {
 		},
 		{
 			Name: "other.metric",
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
 					Value:          100.0,
@@ -99,8 +98,8 @@ func TestHttpQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedResult := &ts.TimeSeriesQueryResponse{
-		Results: []*ts.TimeSeriesQueryResponse_Result{
+	expectedResult := ts.TimeSeriesQueryResponse{
+		Results: []ts.TimeSeriesQueryResponse_Result{
 			{
 				Query: ts.Query{
 					Name:             "test.metric",
@@ -109,7 +108,7 @@ func TestHttpQuery(t *testing.T) {
 					SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
 					Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
 				},
-				Datapoints: []*ts.TimeSeriesDatapoint{
+				Datapoints: []ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          400.0,
@@ -132,7 +131,7 @@ func TestHttpQuery(t *testing.T) {
 					SourceAggregator: ts.TimeSeriesQueryAggregator_SUM.Enum(),
 					Derivative:       ts.TimeSeriesQueryDerivative_NONE.Enum(),
 				},
-				Datapoints: []*ts.TimeSeriesDatapoint{
+				Datapoints: []ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          200.0,
@@ -151,7 +150,7 @@ func TestHttpQuery(t *testing.T) {
 					SourceAggregator: ts.TimeSeriesQueryAggregator_MAX.Enum(),
 					Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
 				},
-				Datapoints: []*ts.TimeSeriesDatapoint{
+				Datapoints: []ts.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 505 * 1e9,
 						Value:          1.0,
@@ -169,9 +168,9 @@ func TestHttpQuery(t *testing.T) {
 		},
 	}
 
-	response := &ts.TimeSeriesQueryResponse{}
-	session := newTestHTTPSession(t, &base.Context{}, tsrv.HTTPAddr())
-	session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
+	var response ts.TimeSeriesQueryResponse
+	session := makeTestHTTPSession(t, &tsrv.Ctx.Context, tsrv.HTTPAddr())
+	if err := session.PostProto(ts.URLQuery, &ts.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
 		Queries: []ts.Query{
@@ -188,7 +187,9 @@ func TestHttpQuery(t *testing.T) {
 				Derivative:       ts.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
 			},
 		},
-	}, response)
+	}, &response); err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range response.Results {
 		sort.Strings(r.Sources)
 	}

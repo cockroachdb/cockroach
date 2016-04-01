@@ -322,7 +322,7 @@ func (rr registryRecorder) record(dest *[]ts.TimeSeriesData) {
 		*dest = append(*dest, ts.TimeSeriesData{
 			Name:   fmt.Sprintf(rr.format, name),
 			Source: rr.source,
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: rr.timestampNanos,
 					Value:          val,

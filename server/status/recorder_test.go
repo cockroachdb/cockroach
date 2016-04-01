@@ -235,7 +235,7 @@ func TestMetricsRecorder(t *testing.T) {
 		expect := ts.TimeSeriesData{
 			Name:   tsPrefix + prefix + name,
 			Source: strconv.FormatInt(source, 10),
-			Datapoints: []*ts.TimeSeriesDatapoint{
+			Datapoints: []ts.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
 					Value:          float64(val),

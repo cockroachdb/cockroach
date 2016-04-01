@@ -33,12 +33,11 @@ import (
 // HTTP requests against the same server, especially where no errors are
 // expected in the HTTP layer.
 type testHTTPSession struct {
-	t       *testing.T
 	client  *http.Client
 	baseURL string
 }
 
-// newTestHTTPSession constructs a new testHTTPSession. The session will
+// makeTestHTTPSession constructs a new testHTTPSession. The session will
 // instantiate a client using the based base context. All HTTP requests from the
 // session will be sent to the given baseUrl.
 //
@@ -47,13 +46,12 @@ type testHTTPSession struct {
 //
 // If an error occurs in HTTP layer during any session operation, a Fatal method
 // will be called on the supplied t.Tester.
-func newTestHTTPSession(t *testing.T, ctx *base.Context, baseURL string) *testHTTPSession {
+func makeTestHTTPSession(t *testing.T, ctx *base.Context, baseURL string) testHTTPSession {
 	client, err := ctx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("error creating client: %s", err)
 	}
-	return &testHTTPSession{
-		t:       t,
+	return testHTTPSession{
 		client:  client,
 		baseURL: ctx.HTTPRequestScheme() + "://" + baseURL,
 	}
@@ -62,10 +60,10 @@ func newTestHTTPSession(t *testing.T, ctx *base.Context, baseURL string) *testHT
 // Post performs an http POST of the given bytes to the given relative URL. Any
 // response returned from the request will be returned from this method as a
 // byte slice.
-func (ths *testHTTPSession) Post(relative string, body []byte) []byte {
+func (ths testHTTPSession) Post(relative string, body []byte) ([]byte, error) {
 	req, err := http.NewRequest("POST", ths.baseURL+relative, bytes.NewBuffer(body))
 	if err != nil {
-		ths.t.Fatal(err)
+		return nil, err
 	}
 
 	// All requests currently accept JSON.
@@ -73,35 +71,32 @@ func (ths *testHTTPSession) Post(relative string, body []byte) []byte {
 	req.Header.Set(util.AcceptHeader, util.JSONContentType)
 	resp, err := ths.client.Do(req)
 	if err != nil {
-		ths.t.Fatal(err)
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := ioutil.ReadAll(resp.Body)
-		ths.t.Fatalf("unexpected status code: %v, %s", resp.StatusCode, respBody)
+		return nil, util.Errorf("unexpected status code: %v, %s", resp.StatusCode, respBody)
 	}
 	returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 	if returnedContentType != util.JSONContentType {
-		ths.t.Fatalf("unexpected content type: %v", returnedContentType)
+		return nil, util.Errorf("unexpected content type: %v", returnedContentType)
 	}
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		ths.t.Fatal(err)
-	}
-	return respBody
+	return ioutil.ReadAll(resp.Body)
 }
 
 // PostProto handles the common case where both the data posted and the expected
 // response are encoded protobuffers. This method handles the marshalling of
 // those buffers.
-func (ths *testHTTPSession) PostProto(relative string, msg proto.Message, out interface{}) {
+func (ths testHTTPSession) PostProto(relative string, msg proto.Message, out interface{}) error {
 	requestBytes, err := json.Marshal(msg)
 	if err != nil {
-		ths.t.Fatal(err)
+		return err
 	}
-	resp := ths.Post(relative, requestBytes)
-	if err := json.Unmarshal(resp, out); err != nil {
-		ths.t.Fatal(err)
+	resp, err := ths.Post(relative, requestBytes)
+	if err != nil {
+		return err
 	}
+	return json.Unmarshal(resp, out)
 }

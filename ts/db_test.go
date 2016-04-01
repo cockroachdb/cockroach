@@ -57,8 +57,8 @@ type testModel struct {
 
 // newTestModel creates a new testModel instance. The Start() method must
 // be called before using it.
-func newTestModel(t *testing.T) *testModel {
-	return &testModel{
+func newTestModel(t *testing.T) testModel {
+	return testModel{
 		t:                t,
 		modelData:        make(map[string]roachpb.Value),
 		seenSources:      make(map[string]struct{}),
@@ -168,13 +168,13 @@ func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 		keyStr := string(key)
 
 		existing, ok := tm.modelData[keyStr]
-		var newTs *roachpb.InternalTimeSeriesData
+		var newTs roachpb.InternalTimeSeriesData
 		if ok {
 			existingTs, err := existing.GetTimeseries()
 			if err != nil {
 				tm.t.Fatalf("test could not extract time series from existing model value: %s", err.Error())
 			}
-			newTs, err = engine.MergeInternalTimeSeriesData(&existingTs, idata)
+			newTs, err = engine.MergeInternalTimeSeriesData(existingTs, idata)
 			if err != nil {
 				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
 			}
@@ -185,7 +185,7 @@ func (tm *testModel) storeInModel(r Resolution, data TimeSeriesData) {
 			}
 		}
 		var val roachpb.Value
-		if err := val.SetProto(newTs); err != nil {
+		if err := val.SetProto(&newTs); err != nil {
 			tm.t.Fatal(err)
 		}
 		tm.modelData[keyStr] = val
@@ -211,7 +211,7 @@ func (tm *testModel) storeTimeSeriesData(r Resolution, data []TimeSeriesData) {
 // the model whenever GetTimeSeriesData is called. Data is returned until all
 // sets are exhausted, at which point the supplied stop.Stopper is stopped.
 type modelDataSource struct {
-	model       *testModel
+	model       testModel
 	datasets    [][]TimeSeriesData
 	r           Resolution
 	stopper     *stop.Stopper
@@ -240,8 +240,8 @@ func (mds *modelDataSource) GetTimeSeriesData() []TimeSeriesData {
 }
 
 // datapoint quickly generates a time series datapoint.
-func datapoint(timestamp int64, val float64) *TimeSeriesDatapoint {
-	return &TimeSeriesDatapoint{
+func datapoint(timestamp int64, val float64) TimeSeriesDatapoint {
+	return TimeSeriesDatapoint{
 		TimestampNanos: timestamp,
 		Value:          val,
 	}
@@ -259,7 +259,7 @@ func TestStoreTimeSeries(t *testing.T) {
 	tm.storeTimeSeriesData(Resolution10s, []TimeSeriesData{
 		{
 			Name: "test.metric",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(-446061360000000000, 100),
 			},
 		},
@@ -273,7 +273,7 @@ func TestStoreTimeSeries(t *testing.T) {
 		{
 			Name:   "test.metric.float",
 			Source: "cpu01",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(1428713843000000000, 100.0),
 				datapoint(1428713843000000001, 50.2),
 				datapoint(1428713843000000002, 90.9),
@@ -284,7 +284,7 @@ func TestStoreTimeSeries(t *testing.T) {
 		{
 			Name:   "test.metric.float",
 			Source: "cpu02",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(1428713843000000000, 900.8),
 				datapoint(1428713843000000001, 30.12),
 				datapoint(1428713843000000002, 72.324),
@@ -299,7 +299,7 @@ func TestStoreTimeSeries(t *testing.T) {
 	tm.storeTimeSeriesData(Resolution10s, []TimeSeriesData{
 		{
 			Name: "test.metric",
-			Datapoints: []*TimeSeriesDatapoint{
+			Datapoints: []TimeSeriesDatapoint{
 				datapoint(-446061360000000001, 200),
 				datapoint(450000000000000000, 1),
 				datapoint(460000000000000000, 777),
@@ -318,7 +318,7 @@ func TestPollSource(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	testSource := &modelDataSource{
+	testSource := modelDataSource{
 		model:   tm,
 		r:       Resolution10s,
 		stopper: stop.NewStopper(),
@@ -327,7 +327,7 @@ func TestPollSource(t *testing.T) {
 				{
 					Name:   "test.metric.float",
 					Source: "cpu01",
-					Datapoints: []*TimeSeriesDatapoint{
+					Datapoints: []TimeSeriesDatapoint{
 						datapoint(1428713843000000000, 100.0),
 						datapoint(1428713843000000001, 50.2),
 						datapoint(1428713843000000002, 90.9),
@@ -336,7 +336,7 @@ func TestPollSource(t *testing.T) {
 				{
 					Name:   "test.metric.float",
 					Source: "cpu02",
-					Datapoints: []*TimeSeriesDatapoint{
+					Datapoints: []TimeSeriesDatapoint{
 						datapoint(1428713843000000000, 900.8),
 						datapoint(1428713843000000001, 30.12),
 						datapoint(1428713843000000002, 72.324),
@@ -346,7 +346,7 @@ func TestPollSource(t *testing.T) {
 			{
 				{
 					Name: "test.metric",
-					Datapoints: []*TimeSeriesDatapoint{
+					Datapoints: []TimeSeriesDatapoint{
 						datapoint(-446061360000000000, 100),
 					},
 				},
@@ -354,7 +354,7 @@ func TestPollSource(t *testing.T) {
 		},
 	}
 
-	tm.DB.PollSource(testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	tm.DB.PollSource(&testSource, time.Millisecond, Resolution10s, testSource.stopper)
 	<-testSource.stopper.IsStopped()
 	if a, e := testSource.calledCount, 2; a != e {
 		t.Errorf("testSource was called %d times, expected %d", a, e)

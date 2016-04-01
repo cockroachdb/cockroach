@@ -32,7 +32,7 @@ import (
 // adjustment which adjusts each Sample offset to be relative to the start time
 // of the dataSpan, rather than the start time of the InternalTimeSeriesData.
 type calibratedData struct {
-	*roachpb.InternalTimeSeriesData
+	roachpb.InternalTimeSeriesData
 	offsetAdjustment int32
 }
 
@@ -61,7 +61,7 @@ func (ds *dataSpan) timestampForOffset(offset int32) int64 {
 
 // addData adds an InternalTimeSeriesData object into this dataSpan, normalizing
 // it to a calibratedData object in the process.
-func (ds *dataSpan) addData(data *roachpb.InternalTimeSeriesData) error {
+func (ds *dataSpan) addData(data roachpb.InternalTimeSeriesData) error {
 	if data.SampleDurationNanos != ds.sampleNanos {
 		return util.Errorf("data added to dataSpan with mismatched sample duration period")
 	}
@@ -420,7 +420,7 @@ func (is unionIterator) min() float64 {
 // returned datapoint will represent the sum of datapoints from all sources at
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
-func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]*TimeSeriesDatapoint, []string, error) {
+func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]TimeSeriesDatapoint, []string, error) {
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
@@ -528,14 +528,13 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]*T
 			iters.advance()
 		}
 	}
-	var responseData []*TimeSeriesDatapoint
+	var responseData []TimeSeriesDatapoint
 	for iters.isValid() && iters.timestamp() <= endNanos {
 		current := TimeSeriesDatapoint{
 			TimestampNanos: iters.timestamp(),
 			Value:          valueFn(),
 		}
-		response := &TimeSeriesDatapoint{}
-		*response = current
+		response := current
 		if isDerivative {
 			dTime := (current.TimestampNanos - last.TimestampNanos) / time.Second.Nanoseconds()
 			if dTime == 0 {
@@ -562,8 +561,8 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]*T
 func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSpan, error) {
 	sourceSpans := make(map[string]*dataSpan)
 	for _, row := range rows {
-		data := &roachpb.InternalTimeSeriesData{}
-		if err := row.ValueProto(data); err != nil {
+		var data roachpb.InternalTimeSeriesData
+		if err := row.ValueProto(&data); err != nil {
 			return nil, err
 		}
 		_, source, _, _, err := DecodeDataKey(row.Key)
