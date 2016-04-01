@@ -116,8 +116,8 @@ func TestGossipStorage(t *testing.T) {
 		for i := range stores {
 			p := &stores[i]
 
-			if p.Len() != 2 {
-				return util.Errorf("incorrect number of addresses: expected 2; got %d", p.Len())
+			if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, p.Len(); expected != actual {
+				return util.Errorf("expected %v, got %v (info: %#v)", expected, actual, p.Info().Addresses)
 			}
 		}
 		return nil
@@ -198,8 +198,10 @@ func TestGossipStorage(t *testing.T) {
 		}
 	})
 
-	if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
-		t.Fatalf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
-	}
-
+	util.SucceedsSoon(t, func() error {
+		if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
+			return util.Errorf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
+		}
+		return nil
+	})
 }
