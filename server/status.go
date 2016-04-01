@@ -134,6 +134,8 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, metricSource json.Mar
 	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
 	server.router.GET(statusLogFilePattern, server.handleLogFile)
 	server.router.GET(statusLogsPattern, server.handleLogs)
+	// TODO(tschottdorf): significant overlap with /debug/pprof/goroutine,
+	// except that this one allows querying by NodeID.
 	server.router.GET(statusStacksPattern, server.handleStacks)
 	server.router.GET(statusNodesPrefix, server.handleNodesStatus)
 	server.router.GET(statusNodePattern, server.handleNodeStatus)
