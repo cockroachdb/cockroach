@@ -24,12 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // loadNodes fetches a node and recursively all of its children.
-func loadNodes(t *testing.T, db *client.DB, key roachpb.RKey, nodes map[string]roachpb.RangeTreeNode) {
-	node := new(roachpb.RangeTreeNode)
+func loadNodes(t *testing.T, db *client.DB, key roachpb.RKey, nodes map[string]storage.RangeTreeNode) {
+	node := new(storage.RangeTreeNode)
 	if err := db.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
 		t.Fatal(err)
 	}
@@ -44,12 +45,12 @@ func loadNodes(t *testing.T, db *client.DB, key roachpb.RKey, nodes map[string]r
 
 // loadTree loads the tree root and all of its nodes. It puts all of the nodes
 // into a map.
-func loadTree(t *testing.T, db *client.DB) (*roachpb.RangeTree, map[string]roachpb.RangeTreeNode) {
-	tree := new(roachpb.RangeTree)
+func loadTree(t *testing.T, db *client.DB) (*storage.RangeTree, map[string]storage.RangeTreeNode) {
+	tree := new(storage.RangeTree)
 	if err := db.GetProto(keys.RangeTreeRoot, tree); err != nil {
 		t.Fatal(err)
 	}
-	nodes := make(map[string]roachpb.RangeTreeNode)
+	nodes := make(map[string]storage.RangeTreeNode)
 	if tree.RootKey != nil {
 		loadNodes(t, db, tree.RootKey, nodes)
 	}
@@ -60,7 +61,7 @@ func loadTree(t *testing.T, db *client.DB) (*roachpb.RangeTree, map[string]roach
 // red-black tree. It does so by checking each of the red-black tree properties.
 // These verify functions are similar to the those found in the range_tree_test
 // but these use a map of nodes instead of a tree context.
-func VerifyTree(t *testing.T, tree *roachpb.RangeTree, nodes map[string]roachpb.RangeTreeNode, testName string) {
+func VerifyTree(t *testing.T, tree *storage.RangeTree, nodes map[string]storage.RangeTreeNode, testName string) {
 	root, ok := nodes[tree.RootKey.String()]
 	if !ok {
 		t.Fatalf("%s: could not find root node with key %s", testName, tree.RootKey)
@@ -78,7 +79,7 @@ func VerifyTree(t *testing.T, tree *roachpb.RangeTree, nodes map[string]roachpb.
 
 // isRed will return true only if node exists and is not set to black. This is
 // the same helper function as the one embedded in the range tree.
-func isRed(node *roachpb.RangeTreeNode) bool {
+func isRed(node *storage.RangeTreeNode) bool {
 	if node == nil {
 		return false
 	}
@@ -87,18 +88,18 @@ func isRed(node *roachpb.RangeTreeNode) bool {
 
 // getLeftAndRight returns the left and right nodes, if they exist, in order,
 // from the passed in map of nodes.
-func getLeftAndRight(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testName string, node *roachpb.RangeTreeNode) (*roachpb.RangeTreeNode, *roachpb.RangeTreeNode) {
-	var left *roachpb.RangeTreeNode
-	var right *roachpb.RangeTreeNode
+func getLeftAndRight(t *testing.T, nodes map[string]storage.RangeTreeNode, testName string, node *storage.RangeTreeNode) (*storage.RangeTreeNode, *storage.RangeTreeNode) {
+	var left *storage.RangeTreeNode
+	var right *storage.RangeTreeNode
 	var ok bool
 	if node.LeftKey != nil {
-		left = new(roachpb.RangeTreeNode)
+		left = new(storage.RangeTreeNode)
 		if *left, ok = nodes[node.LeftKey.String()]; !ok {
 			t.Errorf("%s: could not locate node with key %s", testName, node.LeftKey)
 		}
 	}
 	if node.RightKey != nil {
-		right = new(roachpb.RangeTreeNode)
+		right = new(storage.RangeTreeNode)
 		if *right, ok = nodes[node.RightKey.String()]; !ok {
 			t.Errorf("%s: could not locate node with key %s", testName, node.RightKey)
 		}
@@ -109,7 +110,7 @@ func getLeftAndRight(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testN
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
 // greater than it. It recursively walks the tree to perform this same check.
-func verifyBinarySearchTree(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testName string, node *roachpb.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
+func verifyBinarySearchTree(t *testing.T, nodes map[string]storage.RangeTreeNode, testName string, node *storage.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
 	if node == nil {
 		return
 	}
@@ -126,14 +127,14 @@ func verifyBinarySearchTree(t *testing.T, nodes map[string]roachpb.RangeTreeNode
 }
 
 // verifyProperty2 ensures that the root node is black.
-func verifyProperty2(t *testing.T, testName string, root *roachpb.RangeTreeNode) {
+func verifyProperty2(t *testing.T, testName string, root *storage.RangeTreeNode) {
 	if e, a := false, isRed(root); e != a {
 		t.Errorf("%s: Failed Property 2 - The root node is not black.", testName)
 	}
 }
 
 // verifyProperty4 ensures that the parent of every red node is black.
-func verifyProperty4(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testName string, node *roachpb.RangeTreeNode) {
+func verifyProperty4(t *testing.T, nodes map[string]storage.RangeTreeNode, testName string, node *storage.RangeTreeNode) {
 	if node == nil {
 		return
 	}
@@ -153,7 +154,7 @@ func verifyProperty4(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testN
 
 // verifyProperty5 ensures that all paths from any given node to its leaf nodes
 // contain the same number of black nodes.
-func verifyProperty5(t *testing.T, nodes map[string]roachpb.RangeTreeNode, testName string, node *roachpb.RangeTreeNode, blackCount int, pathBlackCount *int) {
+func verifyProperty5(t *testing.T, nodes map[string]storage.RangeTreeNode, testName string, node *storage.RangeTreeNode, blackCount int, pathBlackCount *int) {
 	if !isRed(node) {
 		blackCount++
 	}
@@ -182,7 +183,7 @@ func TestSetupRangeTree(t *testing.T) {
 	db := store.DB()
 
 	tree, nodes := loadTree(t, db)
-	expectedTree := &roachpb.RangeTree{
+	expectedTree := &storage.RangeTree{
 		RootKey: roachpb.RKeyMin,
 	}
 	if !reflect.DeepEqual(tree, expectedTree) {

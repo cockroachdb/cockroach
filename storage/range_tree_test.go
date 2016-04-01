@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func createTreeContext(rootKey roachpb.RKey, nodes []*roachpb.RangeTreeNode) *treeContext {
-	root := &roachpb.RangeTree{
+func createTreeContext(rootKey roachpb.RKey, nodes []*RangeTreeNode) *treeContext {
+	root := &RangeTree{
 		RootKey: rootKey,
 	}
 	tc := &treeContext{
@@ -51,13 +51,13 @@ func createTreeContext(rootKey roachpb.RKey, nodes []*roachpb.RangeTreeNode) *tr
 func TestIsRed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		node     *roachpb.RangeTreeNode
+		node     *RangeTreeNode
 		expected bool
 	}{
 		// normal black node
-		{&roachpb.RangeTreeNode{Black: true}, false},
+		{&RangeTreeNode{Black: true}, false},
 		// normal red node
-		{&roachpb.RangeTreeNode{Black: false}, true},
+		{&RangeTreeNode{Black: false}, true},
 		// nil
 		{nil, false},
 	}
@@ -73,7 +73,7 @@ func TestIsRed(t *testing.T) {
 // expected value. It also makes sure that the node is marked as dirty in the
 // cache. If an actual value is passed it, that is compared with the value in
 // the cache as well.
-func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, key roachpb.RKey, expected, actual *roachpb.RangeTreeNode) {
+func checkTreeNode(t *testing.T, tc *treeContext, testNumber int, name string, key roachpb.RKey, expected, actual *RangeTreeNode) {
 	if expected != nil {
 		// Is the value correct?
 		cached, err := tc.getNode(expected.Key)
@@ -121,17 +121,17 @@ func TestReplaceNode(t *testing.T) {
 
 	testCases := []struct {
 		root           roachpb.RKey
-		parent         *roachpb.RangeTreeNode
-		oldNode        *roachpb.RangeTreeNode
-		newNode        *roachpb.RangeTreeNode
+		parent         *RangeTreeNode
+		oldNode        *RangeTreeNode
+		newNode        *RangeTreeNode
 		expectedRoot   roachpb.RKey
-		expectedParent *roachpb.RangeTreeNode
-		expectedNew    *roachpb.RangeTreeNode
+		expectedParent *RangeTreeNode
+		expectedNew    *RangeTreeNode
 		expectedErr    bool
 	}{
 		// Test Case 0: root, replace with nil, should fail
 		{
-			oldNode: &roachpb.RangeTreeNode{
+			oldNode: &RangeTreeNode{
 				Key: keyOld,
 			},
 			expectedErr: true,
@@ -139,20 +139,20 @@ func TestReplaceNode(t *testing.T) {
 		// Test Case 1: non-root, replace with nil, left child
 		{
 			root: keyRoot,
-			oldNode: &roachpb.RangeTreeNode{
+			oldNode: &RangeTreeNode{
 				Key:       keyOld,
 				ParentKey: keyParent,
 				LeftKey:   keyOldLeft,
 				RightKey:  keyOldRight,
 			},
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyOld,
 				RightKey:  keyParentRight,
 			},
 			expectedRoot: keyRoot,
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				RightKey:  keyParentRight,
@@ -161,20 +161,20 @@ func TestReplaceNode(t *testing.T) {
 		// Test Case 2: non-root, replace with nil, right child
 		{
 			root: keyRoot,
-			oldNode: &roachpb.RangeTreeNode{
+			oldNode: &RangeTreeNode{
 				Key:       keyOld,
 				ParentKey: keyParent,
 				LeftKey:   keyOldLeft,
 				RightKey:  keyOldRight,
 			},
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyParentLeft,
 				RightKey:  keyOld,
 			},
 			expectedRoot: keyRoot,
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyParentLeft,
@@ -183,31 +183,31 @@ func TestReplaceNode(t *testing.T) {
 		// Test Case 3: non-root, replace with node, left child
 		{
 			root: keyRoot,
-			oldNode: &roachpb.RangeTreeNode{
+			oldNode: &RangeTreeNode{
 				Key:       keyOld,
 				ParentKey: keyParent,
 				LeftKey:   keyOldLeft,
 				RightKey:  keyOldRight,
 			},
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyOld,
 				RightKey:  keyParentRight,
 			},
-			newNode: &roachpb.RangeTreeNode{
+			newNode: &RangeTreeNode{
 				Key:      keyNew,
 				LeftKey:  keyNewLeft,
 				RightKey: keyNewRight,
 			},
 			expectedRoot: keyRoot,
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyNew,
 				RightKey:  keyParentRight,
 			},
-			expectedNew: &roachpb.RangeTreeNode{
+			expectedNew: &RangeTreeNode{
 				Key:       keyNew,
 				ParentKey: keyParent,
 				LeftKey:   keyNewLeft,
@@ -217,31 +217,31 @@ func TestReplaceNode(t *testing.T) {
 		// Test Case 4: non-root, replace with node, right child
 		{
 			root: keyRoot,
-			oldNode: &roachpb.RangeTreeNode{
+			oldNode: &RangeTreeNode{
 				Key:       keyOld,
 				ParentKey: keyParent,
 				LeftKey:   keyOldLeft,
 				RightKey:  keyOldRight,
 			},
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyParentLeft,
 				RightKey:  keyOld,
 			},
-			newNode: &roachpb.RangeTreeNode{
+			newNode: &RangeTreeNode{
 				Key:      keyNew,
 				LeftKey:  keyNewLeft,
 				RightKey: keyNewRight,
 			},
 			expectedRoot: keyRoot,
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:       keyParent,
 				ParentKey: keyParentParent,
 				LeftKey:   keyParentLeft,
 				RightKey:  keyNew,
 			},
-			expectedNew: &roachpb.RangeTreeNode{
+			expectedNew: &RangeTreeNode{
 				Key:       keyNew,
 				ParentKey: keyParent,
 				LeftKey:   keyNewLeft,
@@ -251,18 +251,18 @@ func TestReplaceNode(t *testing.T) {
 		// Test Case 5: root, replace with node
 		{
 			root: keyOld,
-			oldNode: &roachpb.RangeTreeNode{
+			oldNode: &RangeTreeNode{
 				Key:      keyOld,
 				LeftKey:  keyOldLeft,
 				RightKey: keyOldRight,
 			},
-			newNode: &roachpb.RangeTreeNode{
+			newNode: &RangeTreeNode{
 				Key:      keyNew,
 				LeftKey:  keyNewLeft,
 				RightKey: keyNewRight,
 			},
 			expectedRoot: keyNew,
-			expectedNew: &roachpb.RangeTreeNode{
+			expectedNew: &RangeTreeNode{
 				Key:      keyNew,
 				LeftKey:  keyNewLeft,
 				RightKey: keyNewRight,
@@ -271,7 +271,7 @@ func TestReplaceNode(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		tc := createTreeContext(test.root, []*roachpb.RangeTreeNode{
+		tc := createTreeContext(test.root, []*RangeTreeNode{
 			test.parent,
 			test.newNode,
 			test.oldNode,
@@ -316,58 +316,58 @@ func TestRotateRight(t *testing.T) {
 	keyParentRight := roachpb.RKey("PR")
 
 	testCases := []struct {
-		node              *roachpb.RangeTreeNode
-		parent            *roachpb.RangeTreeNode
-		left              *roachpb.RangeTreeNode
-		leftRight         *roachpb.RangeTreeNode
-		expectedNode      *roachpb.RangeTreeNode
-		expectedParent    *roachpb.RangeTreeNode
-		expectedLeft      *roachpb.RangeTreeNode
-		expectedLeftRight *roachpb.RangeTreeNode
+		node              *RangeTreeNode
+		parent            *RangeTreeNode
+		left              *RangeTreeNode
+		leftRight         *RangeTreeNode
+		expectedNode      *RangeTreeNode
+		expectedParent    *RangeTreeNode
+		expectedLeft      *RangeTreeNode
+		expectedLeftRight *RangeTreeNode
 	}{
 		// Test Case 0: Normal Rotation, parent left
 		{
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyNode,
 				RightKey: keyParentRight,
 			},
-			node: &roachpb.RangeTreeNode{
+			node: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyParent,
 				LeftKey:   keyLeft,
 				RightKey:  keyRight,
 			},
-			left: &roachpb.RangeTreeNode{
+			left: &RangeTreeNode{
 				Key:       keyLeft,
 				ParentKey: keyNode,
 				LeftKey:   keyLeftLeft,
 				RightKey:  keyLeftRight,
 			},
-			leftRight: &roachpb.RangeTreeNode{
+			leftRight: &RangeTreeNode{
 				Key:       keyLeftRight,
 				ParentKey: keyLeft,
 				LeftKey:   keyLeftRightLeft,
 				RightKey:  keyLeftRightRight,
 			},
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyLeft,
 				RightKey: keyParentRight,
 			},
-			expectedNode: &roachpb.RangeTreeNode{
+			expectedNode: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyLeft,
 				LeftKey:   keyLeftRight,
 				RightKey:  keyRight,
 			},
-			expectedLeft: &roachpb.RangeTreeNode{
+			expectedLeft: &RangeTreeNode{
 				Key:       keyLeft,
 				ParentKey: keyParent,
 				LeftKey:   keyLeftLeft,
 				RightKey:  keyNode,
 			},
-			expectedLeftRight: &roachpb.RangeTreeNode{
+			expectedLeftRight: &RangeTreeNode{
 				Key:       keyLeftRight,
 				ParentKey: keyNode,
 				LeftKey:   keyLeftRightLeft,
@@ -376,47 +376,47 @@ func TestRotateRight(t *testing.T) {
 		},
 		// Test Case 1: Normal Rotation, parent right
 		{
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyParentLeft,
 				RightKey: keyNode,
 			},
-			node: &roachpb.RangeTreeNode{
+			node: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyParent,
 				LeftKey:   keyLeft,
 				RightKey:  keyRight,
 			},
-			left: &roachpb.RangeTreeNode{
+			left: &RangeTreeNode{
 				Key:       keyLeft,
 				ParentKey: keyNode,
 				LeftKey:   keyLeftLeft,
 				RightKey:  keyLeftRight,
 			},
-			leftRight: &roachpb.RangeTreeNode{
+			leftRight: &RangeTreeNode{
 				Key:       keyLeftRight,
 				ParentKey: keyLeft,
 				LeftKey:   keyLeftRightLeft,
 				RightKey:  keyLeftRightRight,
 			},
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyParentLeft,
 				RightKey: keyLeft,
 			},
-			expectedNode: &roachpb.RangeTreeNode{
+			expectedNode: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyLeft,
 				LeftKey:   keyLeftRight,
 				RightKey:  keyRight,
 			},
-			expectedLeft: &roachpb.RangeTreeNode{
+			expectedLeft: &RangeTreeNode{
 				Key:       keyLeft,
 				ParentKey: keyParent,
 				LeftKey:   keyLeftLeft,
 				RightKey:  keyNode,
 			},
-			expectedLeftRight: &roachpb.RangeTreeNode{
+			expectedLeftRight: &RangeTreeNode{
 				Key:       keyLeftRight,
 				ParentKey: keyNode,
 				LeftKey:   keyLeftRightLeft,
@@ -425,22 +425,22 @@ func TestRotateRight(t *testing.T) {
 		},
 		// Test Case 2: Root Rotation, no leftRight node
 		{
-			node: &roachpb.RangeTreeNode{
+			node: &RangeTreeNode{
 				Key:      keyNode,
 				LeftKey:  keyLeft,
 				RightKey: keyRight,
 			},
-			left: &roachpb.RangeTreeNode{
+			left: &RangeTreeNode{
 				Key:       keyLeft,
 				ParentKey: keyNode,
 				LeftKey:   keyLeftLeft,
 			},
-			expectedNode: &roachpb.RangeTreeNode{
+			expectedNode: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyLeft,
 				RightKey:  keyRight,
 			},
-			expectedLeft: &roachpb.RangeTreeNode{
+			expectedLeft: &RangeTreeNode{
 				Key:      keyLeft,
 				LeftKey:  keyLeftLeft,
 				RightKey: keyNode,
@@ -449,7 +449,7 @@ func TestRotateRight(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		tc := createTreeContext(keyNode, []*roachpb.RangeTreeNode{
+		tc := createTreeContext(keyNode, []*RangeTreeNode{
 			test.parent,
 			test.node,
 			test.left,
@@ -498,58 +498,58 @@ func TestRotateLeft(t *testing.T) {
 	keyParentRight := roachpb.RKey("PR")
 
 	testCases := []struct {
-		node              *roachpb.RangeTreeNode
-		parent            *roachpb.RangeTreeNode
-		right             *roachpb.RangeTreeNode
-		rightLeft         *roachpb.RangeTreeNode
-		expectedNode      *roachpb.RangeTreeNode
-		expectedParent    *roachpb.RangeTreeNode
-		expectedRight     *roachpb.RangeTreeNode
-		expectedRightLeft *roachpb.RangeTreeNode
+		node              *RangeTreeNode
+		parent            *RangeTreeNode
+		right             *RangeTreeNode
+		rightLeft         *RangeTreeNode
+		expectedNode      *RangeTreeNode
+		expectedParent    *RangeTreeNode
+		expectedRight     *RangeTreeNode
+		expectedRightLeft *RangeTreeNode
 	}{
 		// Test Case 0: Normal Rotation, parent left
 		{
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyNode,
 				RightKey: keyParentRight,
 			},
-			node: &roachpb.RangeTreeNode{
+			node: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyParent,
 				LeftKey:   keyLeft,
 				RightKey:  keyRight,
 			},
-			right: &roachpb.RangeTreeNode{
+			right: &RangeTreeNode{
 				Key:       keyRight,
 				ParentKey: keyNode,
 				LeftKey:   keyRightLeft,
 				RightKey:  keyRightRight,
 			},
-			rightLeft: &roachpb.RangeTreeNode{
+			rightLeft: &RangeTreeNode{
 				Key:       keyRightLeft,
 				ParentKey: keyRight,
 				LeftKey:   keyRightLeftLeft,
 				RightKey:  keyRightLeftRight,
 			},
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyRight,
 				RightKey: keyParentRight,
 			},
-			expectedNode: &roachpb.RangeTreeNode{
+			expectedNode: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyRight,
 				LeftKey:   keyLeft,
 				RightKey:  keyRightLeft,
 			},
-			expectedRight: &roachpb.RangeTreeNode{
+			expectedRight: &RangeTreeNode{
 				Key:       keyRight,
 				ParentKey: keyParent,
 				LeftKey:   keyNode,
 				RightKey:  keyRightRight,
 			},
-			expectedRightLeft: &roachpb.RangeTreeNode{
+			expectedRightLeft: &RangeTreeNode{
 				Key:       keyRightLeft,
 				ParentKey: keyNode,
 				LeftKey:   keyRightLeftLeft,
@@ -558,47 +558,47 @@ func TestRotateLeft(t *testing.T) {
 		},
 		// Test Case 1: Normal Rotation, parent right
 		{
-			parent: &roachpb.RangeTreeNode{
+			parent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyParentLeft,
 				RightKey: keyNode,
 			},
-			node: &roachpb.RangeTreeNode{
+			node: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyParent,
 				LeftKey:   keyLeft,
 				RightKey:  keyRight,
 			},
-			right: &roachpb.RangeTreeNode{
+			right: &RangeTreeNode{
 				Key:       keyRight,
 				ParentKey: keyNode,
 				LeftKey:   keyRightLeft,
 				RightKey:  keyRightRight,
 			},
-			rightLeft: &roachpb.RangeTreeNode{
+			rightLeft: &RangeTreeNode{
 				Key:       keyRightLeft,
 				ParentKey: keyRight,
 				LeftKey:   keyRightLeftLeft,
 				RightKey:  keyRightLeftRight,
 			},
-			expectedParent: &roachpb.RangeTreeNode{
+			expectedParent: &RangeTreeNode{
 				Key:      keyParent,
 				LeftKey:  keyParentLeft,
 				RightKey: keyRight,
 			},
-			expectedNode: &roachpb.RangeTreeNode{
+			expectedNode: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyRight,
 				LeftKey:   keyLeft,
 				RightKey:  keyRightLeft,
 			},
-			expectedRight: &roachpb.RangeTreeNode{
+			expectedRight: &RangeTreeNode{
 				Key:       keyRight,
 				ParentKey: keyParent,
 				LeftKey:   keyNode,
 				RightKey:  keyRightRight,
 			},
-			expectedRightLeft: &roachpb.RangeTreeNode{
+			expectedRightLeft: &RangeTreeNode{
 				Key:       keyRightLeft,
 				ParentKey: keyNode,
 				LeftKey:   keyRightLeftLeft,
@@ -607,22 +607,22 @@ func TestRotateLeft(t *testing.T) {
 		},
 		// Test Case 2: Root Rotation, no leftRight node
 		{
-			node: &roachpb.RangeTreeNode{
+			node: &RangeTreeNode{
 				Key:      keyNode,
 				LeftKey:  keyLeft,
 				RightKey: keyRight,
 			},
-			right: &roachpb.RangeTreeNode{
+			right: &RangeTreeNode{
 				Key:       keyRight,
 				ParentKey: keyNode,
 				RightKey:  keyRightRight,
 			},
-			expectedNode: &roachpb.RangeTreeNode{
+			expectedNode: &RangeTreeNode{
 				Key:       keyNode,
 				ParentKey: keyRight,
 				LeftKey:   keyLeft,
 			},
-			expectedRight: &roachpb.RangeTreeNode{
+			expectedRight: &RangeTreeNode{
 				Key:      keyRight,
 				LeftKey:  keyNode,
 				RightKey: keyRightRight,
@@ -631,7 +631,7 @@ func TestRotateLeft(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		tc := createTreeContext(keyNode, []*roachpb.RangeTreeNode{
+		tc := createTreeContext(keyNode, []*RangeTreeNode{
 			test.parent,
 			test.node,
 			test.right,
@@ -683,107 +683,107 @@ func TestSwapNodes(t *testing.T) {
 
 	testCases := []struct {
 		root            roachpb.RKey
-		a               *roachpb.RangeTreeNode
-		aParent         *roachpb.RangeTreeNode
-		aLeft           *roachpb.RangeTreeNode
-		aRight          *roachpb.RangeTreeNode
-		b               *roachpb.RangeTreeNode
-		bParent         *roachpb.RangeTreeNode
-		bLeft           *roachpb.RangeTreeNode
-		bRight          *roachpb.RangeTreeNode
+		a               *RangeTreeNode
+		aParent         *RangeTreeNode
+		aLeft           *RangeTreeNode
+		aRight          *RangeTreeNode
+		b               *RangeTreeNode
+		bParent         *RangeTreeNode
+		bLeft           *RangeTreeNode
+		bRight          *RangeTreeNode
 		rootExpected    roachpb.RKey
-		aExpected       *roachpb.RangeTreeNode
-		aParentExpected *roachpb.RangeTreeNode
-		aLeftExpected   *roachpb.RangeTreeNode
-		aRightExpected  *roachpb.RangeTreeNode
-		bExpected       *roachpb.RangeTreeNode
-		bParentExpected *roachpb.RangeTreeNode
-		bLeftExpected   *roachpb.RangeTreeNode
-		bRightExpected  *roachpb.RangeTreeNode
+		aExpected       *RangeTreeNode
+		aParentExpected *RangeTreeNode
+		aLeftExpected   *RangeTreeNode
+		aRightExpected  *RangeTreeNode
+		bExpected       *RangeTreeNode
+		bParentExpected *RangeTreeNode
+		bLeftExpected   *RangeTreeNode
+		bRightExpected  *RangeTreeNode
 	}{
 		// Test Case 0: Normal swap, two separate nodes, a's a left child, b's a left child
 		// This should just swap all direct references to a and b, leaving
 		// everything else intact.
 		{
 			root: keyRoot,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyALeft,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			aParent: &roachpb.RangeTreeNode{
+			aParent: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyA,
 				RightKey: keyAParentRight,
 			},
-			aLeft: &roachpb.RangeTreeNode{
+			aLeft: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyA,
 			},
-			aRight: &roachpb.RangeTreeNode{
+			aRight: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyBParent,
 				Black:     false,
 			},
-			bParent: &roachpb.RangeTreeNode{
+			bParent: &RangeTreeNode{
 				Key:      keyBParent,
 				LeftKey:  keyB,
 				RightKey: keyBParentRight,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyRoot,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyBParent,
 				Black:     false,
 			},
-			aParentExpected: &roachpb.RangeTreeNode{
+			aParentExpected: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyB,
 				RightKey: keyAParentRight,
 			},
-			aLeftExpected: &roachpb.RangeTreeNode{
+			aLeftExpected: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyB,
 			},
-			aRightExpected: &roachpb.RangeTreeNode{
+			aRightExpected: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyALeft,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			bParentExpected: &roachpb.RangeTreeNode{
+			bParentExpected: &RangeTreeNode{
 				Key:      keyBParent,
 				LeftKey:  keyA,
 				RightKey: keyBParentRight,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -793,84 +793,84 @@ func TestSwapNodes(t *testing.T) {
 		// everything else intact.
 		{
 			root: keyRoot,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyALeft,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			aParent: &roachpb.RangeTreeNode{
+			aParent: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyAParentLeft,
 				RightKey: keyA,
 			},
-			aLeft: &roachpb.RangeTreeNode{
+			aLeft: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyA,
 			},
-			aRight: &roachpb.RangeTreeNode{
+			aRight: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyBParent,
 				Black:     false,
 			},
-			bParent: &roachpb.RangeTreeNode{
+			bParent: &RangeTreeNode{
 				Key:      keyBParent,
 				LeftKey:  keyBParentLeft,
 				RightKey: keyB,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyRoot,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyBParent,
 				Black:     false,
 			},
-			aParentExpected: &roachpb.RangeTreeNode{
+			aParentExpected: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyAParentLeft,
 				RightKey: keyB,
 			},
-			aLeftExpected: &roachpb.RangeTreeNode{
+			aLeftExpected: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyB,
 			},
-			aRightExpected: &roachpb.RangeTreeNode{
+			aRightExpected: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyALeft,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			bParentExpected: &roachpb.RangeTreeNode{
+			bParentExpected: &RangeTreeNode{
 				Key:      keyBParent,
 				LeftKey:  keyBParentLeft,
 				RightKey: keyA,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -878,66 +878,66 @@ func TestSwapNodes(t *testing.T) {
 		// Test Case 2: b is a's right child, a is a right child
 		{
 			root: keyRoot,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyALeft,
 				RightKey:  keyB,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			aParent: &roachpb.RangeTreeNode{
+			aParent: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyAParentLeft,
 				RightKey: keyA,
 			},
-			aLeft: &roachpb.RangeTreeNode{
+			aLeft: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyA,
 				Black:     false,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyRoot,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyB,
 				Black:     false,
 			},
-			aParentExpected: &roachpb.RangeTreeNode{
+			aParentExpected: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyAParentLeft,
 				RightKey: keyB,
 			},
-			aLeftExpected: &roachpb.RangeTreeNode{
+			aLeftExpected: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyALeft,
 				RightKey:  keyA,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -945,66 +945,66 @@ func TestSwapNodes(t *testing.T) {
 		// Test Case 3: b is a's left child, a is a left child
 		{
 			root: keyRoot,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyB,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			aParent: &roachpb.RangeTreeNode{
+			aParent: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyA,
 				RightKey: keyAParentRight,
 			},
-			aRight: &roachpb.RangeTreeNode{
+			aRight: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyA,
 				Black:     false,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyRoot,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyB,
 				Black:     false,
 			},
-			aParentExpected: &roachpb.RangeTreeNode{
+			aParentExpected: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyB,
 				RightKey: keyAParentRight,
 			},
-			aRightExpected: &roachpb.RangeTreeNode{
+			aRightExpected: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyA,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -1012,66 +1012,66 @@ func TestSwapNodes(t *testing.T) {
 		// Test Case 4: b is a's right child, a is a left child
 		{
 			root: keyRoot,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyALeft,
 				RightKey:  keyB,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			aParent: &roachpb.RangeTreeNode{
+			aParent: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyA,
 				RightKey: keyAParentRight,
 			},
-			aLeft: &roachpb.RangeTreeNode{
+			aLeft: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyA,
 				Black:     false,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyRoot,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyB,
 				Black:     false,
 			},
-			aParentExpected: &roachpb.RangeTreeNode{
+			aParentExpected: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyB,
 				RightKey: keyAParentRight,
 			},
-			aLeftExpected: &roachpb.RangeTreeNode{
+			aLeftExpected: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyALeft,
 				RightKey:  keyA,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -1079,66 +1079,66 @@ func TestSwapNodes(t *testing.T) {
 		// Test Case 5: b is a's left child, a is a right child
 		{
 			root: keyRoot,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyB,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			aParent: &roachpb.RangeTreeNode{
+			aParent: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyAParentLeft,
 				RightKey: keyA,
 			},
-			aRight: &roachpb.RangeTreeNode{
+			aRight: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyA,
 				Black:     false,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyRoot,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyB,
 				Black:     false,
 			},
-			aParentExpected: &roachpb.RangeTreeNode{
+			aParentExpected: &RangeTreeNode{
 				Key:      keyAParent,
 				LeftKey:  keyAParentLeft,
 				RightKey: keyB,
 			},
-			aRightExpected: &roachpb.RangeTreeNode{
+			aRightExpected: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyA,
 				RightKey:  keyARight,
 				ParentKey: keyAParent,
 				Black:     true,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -1146,72 +1146,72 @@ func TestSwapNodes(t *testing.T) {
 		// Test Case 6: a is root, b is unrelated to a
 		{
 			root: keyA,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:      keyA,
 				LeftKey:  keyALeft,
 				RightKey: keyARight,
 				Black:    true,
 			},
-			aLeft: &roachpb.RangeTreeNode{
+			aLeft: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyA,
 			},
-			aRight: &roachpb.RangeTreeNode{
+			aRight: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyBParent,
 				Black:     false,
 			},
-			bParent: &roachpb.RangeTreeNode{
+			bParent: &RangeTreeNode{
 				Key:      keyBParent,
 				LeftKey:  keyB,
 				RightKey: keyBParentRight,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
-			bRight: &roachpb.RangeTreeNode{
+			bRight: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyB,
 			},
 			rootExpected: keyB,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				RightKey:  keyBRight,
 				ParentKey: keyBParent,
 				Black:     false,
 			},
-			aLeftExpected: &roachpb.RangeTreeNode{
+			aLeftExpected: &RangeTreeNode{
 				Key:       keyALeft,
 				ParentKey: keyB,
 			},
-			aRightExpected: &roachpb.RangeTreeNode{
+			aRightExpected: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:      keyB,
 				LeftKey:  keyALeft,
 				RightKey: keyARight,
 				Black:    true,
 			},
-			bParentExpected: &roachpb.RangeTreeNode{
+			bParentExpected: &RangeTreeNode{
 				Key:      keyBParent,
 				LeftKey:  keyA,
 				RightKey: keyBParentRight,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
-			bRightExpected: &roachpb.RangeTreeNode{
+			bRightExpected: &RangeTreeNode{
 				Key:       keyBRight,
 				ParentKey: keyA,
 			},
@@ -1219,44 +1219,44 @@ func TestSwapNodes(t *testing.T) {
 		// Test Case 7: b is a's left child, a is a right child, a is root
 		{
 			root: keyA,
-			a: &roachpb.RangeTreeNode{
+			a: &RangeTreeNode{
 				Key:      keyA,
 				LeftKey:  keyB,
 				RightKey: keyARight,
 				Black:    true,
 			},
-			aRight: &roachpb.RangeTreeNode{
+			aRight: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyA,
 			},
-			b: &roachpb.RangeTreeNode{
+			b: &RangeTreeNode{
 				Key:       keyB,
 				LeftKey:   keyBLeft,
 				ParentKey: keyA,
 				Black:     false,
 			},
-			bLeft: &roachpb.RangeTreeNode{
+			bLeft: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyB,
 			},
 			rootExpected: keyB,
-			aExpected: &roachpb.RangeTreeNode{
+			aExpected: &RangeTreeNode{
 				Key:       keyA,
 				LeftKey:   keyBLeft,
 				ParentKey: keyB,
 				Black:     false,
 			},
-			aRightExpected: &roachpb.RangeTreeNode{
+			aRightExpected: &RangeTreeNode{
 				Key:       keyARight,
 				ParentKey: keyB,
 			},
-			bExpected: &roachpb.RangeTreeNode{
+			bExpected: &RangeTreeNode{
 				Key:      keyB,
 				LeftKey:  keyA,
 				RightKey: keyARight,
 				Black:    true,
 			},
-			bLeftExpected: &roachpb.RangeTreeNode{
+			bLeftExpected: &RangeTreeNode{
 				Key:       keyBLeft,
 				ParentKey: keyA,
 			},
@@ -1264,7 +1264,7 @@ func TestSwapNodes(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		tc := createTreeContext(test.root, []*roachpb.RangeTreeNode{
+		tc := createTreeContext(test.root, []*RangeTreeNode{
 			test.a,
 			test.aRight,
 			test.aLeft,
@@ -1334,7 +1334,7 @@ func verifyTree(t *testing.T, tc *treeContext, testName string) {
 // verifyBinarySearchTree checks to ensure that all keys to the left of the root
 // node are less than it, and all nodes to the right of the root node are
 // greater than it. It recursively walks the tree to perform this same check.
-func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, node *roachpb.RangeTreeNode, keyMin, keyMax roachpb.RKey) {
+func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, node *RangeTreeNode, keyMin, keyMax roachpb.RKey) {
 	if !node.Key.Less(keyMax) {
 		t.Errorf("%s: Failed Property BST - The key %s is not less than %s.", testName, node.Key, keyMax)
 	}
@@ -1359,14 +1359,14 @@ func verifyBinarySearchTree(t *testing.T, tc *treeContext, testName string, node
 }
 
 // verifyProperty2 ensures that the root node is black.
-func verifyProperty2(t *testing.T, tc *treeContext, testName string, root *roachpb.RangeTreeNode) {
+func verifyProperty2(t *testing.T, tc *treeContext, testName string, root *RangeTreeNode) {
 	if e, a := false, isRed(root); e != a {
 		t.Errorf("%s: Failed Property 2 - The root node is not black.", testName)
 	}
 }
 
 // verifyProperty4 ensures that the parent of every red node is black.
-func verifyProperty4(t *testing.T, tc *treeContext, testName string, node *roachpb.RangeTreeNode) {
+func verifyProperty4(t *testing.T, tc *treeContext, testName string, node *RangeTreeNode) {
 	if node == nil {
 		return
 	}
@@ -1392,7 +1392,7 @@ func verifyProperty4(t *testing.T, tc *treeContext, testName string, node *roach
 
 // verifyProperty5 ensures that all paths from any given node to its leaf nodes
 // contain the same number of black nodes.
-func verifyProperty5(t *testing.T, tc *treeContext, testName string, node *roachpb.RangeTreeNode, blackCount int, pathBlackCount *int) {
+func verifyProperty5(t *testing.T, tc *treeContext, testName string, node *RangeTreeNode, blackCount int, pathBlackCount *int) {
 	if !isRed(node) {
 		blackCount++
 	}
@@ -1425,7 +1425,7 @@ func TestTree(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	keyRoot := roachpb.RKey("m")
-	tc := createTreeContext(keyRoot, []*roachpb.RangeTreeNode{
+	tc := createTreeContext(keyRoot, []*RangeTreeNode{
 		{
 			Key:   keyRoot,
 			Black: true,
@@ -1446,7 +1446,7 @@ func TestTree(t *testing.T) {
 
 	//keys := []string{"f", "e", "d", "z"}
 	for _, key := range keysInsert {
-		node := &roachpb.RangeTreeNode{
+		node := &RangeTreeNode{
 			Key: roachpb.RKey(key),
 		}
 		err := tc.insert(node)
@@ -1457,7 +1457,7 @@ func TestTree(t *testing.T) {
 	}
 
 	// Try adding an already added key.
-	node := &roachpb.RangeTreeNode{
+	node := &RangeTreeNode{
 		Key: roachpb.RKey("z"),
 	}
 	if err := tc.insert(node); err == nil {
