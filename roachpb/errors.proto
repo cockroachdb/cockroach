@@ -203,6 +203,12 @@ message ExistingSchemaChangeLeaseError {
 message DescriptorDeletedError {
 }
 
+// A DescriptorNotFoundError indicates that a requested descriptor
+// doesn't exist (or no longer exists).
+message DescriptorNotFoundError {
+  optional uint32 descriptor_id = 1 [(gogoproto.nullable) = false];
+}
+
 // ErrorWithPGCode is the detail for errors carring sql error codes.
 message ErrorWithPGCode {
   optional string error_code = 1 [(gogoproto.nullable) = false];
@@ -238,6 +244,7 @@ message ErrorDetail {
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
   optional ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
   optional DescriptorDeletedError descriptor_deleted = 23;
+  optional DescriptorNotFoundError descriptor_not_found = 24;
   optional ErrorWithPGCode error_with_pg_code = 21;
 }
 

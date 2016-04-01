@@ -172,8 +172,8 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
-	for i := range n.Names {
-		droppedDesc, err := p.dropTableImpl(n.Names[i])
+	for _, name := range n.Names {
+		droppedDesc, err := p.dropTableImpl(name)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +182,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, tableDoesntExistUErr(n.Names[i].Table())
+			return nil, tableDoesNotExistUErr(name)
 		}
 		// Log a Drop Table event for this table.
 		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
