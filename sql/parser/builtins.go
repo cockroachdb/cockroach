@@ -542,7 +542,7 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{timestampType},
 			ReturnType: TypeInterval,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return timestampMinusBinOp.fn(e, DTimestamp{e.GetTxnTimestamp().GoTime()}, args[0])
+				return timestampMinusBinOp.fn(e, e.GetTxnTimestamp(), args[0])
 			},
 		},
 		Builtin{
@@ -559,7 +559,7 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeDate,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return e.makeDDate(e.GetTxnTimestamp().GoTime())
+				return e.makeDDate(e.GetTxnTimestamp().Time)
 			},
 		},
 	},
@@ -567,18 +567,28 @@ var Builtins = map[string][]Builtin{
 	"now":                   {txnTSImpl},
 	"current_timestamp":     {txnTSImpl},
 	"transaction_timestamp": {txnTSImpl},
-	"transaction_timestamp_unique": {
+
+	"statement_timestamp": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: TypeInt,
+			ReturnType: TypeTimestamp,
 			impure:     true,
 			fn: func(e EvalContext, args DTuple) (Datum, error) {
-				return DInt(e.GetTxnTimestamp().Logical), nil
+				return e.GetStmtTimestamp(), nil
 			},
 		},
 	},
 
-	"statement_timestamp": {stmtTSImpl},
+	"cluster_logical_timestamp": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: TypeDecimal,
+			impure:     true,
+			fn: func(e EvalContext, args DTuple) (Datum, error) {
+				return e.GetClusterTimestamp(), nil
+			},
+		},
+	},
 
 	"clock_timestamp": {
 		Builtin{
@@ -1119,20 +1129,12 @@ var ceilImpl = []Builtin{
 	}),
 }
 
-var stmtTSImpl = Builtin{
-	Types:      ArgTypes{},
-	ReturnType: TypeTimestamp,
-	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return e.GetStmtTimestamp(), nil
-	},
-}
-
 var txnTSImpl = Builtin{
 	Types:      ArgTypes{},
 	ReturnType: TypeTimestamp,
 	impure:     true,
 	fn: func(e EvalContext, args DTuple) (Datum, error) {
-		return DTimestamp{Time: e.GetTxnTimestamp().GoTime()}, nil
+		return e.GetTxnTimestamp(), nil
 	},
 }
 
