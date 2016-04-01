@@ -1133,7 +1133,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 
 	// Range Tree setup.
-	if err := SetupRangeTree(batch, ms, now, desc.StartKey); err != nil {
+	if err := Setup(batch, ms, now, desc.StartKey); err != nil {
 		return err
 	}
 
