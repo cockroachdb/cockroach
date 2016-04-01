@@ -537,11 +537,14 @@ type isAggregateVisitor struct {
 }
 
 func (v *isAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if t, ok := expr.(*parser.FuncExpr); ok {
+	switch t := expr.(type) {
+	case *parser.FuncExpr:
 		if _, ok := aggregates[strings.ToLower(string(t.Name.Base))]; ok {
 			v.aggregated = true
 			return false, expr
 		}
+	case *parser.Subquery:
+		return false, expr
 	}
 
 	return true, expr

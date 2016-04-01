@@ -613,3 +613,9 @@ query RRR
 SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
 ----
 NULL NULL NULL
+
+# Ensure subqueries don't trigger the GROUP BY requirement.
+query B
+SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
+----
+true
