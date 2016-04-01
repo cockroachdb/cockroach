@@ -428,11 +428,16 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 		g.outgoing.setMaxSize(maxPeers)
 	}()
 
-	// Skip if the node has already been seen or it's our own address.
-	if _, ok := g.nodeDescs[desc.NodeID]; ok || desc.Address == g.is.NodeAddr {
+	// Skip if the node has already been seen.
+	if _, ok := g.nodeDescs[desc.NodeID]; ok {
 		return
 	}
 	g.nodeDescs[desc.NodeID] = &desc
+
+	// Skip if it's our own address.
+	if desc.Address == g.is.NodeAddr {
+		return
+	}
 
 	// Add this new node address (if it's not already there) to our list
 	// of resolvers so we can keep connecting to gossip if the original
@@ -691,21 +696,22 @@ func (g *Gossip) hasOutgoing(nodeID roachpb.NodeID) bool {
 func (g *Gossip) getNextBootstrapAddress() net.Addr {
 	// Run through resolvers round robin starting at last resolved index.
 	for i := 0; i < len(g.resolvers); i++ {
-		g.resolverIdx = (g.resolverIdx + 1) % len(g.resolvers)
+		g.resolverIdx += 1
+		g.resolverIdx %= len(g.resolvers)
 		g.resolversTried[g.resolverIdx] = struct{}{}
 		resolver := g.resolvers[g.resolverIdx]
-		addr, err := resolver.GetAddress()
-		if err != nil {
-			log.Errorf("invalid bootstrap address: %+v, %v", resolver, err)
-			continue
-		} else if addr.String() == g.is.NodeAddr.String() {
-			// Skip our own node address.
+		if resolver.IsExhausted() {
 			continue
 		}
-		_, addrActive := g.bootstrapping[addr.String()]
-		if !resolver.IsExhausted() || !addrActive {
-			g.bootstrapping[addr.String()] = struct{}{}
-			return addr
+		if addr, err := resolver.GetAddress(); err != nil {
+			log.Errorf("invalid bootstrap address: %+v, %v", resolver, err)
+			continue
+		} else {
+			addrStr := addr.String()
+			if _, addrActive := g.bootstrapping[addrStr]; !addrActive {
+				g.bootstrapping[addrStr] = struct{}{}
+				return addr
+			}
 		}
 	}
 
