@@ -68,10 +68,10 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b DESC
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY b DESC LIMIT 1 OFFSET 1
 ----
-0  /abc/foo/'two'          /2    PARTIAL   
-0  /abc/primary/2/'two'    NULL  FILTERED  
-1  /abc/foo/'three'        /3    PARTIAL   
-1  /abc/primary/3/'three'  NULL  ROW       
+0  /abc/foo/'two'          /2    PARTIAL
+0  /abc/primary/2/'two'    NULL  FILTERED
+1  /abc/foo/'three'        /3    PARTIAL
+1  /abc/primary/3/'three'  NULL  ROW
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
@@ -79,14 +79,14 @@ EXPLAIN (DEBUG) SELECT * FROM abc WHERE a = 2
 0  /abc/primary/2/'two'  NULL  ROW
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM abc@foo
+EXPLAIN (DEBUG) SELECT b FROM abc@foo
 ----
 0  /abc/foo/'one'    /1  ROW
 1  /abc/foo/'three'  /3  ROW
 2  /abc/foo/'two'    /2  ROW
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM abc@bar
+EXPLAIN (DEBUG) SELECT a FROM abc@bar
 ----
 0  /abc/bar/1/'one'    NULL  ROW
 1  /abc/bar/2/'two'    NULL  ROW

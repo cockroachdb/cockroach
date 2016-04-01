@@ -401,7 +401,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 
 	starQuery := `SELECT * FROM t.test`
-	indexQuery := `SELECT * FROM t.test@foo`
+	indexQuery := `SELECT v FROM t.test@foo`
 	// See the effect of the operations depending on the state.
 	for _, state := range []csql.DescriptorMutation_State{csql.DescriptorMutation_DELETE_ONLY, csql.DescriptorMutation_WRITE_ONLY} {
 		// Init table with some entries.

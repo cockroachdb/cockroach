@@ -31,7 +31,7 @@ statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@foo
+EXPLAIN (DEBUG) SELECT b FROM t@foo
 ----
 0 /t/foo/NULL /1 ROW
 

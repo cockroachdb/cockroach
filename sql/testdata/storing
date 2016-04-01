@@ -48,7 +48,7 @@ statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
 query ITTT
-EXPLAIN (DEBUG) SELECT * FROM t@d_idx
+EXPLAIN (DEBUG) SELECT a, b, d FROM t@d_idx
 ----
 0 /t/d_idx/4/1/2 NULL ROW
 

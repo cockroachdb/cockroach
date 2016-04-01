@@ -37,19 +37,19 @@ type scanNode struct {
 	desc    TableDescriptor
 	index   *IndexDescriptor
 
-	// visibleCols are normally a copy of desc.Columns (even when we are using an index). The only
-	// exception is when we are selecting from a specific index (SELECT * from t@abc), in which case
-	// it contains only the columns in the index.
-	visibleCols []ColumnDescriptor
-	// There is a 1-1 correspondence between visibleCols and resultColumns.
+	// Set if an index was explicitly specified.
+	specifiedIndex *IndexDescriptor
+
+	// There is a 1-1 correspondence between desc.Column sand resultColumns.
 	resultColumns []ResultColumn
-	// row contains values for the current row. There is a 1-1 correspondence between resultColumns and vals.
+	// row contains values for the current row. There is a 1-1 correspondence
+	// between resultColumns and vals.
 	row parser.DTuple
-	// for each column in resultColumns, indicates if the value is needed (used as an optimization
-	// when the upper layer doesn't need all values).
+	// for each column in resultColumns, indicates if the value is needed (used
+	// as an optimization when the upper layer doesn't need all values).
 	valNeededForCol []bool
 
-	// Map used to get the index for columns in visibleCols.
+	// Map used to get the index for columns in desc.Columns.
 	colIdxMap map[ColumnID]int
 
 	spans            []span
@@ -200,60 +200,30 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 	alias := n.desc.Name
 
 	indexName := NormalizeName(tableName.Index())
-	if indexName != "" && NormalizeName(n.desc.PrimaryIndex.Name) != indexName {
-		for i := range n.desc.Indexes {
-			if NormalizeName(n.desc.Indexes[i].Name) == indexName {
-				// Remove all but the matching index from the descriptor.
-				n.desc.Indexes = n.desc.Indexes[i : i+1]
-				n.index = &n.desc.Indexes[0]
-				break
+	if indexName != "" {
+		if indexName == NormalizeName(n.desc.PrimaryIndex.Name) {
+			n.specifiedIndex = &n.desc.PrimaryIndex
+		} else {
+			for i := range n.desc.Indexes {
+				if indexName == NormalizeName(n.desc.Indexes[i].Name) {
+					n.specifiedIndex = &n.desc.Indexes[i]
+					break
+				}
 			}
-		}
-		if n.index == nil {
-			n.pErr = roachpb.NewUErrorf("index \"%s\" not found", indexName)
-			return "", n.pErr
-		}
-		// Use the index name instead of the table name for fully-qualified columns in the
-		// expression.
-		alias = n.index.Name
-		// Strip out any columns from the table that are not present in the
-		// index.
-		visibleCols := make([]ColumnDescriptor, 0, len(n.index.ColumnIDs)+len(n.index.ImplicitColumnIDs))
-		for _, colID := range n.index.ColumnIDs {
-			col, err := n.desc.FindColumnByID(colID)
-			n.pErr = roachpb.NewError(err)
-			if n.pErr != nil {
+			if n.specifiedIndex == nil {
+				n.pErr = roachpb.NewUErrorf("index \"%s\" not found", indexName)
 				return "", n.pErr
 			}
-			visibleCols = append(visibleCols, *col)
 		}
-		for _, colID := range n.index.ImplicitColumnIDs {
-			col, err := n.desc.FindColumnByID(colID)
-			n.pErr = roachpb.NewError(err)
-			if n.pErr != nil {
-				return "", n.pErr
-			}
-			visibleCols = append(visibleCols, *col)
-		}
-		n.isSecondaryIndex = true
-		n.initVisibleCols(visibleCols, len(n.index.ImplicitColumnIDs))
-	} else {
-		n.initDescDefaults()
 	}
-
+	n.initDescDefaults()
 	return alias, nil
 }
 
-func (n *scanNode) initDescDefaults() {
-	n.index = &n.desc.PrimaryIndex
-	n.initVisibleCols(n.desc.Columns, 0)
-}
-
-// makeResultColumns converts ColumnDescriptors to ResultColumns. The last numImplicit columns are
-// marked as hidden.
-func makeResultColumns(colDescs []ColumnDescriptor, numImplicit int) []ResultColumn {
+// makeResultColumns converts ColumnDescriptors to ResultColumns.
+func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
-	for idx, colDesc := range colDescs {
+	for _, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
 		var typ parser.Datum
 
@@ -279,7 +249,7 @@ func makeResultColumns(colDescs []ColumnDescriptor, numImplicit int) []ResultCol
 		default:
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}
-		hidden := colDesc.Hidden || idx >= len(colDescs)-numImplicit
+		hidden := colDesc.Hidden
 		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
 	}
 	return cols
@@ -294,21 +264,21 @@ func (n *scanNode) setNeededColumns(needed []bool) {
 	copy(n.valNeededForCol, needed)
 }
 
-// Initializes the visibleCols and associated structures (resultColumns, colIdxMap).
-// The last numImplicit columns are marked as hidden.
-func (n *scanNode) initVisibleCols(visibleCols []ColumnDescriptor, numImplicit int) {
-	n.visibleCols = visibleCols
-	n.resultColumns = makeResultColumns(visibleCols, numImplicit)
-	n.colIdxMap = make(map[ColumnID]int, len(visibleCols))
-	for i, c := range visibleCols {
+// Initializes the column structures.
+func (n *scanNode) initDescDefaults() {
+	n.index = &n.desc.PrimaryIndex
+	cols := n.desc.Columns
+	n.resultColumns = makeResultColumns(cols)
+	n.colIdxMap = make(map[ColumnID]int, len(cols))
+	for i, c := range cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.valNeededForCol = make([]bool, len(visibleCols))
-	for i := range visibleCols {
+	n.valNeededForCol = make([]bool, len(cols))
+	for i := range cols {
 		n.valNeededForCol[i] = true
 	}
-	n.row = make([]parser.Datum, len(visibleCols))
-	n.qvals = make([]scanQValue, len(visibleCols))
+	n.row = make([]parser.Datum, len(cols))
+	n.qvals = make([]scanQValue, len(cols))
 	for i := range n.qvals {
 		n.qvals[i] = n.makeQValue(i)
 	}
@@ -361,7 +331,7 @@ func (n *scanNode) initScan() bool {
 		if !n.isSecondaryIndex {
 			// We have a sentinel key per row plus at most one key per non-PK column. Of course, we
 			// may have other keys due to a schema change, but this is only a hint.
-			firstBatchLimit *= int64(1 + len(n.visibleCols) - len(n.index.ColumnIDs))
+			firstBatchLimit *= int64(1 + len(n.desc.Columns) - len(n.index.ColumnIDs))
 		}
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
@@ -382,7 +352,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 	n.ordering = n.computeOrdering(n.index, exactPrefix, n.reverse)
 }
 
-// computeOrdering calculates ordering information for table columns (visibleCols) assuming that:
+// computeOrdering calculates ordering information for table columns assuming that:
 //    - we scan a given index (potentially in reverse order), and
 //    - the first `exactPrefix` columns of the index each have an exact (single value) match
 //      (see orderingInfo).
@@ -541,7 +511,7 @@ func (n *scanNode) maybeOutputRow() bool {
 		n.indexKey = nil
 
 		// Fill in any missing values with NULLs
-		for i, col := range n.visibleCols {
+		for i, col := range n.desc.Columns {
 			if n.valNeededForCol[i] && n.row[i] == nil {
 				if !col.Nullable {
 					panic("Non-nullable column with no value!")
@@ -617,7 +587,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		n.pErr = roachpb.NewUErrorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
-	kind := n.visibleCols[idx].Type.Kind
+	kind := n.desc.Columns[idx].Type.Kind
 	d, err := unmarshalColumnValue(kind, kv.Value)
 	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil

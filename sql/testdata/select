@@ -203,7 +203,7 @@ query error multiple LIMIT clauses not allowed
 ((SELECT a FROM t LIMIT 1)) LIMIT 1
 
 query II
-SELECT * FROM xyzw@foo
+SELECT z, y FROM xyzw@foo
 ----
 3 2
 6 5
@@ -214,7 +214,7 @@ SELECT z FROM test.xyzw@foo WHERE y = 5
 6
 
 query I
-SELECT foo.y FROM test.xyzw@foo WHERE z = 3
+SELECT xyzw.y FROM test.xyzw@foo WHERE z = 3
 ----
 2
 
@@ -224,8 +224,10 @@ SELECT z FROM test.unknown@foo WHERE y = 5
 query error index "unknown" not found
 SELECT z FROM test.xyzw@unknown WHERE y = 5
 
-query error qualified name "w" not found
+query I
 SELECT w FROM test.xyzw@foo WHERE y = 5
+----
+7
 
 statement ok
 CREATE TABLE boolean_table (

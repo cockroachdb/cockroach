@@ -82,19 +82,19 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
 func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool) planNode {
-	if s.desc.isEmpty() || (s.filter == nil && analyzeOrdering == nil) {
-		// No table or no where-clause and no ordering.
+	if s.desc.isEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
+		// No table or no where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
 		return s
 	}
 
 	candidates := make([]*indexInfo, 0, len(s.desc.Indexes)+1)
-	if s.isSecondaryIndex {
+	if s.specifiedIndex != nil {
 		// An explicit secondary index was requested. Only add it to the candidate
 		// indexes list.
 		candidates = append(candidates, &indexInfo{
 			desc:  &s.desc,
-			index: s.index,
+			index: s.specifiedIndex,
 		})
 	} else {
 		candidates = append(candidates, &indexInfo{
@@ -725,7 +725,7 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 
 	for i, needed := range scan.valNeededForCol {
 		if needed {
-			colID := scan.visibleCols[i].ID
+			colID := v.desc.Columns[i].ID
 			if !v.index.containsColumnID(colID) {
 				return false
 			}
