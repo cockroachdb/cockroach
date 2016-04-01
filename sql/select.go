@@ -328,7 +328,10 @@ func (p *planner) initSelect(
 			preferOrderMatchingIndex = true
 		}
 
-		plan := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
+		plan, err := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 
 		// Update s.table with the new plan.
 		s.table.node = plan

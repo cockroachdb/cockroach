@@ -203,6 +203,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a.b[1 + 1:4][3] FROM t`},
 		{`SELECT 'a' FROM t`},
 		{`SELECT 'a' FROM t@bar`},
+		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
+		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},
@@ -437,6 +439,10 @@ func TestParse2(t *testing.T) {
 		{`SELECT TIMESTAMP 'foo'`, `SELECT CAST('foo' AS TIMESTAMP)`},
 		{`SELECT INTERVAL 'foo'`, `SELECT CAST('foo' AS INTERVAL)`},
 		{`SELECT CHAR 'foo'`, `SELECT CAST('foo' AS CHAR)`},
+
+		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
+		{`SELECT 'a' FROM t@{NO_INDEX_JOIN,FORCE_INDEX=bar}`,
+			`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 
 		{`SELECT FROM t WHERE a IS UNKNOWN`, `SELECT FROM t WHERE a IS NULL`},
 		{`SELECT FROM t WHERE a IS NOT UNKNOWN`, `SELECT FROM t WHERE a IS NOT NULL`},
@@ -728,6 +734,48 @@ CREATE TABLE a (b INT DEFAULT (SELECT 1))
 			`syntax error at or near ","
 SELECT POSITION('high', 'a')
                       ^
+`,
+		},
+		{
+			`SELECT FROM foo@{FORCE_INDEX}`,
+			`syntax error at or near "}"
+SELECT FROM foo@{FORCE_INDEX}
+                            ^
+`,
+		},
+		{
+			`SELECT FROM foo@{FORCE_INDEX=}`,
+			`syntax error at or near "}"
+SELECT FROM foo@{FORCE_INDEX=}
+                             ^
+`,
+		},
+		{
+			`SELECT FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
+			`FORCE_INDEX specified multiple times at or near "baz"
+SELECT FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+                                             ^
+`,
+		},
+		{
+			`SELECT FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}`,
+			`FORCE_INDEX specified multiple times at or near "baz"
+SELECT FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}
+                                                           ^
+`,
+		},
+		{
+			`SELECT FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}`,
+			`NO_INDEX_JOIN specified multiple times at or near "NO_INDEX_JOIN"
+SELECT FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+                               ^
+`,
+		},
+		{
+			`SELECT FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}`,
+			`NO_INDEX_JOIN specified multiple times at or near "NO_INDEX_JOIN"
+SELECT FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
+                                               ^
 `,
 		},
 	}
