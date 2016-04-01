@@ -107,6 +107,7 @@
 		DidntUpdateDescriptorError
 		ExistingSchemaChangeLeaseError
 		DescriptorDeletedError
+		DescriptorNotFoundError
 		ErrorWithPGCode
 		ErrorDetail
 		ErrPosition

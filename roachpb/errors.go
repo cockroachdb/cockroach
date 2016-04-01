@@ -546,7 +546,7 @@ func (*ExistingSchemaChangeLeaseError) message(_ *Error) string {
 	return "an outstanding schema change lease exists"
 }
 
-var _ ErrorDetailInterface = &DescriptorDeletedError{}
+var _ ErrorDetailInterface = &ExistingSchemaChangeLeaseError{}
 
 func (e *DescriptorDeletedError) Error() string {
 	return e.message(nil)
@@ -556,4 +556,14 @@ func (*DescriptorDeletedError) message(_ *Error) string {
 	return "descriptor doesn't exist"
 }
 
-var _ ErrorDetailInterface = &ExistingSchemaChangeLeaseError{}
+var _ ErrorDetailInterface = &DescriptorDeletedError{}
+
+func (e *DescriptorNotFoundError) Error() string {
+	return e.message(nil)
+}
+
+func (e *DescriptorNotFoundError) message(_ *Error) string {
+	return fmt.Sprintf("descriptor ID %d not found", e.DescriptorId)
+}
+
+var _ ErrorDetailInterface = &DescriptorNotFoundError{}

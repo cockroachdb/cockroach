@@ -73,7 +73,7 @@ test
 statement ok
 CREATE DATABASE b
 
-statement error table "a" does not exist
+statement error table "b.a" does not exist
 SELECT * FROM b.a
 
 statement ok

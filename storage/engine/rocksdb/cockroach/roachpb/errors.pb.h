@@ -43,6 +43,7 @@ void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
 
 class ConditionFailedError;
 class DescriptorDeletedError;
+class DescriptorNotFoundError;
 class DidntUpdateDescriptorError;
 class ErrPosition;
 class Error;
@@ -2113,6 +2114,95 @@ class DescriptorDeletedError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class DescriptorNotFoundError : public ::google::protobuf::Message {
+ public:
+  DescriptorNotFoundError();
+  virtual ~DescriptorNotFoundError();
+
+  DescriptorNotFoundError(const DescriptorNotFoundError& from);
+
+  inline DescriptorNotFoundError& operator=(const DescriptorNotFoundError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const DescriptorNotFoundError& default_instance();
+
+  void Swap(DescriptorNotFoundError* other);
+
+  // implements Message ----------------------------------------------
+
+  inline DescriptorNotFoundError* New() const { return New(NULL); }
+
+  DescriptorNotFoundError* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const DescriptorNotFoundError& from);
+  void MergeFrom(const DescriptorNotFoundError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(DescriptorNotFoundError* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint32 descriptor_id = 1;
+  bool has_descriptor_id() const;
+  void clear_descriptor_id();
+  static const int kDescriptorIdFieldNumber = 1;
+  ::google::protobuf::uint32 descriptor_id() const;
+  void set_descriptor_id(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.DescriptorNotFoundError)
+ private:
+  inline void set_has_descriptor_id();
+  inline void clear_has_descriptor_id();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 descriptor_id_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static DescriptorNotFoundError* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ErrorWithPGCode : public ::google::protobuf::Message {
  public:
   ErrorWithPGCode();
@@ -2484,6 +2574,15 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::DescriptorDeletedError* release_descriptor_deleted();
   void set_allocated_descriptor_deleted(::cockroach::roachpb::DescriptorDeletedError* descriptor_deleted);
 
+  // optional .cockroach.roachpb.DescriptorNotFoundError descriptor_not_found = 24;
+  bool has_descriptor_not_found() const;
+  void clear_descriptor_not_found();
+  static const int kDescriptorNotFoundFieldNumber = 24;
+  const ::cockroach::roachpb::DescriptorNotFoundError& descriptor_not_found() const;
+  ::cockroach::roachpb::DescriptorNotFoundError* mutable_descriptor_not_found();
+  ::cockroach::roachpb::DescriptorNotFoundError* release_descriptor_not_found();
+  void set_allocated_descriptor_not_found(::cockroach::roachpb::DescriptorNotFoundError* descriptor_not_found);
+
   // optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
   bool has_error_with_pg_code() const;
   void clear_error_with_pg_code();
@@ -2539,6 +2638,8 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void clear_has_existing_scheme_change_lease();
   inline void set_has_descriptor_deleted();
   inline void clear_has_descriptor_deleted();
+  inline void set_has_descriptor_not_found();
+  inline void clear_has_descriptor_not_found();
   inline void set_has_error_with_pg_code();
   inline void clear_has_error_with_pg_code();
 
@@ -2567,6 +2668,7 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::DidntUpdateDescriptorError* didnt_update_descriptor_;
   ::cockroach::roachpb::ExistingSchemaChangeLeaseError* existing_scheme_change_lease_;
   ::cockroach::roachpb::DescriptorDeletedError* descriptor_deleted_;
+  ::cockroach::roachpb::DescriptorNotFoundError* descriptor_not_found_;
   ::cockroach::roachpb::ErrorWithPGCode* error_with_pg_code_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
@@ -3871,6 +3973,34 @@ inline void ReplicaCorruptionError::set_processed(bool value) {
 
 // -------------------------------------------------------------------
 
+// DescriptorNotFoundError
+
+// optional uint32 descriptor_id = 1;
+inline bool DescriptorNotFoundError::has_descriptor_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void DescriptorNotFoundError::set_has_descriptor_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void DescriptorNotFoundError::clear_has_descriptor_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void DescriptorNotFoundError::clear_descriptor_id() {
+  descriptor_id_ = 0u;
+  clear_has_descriptor_id();
+}
+inline ::google::protobuf::uint32 DescriptorNotFoundError::descriptor_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.DescriptorNotFoundError.descriptor_id)
+  return descriptor_id_;
+}
+inline void DescriptorNotFoundError::set_descriptor_id(::google::protobuf::uint32 value) {
+  set_has_descriptor_id();
+  descriptor_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.DescriptorNotFoundError.descriptor_id)
+}
+
+// -------------------------------------------------------------------
+
 // ErrorWithPGCode
 
 // optional string error_code = 1;
@@ -4929,15 +5059,58 @@ inline void ErrorDetail::set_allocated_descriptor_deleted(::cockroach::roachpb::
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.descriptor_deleted)
 }
 
-// optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
-inline bool ErrorDetail::has_error_with_pg_code() const {
+// optional .cockroach.roachpb.DescriptorNotFoundError descriptor_not_found = 24;
+inline bool ErrorDetail::has_descriptor_not_found() const {
   return (_has_bits_[0] & 0x00400000u) != 0;
 }
-inline void ErrorDetail::set_has_error_with_pg_code() {
+inline void ErrorDetail::set_has_descriptor_not_found() {
   _has_bits_[0] |= 0x00400000u;
 }
-inline void ErrorDetail::clear_has_error_with_pg_code() {
+inline void ErrorDetail::clear_has_descriptor_not_found() {
   _has_bits_[0] &= ~0x00400000u;
+}
+inline void ErrorDetail::clear_descriptor_not_found() {
+  if (descriptor_not_found_ != NULL) descriptor_not_found_->::cockroach::roachpb::DescriptorNotFoundError::Clear();
+  clear_has_descriptor_not_found();
+}
+inline const ::cockroach::roachpb::DescriptorNotFoundError& ErrorDetail::descriptor_not_found() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.descriptor_not_found)
+  return descriptor_not_found_ != NULL ? *descriptor_not_found_ : *default_instance_->descriptor_not_found_;
+}
+inline ::cockroach::roachpb::DescriptorNotFoundError* ErrorDetail::mutable_descriptor_not_found() {
+  set_has_descriptor_not_found();
+  if (descriptor_not_found_ == NULL) {
+    descriptor_not_found_ = new ::cockroach::roachpb::DescriptorNotFoundError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.descriptor_not_found)
+  return descriptor_not_found_;
+}
+inline ::cockroach::roachpb::DescriptorNotFoundError* ErrorDetail::release_descriptor_not_found() {
+  clear_has_descriptor_not_found();
+  ::cockroach::roachpb::DescriptorNotFoundError* temp = descriptor_not_found_;
+  descriptor_not_found_ = NULL;
+  return temp;
+}
+inline void ErrorDetail::set_allocated_descriptor_not_found(::cockroach::roachpb::DescriptorNotFoundError* descriptor_not_found) {
+  delete descriptor_not_found_;
+  descriptor_not_found_ = descriptor_not_found;
+  if (descriptor_not_found) {
+    set_has_descriptor_not_found();
+  } else {
+    clear_has_descriptor_not_found();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.descriptor_not_found)
+}
+
+// optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
+inline bool ErrorDetail::has_error_with_pg_code() const {
+  return (_has_bits_[0] & 0x00800000u) != 0;
+}
+inline void ErrorDetail::set_has_error_with_pg_code() {
+  _has_bits_[0] |= 0x00800000u;
+}
+inline void ErrorDetail::clear_has_error_with_pg_code() {
+  _has_bits_[0] &= ~0x00800000u;
 }
 inline void ErrorDetail::clear_error_with_pg_code() {
   if (error_with_pg_code_ != NULL) error_with_pg_code_->::cockroach::roachpb::ErrorWithPGCode::Clear();
@@ -5303,6 +5476,8 @@ inline void Error::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -530,6 +530,22 @@ func (n *QualifiedName) String() string {
 	return fmt.Sprintf("%s%s", n.orig.Base, n.orig.Indirect)
 }
 
+// TableName returns a string table name, as it was specified in the original
+// qname (qualified with a database or not). It also strips an index
+// indirection, if any.
+func (n *QualifiedName) TableName() string {
+	n.setOrigIfNotSet()
+	copy := *(n.orig)
+	// Strip an index indirection, if it exists.
+	if len(copy.Indirect) != 0 {
+		lastIndirect := copy.Indirect[len(copy.Indirect)-1]
+		if _, ok := lastIndirect.(IndexIndirection); ok {
+			copy.Indirect = copy.Indirect[0 : len(copy.Indirect)-1]
+		}
+	}
+	return copy.String()
+}
+
 // QualifiedNames represents a command separated list (see the String method)
 // of qualified names.
 type QualifiedNames []*QualifiedName
