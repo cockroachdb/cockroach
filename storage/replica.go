@@ -448,65 +448,70 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		return llChan
 	}
 
-	r.store.Stopper().RunWorker(func() {
-		pErr := func() *roachpb.Error {
-			// TODO(Tobias): get duration from configuration, either as a config flag
-			// or, later, dynamically adjusted.
-			duration := DefaultLeaderLeaseDuration
+	if !r.store.Stopper().RunTask(func() {
+		r.store.Stopper().RunWorker(func() {
+			pErr := func() *roachpb.Error {
+				// TODO(Tobias): get duration from configuration, either as a config flag
+				// or, later, dynamically adjusted.
+				duration := DefaultLeaderLeaseDuration
 
-			// Prepare a Raft command to get a leader lease for this replica.
-			expiration := timestamp.Add(int64(duration), 0)
-			desc := r.Desc()
-			_, replica := desc.FindReplica(r.store.StoreID())
-			if replica == nil {
-				return roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
-			}
-			args := &roachpb.LeaderLeaseRequest{
-				Span: roachpb.Span{
-					Key: desc.StartKey.AsRawKey(),
-				},
-				Lease: roachpb.Lease{
-					Start:      timestamp,
-					Expiration: expiration,
-					Replica:    *replica,
-				},
-			}
-			ba := roachpb.BatchRequest{}
-			ba.Timestamp = r.store.Clock().Now()
-			ba.RangeID = r.RangeID
-			ba.Add(args)
-
-			// Send lease request directly to raft in order to skip unnecessary
-			// checks from normal request machinery, (e.g. the command queue).
-			// Note that the command itself isn't traced, but usually the caller
-			// waiting for the result has an active Trace.
-			cmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-
-			// If the command was committed, wait for the range to apply it.
-			select {
-			case c := <-cmd.done:
-				if c.Err != nil {
-					if log.V(1) {
-						log.Infof("failed to acquire leader lease for replica %s: %s", r.store, c.Err)
-					}
+				// Prepare a Raft command to get a leader lease for this replica.
+				expiration := timestamp.Add(int64(duration), 0)
+				desc := r.Desc()
+				_, replica := desc.FindReplica(r.store.StoreID())
+				if replica == nil {
+					return roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 				}
-				return c.Err
-			case <-r.store.Stopper().ShouldStop():
-				return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
-			}
-		}()
+				args := &roachpb.LeaderLeaseRequest{
+					Span: roachpb.Span{
+						Key: desc.StartKey.AsRawKey(),
+					},
+					Lease: roachpb.Lease{
+						Start:      timestamp,
+						Expiration: expiration,
+						Replica:    *replica,
+					},
+				}
+				ba := roachpb.BatchRequest{}
+				ba.Timestamp = r.store.Clock().Now()
+				ba.RangeID = r.RangeID
+				ba.Add(args)
 
-		// Send result of leader lease to all waiter channels.
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		for _, llChan := range r.mu.llChans {
-			llChan <- pErr
-		}
-		r.mu.llChans = r.mu.llChans[:0]
-	})
+				// Send lease request directly to raft in order to skip unnecessary
+				// checks from normal request machinery, (e.g. the command queue).
+				// Note that the command itself isn't traced, but usually the caller
+				// waiting for the result has an active Trace.
+				cmd, err := r.proposeRaftCommand(r.context(context.Background()), ba)
+				if err != nil {
+					return roachpb.NewError(err)
+				}
+
+				// If the command was committed, wait for the range to apply it.
+				select {
+				case c := <-cmd.done:
+					if c.Err != nil {
+						if log.V(1) {
+							log.Infof("failed to acquire leader lease for replica %s: %s", r.store, c.Err)
+						}
+					}
+					return c.Err
+				case <-r.store.Stopper().ShouldStop():
+					return roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
+				}
+			}()
+
+			// Send result of leader lease to all waiter channels.
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			for _, llChan := range r.mu.llChans {
+				llChan <- pErr
+			}
+			r.mu.llChans = r.mu.llChans[:0]
+		})
+	}) {
+		llChan <- roachpb.NewErrorf("shutting down")
+		return llChan
+	}
 
 	r.mu.llChans = append(r.mu.llChans, llChan)
 	return llChan

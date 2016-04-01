@@ -132,6 +132,14 @@ func NewStopper() *Stopper {
 
 // RunWorker runs the supplied function as a "worker" to be stopped
 // by the stopper. The function <f> is run in a goroutine.
+// It is only safe to call RunWorker at startup or from inside a task;
+// other uses may race with Stop().
+//
+// In general, goroutines started after initial startup should use
+// RunAsyncTask instead of RunWorker. However, in rare cases a task
+// can cause hangs at shutdown that are avoided by using a worker
+// instead. In these cases the worker should be started from inside a
+// synchronous task.
 func (s *Stopper) RunWorker(f func()) {
 	s.stop.Add(1)
 	go func() {
