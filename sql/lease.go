@@ -87,6 +87,8 @@ func jitteredLeaseDuration() time.Duration {
 }
 
 // Acquire a lease on the most recent version of a table descriptor.
+// If the lease cannot be obtained because the descriptor is in the process of
+// being deleted, the error detail will be DescriptorDeletedError.
 func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, *roachpb.Error) {
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
@@ -105,7 +107,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		return nil, pErr
 	}
 	if values == nil {
-		return nil, roachpb.NewErrorf("table ID %d not found", tableID)
+		return nil, roachpb.NewError(
+			&roachpb.DescriptorNotFoundError{DescriptorId: uint32(tableID)})
 	}
 	desc := &Descriptor{}
 	if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), desc); err != nil {
@@ -115,6 +118,9 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
 		return nil, roachpb.NewErrorf("ID %d is not a table", tableID)
+	}
+	if tableDesc.Deleted {
+		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
 	lease.TableDescriptor = *tableDesc
 
@@ -478,6 +484,13 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 			close(t.acquiring)
 			t.acquiring = nil
 			if pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.DescriptorDeletedError); ok {
+					// If we're trying to acquire and the descriptor is being deleted, we
+					// need to release all existing leases since they're now stale.
+					if err := t.releaseLeasesIfNotActive(t.active.data, store); err != nil {
+						log.Warning(err)
+					}
+				}
 				return nil, pErr
 			}
 			t.active.insert(s)
@@ -490,21 +503,26 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 	}
 }
 
-// releaseNonLatest releases all unused non-latest leases.
-func (t *tableState) releaseNonLatest(store LeaseStore) error {
-	// Skip the last lease.
-	for i := 0; i < len(t.active.data)-1; {
-		s := t.active.data[i]
-		if s.Refcount() == 0 {
-			t.active.remove(s)
-			if err := t.releaseNodeLease(s, store); err != nil {
-				return err
-			}
-		} else {
-			i++
+// releaseLeases releases the leases in `leases` with refcount 0.
+func (t *tableState) releaseLeasesIfNotActive(
+	leases []*LeaseState, store LeaseStore) error {
+
+	for _, s := range leases {
+		if s.Refcount() != 0 {
+			continue
+		}
+		t.active.remove(s)
+		if err := t.releaseNodeLease(s, store); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// releaseNonLatest releases all unused non-latest leases.
+func (t *tableState) releaseNonLatest(store LeaseStore) error {
+	// Skip the last lease.
+	return t.releaseLeasesIfNotActive(t.active.data[:len(t.active.data)-1], store)
 }
 
 func (t *tableState) acquireWait() {
@@ -516,6 +534,8 @@ func (t *tableState) acquireWait() {
 	<-acquiring
 }
 
+// If the lease cannot be obtained because the descriptor is in the process of
+// being deleted, the error detail will be DescriptorDeletedError.
 func (t *tableState) acquireNodeLease(
 	txn *client.Txn, minVersion DescriptorVersion, store LeaseStore,
 ) (*LeaseState, *roachpb.Error) {
@@ -547,6 +567,8 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 				// another operation being performed within the transaction. If we
 				// release the lease immediately the transaction will necessarily abort
 				// on the next operation due to not being able to get the lease.
+				// TODO(andrei): ... but would the refcount be 0 above if the
+				// transaction were active?
 			}
 			t.active.remove(s)
 			return t.releaseNodeLease(s, store)
@@ -600,6 +622,10 @@ func (m *LeaseManager) Release(lease *LeaseState) error {
 	}
 	// TODO(pmattis): Can/should we delete from LeaseManager.tables if the
 	// tableState becomes empty?
+	// TODO(andrei): I think we never delete from LeaseManager.tables... which
+	// could be bad if a lot of tables keep being created. I looked into cleaning
+	// up a bit, but it seems tricky to do with the current with the current
+	// locking which is split between LeaseManager and tableState.
 	return t.release(lease, m.LeaseStore)
 }
 
@@ -671,7 +697,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 // refreshLease tries to refresh the node's table lease.
 func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorVersion) error {
 	// Only attempt to update a lease for a table that is already leased.
-	if t := m.findTableState(id, false); t == nil {
+	if t := m.findTableState(id, false); t == nil || len(t.active.data) == 0 {
 		return nil
 	}
 	// Acquire and release a lease on the table at a version >= minVersion.
@@ -687,6 +713,10 @@ func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorV
 		lease, pErr = m.Acquire(txn, id, minVersion)
 		return pErr
 	}); pErr != nil {
+		// Swallow DescriptorDeletedError.
+		if _, ok := pErr.GetDetail().(*roachpb.DescriptorDeletedError); ok {
+			return nil
+		}
 		return pErr.GoError()
 	}
 	return m.Release(lease)

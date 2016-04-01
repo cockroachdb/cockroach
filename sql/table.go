@@ -46,10 +46,6 @@ func TestDisableTableLeases() func() {
 	}
 }
 
-func tableDoesntExistUErr(name string) *roachpb.Error {
-	return roachpb.NewUErrorf("table %q does not exist", name)
-}
-
 // tableKey implements descriptorKey.
 type tableKey struct {
 	parentID ID
@@ -263,7 +259,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (TableDescriptor, *r
 		return TableDescriptor{}, pErr
 	}
 	if desc == nil {
-		return TableDescriptor{}, tableDoesntExistUErr(qname.String())
+		return TableDescriptor{}, tableDoesNotExistUErr(qname)
 	}
 	return *desc, nil
 }
@@ -317,12 +313,21 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		var pErr *roachpb.Error
 		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if pErr != nil {
+			if _, ok := pErr.GetDetail().(*roachpb.DescriptorNotFoundError); ok {
+				// Transform the descriptor error into an error that references the
+				// table's name.
+				return TableDescriptor{}, tableDoesNotExistUErr(qname)
+			}
 			return TableDescriptor{}, pErr
 		}
 		p.leases = append(p.leases, lease)
 	}
 
 	return lease.TableDescriptor, nil
+}
+
+func tableDoesNotExistUErr(qname *parser.QualifiedName) *roachpb.Error {
+	return roachpb.NewUErrorf("table %q does not exist", qname)
 }
 
 // getTableID retrieves the table ID for the specified table. It uses the
@@ -341,6 +346,10 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 	// Lookup the ID of the table in the cache. The use of the cache might cause
 	// the usage of a recently renamed table, but that's a race that could occur
 	// anyways.
+	// TODO(andrei): remove the used of p.systemConfig as a cache for table names,
+	// replace it with using the leases for resolving names, and do away with any
+	// races due to renames. We'll probably have to rewrite renames to perform
+	// an async schema change.
 	nameKey := tableKey{dbID, qname.Table()}
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
@@ -353,7 +362,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 		return 0, pErr
 	}
 	if !gr.Exists() {
-		return 0, roachpb.NewErrorf("table %q does not exist", nameKey.Name())
+		return 0, tableDoesNotExistUErr(qname)
 	}
 	return ID(gr.ValueInt()), nil
 }

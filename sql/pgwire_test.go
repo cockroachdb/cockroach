@@ -617,7 +617,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"DROP TABLE d.t",
 			[]preparedExecTest{
 				base,
-				base.Error(`pq: table "t" does not exist`),
+				base.Error(`pq: table "d.t" does not exist`),
 			},
 		},
 		{
