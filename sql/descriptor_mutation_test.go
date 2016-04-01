@@ -692,4 +692,86 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.makeMutationsActive()
 	// Column b changed to d.
 	_ = mt.checkQueryResponse("SHOW COLUMNS FROM t.test", [][]string{{"a", "STRING", "false", "NULL"}, {"d", "STRING", "true", "NULL"}, {"e", "STRING", "true", "NULL"}})
+
+	// Add column mutation "x" (NULL allowed and no default).
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN x DECIMAL;`); err != nil {
+		t.Fatal(err)
+	}
+	// The mutation in the table descriptor has changed and we would like
+	// to update our copy to make it live.
+	if err := mt.kvDB.GetProto(mt.descKey, mt.desc); err != nil {
+		mt.Fatal(err)
+	}
+	mt.writeColumnMutation("x", csql.DescriptorMutation{Direction: csql.DescriptorMutation_ADD})
+	mt.makeMutationsActive()
+
+	// Insert a new entry.
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('a', 'b', 'c')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('d', 'e', 'f', DECIMAL '0.0')`); err != nil {
+		t.Fatal(err)
+	}
+	_ = mt.checkQueryResponse("SELECT * FROM t.test", [][]string{{"a", "b", "c", "NULL"}, {"d", "e", "f", "0"}})
+
+	// Add column mutation "x" (default value with NULL not allowed).
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN y DECIMAL NOT NULL DEFAULT (DECIMAL '1.3');`); err != nil {
+		t.Fatal(err)
+	}
+	// The mutation in the table descriptor has changed and we would like
+	// to update our copy to make it live.
+	if err := mt.kvDB.GetProto(mt.descKey, mt.desc); err != nil {
+		mt.Fatal(err)
+	}
+	mt.writeColumnMutation("y", csql.DescriptorMutation{Direction: csql.DescriptorMutation_ADD})
+	mt.makeMutationsActive()
+
+	// Insert a new entry.
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('g', 'h', 'i')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.test (a, d, e, y) VALUES ('j', 'k', 'l', DECIMAL '1.0')`); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = mt.checkQueryResponse("SELECT * FROM t.test", [][]string{
+		{"a", "b", "c", "NULL", "1.3"},
+		{"d", "e", "f", "0", "1.3"},
+		{"g", "h", "i", "NULL", "1.3"},
+		{"j", "k", "l", "NULL", "1"},
+	})
+
+	// Add column mutation "q" (NULL NOT allowed).
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN q DECIMAL NOT NULL;`); !testutils.IsError(err, `column q contains null values`) {
+		t.Fatal(err)
+	}
+
+	// Add column mutation "z" (default value and NULL allowed).
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN z DECIMAL DEFAULT (DECIMAL '1.4');`); err != nil {
+		t.Fatal(err)
+	}
+	// The mutation in the table descriptor has changed and we would like
+	// to update our copy to make it live.
+	if err := mt.kvDB.GetProto(mt.descKey, mt.desc); err != nil {
+		mt.Fatal(err)
+	}
+	mt.writeColumnMutation("z", csql.DescriptorMutation{Direction: csql.DescriptorMutation_ADD})
+	mt.makeMutationsActive()
+
+	// Insert a new entry.
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ('m', 'n', 'o')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.test (a, d, e, x, y, z) VALUES ('p', 'q', 'r', DECIMAL '2.0', DECIMAL '2.1', DECIMAL '2.2')`); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = mt.checkQueryResponse("SELECT * FROM t.test", [][]string{
+		{"a", "b", "c", "NULL", "1.3", "1.4"},
+		{"d", "e", "f", "0", "1.3", "1.4"},
+		{"g", "h", "i", "NULL", "1.3", "1.4"},
+		{"j", "k", "l", "NULL", "1", "1.4"},
+		{"m", "n", "o", "NULL", "1.3", "1.4"},
+		{"p", "q", "r", "2", "2.1", "2.2"},
+	})
 }
