@@ -321,7 +321,7 @@ func (n *QualifiedName) NormalizeTableName(database string) error {
 		return fmt.Errorf("invalid table name: %s", n)
 	}
 	if len(n.Indirect) == 2 {
-		if _, ok := n.Indirect[1].(IndexIndirection); !ok {
+		if _, ok := n.Indirect[1].(*IndexIndirection); !ok {
 			return fmt.Errorf("invalid table name: %s", n)
 		}
 	}
@@ -352,7 +352,7 @@ func (n *QualifiedName) QualifyWithDatabase(database string) error {
 	switch n.Indirect[0].(type) {
 	case NameIndirection:
 		// Nothing to do.
-	case IndexIndirection:
+	case *IndexIndirection:
 		// table@index -> database.table@index
 		// *           -> database.*
 		//
@@ -476,9 +476,20 @@ func (n *QualifiedName) Index() string {
 		panic(fmt.Sprintf("%s is not a table name", n))
 	}
 	if len(n.Indirect) == 2 {
-		return string(n.Indirect[1].(IndexIndirection))
+		return string(n.Indirect[1].(*IndexIndirection).Index)
 	}
 	return ""
+}
+
+// NoIndexJoin returns whether a NO_INDEX_JOIN hint was given as part of the table.
+func (n *QualifiedName) NoIndexJoin() bool {
+	if n.normalized != tableName {
+		panic(fmt.Sprintf("%s is not a table name", n))
+	}
+	if len(n.Indirect) == 2 {
+		return n.Indirect[1].(*IndexIndirection).NoIndexJoin
+	}
+	return false
 }
 
 // Column returns the column portion of the name. Note that the returned string

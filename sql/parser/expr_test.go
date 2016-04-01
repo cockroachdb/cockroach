@@ -62,6 +62,10 @@ func TestNormalizeTableName(t *testing.T) {
 		{`test.foo`, `test.foo`, ``, ``},
 		{`bar.foo`, `bar.foo`, `test`, ``},
 		{`foo@bar`, `test.foo@bar`, `test`, ``},
+		{`foo@{FORCE_INDEX=bar}`, `test.foo@bar`, `test`, ``},
+		{`foo@{NO_INDEX_JOIN}`, `test.foo@{NO_INDEX_JOIN}`, `test`, ``},
+		{`foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`, `test.foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`,
+			`test`, ``},
 		{`test.foo@bar`, `test.foo@bar`, ``, ``},
 
 		{`""`, ``, ``, `empty table name`},

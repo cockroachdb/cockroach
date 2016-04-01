@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -81,11 +82,13 @@ type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool) planNode {
+func selectIndex(
+	s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+) (planNode, error) {
 	if s.desc.isEmpty() || (s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil) {
 		// No table or no where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
-		return s
+		return s, nil
 	}
 
 	candidates := make([]*indexInfo, 0, len(s.desc.Indexes)+1)
@@ -125,7 +128,7 @@ func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatc
 		if len(exprs) == 1 && len(exprs[0]) == 1 {
 			if d, ok := exprs[0][0].(parser.DBool); ok && bool(!d) {
 				// The expression simplified to false.
-				return &emptyNode{}
+				return &emptyNode{}, nil
 			}
 		}
 
@@ -156,6 +159,28 @@ func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatc
 		}
 	}
 
+	if s.noIndexJoin {
+		// Eliminate non-covering indexes. We do this after the check above for
+		// constant false filter.
+		for i := 0; i < len(candidates); {
+			if !candidates[i].covering {
+				candidates[i] = candidates[len(candidates)-1]
+				candidates = candidates[:len(candidates)-1]
+			} else {
+				i++
+			}
+		}
+		if len(candidates) == 0 {
+			// The primary index is always covering. So the only way this can
+			// happen is if we had a specified index.
+			if s.specifiedIndex == nil {
+				panic("no covering indexes")
+			}
+			return nil, util.Errorf("index \"%s\" is not covering and NO_INDEX_JOIN was specified",
+				s.specifiedIndex.Name)
+		}
+	}
+
 	if analyzeOrdering != nil {
 		for _, c := range candidates {
 			c.analyzeOrdering(s, analyzeOrdering, preferOrderMatching)
@@ -179,7 +204,7 @@ func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatc
 	s.spans = makeSpans(c.constraints, c.desc.ID, c.index)
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
-		return &emptyNode{}
+		return &emptyNode{}, nil
 	}
 	s.filter = applyConstraints(s.filter, c.constraints)
 	noFilter := (s.filter == nil)
@@ -210,7 +235,7 @@ func selectIndex(s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatc
 		}
 	}
 
-	return plan
+	return plan, nil
 }
 
 type indexConstraint struct {

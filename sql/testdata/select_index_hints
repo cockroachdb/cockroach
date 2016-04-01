@@ -140,3 +140,38 @@ EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 
 query error index \"badidx\" not found
 SELECT * FROM abcd@badidx
+
+query error index \"badidx\" not found
+SELECT * FROM abcd@{FORCE_INDEX=badidx}
+
+query ITT
+EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
+----
+0 index-join
+1 scan       abcd@b       -
+1 scan       abcd@primary
+
+query ITT
+EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
+----
+0 index-join
+1 scan       abcd@cd      /10-/11
+1 scan       abcd@primary
+
+query ITT
+EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
+----
+0 scan       abcd@bcd -
+
+query ITT
+EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
+----
+0 scan       abcd@bcd -
+
+query ITT
+EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 10
+----
+0 scan       abcd@primary -
+
+query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
+EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10

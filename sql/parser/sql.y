@@ -88,6 +88,9 @@ func (u *sqlSymUnion) indirectElem() IndirectionElem {
 func (u *sqlSymUnion) indirect() Indirection {
     return u.val.(Indirection)
 }
+func (u *sqlSymUnion) indexIndirect() *IndexIndirection {
+    return u.val.(*IndexIndirection)
+}
 func (u *sqlSymUnion) stmt() Statement {
     if stmt, ok := u.val.(Statement); ok {
         return stmt
@@ -376,7 +379,10 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <Expr>  where_clause
 %type <IndirectionElem> glob_indirection
 %type <IndirectionElem> name_indirection
+%type <IndirectionElem> index_indirection
 %type <IndirectionElem> indirection_elem
+%type <*IndexIndirection> index_indirection_param
+%type <*IndexIndirection> index_indirection_param_list
 %type <Expr>  a_expr b_expr c_expr a_expr_const
 %type <Expr>  substr_from substr_for
 %type <Expr>  in_expr
@@ -497,7 +503,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   EXISTS EXPLAIN EXTRACT
 
 %token <str>   FALSE FETCH FILTER FIRST FLOAT FOLLOWING FOR
-%token <str>   FOREIGN FROM FULL
+%token <str>   FORCE_INDEX FOREIGN FROM FULL
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
@@ -518,7 +524,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 
 %token <str>   MATCH MINUTE MONTH
 
-%token <str>   NAME NAMES NATURAL NEXT NO NORMAL
+%token <str>   NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
@@ -3566,9 +3572,9 @@ indirection_elem:
   {
     $$.val = $1.indirectElem()
   }
-| '@' col_label
+| index_indirection
   {
-    $$.val = IndexIndirection($2)
+    $$.val = $1.indirectElem()
   }
 | '[' a_expr ']'
   {
@@ -3590,6 +3596,52 @@ glob_indirection:
   {
     $$.val = qualifiedStar
   }
+
+force_index_keyword:
+  FORCE_INDEX
+
+no_index_join_keyword:
+  NO_INDEX_JOIN
+
+index_indirection_param:
+  force_index_keyword '=' col_label
+  {
+     $$.val = &IndexIndirection{Index: Name($3)}
+  }
+|
+  no_index_join_keyword
+  {
+     $$.val = &IndexIndirection{NoIndexJoin: true}
+  }
+
+index_indirection_param_list:
+  index_indirection_param
+  {
+    $$.val = $1.indexIndirect()
+  }
+|
+  index_indirection_param_list ',' index_indirection_param
+  {
+    a := $1.indexIndirect()
+    b := $3.indexIndirect()
+    index := b.Index
+    if index == "" {
+       index = a.Index
+    }
+    noIndexJoin := a.NoIndexJoin || b.NoIndexJoin
+    $$.val = &IndexIndirection{Index: index, NoIndexJoin: noIndexJoin}
+  }
+
+index_indirection:
+  '@' col_label
+  {
+    $$.val = &IndexIndirection{Index: Name($2)}
+  }
+| '@' '{' index_indirection_param_list '}'
+  {
+    $$.val = $3.indexIndirect()
+  }
+
 
 indirection:
   indirection_elem
