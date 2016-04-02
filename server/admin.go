@@ -55,20 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-func init() {
-	// Tweak the authentication logic for the tracing endpoint. By default it's
-	// open for localhost only, but with Docker we want to get there from
-	// anywhere. We maintain the default behavior of only allowing access to
-	// sensitive logs from localhost.
-	//
-	// TODO(mberhault): properly secure this once we require client certs.
-	origAuthRequest := trace.AuthRequest
-	trace.AuthRequest = func(req *http.Request) (bool, bool) {
-		_, sensitive := origAuthRequest(req)
-		return true, sensitive
-	}
-}
-
 const (
 	// debugEndpoint is the prefix of golang's standard debug functionality
 	// for access to exported vars and pprof tools.
@@ -94,10 +80,69 @@ const (
 )
 
 var (
+	// We use the default http mux for the debug endpoint (as pprof and net/trace
+	// register to that via import)
+	debugServeMux = http.DefaultServeMux
+
 	// apiServerMessage is the standard body for all HTTP 500 responses.
 	errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error has occurred. Please "+
 		"check your CockroachDB logs for more details.")
 )
+
+func init() {
+	// Tweak the authentication logic for the tracing endpoint. By default it's
+	// open for localhost only, but with Docker we want to get there from
+	// anywhere. We maintain the default behavior of only allowing access to
+	// sensitive logs from localhost.
+	//
+	// TODO(mberhault): properly secure this once we require client certs.
+	origAuthRequest := trace.AuthRequest
+	trace.AuthRequest = func(req *http.Request) (bool, bool) {
+		_, sensitive := origAuthRequest(req)
+		return true, sensitive
+	}
+
+	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
+		// The explicit header is necessary or (at least Chrome) will try to
+		// download a gzipped file (Content-type comes back application/x-gzip).
+		w.Header().Add("Content-type", "text/html")
+
+		fmt.Fprint(w, `
+<html>
+<head>
+<style>
+table tr td {
+  vertical-align: top;
+}
+</style>
+<title>Debug endpoints</title>
+</head>
+<body>
+<h1>Debug endpoints</h1>
+<table>
+<tr>
+<td>trace (local node only)</td>
+<td><a href="./requests">requests</a>, <a href="./events">events</a></td>
+</tr>
+<tr>
+<td>stopper</td>
+<td><a href="./stopper">active tasks</a></td>
+</tr>
+<tr>
+<td>pprof</td>
+<td>
+<!-- cribbed from the /debug/pprof endpoint -->
+<a href="./pprof/block?debug=1">block</a><br />
+<a href="./pprof/goroutine?debug=1">goroutine</a> (<a href="./pprof/goroutine?debug=2">all</a>)<br />
+<a href="./pprof/heap?debug=1">heap</a><br />
+<a href="./pprof/threadcreate?debug=1">threadcreate</a><br />
+</td>
+</tr>
+</table>
+</body></html>
+`)
+	})
+}
 
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
@@ -201,7 +246,7 @@ func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 // serve mux, which is preconfigured (by import of expvar and net/http/pprof)
 // to serve endpoints which access exported variables and pprof tools.
 func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
-	handler, _ := http.DefaultServeMux.Handler(r)
+	handler, _ := debugServeMux.Handler(r)
 	handler.ServeHTTP(w, r)
 }
 
