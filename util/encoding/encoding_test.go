@@ -370,14 +370,26 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "Decimal, no terminator",
+			name:    "Decimal, malformed uvarint",
 			buf:     []byte{decimalPosValPosExp},
+			pattern: "byte slice with zero length passed to getUvarint",
+			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
+		},
+		{
+			name:    "DecimalDescending, malformed uvarint",
+			buf:     []byte{decimalPosValPosExp},
+			pattern: "byte slice with zero length passed to getUvarint",
+			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
+		},
+		{
+			name:    "Decimal, no terminator",
+			buf:     []byte{decimalPosValPosExp, 0x01},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
 		},
 		{
 			name:    "DecimalDescending, no terminator",
-			buf:     []byte{decimalPosValPosExp},
+			buf:     []byte{decimalPosValPosExp, 0x01},
 			pattern: "did not find terminator",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
 		},
