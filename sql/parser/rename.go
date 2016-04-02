@@ -56,7 +56,7 @@ func (node *RenameTable) String() string {
 
 // RenameIndex represents a RENAME INDEX statement.
 type RenameIndex struct {
-	Name     *QualifiedName
+	Index    *TableNameWithIndex
 	NewName  Name
 	IfExists bool
 }
@@ -67,7 +67,7 @@ func (node *RenameIndex) String() string {
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	fmt.Fprintf(&buf, "%s RENAME TO %s", node.Name, node.NewName)
+	fmt.Fprintf(&buf, "%s RENAME TO %s", node.Index, node.NewName)
 	return buf.String()
 }
 

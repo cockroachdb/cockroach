@@ -190,7 +190,9 @@ func (n *scanNode) ExplainPlan() (name, description string, children []planNode)
 
 // Initializes a scanNode with a tableName. Returns the table or index name that can be used for
 // fully-qualified columns if an alias is not specified.
-func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (string, *roachpb.Error) {
+func (n *scanNode) initTable(
+	p *planner, tableName *parser.QualifiedName, indexHints *parser.IndexHints,
+) (string, *roachpb.Error) {
 	if n.desc, n.pErr = p.getTableLease(tableName); n.pErr != nil {
 		return "", n.pErr
 	}
@@ -201,8 +203,8 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 
 	alias := n.desc.Name
 
-	indexName := NormalizeName(tableName.Index())
-	if indexName != "" {
+	if indexHints != nil && indexHints.Index != "" {
+		indexName := NormalizeName(string(indexHints.Index))
 		if indexName == NormalizeName(n.desc.PrimaryIndex.Name) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
@@ -218,7 +220,7 @@ func (n *scanNode) initTable(p *planner, tableName *parser.QualifiedName) (strin
 			}
 		}
 	}
-	n.noIndexJoin = tableName.NoIndexJoin()
+	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
 	n.initDescDefaults()
 	return alias, nil
 }
