@@ -97,6 +97,8 @@ func TestParse(t *testing.T) {
 		{`DROP TABLE IF EXISTS a`},
 		{`DROP INDEX a.b@c`},
 		{`DROP INDEX IF EXISTS a.b@c`},
+		{`DROP INDEX a.b@c, d@f`},
+		{`DROP INDEX IF EXISTS a.b@c, d@f`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
@@ -384,8 +386,8 @@ func TestParse(t *testing.T) {
 		{`ALTER DATABASE a RENAME TO b`},
 		{`ALTER TABLE a RENAME TO b`},
 		{`ALTER TABLE IF EXISTS a RENAME TO b`},
-		{`ALTER INDEX a RENAME TO b`},
-		{`ALTER INDEX IF EXISTS a RENAME TO b`},
+		{`ALTER INDEX a@b RENAME TO b`},
+		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER TABLE a RENAME COLUMN c1 TO c2`},
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
 
@@ -776,6 +778,36 @@ SELECT FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
 			`NO_INDEX_JOIN specified multiple times at or near "NO_INDEX_JOIN"
 SELECT FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
                                                ^
+`,
+		},
+		{
+			`INSERT INTO a@b VALUES (1, 2)`,
+			`syntax error at or near "@"
+INSERT INTO a@b VALUES (1, 2)
+             ^
+`,
+		},
+		{
+			`ALTER INDEX a RENAME TO b`,
+			`syntax error at or near "RENAME"
+ALTER INDEX a RENAME TO b
+              ^
+`,
+		},
+		{
+
+			`ALTER INDEX a IF EXISTS RENAME TO b`,
+			`syntax error at or near "IF"
+ALTER INDEX a IF EXISTS RENAME TO b
+              ^
+`,
+		},
+		{
+
+			`DROP INDEX a`,
+			`syntax error at or near "EOF"
+DROP INDEX a
+            ^
 `,
 		},
 	}

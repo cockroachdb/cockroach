@@ -130,12 +130,12 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
-	for _, indexQualifiedName := range n.Names {
-		if err := indexQualifiedName.NormalizeTableName(p.session.Database); err != nil {
+	for _, index := range n.IndexList {
+		if err := index.Table.NormalizeTableName(p.session.Database); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
-		tableDesc, pErr := p.getTableDesc(indexQualifiedName)
+		tableDesc, pErr := p.getTableDesc(index.Table)
 		if pErr != nil {
 			return nil, pErr
 		}
@@ -143,7 +143,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		idxName := indexQualifiedName.Index()
+		idxName := string(index.Index)
 		status, i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
 			if n.IfExists {

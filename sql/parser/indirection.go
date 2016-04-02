@@ -28,7 +28,6 @@ type IndirectionElem interface {
 }
 
 func (NameIndirection) indirectionElem()   {}
-func (IndexIndirection) indirectionElem()  {}
 func (StarIndirection) indirectionElem()   {}
 func (*ArrayIndirection) indirectionElem() {}
 
@@ -49,23 +48,6 @@ type NameIndirection Name
 
 func (n NameIndirection) String() string {
 	return fmt.Sprintf(".%s", Name(n))
-}
-
-// IndexIndirection represents "@<name>" or "@{param[,param]}" where param is
-// one of "FORCE_INDEX=<name>" and "NO_INDEX_JOIN" in an indirection expression.
-type IndexIndirection struct {
-	Index       Name
-	NoIndexJoin bool
-}
-
-func (n *IndexIndirection) String() string {
-	if !n.NoIndexJoin {
-		return fmt.Sprintf("@%s", n.Index)
-	}
-	if n.Index == "" {
-		return "@{NO_INDEX_JOIN}"
-	}
-	return fmt.Sprintf("@{FORCE_INDEX=%s,NO_INDEX_JOIN}", n.Index)
 }
 
 // StarIndirection represents ".*" in an indirection expression.

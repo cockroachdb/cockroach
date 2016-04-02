@@ -317,13 +317,8 @@ func (n *QualifiedName) NormalizeTableName(database string) error {
 		return err
 	}
 
-	if len(n.Indirect) > 2 {
+	if len(n.Indirect) > 1 {
 		return fmt.Errorf("invalid table name: %s", n)
-	}
-	if len(n.Indirect) == 2 {
-		if _, ok := n.Indirect[1].(*IndexIndirection); !ok {
-			return fmt.Errorf("invalid table name: %s", n)
-		}
 	}
 	n.normalized = tableName
 	return nil
@@ -352,17 +347,6 @@ func (n *QualifiedName) QualifyWithDatabase(database string) error {
 	switch n.Indirect[0].(type) {
 	case NameIndirection:
 		// Nothing to do.
-	case *IndexIndirection:
-		// table@index -> database.table@index
-		// *           -> database.*
-		//
-		// Accomplished by prepending n.Base to the existing indirection and then
-		// setting n.Base to the supplied database.
-		if database == "" {
-			return fmt.Errorf("no database specified: %s", n)
-		}
-		n.Indirect = append(Indirection{NameIndirection(n.Base)}, n.Indirect...)
-		n.Base = Name(database)
 	case StarIndirection:
 		// * -> database.*
 		if n.Base != "" {
@@ -469,29 +453,6 @@ func (n *QualifiedName) Table() string {
 	return string(n.Base)
 }
 
-// Index returns the index portion of the name. Note that the returned string
-// is not quoted even if the name is a keyword.
-func (n *QualifiedName) Index() string {
-	if n.normalized != tableName {
-		panic(fmt.Sprintf("%s is not a table name", n))
-	}
-	if len(n.Indirect) == 2 {
-		return string(n.Indirect[1].(*IndexIndirection).Index)
-	}
-	return ""
-}
-
-// NoIndexJoin returns whether a NO_INDEX_JOIN hint was given as part of the table.
-func (n *QualifiedName) NoIndexJoin() bool {
-	if n.normalized != tableName {
-		panic(fmt.Sprintf("%s is not a table name", n))
-	}
-	if len(n.Indirect) == 2 {
-		return n.Indirect[1].(*IndexIndirection).NoIndexJoin
-	}
-	return false
-}
-
 // Column returns the column portion of the name. Note that the returned string
 // is not quoted even if the name is a keyword.
 func (n *QualifiedName) Column() string {
@@ -543,6 +504,31 @@ func (n *QualifiedName) String() string {
 type QualifiedNames []*QualifiedName
 
 func (n QualifiedNames) String() string {
+	var buf bytes.Buffer
+	for i, e := range n {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(e.String())
+	}
+	return buf.String()
+}
+
+// TableNameWithIndex represents a "table@index", used in statements that
+// specifically refer to an index.
+type TableNameWithIndex struct {
+	Table *QualifiedName
+	Index Name
+}
+
+func (n *TableNameWithIndex) String() string {
+	return fmt.Sprintf("%s@%s", n.Table, n.Index)
+}
+
+// TableNameWithIndexList is a list of indexes.
+type TableNameWithIndexList []*TableNameWithIndex
+
+func (n TableNameWithIndexList) String() string {
 	var buf bytes.Buffer
 	for i, e := range n {
 		if i > 0 {

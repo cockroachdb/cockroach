@@ -160,16 +160,40 @@ func (*AliasedTableExpr) tableExpr() {}
 func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}
 
+// IndexHints represents "@<index_name>" or "@{param[,param]}" where param is
+// one of:
+//  - FORCE_INDEX=<index_name>
+//  - NO_INDEX_JOIN
+// It is used optionally after a table name in SELECT statements.
+type IndexHints struct {
+	Index       Name
+	NoIndexJoin bool
+}
+
+func (n *IndexHints) String() string {
+	if !n.NoIndexJoin {
+		return fmt.Sprintf("@%s", n.Index)
+	}
+	if n.Index == "" {
+		return "@{NO_INDEX_JOIN}"
+	}
+	return fmt.Sprintf("@{FORCE_INDEX=%s,NO_INDEX_JOIN}", n.Index)
+}
+
 // AliasedTableExpr represents a table expression coupled with an optional
 // alias.
 type AliasedTableExpr struct {
-	Expr SimpleTableExpr
-	As   AliasClause
+	Expr  SimpleTableExpr
+	Hints *IndexHints
+	As    AliasClause
 }
 
 func (node *AliasedTableExpr) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s", node.Expr)
+	if node.Hints != nil {
+		buf.WriteString(node.Hints.String())
+	}
 	if node.As.Alias != "" {
 		fmt.Fprintf(&buf, " AS %s", node.As)
 	}

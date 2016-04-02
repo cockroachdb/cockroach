@@ -42,8 +42,8 @@ func (node *DropDatabase) String() string {
 
 // DropIndex represents a DROP INDEX statement.
 type DropIndex struct {
-	Names    QualifiedNames
-	IfExists bool
+	IndexList TableNameWithIndexList
+	IfExists  bool
 }
 
 func (node *DropIndex) String() string {
@@ -52,7 +52,7 @@ func (node *DropIndex) String() string {
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	buf.WriteString(node.Names.String())
+	buf.WriteString(node.IndexList.String())
 	return buf.String()
 }
 

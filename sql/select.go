@@ -361,7 +361,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 		case *parser.QualifiedName:
 			// Usual case: a table.
 			scan := &scanNode{planner: p, txn: p.txn}
-			s.table.alias, s.pErr = scan.initTable(p, expr)
+			s.table.alias, s.pErr = scan.initTable(p, expr, ate.Hints)
 			if s.pErr != nil {
 				return s.pErr
 			}
