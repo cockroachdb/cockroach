@@ -114,6 +114,12 @@ func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 	return r.RSpan().ContainsKeyRange(start, end)
 }
 
+// OverlapsKeyRange returns whether this RangeDescriptor overlaps the specified
+// key range from start (inclusive) to end (exclusive).
+func (r RangeDescriptor) OverlapsKeyRange(start, end RKey) bool {
+	return r.RSpan().OverlapsKeyRange(start, end)
+}
+
 // FindReplica returns the replica which matches the specified store
 // ID. If no replica matches, (-1, nil) is returned.
 func (r RangeDescriptor) FindReplica(storeID StoreID) (int, *ReplicaDescriptor) {

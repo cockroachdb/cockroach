@@ -960,11 +960,20 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 	return bytes.Compare(start, rs.Key) >= 0 && bytes.Compare(rs.EndKey, end) >= 0
 }
 
+// OverlapsKeyRange returns whether this span overlaps the specified
+// key range from start (inclusive) to end (exclusive).
+func (rs RSpan) OverlapsKeyRange(start, end RKey) bool {
+	if len(end) == 0 {
+		return rs.ContainsKey(start)
+	}
+	return bytes.Compare(rs.EndKey, start) > 0 && bytes.Compare(rs.Key, end) < 0
+}
+
 // Intersect returns the intersection of the current span and the
 // descriptor's range. Returns an error if the span and the
 // descriptor's range do not overlap.
 func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
-	if !rs.Key.Less(desc.EndKey) || !desc.StartKey.Less(rs.EndKey) {
+	if !rs.OverlapsKeyRange(desc.StartKey, desc.EndKey) {
 		return rs, util.Errorf("span and descriptor's range do not overlap")
 	}
 

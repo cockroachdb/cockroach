@@ -715,11 +715,35 @@ func TestRSpanContains(t *testing.T) {
 	for i, test := range testData {
 		if bytes.Compare(test.start, test.end) == 0 {
 			if rs.ContainsKey(test.start) != test.contains {
-				t.Errorf("%d: expected key %q within range", i, test.start)
+				t.Errorf("%d: expected key %q within range = %t", i, test.start, test.contains)
 			}
 		}
 		if rs.ContainsKeyRange(test.start, test.end) != test.contains {
-			t.Errorf("%d: expected key %q within range", i, test.start)
+			t.Errorf("%d: expected key range [%q,%q) within range = %t", i, test.start, test.end, test.contains)
+		}
+	}
+}
+
+// TestRSpanOverlaps verifies methods to check whether a key
+// or key range is overlaps within the span.
+func TestRSpanOverlaps(t *testing.T) {
+	rs := RSpan{Key: []byte("a"), EndKey: []byte("b")}
+
+	testData := []struct {
+		start, end []byte
+		overlaps   bool
+	}{
+		{[]byte("a"), []byte("b"), true},
+		{[]byte("a"), []byte("aa"), true},
+		{[]byte("aa"), []byte("b"), true},
+		{[]byte("b"), []byte("bb"), false},
+		{[]byte("c"), []byte("d"), false},
+		{[]byte("0"), []byte("bb"), true},
+		{[]byte("0"), []byte("a"), false},
+	}
+	for i, test := range testData {
+		if rs.OverlapsKeyRange(test.start, test.end) != test.overlaps {
+			t.Errorf("%d: expected key range [%q,%q) overlaps with range = %t", i, test.start, test.end, test.overlaps)
 		}
 	}
 }
