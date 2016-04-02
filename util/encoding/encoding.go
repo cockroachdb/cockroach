@@ -56,7 +56,6 @@ const (
 	decimalPosValPosExp     = decimalPosValZeroExp + 1
 	decimalInfinity         = decimalPosValPosExp + 1
 	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
-	decimalTerminator       = 0x00
 
 	bytesMarker          byte = decimalNaNDesc + 1
 	bytesDescMarker      byte = bytesMarker + 1
@@ -433,7 +432,7 @@ func EncodeBytesDescending(b []byte, data []byte) []byte {
 // are appended to r. The remainder of the input buffer and the
 // decoded []byte are returned.
 func DecodeBytesAscending(b []byte, r []byte) ([]byte, []byte, error) {
-	return decodeBytesInternal(b, r, ascendingEscapes)
+	return decodeBytesInternal(b, r, ascendingEscapes, true)
 }
 
 // DecodeBytesDescending decodes a []byte value from the input buffer
@@ -446,16 +445,18 @@ func DecodeBytesDescending(b []byte, r []byte) ([]byte, []byte, error) {
 	if r == nil {
 		r = []byte{}
 	}
-	b, r, err := decodeBytesInternal(b, r, descendingEscapes)
+	b, r, err := decodeBytesInternal(b, r, descendingEscapes, true)
 	onesComplement(r)
 	return b, r, err
 }
 
-func decodeBytesInternal(b []byte, r []byte, e escapes) ([]byte, []byte, error) {
-	if len(b) == 0 || b[0] != e.marker {
-		return nil, nil, util.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
+func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]byte, []byte, error) {
+	if expectMarker {
+		if len(b) == 0 || b[0] != e.marker {
+			return nil, nil, util.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
+		}
+		b = b[1:]
 	}
-	b = b[1:]
 
 	for {
 		i := bytes.IndexByte(b, e.escape)
