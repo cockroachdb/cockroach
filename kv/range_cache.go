@@ -92,9 +92,6 @@ type rangeDescriptorCache struct {
 		sync.Mutex
 		inflight map[lookupRequestKey]lookupRequest
 	}
-	// splitPrefetchSync sets whether prefetching the updated half of a split
-	// when a split is detected should be synchronous or completed in the background.
-	splitPrefetchSync bool
 }
 
 type lookupRequest struct {
@@ -111,13 +108,7 @@ type lookupResult struct {
 }
 
 type lookupRequestKey struct {
-	key string
-	// sawAddrErr is useful to distinguish between lookups to the updated and new
-	// halves of a split. This is because only requests to the new half will trigger
-	// an eviction due to an addressing error, while requests to the updated half
-	// will simply find the descriptor missing from the cache. See makeLookupRequestKey
-	// for more details.
-	sawAddrErr      bool
+	key             string
 	considerIntents bool
 	useReverseScan  bool
 }
@@ -132,13 +123,14 @@ type lookupRequestKey struct {
 // - Split:  for a split, only the right half of the split will attempt to evict
 //           the stale descriptor because only the right half will be sending to
 //           the wrong range. Once this stale descriptor is evicted, keys from
-//           both halves of the split will miss the cache. We set the key to hash
-//           to the start of the stale descriptor for lookup requests to both the
-//           left and the right half of the split, but let the sawAddrErr assure
-//           that these requests are mapped to two separate lookupRequest. It's
-//           important that we only infer a request to the right half of a split
-//           on an eviction that sawAddrErr, and not on all evictions, because
-//           there are other reasons why a descriptor may need to be evicted.
+//           both halves of the split will miss the cache. Because both sides of
+//           the split will now map to the same lookupResult, it is important to
+//           use EvictAndReplace if possible to insert one of the two new descriptors.
+//           This way, no requests to that descriptor will ever miss the cache and
+//           risk being coalesced into the other request. If this is not possible,
+//           the lookup will still work, but it will require multiple lookups, which
+//           will be launched in series when requests find that their desired key
+//           is outside of the returned descriptor.
 // - Merges: for a merge, the left half of the merge will never notice. The right
 //           half of the merge will suddenly find its descriptor to be stale, so
 //           it will evict and lookup the new descriptor. We set the key to hash
@@ -155,7 +147,6 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken evictionToken, considerIn
 	}
 	return lookupRequestKey{
 		key:             string(key),
-		sawAddrErr:      evictToken.evictedDueToAddrErr(),
 		considerIntents: considerIntents,
 		useReverseScan:  useReverseScan,
 	}
@@ -194,33 +185,49 @@ func (rdc *rangeDescriptorCache) stringLocked() string {
 
 // evictionToken holds eviction state between calls to LookupRangeDescriptor.
 type evictionToken struct {
-	prevDesc      *roachpb.RangeDescriptor
-	do            func() error // called on eviction.
-	sawAddrErr    bool         // set if an eviction is due to an addressing error.
+	prevDesc *roachpb.RangeDescriptor
+
+	doLocker  sync.Locker                               // protects do and doReplace.
+	do        func() error                              // called on eviction.
+	doReplace func(rs ...roachpb.RangeDescriptor) error // called after eviction on evictAndReplace.
+
 	evicted       bool
 	evictedLocker sync.Locker
 }
 
-func makeEvictionToken(prevDesc *roachpb.RangeDescriptor, evict func() error) evictionToken {
+func (rdc *rangeDescriptorCache) makeEvictionToken(prevDesc *roachpb.RangeDescriptor, evict func() error) evictionToken {
 	return evictionToken{
 		prevDesc:      prevDesc,
 		do:            evict,
+		doReplace:     rdc.insertRangeDescriptorsLocked,
+		doLocker:      &rdc.rangeCacheMu,
 		evictedLocker: &sync.Mutex{},
 	}
 }
 
-// evict instructs the evictionToken to evict the RangeDescriptor it was created
-// with from the rangeDescriptorCache. The method inquires into the cause of the
-// eviction through its sawAddrErr, which should be set to true if the eviction
-// was prompted by an addressing issue, and false otherwise.
-func (et *evictionToken) evict(sawAddrErr bool) error {
+// Evict instructs the evictionToken to evict the RangeDescriptor it was created
+// with from the rangeDescriptorCache.
+func (et *evictionToken) Evict() error {
+	return et.EvictAndReplace(nil)
+}
+
+// EvictAndReplace instructs the evictionToken to evict the RangeDescriptor it was
+// created with from the rangeDescriptorCache. It also allows the user to provide a
+// new RangeDescriptor to insert into the cache, all atomically. If the newDesc pointer
+// is nil, this will behave the same as Evict().
+func (et *evictionToken) EvictAndReplace(newDesc *roachpb.RangeDescriptor) error {
 	et.evictedLocker.Lock()
 	defer et.evictedLocker.Unlock()
 	var err error
 	if !et.evicted {
-		err = et.do()
 		et.evicted = true
-		et.sawAddrErr = sawAddrErr
+
+		et.doLocker.Lock()
+		defer et.doLocker.Unlock()
+		err = et.do()
+		if newDesc != nil && err == nil {
+			err = et.doReplace(*newDesc)
+		}
 	}
 	return err
 }
@@ -234,14 +241,10 @@ func (et *evictionToken) evictedDesc() bool {
 	return et.evicted
 }
 
-func (et *evictionToken) evictedDueToAddrErr() bool {
-	if et.evictedLocker == nil {
-		return false
-	}
-	et.evictedLocker.Lock()
-	defer et.evictedLocker.Unlock()
-	return et.sawAddrErr
-}
+// maxIncorrectLookups defines the number of times a lookup for a
+// RangeDescriptor can return an incorrect descriptor before
+// LookupRangeDescriptor will return an error.
+const maxIncorrectLookups = 100
 
 // LookupRangeDescriptor attempts to locate a descriptor for the range
 // containing the given Key. This is done by querying the two-level
@@ -262,14 +265,19 @@ func (et *evictionToken) evictedDueToAddrErr() bool {
 // if it is found to be stale, or an error if any occurred.
 func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictToken evictionToken,
 	considerIntents, useReverseScan bool) (*roachpb.RangeDescriptor, evictionToken, *roachpb.Error) {
+	return rdc.lookupRangeDescriptorInternal(key, evictToken, considerIntents, useReverseScan, 1)
+}
+
+func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(key roachpb.RKey, evictToken evictionToken,
+	considerIntents, useReverseScan bool, attempt int) (*roachpb.RangeDescriptor, evictionToken, *roachpb.Error) {
 	rdc.rangeCacheMu.RLock()
 	if _, desc, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
 		rdc.rangeCacheMu.RUnlock()
 		return nil, evictionToken{}, roachpb.NewError(err)
 	} else if desc != nil {
 		rdc.rangeCacheMu.RUnlock()
-		returnToken := makeEvictionToken(desc, func() error {
-			return rdc.EvictCachedRangeDescriptor(key, desc, useReverseScan)
+		returnToken := rdc.makeEvictionToken(desc, func() error {
+			return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 		})
 		return desc, returnToken, nil
 	}
@@ -307,8 +315,8 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictTo
 				desc := &rs[0]
 				res = lookupResult{
 					desc: desc,
-					evictToken: makeEvictionToken(desc, func() error {
-						return rdc.EvictCachedRangeDescriptor(key, desc, useReverseScan)
+					evictToken: rdc.makeEvictionToken(desc, func() error {
+						return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 					}),
 				}
 			case 2:
@@ -319,8 +327,8 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictTo
 				nextDesc := rs[1]
 				res = lookupResult{
 					desc: desc,
-					evictToken: makeEvictionToken(desc, func() error {
-						return rdc.InsertRangeDescriptors(nextDesc)
+					evictToken: rdc.makeEvictionToken(desc, func() error {
+						return rdc.insertRangeDescriptorsLocked(nextDesc)
 					}),
 				}
 			default:
@@ -334,14 +342,13 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictTo
 			// These need to be separate because we need to preserve the pointer to rs[0]
 			// so that the seenDesc logic works correctly in EvictCachedRangeDescriptor. An
 			// append could cause a copy, which would change the address of rs[0]. We insert
-			// the prefetced descriptors first to avoid any unintended overwriting.
+			// the prefetched descriptors first to avoid any unintended overwriting.
 			if err := rdc.insertRangeDescriptorsLocked(preRs...); err != nil {
 				log.Warningf("range cache inserting prefetched descriptors failed: %v", err)
 			}
 			if err := rdc.insertRangeDescriptorsLocked(rs...); err != nil {
 				res = lookupResult{pErr: roachpb.NewError(err)}
 			}
-
 		}
 
 		// rdc.lookupRequests does not need to be locked here because we hold an exclusive
@@ -353,24 +360,16 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(key roachpb.RKey, evictTo
 		delete(rdc.lookupRequests.inflight, requestKey)
 		rdc.lookupRequests.Unlock()
 		rdc.rangeCacheMu.Unlock()
+	}
 
-		// Detect if we are the right half of a split. If so, launch a lookup for the left half,
-		// which will only be detected because we evicted the entire previous range.
-		if prevDesc := evictToken.prevDesc; prevDesc != nil && evictToken.evictedDueToAddrErr() {
-			if res.desc != nil && prevDesc.StartKey.Less(res.desc.StartKey) {
-				prefetchSplitLeft := func() {
-					prefetchToken := evictionToken{prevDesc: prevDesc}
-					if _, _, pErr := rdc.LookupRangeDescriptor(prevDesc.StartKey, prefetchToken, considerIntents, useReverseScan); pErr != nil {
-						log.Warningf("range cache prefetching updated split descriptor failed: %v", pErr)
-					}
-				}
-				if rdc.splitPrefetchSync {
-					prefetchSplitLeft()
-				} else {
-					go prefetchSplitLeft()
-				}
-			}
+	// It rarely may be possible that we somehow got grouped in with the
+	// wrong RangeLookup (eg. from a double split), so if we did, redo
+	// the lookup without evicting.
+	if res.desc != nil && !res.desc.ContainsKey(key) {
+		if maxIncorrectLookups == attempt {
+			return nil, evictionToken{}, roachpb.NewErrorf("reached lookup retry limit searching for key %q, found incorrect range descriptor %v", key, res.desc)
 		}
+		return rdc.lookupRangeDescriptorInternal(key, evictToken, considerIntents, useReverseScan, attempt+1)
 	}
 	return res.desc, res.evictToken, res.pErr
 }
@@ -422,12 +421,16 @@ func (rdc *rangeDescriptorCache) performRangeLookup(key roachpb.RKey, considerIn
 // but a warning will be logged.
 func (rdc *rangeDescriptorCache) EvictCachedRangeDescriptor(descKey roachpb.RKey,
 	seenDesc *roachpb.RangeDescriptor, inclusive bool) error {
+	rdc.rangeCacheMu.Lock()
+	defer rdc.rangeCacheMu.Unlock()
+	return rdc.evictCachedRangeDescriptorLocked(descKey, seenDesc, inclusive)
+}
+
+func (rdc *rangeDescriptorCache) evictCachedRangeDescriptorLocked(descKey roachpb.RKey,
+	seenDesc *roachpb.RangeDescriptor, inclusive bool) error {
 	if seenDesc == nil {
 		log.Warningf("compare-and-evict for key %s with nil descriptor; clearing unconditionally", descKey)
 	}
-
-	rdc.rangeCacheMu.Lock()
-	defer rdc.rangeCacheMu.Unlock()
 
 	rngKey, cachedDesc, err := rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
 	if err != nil {
@@ -544,9 +547,7 @@ func (rdc *rangeDescriptorCache) insertRangeDescriptorsLocked(rs ...roachpb.Rang
 	for i := range rs {
 		// Note: we append the end key of each range to meta records
 		// so that calls to rdc.rangeCache.Ceil() for a key will return
-		// the correct range. Using the start key would require using
-		// Floor() which is a possibility for our llrb-based OrderedCache
-		// but not possible for RocksDB.
+		// the correct range.
 
 		// Before adding a new descriptor, make sure we clear out any
 		// pre-existing, overlapping descriptor which might have been
