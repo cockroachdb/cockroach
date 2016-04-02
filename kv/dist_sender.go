@@ -42,8 +42,6 @@ import (
 const (
 	defaultSendNextTimeout = 10 * time.Second // for now; see #2500
 	defaultClientTimeout   = 10 * time.Second
-	retryBackoff           = 250 * time.Millisecond
-	maxRetryBackoff        = 30 * time.Second
 
 	// The default maximum number of ranges to return from a range
 	// lookup.
@@ -55,8 +53,12 @@ const (
 )
 
 var defaultRPCRetryOptions = retry.Options{
-	InitialBackoff: retryBackoff,
-	MaxBackoff:     maxRetryBackoff,
+	// This is an aggressive initial backoff to support situations where retries
+	// which are expected to succeed in a low number of iterations should occur in
+	// quick succession. An example of this is when the rangeDescriptorCache returns
+	// a lookupMismatchError.
+	InitialBackoff: 100 * time.Microsecond,
+	MaxBackoff:     30 * time.Second,
 	Multiplier:     2,
 }
 
@@ -376,7 +378,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // start its query is returned first. Next returned is an evictionToken. In
 // case the descriptor is discovered stale, the returned evictionToken's evict
 // method should be called; it evicts the cache appropriately. Finally, the
-// returned bool is true in case the given range reaches outside the first
+// returned bool is true in case the given range reaches outside the returned
 // descriptor.
 func (ds *DistSender) getDescriptors(
 	rs roachpb.RSpan, evictToken evictionToken, useReverseScan bool,
@@ -394,7 +396,7 @@ func (ds *DistSender) getDescriptors(
 	// We cannot know with complete certainty whether a current
 	// intent or a previously committed value should be used to
 	// direct requests, but by looking up both, we can try both out
-	// without issuing as second lookup. This balances between
+	// without issuing a second lookup. This balances between
 	// the two cases where an intent's txn hasn't yet been
 	// committed (the previous value is correct), or an intent's
 	// txn has been committed (the intent value is correct).
@@ -405,7 +407,7 @@ func (ds *DistSender) getDescriptors(
 
 	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
-		return nil, false, evictionToken{}, pErr
+		return nil, false, returnToken, pErr
 	}
 
 	// Checks whether need to get next range descriptor.
@@ -663,7 +665,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// returns descriptor [c,d) -> [d,g) is never scanned.
 			// We evict and retry in such a case.
 			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, rs.EndKey)) || (!isReverse && !desc.ContainsKeyRange(rs.Key, desc.EndKey)) {
-				if err := evictToken.evict(true); err != nil {
+				if err := evictToken.Evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
@@ -712,7 +714,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// We may simply not be trying to talk to the up-to-date
 				// replicas, so clearing the descriptor here should be a good
 				// idea.
-				if err := evictToken.evict(false); err != nil {
+				if err := evictToken.Evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				if tErr.CanRetry() {
@@ -720,14 +722,16 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 			case *roachpb.RangeNotFoundError, *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it.
-				if err := evictToken.evict(true); err != nil {
-					return nil, roachpb.NewError(err), false
-				}
-				// If we have the new range descriptor, insert it.
+				// If we have the new range descriptor, insert it instead.
+				var replacement *roachpb.RangeDescriptor
 				if rkmErr, ok := tErr.(*roachpb.RangeKeyMismatchError); ok && rkmErr.Range != nil {
-					if err := ds.rangeCache.InsertRangeDescriptors(*rkmErr.Range); err != nil {
-						log.Warningf("could not insert range descriptor from error %v into range cache: %v", rkmErr, err)
+					if sameSpan := desc.RSpan().Equal(rkmErr.Range.RSpan()); !sameSpan {
+						replacement = rkmErr.Range
 					}
+				}
+				// Same as Evict() is replacement if nil.
+				if err := evictToken.EvictAndReplace(replacement); err != nil {
+					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
@@ -745,7 +749,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 						if log.V(1) {
 							log.Infof("error indicates unknown leader %s, expunging descriptor %s", newLeader, desc)
 						}
-						if err := evictToken.evict(false); err != nil {
+						if err := evictToken.Evict(); err != nil {
 							return nil, roachpb.NewError(err), false
 						}
 					}
@@ -760,7 +764,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					// another node (at a lower level), and then if it reaches
 					// this level then we know we've exhausted our options and
 					// must clear the cache.
-					if err := evictToken.evict(false); err != nil {
+					if err := evictToken.Evict(); err != nil {
 						return nil, roachpb.NewError(err), false
 					}
 					newLeader = &roachpb.ReplicaDescriptor{}
