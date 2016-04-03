@@ -328,3 +328,65 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
 }
+
+// expy computes e^x using the Taylor series to the specified scale and
+// stores the result in z, which  is also the return value.
+func expy(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	// Allocate if needed and make sure args aren't mutated.
+	x = new(inf.Dec).Set(x)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	i := decimalOne
+	n := inf.NewDec(0, 0)
+	tmp := inf.NewDec(1, 0)
+	for loop := newLoop("exp", x, s, 40); !loop.done(z); {
+		n.Add(n, i)
+		tmp.Mul(tmp, x)
+		tmp.QuoRound(tmp, n, s+2, inf.RoundHalfUp)
+		z.Add(z, tmp)
+	}
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// Exp computes (e^x) (where x = a*b with a being an integer and b < 1)
+// to the specified scale and stores the result in z, which is also the
+// return value.
+func Exp(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	s += 2
+	x = new(inf.Dec).Set(x)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	u, ok := x.Unscaled()
+	if !ok {
+		return z
+	}
+
+	n := int64(0)
+	for i := int64(1); u/i != 0; i *= 10 {
+		n++
+	}
+
+	ey := inf.NewDec(u, inf.Scale(uint32(n)))
+	// to reach higher accuracy multiply scale by 2
+	// TODO: there must be another way to control the accuracy!
+	ey = expy(ey, ey, s*2)
+
+	// z = (ey ^ (10 ^ n-xscale))
+	itrs := int64(math.Pow(10, float64(n-int64(x.Scale()))))
+	for i := int64(0); i < itrs; i++ {
+		z = z.Mul(z, ey)
+	}
+
+	return z.Round(z, s-2, inf.RoundHalfUp)
+}
