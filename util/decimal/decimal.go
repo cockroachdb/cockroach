@@ -328,3 +328,31 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
 }
+
+// Exp computes e^x using the Taylor series to the specified scale and
+// stores the result in z, which  is also the return value.
+func Exp(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	// Allocate if needed and make sure args aren't mutated.
+	x = new(inf.Dec).Set(x)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	i := inf.NewDec(1, 0)
+	n := inf.NewDec(0, 0)
+	tmp := inf.NewDec(1, 0)
+	for loop := newLoop("exp", x, s, 1); ; {
+		n.Add(n, i)
+		tmp.Mul(tmp, x)
+		tmp.QuoRound(tmp, n, s+2, inf.RoundHalfUp)
+		z.Add(z, tmp)
+		if loop.done(z) {
+			break
+		}
+	}
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
