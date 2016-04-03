@@ -1513,7 +1513,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	}
 
 	// On successful write commands handle write-related triggers including
-	// splitting and config gossip updates.
+	// splitting.
 	if rErr == nil && ba.IsWrite() {
 		// If the commit succeeded, potentially add range to split queue.
 		r.maybeAddToSplitQueue()
