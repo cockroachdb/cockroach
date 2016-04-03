@@ -328,3 +328,99 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
 }
+
+// Pow calculates the pow of x to the specified scale.
+// We use the concept of power series to represent e^x where
+// x = b *ln(a) ==> a^b = e^(b *ln(a))
+func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	s = s * 2
+	switch z {
+	case nil:
+		z = new(inf.Dec)
+	case x:
+		x = new(inf.Dec)
+		x.Set(z)
+		if z == y {
+			y = x
+		}
+	case y:
+		y = new(inf.Dec)
+		y.Set(z)
+	}
+
+	// Validate the sign of x.
+	if x.Sign() == -1 {
+		x = new(inf.Dec).Neg(x)
+		z = Pow(z, x, y, s)
+		return z.Neg(z)
+	}
+
+	z.SetUnscaled(0).SetScale(s)
+	bla := Log(new(inf.Dec), x, s)
+	bla.Mul(y, bla)
+
+	// To be able to calculate a to the power of b where b < 1
+	// We simplfy the calculation to a sum series.
+	// a^b = e^(b * ln(a)) = sum<n: 0->100> ((b * ln a)^n)/n!
+	for n := int64(0); n < 100; n++ {
+		i := new(inf.Dec).SetUnscaled(n)
+		p := ppow(new(inf.Dec).SetUnscaled(1), bla, i, s)
+		f := fac(new(inf.Dec).SetUnscaled(1), i)
+		tmp := new(inf.Dec).QuoRound(p, f, s, inf.RoundHalfUp)
+		z.Add(z, tmp)
+	}
+	return z.Round(z, s/2, inf.RoundHalfUp)
+}
+
+// pow calculates the pow of x to the specified scale
+func ppow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	switch z {
+	case nil:
+		z = new(inf.Dec)
+	case x:
+		x = new(inf.Dec)
+		x.Set(z)
+		if z == y {
+			y = x
+		}
+	case y:
+		y = new(inf.Dec)
+		y.Set(z)
+	}
+
+	u, ok := y.Unscaled()
+	tmp := new(inf.Dec).SetUnscaled(1)
+	if !ok {
+		return new(inf.Dec)
+	}
+	for i := int64(0); i < u; i++ {
+		tmp.Mul(tmp, x)
+	}
+
+	z.Set(tmp)
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+func fac(z, x *inf.Dec) *inf.Dec {
+	// Validate the sign of x.
+	if x.Sign() < 0 || x.Scale() > 0 {
+		panic(fmt.Sprintf("natural fac of non-positive value: %s", x))
+	}
+
+	u, ok := x.Unscaled()
+	if !ok {
+		return new(inf.Dec)
+	}
+
+	tmp := new(inf.Dec).SetUnscaled(1)
+	for i := int64(1); i <= u; i++ {
+		tmp.Mul(tmp, new(inf.Dec).SetUnscaled(i))
+	}
+
+	if z == nil {
+		z = new(inf.Dec)
+	}
+	z.Set(tmp)
+	return z
+}

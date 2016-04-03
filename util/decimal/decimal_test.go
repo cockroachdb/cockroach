@@ -375,3 +375,40 @@ func BenchmarkDecimalLog(b *testing.B) {
 		Log(z, vals[i%len(vals)], 16)
 	}
 }
+
+func TestDecimalPow(t *testing.T) {
+	tests := []decimalTwoArgsTestCase{
+		{"3", "2", "9"},
+		{"4", "4", "256"},
+		{"2", "12", "4096"},
+		{"2.5", "12", "59604.64477539062500000000000000000000"},
+		{"9", "0", "1"},
+		{"0.5", "0.5", "0.70710678118654752440084436210485"},
+		{"9.3", "-7.5", "0.00000005449766385760170529778271"},
+		{"-2", "3", "-8"},
+	}
+	testDecimalDoubleArgFunc(t, Pow, 32, tests)
+}
+
+func TestDecimalPpow(t *testing.T) {
+	tests := []decimalTwoArgsTestCase{
+		{"3", "2", "9"},
+		{"4", "4", "256"},
+		{"2", "12", "4096"},
+		{"2.5", "12", "59604.64477539062500000000000000000000"},
+		{"9", "0", "1"},
+		{"-2", "3", "-8"},
+	}
+	testDecimalDoubleArgFunc(t, ppow, 32, tests)
+}
+
+func TestDecimalFac(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{"3", "6"},
+		{"5", "120"},
+	}
+	facWithScale := func(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+		return fac(z, x)
+	}
+	testDecimalSingleArgFunc(t, facWithScale, 32, tests)
+}
