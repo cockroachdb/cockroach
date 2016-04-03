@@ -328,3 +328,91 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
 }
+
+// For integers we use exponentiation by squaring
+// See: https://en.wikipedia.org/wiki/Exponentiation_by_squaring
+func expx(z, b *inf.Dec, s inf.Scale) *inf.Dec {
+	if z == nil {
+		z = new(inf.Dec)
+	}
+
+	neg := false
+	if neg = b.Sign() == -1; neg {
+		b = b.Abs(b)
+	}
+
+	z.Set(decimalOne)
+	a := new(inf.Dec)
+	a = expy(a, decimalOne, s)
+	z.Set(decimalOne)
+	bb, _ := b.Unscaled()
+	for bb > 0 {
+		if bb%2 == 1 {
+			z = z.Mul(z, a)
+		}
+		bb >>= 1
+		a.Mul(a, a)
+	}
+
+	if neg {
+		z = z.QuoRound(decimalOne, z, s+2, inf.RoundHalfUp)
+	}
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// expy computes e^x using the Taylor series to the specified scale and
+// stores the result in z, which  is also the return value.
+func expy(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	// Allocate if needed and make sure args aren't mutated.
+	x = new(inf.Dec).Set(x)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	i := decimalOne
+	n := inf.NewDec(0, 0)
+	tmp := inf.NewDec(1, 0)
+	for loop := newLoop("exp", x, s, 1); !loop.done(z); {
+		n.Add(n, i)
+		tmp.Mul(tmp, x)
+		tmp.QuoRound(tmp, n, s+2, inf.RoundHalfUp)
+		z.Add(z, tmp)
+	}
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// Exp computes (e^x) (where x = a*b with a being an integer and b < 1)
+// to the specified scale and stores the result in z, which is also the
+// return value.
+func Exp(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
+	s += 2
+	x = new(inf.Dec).Set(x)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	u, ok := x.Unscaled()
+	if !ok {
+		return z
+	}
+	xscale := x.Scale()
+	integer := inf.NewDec(u/int64(math.Pow(10, float64(xscale))), 0)
+	float := new(inf.Dec)
+	float = float.Sub(x, integer)
+
+	ey := new(inf.Dec)
+	ex := new(inf.Dec)
+	ey = expy(ey, float, s+2)
+	ex = expy(ex, decimalOne, s+2)
+
+	z = expx(z, integer, s+2)
+	z = z.Mul(z, ey)
+	return z.Round(z, s-2, inf.RoundHalfUp)
+}
