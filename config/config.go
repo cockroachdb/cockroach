@@ -116,14 +116,18 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
 func (z ZoneConfig) Validate() error {
-	if len(z.ReplicaAttrs) == 0 {
-		return util.Errorf("attributes for at least one replica must be specified in zone config")
+	switch len(z.ReplicaAttrs) {
+	case 0:
+		return fmt.Errorf("attributes for at least one replica must be specified in zone config")
+	case 2:
+		return fmt.Errorf("2 replica configurations are less reliable than 1 replica configurations")
 	}
 	if z.RangeMaxBytes < minRangeMaxBytes {
-		return util.Errorf("RangeMaxBytes %d less than minimum allowed %d", z.RangeMaxBytes, minRangeMaxBytes)
+		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
+			z.RangeMaxBytes, minRangeMaxBytes)
 	}
 	if z.RangeMinBytes >= z.RangeMaxBytes {
-		return util.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
+		return fmt.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
 			z.RangeMinBytes, z.RangeMaxBytes)
 	}
 	return nil

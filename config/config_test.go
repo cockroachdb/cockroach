@@ -317,3 +317,52 @@ func TestComputeSplits(t *testing.T) {
 		}
 	}
 }
+
+func TestZoneConfigValidate(t *testing.T) {
+	testCases := []struct {
+		cfg      config.ZoneConfig
+		expected string
+	}{
+		{
+			config.ZoneConfig{},
+			"attributes for at least one replica must be specified in zone config",
+		},
+		{
+			config.ZoneConfig{
+				ReplicaAttrs: make([]roachpb.Attributes, 2),
+			},
+			"2 replica configurations are less reliable than 1 replica configurations",
+		},
+		{
+			config.ZoneConfig{
+				ReplicaAttrs: make([]roachpb.Attributes, 1),
+			},
+			"RangeMaxBytes 0 less than minimum allowed",
+		},
+		{
+			config.ZoneConfig{
+				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
+			},
+			"",
+		},
+		{
+			config.ZoneConfig{
+				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				RangeMinBytes: config.DefaultZoneConfig().RangeMaxBytes,
+				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
+			},
+			"is greater than or equal to RangeMaxBytes",
+		},
+	}
+	for i, c := range testCases {
+		err := c.cfg.Validate()
+		if c.expected == "" {
+			if err != nil {
+				t.Fatalf("%d: expected success, but got %v", i, err)
+			}
+		} else if !testutils.IsError(err, c.expected) {
+			t.Fatalf("%d: expected %s, but got %v", i, c.expected, err)
+		}
+	}
+}
