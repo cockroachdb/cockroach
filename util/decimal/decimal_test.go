@@ -375,3 +375,41 @@ func BenchmarkDecimalLog(b *testing.B) {
 		Log(z, vals[i%len(vals)], 16)
 	}
 }
+
+func TestDecimalExp(t *testing.T) {
+	tests := []decimalOneArgTestCase{
+		{"2.1", "8.1661699125676501"},
+		{"1", "2.7182818284590452"},
+
+		{"2", "7.3890560989306502"},
+
+		{"-7.1", "0.0008251049232659"},
+		{"-0.7", "0.4965853037914095"},
+		{"0.8", "2.2255409284924676"},
+
+		{"-6.6970342501104617", "0.0012345678982173"},
+		{"-0.6931471805599453", ".5"},
+		{"0.6931471805599453", "2"},
+		{"7.1184763011977896", "1234.5678899999999838"},
+
+		{"41.6572527032084749", "1234567898765432082.9890763978113354"},
+		{"312.345", "4463853675713824294922499817029570039071067102402155066185430427302882199695129254111120181064791178979160372068542599780002019509758173.2401488061929997"},
+	}
+	testDecimalSingleArgFunc(t, Exp, 16, tests)
+}
+
+func BenchmarkDecimalExp(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]*inf.Dec, 100)
+	for i := range vals {
+		vals[i] = NewDecFromFloat(math.Abs(rng.Float64()))
+		vals[i].Add(vals[i], inf.NewDec(int64(randutil.RandIntInRange(rng, 0, 100)), 0))
+	}
+
+	z := new(inf.Dec)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Exp(z, vals[i%len(vals)], 16)
+	}
+}
