@@ -328,3 +328,92 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
 }
+
+// For integers we use exponentiation by squaring.
+// See: https://en.wikipedia.org/wiki/Exponentiation_by_squaring
+func integerPower(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	if z == nil {
+		z = new(inf.Dec)
+	}
+
+	neg := y.Sign() == -1
+	if neg {
+		y.Abs(y)
+	}
+
+	z.Set(decimalOne)
+	u, ok := y.Unscaled()
+	if !ok {
+		panic("integer out of range")
+	}
+	for u > 0 {
+		if u%2 == 1 {
+			z = z.Mul(z, x)
+		}
+		u >>= 1
+		x.Mul(x, x)
+	}
+
+	if neg {
+		z = z.QuoRound(decimalOne, z, s+2, inf.RoundHalfUp)
+	}
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// smallPower computes e^x using the Taylor series to the specified scale and
+// stores the result in z, which is also the return value. It should be used
+// with small x values only.
+func smallPower(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+	// Allocate if needed and make sure args aren't mutated.
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	n := new(inf.Dec)
+	tmp := inf.NewDec(1, 0)
+	for loop := newLoop("exp", x, s, 1); !loop.done(z); {
+		n.Add(n, decimalOne)
+		tmp.Mul(tmp, x)
+		tmp.QuoRound(tmp, n, s+2, inf.RoundHalfUp)
+		z.Add(z, tmp)
+	}
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// Exp computes (e^n) (where n = a*b with a being an integer and b < 1)
+// to the specified scale and stores the result in z, which is also the
+// return value.
+func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
+	s += 2
+	nn := new(inf.Dec).Set(n)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	// We are computing (e^n) by splitting n into an integer and a float
+	// (e.g 3.1 ==> x = 3, y = 0.1), this allows us to write
+	// e^n = e^(x+y) = e^x * e^y
+
+	// Split out x (integer(n))
+	x := inf.NewDec(1, -nn.Scale())
+	x = x.QuoRound(inf.NewDec(1, -nn.Scale()).Round(nn, 0, inf.RoundHalfUp), x, 0, inf.RoundHalfUp)
+
+	// Split out y (n - x) which is < 1
+	y := new(inf.Dec).Sub(nn, x)
+
+	// Use scale = 1000 so the sub results need be very precise before multiplying and rounding afterwards.
+	ey := smallPower(nil, y, 1000)
+	ex := integerPower(z, smallPower(nil, decimalOne, 1000), x, s)
+
+	// e^n = e^(x+y) = e^x * e^y
+	z = z.Mul(ex, ey)
+
+	return z.Round(z, s-2, inf.RoundHalfUp)
+}
