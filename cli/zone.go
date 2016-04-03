@@ -493,7 +493,16 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return conn.Exec(`COMMIT`, nil)
+	if err := conn.Exec(`COMMIT`, nil); err != nil {
+		return err
+	}
+
+	res, err := yaml.Marshal(zone)
+	if err != nil {
+		return err
+	}
+	fmt.Print(string(res))
+	return nil
 }
 
 var zoneCmds = []*cobra.Command{
