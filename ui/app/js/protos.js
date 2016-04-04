@@ -1961,19 +1961,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "rule": "optional",
                             "type": "uint64",
                             "name": "index",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 1
                         },
                         {
                             "rule": "optional",
                             "type": "uint64",
                             "name": "term",
-                            "id": 2,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
+                            "id": 2
                         }
                     ]
                 },
@@ -1986,7 +1980,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "next_replica_id",
                             "id": 1,
                             "options": {
-                                "(gogoproto.nullable)": false,
                                 "(gogoproto.customname)": "NextReplicaID",
                                 "(gogoproto.casttype)": "ReplicaID"
                             }
