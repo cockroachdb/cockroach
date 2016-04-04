@@ -722,12 +722,12 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// Range descriptor might be out of date - evict it.
 				// If we have the new range descriptor, insert it instead.
 				var replacement *roachpb.RangeDescriptor
-				if rkmErr, ok := tErr.(*roachpb.RangeKeyMismatchError); ok && rkmErr.Range != nil {
-					if sameSpan := desc.RSpan().Equal(rkmErr.Range.RSpan()); !sameSpan {
-						replacement = rkmErr.Range
+				if rkmErr, ok := tErr.(*roachpb.RangeKeyMismatchError); ok && rkmErr.MismatchedRange != nil {
+					if sameSpan := desc.RSpan().Equal(rkmErr.MismatchedRange.RSpan()); !sameSpan {
+						replacement = rkmErr.MismatchedRange
 					}
 				}
-				// Same as Evict() is replacement if nil.
+				// Same as Evict() if replacement is nil.
 				if err := evictToken.EvictAndReplace(replacement); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
