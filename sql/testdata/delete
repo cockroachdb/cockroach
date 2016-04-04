@@ -116,4 +116,11 @@ SELECT k, v FROM unindexed
 ----
 k v
 
+statement ok
+CREATE TABLE clusters (id int primary key, name varchar, owner varchar);
 
+statement ok
+CREATE INDEX on clusters (name);
+
+statement ok
+DELETE FROM clusters  WHERE clusters.name = 'asdasd';
