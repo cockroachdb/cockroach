@@ -377,3 +377,24 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 		t.Fatalf("findDeadReplicas did not return expected values; got \n%v, expected \n%v", a, e)
 	}
 }
+
+// TestStorePoolDefaultState verifies that the default state of a
+// store is neither alive nor dead. This is a regression test for a
+// bug in which a call to deadReplicas involving an unknown store
+// would have the side effect of marking that store as alive and
+// eligible for return by getStoreList. It is therefore significant
+// that the two methods are tested in the same test, and in this
+// order.
+func TestStorePoolDefaultState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, _, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
+	defer stopper.Stop()
+
+	if dead := sp.deadReplicas([]roachpb.ReplicaDescriptor{{StoreID: 1}}); len(dead) > 0 {
+		t.Errorf("expected 0 dead replicas; got %v", dead)
+	}
+
+	if sl, c := sp.getStoreList(roachpb.Attributes{}, true); len(sl.stores) > 0 || c != 0 {
+		t.Errorf("expected 0 live stores; got list %v and total count %d", sl, c)
+	}
+}

@@ -263,7 +263,7 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) *roachpb.StoreD
 	return &desc
 }
 
-// findDeadReplicas returns any replicas from the supplied slice that are
+// deadReplicas returns any replicas from the supplied slice that are
 // located on dead stores.
 func (sp *StorePool) deadReplicas(repls []roachpb.ReplicaDescriptor) []roachpb.ReplicaDescriptor {
 	var deadReplicas []roachpb.ReplicaDescriptor
@@ -325,7 +325,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	var aliveStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.stores[roachpb.StoreID(storeID)]
-		if !detail.dead {
+		if !detail.dead && detail.gossiped {
 			aliveStoreCount++
 			if required.IsSubset(*detail.desc.CombinedAttrs()) {
 				desc := detail.desc
