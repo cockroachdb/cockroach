@@ -165,6 +165,10 @@ func (c *Clock) getPhysicalClock() int64 {
 			c.monotonicityErrorsCount++
 			log.Warningf("backward time jump detected (%f seconds)", float64(newTime-c.lastPhysicalTime)/1e9)
 		}
+		forward := (newTime - c.lastPhysicalTime)
+		if forward > (200 * time.Millisecond).Nanoseconds() {
+			log.Warningf("time jumps forward %f seconds", float64(forward)/1e9)
+		}
 	}
 
 	c.lastPhysicalTime = newTime
