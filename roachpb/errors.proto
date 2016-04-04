@@ -55,7 +55,8 @@ message RangeNotFoundError {
 message RangeKeyMismatchError {
   optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
   optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
-  optional RangeDescriptor range = 3;
+  // mismatched_range is the range that the command was incorrectly sent to.
+  optional RangeDescriptor mismatched_range = 3;
 }
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp

@@ -302,7 +302,7 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
-		Range:           desc,
+		MismatchedRange: desc,
 	}
 }
 
@@ -311,9 +311,9 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 func (e *RangeKeyMismatchError) message(_ *Error) string {
-	if e.Range != nil {
+	if e.MismatchedRange != nil {
 		return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
-			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey)
+			e.RequestStartKey, e.RequestEndKey, e.MismatchedRange.StartKey, e.MismatchedRange.EndKey)
 	}
 	return fmt.Sprintf("key range %s-%s could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
 }
