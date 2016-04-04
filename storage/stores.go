@@ -190,12 +190,15 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *Replica
+	var partialDesc *roachpb.RangeDescriptor
 	for _, store := range ls.storeMap {
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
 				log.Warningf("range not contained in one range: [%s,%s), but have [%s,%s)",
 					start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey)
+				partialDesc = tmpRng.Desc()
+				break
 			}
 			continue
 		}
@@ -209,7 +212,7 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {
-		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil)
+		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), partialDesc)
 	}
 	return rangeID, replica, err
 }
