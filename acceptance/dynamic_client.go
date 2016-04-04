@@ -21,10 +21,13 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/grpc/grpc-go/benchmark/stats"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // dynamicClient should be used in acceptance tests when connecting to a
@@ -38,6 +41,8 @@ type dynamicClient struct {
 		// clients is a map from node indexes used by methods passed to the
 		// cluster `c` to db clients.
 		clients map[int]*sql.DB
+		// Latency stats.
+		stats *stats.Stats
 	}
 }
 
@@ -49,6 +54,8 @@ func newDynamicClient(cluster cluster.Cluster, stopper *stop.Stopper) *dynamicCl
 		stopper: stopper,
 	}
 	dc.mu.clients = make(map[int]*sql.DB)
+	// 0 for the default stats.
+	dc.mu.stats = stats.NewStats(0)
 	return dc
 }
 
@@ -62,6 +69,7 @@ func (dc *dynamicClient) Close() {
 		client.Close()
 		delete(dc.mu.clients, i)
 	}
+	log.Infof("\n%s", dc.mu.stats)
 }
 
 // isRetryableError returns true for any errors that show a connection issue
@@ -80,7 +88,13 @@ func (dc *dynamicClient) exec(query string, args ...interface{}) (sql.Result, er
 		if err != nil {
 			return nil, err
 		}
-		if result, err := client.Exec(query, args...); err == nil || !isRetryableError(err) {
+		start := timeutil.Now()
+		if result, err := client.Exec(query, args...); err == nil {
+			dc.mu.Lock()
+			dc.mu.stats.Add(timeutil.Now().Sub(start))
+			dc.mu.Unlock()
+			return result, nil
+		} else if !isRetryableError(err) {
 			return result, err
 		}
 	}
@@ -95,7 +109,13 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 		if err != nil {
 			return err
 		}
-		if err := client.QueryRow(query, queryArgs...).Scan(destArgs...); err == nil || !isRetryableError(err) {
+		start := timeutil.Now()
+		if err := client.QueryRow(query, queryArgs...).Scan(destArgs...); err == nil {
+			dc.mu.Lock()
+			dc.mu.stats.Add(timeutil.Now().Sub(start))
+			dc.mu.Unlock()
+			return nil
+		} else if !isRetryableError(err) {
 			return err
 		}
 	}
