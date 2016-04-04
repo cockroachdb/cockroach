@@ -158,7 +158,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto() {
   static const int RangeKeyMismatchError_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeKeyMismatchError, request_start_key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeKeyMismatchError, request_end_key_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeKeyMismatchError, range_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeKeyMismatchError, mismatched_range_),
   };
   RangeKeyMismatchError_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -654,90 +654,90 @@ void protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto() {
     "\001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007RangeID\"\026\n\024NodeU"
     "navailableError\"B\n\022RangeNotFoundError\022,\n"
     "\010range_id\030\001 \001(\003B\032\310\336\037\000\342\336\037\007RangeID\372\336\037\007Rang"
-    "eID\"\220\001\n\025RangeKeyMismatchError\022\"\n\021request"
+    "eID\"\233\001\n\025RangeKeyMismatchError\022\"\n\021request"
     "_start_key\030\001 \001(\014B\007\372\336\037\003Key\022 \n\017request_end"
-    "_key\030\002 \001(\014B\007\372\336\037\003Key\0221\n\005range\030\003 \001(\0132\".coc"
-    "kroach.roachpb.RangeDescriptor\"\240\001\n\"ReadW"
-    "ithinUncertaintyIntervalError\022:\n\016read_ti"
-    "mestamp\030\001 \001(\0132\034.cockroach.roachpb.Timest"
-    "ampB\004\310\336\037\000\022>\n\022existing_timestamp\030\002 \001(\0132\034."
-    "cockroach.roachpb.TimestampB\004\310\336\037\000\"\031\n\027Tra"
-    "nsactionAbortedError\"P\n\024TransactionPushE"
-    "rror\0228\n\npushee_txn\030\001 \001(\0132\036.cockroach.roa"
-    "chpb.TransactionB\004\310\336\037\000\"\027\n\025TransactionRet"
-    "ryError\"\030\n\026TransactionReplayError\"+\n\026Tra"
-    "nsactionStatusError\022\021\n\003msg\030\001 \001(\tB\004\310\336\037\000\"\\"
-    "\n\020WriteIntentError\0220\n\007intents\030\001 \003(\0132\031.co"
-    "ckroach.roachpb.IntentB\004\310\336\037\000\022\026\n\010resolved"
-    "\030\002 \001(\010B\004\310\336\037\000\"\207\001\n\020WriteTooOldError\0225\n\ttim"
-    "estamp\030\001 \001(\0132\034.cockroach.roachpb.Timesta"
-    "mpB\004\310\336\037\000\022<\n\020actual_timestamp\030\002 \001(\0132\034.coc"
-    "kroach.roachpb.TimestampB\004\310\336\037\000\"\024\n\022OpRequ"
-    "iresTxnError\"F\n\024ConditionFailedError\022.\n\014"
-    "actual_value\030\001 \001(\0132\030.cockroach.roachpb.V"
-    "alue\"\220\001\n\022LeaseRejectedError\022\025\n\007message\030\001"
-    " \001(\tB\004\310\336\037\000\0221\n\trequested\030\002 \001(\0132\030.cockroac"
-    "h.roachpb.LeaseB\004\310\336\037\000\0220\n\010existing\030\003 \001(\0132"
-    "\030.cockroach.roachpb.LeaseB\004\310\336\037\000\";\n\tSendE"
-    "rror\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tretryable"
-    "\030\002 \001(\010B\004\310\336\037\000\"\027\n\025RaftGroupDeletedError\"J\n"
-    "\026ReplicaCorruptionError\022\027\n\terror_msg\030\001 \001"
-    "(\tB\004\310\336\037\000\022\027\n\tprocessed\030\002 \001(\010B\004\310\336\037\000\"\032\n\030Lea"
-    "seVersionChangedError\"\034\n\032DidntUpdateDesc"
-    "riptorError\" \n\036ExistingSchemaChangeLease"
-    "Error\"B\n\017ErrorWithPGCode\022\030\n\nerror_code\030\001"
-    " \001(\tB\004\310\336\037\000\022\025\n\007message\030\002 \001(\tB\004\310\336\037\000\"\372\013\n\013Er"
-    "rorDetail\0225\n\nnot_leader\030\001 \001(\0132!.cockroac"
-    "h.roachpb.NotLeaderError\022>\n\017range_not_fo"
-    "und\030\002 \001(\0132%.cockroach.roachpb.RangeNotFo"
-    "undError\022D\n\022range_key_mismatch\030\003 \001(\0132(.c"
-    "ockroach.roachpb.RangeKeyMismatchError\022_"
-    "\n read_within_uncertainty_interval\030\004 \001(\013"
-    "25.cockroach.roachpb.ReadWithinUncertain"
-    "tyIntervalError\022G\n\023transaction_aborted\030\005"
-    " \001(\0132*.cockroach.roachpb.TransactionAbor"
-    "tedError\022A\n\020transaction_push\030\006 \001(\0132\'.coc"
-    "kroach.roachpb.TransactionPushError\022C\n\021t"
-    "ransaction_retry\030\007 \001(\0132(.cockroach.roach"
-    "pb.TransactionRetryError\022E\n\022transaction_"
-    "replay\030\026 \001(\0132).cockroach.roachpb.Transac"
-    "tionReplayError\022E\n\022transaction_status\030\010 "
-    "\001(\0132).cockroach.roachpb.TransactionStatu"
-    "sError\0229\n\014write_intent\030\t \001(\0132#.cockroach"
-    ".roachpb.WriteIntentError\022:\n\rwrite_too_o"
-    "ld\030\n \001(\0132#.cockroach.roachpb.WriteTooOld"
-    "Error\022>\n\017op_requires_txn\030\013 \001(\0132%.cockroa"
-    "ch.roachpb.OpRequiresTxnError\022A\n\020conditi"
-    "on_failed\030\014 \001(\0132\'.cockroach.roachpb.Cond"
-    "itionFailedError\022=\n\016lease_rejected\030\r \001(\013"
-    "2%.cockroach.roachpb.LeaseRejectedError\022"
-    "A\n\020node_unavailable\030\016 \001(\0132\'.cockroach.ro"
-    "achpb.NodeUnavailableError\022*\n\004send\030\017 \001(\013"
-    "2\034.cockroach.roachpb.SendError\022D\n\022raft_g"
-    "roup_deleted\030\020 \001(\0132(.cockroach.roachpb.R"
-    "aftGroupDeletedError\022E\n\022replica_corrupti"
-    "on\030\021 \001(\0132).cockroach.roachpb.ReplicaCorr"
-    "uptionError\022J\n\025lease_version_changed\030\022 \001"
-    "(\0132+.cockroach.roachpb.LeaseVersionChang"
-    "edError\022N\n\027didnt_update_descriptor\030\023 \001(\013"
-    "2-.cockroach.roachpb.DidntUpdateDescript"
-    "orError\022W\n\034existing_scheme_change_lease\030"
-    "\024 \001(\01321.cockroach.roachpb.ExistingSchema"
-    "ChangeLeaseError\022>\n\022error_with_pg_code\030\025"
-    " \001(\0132\".cockroach.roachpb.ErrorWithPGCode"
-    ":\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n\005index\030\001 \001(\005B\004\310\336"
-    "\037\000\"\363\002\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tr"
-    "etryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023transaction_rest"
-    "art\030\003 \001(\0162%.cockroach.roachpb.Transactio"
-    "nRestartB\004\310\336\037\000\0225\n\runexposed_txn\030\004 \001(\0132\036."
-    "cockroach.roachpb.Transaction\022#\n\013origin_"
-    "node\030\005 \001(\005B\016\310\336\037\000\372\336\037\006NodeID\022.\n\006detail\030\006 \001"
-    "(\0132\036.cockroach.roachpb.ErrorDetail\022-\n\005in"
-    "dex\030\007 \001(\0132\036.cockroach.roachpb.ErrPositio"
-    "n\022/\n\003now\030\010 \001(\0132\034.cockroach.roachpb.Times"
-    "tampB\004\310\336\037\000:\004\230\240\037\000*:\n\022TransactionRestart\022\010"
-    "\n\004NONE\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\tZ\007"
-    "roachpbX\002", 3729);
+    "_key\030\002 \001(\014B\007\372\336\037\003Key\022<\n\020mismatched_range\030"
+    "\003 \001(\0132\".cockroach.roachpb.RangeDescripto"
+    "r\"\240\001\n\"ReadWithinUncertaintyIntervalError"
+    "\022:\n\016read_timestamp\030\001 \001(\0132\034.cockroach.roa"
+    "chpb.TimestampB\004\310\336\037\000\022>\n\022existing_timesta"
+    "mp\030\002 \001(\0132\034.cockroach.roachpb.TimestampB\004"
+    "\310\336\037\000\"\031\n\027TransactionAbortedError\"P\n\024Trans"
+    "actionPushError\0228\n\npushee_txn\030\001 \001(\0132\036.co"
+    "ckroach.roachpb.TransactionB\004\310\336\037\000\"\027\n\025Tra"
+    "nsactionRetryError\"\030\n\026TransactionReplayE"
+    "rror\"+\n\026TransactionStatusError\022\021\n\003msg\030\001 "
+    "\001(\tB\004\310\336\037\000\"\\\n\020WriteIntentError\0220\n\007intents"
+    "\030\001 \003(\0132\031.cockroach.roachpb.IntentB\004\310\336\037\000\022"
+    "\026\n\010resolved\030\002 \001(\010B\004\310\336\037\000\"\207\001\n\020WriteTooOldE"
+    "rror\0225\n\ttimestamp\030\001 \001(\0132\034.cockroach.roac"
+    "hpb.TimestampB\004\310\336\037\000\022<\n\020actual_timestamp\030"
+    "\002 \001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037"
+    "\000\"\024\n\022OpRequiresTxnError\"F\n\024ConditionFail"
+    "edError\022.\n\014actual_value\030\001 \001(\0132\030.cockroac"
+    "h.roachpb.Value\"\220\001\n\022LeaseRejectedError\022\025"
+    "\n\007message\030\001 \001(\tB\004\310\336\037\000\0221\n\trequested\030\002 \001(\013"
+    "2\030.cockroach.roachpb.LeaseB\004\310\336\037\000\0220\n\010exis"
+    "ting\030\003 \001(\0132\030.cockroach.roachpb.LeaseB\004\310\336"
+    "\037\000\";\n\tSendError\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027"
+    "\n\tretryable\030\002 \001(\010B\004\310\336\037\000\"\027\n\025RaftGroupDele"
+    "tedError\"J\n\026ReplicaCorruptionError\022\027\n\ter"
+    "ror_msg\030\001 \001(\tB\004\310\336\037\000\022\027\n\tprocessed\030\002 \001(\010B\004"
+    "\310\336\037\000\"\032\n\030LeaseVersionChangedError\"\034\n\032Didn"
+    "tUpdateDescriptorError\" \n\036ExistingSchema"
+    "ChangeLeaseError\"B\n\017ErrorWithPGCode\022\030\n\ne"
+    "rror_code\030\001 \001(\tB\004\310\336\037\000\022\025\n\007message\030\002 \001(\tB\004"
+    "\310\336\037\000\"\372\013\n\013ErrorDetail\0225\n\nnot_leader\030\001 \001(\013"
+    "2!.cockroach.roachpb.NotLeaderError\022>\n\017r"
+    "ange_not_found\030\002 \001(\0132%.cockroach.roachpb"
+    ".RangeNotFoundError\022D\n\022range_key_mismatc"
+    "h\030\003 \001(\0132(.cockroach.roachpb.RangeKeyMism"
+    "atchError\022_\n read_within_uncertainty_int"
+    "erval\030\004 \001(\01325.cockroach.roachpb.ReadWith"
+    "inUncertaintyIntervalError\022G\n\023transactio"
+    "n_aborted\030\005 \001(\0132*.cockroach.roachpb.Tran"
+    "sactionAbortedError\022A\n\020transaction_push\030"
+    "\006 \001(\0132\'.cockroach.roachpb.TransactionPus"
+    "hError\022C\n\021transaction_retry\030\007 \001(\0132(.cock"
+    "roach.roachpb.TransactionRetryError\022E\n\022t"
+    "ransaction_replay\030\026 \001(\0132).cockroach.roac"
+    "hpb.TransactionReplayError\022E\n\022transactio"
+    "n_status\030\010 \001(\0132).cockroach.roachpb.Trans"
+    "actionStatusError\0229\n\014write_intent\030\t \001(\0132"
+    "#.cockroach.roachpb.WriteIntentError\022:\n\r"
+    "write_too_old\030\n \001(\0132#.cockroach.roachpb."
+    "WriteTooOldError\022>\n\017op_requires_txn\030\013 \001("
+    "\0132%.cockroach.roachpb.OpRequiresTxnError"
+    "\022A\n\020condition_failed\030\014 \001(\0132\'.cockroach.r"
+    "oachpb.ConditionFailedError\022=\n\016lease_rej"
+    "ected\030\r \001(\0132%.cockroach.roachpb.LeaseRej"
+    "ectedError\022A\n\020node_unavailable\030\016 \001(\0132\'.c"
+    "ockroach.roachpb.NodeUnavailableError\022*\n"
+    "\004send\030\017 \001(\0132\034.cockroach.roachpb.SendErro"
+    "r\022D\n\022raft_group_deleted\030\020 \001(\0132(.cockroac"
+    "h.roachpb.RaftGroupDeletedError\022E\n\022repli"
+    "ca_corruption\030\021 \001(\0132).cockroach.roachpb."
+    "ReplicaCorruptionError\022J\n\025lease_version_"
+    "changed\030\022 \001(\0132+.cockroach.roachpb.LeaseV"
+    "ersionChangedError\022N\n\027didnt_update_descr"
+    "iptor\030\023 \001(\0132-.cockroach.roachpb.DidntUpd"
+    "ateDescriptorError\022W\n\034existing_scheme_ch"
+    "ange_lease\030\024 \001(\01321.cockroach.roachpb.Exi"
+    "stingSchemaChangeLeaseError\022>\n\022error_wit"
+    "h_pg_code\030\025 \001(\0132\".cockroach.roachpb.Erro"
+    "rWithPGCode:\004\310\240\037\001\"\"\n\013ErrPosition\022\023\n\005inde"
+    "x\030\001 \001(\005B\004\310\336\037\000\"\363\002\n\005Error\022\025\n\007message\030\001 \001(\t"
+    "B\004\310\336\037\000\022\027\n\tretryable\030\002 \001(\010B\004\310\336\037\000\022H\n\023trans"
+    "action_restart\030\003 \001(\0162%.cockroach.roachpb"
+    ".TransactionRestartB\004\310\336\037\000\0225\n\runexposed_t"
+    "xn\030\004 \001(\0132\036.cockroach.roachpb.Transaction"
+    "\022#\n\013origin_node\030\005 \001(\005B\016\310\336\037\000\372\336\037\006NodeID\022.\n"
+    "\006detail\030\006 \001(\0132\036.cockroach.roachpb.ErrorD"
+    "etail\022-\n\005index\030\007 \001(\0132\036.cockroach.roachpb"
+    ".ErrPosition\022/\n\003now\030\010 \001(\0132\034.cockroach.ro"
+    "achpb.TimestampB\004\310\336\037\000:\004\230\240\037\000*:\n\022Transacti"
+    "onRestart\022\010\n\004NONE\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMME"
+    "DIATE\020\002B\tZ\007roachpbX\002", 3740);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -1715,7 +1715,7 @@ void RangeNotFoundError::clear_range_id() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeKeyMismatchError::kRequestStartKeyFieldNumber;
 const int RangeKeyMismatchError::kRequestEndKeyFieldNumber;
-const int RangeKeyMismatchError::kRangeFieldNumber;
+const int RangeKeyMismatchError::kMismatchedRangeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeKeyMismatchError::RangeKeyMismatchError()
@@ -1725,7 +1725,7 @@ RangeKeyMismatchError::RangeKeyMismatchError()
 }
 
 void RangeKeyMismatchError::InitAsDefaultInstance() {
-  range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
+  mismatched_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(&::cockroach::roachpb::RangeDescriptor::default_instance());
 }
 
 RangeKeyMismatchError::RangeKeyMismatchError(const RangeKeyMismatchError& from)
@@ -1741,7 +1741,7 @@ void RangeKeyMismatchError::SharedCtor() {
   _cached_size_ = 0;
   request_start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   request_end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  range_ = NULL;
+  mismatched_range_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -1754,7 +1754,7 @@ void RangeKeyMismatchError::SharedDtor() {
   request_start_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   request_end_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != default_instance_) {
-    delete range_;
+    delete mismatched_range_;
   }
 }
 
@@ -1791,8 +1791,8 @@ void RangeKeyMismatchError::Clear() {
     if (has_request_end_key()) {
       request_end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
     }
-    if (has_range()) {
-      if (range_ != NULL) range_->::cockroach::roachpb::RangeDescriptor::Clear();
+    if (has_mismatched_range()) {
+      if (mismatched_range_ != NULL) mismatched_range_->::cockroach::roachpb::RangeDescriptor::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -1832,16 +1832,16 @@ bool RangeKeyMismatchError::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(26)) goto parse_range;
+        if (input->ExpectTag(26)) goto parse_mismatched_range;
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor range = 3;
+      // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
       case 3: {
         if (tag == 26) {
-         parse_range:
+         parse_mismatched_range:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_range()));
+               input, mutable_mismatched_range()));
         } else {
           goto handle_unusual;
         }
@@ -1886,10 +1886,10 @@ void RangeKeyMismatchError::SerializeWithCachedSizes(
       2, this->request_end_key(), output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor range = 3;
-  if (has_range()) {
+  // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
+  if (has_mismatched_range()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      3, *this->range_, output);
+      3, *this->mismatched_range_, output);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1916,11 +1916,11 @@ void RangeKeyMismatchError::SerializeWithCachedSizes(
         2, this->request_end_key(), target);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor range = 3;
-  if (has_range()) {
+  // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
+  if (has_mismatched_range()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        3, *this->range_, target);
+        3, *this->mismatched_range_, target);
   }
 
   if (_internal_metadata_.have_unknown_fields()) {
@@ -1949,11 +1949,11 @@ int RangeKeyMismatchError::ByteSize() const {
           this->request_end_key());
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor range = 3;
-    if (has_range()) {
+    // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
+    if (has_mismatched_range()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          *this->range_);
+          *this->mismatched_range_);
     }
 
   }
@@ -1991,8 +1991,8 @@ void RangeKeyMismatchError::MergeFrom(const RangeKeyMismatchError& from) {
       set_has_request_end_key();
       request_end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.request_end_key_);
     }
-    if (from.has_range()) {
-      mutable_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.range());
+    if (from.has_mismatched_range()) {
+      mutable_mismatched_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.mismatched_range());
     }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
@@ -2024,7 +2024,7 @@ void RangeKeyMismatchError::Swap(RangeKeyMismatchError* other) {
 void RangeKeyMismatchError::InternalSwap(RangeKeyMismatchError* other) {
   request_start_key_.Swap(&other->request_start_key_);
   request_end_key_.Swap(&other->request_end_key_);
-  std::swap(range_, other->range_);
+  std::swap(mismatched_range_, other->mismatched_range_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -2147,47 +2147,47 @@ void RangeKeyMismatchError::clear_request_end_key() {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.request_end_key)
 }
 
-// optional .cockroach.roachpb.RangeDescriptor range = 3;
-bool RangeKeyMismatchError::has_range() const {
+// optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
+bool RangeKeyMismatchError::has_mismatched_range() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-void RangeKeyMismatchError::set_has_range() {
+void RangeKeyMismatchError::set_has_mismatched_range() {
   _has_bits_[0] |= 0x00000004u;
 }
-void RangeKeyMismatchError::clear_has_range() {
+void RangeKeyMismatchError::clear_has_mismatched_range() {
   _has_bits_[0] &= ~0x00000004u;
 }
-void RangeKeyMismatchError::clear_range() {
-  if (range_ != NULL) range_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_range();
+void RangeKeyMismatchError::clear_mismatched_range() {
+  if (mismatched_range_ != NULL) mismatched_range_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_mismatched_range();
 }
-const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::range() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.range)
-  return range_ != NULL ? *range_ : *default_instance_->range_;
+const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::mismatched_range() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+  return mismatched_range_ != NULL ? *mismatched_range_ : *default_instance_->mismatched_range_;
 }
-::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_range() {
-  set_has_range();
-  if (range_ == NULL) {
-    range_ = new ::cockroach::roachpb::RangeDescriptor;
+::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_mismatched_range() {
+  set_has_mismatched_range();
+  if (mismatched_range_ == NULL) {
+    mismatched_range_ = new ::cockroach::roachpb::RangeDescriptor;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.range)
-  return range_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+  return mismatched_range_;
 }
-::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_range() {
-  clear_has_range();
-  ::cockroach::roachpb::RangeDescriptor* temp = range_;
-  range_ = NULL;
+::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_mismatched_range() {
+  clear_has_mismatched_range();
+  ::cockroach::roachpb::RangeDescriptor* temp = mismatched_range_;
+  mismatched_range_ = NULL;
   return temp;
 }
-void RangeKeyMismatchError::set_allocated_range(::cockroach::roachpb::RangeDescriptor* range) {
-  delete range_;
-  range_ = range;
-  if (range) {
-    set_has_range();
+void RangeKeyMismatchError::set_allocated_mismatched_range(::cockroach::roachpb::RangeDescriptor* mismatched_range) {
+  delete mismatched_range_;
+  mismatched_range_ = mismatched_range;
+  if (mismatched_range) {
+    set_has_mismatched_range();
   } else {
-    clear_has_range();
+    clear_has_mismatched_range();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.range)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
