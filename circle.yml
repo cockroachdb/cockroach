@@ -44,7 +44,7 @@ deployment:
       - aws configure set region us-east-1
       - build/build-static-binaries.sh
       - mkdir -p "${CIRCLE_ARTIFACTS}/acceptance_deploy"
-      - time acceptance/acceptance.test -test.v -test.timeout 5m
+      - time acceptance/acceptance.test -test.v -test.timeout 10m
           -i cockroachdb/cockroach -nodes 3
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
@@ -63,7 +63,7 @@ deployment:
       - aws configure set region us-east-1
       - build/build-static-binaries.sh
       - mkdir -p "${CIRCLE_ARTIFACTS}/acceptance_deploy"
-      - time acceptance/acceptance.test -test.v -test.timeout 5m
+      - time acceptance/acceptance.test -test.v -test.timeout 10m
           -i cockroachdb/cockroach -nodes 3
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
