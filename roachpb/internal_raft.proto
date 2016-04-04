@@ -18,20 +18,10 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/roachpb/api.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import weak "gogoproto/gogo.proto";
-
-// A RaftCommand is a command which can be serialized and sent via
-// raft.
-message RaftCommand {
-  optional int64 range_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  optional ReplicaDescriptor origin_replica = 2 [(gogoproto.nullable) = false];
-  optional BatchRequest cmd = 3 [(gogoproto.nullable) = false];
-}
 
 // RaftTruncatedState contains metadata about the truncated portion of the raft log.
 // Raft requires access to the term of the last truncated log entry even after the
