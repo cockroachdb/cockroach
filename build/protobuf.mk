@@ -53,7 +53,7 @@ ADMIN_GW_GO := $(ADMIN_PROTO:%.proto=%.pb.gw.go)
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-CPP_PROTOS := $(filter %/span.proto %/metadata.proto %/data.proto %/errors.proto %/internal.proto %/mvcc.proto %/unresolved_addr.proto,$(GO_PROTOS))
+CPP_PROTOS := $(filter %/metadata.proto %/data.proto %/errors.proto %/internal.proto %/mvcc.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc)) $(subst $(GOGOPROTO_ROOT),$(NATIVE_ROOT),$(GOGOPROTO_PROTO:%.proto=%.pb.cc))
 
