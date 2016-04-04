@@ -504,6 +504,12 @@ func Example_zone() {
 	// zone set system replicas:
 	// - attrs: [us-east-1a,ssd]
 	// INSERT 1
+	// replicas:
+	// - attrs: [us-east-1a, ssd]
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 86400
 	// zone ls
 	// .default
 	// system
@@ -519,6 +525,12 @@ func Example_zone() {
 	//   ttlseconds: 86400
 	// zone set system range_max_bytes: 134217728
 	// UPDATE 1
+	// replicas:
+	// - attrs: [us-east-1a, ssd]
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 86400
 	// zone get system
 	// system
 	// replicas:
@@ -535,6 +547,12 @@ func Example_zone() {
 	// unable to remove .default
 	// zone set .default range_max_bytes: 134217728
 	// UPDATE 1
+	// replicas:
+	// - attrs: []
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 86400
 	// zone get system
 	// .default
 	// replicas:
