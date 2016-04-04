@@ -1350,6 +1350,10 @@ func (r *Replica) LeaderLease(
 		}
 		// Note that the lease expiration can be shortened by the holder.
 		// This could be used to effect a faster lease handoff.
+		// TODO(tschottdorf): disallow the above. I don't think it takes
+		// into account that the next lease holder realizes that leases
+		// may have been served at timestamps higher than the expiration
+		// it sees at the point of hand-off.
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return reply, rErr
@@ -1363,15 +1367,40 @@ func (r *Replica) LeaderLease(
 	}
 	r.mu.leaderLease = &args.Lease
 
-	// If this replica is a new holder of the lease, update the
-	// low water mark in the timestamp cache. We add the maximum
-	// clock offset to account for any difference in clocks
-	// between the expiration (set by a remote node) and this
-	// node.
+	// If this replica is a new holder of the lease, update the low water mark
+	// in the timestamp cache to reflect the worst case in which the old
+	// leader served a read precisely when the lease expired, and has a clock
+	// which is maximally offset to the rest of the cluster.
+	//
+	// Since the low water mark will make its way around the cluster's clocks,
+	// we don't blindly base them off the previous leases's experation (which is
+	// commonly the better case), but use the local wall time if that gives a
+	// more conservative result.
+	// For example, the timestamp triggering this new lease was already running
+	// ahead, the previous lease's expiration could be in the future of most
+	// clocks in the cluster, and another MaxOffset here would push us into
+	// illegal territory.
+	// Using this Store's physical clock is legitimate because no other clock
+	// in the cluster, and hence no timestamp can be more than MaxOffset ahead
+	// of it.
+	//
+	// TODO(tschottdorf): This still isn't correct. Our clock may be
+	// too fast as well, so after this the timestamp cache may again put
+	// excessively high timestamps in circulation.
 	if r.mu.leaderLease.Replica.StoreID == r.store.StoreID() &&
 		prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
-		r.mu.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", r.RangeID, args.Lease)
+
+		// Start with the local wall time.
+		now := roachpb.ZeroTimestamp.Add(r.store.Clock().PhysicalNow(), 0)
+		lowWater := now
+		// If opportune, retreat to previous lease's expiration.
+		lowWater.Backward(prevLease.Expiration)
+		// In either case, add MaxOffset.
+		lowWater = lowWater.Add(int64(r.store.Clock().MaxOffset()), 0)
+
+		log.Infof("range %d: new leader lease %s [lowWater=%s, physical=%s] following %s",
+			r.RangeID, args.Lease, lowWater, now, prevLease)
+		r.mu.tsCache.SetLowWater(lowWater)
 	}
 
 	return reply, nil

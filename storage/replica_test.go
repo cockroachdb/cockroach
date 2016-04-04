@@ -707,25 +707,35 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.rng.mu.Unlock()
 	baseLowWater := baseRTS.WallTime
 
+	newLowWater := now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater
+
 	testCases := []struct {
 		storeID     roachpb.StoreID
+		ts          roachpb.Timestamp // store.Clock().PhysicalNow
 		start       roachpb.Timestamp
 		expiration  roachpb.Timestamp
 		expLowWater int64
 	}{
 		// Grant the lease fresh.
-		{tc.store.StoreID(), now, now.Add(10, 0), baseLowWater},
+		{tc.store.StoreID(), now, now, now.Add(10, 0), baseLowWater},
 		// Renew the lease.
-		{tc.store.StoreID(), now.Add(15, 0), now.Add(30, 0), baseLowWater},
+		{tc.store.StoreID(), now, now.Add(15, 0), now.Add(30, 0), baseLowWater},
 		// Renew the lease but shorten expiration.
-		{tc.store.StoreID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
+		{tc.store.StoreID(), now, now.Add(16, 0), now.Add(25, 0), baseLowWater},
 		// Lease is held by another.
-		{tc.store.StoreID() + 1, now.Add(29, 0), now.Add(50, 0), baseLowWater},
-		// Lease is regranted to this replica.
-		{tc.store.StoreID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
+		{tc.store.StoreID() + 1, now, now.Add(29, 0), now.Add(50, 0), baseLowWater},
+		// Lease is regranted to this replica. Store clock moves forward avoid
+		// influencing the result.
+		{tc.store.StoreID(), now.Add(50, 0), now.Add(60, 0), now.Add(70, 0), newLowWater},
+		// Lease is held by another once more.
+		{tc.store.StoreID() + 1, now, now.Add(70, 0), now.Add(90, 0), newLowWater},
+		// Lease is regranted to this replica. This time, the physical clock is
+		// behind and determines the new low water mark.
+		{tc.store.StoreID(), now.Add(55, 0), now.Add(90, 0), now.Add(110, 0), newLowWater + 5},
 	}
 
 	for i, test := range testCases {
+		tc.manualClock.Set(test.ts.WallTime)
 		setLeaderLease(t, tc.rng, &roachpb.Lease{
 			Start:      test.start,
 			Expiration: test.expiration,
