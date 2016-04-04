@@ -294,11 +294,13 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	if detail := sp.getStoreDetail(roachpb.StoreID(1)); detail.dead {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	if detail := sp.getStoreDetailLocked(roachpb.StoreID(1)); detail.dead {
 		t.Errorf("Present storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 
-	if detail := sp.getStoreDetail(roachpb.StoreID(2)); detail.dead {
+	if detail := sp.getStoreDetailLocked(roachpb.StoreID(2)); detail.dead {
 		t.Errorf("Absent storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 }
