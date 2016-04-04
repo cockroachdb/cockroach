@@ -72,9 +72,42 @@ func (c Container) Name() string {
 	return c.name
 }
 
+func hasImage(l *LocalCluster, name, tag string) bool {
+	images, err := l.client.ImageList(context.Background(), types.ImageListOptions{MatchName: name})
+	if err != nil {
+		log.Fatal(err)
+	}
+	nameAndTag := name + ":" + tag
+	for _, image := range images {
+		for _, tag := range image.RepoTags {
+			// The Image.RepoTags field contains strings of the form <repo>:<tag>.
+			if nameAndTag == tag {
+				return true
+			}
+		}
+	}
+	for _, image := range images {
+		for _, tag := range image.RepoTags {
+			log.Infof("%s %s", tag, image.ID)
+		}
+	}
+	return false
+}
+
 func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
+	// Hack: on CircleCI, docker pulls the image on the first access from an
+	// acceptance test even though that image is already present. So we first
+	// check to see if our image is present in order to avoid this slowness.
+	if hasImage(l, options.ImageID, options.Tag) {
+		log.Infof("ImagePull %s:%s already exists", options.ImageID, options.Tag)
+		return nil
+	}
+
 	log.Infof("ImagePull %s:%s starting", options.ImageID, options.Tag)
-	defer log.Infof("ImagePull %s:%s complete", options.ImageID, options.Tag)
+	defer func() {
+		log.Infof("ImagePull %s:%s complete", options.ImageID, options.Tag)
+		hasImage(l, options.ImageID, options.Tag)
+	}()
 
 	rc, err := l.client.ImagePull(context.Background(), options, nil)
 	if err != nil {
@@ -417,6 +450,18 @@ func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID s
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ContainerWait(timeoutCtx, containerID)
+			_ = ret // silence incorrect unused warning
+			return err
+		})
+}
+
+func (cli retryingDockerClient) ImageList(
+	ctx context.Context, options types.ImageListOptions) ([]types.Image, error) {
+	var ret []types.Image
+	return ret, cli.retry(ctx, cli.timeout, "ImageList",
+		func(timeoutCtx context.Context) error {
+			var err error
+			ret, err = cli.APIClient.ImageList(timeoutCtx, options)
 			_ = ret // silence incorrect unused warning
 			return err
 		})
