@@ -458,14 +458,14 @@ class RangeKeyMismatchError : public ::google::protobuf::Message {
   ::std::string* release_request_end_key();
   void set_allocated_request_end_key(::std::string* request_end_key);
 
-  // optional .cockroach.roachpb.RangeDescriptor range = 3;
-  bool has_range() const;
-  void clear_range();
-  static const int kRangeFieldNumber = 3;
-  const ::cockroach::roachpb::RangeDescriptor& range() const;
-  ::cockroach::roachpb::RangeDescriptor* mutable_range();
-  ::cockroach::roachpb::RangeDescriptor* release_range();
-  void set_allocated_range(::cockroach::roachpb::RangeDescriptor* range);
+  // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
+  bool has_mismatched_range() const;
+  void clear_mismatched_range();
+  static const int kMismatchedRangeFieldNumber = 3;
+  const ::cockroach::roachpb::RangeDescriptor& mismatched_range() const;
+  ::cockroach::roachpb::RangeDescriptor* mutable_mismatched_range();
+  ::cockroach::roachpb::RangeDescriptor* release_mismatched_range();
+  void set_allocated_mismatched_range(::cockroach::roachpb::RangeDescriptor* mismatched_range);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeKeyMismatchError)
  private:
@@ -473,15 +473,15 @@ class RangeKeyMismatchError : public ::google::protobuf::Message {
   inline void clear_has_request_start_key();
   inline void set_has_request_end_key();
   inline void clear_has_request_end_key();
-  inline void set_has_range();
-  inline void clear_has_range();
+  inline void set_has_mismatched_range();
+  inline void clear_has_mismatched_range();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr request_start_key_;
   ::google::protobuf::internal::ArenaStringPtr request_end_key_;
-  ::cockroach::roachpb::RangeDescriptor* range_;
+  ::cockroach::roachpb::RangeDescriptor* mismatched_range_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -3004,47 +3004,47 @@ inline void RangeKeyMismatchError::set_allocated_request_end_key(::std::string* 
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.request_end_key)
 }
 
-// optional .cockroach.roachpb.RangeDescriptor range = 3;
-inline bool RangeKeyMismatchError::has_range() const {
+// optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
+inline bool RangeKeyMismatchError::has_mismatched_range() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void RangeKeyMismatchError::set_has_range() {
+inline void RangeKeyMismatchError::set_has_mismatched_range() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void RangeKeyMismatchError::clear_has_range() {
+inline void RangeKeyMismatchError::clear_has_mismatched_range() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void RangeKeyMismatchError::clear_range() {
-  if (range_ != NULL) range_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_range();
+inline void RangeKeyMismatchError::clear_mismatched_range() {
+  if (mismatched_range_ != NULL) mismatched_range_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_mismatched_range();
 }
-inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::range() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.range)
-  return range_ != NULL ? *range_ : *default_instance_->range_;
+inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::mismatched_range() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+  return mismatched_range_ != NULL ? *mismatched_range_ : *default_instance_->mismatched_range_;
 }
-inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_range() {
-  set_has_range();
-  if (range_ == NULL) {
-    range_ = new ::cockroach::roachpb::RangeDescriptor;
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_mismatched_range() {
+  set_has_mismatched_range();
+  if (mismatched_range_ == NULL) {
+    mismatched_range_ = new ::cockroach::roachpb::RangeDescriptor;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.range)
-  return range_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+  return mismatched_range_;
 }
-inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_range() {
-  clear_has_range();
-  ::cockroach::roachpb::RangeDescriptor* temp = range_;
-  range_ = NULL;
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_mismatched_range() {
+  clear_has_mismatched_range();
+  ::cockroach::roachpb::RangeDescriptor* temp = mismatched_range_;
+  mismatched_range_ = NULL;
   return temp;
 }
-inline void RangeKeyMismatchError::set_allocated_range(::cockroach::roachpb::RangeDescriptor* range) {
-  delete range_;
-  range_ = range;
-  if (range) {
-    set_has_range();
+inline void RangeKeyMismatchError::set_allocated_mismatched_range(::cockroach::roachpb::RangeDescriptor* mismatched_range) {
+  delete mismatched_range_;
+  mismatched_range_ = mismatched_range;
+  if (mismatched_range) {
+    set_has_mismatched_range();
   } else {
-    clear_has_range();
+    clear_has_mismatched_range();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.range)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
 }
 
 // -------------------------------------------------------------------
