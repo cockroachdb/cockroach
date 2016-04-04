@@ -204,16 +204,16 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 		return nil, roachpb.NewError(errEmptyIndexName)
 	}
 
-	if err := n.Name.NormalizeTableName(p.session.Database); err != nil {
+	if err := n.Index.Table.NormalizeTableName(p.session.Database); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	tableDesc, pErr := p.getTableDesc(n.Name)
+	tableDesc, pErr := p.getTableDesc(n.Index.Table)
 	if pErr != nil {
 		return nil, pErr
 	}
 
-	idxName := n.Name.Index()
+	idxName := string(n.Index.Index)
 	status, i, err := tableDesc.FindIndexByName(idxName)
 	if err != nil {
 		if n.IfExists {

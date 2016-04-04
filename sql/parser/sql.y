@@ -79,6 +79,12 @@ func (u *sqlSymUnion) qname() *QualifiedName {
 func (u *sqlSymUnion) qnames() QualifiedNames {
     return u.val.(QualifiedNames)
 }
+func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
+    return u.val.(*TableNameWithIndex)
+}
+func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
+    return u.val.(TableNameWithIndexList)
+}
 func (u *sqlSymUnion) indirectElem() IndirectionElem {
     if indirectElem, ok := u.val.(IndirectionElem); ok {
         return indirectElem
@@ -88,8 +94,8 @@ func (u *sqlSymUnion) indirectElem() IndirectionElem {
 func (u *sqlSymUnion) indirect() Indirection {
     return u.val.(Indirection)
 }
-func (u *sqlSymUnion) indexIndirect() *IndexIndirection {
-    return u.val.(*IndexIndirection)
+func (u *sqlSymUnion) indexHints() *IndexHints {
+    return u.val.(*IndexHints)
 }
 func (u *sqlSymUnion) stmt() Statement {
     if stmt, ok := u.val.(Statement); ok {
@@ -312,6 +318,9 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <*QualifiedName> indirect_name_or_glob
 %type <*QualifiedName> insert_target
 
+%type <*TableNameWithIndex> table_name_with_index
+%type <TableNameWithIndexList> table_name_with_index_list
+
 // %type <empty> math_op
 
 %type <IsolationLevel> iso_level
@@ -379,10 +388,10 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <Expr>  where_clause
 %type <IndirectionElem> glob_indirection
 %type <IndirectionElem> name_indirection
-%type <IndirectionElem> index_indirection
 %type <IndirectionElem> indirection_elem
-%type <*IndexIndirection> index_indirection_param
-%type <*IndexIndirection> index_indirection_param_list
+%type <*IndexHints> opt_index_hints
+%type <*IndexHints> index_hints_param
+%type <*IndexHints> index_hints_param_list
 %type <Expr>  a_expr b_expr c_expr a_expr_const
 %type <Expr>  substr_from substr_for
 %type <Expr>  in_expr
@@ -801,13 +810,13 @@ drop_stmt:
   {
     $$.val = &DropDatabase{Name: Name($5), IfExists: true}
   }
-| DROP INDEX qualified_name_list opt_drop_behavior
+| DROP INDEX table_name_with_index_list opt_drop_behavior
   {
-    $$.val = &DropIndex{Names: $3.qnames(), IfExists: false}
+    $$.val = &DropIndex{IndexList: $3.tableWithIdxList(), IfExists: false}
   }
-| DROP INDEX IF EXISTS qualified_name_list opt_drop_behavior
+| DROP INDEX IF EXISTS table_name_with_index_list opt_drop_behavior
   {
-    $$.val = &DropIndex{Names: $5.qnames(), IfExists: true}
+    $$.val = &DropIndex{IndexList: $5.tableWithIdxList(), IfExists: true}
   }
 | DROP TABLE any_name_list
   {
@@ -1600,13 +1609,13 @@ rename_stmt:
   {
     $$.val = &RenameTable{Name: $5.qname(), NewName: $8.qname(), IfExists: true}
   }
-| ALTER INDEX qualified_name RENAME TO name
+| ALTER INDEX table_name_with_index RENAME TO name
   {
-    $$.val = &RenameIndex{Name: $3.qname(), NewName: Name($6), IfExists: false}
+    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
   }
-| ALTER INDEX IF EXISTS qualified_name RENAME TO name
+| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
   {
-    $$.val = &RenameIndex{Name: $5.qname(), NewName: Name($8), IfExists: true}
+    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
@@ -2261,11 +2270,61 @@ from_list:
     $$.val = append($1.tblExprs(), $3.tblExpr())
   }
 
+index_hints_param:
+  FORCE_INDEX '=' col_label
+  {
+     $$.val = &IndexHints{Index: Name($3)}
+  }
+|
+  NO_INDEX_JOIN
+  {
+     $$.val = &IndexHints{NoIndexJoin: true}
+  }
+
+index_hints_param_list:
+  index_hints_param
+  {
+    $$.val = $1.indexHints()
+  }
+|
+  index_hints_param_list ',' index_hints_param
+  {
+    a := $1.indexHints()
+    b := $3.indexHints()
+    index := a.Index
+    if index == "" {
+       index = b.Index
+    } else if b.Index != "" {
+       sqllex.Error("FORCE_INDEX specified multiple times")
+       return 1
+    }
+    if a.NoIndexJoin && b.NoIndexJoin {
+       sqllex.Error("NO_INDEX_JOIN specified multiple times")
+       return 1
+    }
+    noIndexJoin := a.NoIndexJoin || b.NoIndexJoin
+    $$.val = &IndexHints{Index: index, NoIndexJoin: noIndexJoin}
+  }
+
+opt_index_hints:
+  '@' col_label
+  {
+    $$.val = &IndexHints{Index: Name($2)}
+  }
+| '@' '{' index_hints_param_list '}'
+  {
+    $$.val = $3.indexHints()
+  }
+| /* EMPTY */
+  {
+    $$.val = (*IndexHints)(nil)
+  }
+
 // table_ref is where an alias clause can be attached.
 table_ref:
-  relation_expr opt_alias_clause
+  relation_expr opt_index_hints opt_alias_clause
   {
-    $$.val = &AliasedTableExpr{Expr: $1.qname(), As: $2.aliasClause()}
+    $$.val = &AliasedTableExpr{Expr: $1.qname(), Hints: $2.indexHints(), As: $3.aliasClause()}
   }
 | select_with_parens opt_alias_clause
   {
@@ -3572,10 +3631,6 @@ indirection_elem:
   {
     $$.val = $1.indirectElem()
   }
-| index_indirection
-  {
-    $$.val = $1.indirectElem()
-  }
 | '[' a_expr ']'
   {
     $$.val = &ArrayIndirection{Begin: $2.expr()}
@@ -3596,59 +3651,6 @@ glob_indirection:
   {
     $$.val = qualifiedStar
   }
-
-force_index_keyword:
-  FORCE_INDEX
-
-no_index_join_keyword:
-  NO_INDEX_JOIN
-
-index_indirection_param:
-  force_index_keyword '=' col_label
-  {
-     $$.val = &IndexIndirection{Index: Name($3)}
-  }
-|
-  no_index_join_keyword
-  {
-     $$.val = &IndexIndirection{NoIndexJoin: true}
-  }
-
-index_indirection_param_list:
-  index_indirection_param
-  {
-    $$.val = $1.indexIndirect()
-  }
-|
-  index_indirection_param_list ',' index_indirection_param
-  {
-    a := $1.indexIndirect()
-    b := $3.indexIndirect()
-    index := a.Index
-    if index == "" {
-       index = b.Index
-    } else if b.Index != "" {
-       sqllex.Error("FORCE_INDEX specified multiple times")
-       return 1
-    }
-    if a.NoIndexJoin && b.NoIndexJoin {
-       sqllex.Error("NO_INDEX_JOIN specified multiple times")
-       return 1
-    }
-    noIndexJoin := a.NoIndexJoin || b.NoIndexJoin
-    $$.val = &IndexIndirection{Index: index, NoIndexJoin: noIndexJoin}
-  }
-
-index_indirection:
-  '@' col_label
-  {
-    $$.val = &IndexIndirection{Index: Name($2)}
-  }
-| '@' '{' index_indirection_param_list '}'
-  {
-    $$.val = $3.indexIndirect()
-  }
-
 
 indirection:
   indirection_elem
@@ -3747,6 +3749,16 @@ qualified_name_list:
     $$.val = append($1.qnames(), $3.qname())
   }
 
+table_name_with_index_list:
+  table_name_with_index
+  {
+    $$.val = TableNameWithIndexList{$1.tableWithIdx()}
+  }
+| table_name_with_index_list ',' table_name_with_index
+  {
+    $$.val = append($1.tableWithIdxList(), $3.tableWithIdx())
+  }
+
 indirect_name_or_glob_list:
   indirect_name_or_glob
   {
@@ -3770,6 +3782,12 @@ qualified_name:
 | name indirection
   {
     $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+  }
+
+table_name_with_index:
+  qualified_name '@' name
+  {
+    $$.val = &TableNameWithIndex{Table: $1.qname(), Index: Name($3)}
   }
 
 // indirect_name_or_glob is a subset of `qualified_name` accepting only:
@@ -3967,6 +3985,7 @@ unreserved_keyword:
 | FILTER
 | FIRST
 | FOLLOWING
+| FORCE_INDEX
 | GRANTS
 | HIGH
 | HOUR
@@ -3987,6 +4006,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NOTHING
+| NO_INDEX_JOIN
 | NULLS
 | OF
 | OFF

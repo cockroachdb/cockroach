@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
@@ -77,11 +78,12 @@ func TestNormalizeTableName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		q, err := ParseExprTraditional(tc.in)
+		stmt, err := ParseOneTraditional(fmt.Sprintf("SELECT * FROM %s", tc.in))
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		err = q.(*QualifiedName).NormalizeTableName(tc.db)
+		ate := stmt.(*Select).Select.(*SelectClause).From[0].(*AliasedTableExpr)
+		err = ate.Expr.(*QualifiedName).NormalizeTableName(tc.db)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)
@@ -91,8 +93,8 @@ func TestNormalizeTableName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %v", tc.in, err)
 		}
-		q.(*QualifiedName).ClearString()
-		if out := q.String(); tc.out != out {
+		ate.Expr.(*QualifiedName).ClearString()
+		if out := ate.String(); tc.out != out {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}
 	}
@@ -115,8 +117,6 @@ func TestNormalizeColumnName(t *testing.T) {
 		{`""`, ``, `empty column name`},
 		{`test.foo.bar`, ``, `invalid column name: test.foo.bar`},
 		{`test.foo.*`, ``, `invalid column name: test.foo.*`},
-		{`test.foo@bar`, ``, `invalid column name: test.foo@bar`},
-		{`test.foo.bar@blah`, ``, `invalid column name: test.foo.bar@blah`},
 	}
 
 	for _, tc := range testCases {
