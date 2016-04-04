@@ -46,19 +46,39 @@ func TestKeyNext(t *testing.T) {
 		t.Errorf("expected next key to be greater")
 	}
 
+	extraCap := make([]byte, 2, 4)
+	extraCap[0] = 'x'
+	extraCap[1] = 'o'
+
+	noExtraCap := make([]byte, 2, 2)
+	noExtraCap[0] = 'x'
+	noExtraCap[1] = 'o'
+
 	testCases := []struct {
-		key  Key
-		next Key
+		key           Key
+		next          Key
+		expReallocate int // 0 for don't test, -1 for not expected, 1 for expected.
 	}{
-		{nil, Key("\x00")},
-		{Key(""), Key("\x00")},
-		{Key("test key"), Key("test key\x00")},
-		{Key("\xff"), Key("\xff\x00")},
-		{Key("xoxo\x00"), Key("xoxo\x00\x00")},
+		{nil, Key("\x00"), 0},
+		{Key(""), Key("\x00"), 0},
+		{Key("test key"), Key("test key\x00"), 0},
+		{Key("\xff"), Key("\xff\x00"), 0},
+		{Key("xoxo\x00"), Key("xoxo\x00\x00"), 0},
+		{Key(extraCap), Key("xo\x00"), -1},
+		{Key(noExtraCap), Key("xo\x00"), 1},
 	}
 	for i, c := range testCases {
-		if !bytes.Equal(c.key.Next(), c.next) {
-			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, c.key.Next())
+		if next := c.key.Next(); !bytes.Equal(next, c.next) {
+			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, next)
+		}
+		shallowNext := c.key.ShallowNext()
+		if !bytes.Equal(shallowNext, c.next) {
+			t.Errorf("%d: unexpected shallow next bytes for %q: %q", i, c.key, shallowNext)
+		}
+		if c.expReallocate != 0 {
+			if expect, reallocated := c.expReallocate > 0, (&shallowNext[0] != &c.key[0]); expect != reallocated {
+				t.Errorf("%d: unexpected shallow next reallocation = %t, found reallocation = %t", i, expect, reallocated)
+			}
 		}
 	}
 }

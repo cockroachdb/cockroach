@@ -85,7 +85,7 @@ func (rk RKey) Next() RKey {
 // The method may only take a shallow copy of the RKey, so both the
 // receiver and the return value should be treated as immutable after.
 func (rk RKey) ShallowNext() RKey {
-	return append(rk, 0)
+	return RKey(BytesNextShallow(rk))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -107,7 +107,7 @@ func (rk RKey) String() string {
 // messages which refer to Cockroach keys.
 type Key []byte
 
-// BytesNext returns the next possible byte by appending an \x00.
+// BytesNext returns the next possible byte slice by appending an \x00.
 func BytesNext(b []byte) []byte {
 	// TODO(spencer): Do we need to enforce KeyMaxLength here?
 	// Switched to "make and copy" pattern in #4963 for performance.
@@ -115,6 +115,18 @@ func BytesNext(b []byte) []byte {
 	copy(bn, b)
 	bn[len(bn)-1] = 0
 	return bn
+}
+
+// BytesNextShallow returns the next possible byte slice, using the extra
+// capacity of the provided slice if possible.
+func BytesNextShallow(b []byte) []byte {
+	if cap(b) > len(b) {
+		bNext := b[:len(b)+1]
+		if bNext[len(bNext)-1] == 0 {
+			return bNext
+		}
+	}
+	return BytesNext(b)
 }
 
 func bytesPrefixEnd(b []byte) []byte {
@@ -142,7 +154,7 @@ func (k Key) Next() Key {
 // take a shallow copy of the Key, so both the receiver and the return
 // value should be treated as immutable after.
 func (k Key) ShallowNext() Key {
-	return append(k, 0)
+	return Key(BytesNextShallow(k))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
