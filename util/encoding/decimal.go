@@ -43,10 +43,12 @@ var (
 // ordered groups (no NaN or Infinity support yet). The groups can
 // be seen in encoding.go's const definition. Following this, the
 // absolute value of the exponent of the decimal (as defined above)
-// is encoded as an unsigned varint. Next, the absolute value of
-// the digit string is added as a big-endian byte slice, with all
-// null bytes escaped. Finally, the same null terminator sequence
-// used for EncodeBytesAscending is appended to the end.
+// is encoded as an unsigned varint. Finally, the absolute value of
+// the digit string is added as a big-endian byte slice, with the
+// length of this byte slice appended to its front.
+//
+// All together, the encoding looks like:
+//   <marker><uvarint exponent><uvarint length prefix><length bytes of big-endian encoded big.Int>.
 func EncodeDecimalAscending(b []byte, d *inf.Dec) []byte {
 	return encodeDecimal(b, d, false)
 }
@@ -86,12 +88,12 @@ func encodeDecimal(b []byte, d *inf.Dec, invert bool) []byte {
 	bNat := bi.Bits()
 
 	var buf []byte
-	if n := SoftUpperBoundDecimalSize(d); n <= cap(b)-len(b) {
+	if n := UpperBoundDecimalSize(d); n <= cap(b)-len(b) {
 		// We append the marker directly to the input buffer b below, so
 		// we are off by 1 for each of these, which explains the adjustments.
-		buf = b[len(b)+1 : len(b)+n]
+		buf = b[len(b)+1 : len(b)+1]
 	} else {
-		buf = make([]byte, n-1)
+		buf = make([]byte, 0, n-1)
 	}
 
 	switch {
@@ -124,35 +126,69 @@ func encodeDecimal(b []byte, d *inf.Dec, invert bool) []byte {
 }
 
 // encodeDecimalValue encodes the absolute value of a decimal's exponent
-// and slice of digit bytes into buf, returning buf in case the slice was
-// extended on an append. The function first encodes the the absolute value
-// of a decimal's exponent as an unsigned varint. Next, the function copies
-// the decimal's digits into the buffer, escaping any null bytes. Finally,
-// the function appends a byte terminator sequence to the end of the buffer.
+// and slice of digit bytes into buf, returning the populated buffer after
+// encoding. The function first encodes the the absolute value of a decimal's
+// exponent as an unsigned varint. Next, the function determines the length
+// of the decimal's digit buffer and encodes this as an unsigned varint. Finally,
+// it copies the decimal's big-endian digits themselves into the buffer.
 // encodeDecimalValue reacts to positive/negative values and exponents by
-// performing the proper ones complements to ensure proper logical sorting
-// of values encoded in buf.
+// performing the proper encoding routines and ones complements to ensure
+// proper logical sorting of values encoded in buf.
 func encodeDecimalValue(negVal, negExp bool, exp uint64, digits []big.Word, buf []byte) []byte {
-	n := putUvarint(buf, exp)
-	buf = escapeAndCopyWords(buf[:n], digits)
-
-	switch {
-	case negVal && negExp:
-		onesComplement(buf[n:])
-	case negVal:
-		onesComplement(buf)
-	case negExp:
-		onesComplement(buf[:n])
+	// Encode the exponent using a Uvarint.
+	expEncoder := EncodeUvarintAscending
+	if negVal != negExp {
+		expEncoder = EncodeUvarintDescending
 	}
+	buf = expEncoder(buf, exp)
+	expL := len(buf)
+
+	// Encode the digit length and digits. First copy the digit bytes
+	// into their furthest possible position to the right.
+	buf = buf[:expL+maxVarintSize+wordLen(digits)]
+	digitBytesBuf := copyWords(buf[expL+maxVarintSize:], digits)
+
+	// Then encode this byte buffer's length using a Uvarint to the
+	// front of the buffer.
+	byteLenEncoder := EncodeUvarintAscending
+	if negVal {
+		byteLenEncoder = EncodeUvarintDescending
+	}
+	buf = byteLenEncoder(buf[:expL], uint64(len(digitBytesBuf)))
+	digitBytesLenL := len(buf) - expL
+
+	// Finally, shift the digit bytes to the left and truncate.
+	if negVal {
+		onesComplement(digitBytesBuf)
+	}
+	buf = buf[:expL+digitBytesLenL+len(digitBytesBuf)]
+	copy(buf[expL+digitBytesLenL:], digitBytesBuf)
 
 	return buf
 }
 
 func encodeDecimalValueWithoutExp(negVal bool, digits []big.Word, buf []byte) []byte {
-	buf = escapeAndCopyWords(buf[:0], digits)
+	// Encode the digit length and digits. First copy the digit bytes
+	// into their furthest possible position to the right.
+	buf = buf[:maxVarintSize+wordLen(digits)]
+	digitBytesBuf := copyWords(buf[maxVarintSize:], digits)
+
+	// Then encode this byte buffer's length using a Uvarint to the
+	// front of the buffer.
+	byteLenEncoder := EncodeUvarintAscending
 	if negVal {
-		onesComplement(buf)
+		byteLenEncoder = EncodeUvarintDescending
 	}
+	buf = byteLenEncoder(buf[:0], uint64(len(digitBytesBuf)))
+	digitBytesLenL := len(buf)
+
+	// Finally, shift the digit bytes to the left and truncate.
+	if negVal {
+		onesComplement(digitBytesBuf)
+	}
+	buf = buf[:digitBytesLenL+len(digitBytesBuf)]
+	copy(buf[digitBytesLenL:], digitBytesBuf)
+
 	return buf
 }
 
@@ -278,72 +314,86 @@ func decodeDecimal(buf []byte, invert bool, tmp []byte) ([]byte, *inf.Dec, error
 
 func decodeDecimalValue(dec *inf.Dec, negVal, negExp bool, buf, tmp []byte) ([]byte, error) {
 	// Decode the exponent.
+	expDecoder := DecodeUvarintAscending
 	if negVal != negExp {
-		onesComplement(buf)
+		expDecoder = DecodeUvarintDescending
 	}
-	e, l, err := getUvarint(buf)
+	buf, e, err := expDecoder(buf)
 	if err != nil {
 		return nil, err
-	}
-	if negVal != negExp {
-		// Make sure not to modify buf.
-		onesComplement(buf)
 	}
 	if negExp {
 		e = -e
 	}
 
-	// Decode the big.Int and set on the decimal.
+	// Decode the big.Int byte length.
+	byteLenDecoder := DecodeUvarintAscending
 	if negVal {
-		onesComplement(buf)
+		byteLenDecoder = DecodeUvarintDescending
 	}
-	r, biBytes, err := decodeBytesInternal(buf[l:], tmp, ascendingEscapes, false)
+	buf, biByteLen, err := byteLenDecoder(buf)
 	if err != nil {
 		return nil, err
 	}
-	bi := dec.UnscaledBig()
-	bi.SetBytes(biBytes)
+
+	// Decode the big.Int and set on the decimal.
+	if uint64(len(buf)) < biByteLen {
+		return nil, util.Errorf("insufficient byte count to decode big.Int bytes, expected at least %d bytes: %v", biByteLen, buf)
+	}
+	biBuf := buf[:biByteLen]
 	if negVal {
-		// Make sure not to modify buf.
-		onesComplement(buf)
+		onesComplement(biBuf)
+	}
+	bi := dec.UnscaledBig()
+	bi.SetBytes(biBuf)
+	if negVal {
+		// Make sure to restore buf to its original state.
+		onesComplement(biBuf)
 	}
 
 	// Set the decimal's scale.
 	nDigits, _ := numDigits(bi, tmp)
 	exp := int(e) - nDigits
 	dec.SetScale(inf.Scale(-exp))
-	return r, nil
+	return buf[biByteLen:], nil
 }
 
 func decodeDecimalValueWithoutExp(dec *inf.Dec, negVal bool, buf, tmp []byte) ([]byte, error) {
-	// Decode the big.Int and set on the decimal.
+	// Decode the big.Int byte length.
+	byteLenDecoder := DecodeUvarintAscending
 	if negVal {
-		onesComplement(buf)
+		byteLenDecoder = DecodeUvarintDescending
 	}
-	r, biBytes, err := decodeBytesInternal(buf, tmp, ascendingEscapes, false)
+	buf, biByteLen, err := byteLenDecoder(buf)
 	if err != nil {
 		return nil, err
 	}
-	dec.UnscaledBig().SetBytes(biBytes)
-	if negVal {
-		// Make sure not to modify buf.
-		onesComplement(buf)
+
+	// Decode the big.Int and set on the decimal.
+	if uint64(len(buf)) < biByteLen {
+		return nil, util.Errorf("insufficient byte count to decode big.Int bytes, expected at least %d bytes: %v", biByteLen, buf)
 	}
-	return r, nil
+	biBuf := buf[:biByteLen]
+	if negVal {
+		onesComplement(biBuf)
+	}
+	dec.UnscaledBig().SetBytes(biBuf)
+	if negVal {
+		// Make sure to restore buf to its original state.
+		onesComplement(biBuf)
+	}
+	return buf[biByteLen:], nil
 }
 
-// SoftUpperBoundDecimalSize returns the probable upper bound number
-// of bytes that the decimal will need for encoding. There is a very
-// slim chance that if the exponent maxes out maxVarintSize, and there
-// are no leading zeros in the big.Int, and bytes in the big.Int need
-// to be escaped, that this will not be a sufficient upper bound.
-func SoftUpperBoundDecimalSize(d *inf.Dec) int {
+// UpperBoundDecimalSize returns the upper bound number of bytes that the
+// decimal will need for encoding.
+func UpperBoundDecimalSize(d *inf.Dec) int {
 	// Makeup of upper bound size:
 	// - 1 byte for the prefix
 	// - maxVarintSize for the exponent
+	// - maxVarintSize for the big.Int bytes length
 	// - wordLen for the big.Int bytes
-	// - 2 bytes for the terminator
-	return 3 + maxVarintSize + wordLen(d.UnscaledBig().Bits())
+	return 1 + 2*maxVarintSize + wordLen(d.UnscaledBig().Bits())
 }
 
 // Taken from math/big/arith.go.
@@ -353,33 +403,25 @@ func wordLen(nat []big.Word) int {
 	return len(nat) * bigWordSize
 }
 
-// escapeAndCopyWords was adapted from math/big/nat.go. It writes the
-// value of nat into buf using big-endian encoding and returns the new
-// slice in case of an append copy. It escapes all null bytes in the
-// same way as EncodeBytesAscending, and appends the same escape
-// sequence to the end of buf to be decoded by decodeBytesInternal.
-func escapeAndCopyWords(buf []byte, nat []big.Word) []byte {
-	// Omit leading zeros from the resulting byte slice, which is both
-	// safe and exactly what big.Int.Bytes() does. See big.nat.setBytes()
-	// and big.nat.norm() for how this is normalized on decoding.
-	leading := true
-	for w := len(nat) - 1; w >= 0; w-- {
-		d := nat[w]
-		for j := bigWordSize - 1; j >= 0; j-- {
-			by := byte(d >> (8 * big.Word(j)))
-			if by == 0 && leading {
-				continue
-			}
-			leading = false
-
-			if by == escape {
-				buf = append(buf, escape, escaped00)
-			} else {
-				buf = append(buf, by)
-			}
+// copyWords was adapted from math/big/nat.go. It writes the value of
+// nat into buf using big-endian encoding. len(buf) must be >= len(nat)*bigWordSize.
+// The value of nat is encoded in the slice buf[i:], and the unused bytes
+// at the beginning of buf are trimmed before returning.
+func copyWords(buf []byte, nat []big.Word) []byte {
+	i := len(buf)
+	for _, d := range nat {
+		for j := 0; j < bigWordSize; j++ {
+			i--
+			buf[i] = byte(d)
+			d >>= 8
 		}
 	}
-	return append(buf, escape, escapedTerm)
+
+	for i < len(buf) && buf[i] == 0 {
+		i++
+	}
+
+	return buf[i:]
 }
 
 // digitsLookupTable is used to map binary digit counts to their corresponding
