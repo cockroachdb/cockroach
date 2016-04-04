@@ -50,11 +50,6 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 	sel := rows.(*selectNode)
-	// Some decisions below use logic in the scanNode -- if a refactor changes
-	// rows to not be backed by a scanNode, this cast will fail quickly and
-	// visibly (by crashing), indicating those need to be revisited, rather
-	// than silently changing behavior.
-	scan := sel.table.node.(*scanNode)
 
 	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
@@ -93,7 +88,9 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
-	if canDeleteWithoutScan(n, scan, len(indexes)) {
+	// TODO(dt): We could probably be smarter when presented with an index-join,
+	// but this goes away anyway once we push-down more of SQL.
+	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(n, scan, len(indexes)) {
 		return p.fastDelete(scan, rh.getResults(), autoCommit)
 	}
 
