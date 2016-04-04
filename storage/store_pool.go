@@ -41,9 +41,8 @@ const (
 )
 
 type storeDetail struct {
-	desc            roachpb.StoreDescriptor
+	desc            *roachpb.StoreDescriptor
 	dead            bool
-	gossiped        bool // Was this store updated via gossip?
 	timesDied       int
 	foundDeadOn     roachpb.Timestamp
 	lastUpdatedTime roachpb.Timestamp // This is also the priority for the queue.
@@ -60,10 +59,9 @@ func (sd *storeDetail) markDead(foundDeadOn roachpb.Timestamp) {
 
 // markAlive sets the storeDetail to alive(active) and saves the updated time
 // and descriptor.
-func (sd *storeDetail) markAlive(foundAliveOn roachpb.Timestamp, storeDesc roachpb.StoreDescriptor, gossiped bool) {
+func (sd *storeDetail) markAlive(foundAliveOn roachpb.Timestamp, storeDesc *roachpb.StoreDescriptor) {
 	sd.desc = storeDesc
 	sd.dead = false
-	sd.gossiped = gossiped
 	sd.lastUpdatedTime = foundAliveOn
 }
 
@@ -179,7 +177,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 		detail = &storeDetail{index: -1}
 		sp.stores[storeDesc.StoreID] = detail
 	}
-	detail.markAlive(sp.clock.Now(), storeDesc, true)
+	detail.markAlive(sp.clock.Now(), &storeDesc)
 	sp.queue.enqueue(detail)
 }
 
@@ -236,7 +234,7 @@ func (sp *StorePool) getStoreDetail(storeID roachpb.StoreID) storeDetail {
 		// considered dead.
 		detail = &storeDetail{index: -1}
 		sp.stores[storeID] = detail
-		detail.markAlive(sp.clock.Now(), roachpb.StoreDescriptor{StoreID: storeID}, false)
+		detail.markAlive(sp.clock.Now(), nil)
 		sp.queue.enqueue(detail)
 	}
 
@@ -254,13 +252,7 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) *roachpb.StoreD
 		return nil
 	}
 
-	// Only return gossiped stores.
-	if !detail.gossiped {
-		return nil
-	}
-
-	desc := detail.desc
-	return &desc
+	return detail.desc
 }
 
 // deadReplicas returns any replicas from the supplied slice that are
@@ -325,11 +317,10 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	var aliveStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.stores[roachpb.StoreID(storeID)]
-		if !detail.dead && detail.gossiped {
+		if !detail.dead && detail.desc != nil {
 			aliveStoreCount++
 			if required.IsSubset(*detail.desc.CombinedAttrs()) {
-				desc := detail.desc
-				sl.add(&desc)
+				sl.add(detail.desc)
 			}
 		}
 	}

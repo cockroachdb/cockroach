@@ -183,13 +183,13 @@ func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.S
 	for _, storeID := range aliveStoreIDs {
 		storePool.stores[storeID] = &storeDetail{
 			dead: false,
-			desc: roachpb.StoreDescriptor{StoreID: storeID},
+			desc: &roachpb.StoreDescriptor{StoreID: storeID},
 		}
 	}
 	for _, storeID := range deadStoreIDs {
 		storePool.stores[storeID] = &storeDetail{
 			dead: true,
-			desc: roachpb.StoreDescriptor{StoreID: storeID},
+			desc: &roachpb.StoreDescriptor{StoreID: storeID},
 		}
 	}
 }
