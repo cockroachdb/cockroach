@@ -343,7 +343,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <QualifiedNames> any_name_list
 %type <Exprs> expr_list
 %type <Indirection> attrs
-%type <SelectExprs> target_list opt_target_list
+%type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
 %type <Indirection> indirection
@@ -1969,7 +1969,7 @@ select_clause:
 // NOTE: only the leftmost component select_stmt should have INTO. However,
 // this is not checked by the grammar; parse analysis must check it.
 simple_select:
-  SELECT opt_all_clause opt_target_list
+  SELECT opt_all_clause target_list
     from_clause where_clause
     group_clause having_clause window_clause
   {
@@ -3694,14 +3694,6 @@ ctext_row:
   '(' ctext_expr_list ')'
   {
     $$.val = $2.exprs()
-  }
-
-// target list for SELECT
-opt_target_list:
-  target_list
-| /* EMPTY */
-  {
-    $$.val = SelectExprs(nil)
   }
 
 target_list:
