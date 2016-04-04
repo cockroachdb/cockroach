@@ -327,10 +327,6 @@ func (cli resilientDockerClient) ContainerCreate(
 
 func (cli resilientDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
 	err := cli.APIClient.ContainerRemove(ctx, options)
-	// TODO(dan): Is the "No such container" error happening in practice?
-	if err != nil && strings.Contains(err.Error(), "No such container") {
-		return nil
-	}
 
 	if os.Getenv("CIRCLECI") == "true" {
 		// HACK: Removal of docker containers on circleci reports the error:
@@ -400,7 +396,14 @@ func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID 
 func (cli retryingDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
 	return cli.retry(ctx, cli.timeout, "ContainerRemove",
 		func(timeoutCtx context.Context) error {
-			return cli.APIClient.ContainerRemove(timeoutCtx, options)
+			err := cli.APIClient.ContainerRemove(timeoutCtx, options)
+			// Hack: At times, an error will be returned from ContainerRemove, but the
+			// remove will go through. The retry then fails with a "No such container"
+			// error, so these are ignored.
+			if err != nil && strings.Contains(err.Error(), "No such container") {
+				return nil
+			}
+			return err
 		})
 }
 
