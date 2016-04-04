@@ -93,7 +93,7 @@ func TestNormalizeTableName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %v", tc.in, err)
 		}
-		ate.Expr.(*QualifiedName).ClearString()
+		ate.Expr.(*QualifiedName).ClearOrig()
 		if out := ate.String(); tc.out != out {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}
@@ -134,7 +134,7 @@ func TestNormalizeColumnName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %v", tc.in, err)
 		}
-		q.(*QualifiedName).ClearString()
+		q.(*QualifiedName).ClearOrig()
 		if out := q.String(); tc.out != out {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}
