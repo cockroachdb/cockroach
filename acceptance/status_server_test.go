@@ -91,7 +91,6 @@ func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expe
 // TestStatusServer starts up an N node cluster and tests the status server on
 // each node.
 func TestStatusServer(t *testing.T) {
-	t.Skipf("TODO(pmattis): #4512")
 	runTestOnConfigs(t, testStatusServerInner)
 }
 
@@ -110,7 +109,6 @@ func testStatusServerInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConf
 	for i := 0; i < c.NumNodes(); i++ {
 		checkNode(t, c, i, idMap[i], "local", idMap[i])
 		get(t, c.URL(i), "/_status/nodes")
-		get(t, c.URL(i), "/_status/stores")
 	}
 
 	// Proxy from the first node to the last node.
