@@ -18,6 +18,7 @@
 // docs/RFCS/distributed_sql.md.
 // All the concepts here are "physical plan" concepts.
 
+// Cannot be proto3 because depends on structured.proto.
 syntax = "proto2";
 package cockroach.sql.distsql;
 option go_package = "distsql";
