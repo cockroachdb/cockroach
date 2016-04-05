@@ -158,3 +158,9 @@ users primary true   1   id     ASC       false
 users foo     false  1   name   ASC       false
 users bar     true   1   id     ASC       false
 users bar     true   2   name   ASC       false
+
+statement error invalid NUMERIC precision 0
+CREATE TABLE test.d (x DECIMAL(0, 2))
+
+statement error NUMERIC scale 4 must be between 0 and precision 2
+CREATE TABLE test.d (x DECIMAL(2, 4))
