@@ -1057,7 +1057,7 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	rType := reflect.TypeOf(r)
 
 	// Check equality.
-	eqOp, ok := cmpOps[cmpArgs{EQ, lType, rType}]
+	eqOp, ok := CmpOps[CmpArgs{EQ, lType, rType}]
 	if !ok {
 		return 0, false
 	}
@@ -1070,7 +1070,7 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	}
 
 	// Check less than.
-	ltOp, ok := cmpOps[cmpArgs{LT, lType, rType}]
+	ltOp, ok := CmpOps[CmpArgs{LT, lType, rType}]
 	if !ok {
 		return 0, false
 	}

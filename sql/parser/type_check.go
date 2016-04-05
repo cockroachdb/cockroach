@@ -25,14 +25,22 @@ import (
 )
 
 var (
-	typeBytes     = func(MapArgs, DTuple) (Datum, error) { return DummyBytes, nil }
-	typeDate      = func(MapArgs, DTuple) (Datum, error) { return DummyDate, nil }
-	typeFloat     = func(MapArgs, DTuple) (Datum, error) { return DummyFloat, nil }
-	typeDecimal   = func(MapArgs, DTuple) (Datum, error) { return DummyDecimal, nil }
-	typeInt       = func(MapArgs, DTuple) (Datum, error) { return DummyInt, nil }
-	typeInterval  = func(MapArgs, DTuple) (Datum, error) { return DummyInterval, nil }
-	typeString    = func(MapArgs, DTuple) (Datum, error) { return DummyString, nil }
-	typeTimestamp = func(MapArgs, DTuple) (Datum, error) { return DummyTimestamp, nil }
+	// TypeBytes returns a bytes datum.
+	TypeBytes = func(MapArgs, DTuple) (Datum, error) { return DummyBytes, nil }
+	// TypeDate returns a date datum.
+	TypeDate = func(MapArgs, DTuple) (Datum, error) { return DummyDate, nil }
+	// TypeFloat returns a float datum.
+	TypeFloat = func(MapArgs, DTuple) (Datum, error) { return DummyFloat, nil }
+	// TypeDecimal returns a decimal datum.
+	TypeDecimal = func(MapArgs, DTuple) (Datum, error) { return DummyDecimal, nil }
+	// TypeInt returns an int datum.
+	TypeInt = func(MapArgs, DTuple) (Datum, error) { return DummyInt, nil }
+	// TypeInterval returns an interval datum.
+	TypeInterval = func(MapArgs, DTuple) (Datum, error) { return DummyInterval, nil }
+	// TypeString returns a string datum.
+	TypeString = func(MapArgs, DTuple) (Datum, error) { return DummyString, nil }
+	// TypeTimestamp returns a timestamp datum.
+	TypeTimestamp = func(MapArgs, DTuple) (Datum, error) { return DummyTimestamp, nil }
 )
 
 // TypeCheck implements the Expr interface.
@@ -73,8 +81,8 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 	}
 
 	var ok bool
-	if expr.fn, ok = binOps[binArgs{expr.Operator, expr.ltype, expr.rtype}]; ok {
-		return expr.fn.returnType, nil
+	if expr.fn, ok = BinOps[BinArgs{expr.Operator, expr.ltype, expr.rtype}]; ok {
+		return expr.fn.ReturnType, nil
 	}
 
 	return nil, fmt.Errorf("unsupported binary operator: <%s> %s <%s>",
@@ -267,7 +275,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs) (Datum, error) {
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 	dummyArgs := make(DTuple, 0, len(expr.Exprs))
-	types := make(argTypes, 0, len(expr.Exprs))
+	types := make(ArgTypes, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		dummyArg, err := e.TypeCheck(args)
 		if err != nil {
@@ -278,8 +286,8 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 	}
 
 	// Cache is warm and `fn` encodes its return type.
-	if expr.fn.returnType != nil {
-		datum, err := expr.fn.returnType(args, dummyArgs)
+	if expr.fn.ReturnType != nil {
+		datum, err := expr.fn.ReturnType(args, dummyArgs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", expr.Name, err)
 		}
@@ -294,13 +302,13 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 		}
 
 		name := string(expr.Name.Base)
-		candidates, ok := builtins[strings.ToLower(name)]
+		candidates, ok := Builtins[strings.ToLower(name)]
 		if !ok {
 			return nil, fmt.Errorf("unknown function: %s", name)
 		}
 
 		for _, candidate := range candidates {
-			if candidate.types.match(types) {
+			if candidate.Types.match(types) {
 				expr.fn = candidate
 				expr.fnFound = true
 				break
@@ -319,8 +327,8 @@ func (expr *FuncExpr) TypeCheck(args MapArgs) (Datum, error) {
 	}
 
 	// Function lookup succeeded and `fn` encodes its return type.
-	if expr.fn.returnType != nil {
-		datum, err := expr.fn.returnType(args, dummyArgs)
+	if expr.fn.ReturnType != nil {
+		datum, err := expr.fn.ReturnType(args, dummyArgs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", expr.Name, err)
 		}
@@ -449,8 +457,8 @@ func (expr *UnaryExpr) TypeCheck(args MapArgs) (Datum, error) {
 	expr.dtype = reflect.TypeOf(dummyExpr)
 
 	var ok bool
-	if expr.fn, ok = unaryOps[unaryArgs{expr.Operator, expr.dtype}]; ok {
-		return expr.fn.returnType, nil
+	if expr.fn, ok = UnaryOps[UnaryArgs{expr.Operator, expr.dtype}]; ok {
+		return expr.fn.ReturnType, nil
 	}
 
 	return nil, fmt.Errorf("unsupported unary operator: %s <%s>",
@@ -596,13 +604,13 @@ func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error
 	return DummyBool, nil
 }
 
-func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, cmpOp, error) {
+func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight Datum) (Datum, CmpOp, error) {
 	if set, err := args.SetInferredType(dummyLeft, dummyRight); err != nil {
-		return nil, cmpOp{}, err
+		return nil, CmpOp{}, err
 	} else if set != nil {
 		dummyLeft = set
 	} else if set, err := args.SetInferredType(dummyRight, dummyLeft); err != nil {
-		return nil, cmpOp{}, err
+		return nil, CmpOp{}, err
 	} else if set != nil {
 		dummyRight = set
 	}
@@ -613,30 +621,30 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 			// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
 			// dummyLeft.TypeEquals(DummyBool). We currently can't distinguish NULL from
 			// UNKNOWN. Is it important to do so?
-			return DummyBool, cmpOp{}, nil
+			return DummyBool, CmpOp{}, nil
 		default:
-			return DNull, cmpOp{}, nil
+			return DNull, CmpOp{}, nil
 		}
 	}
 	op, dummyLeft, dummyRight, _ = foldComparisonExpr(op, dummyLeft, dummyRight)
 	lType := reflect.TypeOf(dummyLeft)
 	rType := reflect.TypeOf(dummyRight)
 
-	if cmp, ok := cmpOps[cmpArgs{op, lType, rType}]; ok {
+	if cmp, ok := CmpOps[CmpArgs{op, lType, rType}]; ok {
 		if op == EQ && lType == tupleType && rType == tupleType {
 			if err := typeCheckTupleEQ(args, dummyLeft, dummyRight); err != nil {
-				return nil, cmpOp{}, err
+				return nil, CmpOp{}, err
 			}
 		} else if op == In && rType == tupleType {
 			if err := typeCheckTupleIN(args, dummyLeft, dummyRight); err != nil {
-				return nil, cmpOp{}, err
+				return nil, CmpOp{}, err
 			}
 		}
 
 		return cmpOpResultType, cmp, nil
 	}
 
-	return nil, cmpOp{}, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
+	return nil, CmpOp{}, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
 		dummyLeft.Type(), op, dummyRight.Type())
 }
 
