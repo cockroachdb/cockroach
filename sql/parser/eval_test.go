@@ -489,7 +489,7 @@ var benchmarkLikePatterns = []string{
 }
 
 func benchmarkLike(b *testing.B, ctx EvalContext) {
-	likeFn := cmpOps[cmpArgs{Like, stringType, stringType}].fn
+	likeFn := CmpOps[CmpArgs{Like, stringType, stringType}].fn
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
 			if _, err := likeFn(ctx, DString("test"), DString(p)); err != nil {

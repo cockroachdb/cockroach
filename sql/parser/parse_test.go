@@ -863,7 +863,7 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op UnaryOp, expr Expr) Expr {
+	unary := func(op UnaryOperator, expr Expr) Expr {
 		return &UnaryExpr{Operator: op, Expr: expr}
 	}
 	binary := func(op BinaryOp, left, right Expr) Expr {

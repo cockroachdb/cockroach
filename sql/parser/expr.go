@@ -141,7 +141,7 @@ func (i ComparisonOp) String() string {
 type ComparisonExpr struct {
 	Operator    ComparisonOp
 	Left, Right Expr
-	fn          cmpOp
+	fn          CmpOp
 }
 
 func (node *ComparisonExpr) String() string {
@@ -633,7 +633,7 @@ func (i BinaryOp) String() string {
 type BinaryExpr struct {
 	Operator    BinaryOp
 	Left, Right Expr
-	fn          binOp
+	fn          BinOp
 	ltype       reflect.Type
 	rtype       reflect.Type
 }
@@ -642,12 +642,12 @@ func (node *BinaryExpr) String() string {
 	return fmt.Sprintf("%s %s %s", node.Left, node.Operator, node.Right)
 }
 
-// UnaryOp represents a unary operator.
-type UnaryOp int
+// UnaryOperator represents a unary operator.
+type UnaryOperator int
 
 // UnaryExpr.Operator
 const (
-	UnaryPlus UnaryOp = iota
+	UnaryPlus UnaryOperator = iota
 	UnaryMinus
 	UnaryComplement
 )
@@ -658,8 +658,8 @@ var unaryOpName = [...]string{
 	UnaryComplement: "~",
 }
 
-func (i UnaryOp) String() string {
-	if i < 0 || i > UnaryOp(len(unaryOpName)-1) {
+func (i UnaryOperator) String() string {
+	if i < 0 || i > UnaryOperator(len(unaryOpName)-1) {
 		return fmt.Sprintf("UnaryOp(%d)", i)
 	}
 	return unaryOpName[i]
@@ -667,9 +667,9 @@ func (i UnaryOp) String() string {
 
 // UnaryExpr represents a unary value expression.
 type UnaryExpr struct {
-	Operator UnaryOp
+	Operator UnaryOperator
 	Expr     Expr
-	fn       unaryOp
+	fn       UnaryOp
 	dtype    reflect.Type
 }
 
@@ -684,7 +684,7 @@ type FuncExpr struct {
 	Exprs Exprs
 
 	// These fields are not part of the Expr AST.
-	fn      builtin
+	fn      Builtin
 	fnFound bool
 }
 
