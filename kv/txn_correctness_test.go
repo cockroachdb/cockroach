@@ -723,7 +723,6 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 //   R1(A) R2(A) I1(A) C1 I2(A) C2
 func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(spencer): see #5404")
 	txn := "R(A) I(A) C"
 	verify := &verifier{
 		history: "R(A)",
