@@ -294,11 +294,13 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	if detail := sp.getStoreDetail(roachpb.StoreID(1)); detail.dead {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	if detail := sp.getStoreDetailLocked(roachpb.StoreID(1)); detail.dead {
 		t.Errorf("Present storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 
-	if detail := sp.getStoreDetail(roachpb.StoreID(2)); detail.dead {
+	if detail := sp.getStoreDetailLocked(roachpb.StoreID(2)); detail.dead {
 		t.Errorf("Absent storeDetail came back as dead, expected it to be alive. %+v", detail)
 	}
 }
@@ -375,5 +377,26 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	deadReplicas = sp.deadReplicas(replicas)
 	if a, e := deadReplicas, replicas[3:]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("findDeadReplicas did not return expected values; got \n%v, expected \n%v", a, e)
+	}
+}
+
+// TestStorePoolDefaultState verifies that the default state of a
+// store is neither alive nor dead. This is a regression test for a
+// bug in which a call to deadReplicas involving an unknown store
+// would have the side effect of marking that store as alive and
+// eligible for return by getStoreList. It is therefore significant
+// that the two methods are tested in the same test, and in this
+// order.
+func TestStorePoolDefaultState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, _, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
+	defer stopper.Stop()
+
+	if dead := sp.deadReplicas([]roachpb.ReplicaDescriptor{{StoreID: 1}}); len(dead) > 0 {
+		t.Errorf("expected 0 dead replicas; got %v", dead)
+	}
+
+	if sl, c := sp.getStoreList(roachpb.Attributes{}, true); len(sl.stores) > 0 || c != 0 {
+		t.Errorf("expected 0 live stores; got list %v and total count %d", sl, c)
 	}
 }
