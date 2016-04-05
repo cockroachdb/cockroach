@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var testMetaRangeDescriptor = roachpb.RangeDescriptor{
@@ -424,6 +425,46 @@ func TestOwnNodeCertain(t *testing.T) {
 	}
 	if !reflect.DeepEqual(exp, act) {
 		t.Fatalf("wanted %v, got %v", exp, act)
+	}
+}
+
+func TestImmutableBatchArgs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+
+	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+		reply := args.CreateReply()
+		txnClone := args.Txn.Clone()
+		reply.Txn = &txnClone
+		reply.Txn.Timestamp = roachpb.MaxTimestamp
+		return reply, nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend:           testFn,
+		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+	}
+
+	ds := NewDistSender(ctx, g)
+
+	txn := &roachpb.Transaction{
+		TxnMeta: roachpb.TxnMeta{ID: uuid.NewV4()},
+	}
+	// An optimization does copy-on-write if we haven't observed anything,
+	// so make sure we're not in that case.
+	txn.UpdateObservedTimestamp(1, roachpb.MaxTimestamp)
+
+	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
+	if _, pErr := client.SendWrappedWith(ds, context.Background(), roachpb.Header{
+		Txn: txn,
+	}, put); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if !txn.Timestamp.Equal(roachpb.ZeroTimestamp) {
+		t.Fatal("Transaction was mutated by DistSender")
 	}
 }
 

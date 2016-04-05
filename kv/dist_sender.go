@@ -485,29 +485,37 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		ba.Timestamp = ds.clock.Now()
 	}
 
-	if ba.Txn != nil && len(ba.Txn.ObservedTimestamps) == 0 {
-		// Ensure the local NodeID is marked as free from clock offset;
-		// the transaction's timestamp was taken off the local clock.
-		if nDesc := ds.getNodeDescriptor(); nDesc != nil {
-			// TODO(tschottdorf): future refactoring should move this to txn
-			// creation in TxnCoordSender, which is currently unaware of the
-			// NodeID (and wraps *DistSender through client.Sender since it
-			// also needs test compatibility with *LocalSender).
-			//
-			// Taking care below to not modify any memory referenced from
-			// our BatchRequest which may be shared with others.
-			// First, get a shallow clone of our txn (since that holds the
-			// NodeList struct).
-			txnShallow := *ba.Txn
-			// Next, zero the existing data. That makes sure that if we had
-			// something of size zero but with capacity, we don't re-use the
-			// existing space (which others may also use). This is just to
-			// satisfy paranoia/OCD and not expected to matter in practice.
-			txnShallow.ResetObservedTimestamps()
-			// OrigTimestamp is the HLC timestamp at which the Txn started, so
-			// this effectively means no more uncertainty on this node.
-			txnShallow.UpdateObservedTimestamp(nDesc.NodeID, txnShallow.OrigTimestamp)
-			ba.Txn = &txnShallow
+	if ba.Txn != nil {
+		// Make a copy here since the code below modifies it in different places.
+		// TODO(tschottdorf): be smarter about this - no need to do it for
+		// requests that don't get split.
+		txnClone := ba.Txn.Clone()
+		ba.Txn = &txnClone
+
+		if len(ba.Txn.ObservedTimestamps) == 0 {
+			// Ensure the local NodeID is marked as free from clock offset;
+			// the transaction's timestamp was taken off the local clock.
+			if nDesc := ds.getNodeDescriptor(); nDesc != nil {
+				// TODO(tschottdorf): future refactoring should move this to txn
+				// creation in TxnCoordSender, which is currently unaware of the
+				// NodeID (and wraps *DistSender through client.Sender since it
+				// also needs test compatibility with *LocalSender).
+				//
+				// Taking care below to not modify any memory referenced from
+				// our BatchRequest which may be shared with others.
+				//
+				// We already have a clone of our txn (see above), so we can
+				// modify it freely.
+				//
+				// Zero the existing data. That makes sure that if we had
+				// something of size zero but with capacity, we don't re-use the
+				// existing space (which others may also use). This is just to
+				// satisfy paranoia/OCD and not expected to matter in practice.
+				ba.Txn.ResetObservedTimestamps()
+				// OrigTimestamp is the HLC timestamp at which the Txn started, so
+				// this effectively means no more uncertainty on this node.
+				ba.Txn.UpdateObservedTimestamp(nDesc.NodeID, ba.Txn.OrigTimestamp)
+			}
 		}
 	}
 
@@ -572,7 +580,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		reply.Responses = append(reply.Responses, rpl.Responses...)
 		reply.CollectedSpans = append(reply.CollectedSpans, rpl.CollectedSpans...)
 	}
-	*reply.Header() = rplChunks[len(rplChunks)-1].BatchResponse_Header
+	reply.BatchResponse_Header = rplChunks[len(rplChunks)-1].BatchResponse_Header
 	return reply, nil
 }
 
