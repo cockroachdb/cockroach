@@ -314,6 +314,39 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			return util.Errorf("expected heartbeat")
 		})
 	}
+
+	// Sneakily send an ABORT right to DistSender (bypassing TxnCoordSender).
+	{
+		var ba roachpb.BatchRequest
+		ba.Add(&roachpb.EndTransactionRequest{
+			Commit: false,
+			Span:   roachpb.Span{Key: initialTxn.Proto.Key},
+		})
+		txn := initialTxn.Proto.Clone()
+		// TODO(tschottdorf): illegaly mutated in DistSender.Send, fixed in
+		// upcoming commit.
+		ba.Txn = &txn
+		if _, pErr := s.distSender.Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	util.SucceedsSoon(t, func() error {
+		s.Sender.Lock()
+		defer s.Sender.Unlock()
+		if txnMeta, ok := s.Sender.txns[*initialTxn.Proto.ID]; !ok {
+			t.Fatal("transaction unregistered prematurely")
+		} else if txnMeta.txn.Status != roachpb.ABORTED {
+			return fmt.Errorf("transaction is not aborted")
+		}
+		return nil
+	})
+
+	// Trying to do something else should give us a TransactionAbortedError.
+	_, pErr := initialTxn.Get("a")
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
+		t.Fatalf("expected a TransactionAbortedError, but got %v (%T)", pErr, pErr.GetDetail())
+	}
 }
 
 // getTxn fetches the requested key and returns the transaction info.
@@ -880,7 +913,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 }
 
 // TestTxnCoordSenderReleaseTxnMeta verifies that TxnCoordSender releases the
-// txnMetadata after the txn has committed succeed.
+// txnMetadata after the txn has committed successfully.
 func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -1289,7 +1322,8 @@ func TestTxnDurations(t *testing.T) {
 // In TxnCoordSender:
 // func heartbeatLoop(ctx context.Context, ...) {
 //   if !HasContextLifetime(ctx) && txnMeta.hasClientAbandonedCoord ... {
-//     tc.clientHasAbandoned(txnID)
+//     tc.tryAbort(txnID)
+//     return
 //   }
 // }
 func TestContextDoneNil(t *testing.T) {
