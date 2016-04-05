@@ -307,7 +307,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			s.Sender.Lock()
 			s.Manual.Increment(1)
 			s.Sender.Unlock()
-			if heartbeatTS.Less(*txn.LastHeartbeat) {
+			if txn.LastHeartbeat != nil && heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
 				return nil
 			}
@@ -322,10 +322,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			Commit: false,
 			Span:   roachpb.Span{Key: initialTxn.Proto.Key},
 		})
-		txn := initialTxn.Proto.Clone()
-		// TODO(tschottdorf): illegaly mutated in DistSender.Send, fixed in
-		// upcoming commit.
-		ba.Txn = &txn
+		ba.Txn = &initialTxn.Proto
 		if _, pErr := s.distSender.Send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)
 		}
