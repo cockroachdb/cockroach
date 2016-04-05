@@ -1758,7 +1758,7 @@ func TestEndTransactionDeadline(t *testing.T) {
 
 		{
 			txn.Sequence++
-			_, pErr := tc.SendWrappedWith(etHeader, &etArgs)
+			resp, pErr := tc.SendWrappedWith(etHeader, &etArgs)
 			switch i {
 			case 0:
 				// No deadline.
@@ -1767,8 +1767,12 @@ func TestEndTransactionDeadline(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-					t.Errorf("expected TransactionAbortedError but got %T: %s", pErr, pErr)
+				if pErr != nil {
+					t.Error(pErr)
+				}
+				reply := resp.(*roachpb.EndTransactionResponse)
+				if reply.Txn.Status != roachpb.ABORTED {
+					t.Errorf("expected aborted transaction but got %s", reply.Txn)
 				}
 			case 2:
 				// Equal deadline.
@@ -2064,7 +2068,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}{
 		{roachpb.Key("a"), doesNotExist, txn.Epoch, txn.Timestamp, "does not exist"},
 		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
-		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
+		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, ""},
 		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
 		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, `txn "test" id=.*: timestamp regression: 0.000000001,\d+`},
 	}
@@ -2089,7 +2093,12 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		args, h := endTxnArgs(txn, true)
 		txn.Sequence++
 
-		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
+		_, pErr := tc.SendWrappedWith(h, &args)
+		if len(test.expErrRegexp) == 0 {
+			if pErr != nil {
+				t.Errorf("%d: unexpected error %ss", i, pErr)
+			}
+		} else if !testutils.IsPError(pErr, test.expErrRegexp) {
 			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
 		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == nil {
 			// Prevent regression of #5591.

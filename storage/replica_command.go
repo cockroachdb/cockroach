@@ -400,7 +400,12 @@ func (r *Replica) EndTransaction(
 		// and (b) not able to write on error (see #1989), we can't write
 		// ABORTED into the master transaction record, which remains
 		// PENDING, and that's pretty bad.
-		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
+		//
+		// TODO(kaneda): We now write ABORTED into the master transaction record. Resolve local intents.
+		if err := engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, reply.Txn); err != nil {
+			return reply, nil, err
+		}
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), nil
 	}
 
 	// Verify that we can either commit it or abort it (according
@@ -414,7 +419,9 @@ func (r *Replica) EndTransaction(
 		// that we know them, so we return them all for asynchronous
 		// resolution (we're currently not able to write on error, but
 		// see #1989).
-		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
+		//
+		// TODO(kaneda): Resolve local intents.
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), nil
 	} else if h.Txn.Epoch < reply.Txn.Epoch {
 		// TODO(tschottdorf): this leaves the Txn record (and more
 		// importantly, intents) dangling; we can't currently write on

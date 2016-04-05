@@ -1415,12 +1415,13 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// been aborted.
 	etArgs, h := endTxnArgs(pushee, true)
 	pushee.Sequence++
-	_, pErr := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
-	if pErr == nil {
-		t.Errorf("unexpected success committing transaction")
+	resp, pErr := client.SendWrappedWith(store.testSender(), nil, h, &etArgs)
+	if pErr != nil {
+		t.Errorf("unexpected error: %s", pErr)
 	}
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Errorf("expected transaction aborted error; got %s", pErr)
+	reply := resp.(*roachpb.EndTransactionResponse)
+	if reply.Txn.Status != roachpb.ABORTED {
+		t.Errorf("expected aborted transaction but got %s", reply.Txn)
 	}
 }
 

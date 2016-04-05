@@ -1628,6 +1628,7 @@ func (r *Replica) checkIfTxnAborted(b engine.Engine, txn roachpb.Transaction) *r
 		if entry.Priority > newTxn.Priority {
 			newTxn.Priority = entry.Priority
 		}
+		// TODO(kaneda): Update the txn status to to ABORTED instead of returning an error.
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &newTxn)
 	}
 	return nil

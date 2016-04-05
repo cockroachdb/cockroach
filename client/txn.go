@@ -76,24 +76,44 @@ func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachp
 	// The exception is if our transaction was aborted and needs to restart
 	// from scratch, in which case we do just that.
 	if pErr == nil {
+		// Return a TransactionAbortedError if the transaction is aborted but
+		// the request is not requesting a rollback, so that txn.Exec will
+		// initiate a restart.
+		rollback := false
+		for _, union := range ba.Requests {
+			if args, ok := union.GetInner().(*roachpb.EndTransactionRequest); ok {
+				rollback = !args.Commit
+				break
+			}
+		}
+		if br.Txn != nil && br.Txn.Status == roachpb.ABORTED && !rollback {
+			ts.resetTxnOnAbort(br.Txn)
+			return nil, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionAbortedError(), br.Txn)
+		}
 		ts.Proto.Update(br.Txn)
 		return br, nil
 	} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		// On Abort, reset the transaction so we start anew on restart.
-		ts.Proto = roachpb.Transaction{
-			TxnMeta: roachpb.TxnMeta{
-				Isolation: ts.Proto.Isolation,
-			},
-			Name: ts.Proto.Name,
-		}
-		// Acts as a minimum priority on restart.
-		if pErr.GetTxn() != nil {
-			ts.Proto.Priority = pErr.GetTxn().Priority
-		}
+		ts.resetTxnOnAbort(pErr.GetTxn())
 	} else if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
 		ts.Proto.Update(pErr.GetTxn())
 	}
 	return nil, pErr
+}
+
+// resetTxnOnAbort resets the transaction on abort so we start anew on restart.
+func (ts *txnSender) resetTxnOnAbort(txn *roachpb.Transaction) {
+	ts.Proto = roachpb.Transaction{
+		TxnMeta: roachpb.TxnMeta{
+			Isolation: ts.Proto.Isolation,
+		},
+		Name: ts.Proto.Name,
+	}
+	// Acts as a minimum priority on restart.
+	if txn != nil {
+		ts.Proto.Priority = txn.Priority
+	}
 }
 
 // Txn is an in-progress distributed database transaction. A Txn is not safe for

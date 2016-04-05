@@ -759,7 +759,12 @@ func (tc *TxnCoordSender) updateState(
 	case *roachpb.WriteTooOldError:
 		newTxn.Restart(ba.UserPriority, newTxn.Priority, t.ActualTimestamp)
 	case nil:
-		// Nothing to do here, avoid the default case.
+		if br.Txn != nil && br.Txn.Status == roachpb.ABORTED {
+			// Same as TransactionAbortedError.
+			newTxn.Timestamp.Forward(br.Txn.Timestamp)
+			newTxn.Priority = br.Txn.Priority
+			defer tc.cleanupTxn(ctx, *newTxn)
+		}
 	default:
 		if pErr.GetTxn() != nil {
 			if pErr.CanRetry() {

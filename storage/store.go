@@ -1736,6 +1736,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		case roachpb.COMMITTED:
 			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedTxn)
 		case roachpb.ABORTED:
+			// TODO(kaneda): Update the txn status to to ABORTED instead of returning an error.
 			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedTxn)
 		}
 		return updatedTxn, nil
