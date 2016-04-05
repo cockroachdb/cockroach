@@ -1,9 +1,9 @@
 resource "google_compute_http_health_check" "default" {
   name = "cockroach-health-check"
   request_path = "/"
-  port = "${var.cockroach_port}"
-  check_interval_sec = 2
-  healthy_threshold = 2
+  port = "${var.http_port}"
+  check_interval_sec = 5
+  healthy_threshold = 5
   unhealthy_threshold = 2
   timeout_sec = 2
 }
@@ -19,7 +19,9 @@ resource "google_compute_target_pool" "default" {
 resource "google_compute_forwarding_rule" "default" {
   name = "cockroach-forwarding-rule"
   target = "${google_compute_target_pool.default.self_link}"
-  port_range = "${var.cockroach_port}"
+  # Forward all unprivileged ports, relying on the firewall to filter everything
+  # but the whitelisted ports.
+  port_range = "1024-65535"
 }
 
 resource "google_compute_firewall" "default" {
@@ -28,7 +30,7 @@ resource "google_compute_firewall" "default" {
 
   allow {
     protocol = "tcp"
-    ports = ["${var.cockroach_port}"]
+    ports = ["${var.sql_port}", "${var.http_port}"]
   }
 
   source_ranges = ["0.0.0.0/0"]
