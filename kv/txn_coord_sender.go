@@ -335,11 +335,30 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		// coordinator previously.
 		if ba.Txn.Writing {
 			tc.Lock()
-			_, ok := tc.txns[txnID]
-			tc.Unlock()
-			if !ok {
-				pErr := roachpb.NewErrorf("writing transaction timed out, was aborted, " +
+			txnMeta, ok := tc.txns[txnID]
+			// Check whether the transaction is still tracked and has a chance
+			// of completing. It's possible that the coordinator learns about
+			// the transaction having terminated from a heartbeat, and
+			// correctness (along with common sense) mandates that we don't let
+			// the client continue.
+			var pErr *roachpb.Error
+			switch {
+			case !ok:
+				pErr = roachpb.NewErrorf("writing transaction timed out, was aborted, " +
 					"or ran on multiple coordinators")
+			case txnMeta.txn.Status == roachpb.ABORTED:
+				txn := txnMeta.txn.Clone()
+				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(),
+					&txn)
+				defer tc.cleanupTxn(ctx, txn)
+			case txnMeta.txn.Status == roachpb.COMMITTED:
+				txn := txnMeta.txn.Clone()
+				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
+					"transaction is already committed"), &txn)
+				defer tc.cleanupTxn(ctx, txn)
+			}
+			tc.Unlock()
+			if pErr != nil {
 				return nil, pErr
 			}
 		}
@@ -608,7 +627,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 			// responsible for timing out transactions. If ctx.Done() is not nil, then
 			// then heartbeat loop ignores the timeout check and this case is
 			// responsible for client timeouts.
-			tc.clientHasAbandoned(txnID)
+			tc.tryAsyncAbort(txnID)
 			return
 		case <-tc.stopper.ShouldDrain():
 			return
@@ -616,32 +635,32 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 	}
 }
 
-func (tc *TxnCoordSender) clientHasAbandoned(txnID uuid.UUID) {
+// tryAsyncAbort (synchronously) grabs a copy of the txn proto and the intents
+// (which it then clears from txnMeta), and asynchronously tries to abort the
+// transaction.
+func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	var intentSpans []roachpb.Span
-
-	// TODO(tschottdorf): should we be more proactive here?
-	// The client might be continuing the transaction
-	// through another coordinator, but in the most likely
-	// case it's just gone and the open transaction record
-	// could block concurrent operations.
-	if log.V(1) {
-		log.Infof("transaction %s abandoned; stopping heartbeat", txnMeta.txn)
-	}
-	// Grab the intents here to avoid potential race.
+	// Grab the intents and clone the txn to avoid data races.
 	intentSpans = collectIntentSpans(txnMeta.keys)
 	txnMeta.keys.Clear()
-
-	// txnMeta.txn is possibly replaced concurrently,
-	// so grab a copy before unlocking.
 	txn := txnMeta.txn.Clone()
 	tc.Unlock()
+
+	// Since we don't hold the lock continuously, it's possible that two aborts
+	// raced here. That's fine (and probably better than the alternative, which
+	// is missing new intents sometimes).
+	if txn.Status != roachpb.PENDING {
+		return
+	}
 
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &txn
 
-	// Actively abort the transaction and its intents since we assume it's abandoned.
+	if txn.Status != roachpb.PENDING {
+	}
+
 	et := &roachpb.EndTransactionRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
@@ -651,8 +670,8 @@ func (tc *TxnCoordSender) clientHasAbandoned(txnID uuid.UUID) {
 	}
 	ba.Add(et)
 	tc.stopper.RunAsyncTask(func() {
-		// Use the wrapped sender since the normal Sender
-		// does not allow clients to specify intents.
+		// Use the wrapped sender since the normal Sender does not allow
+		// clients to specify intents.
 		// TODO(tschottdorf): not using the existing context here since that
 		// leads to use-after-finish of the contained trace. Should fork off
 		// before the goroutine.
@@ -668,14 +687,26 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	txn := txnMeta.txn.Clone()
+	hasAbandoned := txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow())
 	tc.Unlock()
+
+	if txn.Status != roachpb.PENDING {
+		// A previous iteration has already determined that the transaction is
+		// not ongoing any more, we're just waiting for the client to realize
+		// and want to keep our state for the time being (to dish out the right
+		// error once it returns).
+		return true
+	}
 
 	// Before we send a heartbeat, determine whether this transaction should be
 	// considered abandoned. If so, exit heartbeat. If ctx.Done() is not nil, then
 	// it is a cancellable Context and we skip this check and use the ctx lifetime
 	// instead of a timeout.
-	if ctx.Done() == nil && txnMeta.hasClientAbandonedCoord(tc.clock.PhysicalNow()) {
-		tc.clientHasAbandoned(txnID)
+	if ctx.Done() == nil && hasAbandoned {
+		if log.V(1) {
+			log.Infof("transaction %s abandoned; stopping heartbeat", txnMeta.txn)
+		}
+		tc.tryAsyncAbort(txnID)
 		return false
 	}
 
@@ -689,22 +720,32 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	ba.Add(hb)
 
 	log.Trace(ctx, "heartbeat")
-	_, err := tc.wrapped.Send(ctx, ba)
-	// If the transaction is not in pending state, then we can stop
-	// the heartbeat. It's either aborted or committed, and we resolve
-	// write intents accordingly.
-	if err != nil {
+	br, err := tc.wrapped.Send(ctx, ba)
+
+	// Correctness mandates that when we can't heartbeat the transaction, we
+	// make sure the client doesn't keep going. This is particularly relevant
+	// in the case of an ABORTED transaction, but if we can't reach the
+	// transaction record at all, we're going to have to assume we're aborted
+	// as well.
+	if err == nil {
+		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
+	} else if err != nil {
 		log.Warningf("heartbeat to %s failed: %s", txn, err)
+		// We're not going to let the client carry out additional requests, so
+		// try to clean up.
+		tc.tryAsyncAbort(*txn.ID)
+		txn.Status = roachpb.ABORTED
 	}
-	// TODO(bdarnell): once we have gotten a heartbeat response with
-	// Status != PENDING, future heartbeats are useless. However, we
-	// need to continue the heartbeatLoop until the client either
-	// commits or abandons the transaction. We could save a little
-	// pointless work by restructuring this loop to stop sending
-	// heartbeats between the time that the transaction is aborted and
-	// the client finds out. Furthermore, we could use this information
-	// to send TransactionAbortedErrors to the client so it can restart
-	// immediately instead of running until its EndTransaction.
+
+	// Give the news to the stored proto. This will give long-running
+	// transactions free updates (and more up-to-date information about whether
+	// they have to restart), but in particular makes sure that they notice
+	// when they've been aborted (in which case we'll give tem an error on
+	// their next request).
+	tc.Lock()
+	tc.txns[txnID].txn.Update(&txn)
+	tc.Unlock()
+
 	return true
 }
 
