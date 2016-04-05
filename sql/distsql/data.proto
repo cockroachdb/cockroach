@@ -14,7 +14,7 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.sql.distsql;
 option go_package = "distsql";
 
@@ -24,18 +24,18 @@ import weak "gogoproto/gogo.proto";
 
 message Expression {
   // TODO(radu): TBD how this will be used
-  optional string version = 1 [(gogoproto.nullable) = false];
+  string version = 1;
 
   // SQL expressions are passed as a string, with ValArgs ($0, $1, ..) used for
   // "input" variables.
-  optional string expr = 2 [(gogoproto.nullable) = false];
+  string expr = 2;
 }
 
 message TableReaderSpan {
   // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
   // KVs. The span should be described as starting and ending lists of values
   // for a prefix of the index columns, along with inclusive/exclusive flags.
-  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
   // TODO(radu): support the single-key optimization (span.count)
 }
 
@@ -43,17 +43,17 @@ message TableReaderSpan {
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 message TableReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
   // i.e. table.indexes[index_idx-1]
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
-  optional bool reverse = 3 [(gogoproto.nullable) = false];
+  uint32 index_idx = 2;
+  bool reverse = 3;
   repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
 
   // The filter expression references the columns in the table (table.columns)
   // via $0, $1, etc. If a secondary index is used, the columns that are not
   // available as part of the index cannot be referenced.
-  optional Expression filter = 5 [(gogoproto.nullable) = false];
+  Expression filter = 5 [(gogoproto.nullable) = false];
 
   // The table reader will only produce values for these columns, referenced by
   // their indices in table.columns.
@@ -64,5 +64,5 @@ message TableReaderSpec {
 // computation consisting of processors and streams.
 message FlowSpec {
   // TODO(radu): for now a flow is just a table reader.
-  optional TableReaderSpec reader = 2;
+  TableReaderSpec reader = 2;
 }
