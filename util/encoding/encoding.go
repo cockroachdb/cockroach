@@ -176,6 +176,8 @@ func DecodeUint64Descending(b []byte) ([]byte, uint64, error) {
 	return leftover, ^v, err
 }
 
+const maxVarintSize = 9
+
 // EncodeVarintAscending encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
 // byte. If the value to be encoded is negative the length is encoded
