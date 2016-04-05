@@ -451,7 +451,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		return llChan
 	}
 
-	r.store.Stopper().RunWorker(func() {
+	if !r.store.Stopper().RunAsyncTask(func() {
 		pErr := func() *roachpb.Error {
 			// TODO(Tobias): get duration from configuration, either as a config flag
 			// or, later, dynamically adjusted.
@@ -509,7 +509,10 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 			llChan <- pErr
 		}
 		r.mu.llChans = r.mu.llChans[:0]
-	})
+	}) {
+		llChan <- roachpb.NewErrorf("shutting down")
+		return llChan
+	}
 
 	r.mu.llChans = append(r.mu.llChans, llChan)
 	return llChan
