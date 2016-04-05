@@ -1624,38 +1624,38 @@ func (r *Replica) VerifyChecksum(
 	}
 	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
 		// Replication consistency problem!
-		// Let's collect some more debug information before we panic.
 		logFunc := log.Errorf
-		if args.Snapshot == nil {
-			// No debug information; run another consistency check to deliver
-			// more debug information.
-			if !r.store.stopper.RunAsyncTask(func() {
-				desc := r.Desc()
-				startKey := desc.StartKey.AsRawKey()
-				// Can't use a start key less than LocalMax.
-				if bytes.Compare(startKey, keys.LocalMax) < 0 {
-					startKey = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
-					log.Errorf("couldn't rerun consistency check: %s", err)
-				}
-			}) {
-				log.Error("couldn't rerun consistency check as RunAsyncTask")
-			}
-		} else {
-			// Compute diff.
-			diff := diffRange(args.Snapshot, c.snapshot)
-			if diff != nil {
-				for _, d := range diff {
-					l := "leader"
-					if d.Leader {
-						l = "replica"
+		if r.store.ctx.ConsistencyCheckPanicOnFailure {
+			// Let's collect some more debug information before we panic.
+			if args.Snapshot == nil {
+				// No debug information; run another consistency check to deliver
+				// more debug information.
+				if !r.store.stopper.RunAsyncTask(func() {
+					desc := r.Desc()
+					startKey := desc.StartKey.AsRawKey()
+					// Can't use a start key less than LocalMax.
+					if bytes.Compare(startKey, keys.LocalMax) < 0 {
+						startKey = keys.LocalMax
 					}
-					log.Errorf("inconsistent k:v = (%s (%x), %s, %x) not present on %s",
-						d.Key, d.Key, d.Timestamp, d.Value, l)
+					if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
+						log.Errorf("couldn't rerun consistency check: %s", err)
+					}
+				}) {
+					log.Error("couldn't rerun consistency check as RunAsyncTask")
 				}
-			}
-			if r.store.ctx.ConsistencyCheckPanicOnFailure {
+			} else {
+				// Compute diff.
+				diff := diffRange(args.Snapshot, c.snapshot)
+				if diff != nil {
+					for _, d := range diff {
+						l := "leader"
+						if d.Leader {
+							l = "replica"
+						}
+						log.Errorf("inconsistent k:v = (%s (%x), %s, %x) not present on %s",
+							d.Key, d.Key, d.Timestamp, d.Value, l)
+					}
+				}
 				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
 					p(diff)
 				} else {
