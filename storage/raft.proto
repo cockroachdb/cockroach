@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
@@ -25,14 +25,13 @@ import weak "gogoproto/gogo.proto";
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
 message RaftMessageRequest {
-  optional uint64 range_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID",
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
 
-  optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
-  optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
 
-  optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
+  raftpb.Message message = 4 [(gogoproto.nullable) = false];
 }
 
 // RaftMessageResponse is an empty message returned by raft RPCs. If a
@@ -42,15 +41,14 @@ message RaftMessageResponse {
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
 message ConfChangeContext {
-  optional string command_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "CommandID"];
+  string command_id = 1 [(gogoproto.customname) = "CommandID"];
 
   // Payload is the application-level command (i.e. an encoded
   // roachpb.EndTransactionRequest).
-  optional bytes payload = 2;
+  bytes payload = 2;
 
   // Replica contains full details about the replica being added or removed.
-  optional roachpb.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }
 
 service MultiRaft {
