@@ -322,10 +322,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			Commit: false,
 			Span:   roachpb.Span{Key: initialTxn.Proto.Key},
 		})
-		txn := initialTxn.Proto.Clone()
-		// TODO(tschottdorf): illegaly mutated in DistSender.Send, fixed in
-		// upcoming commit.
-		ba.Txn = &txn
+		ba.Txn = &initialTxn.Proto
 		if _, pErr := s.distSender.Send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)
 		}
