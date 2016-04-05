@@ -14,7 +14,7 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.server.status;
 option go_package = "status";
 
@@ -24,16 +24,16 @@ import weak "gogoproto/gogo.proto";
 
 // StoreStatus records the most recent values of metrics for a store.
 message StoreStatus {
-  optional roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+  roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
   map<string, double> metrics = 2;
 }
 
 // NodeStatus records the most recent values of metrics for a node.
 message NodeStatus {
-  optional roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  optional build.Info build_info = 2 [(gogoproto.nullable) = false];
-  optional int64 started_at = 3 [(gogoproto.nullable) = false];
-  optional int64 updated_at = 4 [(gogoproto.nullable) = false];
+  roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  build.Info build_info = 2 [(gogoproto.nullable) = false];
+  int64 started_at = 3;
+  int64 updated_at = 4;
   map<string, double> metrics = 5;
   repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
 }

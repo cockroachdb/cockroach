@@ -2713,19 +2713,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "rule": "optional",
                                     "type": "int64",
                                     "name": "started_at",
-                                    "id": 3,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
+                                    "id": 3
                                 },
                                 {
                                     "rule": "optional",
                                     "type": "int64",
                                     "name": "updated_at",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
+                                    "id": 4
                                 },
                                 {
                                     "rule": "map",
