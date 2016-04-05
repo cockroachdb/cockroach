@@ -14,7 +14,7 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
@@ -22,9 +22,9 @@ import weak "gogoproto/gogo.proto";
 
 // UserPrivileges describes the list of privileges available for a given user.
 message UserPrivileges {
-  optional string user = 1 [(gogoproto.nullable) = false];
+  string user = 1;
   // privileges is a bitfield of 1<<Privilege values.
-  optional uint32 privileges = 2 [(gogoproto.nullable) = false];
+  uint32 privileges = 2;
 }
 
 // PrivilegeDescriptor describes a list of users and attached
