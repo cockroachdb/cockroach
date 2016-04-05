@@ -54,8 +54,8 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
-			"DECIMAL(5,6)",
-			ColumnType{Kind: ColumnType_DECIMAL, Precision: 5, Width: 6},
+			"DECIMAL(6,5)",
+			ColumnType{Kind: ColumnType_DECIMAL, Precision: 6, Width: 5},
 			true,
 		},
 		{

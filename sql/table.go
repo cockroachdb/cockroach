@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -172,6 +173,17 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		colDatumType = parser.DummyBytes
 	default:
 		return nil, nil, util.Errorf("unexpected type %T", t)
+	}
+
+	if col.Type.Kind == ColumnType_DECIMAL {
+		switch {
+		case col.Type.Precision == 0 && col.Type.Width > 0:
+			// TODO (seif): Find right range for error message.
+			return nil, nil, errors.New("invalid NUMERIC precision 0")
+		case col.Type.Precision < col.Type.Width:
+			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+				col.Type.Width, col.Type.Precision)
+		}
 	}
 
 	if d.DefaultExpr != nil {
