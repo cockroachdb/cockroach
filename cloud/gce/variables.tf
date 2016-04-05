@@ -1,6 +1,10 @@
 # Port used for the load balancer and backends.
-variable "cockroach_port" {
+variable "sql_port" {
   default = "26257"
+}
+
+variable "http_port" {
+  default = "8080"
 }
 
 # GCE region to use.
@@ -14,23 +18,20 @@ variable "gce_zone" {
 }
 
 # GCE project name.
-variable "gce_project" {
-  default = "cockroach-marc"
-}
+variable "gce_project" { }
 
 # GCE account file.
-variable "gce_account_file" {
-  default = "~/terraform/cockroach-marc-64455dfdb138.json"
-}
+variable "gce_account_file" { }
 
 # GCE image name.
 variable "gce_image" {
   default = "ubuntu-os-cloud/ubuntu-1510-wily-v20151021"
 }
 
-# Path to the cockroach binary.
+# Path to the cockroach binary. An empty value results in the latest official
+# binary being used.
 variable "cockroach_binary" {
-  default = "~/cockroach/src/github.com/cockroachdb/cockroach/cockroach"
+  default = ""
 }
 
 # Name of the ssh key pair to use for GCE instances.
@@ -62,6 +63,9 @@ variable "load_balancer_address" {
 }
 
 # Number of instances to start.
-variable "num_instances" {
-  default = 3
+variable "num_instances" { }
+
+# SHA of the cockroach binary to pull down. If none, the latest is fetched.
+variable "cockroach_sha" {
+  default = ""
 }
