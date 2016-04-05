@@ -370,15 +370,15 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeBytesDescending(b, nil); return err },
 		},
 		{
-			name:    "Decimal, no terminator",
+			name:    "Decimal, malformed uvarint",
 			buf:     []byte{decimalPosValPosExp},
-			pattern: "did not find terminator",
+			pattern: "insufficient bytes to decode uvarint value",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
 		},
 		{
-			name:    "DecimalDescending, no terminator",
+			name:    "DecimalDescending, malformed uvarint",
 			buf:     []byte{decimalPosValPosExp},
-			pattern: "did not find terminator",
+			pattern: "insufficient bytes to decode uvarint value",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
 		},
 	}

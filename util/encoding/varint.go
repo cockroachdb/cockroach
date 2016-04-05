@@ -39,6 +39,8 @@
 
 package encoding
 
+import "github.com/cockroachdb/cockroach/util"
+
 // writeBigEndian writes x into buf as a big-endian n-byte
 // integer. If the buffer is too small, a panic will ensue.
 func writeBigEndian(buf []byte, x uint64, n int) {
@@ -118,7 +120,10 @@ func putUvarint(buf []byte, x uint64) int {
 
 // getUvarint decodes a varint-encoded byte slice and returns the result
 // and the length of byte slice been used.
-func getUvarint(b []byte) (uint64, int) {
+func getUvarint(b []byte) (uint64, int, error) {
+	if len(b) == 0 {
+		return 0, 0, util.Errorf("byte slice with zero length passed to getUvarint")
+	}
 	// Treat each byte of the encoding as an unsigned integer
 	// between 0 and 255.
 	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.
@@ -133,24 +138,63 @@ func getUvarint(b []byte) (uint64, int) {
 	// If A0 is 255 then the result is A1..A8 as a 8-byte big-ending integer.
 	switch {
 	case b[0] >= 0 && b[0] <= 240:
-		return uint64(b[0]), 1
+		return uint64(b[0]), 1, nil
 	case b[0] >= 241 && b[0] <= 248:
-		return 240 + 256*(uint64(b[0])-241) + uint64(b[1]), 2
+		l := 2
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return 240 + 256*(uint64(b[0])-241) + uint64(b[1]), l, nil
 	case b[0] == 249:
-		return 2288 + 256*uint64(b[1]) + uint64(b[2]), 3
+		l := 3
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return 2288 + 256*uint64(b[1]) + uint64(b[2]), l, nil
 	case b[0] == 250:
-		return readBigEndian(b[1:4]), 4
+		l := 4
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return readBigEndian(b[1:l]), l, nil
 	case b[0] == 251:
-		return readBigEndian(b[1:5]), 5
+		l := 5
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return readBigEndian(b[1:l]), l, nil
 	case b[0] == 252:
-		return readBigEndian(b[1:6]), 6
+		l := 6
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return readBigEndian(b[1:l]), l, nil
 	case b[0] == 253:
-		return readBigEndian(b[1:7]), 7
+		l := 7
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return readBigEndian(b[1:l]), l, nil
 	case b[0] == 254:
-		return readBigEndian(b[1:8]), 8
+		l := 8
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return readBigEndian(b[1:l]), l, nil
 	case b[0] == 255:
-		return readBigEndian(b[1:9]), 9
+		l := 9
+		if err := checkUvarintLen(b, l); err != nil {
+			return 0, 0, err
+		}
+		return readBigEndian(b[1:l]), l, nil
 	default:
 		panic("varint: invalid format given")
 	}
+}
+
+func checkUvarintLen(b []byte, minLen int) error {
+	if len(b) < minLen {
+		return util.Errorf("could not decode uvarint from %v; expected minimum length of %d", b, minLen)
+	}
+	return nil
 }
