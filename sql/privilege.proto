@@ -30,5 +30,5 @@ message UserPrivileges {
 // PrivilegeDescriptor describes a list of users and attached
 // privileges. The list should be sorted by user for fast access.
 message PrivilegeDescriptor {
-  repeated UserPrivileges users = 1;
+  repeated UserPrivileges users = 1 [(gogoproto.nullable) = false];
 }
