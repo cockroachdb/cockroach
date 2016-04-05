@@ -306,37 +306,98 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const now time.Duration = 3 * 24 * time.Hour
-	const tTxnThreshold = now - txnCleanupThreshold
+
+	const gcTxnAndAC = now - txnCleanupThreshold
+	const gcACOnly = now - abortCacheAgeThreshold
+	if gcTxnAndAC >= gcACOnly {
+		t.Fatalf("test assumption violated due to changing constants; needs adjustment")
+	}
+
 	type spec struct {
 		status      roachpb.TransactionStatus
-		ts          time.Duration
-		heartbeatTS time.Duration
+		orig        time.Duration
+		hb          time.Duration             // last heartbeat (none if ZeroTimestamp)
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
 		expAbortGC  bool                      // expect abort cache entries removed?
 	}
 	// Describes the state of the Txn table before the test.
+	// Many of the abort cache entries deleted wouldn't even be there, so don't
+	// be confused by that.
 	testCases := map[string]spec{
 		// Too young, should not touch.
-		"a": {roachpb.PENDING, tTxnThreshold + 1, 0, roachpb.PENDING, false, false, false},
+		"aa": {
+			status:    roachpb.PENDING,
+			orig:      gcACOnly + 1,
+			newStatus: roachpb.PENDING,
+		},
+		// A little older, so the AbortCache gets cleaned up.
+		"ab": {
+			status:     roachpb.PENDING,
+			orig:       gcTxnAndAC + 1,
+			newStatus:  roachpb.PENDING,
+			expAbortGC: true,
+		},
 		// Old and pending, but still heartbeat (so no Push attempted; it would succeed).
-		// No GC.
-		"b": {roachpb.PENDING, 0, tTxnThreshold + 1, roachpb.PENDING, false, false, false},
+		// It's old enough to delete the abort cache entry though.
+		"ba": {
+			status:     roachpb.PENDING,
+			hb:         gcTxnAndAC + 1,
+			newStatus:  roachpb.PENDING,
+			expAbortGC: true,
+		},
+		// Not old enough for Txn GC, but old enough to remove the abort cache entry.
+		"bb": {
+			status:     roachpb.ABORTED,
+			orig:       gcACOnly - 1,
+			newStatus:  roachpb.ABORTED,
+			expAbortGC: true,
+		},
 		// Old, pending and abandoned. Should push and abort it successfully,
 		// but not GC it just yet (this is an artifact of the implementation).
 		// The abort cache gets cleaned up though.
-		"c": {roachpb.PENDING, tTxnThreshold - 1, 0, roachpb.ABORTED, false, false, true},
+		"c": {
+			status:     roachpb.PENDING,
+			orig:       gcTxnAndAC - 1,
+			newStatus:  roachpb.ABORTED,
+			expAbortGC: true,
+		},
 		// Old and aborted, should delete.
-		"d": {roachpb.ABORTED, tTxnThreshold - 1, 0, -1, false, true, true},
-		// Committed and fresh, so no action.
-		"e": {roachpb.COMMITTED, tTxnThreshold + 1, 0, roachpb.COMMITTED, false, false, false},
+		"d": {
+			status:     roachpb.ABORTED,
+			orig:       gcTxnAndAC - 1,
+			newStatus:  -1,
+			expResolve: true,
+			expAbortGC: true,
+		},
+		// Committed and fresh, so no action. But the abort cache entry is old
+		// enough to be discarded.
+		"e": {
+			status:     roachpb.COMMITTED,
+			orig:       gcTxnAndAC + 1,
+			newStatus:  roachpb.COMMITTED,
+			expAbortGC: true,
+		},
 		// Committed and old. It has an intent (like all tests here), which is
 		// resolvable and hence we can GC.
-		"f": {roachpb.COMMITTED, tTxnThreshold - 1, 0, -1, false, true, true},
+		"f": {
+			status:     roachpb.COMMITTED,
+			orig:       gcTxnAndAC - 1,
+			newStatus:  -1,
+			expResolve: true,
+			expAbortGC: true,
+		},
 		// Same as the previous one, but we've rigged things so that the intent
 		// resolution here will fail and consequently no GC is expected.
-		"g": {roachpb.COMMITTED, tTxnThreshold - 1, 0, roachpb.COMMITTED, true, true, true},
+		"g": {
+			status:      roachpb.COMMITTED,
+			orig:        gcTxnAndAC - 1,
+			newStatus:   roachpb.COMMITTED,
+			failResolve: true,
+			expResolve:  true,
+			expAbortGC:  true,
+		},
 	}
 
 	resolved := map[string][]roachpb.Span{}
@@ -369,11 +430,16 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.ts)).UnixNano)
+		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.orig)).UnixNano)
 		txn := newTransaction("txn1", baseKey, 1, roachpb.SERIALIZABLE, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
-		txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(test.heartbeatTS)}
+		if test.hb > 0 {
+			txn.LastHeartbeat = &roachpb.Timestamp{WallTime: int64(test.hb)}
+		}
+		// Set a high Timestamp to make sure it does not matter. Only
+		// OrigTimestamp (and heartbeat) are used for GC decisions.
+		txn.Timestamp.Forward(roachpb.MaxTimestamp)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
@@ -381,9 +447,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		abortTS := txn.Timestamp
-		abortTS.Forward(*txn.LastHeartbeat)
-		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: abortTS}
+		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: txn.LastActive()}
 		if err := tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
