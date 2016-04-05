@@ -586,7 +586,7 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	if txn.Proto.Status != roachpb.PENDING || txn.IsFinalized() {
 		return nil, roachpb.NewErrorf(
-			"attempting to use transaction with wrong status or finalized: ", txn.Proto.Status)
+			"attempting to use transaction with wrong status or finalized: %s", txn.Proto.Status)
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
