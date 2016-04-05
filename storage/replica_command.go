@@ -1348,12 +1348,16 @@ func (r *Replica) LeaderLease(
 			rErr.Message = "extension moved start timestamp backwards"
 			return reply, rErr
 		}
-		// Note that the lease expiration can be shortened by the holder.
-		// This could be used to effect a faster lease handoff.
-		// TODO(tschottdorf): disallow the above. I don't think it takes
-		// into account that the next lease holder realizes that leases
-		// may have been served at timestamps higher than the expiration
-		// it sees at the point of hand-off.
+		// TODO(tschottdorf): We could allow shortening existing leases, which
+		// could be used to effect a faster lease handoff. This needs to be
+		// properly implemented though (the leader must not shorten the lease
+		// when it has already served commands at higher timestamps), so this
+		// is forbidden now but can be re-enabled when we properly implement
+		// it.
+		if args.Lease.Expiration.Less(prevLease.Expiration) {
+			rErr.Message = "lease shortening currently unsupported"
+			return reply, rErr
+		}
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return reply, rErr
