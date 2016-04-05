@@ -1,15 +1,11 @@
-output "port" {
-  value = "${var.cockroach_port}"
+output "admin_url" {
+  value = "http://${google_compute_forwarding_rule.http_port.ip_address}:${var.http_port}/"
 }
 
-output "forwarding_rule" {
-  value = "${google_compute_forwarding_rule.default.ip_address}"
-}
-
-output "gossip_variable" {
-  value = "${format("lb=%s:%s", google_compute_forwarding_rule.default.ip_address, var.cockroach_port)}"
+output "sql_url" {
+  value = "postgresql://root@${google_compute_forwarding_rule.sql_port.ip_address}:${var.sql_port}/?sslmode=disable"
 }
 
 output "instances" {
-  value = "${join(",", google_compute_instance.cockroach.*.network_interface.0.access_config.0.nat_ip)}"
+  value = "${join(", ", google_compute_instance.cockroach.*.name)}"
 }

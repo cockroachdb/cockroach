@@ -1,6 +1,10 @@
 # Port used for the load balancer and backends.
-variable "cockroach_port" {
+variable "sql_port" {
   default = "26257"
+}
+
+variable "http_port" {
+  default = "8080"
 }
 
 # GCE region to use.

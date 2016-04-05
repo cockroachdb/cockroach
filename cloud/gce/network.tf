@@ -1,7 +1,7 @@
 resource "google_compute_http_health_check" "default" {
   name = "cockroach-health-check"
   request_path = "/"
-  port = "${var.cockroach_port}"
+  port = "${var.http_port}"
   check_interval_sec = 2
   healthy_threshold = 2
   unhealthy_threshold = 2
@@ -16,10 +16,18 @@ resource "google_compute_target_pool" "default" {
   health_checks = ["${google_compute_http_health_check.default.name}"]
 }
 
-resource "google_compute_forwarding_rule" "default" {
+# TODO(cdo): find a way to collapse forwarding rules into a single forwarding
+# rule.
+resource "google_compute_forwarding_rule" "sql_port" {
   name = "cockroach-forwarding-rule"
   target = "${google_compute_target_pool.default.self_link}"
-  port_range = "${var.cockroach_port}"
+  port_range = "${var.sql_port}"
+}
+
+resource "google_compute_forwarding_rule" "http_port" {
+  name = "http-forwarding-rule"
+  target = "${google_compute_target_pool.default.self_link}"
+  port_range = "${var.http_port}"
 }
 
 resource "google_compute_firewall" "default" {
@@ -28,7 +36,7 @@ resource "google_compute_firewall" "default" {
 
   allow {
     protocol = "tcp"
-    ports = ["${var.cockroach_port}"]
+    ports = ["${var.sql_port}", "${var.http_port}"]
   }
 
   source_ranges = ["0.0.0.0/0"]
