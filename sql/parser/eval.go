@@ -46,52 +46,54 @@ var (
 // secondsInDay is the number of seconds in a day.
 const secondsInDay = 24 * 60 * 60
 
-type unaryOp struct {
-	returnType Datum
+// UnaryOp contains unary return type and implementation.
+type UnaryOp struct {
+	ReturnType Datum
 	fn         func(EvalContext, Datum) (Datum, error)
 }
 
-type unaryArgs struct {
-	op      UnaryOp
-	argType reflect.Type
+// UnaryArgs contains unary operations and types.
+type UnaryArgs struct {
+	Op      UnaryOperator
+	ArgType reflect.Type
 }
 
-// unaryOps contains the unary operations indexed by operation type and
+// UnaryOps contains the unary operations indexed by operation type and
 // argument type.
-var unaryOps = map[unaryArgs]unaryOp{
-	unaryArgs{UnaryPlus, intType}: {
-		returnType: DummyInt,
+var UnaryOps = map[UnaryArgs]UnaryOp{
+	UnaryArgs{UnaryPlus, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			return d, nil
 		},
 	},
-	unaryArgs{UnaryPlus, floatType}: {
-		returnType: DummyFloat,
+	UnaryArgs{UnaryPlus, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			return d, nil
 		},
 	},
-	unaryArgs{UnaryPlus, decimalType}: {
-		returnType: DummyDecimal,
+	UnaryArgs{UnaryPlus, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			return d, nil
 		},
 	},
 
-	unaryArgs{UnaryMinus, intType}: {
-		returnType: DummyInt,
+	UnaryArgs{UnaryMinus, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			return -d.(DInt), nil
 		},
 	},
-	unaryArgs{UnaryMinus, floatType}: {
-		returnType: DummyFloat,
+	UnaryArgs{UnaryMinus, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			return -d.(DFloat), nil
 		},
 	},
-	unaryArgs{UnaryMinus, decimalType}: {
-		returnType: DummyDecimal,
+	UnaryArgs{UnaryMinus, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			dec := d.(*DDecimal)
 			dd := &DDecimal{}
@@ -100,44 +102,46 @@ var unaryOps = map[unaryArgs]unaryOp{
 		},
 	},
 
-	unaryArgs{UnaryComplement, intType}: {
-		returnType: DummyInt,
+	UnaryArgs{UnaryComplement, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, d Datum) (Datum, error) {
 			return ^d.(DInt), nil
 		},
 	},
 }
 
-type binOp struct {
-	returnType Datum
+// BinOp contains binary return type and implementation.
+type BinOp struct {
+	ReturnType Datum
 	fn         func(EvalContext, Datum, Datum) (Datum, error)
 }
 
-type binArgs struct {
-	op        BinaryOp
-	leftType  reflect.Type
-	rightType reflect.Type
+// BinArgs contains binary operations and types.
+type BinArgs struct {
+	Op        BinaryOp
+	LeftType  reflect.Type
+	RightType reflect.Type
 }
 
-// binOps contains the binary operations indexed by operation type and argument
+// BinOps contains the binary operations indexed by operation type and argument
 // types.
-var binOps = map[binArgs]binOp{
-	binArgs{Bitand, intType, intType}: {
-		returnType: DummyInt,
+var BinOps = map[BinArgs]BinOp{
+	BinArgs{Bitand, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) & right.(DInt), nil
 		},
 	},
 
-	binArgs{Bitor, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{Bitor, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) | right.(DInt), nil
 		},
 	},
 
-	binArgs{Bitxor, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{Bitxor, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) ^ right.(DInt), nil
 		},
@@ -145,20 +149,20 @@ var binOps = map[binArgs]binOp{
 
 	// TODO(pmattis): Overflow/underflow checks?
 
-	binArgs{Plus, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{Plus, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) + right.(DInt), nil
 		},
 	},
-	binArgs{Plus, floatType, floatType}: {
-		returnType: DummyFloat,
+	BinArgs{Plus, floatType, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DFloat) + right.(DFloat), nil
 		},
 	},
-	binArgs{Plus, decimalType, decimalType}: {
-		returnType: DummyDecimal,
+	BinArgs{Plus, decimalType, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
@@ -167,50 +171,50 @@ var binOps = map[binArgs]binOp{
 			return dd, nil
 		},
 	},
-	binArgs{Plus, dateType, intType}: {
-		returnType: DummyDate,
+	BinArgs{Plus, dateType, intType}: {
+		ReturnType: DummyDate,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DDate) + DDate(right.(DInt)), nil
 		},
 	},
-	binArgs{Plus, intType, dateType}: {
-		returnType: DummyDate,
+	BinArgs{Plus, intType, dateType}: {
+		ReturnType: DummyDate,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DDate(left.(DInt)) + right.(DDate), nil
 		},
 	},
-	binArgs{Plus, timestampType, intervalType}: {
-		returnType: DummyTimestamp,
+	BinArgs{Plus, timestampType, intervalType}: {
+		ReturnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DTimestamp{Time: duration.Add(left.(DTimestamp).Time, right.(DInterval).Duration)}, nil
 		},
 	},
-	binArgs{Plus, intervalType, timestampType}: {
-		returnType: DummyTimestamp,
+	BinArgs{Plus, intervalType, timestampType}: {
+		ReturnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DTimestamp{Time: duration.Add(right.(DTimestamp).Time, left.(DInterval).Duration)}, nil
 		},
 	},
-	binArgs{Plus, intervalType, intervalType}: {
-		returnType: DummyInterval,
+	BinArgs{Plus, intervalType, intervalType}: {
+		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DInterval{Duration: left.(DInterval).Duration.Add(right.(DInterval).Duration)}, nil
 		},
 	},
-	binArgs{Minus, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{Minus, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) - right.(DInt), nil
 		},
 	},
-	binArgs{Minus, floatType, floatType}: {
-		returnType: DummyFloat,
+	BinArgs{Minus, floatType, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DFloat) - right.(DFloat), nil
 		},
 	},
-	binArgs{Minus, decimalType, decimalType}: {
-		returnType: DummyDecimal,
+	BinArgs{Minus, decimalType, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
@@ -219,52 +223,52 @@ var binOps = map[binArgs]binOp{
 			return dd, nil
 		},
 	},
-	binArgs{Minus, dateType, intType}: {
-		returnType: DummyDate,
+	BinArgs{Minus, dateType, intType}: {
+		ReturnType: DummyDate,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DDate) - DDate(right.(DInt)), nil
 		},
 	},
-	binArgs{Minus, dateType, dateType}: {
-		returnType: DummyInt,
+	BinArgs{Minus, dateType, dateType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DInt(left.(DDate) - right.(DDate)), nil
 		},
 	},
-	binArgs{Minus, timestampType, timestampType}: {
-		returnType: DummyInterval,
+	BinArgs{Minus, timestampType, timestampType}: {
+		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			nanos := left.(DTimestamp).Sub(right.(DTimestamp).Time).Nanoseconds()
 			return DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 		},
 	},
-	binArgs{Minus, timestampType, intervalType}: {
-		returnType: DummyTimestamp,
+	BinArgs{Minus, timestampType, intervalType}: {
+		ReturnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DTimestamp{Time: duration.Add(left.(DTimestamp).Time, right.(DInterval).Duration.Mul(-1))}, nil
 		},
 	},
-	binArgs{Minus, intervalType, intervalType}: {
-		returnType: DummyInterval,
+	BinArgs{Minus, intervalType, intervalType}: {
+		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DInterval{Duration: left.(DInterval).Duration.Sub(right.(DInterval).Duration)}, nil
 		},
 	},
 
-	binArgs{Mult, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{Mult, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) * right.(DInt), nil
 		},
 	},
-	binArgs{Mult, floatType, floatType}: {
-		returnType: DummyFloat,
+	BinArgs{Mult, floatType, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DFloat) * right.(DFloat), nil
 		},
 	},
-	binArgs{Mult, decimalType, decimalType}: {
-		returnType: DummyDecimal,
+	BinArgs{Mult, decimalType, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
@@ -273,21 +277,21 @@ var binOps = map[binArgs]binOp{
 			return dd, nil
 		},
 	},
-	binArgs{Mult, intType, intervalType}: {
-		returnType: DummyInterval,
+	BinArgs{Mult, intType, intervalType}: {
+		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DInterval{Duration: right.(DInterval).Duration.Mul(int64(left.(DInt)))}, nil
 		},
 	},
-	binArgs{Mult, intervalType, intType}: {
-		returnType: DummyInterval,
+	BinArgs{Mult, intervalType, intType}: {
+		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DInterval{Duration: left.(DInterval).Duration.Mul(int64(right.(DInt)))}, nil
 		},
 	},
 
-	binArgs{Div, intType, intType}: {
-		returnType: DummyFloat,
+	BinArgs{Div, intType, intType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			rInt := right.(DInt)
 			if rInt == 0 {
@@ -296,14 +300,14 @@ var binOps = map[binArgs]binOp{
 			return DFloat(left.(DInt)) / DFloat(rInt), nil
 		},
 	},
-	binArgs{Div, floatType, floatType}: {
-		returnType: DummyFloat,
+	BinArgs{Div, floatType, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DFloat) / right.(DFloat), nil
 		},
 	},
-	binArgs{Div, decimalType, decimalType}: {
-		returnType: DummyDecimal,
+	BinArgs{Div, decimalType, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
@@ -315,8 +319,8 @@ var binOps = map[binArgs]binOp{
 			return dd, nil
 		},
 	},
-	binArgs{Div, intervalType, intType}: {
-		returnType: DummyInterval,
+	BinArgs{Div, intervalType, intType}: {
+		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			rInt := right.(DInt)
 			if rInt == 0 {
@@ -326,8 +330,8 @@ var binOps = map[binArgs]binOp{
 		},
 	},
 
-	binArgs{Mod, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{Mod, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			r := right.(DInt)
 			if r == 0 {
@@ -336,14 +340,14 @@ var binOps = map[binArgs]binOp{
 			return left.(DInt) % r, nil
 		},
 	},
-	binArgs{Mod, floatType, floatType}: {
-		returnType: DummyFloat,
+	BinArgs{Mod, floatType, floatType}: {
+		ReturnType: DummyFloat,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return DFloat(math.Mod(float64(left.(DFloat)), float64(right.(DFloat)))), nil
 		},
 	},
-	binArgs{Mod, decimalType, decimalType}: {
-		returnType: DummyDecimal,
+	BinArgs{Mod, decimalType, decimalType}: {
+		ReturnType: DummyDecimal,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
@@ -356,308 +360,310 @@ var binOps = map[binArgs]binOp{
 		},
 	},
 
-	binArgs{Concat, stringType, stringType}: {
-		returnType: DummyString,
+	BinArgs{Concat, stringType, stringType}: {
+		ReturnType: DummyString,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DString) + right.(DString), nil
 		},
 	},
-	binArgs{Concat, bytesType, bytesType}: {
-		returnType: DummyBytes,
+	BinArgs{Concat, bytesType, bytesType}: {
+		ReturnType: DummyBytes,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DBytes) + right.(DBytes), nil
 		},
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
-	binArgs{LShift, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{LShift, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) << uint(right.(DInt)), nil
 		},
 	},
-	binArgs{RShift, intType, intType}: {
-		returnType: DummyInt,
+	BinArgs{RShift, intType, intType}: {
+		ReturnType: DummyInt,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return left.(DInt) >> uint(right.(DInt)), nil
 		},
 	},
 }
 
-type cmpArgs struct {
-	op        ComparisonOp
-	leftType  reflect.Type
-	rightType reflect.Type
+// CmpArgs contains comparison operations and types.
+type CmpArgs struct {
+	Op        ComparisonOp
+	LeftType  reflect.Type
+	RightType reflect.Type
 }
 
-type cmpOp struct {
+// CmpOp contains comparison implementation.
+type CmpOp struct {
 	fn func(EvalContext, Datum, Datum) (DBool, error)
 }
 
-var cmpOpResultType = reflect.New(reflect.TypeOf(cmpOp{}).Field(0).Type.Out(0)).Elem().Interface().(DBool)
+var cmpOpResultType = reflect.New(reflect.TypeOf(CmpOp{}).Field(0).Type.Out(0)).Elem().Interface().(DBool)
 
-// cmpOps contains the comparison operations indexed by operation type and
+// CmpOps contains the comparison operations indexed by operation type and
 // argument types.
-var cmpOps = map[cmpArgs]cmpOp{
-	cmpArgs{EQ, stringType, stringType}: {
+var CmpOps = map[CmpArgs]CmpOp{
+	CmpArgs{EQ, stringType, stringType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DString) == right.(DString)), nil
 		},
 	},
-	cmpArgs{EQ, bytesType, bytesType}: {
+	CmpArgs{EQ, bytesType, bytesType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DBytes) == right.(DBytes)), nil
 		},
 	},
-	cmpArgs{EQ, boolType, boolType}: {
+	CmpArgs{EQ, boolType, boolType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DBool) == right.(DBool)), nil
 		},
 	},
-	cmpArgs{EQ, intType, intType}: {
+	CmpArgs{EQ, intType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DInt) == right.(DInt)), nil
 		},
 	},
-	cmpArgs{EQ, floatType, floatType}: {
+	CmpArgs{EQ, floatType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) == right.(DFloat)), nil
 		},
 	},
-	cmpArgs{EQ, decimalType, decimalType}: {
+	CmpArgs{EQ, decimalType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) == 0), nil
 		},
 	},
-	cmpArgs{EQ, floatType, intType}: {
+	CmpArgs{EQ, floatType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) == DFloat(right.(DInt))), nil
 		},
 	},
-	cmpArgs{EQ, intType, floatType}: {
+	CmpArgs{EQ, intType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(DFloat(left.(DInt)) == right.(DFloat)), nil
 		},
 	},
-	cmpArgs{EQ, decimalType, intType}: {
+	CmpArgs{EQ, decimalType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := inf.NewDec(int64(right.(DInt)), 0)
 			return DBool(l.Cmp(r) == 0), nil
 		},
 	},
-	cmpArgs{EQ, intType, decimalType}: {
+	CmpArgs{EQ, intType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := inf.NewDec(int64(left.(DInt)), 0)
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) == 0), nil
 		},
 	},
-	cmpArgs{EQ, decimalType, floatType}: {
+	CmpArgs{EQ, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) == 0), nil
 		},
 	},
-	cmpArgs{EQ, floatType, decimalType}: {
+	CmpArgs{EQ, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) == 0), nil
 		},
 	},
-	cmpArgs{EQ, dateType, dateType}: {
+	CmpArgs{EQ, dateType, dateType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DDate) == right.(DDate)), nil
 		},
 	},
-	cmpArgs{EQ, timestampType, timestampType}: {
+	CmpArgs{EQ, timestampType, timestampType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DTimestamp).Equal(right.(DTimestamp).Time)), nil
 		},
 	},
-	cmpArgs{EQ, intervalType, intervalType}: {
+	CmpArgs{EQ, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DInterval) == right.(DInterval)), nil
 		},
 	},
 
-	cmpArgs{LT, stringType, stringType}: {
+	CmpArgs{LT, stringType, stringType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DString) < right.(DString)), nil
 		},
 	},
-	cmpArgs{LT, bytesType, bytesType}: {
+	CmpArgs{LT, bytesType, bytesType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DBytes) < right.(DBytes)), nil
 		},
 	},
-	cmpArgs{LT, boolType, boolType}: {
+	CmpArgs{LT, boolType, boolType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(!left.(DBool) && right.(DBool)), nil
 		},
 	},
-	cmpArgs{LT, intType, intType}: {
+	CmpArgs{LT, intType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DInt) < right.(DInt)), nil
 		},
 	},
-	cmpArgs{LT, floatType, floatType}: {
+	CmpArgs{LT, floatType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) < right.(DFloat)), nil
 		},
 	},
-	cmpArgs{LT, decimalType, decimalType}: {
+	CmpArgs{LT, decimalType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) < 0), nil
 		},
 	},
-	cmpArgs{LT, floatType, intType}: {
+	CmpArgs{LT, floatType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) < DFloat(right.(DInt))), nil
 		},
 	},
-	cmpArgs{LT, intType, floatType}: {
+	CmpArgs{LT, intType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(DFloat(left.(DInt)) < right.(DFloat)), nil
 		},
 	},
-	cmpArgs{LT, decimalType, intType}: {
+	CmpArgs{LT, decimalType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := inf.NewDec(int64(right.(DInt)), 0)
 			return DBool(l.Cmp(r) < 0), nil
 		},
 	},
-	cmpArgs{LT, intType, decimalType}: {
+	CmpArgs{LT, intType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := inf.NewDec(int64(left.(DInt)), 0)
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) < 0), nil
 		},
 	},
-	cmpArgs{LT, decimalType, floatType}: {
+	CmpArgs{LT, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) < 0), nil
 		},
 	},
-	cmpArgs{LT, floatType, decimalType}: {
+	CmpArgs{LT, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) < 0), nil
 		},
 	},
-	cmpArgs{LT, dateType, dateType}: {
+	CmpArgs{LT, dateType, dateType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DDate) < right.(DDate)), nil
 		},
 	},
-	cmpArgs{LT, timestampType, timestampType}: {
+	CmpArgs{LT, timestampType, timestampType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DTimestamp).Before(right.(DTimestamp).Time)), nil
 		},
 	},
-	cmpArgs{LT, intervalType, intervalType}: {
+	CmpArgs{LT, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DInterval).Duration.Compare(right.(DInterval).Duration) < 0), nil
 		},
 	},
 
-	cmpArgs{LE, stringType, stringType}: {
+	CmpArgs{LE, stringType, stringType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DString) <= right.(DString)), nil
 		},
 	},
-	cmpArgs{LE, bytesType, bytesType}: {
+	CmpArgs{LE, bytesType, bytesType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DBytes) <= right.(DBytes)), nil
 		},
 	},
-	cmpArgs{LE, boolType, boolType}: {
+	CmpArgs{LE, boolType, boolType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(!left.(DBool) || right.(DBool)), nil
 		},
 	},
-	cmpArgs{LE, intType, intType}: {
+	CmpArgs{LE, intType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DInt) <= right.(DInt)), nil
 		},
 	},
-	cmpArgs{LE, floatType, floatType}: {
+	CmpArgs{LE, floatType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) <= right.(DFloat)), nil
 		},
 	},
-	cmpArgs{LE, decimalType, decimalType}: {
+	CmpArgs{LE, decimalType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) <= 0), nil
 		},
 	},
-	cmpArgs{LE, floatType, intType}: {
+	CmpArgs{LE, floatType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DFloat) <= DFloat(right.(DInt))), nil
 		},
 	},
-	cmpArgs{LE, intType, floatType}: {
+	CmpArgs{LE, intType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(DFloat(left.(DInt)) <= right.(DFloat)), nil
 		},
 	},
-	cmpArgs{LE, decimalType, intType}: {
+	CmpArgs{LE, decimalType, intType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := inf.NewDec(int64(right.(DInt)), 0)
 			return DBool(l.Cmp(r) <= 0), nil
 		},
 	},
-	cmpArgs{LE, intType, decimalType}: {
+	CmpArgs{LE, intType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := inf.NewDec(int64(left.(DInt)), 0)
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) <= 0), nil
 		},
 	},
-	cmpArgs{LE, decimalType, floatType}: {
+	CmpArgs{LE, decimalType, floatType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := left.(*DDecimal).Dec
 			r := decimal.NewDecFromFloat(float64(right.(DFloat)))
 			return DBool(l.Cmp(r) <= 0), nil
 		},
 	},
-	cmpArgs{LE, floatType, decimalType}: {
+	CmpArgs{LE, floatType, decimalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			l := decimal.NewDecFromFloat(float64(left.(DFloat)))
 			r := right.(*DDecimal).Dec
 			return DBool(l.Cmp(&r) <= 0), nil
 		},
 	},
-	cmpArgs{LE, dateType, dateType}: {
+	CmpArgs{LE, dateType, dateType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DDate) <= right.(DDate)), nil
 		},
 	},
-	cmpArgs{LE, timestampType, timestampType}: {
+	CmpArgs{LE, timestampType, timestampType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return !DBool(right.(DTimestamp).Before(left.(DTimestamp).Time)), nil
 		},
 	},
-	cmpArgs{LE, intervalType, intervalType}: {
+	CmpArgs{LE, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(DInterval).Duration.Compare(right.(DInterval).Duration) <= 0), nil
 		},
 	},
 
-	cmpArgs{Like, stringType, stringType}: {
+	CmpArgs{Like, stringType, stringType}: {
 		fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 			pattern := string(right.(DString))
 			like := optimizedLikeFunc(pattern)
@@ -673,7 +679,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 		},
 	},
 
-	cmpArgs{SimilarTo, stringType, stringType}: {
+	CmpArgs{SimilarTo, stringType, stringType}: {
 		fn: func(ctx EvalContext, left Datum, right Datum) (DBool, error) {
 			key := similarToKey(right.(DString))
 			re, err := ctx.ReCache.GetRegexp(key)
@@ -685,7 +691,7 @@ var cmpOps = map[cmpArgs]cmpOp{
 	},
 }
 
-var evalTupleEQ = cmpOp{
+var evalTupleEQ = CmpOp{
 	fn: func(ctx EvalContext, ldatum, rdatum Datum) (DBool, error) {
 		left := ldatum.(DTuple)
 		right := rdatum.(DTuple)
@@ -707,7 +713,7 @@ var evalTupleEQ = cmpOp{
 	},
 }
 
-var evalTupleIN = cmpOp{
+var evalTupleIN = CmpOp{
 	fn: func(_ EvalContext, arg, values Datum) (DBool, error) {
 		if arg == DNull {
 			return DBool(false), nil
@@ -724,17 +730,17 @@ func init() {
 	// This avoids an init-loop if we try to initialize this operation when
 	// cmpOps is declared. The loop is caused by evalTupleEQ using cmpOps
 	// internally.
-	cmpOps[cmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
+	CmpOps[CmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
 
-	cmpOps[cmpArgs{In, boolType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, intType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, floatType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, stringType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, bytesType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, dateType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, timestampType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, intervalType, tupleType}] = evalTupleIN
-	cmpOps[cmpArgs{In, tupleType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, boolType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, intType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, floatType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, stringType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, bytesType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, dateType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, timestampType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, intervalType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -1157,7 +1163,7 @@ func (t *ExistsExpr) Eval(ctx EvalContext) (Datum, error) {
 // Eval implements the Expr interface.
 func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 	args := make(DTuple, 0, len(expr.Exprs))
-	types := make(argTypes, 0, len(expr.Exprs))
+	types := make(ArgTypes, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
 		arg, err := e.Eval(ctx)
 		if err != nil {
@@ -1173,7 +1179,7 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 		}
 	}
 
-	if !expr.fn.types.match(types) {
+	if !expr.fn.Types.match(types) {
 		// The argument types no longer match the memoized function. This happens
 		// when a non-NULL argument becomes NULL and the function does not support
 		// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
@@ -1514,7 +1520,7 @@ func evalComparison(ctx EvalContext, op ComparisonOp, left, right Datum) (Datum,
 		return DNull, nil
 	}
 
-	if f, ok := cmpOps[cmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
+	if f, ok := CmpOps[CmpArgs{op, reflect.TypeOf(left), reflect.TypeOf(right)}]; ok {
 		return f.fn(ctx, left, right)
 	}
 
