@@ -318,7 +318,8 @@ message Lease {
 message AbortCacheEntry {
   // The key of the associated transaction.
   optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-  // The original timestamp of the associated transaction.
+  // The candidate commit timestamp the transaction record held at the time
+  // it was aborted.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // The priority of the transaction.
   optional int32 priority = 3 [(gogoproto.nullable) = false];

@@ -1004,6 +1004,13 @@ func (r *Replica) GC(
 //
 // If the pusher is non-transactional, args.PusherTxn is an empty
 // proto with only the priority set.
+//
+// If the pushee is aborted, its timestamp will be forwarded to match
+// its last client activity timestamp (i.e. last heartbeat), if available.
+// This enables cleanup of the abort cache, since that updated timestamp
+// will be persisted there and allows to decide when a transaction belonging
+// to an abort cache entry must have found out via its heartbeats that its
+// transaction has failed.
 func (r *Replica) PushTxn(
 	batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.PushTxnRequest,
 ) (roachpb.PushTxnResponse, error) {
@@ -1062,6 +1069,7 @@ func (r *Replica) PushTxn(
 		// using a trivial Transaction proto here. Maybe some fields ought
 		// to receive dummy values.
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
+		reply.PusheeTxn.Timestamp = args.Now // see method comment
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		return reply, engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
@@ -1096,12 +1104,8 @@ func (r *Replica) PushTxn(
 	var pusherWins bool
 	var reason string
 
-	lastActive := reply.PusheeTxn.OrigTimestamp
-	if realHB := reply.PusheeTxn.LastHeartbeat; realHB != nil {
-		lastActive.Forward(*realHB)
-	}
 	switch {
-	case lastActive.Less(args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)):
+	case reply.PusheeTxn.LastActive().Less(args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
@@ -1150,6 +1154,9 @@ func (r *Replica) PushTxn(
 	// If aborting transaction, set new status and return success.
 	if args.PushType == roachpb.PUSH_ABORT {
 		reply.PusheeTxn.Status = roachpb.ABORTED
+		// Forward the timestamp to accommodate abort cache GC. See method
+		// comment for details.
+		reply.PusheeTxn.Timestamp.Forward(reply.PusheeTxn.LastActive())
 	} else if args.PushType == roachpb.PUSH_TIMESTAMP {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
 		reply.PusheeTxn.Timestamp = args.PushTo
