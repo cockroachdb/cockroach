@@ -641,9 +641,8 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
-	var intentSpans []roachpb.Span
 	// Grab the intents and clone the txn to avoid data races.
-	intentSpans = collectIntentSpans(txnMeta.keys)
+	intentSpans := collectIntentSpans(txnMeta.keys)
 	txnMeta.keys.Clear()
 	txn := txnMeta.txn.Clone()
 	tc.Unlock()
@@ -657,9 +656,6 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &txn
-
-	if txn.Status != roachpb.PENDING {
-	}
 
 	et := &roachpb.EndTransactionRequest{
 		Span: roachpb.Span{
@@ -727,20 +723,21 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// in the case of an ABORTED transaction, but if we can't reach the
 	// transaction record at all, we're going to have to assume we're aborted
 	// as well.
-	if err == nil {
-		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
-	} else if err != nil {
+	if err != nil {
 		log.Warningf("heartbeat to %s failed: %s", txn, err)
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up.
 		tc.tryAsyncAbort(*txn.ID)
+		txn = txn.Clone() // TODO
 		txn.Status = roachpb.ABORTED
+	} else {
+		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 	}
 
 	// Give the news to the stored proto. This will give long-running
 	// transactions free updates (and more up-to-date information about whether
 	// they have to restart), but in particular makes sure that they notice
-	// when they've been aborted (in which case we'll give tem an error on
+	// when they've been aborted (in which case we'll give them an error on
 	// their next request).
 	tc.Lock()
 	tc.txns[txnID].txn.Update(&txn)
