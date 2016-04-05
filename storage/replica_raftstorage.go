@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -332,6 +333,7 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
+	start := time.Now()
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
@@ -400,6 +402,9 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
+
+	log.Infof("generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
+		r.RangeID, appliedIndex, time.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
 
 	return raftpb.Snapshot{
 		Data: data,
@@ -491,6 +496,12 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 	if err != nil {
 		return 0, err
 	}
+
+	log.Infof("received snapshot for range %s at index %d. encoded size=%d, %d KV pairs, %d log entries",
+		r.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
+	defer func(start time.Time) {
+		log.Infof("applied snapshot in %s", time.Since(start))
+	}(time.Now())
 
 	rangeID := r.RangeID
 
