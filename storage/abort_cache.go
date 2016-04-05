@@ -93,6 +93,7 @@ func (sc *AbortCache) Get(e engine.Engine, txnID *uuid.UUID, entry *roachpb.Abor
 // Iterate walks through the abort cache, invoking the given callback for
 // each unmarshaled entry with the key, the transaction ID and the decoded
 // entry.
+// TODO(tschottdorf): should not use a pointer to UUID.
 func (sc *AbortCache) Iterate(
 	e engine.Engine, f func([]byte, *uuid.UUID, roachpb.AbortCacheEntry),
 ) {

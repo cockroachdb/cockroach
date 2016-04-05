@@ -609,6 +609,16 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 	}
 }
 
+// LastActive returns the last timestamp at which client activity definitely
+// occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
+func (t Transaction) LastActive() Timestamp {
+	candidate := t.OrigTimestamp
+	if t.LastHeartbeat != nil {
+		candidate.Forward(*t.LastHeartbeat)
+	}
+	return candidate
+}
+
 // Clone creates a copy of the given transaction. The copy is "mostly" deep,
 // but does share pieces of memory with the original such as Key, ID and the
 // keys with the intent spans.
