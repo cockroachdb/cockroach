@@ -68,6 +68,10 @@ message RangeKeyMismatchError {
   //   mismatched_range will be the descriptor of the range which contains
   //   the start_key of the request.
   optional RangeDescriptor mismatched_range = 3;
+  // suggested_range is a hint to the sender of a command about the range
+  // they may be looking for. This suggestion should be the result of a 
+  // best effort lookup, and makes no guarantees about correctness. 
+  optional RangeDescriptor suggested_range = 4;
 }
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
