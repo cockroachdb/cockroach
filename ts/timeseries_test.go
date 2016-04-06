@@ -149,9 +149,9 @@ func TestToInternal(t *testing.T) {
 	}
 }
 
-// TestNegativeMax is a regression test for github issue #5414; the max value
-// could be improperly set on disk if the real maximum was a negative number.
-func TestNegativeMax(t *testing.T) {
+// TestDiscardEarlierSamples verifies that only a single sample is kept for each
+// sample period; earlier samples are discarded.
+func TestDiscardEarlierSamples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := ts("test.series",
 		tsdp(5*time.Hour+5*time.Minute, -1.0),
@@ -167,25 +167,10 @@ func TestNegativeMax(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if maxVal := out.Samples[0].Max; maxVal == nil {
-		t.Fatal("Expected maximum of sample 0 to be non-nil after initial merge.")
-	} else if *maxVal != -1.0 {
-		t.Fatalf("Expected maximum of sample 0 to be -1.0 after initial merge, was %f", *maxVal)
+	if maxVal := out.Samples[0].Max; maxVal != nil {
+		t.Fatal("Expected maximum of sample 0 to be nil; samples are no longer merged.")
 	}
-
-	// Prevent regression of #5414: The negative number was only improperly set
-	// if a sample with an explicitly set negative max value is merged (it did
-	// not occur when individual samples were merged, because a sample with
-	// count=1 does not have an explicitly set max). Therefore, it could only
-	// happen if a sample is merged twice.
-	out, err = engine.MergeInternalTimeSeriesData(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if maxVal := out.Samples[0].Max; maxVal == nil {
-		t.Fatal("Expected maximum of sample 0 to be non-nil after initial merge.")
-	} else if *maxVal != -1.0 {
-		t.Fatalf("Expected maximum of sample 0 to be -1.0 after initial merge, was %f", *maxVal)
+	if a, e := out.Samples[0].Sum, -2.0; a != e {
+		t.Fatalf("Expected sum of sample 0 to be %f after initial merge, was %f", e, a)
 	}
 }

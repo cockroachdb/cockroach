@@ -356,7 +356,7 @@ func TestEngineMerge(t *testing.T) {
 					}...),
 				},
 				timeSeries(testtime, 1000, []tsSample{
-					{1, 3, 15, 7, 3},
+					{1, 2, 10, 7, 3},
 					{2, 1, 5, 5, 5},
 					{3, 1, 5, 5, 5},
 					{5, 1, 5, 5, 5},
