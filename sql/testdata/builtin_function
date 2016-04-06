@@ -889,7 +889,7 @@ SELECT unique_rowid() < unique_rowid()
 true
 
 query BI
-SELECT experimental_uuid_v4() != experimental_uuid_v4(), length(experimental_uuid_v4())
+SELECT uuid_v4() != uuid_v4(), length(uuid_v4())
 ----
 true 16
 

@@ -387,7 +387,7 @@ func (p *planner) releaseLeases() {
 
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
-	// Columns returns the column names and types . The length of the
+	// Columns returns the column names and types. The length of the
 	// returned slice is guaranteed to be equal to the length of the
 	// tuple returned by Values().
 	Columns() []ResultColumn
