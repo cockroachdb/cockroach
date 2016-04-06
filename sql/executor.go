@@ -373,7 +373,9 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			txnState.reset(ctx, e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
-			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
+			now := e.ctx.Clock.Now()
+			txnState.sqlTimestamp = now
+			execOpt.MinInitialTimestamp = now
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
@@ -541,8 +543,6 @@ func (e *Executor) execStmtsInCurrentTxn(
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
-		stmtTimestamp := e.ctx.Clock.Now()
-
 		var stmtStrBefore string
 		if e.ctx.TestingKnobs.CheckStmtStringChange {
 			stmtStrBefore = stmt.String()
@@ -553,7 +553,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		case Open:
 			res, pErr = e.execStmtInOpenTxn(
 				stmt, planMaker, implicitTxn, txnBeginning && (i == 0), /* firstInTxn */
-				stmtTimestamp, txnState)
+				txnState)
 		case Aborted, RestartWait:
 			res, pErr = e.execStmtInAbortedTxn(stmt, txnState, planMaker)
 		case CommitWait:
@@ -677,7 +677,6 @@ func (e *Executor) execStmtInOpenTxn(
 	stmt parser.Statement, planMaker *planner,
 	implicitTxn bool,
 	firstInTxn bool,
-	stmtTimestamp roachpb.Timestamp,
 	txnState *txnState) (Result, *roachpb.Error) {
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
@@ -686,7 +685,8 @@ func (e *Executor) execStmtInOpenTxn(
 		panic("execStmtInOpenTxn called with the a txn not set on the planner")
 	}
 
-	planMaker.evalCtx.SetStmtTimestamp(stmtTimestamp)
+	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
+	planMaker.evalCtx.SetStmtTimestamp(e.ctx.Clock.Now())
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)

@@ -161,10 +161,11 @@ func makePlanner() *planner {
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
 	if txn != nil {
-		p.evalCtx.SetTxnTimestamp(txn.Proto.OrigTimestamp)
+		p.evalCtx.SetClusterTimestamp(txn.Proto.OrigTimestamp)
 	} else {
 		p.evalCtx.SetTxnTimestamp(roachpb.ZeroTimestamp)
 		p.evalCtx.SetStmtTimestamp(roachpb.ZeroTimestamp)
+		p.evalCtx.SetClusterTimestamp(roachpb.ZeroTimestamp)
 	}
 }
 
