@@ -202,8 +202,10 @@ var debugColumns = []ResultColumn{
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
 
-func (n *explainDebugNode) PErr() *roachpb.Error { return n.plan.PErr() }
-func (n *explainDebugNode) Next() bool           { return n.plan.Next() }
+func (n *explainDebugNode) PErr() *roachpb.Error  { return n.plan.PErr() }
+func (n *explainDebugNode) Start() *roachpb.Error { return n.plan.Start() }
+
+func (n *explainDebugNode) Next() bool { return n.plan.Next() }
 
 func (n *explainDebugNode) ExplainPlan() (name, description string, children []planNode) {
 	return n.plan.ExplainPlan()

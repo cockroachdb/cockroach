@@ -346,6 +346,9 @@ func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 	if pErr != nil {
 		return 0, pErr
 	}
+	if pErr := plan.Start(); pErr != nil {
+		return 0, pErr
+	}
 	return countRowsAffected(plan), plan.PErr()
 }
 
@@ -411,6 +414,11 @@ type planNode interface {
 	// Values().
 	DebugValues() debugValues
 
+	// Start begins the query/statement and initializes what needs to be
+	// initialized (e.g. final type checking of placeholders, first query
+	// plan). Returns an error if initialization fails.
+	Start() *roachpb.Error
+
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
 	Next() bool
@@ -434,6 +442,12 @@ type planNode interface {
 	// MarkDebug puts the node in a special debugging mode, which allows
 	// DebugValues to be used.
 	MarkDebug(mode explainMode)
+}
+
+type planNodeFastPath interface {
+	// FastPathResults returns true and the affected row count if the
+	// node has no result set and has already executed when Start() completes.
+	FastPathResults() (bool, int)
 }
 
 var _ planNode = &distinctNode{}
@@ -476,6 +490,10 @@ func (*emptyNode) DebugValues() debugValues {
 		value:  parser.DNull.String(),
 		output: debugValueRow,
 	}
+}
+
+func (e *emptyNode) Start() *roachpb.Error {
+	return nil
 }
 
 func (e *emptyNode) Next() bool {

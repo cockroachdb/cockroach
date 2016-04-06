@@ -247,6 +247,10 @@ func (n *groupNode) DebugValues() debugValues {
 	return vals
 }
 
+func (n *groupNode) Start() *roachpb.Error {
+	return n.plan.Start()
+}
+
 func (n *groupNode) Next() bool {
 	var scratch []byte
 
