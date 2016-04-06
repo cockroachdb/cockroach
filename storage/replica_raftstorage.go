@@ -404,8 +404,10 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 		return raftpb.Snapshot{}, util.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	log.Infof("generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
-		r.RangeID, appliedIndex, timeutil.Now().Sub(start), len(data), len(snapData.KV), len(snapData.LogEntries))
+	if log.V(1) {
+		log.Infof("generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
+			r.RangeID, appliedIndex, timeutil.Now().Sub(start), len(data), len(snapData.KV), len(snapData.LogEntries))
+	}
 
 	return raftpb.Snapshot{
 		Data: data,

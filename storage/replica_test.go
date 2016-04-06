@@ -2305,10 +2305,10 @@ func TestReplayProtection(t *testing.T) {
 			t.Errorf("%d: expected transaction record to be cleared (%t): %s", i, ok, err)
 		}
 
-		// Now replay begin & put BeginTransaction should fail with a replay error.
+		// Now replay begin & put. BeginTransaction should fail with a replay error.
 		_, pErr = tc.Sender().Send(tc.rng.context(context.Background()), ba)
 		if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
-			t.Errorf("%d: expected transaction replay for iso=%s", i, iso)
+			t.Errorf("%d: expected transaction replay for iso=%s; got %s", i, iso, pErr)
 		}
 
 		// Intent should not have been created.
