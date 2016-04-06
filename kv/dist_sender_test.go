@@ -615,8 +615,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			}
 
 			if !descStale && bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
-				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
-					rs.Key)
+				t.Fatalf("unexpected extra lookup for non-stale replica descriptor at %s", rs.Key)
 			}
 
 			br := &roachpb.BatchResponse{}
@@ -637,8 +636,77 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
 		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
-			return nil, &roachpb.RangeKeyMismatchError{RequestStartKey: rs.Key.AsRawKey(),
-				RequestEndKey: rs.EndKey.AsRawKey()}
+			return nil, &roachpb.RangeKeyMismatchError{
+				RequestStartKey: rs.Key.AsRawKey(),
+				RequestEndKey:   rs.EndKey.AsRawKey(),
+			}
+		}
+		return ba.CreateReply(), nil
+	}
+
+	ctx := &DistSenderContext{
+		RPCSend: testFn,
+	}
+	ds := NewDistSender(ctx, g)
+	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), 0)
+	if _, err := client.SendWrapped(ds, nil, scan); err != nil {
+		t.Errorf("scan encountered error: %s", err)
+	}
+}
+
+// TestRetryOnWrongReplicaErrorWithSuggestion sets up a DistSender on a
+// minimal gossip network and a mock of Send, and verifies that the DistSender
+// correctly retries upon encountering a stale entry in its range descriptor cache
+// without needing to perform a second RangeLookup when the mismatch error
+// provides a suggestion.
+func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	g, s := makeTestGossip(t)
+	defer s()
+	// Updated below, after it has first been returned.
+	goodRangeDescriptor := testRangeDescriptor
+	badRangeDescriptor := testRangeDescriptor
+	badRangeDescriptor.EndKey = roachpb.RKey("zBad")
+	badRangeDescriptor.RangeID++
+	firstLookup := true
+
+	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
+		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+		rs, err := keys.Range(ba)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
+			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
+				br := &roachpb.BatchResponse{}
+				r := &roachpb.RangeLookupResponse{}
+				r.Ranges = append(r.Ranges, testMetaRangeDescriptor)
+				br.Add(r)
+				return br, nil
+			}
+
+			if !firstLookup {
+				t.Fatalf("unexpected extra lookup for non-stale replica descriptor at %s", rs.Key)
+			}
+			firstLookup = false
+
+			br := &roachpb.BatchResponse{}
+			r := &roachpb.RangeLookupResponse{}
+			r.Ranges = append(r.Ranges, badRangeDescriptor)
+			br.Add(r)
+			return br, nil
+		}
+
+		// When the Scan first turns up, provide the correct descriptor as a
+		// suggestion for future range descriptor lookups.
+		if ba.RangeID == badRangeDescriptor.RangeID {
+			return nil, &roachpb.RangeKeyMismatchError{
+				RequestStartKey: rs.Key.AsRawKey(),
+				RequestEndKey:   rs.EndKey.AsRawKey(),
+				SuggestedRange:  &goodRangeDescriptor,
+			}
+		} else if ba.RangeID != goodRangeDescriptor.RangeID {
+			t.Fatalf("unexpected RangeID %d provided in request %v", ba.RangeID, ba)
 		}
 		return ba.CreateReply(), nil
 	}

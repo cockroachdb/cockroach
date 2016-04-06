@@ -1666,9 +1666,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			pErr.Index = index
 		}
 
+		log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
-			log.Trace(ctx, fmt.Sprintf("error: %T", pErr.GetDetail()))
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.
 			if t.Resolved {

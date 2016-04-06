@@ -664,7 +664,14 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// descriptor. Example revscan [a,g), first desc lookup for "g"
 			// returns descriptor [c,d) -> [d,g) is never scanned.
 			// We evict and retry in such a case.
-			if (isReverse && !desc.ContainsKeyRange(desc.StartKey, rs.EndKey)) || (!isReverse && !desc.ContainsKeyRange(rs.Key, desc.EndKey)) {
+			includesFrontOfCurSpan := func(rd *roachpb.RangeDescriptor) bool {
+				if isReverse {
+					// This approach is needed because rs.EndKey is exclusive.
+					return desc.ContainsKeyRange(desc.StartKey, rs.EndKey)
+				}
+				return desc.ContainsKey(rs.Key)
+			}
+			if !includesFrontOfCurSpan(desc) {
 				if err := evictToken.Evict(); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
@@ -720,17 +727,38 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				if tErr.CanRetry() {
 					continue
 				}
-			case *roachpb.RangeNotFoundError, *roachpb.RangeKeyMismatchError:
-				// Range descriptor might be out of date - evict it.
-				// If we have the new range descriptor, insert it instead.
-				var replacement *roachpb.RangeDescriptor
-				if rkmErr, ok := tErr.(*roachpb.RangeKeyMismatchError); ok && rkmErr.MismatchedRange != nil {
-					if sameSpan := desc.RSpan().Equal(rkmErr.MismatchedRange.RSpan()); !sameSpan {
-						replacement = rkmErr.MismatchedRange
+			case *roachpb.RangeNotFoundError:
+				// Range descriptor might be out of date - evict it. This is
+				// likely the result of a rebalance.
+				if err := evictToken.Evict(); err != nil {
+					return nil, roachpb.NewError(err), false
+				}
+				// On addressing errors, don't backoff; retry immediately.
+				r.Reset()
+				if log.V(1) {
+					log.Warning(tErr)
+				}
+				continue
+			case *roachpb.RangeKeyMismatchError:
+				// Range descriptor might be out of date - evict it. This is
+				// likely the result of a range split. If we have new range
+				// descriptors, insert them instead as long as they are different
+				// from the last descriptor to avoid endless loops.
+				var replacements []roachpb.RangeDescriptor
+				different := func(rd *roachpb.RangeDescriptor) bool {
+					return !desc.RSpan().Equal(rd.RSpan())
+				}
+				if tErr.MismatchedRange != nil && different(tErr.MismatchedRange) {
+					replacements = append(replacements, *tErr.MismatchedRange)
+				}
+				if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
+					if includesFrontOfCurSpan(tErr.SuggestedRange) {
+						replacements = append(replacements, *tErr.SuggestedRange)
+
 					}
 				}
-				// Same as Evict() if replacement is nil.
-				if err := evictToken.EvictAndReplace(replacement); err != nil {
+				// Same as Evict() if replacements is empty.
+				if err := evictToken.EvictAndReplace(replacements...); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
 				// On addressing errors, don't backoff; retry immediately.
