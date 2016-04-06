@@ -289,6 +289,6 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 	case ch <- req:
 		return nil
 	default:
-		return util.Errorf("queue for node %d is full", req.Message.To)
+		return util.Errorf("queue for node %d is full", req.ToReplica.NodeID)
 	}
 }

@@ -1404,8 +1404,14 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		Message:     msg,
 	})
 	if err != nil {
-		log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
-			r.store.StoreID(), toReplica.StoreID, err)
+		if log.V(1) {
+			// This is extremely spammy when a node is down, and the message
+			// is always "queue is full" instead of anything helpful
+			// (helpful messages, if any, are logged from the transport
+			// itself).
+			log.Warningf("group %s on store %s failed to send message to %s: %s", groupID,
+				r.store.StoreID(), toReplica.StoreID, err)
+		}
 		r.mu.Lock()
 		r.mu.raftGroup.ReportUnreachable(msg.To)
 		r.mu.Unlock()
