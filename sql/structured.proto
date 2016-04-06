@@ -94,13 +94,14 @@ message IndexDescriptor {
       (gogoproto.casttype) = "ColumnID"];
 }
 
-// A DescriptorMutation represents a column or an index that
+// A DescriptorMutation represents a column, an index or a table that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
 // completely deleted. A table descriptor in the middle of a
 // schema change will have a DescriptorMutation FIFO queue
 // containing each column/index descriptor being added or dropped.
 message DescriptorMutation {
+  // descriptor is missing if the mutation refers to the TableDescriptor itself.
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
@@ -227,7 +228,9 @@ message TableDescriptor {
   optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
   optional PrivilegeDescriptor privileges = 13;
-  // Columns or indexes being added or deleted in a FIFO order.
+  // Outstanding mutations to be applied in FIFO order.
+  // Namely, columns or indexes being added or deleted, or deletion of the table
+  // itself.
   repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
   // The schema update lease. A single goroutine across a cockroach cluster
   // can own it, and will execute pending schema changes for this table.
@@ -250,6 +253,10 @@ message TableDescriptor {
   // represent the data in this table.
   optional uint32 format_version = 17 [(gogoproto.nullable) = false,
       (gogoproto.casttype) = "FormatVersion"];
+
+  // deleted is set if this TableDescriptor is in the process of being deleted.
+  // A deleted descriptor cannot be leased.
+  optional bool deleted = 18 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

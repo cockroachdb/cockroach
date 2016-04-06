@@ -417,19 +417,28 @@ func (desc *TableDescriptor) Validate() error {
 
 	for _, m := range desc.Mutations {
 		unSetEnums := m.State == DescriptorMutation_UNKNOWN || m.Direction == DescriptorMutation_NONE
-		switch desc := m.Descriptor_.(type) {
+		switch mutationDesc := m.Descriptor_.(type) {
 		case *DescriptorMutation_Column:
 			if unSetEnums {
-				col := desc.Column
+				col := mutationDesc.Column
 				return util.Errorf("mutation in state %s, direction %s, col %s, id %v", m.State, m.Direction, col.Name, col.ID)
 			}
 		case *DescriptorMutation_Index:
 			if unSetEnums {
-				idx := desc.Index
+				idx := mutationDesc.Index
 				return util.Errorf("mutation in state %s, direction %s, index %s, id %v", m.State, m.Direction, idx.Name, idx.ID)
 			}
+		case nil:
+			// Check that we're dropping this table.
+			if !desc.Deleted {
+				return util.Errorf(
+					"mutation in state %s, direction %s, and no column/index descriptor",
+					m.State, m.Direction)
+			}
 		default:
-			return util.Errorf("mutation in state %s, direction %s, and no column/index descriptor", m.State, m.Direction)
+			return util.Errorf(
+				"mutation in state %s, direction %s, and unsupported descriptor type",
+				m.State, m.Direction)
 		}
 	}
 
@@ -622,6 +631,12 @@ func (desc *TableDescriptor) addIndexMutation(idx IndexDescriptor, direction Des
 	desc.addMutation(m)
 }
 
+func (desc *TableDescriptor) addDropTableMutation() {
+	// A DROP TABLE mutation is represented by a nil descriptor in the mutation.
+	m := DescriptorMutation{Descriptor_: nil, Direction: DescriptorMutation_DROP}
+	desc.addMutation(m)
+}
+
 func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
@@ -632,6 +647,15 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	}
 	m.MutationID = desc.NextMutationID
 	desc.Mutations = append(desc.Mutations, m)
+}
+
+// setUpVersion sets the up_version marker on the table descriptor (see the proto
+// for comments) and returns the MutationID to be used for the next mutations.
+func (desc *TableDescriptor) setUpVersion() MutationID {
+	desc.UpVersion = true
+	mutationID := desc.NextMutationID
+	desc.NextMutationID++
+	return mutationID
 }
 
 // VisibleColumns returns all non hidden columns.

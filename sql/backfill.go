@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -66,17 +67,21 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-// backfillBatch runs the backfill for all the mutations that match the ID
-// of the first mutation.
-func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
+// batchBackfill accumulates all commands for a backfill into a batch (commands
+// for all the mutations that match the ID of the first mutation). The batch is
+// not executed.
+// Returns true if a deletion of the table descriptor has been batched.
+func (p *planner) batchBackfill(b *client.Batch, tableDesc *TableDescriptor) (
+	bool, *roachpb.Error) {
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
+	var tableDropped bool
 	var newIndexDescs []IndexDescriptor
 	// Mutations are applied in a FIFO order. Only apply the first set
 	// of mutations.
 	mutationID := tableDesc.Mutations[0].MutationID
 	// Collect the elements that are part of the mutation.
-	for _, m := range tableDesc.Mutations {
+	for i, m := range tableDesc.Mutations {
 		if m.MutationID != mutationID {
 			break
 		}
@@ -86,20 +91,32 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			case *DescriptorMutation_Column:
 				// TODO(vivek): Add column to new columns and use it
 				// to fill in default values.
-
 			case *DescriptorMutation_Index:
 				newIndexDescs = append(newIndexDescs, *t.Index)
+			default:
+				return false, roachpb.NewErrorf("unsupported mutation: %+v", m)
 			}
 
 		case DescriptorMutation_DROP:
 			switch t := m.Descriptor_.(type) {
 			case *DescriptorMutation_Column:
 				droppedColumnDescs = append(droppedColumnDescs, *t.Column)
-
 			case *DescriptorMutation_Index:
 				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+			case nil:
+				tableDropped = true
+				if i != len(tableDesc.Mutations)-1 {
+					panic(fmt.Sprintf(
+						"mutations queued after DROP TABLE. Table descriptor: %+v", tableDesc))
+				}
+			default:
+				return false, roachpb.NewErrorf("unsupported mutation: %+v", m)
 			}
 		}
+	}
+
+	if tableDropped {
+		return true, p.truncateAndDropTable(tableDesc, b)
 	}
 
 	// TODO(vivek): Break these backfill operations into chunks. All of them
@@ -117,7 +134,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 		batch := &client.Batch{}
 		batch.Scan(start, start.PrefixEnd(), 0)
 		if pErr := p.txn.Run(batch); pErr != nil {
-			return pErr
+			return false, pErr
 		}
 		for _, result := range batch.Results {
 			var sentinelKey roachpb.Key
@@ -171,7 +188,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 		// row.
 		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
 		if err != nil {
-			return roachpb.NewError(err)
+			return false, roachpb.NewError(err)
 		}
 
 		for rows.Next() {
@@ -181,7 +198,7 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 				secondaryIndexEntries, err := encodeSecondaryIndexes(
 					tableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
 				if err != nil {
-					return roachpb.NewError(err)
+					return false, roachpb.NewError(err)
 				}
 
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -194,8 +211,8 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			}
 		}
 
-		return rows.PErr()
+		return false, rows.PErr()
 	}
 
-	return nil
+	return false, nil
 }

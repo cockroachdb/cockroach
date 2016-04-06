@@ -182,6 +182,11 @@ message DidntUpdateDescriptorError {
 message ExistingSchemaChangeLeaseError {
 }
 
+// A DescriptorDeletedError indicates that an outstanding schema change is no
+// longer applicable because the descriptor in question has been dropped.
+message DescriptorDeletedError {
+}
+
 // ErrorWithPGCode is the detail for errors carring sql error codes.
 message ErrorWithPGCode {
   optional string error_code = 1 [(gogoproto.nullable) = false];
@@ -216,6 +221,7 @@ message ErrorDetail {
   optional LeaseVersionChangedError lease_version_changed = 18;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
   optional ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
+  optional DescriptorDeletedError descriptor_deleted = 23;
   optional ErrorWithPGCode error_with_pg_code = 21;
 }
 

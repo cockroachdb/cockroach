@@ -62,3 +62,17 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, erro
 	// No descriptor or not a table.
 	return nil, nil
 }
+
+// GetTableDesc returns the table descriptor for the table with 'id'.
+// Returns nil if the descriptor is not present, or is present but is not a
+// table.
+func GetTableDesc(cfg config.SystemConfig, id ID) (*TableDescriptor, error) {
+	if descVal := cfg.GetValue(MakeDescMetadataKey(id)); descVal != nil {
+		desc := &Descriptor{}
+		if err := descVal.GetProto(desc); err != nil {
+			return nil, err
+		}
+		return desc.GetTable(), nil
+	}
+	return nil, nil
+}
