@@ -68,16 +68,13 @@ func TestKeyNext(t *testing.T) {
 		{Key(noExtraCap), Key("xo\x00"), 1},
 	}
 	for i, c := range testCases {
-		if next := c.key.Next(); !bytes.Equal(next, c.next) {
+		next := c.key.Next()
+		if !bytes.Equal(next, c.next) {
 			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, next)
 		}
-		shallowNext := c.key.ShallowNext()
-		if !bytes.Equal(shallowNext, c.next) {
-			t.Errorf("%d: unexpected shallow next bytes for %q: %q", i, c.key, shallowNext)
-		}
 		if c.expReallocate != 0 {
-			if expect, reallocated := c.expReallocate > 0, (&shallowNext[0] != &c.key[0]); expect != reallocated {
-				t.Errorf("%d: unexpected shallow next reallocation = %t, found reallocation = %t", i, expect, reallocated)
+			if expect, reallocated := c.expReallocate > 0, (&next[0] != &c.key[0]); expect != reallocated {
+				t.Errorf("%d: unexpected next reallocation = %t, found reallocation = %t", i, expect, reallocated)
 			}
 		}
 	}

@@ -62,7 +62,7 @@ func (k MVCCKey) Next() MVCCKey {
 	ts := k.Timestamp.Prev()
 	if ts == roachpb.ZeroTimestamp {
 		return MVCCKey{
-			Key: k.Key.ShallowNext(),
+			Key: k.Key.Next(),
 		}
 	}
 	return MVCCKey{
@@ -1448,7 +1448,7 @@ func MVCCIterate(engine Engine, startKey, endKey roachpb.Key, timestamp roachpb.
 			}
 
 		} else {
-			iter.Seek(MakeMVCCMetadataKey(metaKey.Key.ShallowNext()))
+			iter.Seek(MakeMVCCMetadataKey(metaKey.Key.Next()))
 			if !iter.Valid() {
 				if err := iter.Error(); err != nil {
 					return nil, err
@@ -1769,7 +1769,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 		}
 
 		// nextKey is already a metadata key.
-		nextKey.Key = key.Key.ShallowNext()
+		nextKey.Key = key.Key.Next()
 	}
 
 	return num, nil

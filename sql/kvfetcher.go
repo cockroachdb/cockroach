@@ -178,7 +178,7 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 		// received key. To resume reverse scans we will set the (exclusive) scan end to the last
 		// received key.
 		if !f.reverse {
-			resumeKey = resumeKey.ShallowNext()
+			resumeKey = resumeKey.Next()
 		}
 	}
 

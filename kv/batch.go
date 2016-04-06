@@ -148,7 +148,7 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 			return nil, err
 		}
 		if len(eAddr) == 0 {
-			eAddr = addr.ShallowNext()
+			eAddr = addr.Next()
 		}
 		if !eAddr.Less(k) {
 			if !k.Less(addr) {
