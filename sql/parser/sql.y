@@ -519,7 +519,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   HAVING HIGH HOUR
 
 %token <str>   IF IFNULL IN
-%token <str>   INDEX INDEXES INITIALLY 
+%token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
@@ -555,7 +555,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   SYMMETRIC
 
 %token <str>   TABLE TABLES TEXT THEN
-%token <str>   TIME TIMESTAMP TO TRAILING TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -1692,29 +1692,29 @@ opt_transaction:
 | /* EMPTY */ {}
 
 opt_to_savepoint:
-  TRANSACTION 
+  TRANSACTION
   {
     $$ = ""
   }
-| TRANSACTION TO savepoint_name 
+| TRANSACTION TO savepoint_name
   {
     $$ = $3
   }
-| TO savepoint_name 
+| TO savepoint_name
   {
     $$ = $2
   }
-| /* EMPTY */ 
+| /* EMPTY */
   {
-    $$ = "" 
+    $$ = ""
   }
 
 savepoint_name:
-  SAVEPOINT name 
+  SAVEPOINT name
   {
     $$ = $2
   }
-| name 
+| name
   {
     $$ = $1
   }
@@ -2716,6 +2716,10 @@ const_datetime:
 | TIMESTAMP
   {
     $$.val = &TimestampType{}
+  }
+| TIMESTAMPTZ
+  {
+    $$.val = &TimestampType{withZone: true}
   }
 
 const_interval:
@@ -4100,6 +4104,7 @@ col_name_keyword:
 | SUBSTRING
 | TIME
 | TIMESTAMP
+| TIMESTAMPTZ
 | TREAT
 | TRIM
 | VALUES
