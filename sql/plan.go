@@ -206,7 +206,11 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.CreateTable:
 		return p.CreateTable(n)
 	case *parser.Delete:
-		return p.Delete(n, autoCommit)
+		dPlan, pErr := p.prepareDeletePlan(n)
+		if pErr == nil {
+			pErr = p.buildDeletePlan(dPlan.(*deleteNode), autoCommit)
+		}
+		return dPlan, pErr
 	case *parser.DropDatabase:
 		return p.DropDatabase(n)
 	case *parser.DropIndex:
@@ -275,7 +279,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	switch n := stmt.(type) {
 	case *parser.Delete:
-		return p.Delete(n, false)
+		return p.prepareDeletePlan(n)
 	case *parser.Insert:
 		return p.Insert(n, false)
 	case *parser.Select:

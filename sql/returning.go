@@ -36,8 +36,8 @@ type returningHelper struct {
 }
 
 func makeReturningHelper(p *planner, r parser.ReturningExprs,
-	alias string, tablecols []ColumnDescriptor) (returningHelper, error) {
-	rh := returningHelper{p: p, results: &returningNode{}}
+	alias string, tablecols []ColumnDescriptor) (*returningHelper, error) {
+	rh := &returningHelper{p: p, results: &returningNode{}}
 	if len(r) == 0 {
 		return rh, nil
 	}
@@ -51,7 +51,7 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 	rh.exprs = make([]parser.Expr, 0, len(r))
 	for _, target := range r {
 		if isStar, cols, exprs, err := checkRenderStar(target, &table, rh.qvals); err != nil {
-			return returningHelper{}, err
+			return nil, err
 		} else if isStar {
 			rh.exprs = append(rh.exprs, exprs...)
 			rh.results.columns = append(rh.results.columns, cols...)
@@ -65,11 +65,11 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 
 		expr, err := resolveQNames(&table, rh.qvals, target.Expr)
 		if err != nil {
-			return returningHelper{}, err
+			return nil, err
 		}
 		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
 		if err != nil {
-			return returningHelper{}, err
+			return nil, err
 		}
 		rh.exprs = append(rh.exprs, expr)
 		rh.results.columns = append(rh.results.columns, ResultColumn{Name: outputName, Typ: typ})
@@ -77,24 +77,24 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 	return rh, nil
 }
 
-// append adds a result row. The row is computed according to the ReturningExprs, with input values
+// appends adds a result row. The row is computed according to the ReturningExprs, with input values
 // from rowVals.
-func (rh *returningHelper) append(rowVals parser.DTuple) error {
+func (rh *returningHelper) append(rowVals parser.DTuple) (parser.DTuple, error) {
 	if rh.exprs == nil {
 		rh.results.rowCount++
-		return nil
+		return rowVals, nil
 	}
 	rh.qvals.populateQVals(rowVals)
 	resrow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(rh.p.evalCtx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		resrow[i] = d
 	}
 	rh.results.rows = append(rh.results.rows, resrow)
-	return nil
+	return resrow, nil
 }
 
 // getResults returns the results as a returningNode.

@@ -277,7 +277,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		if err := rh.append(retVals); err != nil {
+		if _, err := rh.append(retVals); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

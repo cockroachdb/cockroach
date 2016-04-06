@@ -456,6 +456,13 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 // If the plan is a returningNode we can just use the `rowCount`,
 // otherwise we fall back to counting via plan.Next().
 func countRowsAffected(p planNode) int {
+	if a, ok := p.(*deleteNode); ok && a.fastPath {
+		// In the fast path, we only need a single call to Next() to
+		// delete all rows and obtain a count.
+		// FIXME(knz): there is an abstraction leak here.
+		_ = p.Next()
+		return a.rh.results.rowCount
+	}
 	if a, ok := p.(*returningNode); ok {
 		return a.rowCount
 	}
