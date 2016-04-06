@@ -17,6 +17,7 @@
 package duration
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -27,7 +28,15 @@ const (
 	daysInMonth  = 30
 	nanosInDay   = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
 	nanosInMonth = daysInMonth * nanosInDay
+
+	// Used in overflow calculations.
+	maxYearsInDuration = math.MaxInt64 / nanosInMonth
+	minYearsInDuration = math.MinInt64 / nanosInMonth
 )
+
+// ErrEncodeOverflow is returned by Encode when the sortNanos returned would
+// have overflowed or underflowed.
+var ErrEncodeOverflow = errors.New("overflow during Encode")
 
 // A Duration represents a length of time.
 //
@@ -78,9 +87,17 @@ func (d Duration) String() string {
 // (using Decode) and the first int will approximately sort a collection of
 // encoded Durations.
 func (d Duration) Encode() (sortNanos int64, months int64, days int64, err error) {
+	// The number of whole years equivalent to any value of Duration always fits
+	// in an int64. Use this to compute a conservative estimate of overflow.
+	//
+	// TODO(dan): Compute overflow exactly, then document that EncodeBigInt can be
+	// used in overflow cases.
+	years := d.Months/12 + d.Days/daysInMonth/12 + d.Nanos/nanosInMonth/12
+	if years > maxYearsInDuration || years < minYearsInDuration {
+		return 0, 0, 0, ErrEncodeOverflow
+	}
+
 	totalNanos := d.Months*nanosInMonth + d.Days*nanosInDay + d.Nanos
-	// TODO(dan): Handle overflow, then document that EncodeBigInt can be used
-	// in overflow cases.
 	return totalNanos, d.Months, d.Days, nil
 }
 

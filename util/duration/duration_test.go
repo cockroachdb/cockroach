@@ -69,7 +69,7 @@ func fullDurationTests() []durationTest {
 	for _, test := range positiveDurationTests {
 		d := test.duration
 		negDuration := Duration{Months: -d.Months, Days: -d.Days, Nanos: -d.Nanos}
-		ret = append(ret, durationTest{cmpToPrev: -test.cmpToPrev, duration: negDuration})
+		ret = append(ret, durationTest{cmpToPrev: -test.cmpToPrev, duration: negDuration, err: test.err})
 	}
 	ret = append(ret, positiveDurationTests...)
 	return ret
@@ -79,8 +79,7 @@ func TestEncodeDecode(t *testing.T) {
 	for i, test := range fullDurationTests() {
 		sortNanos, months, days, err := test.duration.Encode()
 		if test.err && err == nil {
-			// TODO(dan): Uncomment this when over and underflow are checked.
-			// t.Errorf("%d expected error but didn't get one", i)
+			t.Errorf("%d expected error but didn't get one", i)
 		} else if !test.err && err != nil {
 			t.Errorf("%d expected no error but got one: %s", i, err)
 		}
