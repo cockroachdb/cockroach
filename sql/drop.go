@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // DropDatabase drops a database.
@@ -58,7 +59,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 
 	tbNameStrings := make([]string, len(tbNames))
 	for i := range tbNames {
-		tbDesc, err := p.dropTableImpl(tbNames, i)
+		tbDesc, err := p.dropTableImpl(tbNames[i])
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +152,10 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 				return &emptyNode{}, nil
 			}
 		}
-		mutationID := tableDesc.setUpVersion(true /* incrementMutationID */)
+		mutationID, err := tableDesc.setUpVersion(true /* incrementMutationID */)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		if err := tableDesc.Validate(); pErr != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -169,7 +173,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 	for i := range n.Names {
-		droppedDesc, err := p.dropTableImpl(n.Names, i)
+		droppedDesc, err := p.dropTableImpl(n.Names[i])
 		if err != nil {
 			return nil, err
 		}
@@ -200,74 +204,73 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 // dropTableImpl is used to drop a single table by name, which can result from
 // either a DROP TABLE or DROP DATABASE statement. This method returns the
 // dropped table descriptor, to be used for the purpose of logging the event.
-func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableDescriptor, *roachpb.Error) {
-	// TODO(XisiHuang): should do truncate and delete descriptor in
-	// the same txn
-	tableQualifiedName := names[index]
-	if err := tableQualifiedName.NormalizeTableName(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
-	}
+// The table is not actually truncated or deleted synchronously. Instead, it is
+// marked as deleted (meaning up_version is set and deleted is set) and the
+// actual deletion happens async in a schema changer. Note that, courtesy of
+// up_version, the actual truncation and dropping will only happen once every
+// node ACKs the version of the descriptor with the deleted bit set, meaning the
+// lease manager will not hand out new leases for it).
+// If the table does not exist, this function returns a nil descriptor.
+func (p *planner) dropTableImpl(name *parser.QualifiedName) (
+	*TableDescriptor, *roachpb.Error) {
 
-	dbDesc, pErr := p.getDatabaseDesc(tableQualifiedName.Database())
+	tableDesc, pErr := p.getTableDescEx(name)
 	if pErr != nil {
 		return nil, pErr
 	}
-
-	tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}
-	nameKey := tbKey.Key()
-	gr, pErr := p.txn.Get(nameKey)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	if !gr.Exists() {
-		// Return nil descriptor. This might result in an error at a higher
-		// level.
-		return nil, nil
-	}
-
-	desc := &Descriptor{}
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
-		return nil, pErr
-	}
-	tableDesc := desc.GetTable()
 	if tableDesc == nil {
-		return nil, roachpb.NewErrorf("%q is not a table", tbKey.Name())
-	}
-	if err := tableDesc.Validate(); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if _, pErr := p.Truncate(&parser.Truncate{Tables: names[index : index+1]}); pErr != nil {
 		return nil, pErr
 	}
 
-	zoneKey := MakeZoneKey(tableDesc.ID)
+	if pErr := p.checkPrivilege(tableDesc, privilege.DROP); pErr != nil {
+		return nil, roachpb.NewError(pErr)
+	}
 
-	// Delete table descriptor
-	b := &client.Batch{}
-	b.Del(descKey)
-	b.Del(nameKey)
-	// Delete the zone config entry for this table.
-	b.Del(zoneKey)
+	_, err := tableDesc.setUpVersion(false /* incrementMutationID */)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	tableDesc.Deleted = true
+	if pErr = p.writeTableDesc(tableDesc); pErr != nil {
+		return nil, pErr
+	}
+	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
 
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
-			if err := expectDeleted(systemConfig, key); err != nil {
-				return err
-			}
+	verifyMetadataCallback := func(systemConfig config.SystemConfig, tableID ID) error {
+		desc, err := GetTableDesc(systemConfig, tableID)
+		if err != nil {
+			return err
 		}
-		return nil
+		if desc == nil {
+			return util.Errorf("table %d missing", tableID)
+		}
+		if desc.Deleted {
+			return nil
+		}
+		return util.Errorf("expected table %d to be marked as deleted", tableID)
+	}
+	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+		return verifyMetadataCallback(systemConfig, tableDesc.ID)
 	})
 
-	if pErr := p.txn.Run(b); pErr != nil {
-		return nil, pErr
-	}
-
 	return tableDesc, nil
+}
+
+// truncateAndDropTable batches all the commands required for truncating and deleting the
+// table descriptor.
+// It is called from a mutation, async wrt the DROP statement.
+func truncateAndDropTable(tableDesc *TableDescriptor, db *client.DB) *roachpb.Error {
+	return db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if pErr := truncateTable(tableDesc, txn); pErr != nil {
+			return pErr
+		}
+		zoneKey, nameKey, descKey := getKeysForTableDescriptor(tableDesc)
+		// Delete table descriptor
+		b := client.Batch{}
+		b.Del(descKey)
+		b.Del(nameKey)
+		// Delete the zone config entry for this table.
+		b.Del(zoneKey)
+		return txn.Run(&b)
+	})
 }

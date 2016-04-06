@@ -639,14 +639,22 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 // incrementMutationID specified whether one or more mutations have been added
 // and used the NextMutationID. If so, NextMutationID is incremented and the old
 // value is returned. If not set, invalidMutationID is returned.
-func (desc *TableDescriptor) setUpVersion(incrementMutationID bool) MutationID {
+func (desc *TableDescriptor) setUpVersion(incrementMutationID bool,
+) (MutationID, error) {
+	if desc.Deleted {
+		// We don't allow the version to be incremented any more once a table
+		// has been deleted. This will block new mutations from being queued on the
+		// table; it'd be misleading to allow them to be queued, since the
+		// respective schema change will never run.
+		return invalidMutationID, fmt.Errorf("table %q has been deleted", desc.Name)
+	}
 	desc.UpVersion = true
 	mutationID := invalidMutationID
 	if incrementMutationID {
 		mutationID = desc.NextMutationID
 		desc.NextMutationID++
 	}
-	return mutationID
+	return mutationID, nil
 }
 
 // VisibleColumns returns all non hidden columns.

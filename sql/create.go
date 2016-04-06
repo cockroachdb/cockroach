@@ -101,7 +101,10 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 	}
 
 	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
-	mutationID := tableDesc.setUpVersion(true /* incrementMutationID */)
+	mutationID, err := tableDesc.setUpVersion(true /* incrementMutationID */)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, roachpb.NewError(err)
 	}

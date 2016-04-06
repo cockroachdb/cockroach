@@ -206,7 +206,10 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return &emptyNode{}, nil
 	}
 
-	mutationID := tableDesc.setUpVersion(addedMutations)
+	mutationID, err := tableDesc.setUpVersion(addedMutations)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, roachpb.NewError(err)
