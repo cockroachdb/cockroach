@@ -555,7 +555,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   SYMMETRIC
 
 %token <str>   TABLE TABLES TEXT THEN
-%token <str>   TIME TIMESTAMP TO TRAILING TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -2717,6 +2717,10 @@ const_datetime:
   {
     $$.val = &TimestampType{}
   }
+| TIMESTAMPTZ
+  {
+    $$.val = &TimestampType{withZone: true}
+  }
 
 const_interval:
   INTERVAL {
@@ -4100,6 +4104,7 @@ col_name_keyword:
 | SUBSTRING
 | TIME
 | TIMESTAMP
+| TIMESTAMPTZ
 | TREAT
 | TRIM
 | VALUES

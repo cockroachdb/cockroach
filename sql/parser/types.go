@@ -106,9 +106,13 @@ func (node *DateType) String() string {
 
 // TimestampType represents a TIMESTAMP type.
 type TimestampType struct {
+	withZone bool
 }
 
 func (node *TimestampType) String() string {
+	if node.withZone {
+		return "TIMESTAMPTZ"
+	}
 	return "TIMESTAMP"
 }
 
