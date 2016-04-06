@@ -425,7 +425,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	max_value := 2000
+	max_value := csql.IndexBackfillChunkSize * 10
 	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, max_value)
 	for i := 1; i <= max_value; i++ {
 		insert += fmt.Sprintf(` ,(%d, %d)`, i, max_value-i)
@@ -448,7 +448,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
-	version := desc.GetTable().Version
+	tableDesc := desc.GetTable()
+	version := tableDesc.Version
 
 	// Run the schema changes in a separate goroutine.
 	var wg sync.WaitGroup
@@ -505,7 +506,7 @@ ALTER INDEX t.test@foo RENAME TO bar;
 	wg.Wait()
 
 	// Verify that the index over v is consistent.
-	rows, err := sqlDB.Query(`SELECT v from t.test@bar`)
+	rows, err := sqlDB.Query(`SELECT v, x from t.test@bar`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,11 +514,15 @@ ALTER INDEX t.test@foo RENAME TO bar;
 	i := 0
 	for ; rows.Next(); i++ {
 		var val int
-		if err := rows.Scan(&val); err != nil {
+		var x float64
+		if err := rows.Scan(&val, &x); err != nil {
 			t.Fatal(err)
 		}
 		if i != val {
 			t.Errorf("e = %d, v = %d", i, val)
+		}
+		if 1.4 != x {
+			t.Errorf("e = %f, v = %f", 1.4, x)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -525,5 +530,24 @@ ALTER INDEX t.test@foo RENAME TO bar;
 	}
 	if max_value+1 != i {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", max_value+1, i)
+	}
+
+	// Test Drop column x.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	// keys == 4 times rows.
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 4 * (max_value + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP x`); err != nil {
+		t.Fatal(err)
+	}
+	// keys == 3 times rows.
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 3 * (max_value + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }

@@ -59,10 +59,12 @@ type scanNode struct {
 	reverse          bool
 	columnIDs        []ColumnID
 	// The direction with which the corresponding column was encoded.
-	columnDirs       []encoding.Direction
-	ordering         orderingInfo
-	pErr             *roachpb.Error
-	indexKey         []byte         // the index key of the current row
+	columnDirs []encoding.Direction
+	ordering   orderingInfo
+	pErr       *roachpb.Error
+	indexKey   []byte // the index key of the current row
+	// the index key remembered after the current row is processed.
+	currIndexKey     []byte
 	rowIndex         int            // the index of the current row
 	colID            ColumnID       // column ID of the current key
 	valTypes         []parser.Datum // the index key value types for the current row
@@ -513,6 +515,7 @@ func (n *scanNode) maybeOutputRow() bool {
 		(n.isSecondaryIndex || n.kvEnd ||
 			!bytes.HasPrefix(n.kv.Key, n.indexKey)) {
 		// The current key belongs to a new row. Output the current row.
+		n.currIndexKey = n.indexKey
 		n.indexKey = nil
 
 		// Fill in any missing values with NULLs
