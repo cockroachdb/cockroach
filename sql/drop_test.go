@@ -117,7 +117,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if gr, err := kvDB.Get(tbDescKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
-		t.Fatalf("table descriptor still exists after database is dropped")
+		t.Fatalf("table descriptor still exists after database is dropped: %q", tbDescKey)
 	}
 
 	if gr, err := kvDB.Get(tbNameKey); err != nil {

@@ -31,9 +31,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, roachpb.NewError(err)
 	}
 
-	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
-	if err != nil {
-		return nil, err
+	dbDesc, pErr := p.getDatabaseDesc(n.Table.Database())
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Check if table exists.
@@ -179,15 +179,13 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	if numMutations == len(tableDesc.Mutations) {
 		return &emptyNode{}, nil
 	}
-	tableDesc.UpVersion = true
-	mutationID := tableDesc.NextMutationID
-	tableDesc.NextMutationID++
+	mutationID := tableDesc.setUpVersion()
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); err != nil {
+	if pErr = p.writeTableDesc(&tableDesc); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)

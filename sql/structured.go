@@ -634,6 +634,15 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
+// setUpVersion sets the up_version marker on the table descriptor (see the proto
+// for comments) and returns the MutationID to be used for the next mutations.
+func (desc *TableDescriptor) setUpVersion() MutationID {
+	desc.UpVersion = true
+	mutationID := desc.NextMutationID
+	desc.NextMutationID++
+	return mutationID
+}
+
 // VisibleColumns returns all non hidden columns.
 func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	var cols []ColumnDescriptor

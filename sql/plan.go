@@ -385,6 +385,11 @@ func (p *planner) releaseLeases() {
 	}
 }
 
+func (p *planner) writeTableDesc(tableDesc *TableDescriptor) *roachpb.Error {
+	key := MakeDescMetadataKey(tableDesc.GetID())
+	return p.txn.Put(key, wrapDescriptor(tableDesc))
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 type planNode interface {
 	// Columns returns the column names and types . The length of the
