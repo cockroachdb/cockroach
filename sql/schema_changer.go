@@ -46,6 +46,26 @@ type SchemaChanger struct {
 	execAfter time.Time
 }
 
+func (sc *SchemaChanger) truncateAndDropTable(
+	lease *TableDescriptor_SchemaChangeLease,
+	tableDesc *TableDescriptor) *roachpb.Error {
+
+	l, pErr := sc.ExtendLease(*lease)
+	if pErr != nil {
+		return pErr
+	}
+	*lease = l
+	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		// TODO(vivek): Use the original users privileges.
+		p := makePlanner()
+		p.session.User = security.RootUser
+		p.systemConfig = sc.cfg
+		p.leaseMgr = sc.leaseMgr
+		p.setTxn(txn)
+		return p.truncateAndDropTable(tableDesc)
+	})
+}
+
 // applyMutations runs the backfill for the mutations.
 func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
 	l, pErr := sc.ExtendLease(*lease)
@@ -65,6 +85,9 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		if pErr != nil {
 			return pErr
 		}
+		if tableDesc == nil {
+			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
+		}
 
 		if len(tableDesc.Mutations) == 0 || tableDesc.Mutations[0].MutationID != sc.mutationID {
 			// Nothing to do. Someone else executed the mutations already.
@@ -72,8 +95,8 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		}
 
 		b := client.Batch{}
-		// Run backfill for the first mutation ID.
-		if pErr := p.backfillBatch(&b, tableDesc); pErr != nil {
+		// Accumulate and then run the backfill for the first mutation ID.
+		if pErr := p.batchBackfill(&b, tableDesc); pErr != nil {
 			return pErr
 		}
 		if pErr := p.txn.Run(&b); pErr != nil {
@@ -114,6 +137,9 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 		if err != nil {
 			return err
 		}
+		if tableDesc == nil {
+			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
+		}
 
 		// A second to deal with the time uncertainty across nodes.
 		// It is perfectly valid for two or more goroutines to hold a valid
@@ -141,6 +167,9 @@ func (sc *SchemaChanger) findTableWithLease(
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
+	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
 	if tableDesc.Lease == nil {
 		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
@@ -191,16 +220,36 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	if pErr != nil {
 		return pErr
 	}
+	needRelease := true
 	// Always try to release lease.
 	defer func(l *TableDescriptor_SchemaChangeLease) {
+		// If the schema changer deleted the descriptor, there's no longer a lease to be
+		// released.
+		if !needRelease {
+			return
+		}
 		if err := sc.ReleaseLease(*l); err != nil {
 			log.Warning(err)
 		}
 	}(&lease)
 
 	// Increment the version and unset tableDescriptor.UpVersion.
-	if _, pErr := sc.MaybeIncrementVersion(); pErr != nil {
+	desc, pErr := sc.MaybeIncrementVersion()
+	if pErr != nil {
 		return pErr
+	}
+
+	if desc.GetTable().Deleted {
+		// Wait for everybody to see the version with the deleted bit set.
+		if err := sc.waitToUpdateLeases(); err != nil {
+			return roachpb.NewError(err)
+		}
+		// Truncate the table and delete the descriptor.
+		if pErr := sc.truncateAndDropTable(&lease, desc.GetTable()); pErr != nil {
+			return pErr
+		}
+		needRelease = false
+		return nil
 	}
 
 	// Wait for the schema change to propagate to all nodes after this function
@@ -405,6 +454,11 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		if pErr != nil {
 			return pErr
 		}
+		if tableDesc == nil {
+			// The table has been deleted => no more schema changes to be done for this table.
+			done = true
+			return nil
+		}
 		if sc.mutationID == invalidMutationID {
 			if tableDesc.UpVersion {
 				done = false
@@ -588,11 +642,25 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				timer = s.newTimer()
 
 			case <-timer.C:
-				for _, sc := range s.schemaChangers {
+				for tableID, sc := range s.schemaChangers {
 					if time.Since(sc.execAfter) > 0 {
+						// TODO(vivek): We don't seem to protect against a race where one
+						// node executes a sc, releases the lease, and now a second node's
+						// timer fires before receiving the gossip update about that change
+						// being done, and so it starts executing the same change again.
+						// Should we protect against it?
 						pErr := sc.exec()
-						if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); !ok && pErr != nil {
-							log.Info(pErr)
+						if pErr != nil {
+							switch pErr.GetDetail().(type) {
+							case *roachpb.ExistingSchemaChangeLeaseError:
+							case *roachpb.DescriptorDeletedError:
+								// Someone deleted this table. Don't try to run the schema
+								// changer again. Note that there's no gossip update for the
+								// deletion which would remove this schemaChanger.
+								delete(s.schemaChangers, tableID)
+							default:
+								log.Warningf("Error executing schema change: %s", pErr)
+							}
 						}
 						// Advance the execAfter time so that this schema changer
 						// doesn't get called again for a while.

@@ -66,9 +66,12 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-// backfillBatch runs the backfill for all the mutations that match the ID
-// of the first mutation.
-func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
+// batchBackfill accumulates all commands for a backfill into a batch (commands
+// for all the mutations that match the ID of the first mutation). The batch is
+// not executed.
+func (p *planner) batchBackfill(
+	b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
+
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
@@ -86,18 +89,20 @@ func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *ro
 			case *DescriptorMutation_Column:
 				// TODO(vivek): Add column to new columns and use it
 				// to fill in default values.
-
 			case *DescriptorMutation_Index:
 				newIndexDescs = append(newIndexDescs, *t.Index)
+			default:
+				return roachpb.NewErrorf("unsupported mutation: %+v", m)
 			}
 
 		case DescriptorMutation_DROP:
 			switch t := m.Descriptor_.(type) {
 			case *DescriptorMutation_Column:
 				droppedColumnDescs = append(droppedColumnDescs, *t.Column)
-
 			case *DescriptorMutation_Index:
 				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+			default:
+				return roachpb.NewErrorf("unsupported mutation: %+v", m)
 			}
 		}
 	}

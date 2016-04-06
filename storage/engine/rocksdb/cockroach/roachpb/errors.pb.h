@@ -42,6 +42,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
 
 class ConditionFailedError;
+class DescriptorDeletedError;
 class DidntUpdateDescriptorError;
 class ErrPosition;
 class Error;
@@ -2033,6 +2034,85 @@ class ExistingSchemaChangeLeaseError : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class DescriptorDeletedError : public ::google::protobuf::Message {
+ public:
+  DescriptorDeletedError();
+  virtual ~DescriptorDeletedError();
+
+  DescriptorDeletedError(const DescriptorDeletedError& from);
+
+  inline DescriptorDeletedError& operator=(const DescriptorDeletedError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const DescriptorDeletedError& default_instance();
+
+  void Swap(DescriptorDeletedError* other);
+
+  // implements Message ----------------------------------------------
+
+  inline DescriptorDeletedError* New() const { return New(NULL); }
+
+  DescriptorDeletedError* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const DescriptorDeletedError& from);
+  void MergeFrom(const DescriptorDeletedError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(DescriptorDeletedError* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.DescriptorDeletedError)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static DescriptorDeletedError* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ErrorWithPGCode : public ::google::protobuf::Message {
  public:
   ErrorWithPGCode();
@@ -2395,6 +2475,15 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::ExistingSchemaChangeLeaseError* release_existing_scheme_change_lease();
   void set_allocated_existing_scheme_change_lease(::cockroach::roachpb::ExistingSchemaChangeLeaseError* existing_scheme_change_lease);
 
+  // optional .cockroach.roachpb.DescriptorDeletedError descriptor_deleted = 23;
+  bool has_descriptor_deleted() const;
+  void clear_descriptor_deleted();
+  static const int kDescriptorDeletedFieldNumber = 23;
+  const ::cockroach::roachpb::DescriptorDeletedError& descriptor_deleted() const;
+  ::cockroach::roachpb::DescriptorDeletedError* mutable_descriptor_deleted();
+  ::cockroach::roachpb::DescriptorDeletedError* release_descriptor_deleted();
+  void set_allocated_descriptor_deleted(::cockroach::roachpb::DescriptorDeletedError* descriptor_deleted);
+
   // optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
   bool has_error_with_pg_code() const;
   void clear_error_with_pg_code();
@@ -2448,6 +2537,8 @@ class ErrorDetail : public ::google::protobuf::Message {
   inline void clear_has_didnt_update_descriptor();
   inline void set_has_existing_scheme_change_lease();
   inline void clear_has_existing_scheme_change_lease();
+  inline void set_has_descriptor_deleted();
+  inline void clear_has_descriptor_deleted();
   inline void set_has_error_with_pg_code();
   inline void clear_has_error_with_pg_code();
 
@@ -2475,6 +2566,7 @@ class ErrorDetail : public ::google::protobuf::Message {
   ::cockroach::roachpb::LeaseVersionChangedError* lease_version_changed_;
   ::cockroach::roachpb::DidntUpdateDescriptorError* didnt_update_descriptor_;
   ::cockroach::roachpb::ExistingSchemaChangeLeaseError* existing_scheme_change_lease_;
+  ::cockroach::roachpb::DescriptorDeletedError* descriptor_deleted_;
   ::cockroach::roachpb::ErrorWithPGCode* error_with_pg_code_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
@@ -3775,6 +3867,10 @@ inline void ReplicaCorruptionError::set_processed(bool value) {
 
 // -------------------------------------------------------------------
 
+// DescriptorDeletedError
+
+// -------------------------------------------------------------------
+
 // ErrorWithPGCode
 
 // optional string error_code = 1;
@@ -4790,15 +4886,58 @@ inline void ErrorDetail::set_allocated_existing_scheme_change_lease(::cockroach:
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.existing_scheme_change_lease)
 }
 
-// optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
-inline bool ErrorDetail::has_error_with_pg_code() const {
+// optional .cockroach.roachpb.DescriptorDeletedError descriptor_deleted = 23;
+inline bool ErrorDetail::has_descriptor_deleted() const {
   return (_has_bits_[0] & 0x00200000u) != 0;
 }
-inline void ErrorDetail::set_has_error_with_pg_code() {
+inline void ErrorDetail::set_has_descriptor_deleted() {
   _has_bits_[0] |= 0x00200000u;
 }
-inline void ErrorDetail::clear_has_error_with_pg_code() {
+inline void ErrorDetail::clear_has_descriptor_deleted() {
   _has_bits_[0] &= ~0x00200000u;
+}
+inline void ErrorDetail::clear_descriptor_deleted() {
+  if (descriptor_deleted_ != NULL) descriptor_deleted_->::cockroach::roachpb::DescriptorDeletedError::Clear();
+  clear_has_descriptor_deleted();
+}
+inline const ::cockroach::roachpb::DescriptorDeletedError& ErrorDetail::descriptor_deleted() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.descriptor_deleted)
+  return descriptor_deleted_ != NULL ? *descriptor_deleted_ : *default_instance_->descriptor_deleted_;
+}
+inline ::cockroach::roachpb::DescriptorDeletedError* ErrorDetail::mutable_descriptor_deleted() {
+  set_has_descriptor_deleted();
+  if (descriptor_deleted_ == NULL) {
+    descriptor_deleted_ = new ::cockroach::roachpb::DescriptorDeletedError;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.descriptor_deleted)
+  return descriptor_deleted_;
+}
+inline ::cockroach::roachpb::DescriptorDeletedError* ErrorDetail::release_descriptor_deleted() {
+  clear_has_descriptor_deleted();
+  ::cockroach::roachpb::DescriptorDeletedError* temp = descriptor_deleted_;
+  descriptor_deleted_ = NULL;
+  return temp;
+}
+inline void ErrorDetail::set_allocated_descriptor_deleted(::cockroach::roachpb::DescriptorDeletedError* descriptor_deleted) {
+  delete descriptor_deleted_;
+  descriptor_deleted_ = descriptor_deleted;
+  if (descriptor_deleted) {
+    set_has_descriptor_deleted();
+  } else {
+    clear_has_descriptor_deleted();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.descriptor_deleted)
+}
+
+// optional .cockroach.roachpb.ErrorWithPGCode error_with_pg_code = 21;
+inline bool ErrorDetail::has_error_with_pg_code() const {
+  return (_has_bits_[0] & 0x00400000u) != 0;
+}
+inline void ErrorDetail::set_has_error_with_pg_code() {
+  _has_bits_[0] |= 0x00400000u;
+}
+inline void ErrorDetail::clear_has_error_with_pg_code() {
+  _has_bits_[0] &= ~0x00400000u;
 }
 inline void ErrorDetail::clear_error_with_pg_code() {
   if (error_with_pg_code_ != NULL) error_with_pg_code_->::cockroach::roachpb::ErrorWithPGCode::Clear();
@@ -5164,6 +5303,8 @@ inline void Error::set_allocated_now(::cockroach::roachpb::Timestamp* now) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
