@@ -751,8 +751,10 @@ func (d DInterval) IsMin() bool {
 
 // String implements the Datum interface.
 func (d DInterval) String() string {
-	// TODO(dan): Make this output postgres compatible for all values.
-	return time.Duration(d.Duration.Nanos).String()
+	if d.Months != 0 || d.Days != 0 {
+		return d.String()
+	}
+	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
 
 // DTuple is the tuple Datum.
