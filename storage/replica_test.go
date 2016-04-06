@@ -4681,13 +4681,19 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 func TestNewReplicaCorruptionError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	err := newReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil)
-	if cur, exp := err.String(), `error_msg:"foo (caused by bar)"`; !strings.Contains(cur, exp) {
-		t.Fatalf("expected '%s' contained in '%s'", exp, cur)
-	}
-	err = newReplicaCorruptionError(nil, nil, nil)
-	if exp, act := `error_msg:""`, err.String(); !strings.Contains(act, exp) {
-		t.Fatalf("expected '%s' contained in '%s'", exp, act)
+	for i, tc := range []struct {
+		errStruct *roachpb.ReplicaCorruptionError
+		expErr    string
+	}{
+		{newReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil), "replica corruption (processed=false): foo (caused by bar)"},
+		{newReplicaCorruptionError(nil, nil, nil), "replica corruption (processed=false)"},
+	} {
+		// This uses fmt.Sprint because that ends up calling Error() and is the
+		// intended use. A previous version of this test called String() directly
+		// which called the wrong (reflection-based) implementation.
+		if errStr := fmt.Sprint(tc.errStruct); errStr != tc.expErr {
+			t.Errorf("%d: expected '%s' but got '%s'", i, tc.expErr, errStr)
+		}
 	}
 }
 
