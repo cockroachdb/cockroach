@@ -307,6 +307,23 @@ message Lease {
   optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
   // The address of the would-be lease holder.
   optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
+  // The maximum clock drift in effect for this lease (in nanoseconds).
+  // This specifies a grace period at the end of the lease during which
+  // the lease must not be used (but must be extended instead). This
+  // prevents a failure of linearizability on a single register during
+  // lease changes. Without that grace period, the following could occur:
+  // * a leader lease gets committed on the new leader (but not the old).
+  // * client proposes and commits a write on new leader (with a timestamp
+  //   just greater than the expiration of the old lease).
+  // * client tries to read what it wrote, but hits a slow coordinator
+  //   (which assigns a timestamp covered by the old lease).
+  // * the read is served by the old leader (which has not processed the
+  //   change in leadership).
+  // * the client fails to read their own write.
+  //
+  // Instead, the old leader must refuse to serve the client's command because
+  // it will arrive with a timestamp within the grace period.
+  optional int64 max_offset = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
 }
 
 // AbortCacheEntry contains information about a transaction which has

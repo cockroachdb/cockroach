@@ -91,10 +91,15 @@ var txnAutoGC = true
 const (
 	raftInitialLogIndex = 10
 	raftInitialLogTerm  = 5
-
-	// DefaultLeaderLeaseDuration is the default duration of the leader lease.
-	DefaultLeaderLeaseDuration = time.Second
 )
+
+// DefaultLeaderLeaseDuration is the default duration of the leader lease.
+var DefaultLeaderLeaseDuration = func(maxOffset time.Duration) time.Duration {
+	// We make sure the duration is at least MaxOffset as we don't want to
+	// end up in a situation in which the grace period eats up all of the
+	// lease.
+	return time.Second + maxOffset
+}
 
 // consultsTimestampCacheMethods specifies the set of methods which
 // consult the timestamp cache. This syntax creates a sparse array
@@ -455,7 +460,8 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		pErr := func() *roachpb.Error {
 			// TODO(Tobias): get duration from configuration, either as a config flag
 			// or, later, dynamically adjusted.
-			duration := DefaultLeaderLeaseDuration
+			maxOffset := r.store.Clock().MaxOffset()
+			duration := DefaultLeaderLeaseDuration(maxOffset)
 
 			// Prepare a Raft command to get a leader lease for this replica.
 			expiration := timestamp.Add(int64(duration), 0)
@@ -472,6 +478,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 					Start:      timestamp,
 					Expiration: expiration,
 					Replica:    *replica,
+					MaxOffset:  maxOffset,
 				},
 			}
 			ba := roachpb.BatchRequest{}

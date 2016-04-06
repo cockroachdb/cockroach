@@ -799,6 +799,47 @@ func TestRSpanIntersect(t *testing.T) {
 	}
 }
 
+func TestLeaseCovers(t *testing.T) {
+	mk := func(ds ...int64) (sl []Timestamp) {
+		for _, d := range ds {
+			sl = append(sl, ZeroTimestamp.Add(d, 0))
+		}
+		return sl
+	}
+
+	ts10 := mk(10)[0]
+	ts1K := mk(1000)[0]
+
+	for i, test := range []struct {
+		lease   Lease
+		in, out []Timestamp
+	}{
+		{
+			lease: Lease{Expiration: ts1K, MaxOffset: time.Duration(ts1K.WallTime)},
+			out:   mk(0, 100, 500, 999, 1000),
+		},
+		{
+			lease: Lease{Start: ts10, Expiration: ts1K, MaxOffset: time.Duration(500)},
+			// Timestamps are excluded via the grace period even before the
+			// lease's official expiration.
+			out: mk(500, 999, 1000, 1001, 2000),
+			// Note that the lease covers timestamps before its start timestamp.
+			in: mk(0, 9, 10, 300, 499),
+		},
+	} {
+		for _, ts := range test.in {
+			if !test.lease.Covers(ts) {
+				t.Errorf("%d: should contain %s", i, ts)
+			}
+		}
+		for _, ts := range test.out {
+			if test.lease.Covers(ts) {
+				t.Errorf("%d: must not contain %s", i, ts)
+			}
+		}
+	}
+}
+
 func BenchmarkValueSetBytes(b *testing.B) {
 	v := Value{}
 	bytes := make([]byte, 16)

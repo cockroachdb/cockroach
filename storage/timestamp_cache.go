@@ -102,6 +102,8 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 	tc.rCache.Clear()
 	tc.wCache.Clear()
 	tc.lowWater = clock.Now()
+	// TODO(tschottdorf): It's dangerous to inject timestamps (which will make
+	// it into the HLC) like that.
 	tc.lowWater.WallTime += clock.MaxOffset().Nanoseconds()
 	tc.latest = tc.lowWater
 }
