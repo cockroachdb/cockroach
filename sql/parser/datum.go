@@ -721,40 +721,22 @@ func (d DInterval) Compare(other Datum) int {
 
 // HasPrev implements the Datum interface.
 func (d DInterval) HasPrev() bool {
-	return true
+	return false
 }
 
 // Prev implements the Datum interface.
 func (d DInterval) Prev() Datum {
-	// TODO(dan): It seems like the hard parts of this logic belong in
-	// util/duration somehow.
-	prevD := d
-	if prevD.Nanos != math.MinInt64 {
-		prevD.Nanos--
-	} else {
-		// This is a bit hard because we might have to shift nanos over.
-		panic("TODO(dan)")
-	}
-	return prevD
+	panic(d.Type() + ".Prev() not supported")
 }
 
 // HasNext implements the Datum interface.
 func (d DInterval) HasNext() bool {
-	return true
+	return false
 }
 
 // Next implements the Datum interface.
 func (d DInterval) Next() Datum {
-	// TODO(dan): It seems like the hard parts of this logic belong in
-	// util/duration somehow.
-	nextD := d
-	if nextD.Nanos != math.MaxInt64 {
-		nextD.Nanos++
-	} else {
-		// This is a bit hard because we might have to shift nanos over.
-		panic("TODO(dan)")
-	}
-	return nextD
+	panic(d.Type() + ".Next() not supported")
 }
 
 // IsMax implements the Datum interface.
