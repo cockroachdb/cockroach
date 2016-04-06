@@ -519,7 +519,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %token <str>   HAVING HIGH HOUR
 
 %token <str>   IF IFNULL IN
-%token <str>   INDEX INDEXES INITIALLY 
+%token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
@@ -1692,29 +1692,29 @@ opt_transaction:
 | /* EMPTY */ {}
 
 opt_to_savepoint:
-  TRANSACTION 
+  TRANSACTION
   {
     $$ = ""
   }
-| TRANSACTION TO savepoint_name 
+| TRANSACTION TO savepoint_name
   {
     $$ = $3
   }
-| TO savepoint_name 
+| TO savepoint_name
   {
     $$ = $2
   }
-| /* EMPTY */ 
+| /* EMPTY */
   {
-    $$ = "" 
+    $$ = ""
   }
 
 savepoint_name:
-  SAVEPOINT name 
+  SAVEPOINT name
   {
     $$ = $2
   }
-| name 
+| name
   {
     $$ = $1
   }
