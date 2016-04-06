@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -325,7 +326,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	}
 
 	const badTablePath = "databases/system/tables/" + fakename
-	const tableErrPattern = `table \\"` + fakename + `\\" does not exist`
+	const tableErrPattern = `table \\"system.` + fakename + `\\" does not exist`
 	if err := apiGet(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -338,9 +339,9 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 
 	const fakeTable = "users;DROP DATABASE system;"
 	const path = "databases/system/tables/" + fakeTable
-	const errPattern = `table \\"` + fakeTable + `\\" does not exist`
-	if err := apiGet(s, path, nil); !testutils.IsError(err, errPattern) {
-		t.Fatalf("unexpected error: %s", err)
+	const errPattern = fakeTable + `\\\"\" does not exist`
+	if err := apiGet(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
+		t.Fatalf("unexpected error: %s\nexpected: %s", err, errPattern)
 	}
 }
 

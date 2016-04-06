@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+func databaseDoesNotExistError(name string) error {
+	return fmt.Errorf("database %q does not exist", name)
+}
+
 // databaseKey implements descriptorKey.
 type databaseKey struct {
 	name string
@@ -75,11 +79,25 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 	}
 }
 
-// getDatabaseDesc looks up the database descriptor given its name.
-func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
+// getDatabaseDescEx looks up the database descriptor given its name.
+func (p *planner) getDatabaseDescEx(name string) (*DatabaseDescriptor, *roachpb.Error) {
 	desc := &DatabaseDescriptor{}
-	if pErr := p.getDescriptor(databaseKey{name}, desc); pErr != nil {
+	found, pErr := p.getDescriptor(databaseKey{name}, desc)
+	if !found {
 		return nil, pErr
+	}
+	return desc, pErr
+}
+
+// getDatabaseDesc is like getDatabaseDescEx but returns an error if the
+// database doesn't exist.
+func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
+	desc, pErr := p.getDatabaseDescEx(name)
+	if pErr != nil {
+		return nil, pErr
+	}
+	if desc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(name))
 	}
 	return desc, nil
 }
@@ -119,6 +137,15 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 	}
 
 	return database, database.Validate()
+}
+
+func getKeysForDatabaseDescriptor(
+	dbDesc *DatabaseDescriptor,
+) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
+	zoneKey = MakeZoneKey(dbDesc.ID)
+	nameKey = MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
+	descKey = MakeDescMetadataKey(dbDesc.ID)
+	return
 }
 
 func (p *planner) getDatabaseID(name string) (ID, *roachpb.Error) {

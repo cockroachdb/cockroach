@@ -42,11 +42,6 @@ type editNodeBase struct {
 }
 
 func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, autoCommit bool, priv privilege.Kind) (editNodeBase, *roachpb.Error) {
-	// TODO(marcb): We can't use the cached descriptor here because a recent
-	// update of the schema (e.g. the addition of an index) might not be
-	// reflected in the cached version (yet). Perhaps schema modification
-	// routines such as CREATE INDEX should not return until the schema change
-	// has been pushed everywhere.
 	tableDesc, pErr := p.getAliasedTableLease(t)
 	if pErr != nil {
 		return editNodeBase{}, pErr
