@@ -915,23 +915,37 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *r
 //
 // TODO(tschottdorf): find a way not to update the batch txn
 //   which should be immutable.
-func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) {
+func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if consultsTimestampCache(args) {
 			header := args.Header()
-			key := header.Key
-			// On BeginTransaction, we consult the transaction key.  We
-			// leave write timestamp cache entries on EndTransaction, Which
-			// prevents replays.
+			// BeginTransaction is a special case. We use the transaction
+			// key to look for an entry which would indicate this transaction
+			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
-				key = keys.TransactionKey(key, ba.GetTxnID())
+				key := keys.TransactionKey(header.Key, ba.GetTxnID())
+				wTS, wOK := r.mu.tsCache.GetMaxWrite(key, nil, nil)
+				if wOK {
+					return roachpb.NewError(roachpb.NewTransactionReplayError())
+				} else if !wTS.Less(ba.Txn.Timestamp) {
+					// This is a crucial bit of code. The timestamp cache is
+					// reset with the current time + max offset as the low water
+					// mark, so if this replica recently assumed leadership,
+					// this case will be true for new txns, even if they're not
+					// a replay. We move the timestamp forward and return retry.
+					// If it's really a replay, it won't retry.
+					txn := ba.Txn.Clone()
+					txn.Timestamp.Forward(wTS.Next())
+					return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), &txn)
+				}
+				continue
 			}
 
 			// Forward the timestamp if there's been a more recent read.
-			rTS := r.mu.tsCache.GetMaxRead(key, header.EndKey, ba.GetTxnID())
+			rTS, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey, ba.GetTxnID())
 			if ba.Txn != nil {
 				ba.Txn.Timestamp.Forward(rTS.Next())
 			} else {
@@ -942,7 +956,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) {
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS := r.mu.tsCache.GetMaxWrite(key, header.EndKey, ba.GetTxnID())
+			wTS, _ := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey, ba.GetTxnID())
 			if ba.Txn != nil {
 				if !wTS.Less(ba.Txn.Timestamp) {
 					ba.Txn.Timestamp.Forward(wTS.Next())
@@ -953,6 +967,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) {
 			}
 		}
 	}
+	return nil
 }
 
 // addAdminCmd executes the command directly. There is no interaction
@@ -1105,7 +1120,9 @@ func (r *Replica) addWriteCmd(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	r.applyTimestampCache(&ba)
+	if pErr := r.applyTimestampCache(&ba); pErr != nil {
+		return nil, pErr
+	}
 
 	log.Trace(ctx, "raft")
 

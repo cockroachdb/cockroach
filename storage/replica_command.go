@@ -333,13 +333,6 @@ func (r *Replica) BeginTransaction(
 	clonedTxn := h.Txn.Clone()
 	reply.Txn = &clonedTxn
 
-	// This can happen on BeginTransaction replays which occur
-	// after an EndTransaction has already written to the write
-	// timestamp cache, causing WriteTooOld to be set.
-	if reply.Txn.WriteTooOld {
-		return reply, roachpb.NewTransactionReplayError()
-	}
-
 	// Verify transaction does not already exist.
 	txn := roachpb.Transaction{}
 	ok, err := engine.MVCCGetProto(batch, key, roachpb.ZeroTimestamp, true, nil, &txn)

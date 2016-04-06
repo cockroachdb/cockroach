@@ -773,7 +773,6 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 //   R2(B) DR1(A-C) I2(B) C2 SC1(A-C) W1(D,A+B) C1
 func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(spencer): see #5404")
 	txn1 := "DR(A-C) SC(A-C) W(D,A+B) C"
 	txn2 := "R(B) I(B) C"
 	verify := &verifier{

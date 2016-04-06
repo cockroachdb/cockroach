@@ -1020,11 +1020,9 @@ func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) 
 	s := createTestDB(t)
 	reg := metric.NewRegistry()
 	txnMetrics := NewTxnMetrics(reg)
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	sender := NewTxnCoordSender(s.distSender, clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
+	sender := NewTxnCoordSender(s.distSender, s.Clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
 
-	return manual, sender, func() {
+	return s.Manual, sender, func() {
 		teardownHeartbeats(sender)
 		s.Stop()
 	}
