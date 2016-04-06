@@ -190,12 +190,15 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *Replica
+	var partialDesc *roachpb.RangeDescriptor
 	for _, store := range ls.storeMap {
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
 				log.Warningf("range not contained in one range: [%s,%s), but have [%s,%s)",
 					start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey)
+				partialDesc = tmpRng.Desc()
+				break
 			}
 			continue
 		}
@@ -209,7 +212,7 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 			"range %+v exists on additional store: %+v", rng, store)
 	}
 	if replica == nil {
-		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), nil)
+		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), partialDesc)
 	}
 	return rangeID, replica, err
 }
@@ -237,7 +240,7 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 // the descriptors for the given (meta) key.
 func (ls *Stores) RangeLookup(
 	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -251,9 +254,10 @@ func (ls *Stores) RangeLookup(
 	})
 	br, pErr := ls.Send(context.TODO(), ba)
 	if pErr != nil {
-		return nil, pErr
+		return nil, nil, pErr
 	}
-	return br.Responses[0].GetInner().(*roachpb.RangeLookupResponse).Ranges, nil
+	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
+	return resp.Ranges, resp.PrefetchedRanges, nil
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
