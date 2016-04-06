@@ -213,9 +213,14 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 	return tableDesc.Version, nil
 }
 
-// Publish a new version of a table descriptor. The update closure may be
-// called multiple times if retries occur: make sure it does not have side
-// effects.
+// Publish updates a table descriptor. It also maintains the invariant that
+// there are at most two versions of the descriptor out in the wild at any time
+// by first waiting for all nodes to be on the current (pre-update) version of
+// the table desc.
+// The update closure is called after the wait, and it provides the new version
+// of the descriptor to be written. In a multi-step schema operation, this
+// update should perform a single step.  The closure may be called multiple
+// times if retries occur; make sure it does not have side effects.
 func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *roachpb.Error {
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
@@ -255,8 +260,7 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 				return roachpb.NewError(&roachpb.LeaseVersionChangedError{})
 			}
 
-			// Run the update closure which is intended to perform a single step in a
-			// multi-step schema change operation.
+			// Run the update closure.
 			if err := update(tableDesc); err != nil {
 				return roachpb.NewError(err)
 			}
