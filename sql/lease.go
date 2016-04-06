@@ -567,8 +567,6 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 				// another operation being performed within the transaction. If we
 				// release the lease immediately the transaction will necessarily abort
 				// on the next operation due to not being able to get the lease.
-				// TODO(andrei): ... but would the refcount be 0 above if the
-				// transaction were active?
 			}
 			t.active.remove(s)
 			return t.releaseNodeLease(s, store)
