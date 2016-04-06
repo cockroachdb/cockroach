@@ -65,9 +65,12 @@ func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease
 		if pErr != nil {
 			return pErr
 		}
+		if tableDesc == nil {
+			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
+		}
 
 		if len(tableDesc.Mutations) == 0 || tableDesc.Mutations[0].MutationID != sc.mutationID {
-			// Nothing to do.
+			// Nothing to do. Someone else executed the mutations already.
 			return nil
 		}
 
@@ -114,6 +117,9 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 		if err != nil {
 			return err
 		}
+		if tableDesc == nil {
+			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
+		}
 
 		// A second to deal with the time uncertainty across nodes.
 		// It is perfectly valid for two or more goroutines to hold a valid
@@ -141,6 +147,9 @@ func (sc *SchemaChanger) findTableWithLease(
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
+	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
 	if tableDesc.Lease == nil {
 		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
@@ -239,6 +248,8 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 }
 
 // MaybeIncrementVersion increments the version if needed.
+// If the version is to be incremented, it also assures that all nodes are on
+// the current (pre-increment) version of the descriptor.
 func (sc *SchemaChanger) MaybeIncrementVersion() *roachpb.Error {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		if !desc.UpVersion {
@@ -318,6 +329,9 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 	return err
 }
 
+// done finalizes the mutations (adds new cols/indexes to the table).
+// It ensures that all nodes are on the current (pre-update) version of the
+// schema.
 func (sc *SchemaChanger) done() *roachpb.Error {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		i := 0
@@ -335,6 +349,7 @@ func (sc *SchemaChanger) done() *roachpb.Error {
 			// the version.
 			return &roachpb.DidntUpdateDescriptorError{}
 		}
+		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]
 		return nil
 	})
@@ -394,6 +409,11 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
 		if pErr != nil {
 			return pErr
+		}
+		if tableDesc == nil {
+			// The table has been deleted => no more schema changes to be done for this table.
+			done = true
+			return nil
 		}
 		if sc.mutationID == invalidMutationID {
 			if tableDesc.UpVersion {
