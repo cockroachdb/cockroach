@@ -354,7 +354,7 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	if local := !rk.Equal(k); local {
 		// The upper bound for a range-local key that addresses to key k
 		// is the key directly after k.
-		rk = rk.ShallowNext()
+		rk = rk.Next()
 	}
 	return rk, nil
 }
@@ -431,7 +431,7 @@ func MetaScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
 		return Meta1KeyMax, Meta1Prefix.PrefixEnd(), nil
 	}
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	return key.ShallowNext().AsRawKey(), key[:len(Meta1Prefix)].PrefixEnd().AsRawKey(), nil
+	return key.Next().AsRawKey(), key[:len(Meta1Prefix)].PrefixEnd().AsRawKey(), nil
 }
 
 // MetaReverseScanBounds returns the range [start,end) within which the desired
@@ -448,7 +448,7 @@ func MetaReverseScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
 	if key.Equal(Meta2Prefix) {
 		// Special case Meta2Prefix: this is the first key in Meta2, and the scan
 		// interval covers all of Meta1.
-		return Meta1Prefix, key.ShallowNext().AsRawKey(), nil
+		return Meta1Prefix, key.Next().AsRawKey(), nil
 	}
 	// Otherwise find the first entry greater than the given key and find the last entry
 	// in the same prefix. For MVCCReverseScan the endKey is exclusive, if we want to find

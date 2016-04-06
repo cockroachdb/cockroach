@@ -923,7 +923,8 @@ func TestStoreSplitReadRace(t *testing.T) {
 	defer config.TestingDisableTableSplits()()
 	splitKey := roachpb.Key("a")
 	key := func(i int) roachpb.Key {
-		return append(splitKey.Next(), []byte(fmt.Sprintf("%03d", i))...)
+		splitCopy := append([]byte(nil), splitKey.Next()...)
+		return append(splitCopy, []byte(fmt.Sprintf("%03d", i))...)
 	}
 
 	getContinues := make(chan struct{})

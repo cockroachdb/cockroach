@@ -76,16 +76,10 @@ func (rk RKey) Equal(other []byte) bool {
 }
 
 // Next returns the RKey that sorts immediately after the given one.
-func (rk RKey) Next() RKey {
-	return RKey(BytesNext(rk))
-}
-
-// ShallowNext returns the RKey that sorts immediately after the
-// given one, using extra capacity of the recevier key if possible.
 // The method may only take a shallow copy of the RKey, so both the
 // receiver and the return value should be treated as immutable after.
-func (rk RKey) ShallowNext() RKey {
-	return RKey(BytesNextShallow(rk))
+func (rk RKey) Next() RKey {
+	return RKey(BytesNext(rk))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -107,26 +101,21 @@ func (rk RKey) String() string {
 // messages which refer to Cockroach keys.
 type Key []byte
 
-// BytesNext returns the next possible byte slice by appending an \x00.
+// BytesNext returns the next possible byte slice, using the extra capacity
+// of the provided slice if possible, and if not, appending an \x00.
 func BytesNext(b []byte) []byte {
-	// TODO(spencer): Do we need to enforce KeyMaxLength here?
-	// Switched to "make and copy" pattern in #4963 for performance.
-	bn := make([]byte, len(b)+1)
-	copy(bn, b)
-	bn[len(bn)-1] = 0
-	return bn
-}
-
-// BytesNextShallow returns the next possible byte slice, using the extra
-// capacity of the provided slice if possible.
-func BytesNextShallow(b []byte) []byte {
 	if cap(b) > len(b) {
 		bNext := b[:len(b)+1]
 		if bNext[len(bNext)-1] == 0 {
 			return bNext
 		}
 	}
-	return BytesNext(b)
+	// TODO(spencer): Do we need to enforce KeyMaxLength here?
+	// Switched to "make and copy" pattern in #4963 for performance.
+	bn := make([]byte, len(b)+1)
+	copy(bn, b)
+	bn[len(bn)-1] = 0
+	return bn
 }
 
 func bytesPrefixEnd(b []byte) []byte {
@@ -144,17 +133,11 @@ func bytesPrefixEnd(b []byte) []byte {
 	return b
 }
 
-// Next returns the next key in lexicographic sort order.
-func (k Key) Next() Key {
-	return Key(BytesNext(k))
-}
-
-// ShallowNext returns the next key in lexicographic sort order, using
-// extra capacity of the recevier key if possible. The method may only
+// Next returns the next key in lexicographic sort order. The method may only
 // take a shallow copy of the Key, so both the receiver and the return
 // value should be treated as immutable after.
-func (k Key) ShallowNext() Key {
-	return Key(BytesNextShallow(k))
+func (k Key) Next() Key {
+	return Key(BytesNext(k))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
