@@ -20,8 +20,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"reflect"
 	"sort"
@@ -70,6 +72,11 @@ func getJSON(url string) (interface{}, error) {
 	return jI, nil
 }
 
+// debugURL returns the root debug URL.
+func debugURL(s *TestServer) string {
+	return s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint
+}
+
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
@@ -77,7 +84,27 @@ func TestAdminDebugExpVar(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	jI, err := getJSON(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + "vars")
+	jI, err := getJSON(debugURL(s) + "vars")
+	if err != nil {
+		t.Fatalf("failed to fetch JSON: %v", err)
+	}
+	j := jI.(map[string]interface{})
+	if _, ok := j["cmdline"]; !ok {
+		t.Error("cmdline not found in JSON response")
+	}
+	if _, ok := j["memstats"]; !ok {
+		t.Error("memstats not found in JSON response")
+	}
+}
+
+// TestAdminDebugMetrics verifies that cmdline and memstats variables are
+// available via the /debug/metrics link.
+func TestAdminDebugMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	jI, err := getJSON(debugURL(s) + "metrics")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -97,7 +124,7 @@ func TestAdminDebugPprof(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 
-	body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + "pprof/block")
+	body, err := getText(debugURL(s) + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +135,7 @@ func TestAdminDebugPprof(t *testing.T) {
 
 // TestAdminDebugTrace verifies that the net/trace endpoints are available
 // via /debug/{requests,events}.
-func TestAdminNetTrace(t *testing.T) {
+func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()
@@ -121,12 +148,54 @@ func TestAdminNetTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := getText(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + c.segment)
+		body, err := getText(debugURL(s) + c.segment)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Contains(body, []byte(c.search)) {
 			t.Errorf("expected %s to be contained in %s", c.search, body)
+		}
+	}
+}
+
+// TestAdminDebugRedirect verifies that the /debug/ endpoint is redirected to on
+// incorrect /debug/ paths.
+func TestAdminDebugRedirect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	expURL := debugURL(s)
+	origURL := expURL + "incorrect"
+
+	// There are no particular permissions on admin endpoints, TestUser is fine.
+	client, err := testutils.NewTestBaseContext(TestUser).GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Don't follow redirects automatically.
+	redirectAttemptedError := errors.New("redirect")
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return redirectAttemptedError
+	}
+
+	resp, err := client.Get(origURL)
+	if urlError, ok := err.(*url.Error); ok && urlError.Err == redirectAttemptedError {
+		// Ignore the redirectAttemptedError.
+		err = nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusMovedPermanently {
+			t.Errorf("expected status code %d; got %d", http.StatusMovedPermanently, resp.StatusCode)
+		}
+		if redirectURL, err := resp.Location(); err != nil {
+			t.Error(err)
+		} else if foundURL := redirectURL.String(); foundURL != expURL {
+			t.Errorf("expected location %s; got %s", expURL, foundURL)
 		}
 	}
 }
