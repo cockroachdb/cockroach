@@ -164,7 +164,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
-			if _, err := marshalColumnValue(cols[i], d, p.evalCtx.Args); err != nil {
+			if err := assignArgType(cols[i], d, p.evalCtx.Args); err != nil {
 				return nil, roachpb.NewError(err)
 			}
 		}
@@ -264,8 +264,11 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		// happen before index encoding because certain datum types (i.e. tuple)
 		// cannot be used as index values.
 		for i, val := range newVals {
+			if err := assignArgType(cols[i], val, p.evalCtx.Args); err != nil {
+				return nil, roachpb.NewError(err)
+			}
 			var mErr error
-			if marshalled[i], mErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mErr != nil {
+			if marshalled[i], mErr = marshalColumnValue(cols[i], val); mErr != nil {
 				return nil, roachpb.NewError(mErr)
 			}
 		}
@@ -322,7 +325,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		}
 
 		// rowVals[:len(tableDesc.Columns)] have been updated with the new values above.
-		if err := rh.append(rowVals[:len(tableDesc.Columns)]); err != nil {
+		if _, err := rh.append(rowVals[:len(tableDesc.Columns)]); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

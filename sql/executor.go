@@ -329,6 +329,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
+	log.Warningf("Executor.execRequest: %s", sql)
 	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
 	if err != nil {
 		pErr := roachpb.NewError(err)
@@ -454,13 +455,17 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 // If the plan is a returningNode we can just use the `rowCount`,
 // otherwise we fall back to counting via plan.Next().
 func countRowsAffected(p planNode) int {
-	if a, ok := p.(*returningNode); ok {
-		return a.rowCount
+	if a, ok := p.(planNodeFastPath); ok {
+		if res, count := a.FastPathResults(); res {
+			return count
+		}
 	}
+
 	count := 0
 	for p.Next() {
 		count++
 	}
+
 	return count
 }
 
@@ -876,6 +881,10 @@ func (e *Executor) execStmt(
 	var result Result
 	plan, pErr := planMaker.makePlan(stmt, autoCommit)
 	if pErr != nil {
+		return result, pErr
+	}
+
+	if pErr := plan.Start(); pErr != nil {
 		return result, pErr
 	}
 
