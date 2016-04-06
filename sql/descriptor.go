@@ -40,7 +40,7 @@ var _ descriptorProto = &DatabaseDescriptor{}
 var _ descriptorProto = &TableDescriptor{}
 
 // descriptorKey is the interface implemented by both
-// DatabaseKey and TableKey. It is used to easily get the
+// databaseKey and tableKey. It is used to easily get the
 // descriptor key and plain name.
 type descriptorKey interface {
 	Key() roachpb.Key
@@ -126,37 +126,44 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 
 // getDescriptor looks up the descriptor for `plainKey`, validates it,
 // and unmarshals it into `descriptor`.
-func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto) *roachpb.Error {
+// If `plainKey` doesn't exist, returns false and nil error.
+// In most cases you'll want to use wrappers: `getDatabaseDesc` or
+// `getTableDesc`.
+func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto,
+) (bool, *roachpb.Error) {
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !gr.Exists() {
-		return roachpb.NewUErrorf("%s %q does not exist", descriptor.TypeName(), plainKey.Name())
+		return false, nil
 	}
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
 	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
-		return pErr
+		return false, pErr
 	}
 
 	switch t := descriptor.(type) {
 	case *TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return roachpb.NewErrorf("%q is not a table", plainKey.Name())
+			return false, roachpb.NewErrorf("%q is not a table", plainKey.Name())
 		}
 		*t = *table
 	case *DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return roachpb.NewErrorf("%q is not a database", plainKey.Name())
+			return false, roachpb.NewErrorf("%q is not a database", plainKey.Name())
 		}
 		*t = *database
 	}
 
-	return roachpb.NewError(descriptor.Validate())
+	if err := descriptor.Validate(); err != nil {
+		return false, roachpb.NewError(err)
+	}
+	return true, nil
 }
 
 // getDescriptorsFromTargetList examines a TargetList and fetches the
