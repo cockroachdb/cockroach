@@ -265,20 +265,24 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 	}
 }
 
-// GetMaxRead returns the maximum read timestamps which overlap
-// the interval spanning from start to end. Cached timestamps matching
-// the specified txnID are not considered. If no part of the specified
-// range is overlapped by timestamps from different transactions in the
-// cache, the low water timestamp is returned for the read timestamps.
-func (tc *TimestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) roachpb.Timestamp {
+// GetMaxRead returns the maximum read timestamp which overlaps the
+// interval spanning from start to end. Cached timestamps matching the
+// specified txnID are not considered. If no part of the specified
+// range is overlapped by timestamps from different transactions in
+// the cache, the low water timestamp is returned for the read
+// timestamps. Also returns an "ok" bool, indicating whether an
+// explicit match of the interval was found in the cache.
+func (tc *TimestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (roachpb.Timestamp, bool) {
 	return tc.getMax(start, end, txnID, true)
 }
 
-// GetMaxWrite returns the maximum write timestamps which overlap
-// the interval spanning from start to end. Cached timestamps matching
-// the specified txnID are not considered. If no part of the specified
-// range is overlapped by timestamps from different transactions in the
-// cache, the low water timestamp is returned for the write timestamps.
+// GetMaxWrite returns the maximum write timestamp which overlaps the
+// interval spanning from start to end. Cached timestamps matching the
+// specified txnID are not considered. If no part of the specified
+// range is overlapped by timestamps from different transactions in
+// the cache, the low water timestamp is returned for the write
+// timestamps. Also returns an "ok" bool, indicating whether an
+// explicit match of the interval was found in the cache.
 //
 // The txn ID prevents restarts with a pattern like: read("a"),
 // write("a"). The read adds a timestamp for "a". Then the write (for
@@ -286,14 +290,15 @@ func (tc *TimestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) r
 // forced to increment it. This allows timestamps from the same txn
 // to be ignored because the write would instead get the low water
 // timestamp.
-func (tc *TimestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) roachpb.Timestamp {
+func (tc *TimestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) (roachpb.Timestamp, bool) {
 	return tc.getMax(start, end, txnID, false)
 }
 
-func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) roachpb.Timestamp {
+func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) (roachpb.Timestamp, bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
+	var ok bool
 	max := tc.lowWater
 	cache := tc.wCache
 	if readTSCache {
@@ -303,11 +308,12 @@ func (tc *TimestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readT
 		ce := o.Value.(*cacheValue)
 		if ce.txnID == nil || txnID == nil || !roachpb.TxnIDEqual(txnID, ce.txnID) {
 			if max.Less(ce.timestamp) {
+				ok = true
 				max = ce.timestamp
 			}
 		}
 	}
-	return max
+	return max, ok
 }
 
 // MergeInto merges all entries from this timestamp cache into the
