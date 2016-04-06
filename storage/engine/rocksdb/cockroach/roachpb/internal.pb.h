@@ -226,19 +226,19 @@ class InternalTimeSeriesSample : public ::google::protobuf::Message {
   ::google::protobuf::int32 offset() const;
   void set_offset(::google::protobuf::int32 value);
 
-  // optional uint32 count = 6;
-  bool has_count() const;
-  void clear_count();
-  static const int kCountFieldNumber = 6;
-  ::google::protobuf::uint32 count() const;
-  void set_count(::google::protobuf::uint32 value);
-
   // optional double sum = 7;
   bool has_sum() const;
   void clear_sum();
   static const int kSumFieldNumber = 7;
   double sum() const;
   void set_sum(double value);
+
+  // optional uint32 count = 6;
+  bool has_count() const;
+  void clear_count();
+  static const int kCountFieldNumber = 6;
+  ::google::protobuf::uint32 count() const;
+  void set_count(::google::protobuf::uint32 value);
 
   // optional double max = 8;
   bool has_max() const;
@@ -258,10 +258,10 @@ class InternalTimeSeriesSample : public ::google::protobuf::Message {
  private:
   inline void set_has_offset();
   inline void clear_has_offset();
-  inline void set_has_count();
-  inline void clear_has_count();
   inline void set_has_sum();
   inline void clear_has_sum();
+  inline void set_has_count();
+  inline void clear_has_count();
   inline void set_has_max();
   inline void clear_has_max();
   inline void set_has_min();
@@ -270,9 +270,9 @@ class InternalTimeSeriesSample : public ::google::protobuf::Message {
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  double sum_;
   ::google::protobuf::int32 offset_;
   ::google::protobuf::uint32 count_;
-  double sum_;
   double max_;
   double min_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto();
@@ -396,39 +396,15 @@ inline void InternalTimeSeriesSample::set_offset(::google::protobuf::int32 value
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.offset)
 }
 
-// optional uint32 count = 6;
-inline bool InternalTimeSeriesSample::has_count() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void InternalTimeSeriesSample::set_has_count() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void InternalTimeSeriesSample::clear_has_count() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void InternalTimeSeriesSample::clear_count() {
-  count_ = 0u;
-  clear_has_count();
-}
-inline ::google::protobuf::uint32 InternalTimeSeriesSample::count() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.count)
-  return count_;
-}
-inline void InternalTimeSeriesSample::set_count(::google::protobuf::uint32 value) {
-  set_has_count();
-  count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.count)
-}
-
 // optional double sum = 7;
 inline bool InternalTimeSeriesSample::has_sum() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void InternalTimeSeriesSample::set_has_sum() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void InternalTimeSeriesSample::clear_has_sum() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void InternalTimeSeriesSample::clear_sum() {
   sum_ = 0;
@@ -442,6 +418,30 @@ inline void InternalTimeSeriesSample::set_sum(double value) {
   set_has_sum();
   sum_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.sum)
+}
+
+// optional uint32 count = 6;
+inline bool InternalTimeSeriesSample::has_count() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void InternalTimeSeriesSample::set_has_count() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void InternalTimeSeriesSample::clear_has_count() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void InternalTimeSeriesSample::clear_count() {
+  count_ = 0u;
+  clear_has_count();
+}
+inline ::google::protobuf::uint32 InternalTimeSeriesSample::count() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalTimeSeriesSample.count)
+  return count_;
+}
+inline void InternalTimeSeriesSample::set_count(::google::protobuf::uint32 value) {
+  set_has_count();
+  count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.InternalTimeSeriesSample.count)
 }
 
 // optional double max = 8;

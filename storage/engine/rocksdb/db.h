@@ -80,6 +80,9 @@ void DBClose(DBEngine* db);
 // complete.
 DBStatus DBFlush(DBEngine* db);
 
+// Forces an immediate compaction over all keys.
+DBStatus DBCompact(DBEngine* db);
+
 // Returns the approximate file system spaced used by keys in the
 // range [start,end].
 uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end);

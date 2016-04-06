@@ -76,10 +76,10 @@ type InternalTimeSeriesSample struct {
 	// determined by the value of the "sample_duration_milliseconds" field of
 	// the TimeSeriesData collection.
 	Offset int32 `protobuf:"varint,1,opt,name=offset" json:"offset"`
-	// Count of measurements taken within this sample.
-	Count uint32 `protobuf:"varint,6,opt,name=count" json:"count"`
 	// Sum of all measurements.
 	Sum float64 `protobuf:"fixed64,7,opt,name=sum" json:"sum"`
+	// Count of measurements taken within this sample.
+	Count uint32 `protobuf:"varint,6,opt,name=count" json:"count"`
 	// Maximum encountered measurement in this sample.
 	Max *float64 `protobuf:"fixed64,8,opt,name=max" json:"max,omitempty"`
 	// Minimum encountered measurement in this sample.

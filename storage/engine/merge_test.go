@@ -61,8 +61,14 @@ func appender(s string) []byte {
 }
 
 // timeSeries generates a simple InternalTimeSeriesData object which starts
-// at the given timestamp and has samples of the given duration.
+// at the given timestamp and has samples of the given duration. The object is
+// stored in an MVCCMetadata object and marshalled to bytes.
 func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
+	tsv := timeSeriesAsValue(start, duration, samples...)
+	return mustMarshal(&MVCCMetadata{RawBytes: tsv.RawBytes})
+}
+
+func timeSeriesAsValue(start int64, duration int64, samples ...tsSample) roachpb.Value {
 	ts := &roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: start,
 		SampleDurationNanos: duration,
@@ -83,7 +89,7 @@ func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 	if err := v.SetProto(ts); err != nil {
 		panic(err)
 	}
-	return mustMarshal(&MVCCMetadata{RawBytes: v.RawBytes})
+	return v
 }
 
 // TestGoMerge tests the function goMerge but not the integration with
@@ -189,7 +195,7 @@ func TestGoMerge(t *testing.T) {
 			}...),
 			timeSeries(testtime, 1000, []tsSample{
 				{1, 1, 5, 5, 5},
-				{2, 2, 10, 5, 5},
+				{2, 1, 5, 5, 5},
 			}...),
 		},
 		{
@@ -230,8 +236,8 @@ func TestGoMerge(t *testing.T) {
 				{3, 1, 5, 5, 5},
 			}...),
 			timeSeries(testtime, 1000, []tsSample{
-				{1, 3, 115, 100, 5},
-				{2, 2, 10, 5, 5},
+				{1, 1, 100, 100, 100},
+				{2, 1, 5, 5, 5},
 				{3, 1, 5, 5, 5},
 			}...),
 		},
