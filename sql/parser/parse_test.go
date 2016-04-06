@@ -438,6 +438,7 @@ func TestParse2(t *testing.T) {
 		{`SELECT DECIMAL 'foo'`, `SELECT CAST('foo' AS DECIMAL)`},
 		{`SELECT DATE 'foo'`, `SELECT CAST('foo' AS DATE)`},
 		{`SELECT TIMESTAMP 'foo'`, `SELECT CAST('foo' AS TIMESTAMP)`},
+		{`SELECT TIMESTAMPTZ 'foo'`, `SELECT CAST('foo' AS TIMESTAMP)`},
 		{`SELECT INTERVAL 'foo'`, `SELECT CAST('foo' AS INTERVAL)`},
 		{`SELECT CHAR 'foo'`, `SELECT CAST('foo' AS CHAR)`},
 
