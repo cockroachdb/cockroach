@@ -350,12 +350,12 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				txn := txnMeta.txn.Clone()
 				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(),
 					&txn)
-				defer tc.cleanupTxn(ctx, txn)
+				tc.cleanupTxnLocked(ctx, txn)
 			case txnMeta.txn.Status == roachpb.COMMITTED:
 				txn := txnMeta.txn.Clone()
 				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
 					"transaction is already committed"), &txn)
-				defer tc.cleanupTxn(ctx, txn)
+				tc.cleanupTxnLocked(ctx, txn)
 			}
 			tc.Unlock()
 			if pErr != nil {
@@ -467,7 +467,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}()
 	}
 	if br.Txn.Status != roachpb.PENDING {
-		tc.cleanupTxn(ctx, *br.Txn)
+		tc.Lock()
+		tc.cleanupTxnLocked(ctx, *br.Txn)
+		tc.Unlock()
 	}
 	return br, nil
 }
@@ -526,13 +528,11 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 	return nil
 }
 
-// cleanupTxn is called when a transaction ends. The transaction record is
-// updated and the heartbeat goroutine signaled to clean up the transaction
+// cleanupTxnLocked is called when a transaction ends. The transaction record
+// is updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
-func (tc *TxnCoordSender) cleanupTxn(ctx context.Context, txn roachpb.Transaction) {
+func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
 	log.Trace(ctx, "coordinator stops")
-	tc.Lock()
-	defer tc.Unlock()
 	txnMeta, ok := tc.txns[*txn.ID]
 	// The heartbeat might've already removed the record. Or we may have already
 	// closed txnEnd but we are racing with the heartbeat cleanup.
@@ -752,19 +752,30 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 func (tc *TxnCoordSender) updateState(
 	startNS int64, ctx context.Context, ba roachpb.BatchRequest,
 	br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-	newTxn := &roachpb.Transaction{}
+
+	tc.Lock()
+	defer tc.Unlock()
+
+	if ba.Txn == nil {
+		// Not a transactional request.
+		return pErr
+	}
+
+	var newTxn roachpb.Transaction
 	newTxn.Update(ba.Txn)
 	if pErr == nil {
 		newTxn.Update(br.Txn)
-	} else {
-		newTxn.Update(pErr.GetTxn())
+	} else if errTxn := pErr.GetTxn(); errTxn != nil {
+		newTxn.Update(errTxn)
 	}
 
 	switch t := pErr.GetDetail().(type) {
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
 		// timestamp regressions; consider txn dead.
-		defer tc.cleanupTxn(ctx, *pErr.GetTxn())
+		if txn := pErr.GetTxn(); txn != nil {
+			defer tc.cleanupTxnLocked(ctx, *txn)
+		}
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:
@@ -784,7 +795,7 @@ func (tc *TxnCoordSender) updateState(
 		newTxn.Priority = pErr.GetTxn().Priority
 		// Clean up the freshly aborted transaction in defer(), avoiding a
 		// race with the state update below.
-		defer tc.cleanupTxn(ctx, *newTxn)
+		defer tc.cleanupTxnLocked(ctx, newTxn)
 	case *roachpb.TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're
 		// just ahead of the pushee.
@@ -811,21 +822,8 @@ func (tc *TxnCoordSender) updateState(
 		}
 	}
 
-	if pErr != nil && pErr.GetTxn() != nil {
-		// Avoid changing existing errors because sometimes they escape into
-		// goroutines and then there are races. Fairly sure there isn't one
-		// here, but better safe than sorry.
-		pErrShallow := *pErr
-		pErrShallow.SetTxn(newTxn)
-		pErr = &pErrShallow
-	}
-
-	if newTxn.ID == nil {
-		return pErr
-	}
 	txnID := *newTxn.ID
-	tc.Lock()
-	defer tc.Unlock()
+
 	txnMeta := tc.txns[txnID]
 	// For successful transactional requests, keep the written intents and
 	// the updated transaction record to be sent along with the reply.
@@ -866,7 +864,7 @@ func (tc *TxnCoordSender) updateState(
 			if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
 				log.Trace(ctx, "coordinator spawns")
 				txnMeta = &txnMetadata{
-					txn:              *newTxn,
+					txn:              newTxn,
 					keys:             intentGroup,
 					firstUpdateNanos: startNS,
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
@@ -897,17 +895,31 @@ func (tc *TxnCoordSender) updateState(
 
 	// Update our record of this transaction, even on error.
 	if txnMeta != nil {
-		txnMeta.txn = *newTxn
+		txnMeta.txn.Update(&newTxn)
 		if !txnMeta.txn.Writing {
 			panic("tracking a non-writing txn")
 		}
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 	}
+
 	if pErr == nil {
 		// For successful transactional requests, always send the updated txn
-		// record back.
-		br.Txn = newTxn
+		// record back. Note that we make sure not to share data with newTxn
+		// (which may have made it into txnMeta).
+		if br.Txn != nil {
+			br.Txn.Update(&newTxn)
+		} else {
+			clonedTxn := newTxn.Clone()
+			br.Txn = &clonedTxn
+		}
+	} else if pErr.GetTxn() != nil {
+		// Avoid changing existing errors because sometimes they escape into
+		// goroutines and data races can occur.
+		pErrShallow := *pErr
+		pErrShallow.SetTxn(&newTxn) // SetTxn clones newTxn
+		pErr = &pErrShallow
 	}
+
 	return pErr
 }
 
