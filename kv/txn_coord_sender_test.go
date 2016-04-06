@@ -756,7 +756,9 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	s.Sender.cleanupTxn(context.Background(), txn.Proto)
+	s.Sender.Lock()
+	s.Sender.cleanupTxnLocked(context.Background(), txn.Proto)
+	s.Sender.Unlock()
 
 	ba = txn.NewBatch()
 	ba.InternalAddRequest(&roachpb.EndTransactionRequest{})
