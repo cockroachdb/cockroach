@@ -504,7 +504,7 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"experimental_uuid_v4": {
+	"uuid_v4": {
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeBytes,
