@@ -467,6 +467,15 @@ class RangeKeyMismatchError : public ::google::protobuf::Message {
   ::cockroach::roachpb::RangeDescriptor* release_mismatched_range();
   void set_allocated_mismatched_range(::cockroach::roachpb::RangeDescriptor* mismatched_range);
 
+  // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
+  bool has_suggested_range() const;
+  void clear_suggested_range();
+  static const int kSuggestedRangeFieldNumber = 4;
+  const ::cockroach::roachpb::RangeDescriptor& suggested_range() const;
+  ::cockroach::roachpb::RangeDescriptor* mutable_suggested_range();
+  ::cockroach::roachpb::RangeDescriptor* release_suggested_range();
+  void set_allocated_suggested_range(::cockroach::roachpb::RangeDescriptor* suggested_range);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeKeyMismatchError)
  private:
   inline void set_has_request_start_key();
@@ -475,6 +484,8 @@ class RangeKeyMismatchError : public ::google::protobuf::Message {
   inline void clear_has_request_end_key();
   inline void set_has_mismatched_range();
   inline void clear_has_mismatched_range();
+  inline void set_has_suggested_range();
+  inline void clear_has_suggested_range();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -482,6 +493,7 @@ class RangeKeyMismatchError : public ::google::protobuf::Message {
   ::google::protobuf::internal::ArenaStringPtr request_start_key_;
   ::google::protobuf::internal::ArenaStringPtr request_end_key_;
   ::cockroach::roachpb::RangeDescriptor* mismatched_range_;
+  ::cockroach::roachpb::RangeDescriptor* suggested_range_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2ferrors_2eproto();
@@ -3045,6 +3057,49 @@ inline void RangeKeyMismatchError::set_allocated_mismatched_range(::cockroach::r
     clear_has_mismatched_range();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.mismatched_range)
+}
+
+// optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
+inline bool RangeKeyMismatchError::has_suggested_range() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void RangeKeyMismatchError::set_has_suggested_range() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void RangeKeyMismatchError::clear_has_suggested_range() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void RangeKeyMismatchError::clear_suggested_range() {
+  if (suggested_range_ != NULL) suggested_range_->::cockroach::roachpb::RangeDescriptor::Clear();
+  clear_has_suggested_range();
+}
+inline const ::cockroach::roachpb::RangeDescriptor& RangeKeyMismatchError::suggested_range() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
+  return suggested_range_ != NULL ? *suggested_range_ : *default_instance_->suggested_range_;
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::mutable_suggested_range() {
+  set_has_suggested_range();
+  if (suggested_range_ == NULL) {
+    suggested_range_ = new ::cockroach::roachpb::RangeDescriptor;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
+  return suggested_range_;
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeKeyMismatchError::release_suggested_range() {
+  clear_has_suggested_range();
+  ::cockroach::roachpb::RangeDescriptor* temp = suggested_range_;
+  suggested_range_ = NULL;
+  return temp;
+}
+inline void RangeKeyMismatchError::set_allocated_suggested_range(::cockroach::roachpb::RangeDescriptor* suggested_range) {
+  delete suggested_range_;
+  suggested_range_ = suggested_range;
+  if (suggested_range) {
+    set_has_suggested_range();
+  } else {
+    clear_has_suggested_range();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeKeyMismatchError.suggested_range)
 }
 
 // -------------------------------------------------------------------

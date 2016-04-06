@@ -788,7 +788,17 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 // TODO(tschottdorf): almost obsolete.
 func (r *Replica) checkCmdHeader(header roachpb.Span) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		return roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+		rkme := roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+		// Try to suggest the correct range on a key mismatch error where
+		// even the start key of the request went to the wrong range.
+		if !r.ContainsKey(header.Key) {
+			if keyAddr, err := keys.Addr(header.Key); err == nil {
+				if repl := r.store.LookupReplica(keyAddr, nil); repl != nil {
+					rkme.SuggestedRange = repl.Desc()
+				}
+			}
+		}
+		return rkme
 	}
 	return nil
 }
