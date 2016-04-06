@@ -303,6 +303,15 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
+// Compact forces compaction on the database. This is currently used only to
+// force partial merges to occur in unit tests.
+func (r *RocksDB) Compact() {
+	err := statusToError(C.DBCompact(r.rdb))
+	if err != nil {
+		log.Warningf("compact: %s", err)
+	}
+}
+
 // Destroy destroys the underlying filesystem data associated with the database.
 func (r *RocksDB) Destroy() error {
 	return statusToError(C.DBDestroy(goToCSlice([]byte(r.dir))))

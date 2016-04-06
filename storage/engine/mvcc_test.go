@@ -66,7 +66,13 @@ var (
 	value3       = roachpb.MakeValueFromString("testValue3")
 	value4       = roachpb.MakeValueFromString("testValue4")
 	value5       = roachpb.MakeValueFromString("testValue5")
-	valueEmpty   = roachpb.MakeValueFromString("")
+	tsvalue1     = timeSeriesAsValue(testtime, 1000, []tsSample{
+		{1, 1, 5, 5, 5},
+	}...)
+	tsvalue2 = timeSeriesAsValue(testtime, 1000, []tsSample{
+		{1, 1, 15, 15, 15},
+	}...)
+	valueEmpty = roachpb.MakeValueFromString("")
 )
 
 // createTestEngine returns a new in-memory engine with 1MB of storage
@@ -3190,6 +3196,62 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("intent should not be cleared by resolve intent request with lower epoch")
+	}
+}
+
+// TestMVCCTimeSeriesPartialMerge ensures that "partial merges" of merged time
+// series data does not result in a different final result than a "full merge".
+func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Perform the same sequence of merges on two different keys. For
+	// one of them, insert some compactions which cause partial merges
+	// to be run and affect the results.
+	vals := make([]*roachpb.Value, 2)
+
+	for i, k := range []roachpb.Key{testKey1, testKey2} {
+		log.Infof("testing key %s", k)
+		if err := MVCCMerge(engine, nil, k, makeTS(0, 1), tsvalue1); err != nil {
+			t.Fatal(err)
+		}
+		if err := MVCCMerge(engine, nil, k, makeTS(0, 2), tsvalue2); err != nil {
+			t.Fatal(err)
+		}
+
+		if i == 1 {
+			engine.(InMem).Compact()
+		}
+
+		if err := MVCCMerge(engine, nil, k, makeTS(0, 2), tsvalue2); err != nil {
+			t.Fatal(err)
+		}
+		if err := MVCCMerge(engine, nil, k, makeTS(0, 1), tsvalue1); err != nil {
+			t.Fatal(err)
+		}
+
+		if i == 1 {
+			engine.(InMem).Compact()
+		}
+
+		if v, _, err := MVCCGet(engine, k, roachpb.ZeroTimestamp, true, nil); err != nil {
+			t.Fatal(err)
+		} else {
+			vals[i] = v
+		}
+	}
+
+	if first, second := vals[0], vals[1]; !reflect.DeepEqual(first, second) {
+		var firstTS, secondTS *roachpb.InternalTimeSeriesData
+		if err := first.GetProto(firstTS); err != nil {
+			t.Fatal(err)
+		}
+		if err := second.GetProto(secondTS); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatalf("partially merged value %v differed from expected merged value %v", secondTS, firstTS)
 	}
 }
 
