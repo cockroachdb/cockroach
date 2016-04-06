@@ -504,16 +504,8 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"uuid_v4": {
-		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeBytes,
-			impure:     true,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DBytes(uuid.NewV4().GetBytes()), nil
-			},
-		},
-	},
+	"experimental_uuid_v4": {uuidV4Impl},
+	"uuid_v4":              {uuidV4Impl},
 
 	"greatest": {
 		Builtin{
@@ -1105,6 +1097,15 @@ var substringImpls = []Builtin{
 			escape := string(args[2].(DString))
 			return regexpExtract(ctx, s, pattern, escape)
 		},
+	},
+}
+
+var uuidV4Impl = Builtin{
+	Types:      ArgTypes{},
+	ReturnType: TypeBytes,
+	impure:     true,
+	fn: func(_ EvalContext, args DTuple) (Datum, error) {
+		return DBytes(uuid.NewV4().GetBytes()), nil
 	},
 }
 
