@@ -36,15 +36,17 @@ type leaseTest struct {
 	*testing.T
 	server *testServer
 	db     *sql.DB
+	kvDB   *client.DB
 	nodes  map[uint32]*csql.LeaseManager
 }
 
 func newLeaseTest(t *testing.T) *leaseTest {
-	s, db, _ := setup(t)
+	s, db, kvDB := setup(t)
 	return &leaseTest{
 		T:      t,
 		server: s,
 		db:     db,
+		kvDB:   kvDB,
 		nodes:  map[uint32]*csql.LeaseManager{},
 	}
 }
@@ -228,6 +230,67 @@ func TestLeaseManager(testingT *testing.T) {
 	t.expectLeases(descID, "/3/2 /4/1")
 	t.mustRelease(1, l9)
 	t.expectLeases(descID, "/3/2 /4/1")
+}
+
+func getDescriptorID(db *client.DB, database string, table string) csql.ID {
+	dbNameKey := csql.MakeNameMetadataKey(keys.RootNamespaceID, database)
+	gr, err := db.Get(dbNameKey)
+	if err != nil {
+		panic(err)
+	}
+	if !gr.Exists() {
+		panic("database missing")
+	}
+	dbDescID := csql.ID(gr.ValueInt())
+
+	tableNameKey := csql.MakeNameMetadataKey(dbDescID, table)
+	gr, err = db.Get(tableNameKey)
+	if err != nil {
+		panic(err)
+	}
+	if !gr.Exists() {
+		panic("table missing")
+	}
+	return csql.ID(gr.ValueInt())
+}
+
+// Test that we fail to lease a table that was marked for deletion.
+func TestCantLeaseDeletedTable(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)
+	t := newLeaseTest(testingT)
+	defer t.cleanup()
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+`
+	_, err := t.db.Query(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Figure out the descriptor ID.
+	tableID := getDescriptorID(t.kvDB, "test", "t")
+
+	// Block the schema changers.
+	defer csql.TestDisableSyncSchemaChangeExec()()
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+
+	// DROP the table
+	_, err = t.db.Query(`DROP TABLE test.t`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure we can't get a lease on the descriptor.
+	// We'll try to get a lease with a bogus node ID.  If we used our own, we
+	// might already have a lease on this node which won't be released since we
+	// blocked the schema changes that do gossip publishing.
+	var nodeID uint32 = 100
+	_, err = t.acquire(nodeID, tableID, 0)
+	if !testutils.IsError(err, "descriptor doesn't exist") {
+		t.Fatalf("got a different error than expected: ", err)
+	}
 }
 
 func TestLeaseManagerReacquire(testingT *testing.T) {

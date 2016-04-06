@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 )
@@ -279,6 +280,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
+	}
+
+	// Test that deleted table cannot be used. This prevents regressions where
+	// name -> descriptor ID caches might make this statement erronously work.
+	if _, err := sqlDB.Exec(`SELECT * FROM t.kv`); !testutils.IsError(err, `table "t.kv" does not exist`) {
+		t.Fatalf("different error than expected: %s", err)
 	}
 
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
