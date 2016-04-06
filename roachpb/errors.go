@@ -513,7 +513,11 @@ func (e *ReplicaCorruptionError) Error() string {
 }
 
 func (e *ReplicaCorruptionError) message(_ *Error) string {
-	return fmt.Sprintf("replica corruption (processed=%t): %s", e.Processed, e.ErrorMsg)
+	msg := fmt.Sprintf("replica corruption (processed=%t)", e.Processed)
+	if e.ErrorMsg != "" {
+		msg += ": " + e.ErrorMsg
+	}
+	return msg
 }
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
