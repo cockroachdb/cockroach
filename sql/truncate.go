@@ -41,15 +41,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
-
-		// Delete rows and indexes starting with the table's prefix.
-		tableStartKey := roachpb.Key(tablePrefix)
-		tableEndKey := tableStartKey.PrefixEnd()
-		if log.V(2) {
-			log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
-		}
-		b.DelRange(tableStartKey, tableEndKey, false)
+		p.TruncateImpl(&tableDesc, &b)
 	}
 
 	if pErr := p.txn.Run(&b); pErr != nil {
@@ -57,4 +49,19 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 	}
 
 	return &emptyNode{}, nil
+}
+
+// TruncateImpl batches commands for truncating the data of the table.
+// It deletes a range of data for the table, which includes the PK and all
+// indexes.
+func (*planner) TruncateImpl(tableDesc *TableDescriptor, b *client.Batch) {
+	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
+
+	// Delete rows and indexes starting with the table's prefix.
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	if log.V(2) {
+		log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
+	}
+	b.DelRange(tableStartKey, tableEndKey, false)
 }
