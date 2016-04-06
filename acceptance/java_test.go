@@ -105,7 +105,7 @@ EOF
 # See: https://basildoncoder.com/blog/postgresql-jdbc-client-certificates.html
 openssl pkcs8 -topk8 -inform PEM -outform DER -in /certs/node.key -out key.pk8 -nocrypt
 
-export PATH=$PATH:/usr/lib/jvm/java-1.7-openjdk/bin
+export PATH=$PATH:/usr/lib/jvm/java-1.8-openjdk/bin
 javac main.java
 java -cp /postgres.jar:. main
 `
