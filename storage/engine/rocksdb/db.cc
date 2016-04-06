@@ -1297,6 +1297,11 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+  // File size settings: TODO(marc): https://github.com/cockroachdb/cockroach/issues/5852
+  options.target_file_size_base = 67108864; // 64MB
+  options.target_file_size_multiplier = 8;
+  options.max_bytes_for_level_base = 536870912; // 512MB
+  options.max_bytes_for_level_multiplier = 8;
   if (row_cache_size > 0) {
     options.row_cache = rocksdb::NewLRUCache(
         row_cache_size, num_cache_shard_bits);
