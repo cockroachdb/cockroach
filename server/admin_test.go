@@ -90,6 +90,26 @@ func TestAdminDebugExpVar(t *testing.T) {
 	}
 }
 
+// TestAdminDebugMetrics verifies that cmdline and memstats variables are
+// available via the /debug/metrics link.
+func TestAdminDebugMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := StartTestServer(t)
+	defer s.Stop()
+
+	jI, err := getJSON(s.Ctx.HTTPRequestScheme() + "://" + s.HTTPAddr() + debugEndpoint + "metrics")
+	if err != nil {
+		t.Fatalf("failed to fetch JSON: %v", err)
+	}
+	j := jI.(map[string]interface{})
+	if _, ok := j["cmdline"]; !ok {
+		t.Error("cmdline not found in JSON response")
+	}
+	if _, ok := j["memstats"]; !ok {
+		t.Error("memstats not found in JSON response")
+	}
+}
+
 // TestAdminDebugPprof verifies that pprof tools are available.
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
@@ -108,7 +128,7 @@ func TestAdminDebugPprof(t *testing.T) {
 
 // TestAdminDebugTrace verifies that the net/trace endpoints are available
 // via /debug/{requests,events}.
-func TestAdminNetTrace(t *testing.T) {
+func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := StartTestServer(t)
 	defer s.Stop()

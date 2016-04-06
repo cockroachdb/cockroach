@@ -20,9 +20,6 @@ package server
 
 import (
 	"bytes"
-	// This is imported for its side-effect of registering expvar
-	// endpoints with the http.DefaultServeMux.
-	_ "expvar"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -38,6 +35,8 @@ import (
 
 	gwruntime "github.com/gengo/grpc-gateway/runtime"
 	"github.com/gogo/protobuf/proto"
+	"github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics/exp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -81,7 +80,7 @@ const (
 
 var (
 	// We use the default http mux for the debug endpoint (as pprof and net/trace
-	// register to that via import)
+	// register to that via import, and go-metrics registers to that via exp.Exp())
 	debugServeMux = http.DefaultServeMux
 
 	// apiServerMessage is the standard body for all HTTP 500 responses.
@@ -129,6 +128,10 @@ table tr td {
 <td><a href="./stopper">active tasks</a></td>
 </tr>
 <tr>
+<td>metrics</td>
+<td><a href="./metrics">variables</a></td>
+</tr>
+<tr>
 <td>pprof</td>
 <td>
 <!-- cribbed from the /debug/pprof endpoint -->
@@ -142,6 +145,11 @@ table tr td {
 </body></html>
 `)
 	})
+
+	// This registers a superset of the variables exposed through the /debug/vars endpoint
+	// onto the /debug/metrics endpoint. It includes all expvars registered globally and
+	// all metrics registered on the DefaultRegistry.
+	exp.Exp(metrics.DefaultRegistry)
 }
 
 // A adminServer provides a RESTful HTTP API to administration of
@@ -243,8 +251,8 @@ func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default
-// serve mux, which is preconfigured (by import of expvar and net/http/pprof)
-// to serve endpoints which access exported variables and pprof tools.
+// serve mux, which is preconfigured (by import of net/http/pprof and registration
+// of go-metrics) to serve endpoints which access exported variables and pprof tools.
 func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler, _ := debugServeMux.Handler(r)
 	handler.ServeHTTP(w, r)
