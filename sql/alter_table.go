@@ -31,9 +31,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, roachpb.NewError(err)
 	}
 
-	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
-	if err != nil {
-		return nil, err
+	dbDesc, pErr := p.getDatabaseDesc(n.Table.Database())
+	if pErr != nil {
+		return nil, pErr
 	}
 
 	// Check if table exists.
@@ -201,20 +201,18 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	// dummy mutations. Most tests trigger errors above
 	// this line, but tests that run redundant operations like dropping
 	// a column when it's already dropped will hit this condition and exit.
-	mutationID := invalidMutationID
-	if len(tableDesc.Mutations) > origNumMutations {
-		mutationID = tableDesc.NextMutationID
-		tableDesc.NextMutationID++
-	} else if !descriptorChanged {
+	addedMutations := len(tableDesc.Mutations) > origNumMutations
+	if !addedMutations && !descriptorChanged {
 		return &emptyNode{}, nil
 	}
-	tableDesc.UpVersion = true
+
+	mutationID := tableDesc.setUpVersion(addedMutations)
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); err != nil {
+	if pErr = p.writeTableDesc(&tableDesc); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)

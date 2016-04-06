@@ -11,7 +11,7 @@ Database User      Privileges
 a        readwrite ALL
 a        root      ALL
 
-statement error table "t" does not exist
+statement error table "a.t" does not exist
 SHOW GRANTS ON a.t
 
 statement error table "t" does not exist
@@ -23,7 +23,7 @@ SET DATABASE = a
 statement error table "t" does not exist
 SHOW GRANTS ON t
 
-statement error table "t" does not exist
+statement error table "a.t" does not exist
 GRANT ALL ON a.t TO readwrite
 
 statement ok
@@ -122,7 +122,7 @@ GRANT ALL ON a.t@xyz TO readwrite
 statement error pq: no database specified: *
 GRANT ALL ON * TO readwrite
 
-statement error table "tt" does not exist
+statement error table "a.tt" does not exist
 GRANT ALL ON a.t, a.tt TO readwrite
 
 # '*' doesn't work for databases.
