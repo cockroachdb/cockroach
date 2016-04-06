@@ -102,6 +102,10 @@ func init() {
 	}
 
 	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != debugEndpoint {
+			http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
+		}
+
 		// The explicit header is necessary or (at least Chrome) will try to
 		// download a gzipped file (Content-type comes back application/x-gzip).
 		w.Header().Add("Content-type", "text/html")
