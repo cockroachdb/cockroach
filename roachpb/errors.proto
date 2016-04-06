@@ -14,7 +14,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
@@ -34,11 +34,10 @@ import weak "gogoproto/gogo.proto";
 message NotLeaseHolderError {
   // The replica the error originated from. Used in the error's string
   // representation.
-  optional ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
+  ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
   // The lease holder, if known.
-  optional ReplicaDescriptor lease_holder = 2;
-  optional int64 range_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  ReplicaDescriptor lease_holder = 2;
+  int64 range_id = 3 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
 
 // A NodeUnavailableError indicates that the sending gateway can
@@ -50,15 +49,14 @@ message NodeUnavailableError {
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 message RangeNotFoundError {
-  optional int64 range_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
 
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 message RangeKeyMismatchError {
-  optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
-  optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
+  bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
+  bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
   // mismatched_range is the range that the command was incorrectly sent to.
   // This descriptor will be populated in either of two scenarios:
   // - the command specified a RangeID in its header but the corresponding
@@ -71,17 +69,17 @@ message RangeKeyMismatchError {
   //   request's start key but the request spans multiple ranges,
   //   mismatched_range will be the descriptor of the range which contains
   //   the start_key of the request.
-  optional RangeDescriptor mismatched_range = 3;
+  RangeDescriptor mismatched_range = 3;
   // suggested_range is a hint to the sender of a command about the range
   // they may be looking for. This suggestion should be the result of a
   // best effort lookup, and makes no guarantees about correctness.
-  optional RangeDescriptor suggested_range = 4;
+  RangeDescriptor suggested_range = 4;
 }
 
 // A RangeFrozenError indicates that a Range refused to process a Raft command
 // due to being in frozen state.
 message RangeFrozenError {
-  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
 }
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
@@ -91,8 +89,8 @@ message RangeFrozenError {
 // lower bound for a new timestamp at which at least the read producing
 // this error would succeed on retry.
 message ReadWithinUncertaintyIntervalError {
-  optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A TransactionAbortedError indicates that the transaction was
@@ -104,7 +102,7 @@ message TransactionAbortedError {
 // continue because it encountered a write intent from another
 // transaction which it was unable to push.
 message TransactionPushError {
-  optional Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
+  Transaction pushee_txn = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionRetryError indicates that the transaction must be
@@ -126,7 +124,7 @@ message TransactionReplayError {
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 message TransactionStatusError {
-  optional string msg = 1 [(gogoproto.nullable) = false];
+  string msg = 1;
 }
 
 // A WriteIntentError indicates that one or more write intent
@@ -139,7 +137,7 @@ message TransactionStatusError {
 // retry.
 message WriteIntentError {
   repeated Intent intents = 1 [(gogoproto.nullable) = false];
-  optional bool resolved = 2 [(gogoproto.nullable) = false];
+  bool resolved = 2;
 }
 
 // A WriteTooOldError indicates that a write encountered a versioned
@@ -147,8 +145,8 @@ message WriteIntentError {
 // history. The write is instead done at actual timestamp, which is
 // the timestamp of the existing version+1.
 message WriteTooOldError {
-  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // An OpRequiresTxnError indicates that a command required to be
@@ -163,21 +161,21 @@ message OpRequiresTxnError {
 // because it was missing or was not equal. The error will
 // contain the actual value found.
 message ConditionFailedError {
-  optional Value actual_value = 1;
+  Value actual_value = 1;
 }
 
 // A LeaseRejectedError indicates that the requested replica could
 // not acquire the desired lease because of an existing range lease.
 message LeaseRejectedError {
-  optional string message = 1 [(gogoproto.nullable) = false];
-  optional Lease requested = 2 [(gogoproto.nullable) = false];
-  optional Lease existing = 3 [(gogoproto.nullable) = false];
+  string message = 1;
+  Lease requested = 2 [(gogoproto.nullable) = false];
+  Lease existing = 3 [(gogoproto.nullable) = false];
 }
 
 // A SendError indicates that a message could not be delivered to
 // the desired recipient(s).
 message SendError {
-  optional string message = 1 [(gogoproto.nullable) = false];
+  string message = 1;
   reserved 2;
 }
 
@@ -189,38 +187,38 @@ message RaftGroupDeletedError {
 // A ReplicaCorruptionError indicates that the replica has experienced
 // an error which puts its integrity at risk.
 message ReplicaCorruptionError {
-  optional string error_msg = 1 [(gogoproto.nullable) = false];;
+  string error_msg = 1;
   // processed indicates that the error has been taken into account and
   // necessary steps will be taken. For now, required for testing.
-  optional bool processed = 2 [(gogoproto.nullable) = false];;
+  bool processed = 2;
 }
 
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
 
-  optional NotLeaseHolderError not_lease_holder = 1;
-  optional RangeNotFoundError range_not_found = 2;
-  optional RangeKeyMismatchError range_key_mismatch = 3;
-  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-  optional TransactionAbortedError transaction_aborted = 5;
-  optional TransactionPushError transaction_push = 6;
-  optional TransactionRetryError transaction_retry = 7;
-  optional TransactionReplayError transaction_replay = 22;
-  optional TransactionStatusError transaction_status = 8;
-  optional WriteIntentError write_intent = 9;
-  optional WriteTooOldError write_too_old = 10;
-  optional OpRequiresTxnError op_requires_txn = 11;
-  optional ConditionFailedError condition_failed = 12;
-  optional LeaseRejectedError lease_rejected = 13;
-  optional NodeUnavailableError node_unavailable = 14;
-  optional SendError send = 15;
-  optional RangeFrozenError range_frozen = 25;
+  NotLeaseHolderError not_lease_holder = 1;
+  RangeNotFoundError range_not_found = 2;
+  RangeKeyMismatchError range_key_mismatch = 3;
+  ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
+  TransactionAbortedError transaction_aborted = 5;
+  TransactionPushError transaction_push = 6;
+  TransactionRetryError transaction_retry = 7;
+  TransactionReplayError transaction_replay = 22;
+  TransactionStatusError transaction_status = 8;
+  WriteIntentError write_intent = 9;
+  WriteTooOldError write_too_old = 10;
+  OpRequiresTxnError op_requires_txn = 11;
+  ConditionFailedError condition_failed = 12;
+  LeaseRejectedError lease_rejected = 13;
+  NodeUnavailableError node_unavailable = 14;
+  SendError send = 15;
+  RangeFrozenError range_frozen = 25;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
-  optional RaftGroupDeletedError raft_group_deleted = 16;
-  optional ReplicaCorruptionError replica_corruption = 17;
+  RaftGroupDeletedError raft_group_deleted = 16;
+  ReplicaCorruptionError replica_corruption = 17;
 }
 
 // TransactionRestart indicates how an error should be handled in a
@@ -246,7 +244,7 @@ enum TransactionRestart {
 // primitive field would break compatibility with proto3, where primitive fields
 // are no longer allowed to be nullable.
 message ErrPosition {
-  optional int32 index = 1 [(gogoproto.nullable) = false];
+  int32 index = 1;
 }
 
 // Error is a generic representation including a string message
@@ -255,29 +253,29 @@ message Error {
   option (gogoproto.goproto_stringer) = false;
 
   // message is a human-readable error message.
-  optional string message = 1 [(gogoproto.nullable) = false];
+  string message = 1;
 
   // If transaction_restart is not ABORT, the error condition may be handled by
   // restarting the transaction (with or without a backoff).
-  optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
+  TransactionRestart transaction_restart = 3;
 
   // An optional transaction related to this error. Not to be accessed directly.
-  optional Transaction unexposed_txn = 4;
+  Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
-  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID" ];
+  int32 origin_node = 5 [(gogoproto.casttype) = "NodeID"];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 6;
+  ErrorDetail detail = 6;
 
   // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
-  optional ErrPosition index = 7;
+  ErrPosition index = 7;
 
   // now is the current time at the node sending the response,
   // which can be used by the receiver to update its local HLC.
-  optional util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false];
 
   reserved 2;
 }
