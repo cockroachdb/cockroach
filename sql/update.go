@@ -322,7 +322,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		}
 
 		// rowVals[:len(tableDesc.Columns)] have been updated with the new values above.
-		if err := rh.append(rowVals[:len(tableDesc.Columns)]); err != nil {
+		if _, err := rh.append(rowVals[:len(tableDesc.Columns)]); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

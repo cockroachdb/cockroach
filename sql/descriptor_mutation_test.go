@@ -79,16 +79,16 @@ func (mt mutationTest) checkQueryResponse(q string, e [][]string) int {
 					s = fmt.Sprint(val)
 				}
 				if e[i][j] != s {
-					mt.Fatalf("e:%v, v:%v", e[i][j], s)
+					mt.Fatalf("expected %v, found %v", e[i][j], s)
 				}
 				numVals++
 			} else if e[i][j] != "NULL" {
-				mt.Fatalf("e:%v, v:%v", e[i][j], "NULL")
+				mt.Fatalf("expected %v, found %v", e[i][j], "NULL")
 			}
 		}
 	}
 	if i != len(e) {
-		mt.Fatalf("fewer rows read than expected: %d, e=%v", i, e)
+		mt.Fatalf("fewer rows read than expected: found %d, expected %v", i, e)
 	}
 	return numVals
 }

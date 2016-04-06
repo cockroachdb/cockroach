@@ -459,10 +459,19 @@ func countRowsAffected(p planNode) int {
 	if a, ok := p.(*returningNode); ok {
 		return a.rowCount
 	}
+
 	count := 0
 	for p.Next() {
 		count++
 	}
+
+	if a, ok := p.(*deleteNode); ok && a.fastPath {
+		// In the fast path, we only need a single call to Next() to
+		// delete all rows and obtain a count. The proper count
+		// is then available in the delete node itself.
+		return a.rh.results.rowCount
+	}
+
 	return count
 }
 
