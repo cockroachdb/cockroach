@@ -307,7 +307,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			s.Sender.Lock()
 			s.Manual.Increment(1)
 			s.Sender.Unlock()
-			if heartbeatTS.Less(*txn.LastHeartbeat) {
+			if txn.LastHeartbeat != nil && heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
 				return nil
 			}

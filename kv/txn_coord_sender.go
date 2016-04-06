@@ -733,13 +733,14 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up.
 		tc.tryAsyncAbort(*txn.ID)
+		txn = txn.Clone() // TODO
 		txn.Status = roachpb.ABORTED
 	}
 
 	// Give the news to the stored proto. This will give long-running
 	// transactions free updates (and more up-to-date information about whether
 	// they have to restart), but in particular makes sure that they notice
-	// when they've been aborted (in which case we'll give tem an error on
+	// when they've been aborted (in which case we'll give them an error on
 	// their next request).
 	tc.Lock()
 	tc.txns[txnID].txn.Update(&txn)

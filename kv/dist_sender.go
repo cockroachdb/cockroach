@@ -580,7 +580,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		reply.Responses = append(reply.Responses, rpl.Responses...)
 		reply.CollectedSpans = append(reply.CollectedSpans, rpl.CollectedSpans...)
 	}
-	*reply.Header() = rplChunks[len(rplChunks)-1].BatchResponse_Header
+	reply.BatchResponse_Header = rplChunks[len(rplChunks)-1].BatchResponse_Header
 	return reply, nil
 }
 
