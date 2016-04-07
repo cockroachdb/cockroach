@@ -25,7 +25,7 @@ import (
 	"gopkg.in/inf.v0"
 )
 
-var e = smallPower(nil, decimalOne, 1000)
+var e = smallExp(inf.NewDec(1, 0), decimalOne, 1000)
 
 // NewDecFromFloat allocates and returns a new Dec set to the given
 // float64 value. The function will panic if the float is NaN or ±Inf.
@@ -358,21 +358,18 @@ func integerPower(z, x *inf.Dec, y int64, s inf.Scale) *inf.Dec {
 	return z.Round(z, s, inf.RoundHalfUp)
 }
 
-// smallPower computes e^x using the Taylor series to the specified scale and
+// smallExp computes z * e^x using the Taylor series to the specified scale and
 // stores the result in z, which is also the return value. It should be used
 // with small x values only.
-func smallPower(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+func smallExp(z, x *inf.Dec, s inf.Scale) *inf.Dec {
 	// Allocate if needed and make sure args aren't mutated.
 	if z == nil {
 		z = new(inf.Dec)
 		z.SetUnscaled(1).SetScale(0)
-	} else {
-		z.SetUnscaled(1).SetScale(0)
 	}
-
 	n := new(inf.Dec)
-	tmp := inf.NewDec(1, 0)
-	for loop := newLoop("exp", x, s, 1); !loop.done(z); {
+	tmp := new(inf.Dec).Set(z)
+	for loop := newLoop("exp", z, s, 1); !loop.done(z); {
 		n.Add(n, decimalOne)
 		tmp.Mul(tmp, x)
 		tmp.QuoRound(tmp, n, s+2, inf.RoundHalfUp)
@@ -411,12 +408,6 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 		panic("integer out of range")
 	}
 
-	// Use scale = 1000 so the sub results need be very precise before multiplying and rounding afterwards.
-	ey := smallPower(nil, y, 1000)
-	ex := integerPower(z, new(inf.Dec).Set(e), integer, s)
-
-	// e^n = e^(x+y) = e^x * e^y
-	z = z.Mul(ex, ey)
-
-	return z.Round(z, s-2, inf.RoundHalfUp)
+	ex := integerPower(z, new(inf.Dec).Set(e), integer, s+2)
+	return smallExp(ex, y, s-2)
 }
