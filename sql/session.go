@@ -176,7 +176,7 @@ type txnState struct {
 
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
-	sqlTimestamp roachpb.Timestamp
+	sqlTimestamp time.Time
 }
 
 // reset creates a new Txn and initializes it using the session defaults.

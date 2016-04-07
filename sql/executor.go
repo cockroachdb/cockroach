@@ -372,9 +372,8 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			txnState.reset(ctx, e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
-			now := e.ctx.Clock.Now()
-			txnState.sqlTimestamp = now
-			execOpt.MinInitialTimestamp = now
+			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
+			txnState.sqlTimestamp = e.ctx.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
@@ -685,7 +684,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planMaker.evalCtx.SetStmtTimestamp(e.ctx.Clock.Now())
+	planMaker.evalCtx.SetStmtTimestamp(e.ctx.Clock.PhysicalTime())
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)

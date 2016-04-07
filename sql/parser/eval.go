@@ -820,13 +820,13 @@ func (ctx *EvalContext) GetTxnTimestamp() DTimestamp {
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
-func (ctx *EvalContext) SetTxnTimestamp(ts roachpb.Timestamp) {
-	ctx.txnTimestamp.Time = ts.GoTime()
+func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
+	ctx.txnTimestamp.Time = ts
 }
 
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
-func (ctx *EvalContext) SetStmtTimestamp(ts roachpb.Timestamp) {
-	ctx.stmtTimestamp.Time = ts.GoTime()
+func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
+	ctx.stmtTimestamp.Time = ts
 }
 
 var tenBillion = big.NewInt(1e10)
