@@ -696,7 +696,10 @@ func (c *v3Conn) sendError(errCode string, errToSend string) error {
 	if err := c.writeBuf.WriteByte(0); err != nil {
 		return err
 	}
-	return c.writeBuf.finishMsg(c.wr)
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	return c.wr.Flush()
 }
 
 func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int32) error {
