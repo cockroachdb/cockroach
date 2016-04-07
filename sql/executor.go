@@ -227,20 +227,20 @@ func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 // updateSystemConfig is called whenever the system config gossip entry is updated.
 func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	e.systemConfigMu.Lock()
+	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
 	e.databaseCache = &databaseCache{
 		databases: map[string]ID{},
 	}
 	e.systemConfigCond.Broadcast()
-	e.systemConfigMu.Unlock()
 }
 
 // getSystemConfig returns a copy of the latest system config.
 func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 	e.systemConfigMu.RLock()
+	defer e.systemConfigMu.RUnlock()
 	cfg, cache := e.systemConfig, e.databaseCache
-	e.systemConfigMu.RUnlock()
 	return cfg, cache
 }
 
@@ -281,7 +281,6 @@ func (e *Executor) Prepare(ctx context.Context, query string, session *Session, 
 }
 
 // ExecuteStatements executes the given statement(s) and returns a response.
-// On error, the returned integer is an HTTP error code.
 func (e *Executor) ExecuteStatements(
 	ctx context.Context, session *Session, stmts string,
 	params []parser.Datum) StatementResults {
@@ -291,8 +290,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	res := e.execRequest(ctx, session, stmts)
-	return res
+	return e.execRequest(ctx, session, stmts)
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -367,7 +365,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
-				stmtsToExec = stmtsToExec[0:1]
+				stmtsToExec = stmtsToExec[:1]
 			}
 			txnState.reset(ctx, e, session)
 			txnState.State = Open
@@ -398,8 +396,10 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
 			}
 			txnState.txn = txn
-			return runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec,
-				&results, &remainingStmts)
+
+			var pErr *roachpb.Error
+			results, remainingStmts, pErr = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
+			return pErr
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
@@ -422,7 +422,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		// If the txn is in any state but Open, exec the schema changes. They'll
 		// short-circuit themselves if the mutation that queued them has been
 		// rolled back from the table descriptor.
-		stmtsExecuted := stmts[0 : len(stmtsToExec)-len(remainingStmts)]
+		stmtsExecuted := stmts[:len(stmtsToExec)-len(remainingStmts)]
 		if txnState.State != Open {
 			planMaker.releaseLeases()
 			// Exec the schema changers (if the txn rolled back, the schema changers
@@ -465,33 +465,33 @@ func countRowsAffected(p planNode) int {
 	return count
 }
 
-// runTxnAttempt is the closure we pass to txn.Exec(). It will be called
-// possibly multiple times (if opt.AutoRetry is set).
+// runTxnAttempt is used in the closure we pass to txn.Exec(). It
+// will be called possibly multiple times (if opt.AutoRetry is set).
 // It sets up a planner and delegates execution of statements to
 // execStmtsInCurrentTxn().
 func runTxnAttempt(
-	e *Executor, planMaker *planner, origState TxnStateEnum, txnState *txnState,
-	opt *client.TxnExecOptions, stmts parser.StatementList,
-	// return values
-	results *[]Result, remainingStmts *parser.StatementList) *roachpb.Error {
+	e *Executor,
+	planMaker *planner,
+	origState TxnStateEnum,
+	txnState *txnState,
+	opt *client.TxnExecOptions,
+	stmts parser.StatementList,
+) ([]Result, parser.StatementList, *roachpb.Error) {
 
 	// Ignore the state that might have been set by a previous try
 	// of this closure.
 	txnState.State = origState
 	txnState.commitSeen = false
 
-	*results = nil
-
 	planMaker.setTxn(txnState.txn)
-	var pErr *roachpb.Error
-	*results, *remainingStmts, pErr = e.execStmtsInCurrentTxn(
+	results, remainingStmts, pErr := e.execStmtsInCurrentTxn(
 		stmts, planMaker, txnState,
 		opt.AutoCommit /* implicitTxn */, opt.AutoRetry /* txnBeginning */)
-	if opt.AutoCommit && len(*remainingStmts) > 0 {
+	if opt.AutoCommit && len(remainingStmts) > 0 {
 		panic("implicit txn failed to execute all stmts")
 	}
 	planMaker.resetTxn()
-	return pErr
+	return results, remainingStmts, pErr
 }
 
 // execStmtsInCurrentTxn consumes a prefix of stmts, namely the
@@ -524,10 +524,12 @@ func runTxnAttempt(
 //    occurred, it is also the last result returned. Subsequent statements
 //    have not been executed.
 func (e *Executor) execStmtsInCurrentTxn(
-	stmts parser.StatementList, planMaker *planner,
+	stmts parser.StatementList,
+	planMaker *planner,
 	txnState *txnState,
-	implicitTxn bool, txnBeginning bool) (
-	[]Result, parser.StatementList, *roachpb.Error) {
+	implicitTxn bool,
+	txnBeginning bool,
+) ([]Result, parser.StatementList, *roachpb.Error) {
 	var results []Result
 	if txnState.State == NoTxn {
 		panic("execStmtsInCurrentTransaction called outside of a txn")
@@ -561,8 +563,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
 		if e.ctx.TestingKnobs.CheckStmtStringChange {
-			after := stmt.String()
-			if after != stmtStrBefore {
+			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
 			}
@@ -589,8 +590,8 @@ func (e *Executor) execStmtsInCurrentTxn(
 // Aborted or RestartWait.
 // Everything but COMMIT/ROLLBACK/RESTART causes errors.
 func (e *Executor) execStmtInAbortedTxn(
-	stmt parser.Statement, txnState *txnState, planMaker *planner) (
-	Result, *roachpb.Error) {
+	stmt parser.Statement, txnState *txnState, planMaker *planner,
+) (Result, *roachpb.Error) {
 
 	if txnState.State != Aborted && txnState.State != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
@@ -633,7 +634,8 @@ func (e *Executor) execStmtInAbortedTxn(
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (e *Executor) execStmtInCommitWaitTxn(
-	stmt parser.Statement, txnState *txnState) (Result, *roachpb.Error) {
+	stmt parser.Statement, txnState *txnState,
+) (Result, *roachpb.Error) {
 	if txnState.State != CommitWait {
 		panic("execStmtInCommitWaitTxn called outside of an aborted txn")
 	}
@@ -673,10 +675,12 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // - a Result
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
-	stmt parser.Statement, planMaker *planner,
+	stmt parser.Statement,
+	planMaker *planner,
 	implicitTxn bool,
 	firstInTxn bool,
-	txnState *txnState) (Result, *roachpb.Error) {
+	txnState *txnState,
+) (Result, *roachpb.Error) {
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
@@ -832,8 +836,9 @@ const (
 )
 
 // commitSqlTransaction commits a transaction.
-func commitSQLTransaction(txnState *txnState, p *planner,
-	commitType commitType, e *Executor) (Result, *roachpb.Error) {
+func commitSQLTransaction(
+	txnState *txnState, p *planner, commitType commitType, e *Executor,
+) (Result, *roachpb.Error) {
 
 	if p.txn != txnState.txn {
 		panic("commitSQLTransaction called on a different txn than the planner's")
@@ -867,8 +872,8 @@ func commitSQLTransaction(txnState *txnState, p *planner,
 
 // the current transaction might have been committed/rolled back when this returns.
 func (e *Executor) execStmt(
-	stmt parser.Statement, planMaker *planner,
-	autoCommit bool) (Result, *roachpb.Error) {
+	stmt parser.Statement, planMaker *planner, autoCommit bool,
+) (Result, *roachpb.Error) {
 	var result Result
 	plan, pErr := planMaker.makePlan(stmt, autoCommit)
 	if pErr != nil {

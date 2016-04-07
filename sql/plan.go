@@ -446,7 +446,7 @@ var _ planNode = &explainDebugNode{}
 var _ planNode = &explainTraceNode{}
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
-// results (if results is initializer to true). The former is used for nodes that have no results
+// results (if results is initialized to true). The former is used for nodes that have no results
 // (e.g. a table for which the filtering condition has a contradiction), the latter is used by
 // select statements that have no table or where we detect the filtering condition throws away all
 // results.
