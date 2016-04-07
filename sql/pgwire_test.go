@@ -18,6 +18,7 @@ package sql_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -245,8 +246,10 @@ func TestPGPrepareFail(t *testing.T) {
 }
 
 type preparedQueryTest struct {
-	params, results []interface{}
-	error           string
+	params  []interface{}
+	results [][]interface{}
+	others  int
+	error   string
 }
 
 func (p preparedQueryTest) Params(v ...interface{}) preparedQueryTest {
@@ -255,7 +258,12 @@ func (p preparedQueryTest) Params(v ...interface{}) preparedQueryTest {
 }
 
 func (p preparedQueryTest) Results(v ...interface{}) preparedQueryTest {
-	p.results = v
+	p.results = append(p.results, v)
+	return p
+}
+
+func (p preparedQueryTest) Others(o int) preparedQueryTest {
+	p.others = o
 	return p
 }
 
@@ -331,14 +339,14 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW database": {
 			base.Results(""),
 		},
-		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1": {
+		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
 			base.Params([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
 		},
 		"SHOW COLUMNS FROM system.users": {
-			base.Results("username", "STRING", false, sql.NullBool{}),
+			base.Results("username", "STRING", false, sql.NullBool{}).Others(1),
 		},
 		"SHOW DATABASES": {
-			base.Results("d"),
+			base.Results("d").Others(1),
 		},
 		"SHOW GRANTS ON system.users": {
 			base.Results("users", security.RootUser, "DELETE,GRANT,INSERT,SELECT,UPDATE"),
@@ -347,7 +355,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Results("users", "primary", true, 1, "username", "ASC", false),
 		},
 		"SHOW TABLES FROM system": {
-			base.Results("descriptor"),
+			base.Results("descriptor").Others(7),
 		},
 		"SHOW TIME ZONE": {
 			base.Results("UTC"),
@@ -428,36 +436,70 @@ func TestPGPreparedQuery(t *testing.T) {
 
 	runTests := func(query string, tests []preparedQueryTest, queryFunc func(...interface{}) (*sql.Rows, error)) {
 		for _, test := range tests {
-			if rows, err := queryFunc(test.params...); err != nil {
+			rows, err := queryFunc(test.params...)
+			if err != nil {
 				if test.error == "" {
 					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
 				} else if err.Error() != test.error {
 					t.Errorf("%s: %v: expected error: %s, got %s", query, test.params, test.error, err)
 				}
-			} else {
-				defer rows.Close()
+				continue
+			}
+			defer rows.Close()
 
-				if test.error != "" {
-					t.Errorf("expected error: %s: %v", query, test.params)
-				} else {
-					if !rows.Next() {
-						t.Errorf("expected row: %s: %v", query, test.params)
-					} else {
-						dst := make([]interface{}, len(test.results))
-						for i, d := range test.results {
-							dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
-						}
-						if err := rows.Scan(dst...); err != nil {
-							t.Error(err)
-						}
-						for i, d := range dst {
-							dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
-						}
-						if !reflect.DeepEqual(dst, test.results) {
-							t.Errorf("%s: %v: expected %v, got %v", query, test.params, test.results, dst)
-						}
-					}
+			if test.error != "" {
+				t.Errorf("expected error: %s: %v", query, test.params)
+				continue
+			}
+
+			for _, expected := range test.results {
+				if !rows.Next() {
+					t.Errorf("expected row: %s: %v", query, test.params)
+					continue
 				}
+				dst := make([]interface{}, len(expected))
+				for i, d := range expected {
+					dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
+				}
+				if err := rows.Scan(dst...); err != nil {
+					t.Error(err)
+				}
+				for i, d := range dst {
+					dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
+				}
+				if !reflect.DeepEqual(dst, expected) {
+					t.Errorf("%s: %v: expected %v, got %v", query, test.params, expected, dst)
+				}
+			}
+			for rows.Next() {
+				if test.others > 0 {
+					test.others--
+					continue
+				}
+				cols, err := rows.Columns()
+				if err != nil {
+					t.Errorf("%s: %s", query, err)
+					continue
+				}
+				dst := make([]interface{}, len(cols))
+				for i, d := range dst {
+					dst[i] = &d
+				}
+				if err := rows.Scan(dst...); err != nil {
+					t.Errorf("%s: %s", query, err)
+					continue
+				}
+				b, err := json.Marshal(dst)
+				if err != nil {
+					t.Errorf("%s: %s", query, err)
+					continue
+				}
+				t.Errorf("%s: unexpected row: %s", query, b)
+				continue
+			}
+			if test.others > 0 {
+				t.Errorf("%s: expected %d more rows", query, test.others)
+				continue
 			}
 		}
 	}
