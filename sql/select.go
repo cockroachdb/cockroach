@@ -186,13 +186,13 @@ func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
 	default:
-		plan, pberr := p.makePlan(s, autoCommit)
-		if pberr != nil {
-			return nil, pberr
+		plan, pErr := p.makePlan(s, autoCommit)
+		if pErr != nil {
+			return nil, pErr
 		}
-		sort, pberr := p.orderBy(orderBy, plan)
-		if pberr != nil {
-			return nil, pberr
+		sort, pErr := p.orderBy(orderBy, plan)
+		if pErr != nil {
+			return nil, pErr
 		}
 		count, offset, err := p.evalLimit(limit)
 		if err != nil {
@@ -343,7 +343,7 @@ func (p *planner) initSelect(
 	return p.limit(limitCount, limitOffset, p.distinct(parsed, sort.wrap(group.wrap(s)))), nil
 }
 
-// Initializes the table node, given the parsed select expression
+// initFrom initializes the table node, given the parsed select expression
 func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.Error {
 	from := parsed.From
 	var colAlias parser.NameList
@@ -481,8 +481,9 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 // we match the prefix of the qualified name to one of the tables in the query and then expand the
 // "*" into a list of columns. The qvalMap is updated to include all the relevant columns. A
 // ResultColumns and Expr pair is returned for each column.
-func checkRenderStar(target parser.SelectExpr, table *tableInfo, qvals qvalMap) (isStar bool,
-	columns []ResultColumn, exprs []parser.Expr, err error) {
+func checkRenderStar(
+	target parser.SelectExpr, table *tableInfo, qvals qvalMap,
+) (isStar bool, columns []ResultColumn, exprs []parser.Expr, err error) {
 	qname, ok := target.Expr.(*parser.QualifiedName)
 	if !ok {
 		return false, nil, nil, nil
