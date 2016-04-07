@@ -544,9 +544,9 @@ bool MergeTimeSeriesValues(
   new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
 
   // Sort values in right_ts. Assume values in left_ts have been sorted.
-  std::sort(right_ts.mutable_samples()->pointer_begin(),
-            right_ts.mutable_samples()->pointer_end(),
-            TimeSeriesSampleOrdering);
+  std::stable_sort(right_ts.mutable_samples()->pointer_begin(),
+                   right_ts.mutable_samples()->pointer_end(),
+                   TimeSeriesSampleOrdering);
 
   // Merge sample values of left and right into new_ts.
   auto left_front = left_ts.samples().begin();
@@ -568,20 +568,24 @@ bool MergeTimeSeriesValues(
       next_offset = right_front->offset();
     }
 
-    // Create an empty sample in the output collection with the selected
-    // offset.  Accumulate data from all samples at the front of either left
-    // or right which match the selected timestamp. This behavior is needed
-    // because each side may individually have duplicated offsets.
+    // Create an empty sample in the output collection.
     cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
-    ns->set_offset(next_offset);
-    while (left_front != left_end && left_front->offset() == ns->offset()) {
-      AccumulateTimeSeriesSamples(ns, *left_front);
+
+    // Only the most recently merged value with a given sample offset is kept;
+    // samples merged earlier at the same offset are discarded. We will now
+    // parse through the left and right sample sets, finding the most recently
+    // merged sample at the current offset.
+    cockroach::roachpb::InternalTimeSeriesSample src;
+    while (left_front != left_end && left_front->offset() == next_offset) {
+      src = *left_front;
       left_front++;
     }
-    while (right_front != right_end && right_front->offset() == ns->offset()) {
-      AccumulateTimeSeriesSamples(ns, *right_front);
+    while (right_front != right_end && right_front->offset() == next_offset) {
+      src = *right_front;
       right_front++;
     }
+
+    ns->CopyFrom(src);
   }
 
   // Serialize the new TimeSeriesData into the left value's byte field.
@@ -610,9 +614,9 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
   new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
 
   // Sort values in the ts value.
-  std::sort(val_ts.mutable_samples()->pointer_begin(),
-            val_ts.mutable_samples()->pointer_end(),
-            TimeSeriesSampleOrdering);
+  std::stable_sort(val_ts.mutable_samples()->pointer_begin(),
+                   val_ts.mutable_samples()->pointer_end(),
+                   TimeSeriesSampleOrdering);
 
   // Merge sample values of left and right into new_ts.
   auto front = val_ts.samples().begin();
@@ -627,7 +631,7 @@ bool ConsolidateTimeSeriesValue(std::string *val, rocksdb::Logger* logger) {
     cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
     ns->set_offset(front->offset());
     while (front != end && front->offset() == ns->offset()) {
-      AccumulateTimeSeriesSamples(ns, *front);
+      ns->CopyFrom(*front);
       ++front;
     }
   }
@@ -645,24 +649,13 @@ bool MergeValues(cockroach::storage::engine::MVCCMetadata *left,
       rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
       return false;
     }
-    // Check for replay; if left merge_timestamp is equal to right,
-    // then ignore the merge request. Replays can happen on merges as
-    // there is no higher-level replay protection and Raft may
-    // duplicate commands. The replay protection here is imperfect.
-    // Raft may duplicate and replay commands out of order, in which
-    // case the same command may be re-merged.
-    //
-    // NOTE: there are test cases in storage/engine/merge_test and in
-    //   ts/db_test which will send MVCCMetadata with empty
-    //   merge_timestamps and should always be merged; thus the check
-    //   for non-empty merge_timestamps.
-    if (left->has_merge_timestamp() && right.has_merge_timestamp()) {
-      if (left->merge_timestamp().wall_time() == right.merge_timestamp().wall_time() &&
-          left->merge_timestamp().logical() == right.merge_timestamp().logical()) {
-        return true;
-      }
-      left->mutable_merge_timestamp()->CopyFrom(right.merge_timestamp());
-    }
+
+    // Replay Advisory: Because merge commands pass through raft, it is possible
+    // for merging values to be "replayed". Currently, the only actual use of
+    // the merge system is for time series data, which is safe against replay;
+    // however, this property is not general for all potential mergeable types.
+    // If a future need arises to merge another type of data, replay protection
+    // will likely need to be a consideration.
 
     if (IsTimeSeriesData(left->raw_bytes()) || IsTimeSeriesData(right.raw_bytes())) {
       // The right operand must also be a time series.
@@ -1342,6 +1335,10 @@ DBStatus DBFlush(DBEngine* db) {
   rocksdb::FlushOptions options;
   options.wait = true;
   return ToDBStatus(db->rep->Flush(options));
+}
+
+DBStatus DBCompact(DBEngine* db) {
+  return ToDBStatus(db->rep->CompactRange(rocksdb::CompactRangeOptions(), NULL, NULL));
 }
 
 uint64_t DBApproximateSize(DBEngine* db, DBKey start, DBKey end) {
