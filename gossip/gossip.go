@@ -700,9 +700,6 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 		g.resolverIdx %= len(g.resolvers)
 		g.resolversTried[g.resolverIdx] = struct{}{}
 		resolver := g.resolvers[g.resolverIdx]
-		if resolver.IsExhausted() {
-			continue
-		}
 		if addr, err := resolver.GetAddress(); err != nil {
 			log.Errorf("invalid bootstrap address: %+v, %v", resolver, err)
 			continue

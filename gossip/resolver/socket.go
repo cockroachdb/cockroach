@@ -56,7 +56,3 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 	}
 	return nil, util.Errorf("unknown address type: %q", sr.typ)
 }
-
-// IsExhausted returns whether the resolver can yield further
-// addresses.
-func (sr *socketResolver) IsExhausted() bool { return sr.exhausted }

@@ -73,15 +73,14 @@ func TestGetAddress(t *testing.T) {
 	testCases := []struct {
 		resolverSpec string
 		success      bool
-		oneShot      bool
 		addressType  string
 		addressValue string
 	}{
-		{"tcp=127.0.0.1:26222", true, true, "tcp", "127.0.0.1:26222"},
-		{"tcp=127.0.0.1", true, true, "tcp", "127.0.0.1:" + base.DefaultPort},
-		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
+		{"tcp=127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
+		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
+		{"tcp=localhost:80", true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.
-		{"unix=/tmp/foo", true, true, "unix", "/tmp/foo"},
+		{"unix=/tmp/foo", true, "unix", "/tmp/foo"},
 	}
 
 	for tcNum, tc := range testCases {
@@ -95,9 +94,6 @@ func TestGetAddress(t *testing.T) {
 		}
 		if err != nil {
 			continue
-		}
-		if resolver.IsExhausted() != tc.oneShot {
-			t.Errorf("#%d: expected exhausted resolver=%t, but is: %+v", tcNum, tc.oneShot, resolver)
 		}
 		if address.Network() != tc.addressType {
 			t.Errorf("#%d: expected address type=%s, got %+v", tcNum, tc.addressType, address)
