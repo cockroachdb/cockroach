@@ -219,27 +219,31 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 // the table desc.
 // The update closure is called after the wait, and it provides the new version
 // of the descriptor to be written. In a multi-step schema operation, this
-// update should perform a single step.  The closure may be called multiple
-// times if retries occur; make sure it does not have side effects.
-func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *roachpb.Error {
+// update should perform a single step.
+// The closure may be called multiple times if retries occur; make sure it does
+// not have side effects.
+// Returns the updated version of the descriptor.
+func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) (
+	*Descriptor, *roachpb.Error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     2,
 	}
 
+	// Retry while getting LeaseVersionChangedError.
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
 		expectedVersion, err := s.waitForOneVersion(tableID, retryOpts)
 		if err != nil {
-			return roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 
+		desc := &Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
-			desc := &Descriptor{}
 			descKey := MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
@@ -284,11 +288,14 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) *ro
 			return txn.CommitInBatch(b)
 		})
 
+		if pErr == nil {
+			return desc, nil
+		}
 		if _, ok := pErr.GetDetail().(*roachpb.LeaseVersionChangedError); !ok {
 			if _, ok := pErr.GetDetail().(*roachpb.DidntUpdateDescriptorError); ok {
-				return nil
+				return desc, nil
 			}
-			return pErr
+			return nil, pErr
 		}
 	}
 
