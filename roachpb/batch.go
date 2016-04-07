@@ -105,11 +105,6 @@ func (br *BatchResponse) String() string {
 	return strings.Join(str, ", ")
 }
 
-// Header returns a pointer to the header.
-func (br *BatchResponse) Header() *BatchResponse_Header {
-	return &br.BatchResponse_Header
-}
-
 // IntentSpanIterate calls the passed method with the key ranges of the
 // transactional writes contained in the batch.
 func (ba *BatchRequest) IntentSpanIterate(fn func(key, endKey Key)) {

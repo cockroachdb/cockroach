@@ -570,7 +570,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		}
 		// Propagate transaction from last reply to next request. The final
 		// update is taken and put into the response's main header.
-		ba.Txn.Update(rpl.Header().Txn)
+		ba.Txn.Update(rpl.Txn)
 		rplChunks = append(rplChunks, rpl)
 		parts = parts[1:]
 	}
