@@ -103,7 +103,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 
 	// Construct the default expressions. The returned slice will be nil if no
 	// column in the table has a default expression.
-	defaultExprs, err := p.makeDefaultExprs(cols)
+	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -385,10 +385,12 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 	return ret
 }
 
-func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
-	// Check to see if any of the columns have DEFAULT expressions. If there are
-	// no DEFAULT expressions, we don't bother with constructing the defaults map
-	// as the defaults are all NULL.
+func makeDefaultExprs(
+	cols []ColumnDescriptor, parse *parser.Parser, evalCtx parser.EvalContext,
+) ([]parser.Expr, error) {
+	// Check to see if any of the columns have DEFAULT expressions. If there
+	// are no DEFAULT expressions, we don't bother with constructing the
+	// defaults map as the defaults are all NULL.
 	haveDefaults := false
 	for _, col := range cols {
 		if col.DefaultExpr != nil {
@@ -411,7 +413,7 @@ func (p *planner) makeDefaultExprs(cols []ColumnDescriptor) ([]parser.Expr, erro
 		if err != nil {
 			return nil, err
 		}
-		expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
+		expr, err = parse.NormalizeExpr(evalCtx, expr)
 		if err != nil {
 			return nil, err
 		}
