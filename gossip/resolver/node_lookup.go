@@ -97,7 +97,3 @@ func resolveAddress(network, address string) (net.Addr, error) {
 	}
 	return nil, util.Errorf("unknown address type: %q", network)
 }
-
-// IsExhausted always returns false, as there's no way to know how many
-// nodes are behind a load balancer.
-func (nl *nodeLookupResolver) IsExhausted() bool { return false }
