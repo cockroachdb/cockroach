@@ -387,7 +387,9 @@ func TestUncertaintyRestart(t *testing.T) {
 	s := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
-	s.Clock.SetMaxOffset(250 * time.Millisecond)
+	const maxOffset = 250 * time.Millisecond
+	s.Clock.SetMaxOffset(maxOffset)
+	s.Manual.Set(maxOffset.Nanoseconds() + 1)
 
 	var key = roachpb.Key("a")
 
