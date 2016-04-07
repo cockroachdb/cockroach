@@ -25,6 +25,8 @@ import (
 	"gopkg.in/inf.v0"
 )
 
+var e = smallPower(nil, decimalOne, 1000)
+
 // NewDecFromFloat allocates and returns a new Dec set to the given
 // float64 value. The function will panic if the float is NaN or ±Inf.
 func NewDecFromFloat(f float64) *inf.Dec {
@@ -331,26 +333,22 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 
 // For integers we use exponentiation by squaring.
 // See: https://en.wikipedia.org/wiki/Exponentiation_by_squaring
-func integerPower(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+func integerPower(z, x *inf.Dec, y int64, s inf.Scale) *inf.Dec {
 	if z == nil {
 		z = new(inf.Dec)
 	}
 
-	neg := y.Sign() == -1
+	neg := y < 0
 	if neg {
-		y.Abs(y)
+		y = -y
 	}
 
 	z.Set(decimalOne)
-	u, ok := y.Unscaled()
-	if !ok {
-		panic("integer out of range")
-	}
-	for u > 0 {
-		if u%2 == 1 {
+	for y > 0 {
+		if y%2 == 1 {
 			z = z.Mul(z, x)
 		}
-		u >>= 1
+		y >>= 1
 		x.Mul(x, x)
 	}
 
@@ -402,15 +400,20 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 	// e^n = e^(x+y) = e^x * e^y
 
 	// Split out x (integer(n))
-	x := inf.NewDec(1, -nn.Scale())
-	x = x.QuoRound(inf.NewDec(1, -nn.Scale()).Round(nn, 0, inf.RoundHalfUp), x, 0, inf.RoundHalfUp)
+	x := new(inf.Dec).Round(nn, 0, inf.RoundDown)
 
 	// Split out y (n - x) which is < 1
 	y := new(inf.Dec).Sub(nn, x)
 
+	// convert x to integer
+	integer, ok := x.Unscaled()
+	if !ok {
+		panic("integer out of range")
+	}
+
 	// Use scale = 1000 so the sub results need be very precise before multiplying and rounding afterwards.
 	ey := smallPower(nil, y, 1000)
-	ex := integerPower(z, smallPower(nil, decimalOne, 1000), x, s)
+	ex := integerPower(z, new(inf.Dec).Set(e), integer, s)
 
 	// e^n = e^(x+y) = e^x * e^y
 	z = z.Mul(ex, ey)
