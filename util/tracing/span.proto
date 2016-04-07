@@ -24,8 +24,8 @@ import weak "gogoproto/gogo.proto";
 // distributed trace as per the OpenTracing specification. See
 // http://opentracing.io/spec/ for details.
 message Span {
-  int64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
-  int64 span_id = 2 [(gogoproto.customname) = "SpanID"];
+  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
   bool sampled = 3;
   map<string, string> baggage = 4;
 }
