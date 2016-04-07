@@ -118,21 +118,15 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 func TestGossipCullNetwork(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Create the local gossip and minPeers peers.
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t)
 	local.SetCullInterval(5 * time.Millisecond)
-	peers := []*Gossip{}
-	for i := 0; i < minPeers; i++ {
-		peers = append(peers, startGossip(roachpb.NodeID(i+2), stopper, t))
-	}
 
-	// Start clients to all peers and start the local gossip's manage routine.
 	local.mu.Lock()
-	for _, p := range peers {
-		pAddr := p.is.NodeAddr
-		local.startClient(&pAddr, stopper)
+	for i := 0; i < minPeers; i++ {
+		peer := startGossip(roachpb.NodeID(i+2), stopper, t)
+		local.startClient(&peer.is.NodeAddr, stopper)
 	}
 	local.mu.Unlock()
 	local.manage()
