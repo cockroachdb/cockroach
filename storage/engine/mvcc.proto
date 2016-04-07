@@ -84,7 +84,7 @@ message MVCCStats {
   // gc_bytes_age is the cumulative age of the non-live data (i.e.
   // data included in key_bytes and val_bytes, but not live_bytes).
   // See the comment on MVCCStats.
-  optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge" ];
+  optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
 
   // live_bytes is the number of bytes stored in keys and values which can in
   // principle be read by means of a Scan or Get, including intents but not
