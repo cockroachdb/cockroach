@@ -21,6 +21,7 @@ import (
 	"net"
 
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -57,18 +58,16 @@ func newClient(addr net.Addr) *client {
 	}
 }
 
-// start dials the remote addr and commences gossip once connected.
-// Upon exit, the client is sent on the disconnected channel.
-// If the client experienced an error, its err field will
-// be set. This method starts client processing in a goroutine and
-// returns immediately.
+// start dials the remote addr and commences gossip once connected. Upon exit,
+// the client is sent on the disconnected channel. This method starts client
+// processing in a goroutine and returns immediately.
 func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
 		defer func() {
 			disconnected <- c
 		}()
 
-		conn, err := ctx.GRPCDial(c.addr.String())
+		conn, err := ctx.GRPCDial(c.addr.String(), grpc.WithBlock())
 		if err != nil {
 			log.Errorf("failed to dial: %v", err)
 			return
