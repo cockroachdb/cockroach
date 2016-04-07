@@ -154,10 +154,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 	expectedVersion := desc.GetTable().Version
 
-	if pErr := changer.MaybeIncrementVersion(); pErr != nil {
-		t.Fatal(pErr)
-	}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+	desc, pErr = changer.MaybeIncrementVersion()
+	if pErr != nil {
 		t.Fatal(pErr)
 	}
 	newVersion := desc.GetTable().Version
@@ -186,15 +184,21 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if isDone {
 		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
 	}
-	if pErr := changer.MaybeIncrementVersion(); pErr != nil {
+	desc, pErr = changer.MaybeIncrementVersion()
+	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+	savedDesc := &csql.Descriptor{}
+	if pErr := kvDB.GetProto(descKey, savedDesc); pErr != nil {
 		t.Fatal(pErr)
 	}
 	newVersion = desc.GetTable().Version
 	if newVersion != expectedVersion {
-		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
+		t.Fatalf("bad version in returned desc; e = %d, v = %d", expectedVersion, newVersion)
+	}
+	newVersion = savedDesc.GetTable().Version
+	if newVersion != expectedVersion {
+		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
 	}
 	isDone, err = changer.IsDone()
 	if err != nil {

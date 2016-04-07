@@ -199,7 +199,7 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	}(&lease)
 
 	// Increment the version and unset tableDescriptor.UpVersion.
-	if pErr := sc.MaybeIncrementVersion(); pErr != nil {
+	if _, pErr := sc.MaybeIncrementVersion(); pErr != nil {
 		return pErr
 	}
 
@@ -235,13 +235,15 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	}
 
 	// Mark the mutations as completed.
-	return sc.done()
+	_, pErr = sc.done()
+	return pErr
 }
 
 // MaybeIncrementVersion increments the version if needed.
 // If the version is to be incremented, it also assures that all nodes are on
 // the current (pre-increment) version of the descriptor.
-func (sc *SchemaChanger) MaybeIncrementVersion() *roachpb.Error {
+// Returns the (potentially updated) descriptor.
+func (sc *SchemaChanger) MaybeIncrementVersion() (*Descriptor, *roachpb.Error) {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		if !desc.UpVersion {
 			// Return error so that Publish() doesn't increment the version.
@@ -257,7 +259,7 @@ func (sc *SchemaChanger) MaybeIncrementVersion() *roachpb.Error {
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
 func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
-	if pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
+	if _, pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		var modified bool
 		// Apply mutations belonging to the same version.
 		for i, mutation := range desc.Mutations {
@@ -323,7 +325,8 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of the
 // schema.
-func (sc *SchemaChanger) done() *roachpb.Error {
+// Returns the updated of the descriptor.
+func (sc *SchemaChanger) done() (*Descriptor, *roachpb.Error) {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		i := 0
 		for _, mutation := range desc.Mutations {
@@ -351,7 +354,7 @@ func (sc *SchemaChanger) done() *roachpb.Error {
 // and run through the state machine until the mutations are deleted.
 func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease) error {
 	// Reverse the flow of the state machine.
-	if pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
+	if _, pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
@@ -388,7 +391,8 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 	}
 
 	// Mark the mutations as completed.
-	return sc.done().GoError()
+	_, pErr := sc.done()
+	return pErr.GoError()
 }
 
 // IsDone returns true if the work scheduled for the schema changer
