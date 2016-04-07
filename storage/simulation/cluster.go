@@ -75,6 +75,9 @@ func createCluster(
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, nil, stopper)
+	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
+	// instance to prevent conflicts with real NodeIDs.
+	g.SetNodeID(-1)
 	storePool := storage.NewStorePool(g, clock, storage.TestTimeUntilStoreDeadOff, stopper)
 	c := &Cluster{
 		stopper:   stopper,
