@@ -494,9 +494,6 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 				return nil, pErr
 			}
 			t.active.insert(s)
-			if err := t.releaseNonLatest(store); err != nil {
-				log.Warning(err)
-			}
 		}
 
 		// A new lease was added, so loop and perform the lookup again.
@@ -504,6 +501,7 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 }
 
 // releaseLeases releases the leases in `leases` with refcount 0.
+// t.mu must be locked.
 func (t *tableState) releaseLeasesIfNotActive(
 	leases []*LeaseState, store LeaseStore) error {
 
@@ -520,7 +518,10 @@ func (t *tableState) releaseLeasesIfNotActive(
 }
 
 // releaseNonLatest releases all unused non-latest leases.
+// t.mu must be locked.
 func (t *tableState) releaseNonLatest(store LeaseStore) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// Skip the last lease.
 	return t.releaseLeasesIfNotActive(t.active.data[:len(t.active.data)-1], store)
 }
@@ -581,6 +582,58 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error
 	t.mu.Unlock()
 	defer t.mu.Lock()
 	return store.Release(lease)
+}
+
+// refreshMaybe refreshes the leases on a table. Unused leases older than
+// minVersion will be released.
+// If t has no active leases, nothing is done.
+func (t *tableState) refreshMaybe(
+	db *client.DB, minVersion DescriptorVersion, store LeaseStore) error {
+
+	nonEmpty := func() bool {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		return len(t.active.data) > 0
+	}()
+	if !nonEmpty {
+		// We don't currently have a lease on this table, so no need to refresh
+		// anything.
+		return nil
+	}
+
+	// Acquire and release a lease on the table at a version >= minVersion.
+	var lease *LeaseState
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		// Acquire() can only acquire a lease at a version if it has
+		// already been acquired at that version, or that version
+		// is the latest version. If the latest version is > minVersion
+		// then the node acquires a lease at the latest version but
+		// Acquire() itself returns an error. This is okay, because
+		// we want to update the node lease.
+		lease, pErr = t.acquire(txn, minVersion, store)
+		if pErr == nil {
+			if err := t.releaseNonLatest(store); err != nil {
+				log.Warning(err)
+			}
+		} else if _, ok := pErr.GetDetail().(*roachpb.DescriptorDeletedError); ok {
+			// If the descriptor is being deleted, we need to release all
+			// existing leases since they're now stale.
+			t.mu.Lock()
+			if err := t.releaseLeasesIfNotActive(t.active.data, store); err != nil {
+				log.Warning(err)
+			}
+			t.mu.Unlock()
+		}
+		return pErr
+	}); pErr != nil {
+		// Swallow DescriptorDeletedError.
+		if _, ok := pErr.GetDetail().(*roachpb.DescriptorDeletedError); ok {
+			return nil
+		}
+		return pErr.GoError()
+	}
+	return t.release(lease, store)
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. Exported only
@@ -676,10 +729,12 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 								kv.Key, table.ID, table.Version)
 						}
 						// Try to refresh the table lease to one >= this version.
-						if err := m.refreshLease(db, table.ID, table.Version); err != nil {
-							log.Warningf("%s: %v", kv.Key, err)
+						if t := m.findTableState(table.ID, false); t != nil {
+							if err := t.refreshMaybe(
+								db, table.Version, m.LeaseStore); err != nil {
+								log.Warningf("%s: %v", kv.Key, err)
+							}
 						}
-
 					case *Descriptor_Database:
 						// Ignore.
 					}
@@ -690,32 +745,4 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 			}
 		}
 	})
-}
-
-// refreshLease tries to refresh the node's table lease.
-func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorVersion) error {
-	// Only attempt to update a lease for a table that is already leased.
-	if t := m.findTableState(id, false); t == nil || len(t.active.data) == 0 {
-		return nil
-	}
-	// Acquire and release a lease on the table at a version >= minVersion.
-	var lease *LeaseState
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		// Acquire() can only acquire a lease at a version if it has
-		// already been acquired at that version, or that version
-		// is the latest version. If the latest version is > minVersion
-		// then the node acquires a lease at the latest version but
-		// Acquire() itself returns an error. This is okay, because
-		// we want to update the node lease.
-		lease, pErr = m.Acquire(txn, id, minVersion)
-		return pErr
-	}); pErr != nil {
-		// Swallow DescriptorDeletedError.
-		if _, ok := pErr.GetDetail().(*roachpb.DescriptorDeletedError); ok {
-			return nil
-		}
-		return pErr.GoError()
-	}
-	return m.Release(lease)
 }
