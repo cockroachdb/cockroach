@@ -30,7 +30,6 @@ import (
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
-	b := client.Batch{}
 	for _, tableQualifiedName := range n.Tables {
 		tableDesc, pErr := p.getTableLease(tableQualifiedName)
 		if pErr != nil {
@@ -41,20 +40,20 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 			return nil, roachpb.NewError(err)
 		}
 
-		p.TruncateImpl(&tableDesc, &b)
-	}
-
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, pErr
+		if pErr := truncateTable(&tableDesc, p.txn); pErr != nil {
+			return nil, pErr
+		}
 	}
 
 	return &emptyNode{}, nil
 }
 
-// TruncateImpl batches commands for truncating the data of the table.
+// truncateTable truncates the data of a table.
 // It deletes a range of data for the table, which includes the PK and all
 // indexes.
-func (*planner) TruncateImpl(tableDesc *TableDescriptor, b *client.Batch) {
+func truncateTable(
+	tableDesc *TableDescriptor, txn *client.Txn) *roachpb.Error {
+
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 	// Delete rows and indexes starting with the table's prefix.
@@ -63,5 +62,7 @@ func (*planner) TruncateImpl(tableDesc *TableDescriptor, b *client.Batch) {
 	if log.V(2) {
 		log.Infof("DelRange %s - %s", tableStartKey, tableEndKey)
 	}
+	b := client.Batch{}
 	b.DelRange(tableStartKey, tableEndKey, false)
+	return txn.Run(&b)
 }

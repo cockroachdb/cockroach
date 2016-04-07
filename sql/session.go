@@ -285,6 +285,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{PErr: pErr}
 				}
+				log.Warningf("Error executing schema change: %s", pErr)
 			}
 			break
 		}

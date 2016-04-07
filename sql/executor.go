@@ -451,13 +451,13 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		// rolled back from the table descriptor.
 		stmtsExecuted := stmts[:len(stmtsToExec)-len(remainingStmts)]
 		if txnState.State != Open {
-			planMaker.releaseLeases()
+			planMaker.checkTestingVerifyMetadataInitialOrDie(e, stmts)
+			planMaker.checkTestingVerifyMetadataOrDie(e, stmtsExecuted)
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
+			planMaker.releaseLeases()
 			txnState.schemaChangers.execSchemaChanges(e, planMaker, res.ResultList)
-			planMaker.checkTestingVerifyMetadataInitialOrDie(e, stmts)
-			planMaker.checkTestingVerifyMetadataOrDie(e, stmtsExecuted)
 		} else {
 			// We're still in a txn, so we only check that the verifyMetadata callback
 			// fails the first time it's run. The gossip update that will make the
