@@ -169,7 +169,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 		// Return the result column types.
-		return rh.getResults(), nil
+		return rh.getResults()
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -350,7 +350,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	}
 
 	tracing.AnnotateTrace()
-	return rh.getResults(), nil
+	return rh.getResults()
 }
 
 func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) parser.Expr {
