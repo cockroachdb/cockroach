@@ -2702,6 +2702,10 @@ character_base:
   {
     $$.val = &StringType{Name: "VARCHAR"}
   }
+| STRING
+  {
+    $$.val = &StringType{Name: "STRING"}
+  }
 
 opt_varying:
   VARYING {}
