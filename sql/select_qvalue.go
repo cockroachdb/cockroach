@@ -207,20 +207,30 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 func (*qnameVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
 func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
-	return resolveQNames(&s.table, s.qvals, expr)
+	var v *qnameVisitor
+	if s.planner != nil {
+		v = &s.planner.qnameVisitor
+	}
+	return resolveQNames(expr, &s.table, s.qvals, v)
 }
 
-func resolveQNames(table *tableInfo, qvals qvalMap, expr parser.Expr) (parser.Expr, error) {
+// resolveQNames walks the provided expression and resolves all qualified
+// names using the tableInfo and qvalMap. The function takes an optional
+// qnameVisitor to provide the caller the option of avoiding an allocation.
+func resolveQNames(expr parser.Expr, table *tableInfo, qvals qvalMap, v *qnameVisitor) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
-	v := qnameVisitor{
+	if v == nil {
+		v = new(qnameVisitor)
+	}
+	*v = qnameVisitor{
 		qt: qvalResolver{
 			table: table,
 			qvals: qvals,
 		},
 	}
-	expr, _ = parser.WalkExpr(&v, expr)
+	expr, _ = parser.WalkExpr(v, expr)
 	return expr, v.err
 }
 

@@ -63,7 +63,7 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 		// manipulations to the expression.
 		outputName := getRenderColName(target)
 
-		expr, err := resolveQNames(&table, rh.qvals, target.Expr)
+		expr, err := resolveQNames(target.Expr, &table, rh.qvals, &p.qnameVisitor)
 		if err != nil {
 			return returningHelper{}, err
 		}
