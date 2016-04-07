@@ -58,16 +58,14 @@ message InternalTimeSeriesData {
 // Each sample may contain data gathered from multiple measurements of the same
 // variable, as long as all of those measurements occurred within the sample
 // period. The sample stores several aggregated values from these measurements:
-// - The sum of all measured values
-// - A count of all measurements taken
 // - The maximum individual measurement seen
 // - The minimum individual measurement seen
 //
 // If zero measurements are present in a sample, then it should be omitted
 // entirely from any collection it would be a part of.
 //
-// If the count of measurements is 1, then max and min fields may be omitted
-// and assumed equal to the sum field.
+// If only one value exists, max and min fields may be omitted and
+// assumed equal to the value present.
 message InternalTimeSeriesSample {
   // Temporal offset from the "start_timestamp" of the InternalTimeSeriesData
   // collection this data point is part in. The units of this value are
@@ -75,12 +73,13 @@ message InternalTimeSeriesSample {
   // the TimeSeriesData collection.
   optional int32 offset = 1 [(gogoproto.nullable) = false];
 
-  // Count of measurements taken within this sample.
-  optional uint32 count = 6 [(gogoproto.nullable) = false];
-  // Sum of all measurements.
-  optional double sum = 7 [(gogoproto.nullable) = false];
+  // A series of measurements gathered over a time period.
+  repeated double value = 2;
   // Maximum encountered measurement in this sample.
   optional double max = 8;
   // Minimum encountered measurement in this sample.
   optional double min = 9;
+
+  optional uint32 DELETED_count = 6 [(gogoproto.nullable) = false];
+  optional double DELETED_sum = 7 [(gogoproto.nullable) = false];
 }
