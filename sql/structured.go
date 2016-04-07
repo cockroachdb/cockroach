@@ -637,17 +637,28 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 // incrementMutationID returns the id that has been used by mutations appended
 // with addMutation() since the last time this function was called.
 // Future mutations will use a new ID.
-func (desc *TableDescriptor) incrementMutationID() MutationID {
-	desc.setUpVersion()
+func (desc *TableDescriptor) incrementMutationID() (MutationID, error) {
+	err := desc.setUpVersion()
+	if err != nil {
+		return invalidMutationID, err
+	}
 	mutationID := desc.NextMutationID
 	desc.NextMutationID++
-	return mutationID
+	return mutationID, nil
 }
 
-// setUpVersion sets the up_version marker on the table descriptor (see the
-// proto for comments).
-func (desc *TableDescriptor) setUpVersion() {
+// setUpVersion sets the up_version marker on the table descriptor (see the proto
+// for comments).
+func (desc *TableDescriptor) setUpVersion() error {
+	if desc.Deleted {
+		// We don't allow the version to be incremented any more once a table
+		// has been deleted. This will block new mutations from being queued on the
+		// table; it'd be misleading to allow them to be queued, since the
+		// respective schema change will never run.
+		return fmt.Errorf("table %q has been deleted", desc.Name)
+	}
 	desc.UpVersion = true
+	return nil
 }
 
 // VisibleColumns returns all non hidden columns.
