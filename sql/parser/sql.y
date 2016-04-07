@@ -2540,10 +2540,6 @@ simple_typename:
   {
     $$.val = &StringType{Name: "TEXT"}
   }
-| STRING
-  {
-    $$.val = &StringType{Name: "STRING"}
-  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -2701,6 +2697,10 @@ character_base:
 | VARCHAR
   {
     $$.val = &StringType{Name: "VARCHAR"}
+  }
+| STRING
+  {
+    $$.val = &StringType{Name: "STRING"}
   }
 
 opt_varying:
