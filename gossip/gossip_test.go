@@ -22,11 +22,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -123,70 +123,47 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t)
 
-	// Buffer the channel so that it doesn't fill up when the test is shutting
-	// down.
-	disconnectedCh := make(chan *client, local.server.incoming.maxSize)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Start a loopback client so we "learn" about ourselves and leave it open.
-	{
-		c := newClient(&local.is.NodeAddr)
-
-		conn, err := local.rpcContext.GRPCDial(c.addr.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		stream, err := NewGossipClient(conn).Gossip(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := c.requestGossip(local, local.is.NodeAddr, stream); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	connectedClients := struct {
-		sync.Mutex
-		set map[roachpb.NodeID]struct{}
-	}{
-		set: make(map[roachpb.NodeID]struct{}),
-	}
-
-	// Fill the incoming clients.
+	// Start one loopback client plus enough additional clients to fill the
+	// incoming clients.
+	peers := []*Gossip{local}
 	for i := 0; i < local.server.incoming.maxSize; i++ {
-		peer := startGossip(roachpb.NodeID(i+2), stopper, t)
-		peer.RegisterCallback(".*", func(_ string, _ roachpb.Value) {
-			connectedClients.Lock()
-			connectedClients.set[peer.is.NodeID] = struct{}{}
-			connectedClients.Unlock()
-		})
+		peers = append(peers, startGossip(roachpb.NodeID(i+2), stopper, t))
+	}
+
+	for _, peer := range peers {
 		c := newClient(&local.is.NodeAddr)
-		c.start(peer, disconnectedCh, peer.rpcContext, stopper)
+
+		util.SucceedsSoon(t, func() error {
+			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
+			if err != nil {
+				return err
+			}
+
+			stream, err := NewGossipClient(conn).Gossip(ctx)
+			if err != nil {
+				return err
+			}
+
+			if err := c.requestGossip(peer, peer.is.NodeAddr, stream); err != nil {
+				return err
+			}
+
+			// Wait until the server responds, so we know we're connected.
+			_, err = stream.Recv()
+			return err
+		})
 	}
 
-	// Make sure none of the initial clients were disconnected.
-	util.SucceedsSoon(t, func() error {
-		connectedClients.Lock()
-		l := len(connectedClients.set)
-		connectedClients.Unlock()
-		if l < local.server.incoming.maxSize {
-			return util.Errorf("%d of %d clients connected", l, local.server.incoming.maxSize)
-		}
-		return nil
-	})
-
-	select {
-	case disconnectedClient := <-disconnectedCh:
-		t.Fatalf("unexpected client %v was disconnected", disconnectedClient)
-	default:
-	}
+	const numClients = 100
+	disconnectedCh := make(chan *client)
+	numFailedConns := 0
 
 	// Start a few overflow peers and assert that they don't get forwarded to us
 	// again.
-	for i := 0; i < 100; i++ {
+	for i := 0; i < numClients; i++ {
 		peer := startGossip(roachpb.NodeID(i+local.server.incoming.maxSize+2), stopper, t)
 
 		c := newClient(&local.is.NodeAddr)
@@ -194,12 +171,19 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 		disconnectedClient := <-disconnectedCh
 		if disconnectedClient != c {
-			t.Fatalf("expected %v to be disconnected, got %v", c, disconnectedClient)
+			t.Fatalf("expected %p to be disconnected, got %p", c, disconnectedClient)
 		} else if c.forwardAddr == nil {
-			t.Errorf("peer #%d: got nil forwarding address", i)
+			// Under high load, clients sometimes fail to connect for reasons
+			// unrelated to the test, so we need to permit some.
+			numFailedConns++
+			t.Logf("node #%d: got nil forwarding address", peer.is.NodeID)
 		} else if *c.forwardAddr == local.is.NodeAddr {
-			t.Errorf("peer #%d: got local's forwarding address", i)
+			t.Errorf("node #%d: got local's forwarding address", peer.is.NodeID)
 		}
+	}
+
+	if numFailedConns > numClients/10 {
+		t.Errorf("%d clients disconnected for unexpected reasons", numFailedConns)
 	}
 }
 
