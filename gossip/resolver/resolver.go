@@ -31,7 +31,6 @@ type Resolver interface {
 	Type() string
 	Addr() string
 	GetAddress() (net.Addr, error)
-	IsExhausted() bool
 }
 
 var validTypes = map[string]struct{}{

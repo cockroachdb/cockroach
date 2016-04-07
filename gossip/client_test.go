@@ -369,14 +369,10 @@ func (tr *testResolver) Addr() string { return tr.addr }
 
 func (tr *testResolver) GetAddress() (net.Addr, error) {
 	defer func() { tr.numTries++ }()
-	if tr.numTries < tr.numFails || tr.IsExhausted() {
+	if tr.numTries < tr.numFails {
 		return nil, errors.New("bad address")
 	}
 	return util.NewUnresolvedAddr("tcp", tr.addr), nil
-}
-
-func (tr *testResolver) IsExhausted() bool {
-	return tr.numTries > tr.numFails+tr.numSuccesses
 }
 
 // TestClientRetryBootstrap verifies that an initial failure to connect
