@@ -141,6 +141,34 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	}
 }
 
+// randomPeer selects a random peer from nodeMap which is not equal to selfID.
+func randomPeer(
+	nodeMap map[util.UnresolvedAddr]roachpb.NodeID, selfID roachpb.NodeID,
+) (util.UnresolvedAddr, roachpb.NodeID) {
+	var peerAddr util.UnresolvedAddr
+	var peerNodeID roachpb.NodeID
+	if len(nodeMap) > 0 {
+		// Choose a random peer for forwarding.
+		peerIdx := rand.Intn(len(nodeMap))
+		for addr, id := range nodeMap {
+			if id == selfID {
+				// Don't forward back to ourselves.
+				continue
+			}
+			// Keep track of a valid forwarding peer in case the randomly
+			// selected node is the last node in the map and that node is
+			// ourself.
+			peerAddr = addr
+			peerNodeID = id
+			if peerIdx == 0 {
+				break
+			}
+			peerIdx--
+		}
+	}
+	return peerAddr, peerNodeID
+}
+
 func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) error, receiverFn func() (*Request, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -165,37 +193,19 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 					delete(s.nodeMap, addr)
 				}(args.NodeID, args.Addr)
 			} else {
-				var alternateAddr util.UnresolvedAddr
-				var alternateNodeID roachpb.NodeID
-				// Choose a random peer for forwarding.
-				altIdx := rand.Intn(len(s.nodeMap))
-				for addr, id := range s.nodeMap {
-					if id == s.is.NodeID {
-						// Don't forward back to ourselves.
-						continue
-					}
-					// Keep track of a valid forwarding peer in case the randomly
-					// selected node is the last node in the map and that node is
-					// ourself.
-					alternateAddr = addr
-					alternateNodeID = id
-					if altIdx == 0 {
-						break
-					}
-					altIdx--
-				}
-
-				if alternateNodeID == s.is.NodeID {
-					panic("cannot recommend self as node to forward to")
-				}
-
-				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-					args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
-
 				*reply = Response{
-					NodeID:          s.is.NodeID,
-					AlternateAddr:   &alternateAddr,
-					AlternateNodeID: alternateNodeID,
+					NodeID: s.is.NodeID,
+				}
+
+				alternateAddr, alternateNodeID := randomPeer(s.nodeMap, s.is.NodeID)
+				if alternateNodeID == s.is.NodeID || alternateNodeID == 0 {
+					log.Infof("refusing gossip from node %d (max %d conns); no forwarding peer",
+						args.NodeID, s.incoming.maxSize)
+				} else {
+					log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+						args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
+					reply.AlternateAddr = &alternateAddr
+					reply.AlternateNodeID = alternateNodeID
 				}
 
 				s.mu.Unlock()
