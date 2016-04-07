@@ -409,6 +409,13 @@ func (r *Replica) EndTransaction(
 	if reply.Txn.Status == roachpb.COMMITTED {
 		return reply, nil, roachpb.NewTransactionStatusError("already committed")
 	} else if reply.Txn.Status == roachpb.ABORTED {
+		if !args.Commit {
+			// The transaction has already been aborted by other.
+			// Do not return TransactionAbortedError since the client anyway
+			// wanted to abort the transaction.
+			// TODO(kaneda): Resolve local intents here?
+			return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), nil
+		}
 		// If the transaction was previously aborted by a concurrent
 		// writer's push, any intents written are still open. It's only now
 		// that we know them, so we return them all for asynchronous

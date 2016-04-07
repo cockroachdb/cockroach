@@ -2098,6 +2098,45 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 }
 
+// TestEndTransactionRollbackAbortedTransaction verifies that no error
+// is returned when a transaction that has already been aborted is
+// rolled back by an EndTransactionRequest.
+func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTxnAutoGC(false)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := []byte("a")
+	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	_, btH := beginTxnArgs(key, txn)
+	put := putArgs(key, key)
+	if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), tc.rng.context(context.Background()), btH, &put); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	args, h := endTxnArgs(txn, false)
+	resp, pErr := tc.SendWrappedWith(h, &args)
+	if pErr != nil {
+		t.Error(pErr)
+	}
+	reply := resp.(*roachpb.EndTransactionResponse)
+	if reply.Txn.Status != roachpb.ABORTED {
+		t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
+	}
+
+	// Abort the transaction again. No error is returned.
+	resp, pErr = tc.SendWrappedWith(h, &args)
+	if pErr != nil {
+		t.Error(pErr)
+	}
+	reply = resp.(*roachpb.EndTransactionResponse)
+	if reply.Txn.Status != roachpb.ABORTED {
+		t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
+	}
+}
+
 // TestRaftReplayProtection verifies that non-transactional batches
 // enjoy some protection from raft replays, but highlights an example
 // where they won't.
