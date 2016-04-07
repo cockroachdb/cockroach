@@ -62,7 +62,7 @@ c     c_foo_bar_idx  false  1   foo    ASC        false
 c     c_foo_bar_idx  false  2   bar    DESC       false
 c     c_bar_key      true   1   bar    ASC        false
 
-# primary keys can never be null 
+# primary keys can never be null
 
 statement ok
 CREATE TABLE d (
@@ -135,9 +135,12 @@ SHOW INDEXES FROM test.users
 
 statement ok
 CREATE TABLE test.users (
-  id    INT PRIMARY KEY,
-  name  VARCHAR NOT NULL,
-  title VARCHAR,
+  id        INT PRIMARY KEY,
+  name      VARCHAR NOT NULL,
+  title     VARCHAR,
+  nickname  STRING,
+  username  STRING(10),
+  email     VARCHAR(100),
   INDEX foo (name),
   UNIQUE INDEX bar (id, name)
 )
@@ -145,10 +148,13 @@ CREATE TABLE test.users (
 query TTBT colnames
 SHOW COLUMNS FROM test.users
 ----
-Field Type   Null  Default
-id    INT    false  NULL
-name  STRING false NULL
-title STRING true  NULL
+Field       Type        Null    Default
+id          INT         false   NULL
+name        STRING      false   NULL
+title       STRING      true    NULL
+nickname    STRING      true    NULL
+username    STRING(10)  true    NULL
+email       STRING(100) true    NULL
 
 query TTBITTB colnames
 SHOW INDEXES FROM test.users
