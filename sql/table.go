@@ -254,7 +254,8 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *
 }
 
 // get the table descriptor for the ID passed in using an existing txn.
-// returns nil if the descriptor doesn't exist.
+// returns nil if the descriptor doesn't exist or if it exists but is not a
+// table.
 func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
@@ -262,13 +263,18 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 	if pErr := txn.GetProto(descKey, desc); pErr != nil {
 		return nil, pErr
 	}
-	tableDesc := desc.GetTable()
-	if tableDesc == nil {
-		// TODO(andrei): We're theoretically hiding the error where desc exists, but
-		// is not a TableDescriptor.
-		return nil, nil
-	}
-	return tableDesc, nil
+	// TODO(andrei): We're theoretically hiding the error where desc exists, but
+	// is not a TableDescriptor.
+	return desc.GetTable(), nil
+}
+
+func getKeysForTableDescriptor(
+	tableDesc *TableDescriptor,
+) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
+	zoneKey = MakeZoneKey(tableDesc.ID)
+	nameKey = MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
+	descKey = MakeDescMetadataKey(tableDesc.ID)
+	return
 }
 
 // getTableLease acquires a lease for the specified table. The lease will be

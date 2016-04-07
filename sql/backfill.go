@@ -101,6 +101,9 @@ func getTableDescAtVersion(
 	if pErr != nil {
 		return nil, pErr
 	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
+	}
 	if version != tableDesc.Version {
 		return nil, descriptorChangedVersionError
 	}
@@ -147,6 +150,9 @@ func (sc *SchemaChanger) runBackfillAtLatestVersion(
 		if pErr != nil {
 			return pErr
 		}
+		if tableDesc == nil {
+			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
+		}
 		version = tableDesc.Version
 		for _, m := range tableDesc.Mutations {
 			if m.MutationID != sc.mutationID {
@@ -157,18 +163,20 @@ func (sc *SchemaChanger) runBackfillAtLatestVersion(
 				switch t := m.Descriptor_.(type) {
 				case *DescriptorMutation_Column:
 					addedColumnDescs = append(addedColumnDescs, *t.Column)
-
 				case *DescriptorMutation_Index:
 					addedIndexDescs = append(addedIndexDescs, *t.Index)
+				default:
+					return roachpb.NewErrorf("unsupported mutation: %+v", m)
 				}
 
 			case DescriptorMutation_DROP:
 				switch t := m.Descriptor_.(type) {
 				case *DescriptorMutation_Column:
 					droppedColumnDescs = append(droppedColumnDescs, *t.Column)
-
 				case *DescriptorMutation_Index:
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+				default:
+					return roachpb.NewErrorf("unsupported mutation: %+v", m)
 				}
 			}
 		}

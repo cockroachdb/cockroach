@@ -47,7 +47,9 @@ func (p *planner) changePrivileges(
 
 		tableDesc, updatingTable := descriptor.(*TableDescriptor)
 		if updatingTable {
-			tableDesc.UpVersion = true
+			if err := tableDesc.setUpVersion(); err != nil {
+				return nil, roachpb.NewError(err)
+			}
 			p.notifySchemaChange(tableDesc.ID, invalidMutationID)
 		}
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -281,6 +282,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
+	// Test that deleted table cannot be used. This prevents regressions where
+	// name -> descriptor ID caches might make this statement erronously work.
+	if _, err := sqlDB.Exec(`SELECT * FROM t.kv`); !testutils.IsError(err, `table "t.kv" does not exist`) {
+		t.Fatalf("different error than expected: %s", err)
+	}
+
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 0; len(kvs) != l {
@@ -304,4 +311,39 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	} else if gr.Exists() {
 		t.Fatalf("zone config entry still exists after the table is dropped")
 	}
+}
+
+func TestDropTableInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sqlDB, _ := setup(t)
+	defer cleanup(s, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	// We might still be able to read/write in the table inside this transaction
+	// until the schema changer runs, but we shouldn't be able to ALTER it.
+	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
+		`table "kv" has been deleted`) {
+		t.Fatalf("different error than expected: %s", err)
+	}
+
+	// Can't commit after ALTER errored, so we ROLLBACK.
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
 }

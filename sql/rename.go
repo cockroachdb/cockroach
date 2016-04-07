@@ -258,7 +258,9 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 		tableDesc.Mutations[i].GetIndex().Name = newIdxName
 	}
 
-	tableDesc.UpVersion = true
+	if err := tableDesc.setUpVersion(); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
 		return nil, roachpb.NewError(err)
@@ -358,7 +360,9 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 		}
 	}
 	column.Name = newColName
-	tableDesc.UpVersion = true
+	if err := tableDesc.setUpVersion(); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	descKey := MakeDescMetadataKey(tableDesc.GetID())
 	if err := tableDesc.Validate(); err != nil {
