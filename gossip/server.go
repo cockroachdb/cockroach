@@ -154,7 +154,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 		if args.NodeID != 0 {
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
-			if s.incoming.hasNode(args.NodeID) {
+			if args.NodeID == s.is.NodeID {
+				// This is an incoming loopback connection which should be closed by
+				// the client.
+			} else if s.incoming.hasNode(args.NodeID) {
 				// Do nothing.
 			} else if s.incoming.hasSpace() {
 				s.incoming.addNode(args.NodeID)
@@ -170,23 +173,12 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				// Choose a random peer for forwarding.
 				altIdx := rand.Intn(len(s.nodeMap))
 				for addr, id := range s.nodeMap {
-					if id == s.is.NodeID {
-						// Don't forward back to ourselves.
-						continue
-					}
-					// Keep track of a valid forwarding peer in case the randomly
-					// selected node is the last node in the map and that node is
-					// ourself.
-					alternateAddr = addr
-					alternateNodeID = id
 					if altIdx == 0 {
+						alternateAddr = addr
+						alternateNodeID = id
 						break
 					}
 					altIdx--
-				}
-
-				if alternateNodeID == s.is.NodeID {
-					panic("cannot recommend self as node to forward to")
 				}
 
 				log.Infof("refusing gossip from node %d (max %d conns); forwarding to %d (%s)",

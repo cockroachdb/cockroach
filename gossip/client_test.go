@@ -20,10 +20,10 @@ import (
 	"errors"
 	"math"
 	"net"
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -439,7 +439,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	if err := client.handleResponse(local, reply); !testutils.IsError(err, "received forward") {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(client.forwardAddr, &newAddr) {
+	if !proto.Equal(client.forwardAddr, &newAddr) {
 		t.Fatalf("unexpected forward address %v, expected %v", client.forwardAddr, &newAddr)
 	}
 }

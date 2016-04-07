@@ -420,19 +420,18 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// Recompute max peers based on size of network and set the max
-	// sizes for incoming and outgoing node sets.
-	defer func() {
-		maxPeers := g.maxPeers(len(g.nodeDescs))
-		g.incoming.setMaxSize(maxPeers)
-		g.outgoing.setMaxSize(maxPeers)
-	}()
-
 	// Skip if the node has already been seen.
 	if _, ok := g.nodeDescs[desc.NodeID]; ok {
 		return
 	}
+
 	g.nodeDescs[desc.NodeID] = &desc
+
+	// Recompute max peers based on size of network and set the max
+	// sizes for incoming and outgoing node sets.
+	maxPeers := g.maxPeers(len(g.nodeDescs))
+	g.incoming.setMaxSize(maxPeers)
+	g.outgoing.setMaxSize(maxPeers)
 
 	// Skip if it's our own address.
 	if desc.Address == g.is.NodeAddr {

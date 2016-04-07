@@ -74,7 +74,9 @@ func (as nodeSet) hasNode(node roachpb.NodeID) bool {
 
 // setMaxSize adjusts the maximum size allowed for the node set.
 func (as *nodeSet) setMaxSize(maxSize int) {
-	as.maxSize = maxSize
+	if as.maxSize != maxSize {
+		as.maxSize = maxSize
+	}
 }
 
 // addNode adds the node to the nodes set.

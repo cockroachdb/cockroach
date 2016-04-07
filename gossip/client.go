@@ -34,7 +34,7 @@ import (
 type client struct {
 	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
 	addr                  net.Addr                 // Peer node network address
-	forwardAddr           net.Addr                 // Set if disconnected with an alternate addr
+	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
 	closer                chan struct{}            // Client shutdown channel
 }
