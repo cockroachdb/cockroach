@@ -12,6 +12,7 @@ typings.installed
 
 # Generated intermediates
 /build
+/next/build
 /index.html
 
 # Generated proto json/typescript/javascript
