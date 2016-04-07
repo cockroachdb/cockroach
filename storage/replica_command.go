@@ -368,9 +368,8 @@ func (r *Replica) BeginTransaction(
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
-// transaction according to the args.Commit parameter.
-// TODO(tschottdorf): return nil reply on any error. The error itself
-// must be the authoritative source of information.
+// transaction according to the args.Commit parameter. Rolling back
+// an already rolled-back txn is ok.
 func (r *Replica) EndTransaction(
 	ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.EndTransactionRequest,
 ) (roachpb.EndTransactionResponse, []roachpb.Intent, error) {
@@ -409,6 +408,13 @@ func (r *Replica) EndTransaction(
 	if reply.Txn.Status == roachpb.COMMITTED {
 		return reply, nil, roachpb.NewTransactionStatusError("already committed")
 	} else if reply.Txn.Status == roachpb.ABORTED {
+		if !args.Commit {
+			// The transaction has already been aborted by other.
+			// Do not return TransactionAbortedError since the client anyway
+			// wanted to abort the transaction.
+			// TODO(kaneda): Resolve local intents here and add external intents to txn proto?
+			return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), nil
+		}
 		// If the transaction was previously aborted by a concurrent
 		// writer's push, any intents written are still open. It's only now
 		// that we know them, so we return them all for asynchronous
