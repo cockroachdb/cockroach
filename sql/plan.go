@@ -46,10 +46,13 @@ type planner struct {
 	testingVerifyMetadataFn func(config.SystemConfig) error
 	verifyFnCheckedOnce     bool
 
-	parser             parser.Parser
+	parser parser.Parser
+	params parameters
+
+	// Avoid allocations by embedding commonly used visitors.
 	isAggregateVisitor isAggregateVisitor
-	params             parameters
 	subqueryVisitor    subqueryVisitor
+	qnameVisitor       qnameVisitor
 
 	execCtx *ExecutorContext
 }
