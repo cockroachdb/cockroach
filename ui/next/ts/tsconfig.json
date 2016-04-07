@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES5",
+    "outFile": "../build/app_next.js"
+  },
+  "files": [
+    "./app.ts"
+  ]
+}
