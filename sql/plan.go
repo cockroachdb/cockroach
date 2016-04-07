@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -163,8 +164,8 @@ func (p *planner) setTxn(txn *client.Txn) {
 	if txn != nil {
 		p.evalCtx.SetClusterTimestamp(txn.Proto.OrigTimestamp)
 	} else {
-		p.evalCtx.SetTxnTimestamp(roachpb.ZeroTimestamp)
-		p.evalCtx.SetStmtTimestamp(roachpb.ZeroTimestamp)
+		p.evalCtx.SetTxnTimestamp(time.Time{})
+		p.evalCtx.SetStmtTimestamp(time.Time{})
 		p.evalCtx.SetClusterTimestamp(roachpb.ZeroTimestamp)
 	}
 }
