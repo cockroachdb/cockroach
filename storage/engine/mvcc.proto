@@ -14,6 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
+// Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
 package cockroach.storage.engine;
 option go_package = "engine";
@@ -65,9 +66,9 @@ message MVCCMetadata {
 // Important to keep in mind with those computations is that (x/1e9 - y/1e9)
 // does not equal (x-y)/1e9 in most cases.
 //
-// Note that this struct must be kept at a fixed size by using fixed-size 
+// Note that this struct must be kept at a fixed size by using fixed-size
 // encodings for all fields and by making all fields non-nullable. This is
-// so that it can predict its own impact on the size of the system-local 
+// so that it can predict its own impact on the size of the system-local
 // kv-pairs.
 message MVCCStats {
   // last_update_nanos is a timestamp at which the ages were last

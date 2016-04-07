@@ -1,1 +1,0 @@
-./cockroach/roachpb/errors.pb.cc

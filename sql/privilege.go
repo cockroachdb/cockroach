@@ -30,7 +30,7 @@ func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
 
 // findUserIndex looks for a given user and returns its
 // index in the User array if found. Returns -1 otherwise.
-func (p *PrivilegeDescriptor) findUserIndex(user string) int {
+func (p PrivilegeDescriptor) findUserIndex(user string) int {
 	idx := sort.Search(len(p.Users), func(i int) bool {
 		return p.Users[i].User >= user
 	})
@@ -42,12 +42,12 @@ func (p *PrivilegeDescriptor) findUserIndex(user string) int {
 
 // findUser looks for a specific user in the list.
 // Returns (nil, false) if not found, or (obj, true) if found.
-func (p *PrivilegeDescriptor) findUser(user string) (*UserPrivileges, bool) {
+func (p PrivilegeDescriptor) findUser(user string) (*UserPrivileges, bool) {
 	idx := p.findUserIndex(user)
 	if idx == -1 {
 		return nil, false
 	}
-	return p.Users[idx], true
+	return &p.Users[idx], true
 }
 
 // findOrCreateUser looks for a specific user in the list, creating it if needed.
@@ -57,16 +57,16 @@ func (p *PrivilegeDescriptor) findOrCreateUser(user string) *UserPrivileges {
 	})
 	if idx == len(p.Users) {
 		// Not found but should be inserted at the end.
-		p.Users = append(p.Users, &UserPrivileges{User: user})
+		p.Users = append(p.Users, UserPrivileges{User: user})
 	} else if p.Users[idx].User == user {
 		// Found.
 	} else {
-		// New element to be inserted at i.
-		p.Users = append(p.Users, nil)
+		// New element to be inserted at idx.
+		p.Users = append(p.Users, UserPrivileges{})
 		copy(p.Users[idx+1:], p.Users[idx:])
-		p.Users[idx] = &UserPrivileges{User: user}
+		p.Users[idx] = UserPrivileges{User: user}
 	}
-	return p.Users[idx]
+	return &p.Users[idx]
 }
 
 // removeUser looks for a given user in the list and removes it if present.
@@ -76,17 +76,14 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 		// Not found.
 		return
 	}
-
-	copy(p.Users[idx:], p.Users[idx+1:])
-	p.Users[len(p.Users)-1] = nil
-	p.Users = p.Users[:len(p.Users)-1]
+	p.Users = append(p.Users[:idx], p.Users[idx+1:]...)
 }
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
-		Users: []*UserPrivileges{
+		Users: []UserPrivileges{
 			{
 				User:       user,
 				Privileges: priv.ToBitField(),
@@ -99,7 +96,7 @@ func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescript
 // with ALL privileges for the root user.
 func NewDefaultPrivilegeDescriptor() *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
-		Users: []*UserPrivileges{
+		Users: []UserPrivileges{
 			{
 				User:       security.RootUser,
 				Privileges: privilege.ALL.Mask(),
@@ -169,7 +166,7 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // It takes the descriptor ID which is used to determine if
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
-func (p *PrivilegeDescriptor) Validate(id ID) error {
+func (p PrivilegeDescriptor) Validate(id ID) error {
 	userPriv, ok := p.findUser(security.RootUser)
 	if !ok {
 		return fmt.Errorf("user %s does not have privileges", security.RootUser)
@@ -212,8 +209,8 @@ type UserPrivilegeString struct {
 
 // Show returns the list of {username, privileges} sorted by username.
 // 'privileges' is a string of comma-separated sorted privilege names.
-func (p *PrivilegeDescriptor) Show() []UserPrivilegeString {
-	ret := []UserPrivilegeString{}
+func (p PrivilegeDescriptor) Show() []UserPrivilegeString {
+	ret := make([]UserPrivilegeString, 0, len(p.Users))
 	for _, userPriv := range p.Users {
 		ret = append(ret, UserPrivilegeString{
 			User:       userPriv.User,
@@ -224,7 +221,7 @@ func (p *PrivilegeDescriptor) Show() []UserPrivilegeString {
 }
 
 // CheckPrivilege returns true if 'user' has 'privilege' on this descriptor.
-func (p *PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bool {
+func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bool {
 	userPriv, ok := p.findUser(user)
 	if !ok {
 		return false
