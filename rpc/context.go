@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -172,10 +173,11 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 	defer heartbeatTimer.Stop()
 	for {
 		sendTime := ctx.localClock.PhysicalTime()
-		goCtx, cancel := context.WithTimeout(context.Background(), ctx.HeartbeatTimeout)
-		response, err := heartbeatClient.Ping(goCtx, &request)
+		response, err := ctx.heartbeat(heartbeatClient, request)
 		if err != nil {
-			cancel()
+			if grpc.Code(err) == codes.DeadlineExceeded {
+				continue
+			}
 			return err
 		}
 		receiveTime := ctx.localClock.PhysicalTime()
@@ -211,4 +213,10 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			heartbeatTimer.Read = true
 		}
 	}
+}
+
+func (ctx *Context) heartbeat(heartbeatClient HeartbeatClient, request PingRequest) (*PingResponse, error) {
+	goCtx, cancel := context.WithTimeout(context.Background(), ctx.HeartbeatTimeout)
+	defer cancel()
+	return heartbeatClient.Ping(goCtx, &request)
 }
