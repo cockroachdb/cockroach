@@ -93,7 +93,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		}
 	}
 
-	defaultExprs, err := p.makeDefaultExprs(cols)
+	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

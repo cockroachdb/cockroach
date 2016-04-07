@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 func makeColIDtoRowIndex(row planNode, desc *TableDescriptor) (map[ColumnID]int, error) {
@@ -66,183 +68,319 @@ func (ids indexesByID) Swap(i, j int) {
 	ids[i], ids[j] = ids[j], ids[i]
 }
 
-// backfillBatch runs the backfill for all the mutations that match the ID
-// of the first mutation.
-func (p *planner) backfillBatch(b *client.Batch, tableDesc *TableDescriptor) *roachpb.Error {
+func convertBackfillError(
+	tableDesc *TableDescriptor, b *client.Batch, pErr *roachpb.Error,
+) *roachpb.Error {
+	// Locally apply mutations belonging to the same mutationID for use by
+	// convertBatchError().
+	mutationID := tableDesc.Mutations[0].MutationID
+	for _, mutation := range tableDesc.Mutations {
+		if mutation.MutationID != mutationID {
+			// Mutations are applied in a FIFO order. Only apply the first set
+			// of mutations if they have the mutation ID we're looking for.
+			break
+		}
+		tableDesc.makeMutationComplete(mutation)
+	}
+	return convertBatchError(tableDesc, *b, pErr)
+}
+
+var descriptorChangedVersionError = roachpb.NewErrorf("table descriptor has changed version")
+
+// getTableDescAtVersion attempts to read a descriptor from the database at a
+// specific version.
+func getTableDescAtVersion(
+	txn *client.Txn, id ID, version DescriptorVersion,
+) (*TableDescriptor, *roachpb.Error) {
+	tableDesc, pErr := getTableDescFromID(txn, id)
+	if pErr != nil {
+		return nil, pErr
+	}
+	if version != tableDesc.Version {
+		return nil, descriptorChangedVersionError
+	}
+	return tableDesc, nil
+}
+
+// runBackfill runs the backfill for the schema changer. It runs the entire
+// backfill at a specific version of the table descriptor, and re-attempts to
+// run the schema change when the version changes.
+func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
+	for {
+		pErr := sc.runBackfillAtLatestVersion(lease)
+		if pErr == descriptorChangedVersionError {
+			continue
+		}
+		return pErr
+	}
+}
+
+// Run the backfill at the latest table descriptor version. It returns
+// descriptorChangedVersionError when the table descriptor version changes
+// while it is running the backfill.
+func (sc *SchemaChanger) runBackfillAtLatestVersion(
+	lease *TableDescriptor_SchemaChangeLease,
+) *roachpb.Error {
+	l, pErr := sc.ExtendLease(*lease)
+	if pErr != nil {
+		return pErr
+	}
+	*lease = l
+
+	// Mutations are applied in a FIFO order. Only apply the first set of
+	// mutations. Collect the elements that are part of the mutation.
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newColumnDescs []ColumnDescriptor
 	var newIndexDescs []IndexDescriptor
-	// Mutations are applied in a FIFO order. Only apply the first set
-	// of mutations.
-	mutationID := tableDesc.Mutations[0].MutationID
-	// Collect the elements that are part of the mutation.
-	for _, m := range tableDesc.Mutations {
-		if m.MutationID != mutationID {
-			break
+	// Remember the version at the start of the backfill so we can ensure
+	// later that the table descriptor hasn't changed during the backfill
+	// process.
+	var version DescriptorVersion
+	if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
+		if pErr != nil {
+			return pErr
 		}
-		switch m.Direction {
-		case DescriptorMutation_ADD:
-			switch t := m.Descriptor_.(type) {
-			case *DescriptorMutation_Column:
-				newColumnDescs = append(newColumnDescs, *t.Column)
-
-			case *DescriptorMutation_Index:
-				newIndexDescs = append(newIndexDescs, *t.Index)
+		version = tableDesc.Version
+		for _, m := range tableDesc.Mutations {
+			if m.MutationID != sc.mutationID {
+				break
 			}
+			switch m.Direction {
+			case DescriptorMutation_ADD:
+				switch t := m.Descriptor_.(type) {
+				case *DescriptorMutation_Column:
+					newColumnDescs = append(newColumnDescs, *t.Column)
 
-		case DescriptorMutation_DROP:
-			switch t := m.Descriptor_.(type) {
-			case *DescriptorMutation_Column:
-				droppedColumnDescs = append(droppedColumnDescs, *t.Column)
+				case *DescriptorMutation_Index:
+					newIndexDescs = append(newIndexDescs, *t.Index)
+				}
 
-			case *DescriptorMutation_Index:
-				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+			case DescriptorMutation_DROP:
+				switch t := m.Descriptor_.(type) {
+				case *DescriptorMutation_Column:
+					droppedColumnDescs = append(droppedColumnDescs, *t.Column)
+
+				case *DescriptorMutation_Index:
+					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+				}
 			}
 		}
+		return nil
+	}); pErr != nil {
+		return pErr
 	}
 
 	// TODO(vivek): Break these backfill operations into chunks. All of them
 	// will fail on big tables (see #3274).
 
-	defaultExprs, err := p.makeDefaultExprs(newColumnDescs)
+	evalCtx := parser.EvalContext{}
+	// Set the eval context timestamps.
+	pTime := timeutil.Now()
+	evalCtx.SetTxnTimestamp(pTime)
+	evalCtx.SetStmtTimestamp(pTime)
+	defaultExprs, err := makeDefaultExprs(newColumnDescs, &parser.Parser{}, evalCtx)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
 
+	// Remember any new non nullable column with no default value.
 	nonNullableColumn := ""
-	// Add the column to the table descriptor.
 	for _, columnDesc := range newColumnDescs {
 		if columnDesc.DefaultExpr == nil && !columnDesc.Nullable {
 			nonNullableColumn = columnDesc.Name
 		}
-		tableDesc.AddColumn(columnDesc)
 	}
 
+	// Add or Drop a column.
 	if len(droppedColumnDescs) > 0 || nonNullableColumn != "" || len(defaultExprs) > 0 {
-		// Run a scan across the table using the primary key.
-		start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
-		// Use a different batch to perform the scan.
-		batch := &client.Batch{}
-		batch.Scan(start, start.PrefixEnd(), 0)
-		if pErr := p.txn.Run(batch); pErr != nil {
+		// First extend the schema change lease.
+		l, pErr := sc.ExtendLease(*lease)
+		if pErr != nil {
 			return pErr
 		}
+		*lease = l
 
-		if nonNullableColumn != "" {
-			for _, result := range batch.Results {
-				if len(result.Rows) > 0 {
-					return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
-				}
+		if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+			if pErr != nil {
+				return pErr
 			}
-		}
 
-		for _, result := range batch.Results {
-			var sentinelKey roachpb.Key
-			for _, kv := range result.Rows {
-				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
-					// Sentinel keys have a 0 suffix indicating 0 bytes of column
-					// ID. Strip off that suffix to determine the prefix shared with the
-					// other keys for the row.
-					sentinelKey = stripColumnIDLength(kv.Key)
+			// Run a scan across the table using the primary key.
+			start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
+			// Use a different batch to perform the scan.
+			b := &client.Batch{}
+			b.Scan(start, start.PrefixEnd(), 0)
+			if pErr := txn.Run(b); pErr != nil {
+				return pErr
+			}
 
-					// Delete the entire dropped columns.
-					// This used to use SQL UPDATE in the past to update the dropped
-					// column to NULL; but a column in the process of being
-					// dropped is placed in the table descriptor mutations, and
-					// a SQL UPDATE of a column in mutations will fail.
-					for _, columnDesc := range droppedColumnDescs {
-						// Delete the dropped column.
-						colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
-						if log.V(2) {
-							log.Infof("Del %s", colKey)
-						}
-						b.Del(colKey)
-					}
-					// Add the new columns and backfill the values.
-					for i, expr := range defaultExprs {
-						if expr == nil {
-							continue
-						}
-						col := newColumnDescs[i]
-						colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
-						d, err := expr.Eval(p.evalCtx)
-						if err != nil {
-							return roachpb.NewError(err)
-						}
-						val, err := marshalColumnValue(col, d, p.evalCtx.Args)
-						if err != nil {
-							return roachpb.NewError(err)
-						}
-						if log.V(2) {
-							log.Infof("CPut %s -> %v", colKey, val)
-						}
-						b.CPut(colKey, val, nil)
+			if nonNullableColumn != "" {
+				for _, result := range b.Results {
+					if len(result.Rows) > 0 {
+						return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
 					}
 				}
 			}
+
+			writeBatch := &client.Batch{}
+			for _, result := range b.Results {
+				var sentinelKey roachpb.Key
+				for _, kv := range result.Rows {
+					if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
+						// Sentinel keys have a 0 suffix indicating 0 bytes of column
+						// ID. Strip off that suffix to determine the prefix shared with the
+						// other keys for the row.
+						sentinelKey = stripColumnIDLength(kv.Key)
+
+						// Delete the entire dropped columns.
+						// This used to use SQL UPDATE in the past to update the dropped
+						// column to NULL; but a column in the process of being
+						// dropped is placed in the table descriptor mutations, and
+						// a SQL UPDATE of a column in mutations will fail.
+						for _, columnDesc := range droppedColumnDescs {
+							// Delete the dropped column.
+							colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
+							if log.V(2) {
+								log.Infof("Del %s", colKey)
+							}
+							writeBatch.Del(colKey)
+						}
+						// Add the new columns and backfill the values.
+						for i, expr := range defaultExprs {
+							if expr == nil {
+								continue
+							}
+							col := newColumnDescs[i]
+							colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
+							d, err := expr.Eval(evalCtx)
+							if err != nil {
+								return roachpb.NewError(err)
+							}
+							val, err := marshalColumnValue(col, d, evalCtx.Args)
+							if err != nil {
+								return roachpb.NewError(err)
+							}
+							if log.V(2) {
+								log.Infof("CPut %s -> %v", colKey, val)
+							}
+							writeBatch.CPut(colKey, val, nil)
+						}
+					}
+				}
+			}
+			if pErr := txn.Run(writeBatch); pErr != nil {
+				return convertBackfillError(tableDesc, writeBatch, pErr)
+			}
+			return nil
+		}); pErr != nil {
+			return pErr
 		}
 	}
 
+	// Drop indexes.
 	for _, indexDescriptor := range droppedIndexDescs {
-		indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, indexDescriptor.ID)
-
-		// Delete the index.
-		indexStartKey := roachpb.Key(indexPrefix)
-		indexEndKey := indexStartKey.PrefixEnd()
-		if log.V(2) {
-			log.Infof("DelRange %s - %s", indexStartKey, indexEndKey)
+		// First extend the schema change lease.
+		l, pErr := sc.ExtendLease(*lease)
+		if pErr != nil {
+			return pErr
 		}
-		b.DelRange(indexStartKey, indexEndKey, false)
+		*lease = l
+		if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+			if pErr != nil {
+				return pErr
+			}
+
+			indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, indexDescriptor.ID)
+
+			// Delete the index.
+			indexStartKey := roachpb.Key(indexPrefix)
+			indexEndKey := indexStartKey.PrefixEnd()
+			if log.V(2) {
+				log.Infof("DelRange %s - %s", indexStartKey, indexEndKey)
+			}
+			b := &client.Batch{}
+			b.DelRange(indexStartKey, indexEndKey, false)
+
+			if pErr := txn.Run(b); pErr != nil {
+				return pErr
+			}
+			return nil
+		}); pErr != nil {
+			return pErr
+		}
 	}
 
+	// Add new indexes.
 	if len(newIndexDescs) > 0 {
-		// Get all the rows affected.
-		// TODO(tamird): Support partial indexes?
-		// Use a scanNode with SELECT to pass in a TableDescriptor
-		// to the SELECT without needing to use a parser.QualifiedName,
-		// because we want to run schema changes from a gossip feed of
-		// table IDs.
-		scan := &scanNode{
-			planner: p,
-			txn:     p.txn,
-			desc:    *tableDesc,
+		// First extend the schema change lease.
+		l, pErr := sc.ExtendLease(*lease)
+		if pErr != nil {
+			return pErr
 		}
-		scan.initDescDefaults()
-		rows, err := selectIndex(scan, nil, false)
-		if err != nil {
-			return roachpb.NewError(err)
-		}
+		*lease = l
+		if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+			if pErr != nil {
+				return pErr
+			}
 
-		// Construct a map from column ID to the index the value appears at within a
-		// row.
-		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
-		if err != nil {
-			return roachpb.NewError(err)
-		}
+			// Get all the rows affected.
+			// TODO(tamird): Support partial indexes?
+			// Use a scanNode with SELECT to pass in a TableDescriptor
+			// to the SELECT without needing to use a parser.QualifiedName,
+			// because we want to run schema changes from a gossip feed of
+			// table IDs.
+			scan := &scanNode{
+				planner: makePlanner(),
+				txn:     txn,
+				desc:    *tableDesc,
+			}
+			scan.initDescDefaults()
+			rows, err := selectIndex(scan, nil, false)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
 
-		for rows.Next() {
-			rowVals := rows.Values()
+			// Construct a map from column ID to the index the value appears at within a
+			// row.
+			colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+			b := &client.Batch{}
+			for rows.Next() {
+				rowVals := rows.Values()
 
-			for _, newIndexDesc := range newIndexDescs {
-				secondaryIndexEntries, err := encodeSecondaryIndexes(
-					tableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
-				if err != nil {
-					return roachpb.NewError(err)
-				}
-
-				for _, secondaryIndexEntry := range secondaryIndexEntries {
-					if log.V(2) {
-						log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
-							secondaryIndexEntry.value)
+				for _, newIndexDesc := range newIndexDescs {
+					secondaryIndexEntries, err := encodeSecondaryIndexes(
+						tableDesc.ID, []IndexDescriptor{newIndexDesc}, colIDtoRowIndex, rowVals)
+					if err != nil {
+						return roachpb.NewError(err)
 					}
-					b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+
+					for _, secondaryIndexEntry := range secondaryIndexEntries {
+						if log.V(2) {
+							log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
+								secondaryIndexEntry.value)
+						}
+						b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+					}
 				}
 			}
+			if rows.PErr() != nil {
+				return rows.PErr()
+			}
+			if pErr := txn.Run(b); pErr != nil {
+				return convertBackfillError(tableDesc, b, pErr)
+			}
+			return nil
+		}); pErr != nil {
+			return pErr
 		}
-
-		return rows.PErr()
 	}
-
 	return nil
 }
