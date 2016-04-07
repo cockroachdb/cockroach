@@ -116,10 +116,11 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 }
 
 func (t *leaseTest) publish(nodeID uint32, descID csql.ID) *roachpb.Error {
-	return t.node(nodeID).Publish(descID,
+	_, pErr := t.node(nodeID).Publish(descID,
 		func(*csql.TableDescriptor) error {
 			return nil
 		})
+	return pErr
 }
 
 func (t *leaseTest) mustPublish(nodeID uint32, descID csql.ID) {
@@ -302,7 +303,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		err := n1.Publish(descID, func(*csql.TableDescriptor) error {
+		_, pErr := n1.Publish(descID, func(*csql.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -313,8 +314,8 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 			<-n1update
 			return nil
 		})
-		if err != nil {
-			panic(err)
+		if pErr != nil {
+			panic(pErr)
 		}
 		wg.Done()
 	}(n1update, n2start)
@@ -323,11 +324,11 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		err := n2.Publish(descID, func(*csql.TableDescriptor) error {
+		_, pErr := n2.Publish(descID, func(*csql.TableDescriptor) error {
 			return nil
 		})
-		if err != nil {
-			panic(err)
+		if pErr != nil {
+			panic(pErr)
 		}
 		close(n1update)
 		wg.Done()
