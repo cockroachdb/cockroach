@@ -28,6 +28,7 @@ BOWER_COMPONENTS     := bower_components
 NODE_MODULES         := node_modules
 TYPINGS              := typings
 TS_ROOT              := ts
+TS_NEXT_ROOT         := next/ts
 STYL_ROOT            := styl
 TEST_ROOT            := ts/test
 GENERATED_ROOT       := generated
@@ -42,6 +43,7 @@ GOPATH_BIN := $(GOPATH)/bin
 GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
 TYPESCRIPT_TARGET       := build/app.js
+TYPESCRIPT_NEXT_TARGET  := next/build/app_next.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 CSS_DEBUG_TARGET        := build/app_debug.css
@@ -51,6 +53,7 @@ GOBINDATA_FONTS         := ./fonts/*
 GOBINDATA_ASSETS        := ./assets/*
 GOBINDATA_DEPS          := $(TYPESCRIPT_TARGET) $(CSS_TARGET)
 GOBINDATA_DEBUG_DEPS    := $(TYPESCRIPT_TARGET) $(CSS_DEBUG_TARGET)
+GOBINDATA_NEXT_DEPS     := $(TYPESCRIPT_NEXT_TARGET) $(CSS_DEBUG_TARGET)
 GOBINDATA_SOURCES       := $(BOWER_COMPONENTS)/d3/d3.min.js \
                            $(NODE_MODULES)/lodash/lodash.min.js \
                            $(BOWER_COMPONENTS)/mithriljs/mithril.js \
@@ -73,12 +76,18 @@ GOBINDATA_DEBUG_SOURCES := $(BOWER_COMPONENTS)/d3/d3.js \
                            $(GOBINDATA_ASSETS) \
                            favicon.ico \
                            apple-touch-icon.png
+GOBINDATA_NEXT_SOURCES  := $(GOBINDATA_FONTS) \
+                           $(GOBINDATA_ASSETS) \
+                           favicon.ico \
+                           apple-touch-icon.png
 GOBINDATA_TARGET        := ./embedded.go
 GOBINDATA_DEBUG_TARGET  := ./embedded_debug.go
+GOBINDATA_NEXT_TARGET   := ./embedded_next.go
 
 .PHONY: all
 all: lint $(GOBINDATA_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_DEBUG_TARGET)
+	rm -f $(GOBINDATA_NEXT_TARGET)
 
 .PHONY: lint
 lint: npm.installed
@@ -88,6 +97,12 @@ lint: npm.installed
 .PHONY: debug
 debug: $(GOBINDATA_DEBUG_TARGET) $(TEST_TARGET)
 	rm -f $(GOBINDATA_TARGET)
+	rm -f $(GOBINDATA_NEXT_TARGET)
+
+.PHONY: next
+next: $(GOBINDATA_NEXT_TARGET)
+	rm -f $(GOBINDATA_TARGET)
+	rm -f $(GOBINDATA_DEBUG_TARGET)
 
 bower.installed: bower.json npm.installed
 	rm -rf $(BOWER_COMPONENTS)/
@@ -107,6 +122,9 @@ typings.installed: typings.json npm.installed
 
 $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TS_ROOT)
+
+$(TYPESCRIPT_NEXT_TARGET): $(shell find $(TS_NEXT_ROOT)) $(REMOTE_DEPS)
+	tsc -p $(TS_NEXT_ROOT)
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
@@ -128,7 +146,7 @@ $(GOBINDATA_TARGET): $(GOBINDATA_DEPS) bower.installed release/$(INDEX)
 	rm -f $(INDEX)
 	cp release/$(INDEX) $(INDEX)
 	chmod a-w $(INDEX)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(GOBINDATA_SOURCES)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ $(GOBINDATA_DEPS) $(INDEX) $(INDEX_NEXT) $(GOBINDATA_SOURCES)
 	gofmt -s -w $@
 	goimports -w $@
 
@@ -136,7 +154,13 @@ $(GOBINDATA_DEBUG_TARGET): $(GOBINDATA_DEBUG_DEPS) bower.installed debug/$(INDEX
 	rm -f $(INDEX)
 	cp debug/$(INDEX) $(INDEX)
 	chmod a-w $(INDEX)
-	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEBUG_DEPS) $(INDEX) $(GOBINDATA_DEBUG_SOURCES)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_DEBUG_DEPS) $(INDEX) $(INDEX_NEXT) $(GOBINDATA_DEBUG_SOURCES)
+
+$(GOBINDATA_NEXT_TARGET): $(GOBINDATA_NEXT_DEPS) bower.installed next/$(INDEX)
+	rm -f $(INDEX)
+	cp next/$(INDEX) $(INDEX)
+	chmod a-w $(INDEX)
+	$(GO_BINDATA) -nometadata -pkg ui -o $@ -debug $(GOBINDATA_NEXT_DEPS) $(INDEX) $(GOBINDATA_NEXT_SOURCES)
 
 watch: debug
 	gulp watch
