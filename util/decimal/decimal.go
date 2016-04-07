@@ -25,6 +25,8 @@ import (
 	"gopkg.in/inf.v0"
 )
 
+var e = smallExp(inf.NewDec(1, 0), decimalOne, 1000)
+
 // NewDecFromFloat allocates and returns a new Dec set to the given
 // float64 value. The function will panic if the float is NaN or ±Inf.
 func NewDecFromFloat(f float64) *inf.Dec {
@@ -327,4 +329,85 @@ func Log(z *inf.Dec, x *inf.Dec, s inf.Scale) *inf.Dec {
 
 	// Round to the desired scale.
 	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// For integers we use exponentiation by squaring.
+// See: https://en.wikipedia.org/wiki/Exponentiation_by_squaring
+func integerPower(z, x *inf.Dec, y int64, s inf.Scale) *inf.Dec {
+	if z == nil {
+		z = new(inf.Dec)
+	}
+
+	neg := y < 0
+	if neg {
+		y = -y
+	}
+
+	z.Set(decimalOne)
+	for y > 0 {
+		if y%2 == 1 {
+			z = z.Mul(z, x)
+		}
+		y >>= 1
+		x.Mul(x, x)
+	}
+
+	if neg {
+		z = z.QuoRound(decimalOne, z, s+2, inf.RoundHalfUp)
+	}
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// smallExp computes z * e^x using the Taylor series to the specified scale and
+// stores the result in z, which is also the return value. It should be used
+// with small x values only.
+func smallExp(z, x *inf.Dec, s inf.Scale) *inf.Dec {
+	// Allocate if needed and make sure args aren't mutated.
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	}
+	n := new(inf.Dec)
+	tmp := new(inf.Dec).Set(z)
+	for loop := newLoop("exp", z, s, 1); !loop.done(z); {
+		n.Add(n, decimalOne)
+		tmp.Mul(tmp, x)
+		tmp.QuoRound(tmp, n, s+2, inf.RoundHalfUp)
+		z.Add(z, tmp)
+	}
+	// Round to the desired scale.
+	return z.Round(z, s, inf.RoundHalfUp)
+}
+
+// Exp computes (e^n) (where n = a*b with a being an integer and b < 1)
+// to the specified scale and stores the result in z, which is also the
+// return value.
+func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
+	s += 2
+	nn := new(inf.Dec).Set(n)
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	} else {
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	// We are computing (e^n) by splitting n into an integer and a float
+	// (e.g 3.1 ==> x = 3, y = 0.1), this allows us to write
+	// e^n = e^(x+y) = e^x * e^y
+
+	// Split out x (integer(n))
+	x := new(inf.Dec).Round(nn, 0, inf.RoundDown)
+
+	// Split out y (n - x) which is < 1
+	y := new(inf.Dec).Sub(nn, x)
+
+	// convert x to integer
+	integer, ok := x.Unscaled()
+	if !ok {
+		panic("integer out of range")
+	}
+
+	ex := integerPower(z, new(inf.Dec).Set(e), integer, s+2)
+	return smallExp(ex, y, s-2)
 }
