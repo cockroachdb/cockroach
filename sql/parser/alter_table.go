@@ -54,7 +54,7 @@ func (node AlterTableCmds) String() string {
 // AlterTableCmd represents a table modification operation.
 type AlterTableCmd interface {
 	// Placeholder function to ensure that only desired types
-	// (AlterTable*Cmd) conform to the AlterTableCmd interface.
+	// (AlterTable*) conform to the AlterTableCmd interface.
 	alterTableCmd()
 }
 
@@ -62,6 +62,7 @@ func (*AlterTableAddColumn) alterTableCmd()      {}
 func (*AlterTableAddConstraint) alterTableCmd()  {}
 func (*AlterTableDropColumn) alterTableCmd()     {}
 func (*AlterTableDropConstraint) alterTableCmd() {}
+func (*AlterTableSetDefault) alterTableCmd()     {}
 
 // AlterTableAddColumn represents an ADD COLUMN command.
 type AlterTableAddColumn struct {
@@ -120,4 +121,27 @@ type AlterTableDropConstraint struct {
 
 func (node *AlterTableDropConstraint) String() string {
 	return fmt.Sprintf("DROP CONSTRAINT %s", node.Constraint)
+}
+
+// AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
+// command.
+type AlterTableSetDefault struct {
+	columnKeyword bool
+	Column        string
+	Default       Expr
+}
+
+func (node *AlterTableSetDefault) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("ALTER")
+	if node.columnKeyword {
+		_, _ = buf.WriteString(" COLUMN")
+	}
+	fmt.Fprintf(&buf, " %s", node.Column)
+	if node.Default == nil {
+		_, _ = buf.WriteString(" DROP DEFAULT")
+	} else {
+		fmt.Fprintf(&buf, " SET DEFAULT %s", node.Default)
+	}
+	return buf.String()
 }
