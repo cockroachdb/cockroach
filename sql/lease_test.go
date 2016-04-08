@@ -14,6 +14,8 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
+// Note that there's also lease_internal_test.go, in package sql.
+
 package sql_test
 
 import (
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -36,15 +39,17 @@ type leaseTest struct {
 	*testing.T
 	server *testServer
 	db     *sql.DB
+	kvDB   *client.DB
 	nodes  map[uint32]*csql.LeaseManager
 }
 
-func newLeaseTest(t *testing.T) *leaseTest {
-	s, db, _ := setup(t)
+func newLeaseTest(t *testing.T, ctx *server.Context) *leaseTest {
+	s, db, kvDB := setupWithContext(t, ctx)
 	return &leaseTest{
 		T:      t,
 		server: s,
 		db:     db,
+		kvDB:   kvDB,
 		nodes:  map[uint32]*csql.LeaseManager{},
 	}
 }
@@ -140,7 +145,7 @@ func (t *leaseTest) node(nodeID uint32) *csql.LeaseManager {
 
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
-	t := newLeaseTest(testingT)
+	t := newLeaseTest(testingT, server.NewTestContext())
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -233,7 +238,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
-	t := newLeaseTest(testingT)
+	t := newLeaseTest(testingT, server.NewTestContext())
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -280,7 +285,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)
-	t := newLeaseTest(testingT)
+	t := newLeaseTest(testingT, server.NewTestContext())
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
@@ -338,4 +343,79 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 
 	t.mustAcquire(1, descID, 0)
 	t.expectLeases(descID, "/3/1")
+}
+
+func getDescriptorID(db *client.DB, database string, table string) csql.ID {
+	dbNameKey := csql.MakeNameMetadataKey(keys.RootNamespaceID, database)
+	gr, err := db.Get(dbNameKey)
+	if err != nil {
+		panic(err)
+	}
+	if !gr.Exists() {
+		panic("database missing")
+	}
+	dbDescID := csql.ID(gr.ValueInt())
+
+	tableNameKey := csql.MakeNameMetadataKey(dbDescID, table)
+	gr, err = db.Get(tableNameKey)
+	if err != nil {
+		panic(err)
+	}
+	if !gr.Exists() {
+		panic("table missing")
+	}
+	return csql.ID(gr.ValueInt())
+}
+
+// Test that we fail to lease a table that was marked for deletion.
+func TestCantLeaseDeletedTable(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+
+	var mu sync.Mutex
+	clearSchemaChangers := false
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+		func(tscc csql.TestingSchemaChangerCollection) {
+			mu.Lock()
+			defer mu.Unlock()
+			if clearSchemaChangers {
+				tscc.ClearSchemaChangers()
+			}
+		}
+	t := newLeaseTest(testingT, ctx)
+	defer t.cleanup()
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+`
+	_, err := t.db.Query(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Block schema changers.
+	mu.Lock()
+	clearSchemaChangers = true
+	mu.Unlock()
+
+	// Figure out the descriptor ID.
+	tableID := getDescriptorID(t.kvDB, "test", "t")
+
+	// DROP the table
+	_, err = t.db.Query(`DROP TABLE test.t`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure we can't get a lease on the descriptor.
+	// We'll try to get a lease with a bogus node ID.  If we used our own, we
+	// might already have a lease on this node which won't be released since we
+	// blocked the schema changes that do gossip publishing.
+	var nodeID uint32 = 100
+	_, err = t.acquire(nodeID, tableID, 0)
+	if !testutils.IsError(err, "descriptor doesn't exist") {
+		t.Fatalf("got a different error than expected: %s", err)
+	}
 }
