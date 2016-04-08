@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -44,53 +43,6 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter time.Time
-}
-
-// applyMutations runs the backfill for the mutations.
-func (sc *SchemaChanger) applyMutations(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
-	l, pErr := sc.ExtendLease(*lease)
-	if pErr != nil {
-		return pErr
-	}
-	*lease = l
-	return sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		// TODO(vivek): Use the original users privileges.
-		p := makePlanner()
-		p.session.User = security.RootUser
-		p.systemConfig = sc.cfg
-		p.leaseMgr = sc.leaseMgr
-		p.setTxn(txn)
-
-		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
-		if pErr != nil {
-			return pErr
-		}
-
-		if len(tableDesc.Mutations) == 0 || tableDesc.Mutations[0].MutationID != sc.mutationID {
-			// Nothing to do.
-			return nil
-		}
-
-		b := client.Batch{}
-		// Run backfill for the first mutation ID.
-		if pErr := p.backfillBatch(&b, tableDesc); pErr != nil {
-			return pErr
-		}
-		if pErr := p.txn.Run(&b); pErr != nil {
-			// Locally apply mutations belonging to the same mutationID
-			// for use by convertBatchError().
-			for _, mutation := range tableDesc.Mutations {
-				if mutation.MutationID != sc.mutationID {
-					// Mutations are applied in a FIFO order. Only apply the first set of
-					// mutations if they have the mutation ID we're looking for.
-					break
-				}
-				tableDesc.makeMutationComplete(mutation)
-			}
-			return convertBatchError(tableDesc, b, pErr)
-		}
-		return nil
-	})
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -225,8 +177,8 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 		return roachpb.NewError(err)
 	}
 
-	// Apply backfill.
-	if pErr := sc.applyMutations(&lease); pErr != nil {
+	// Run backfill.
+	if pErr := sc.runBackfill(&lease); pErr != nil {
 		// Purge the mutations if the application of the mutations fail.
 		if errPurge := sc.purgeMutations(&lease); errPurge != nil {
 			return roachpb.NewErrorf("error purging mutation: %s, after error: %s", errPurge, pErr)
@@ -372,12 +324,12 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 		return err
 	}
 
-	// Apply backfill and don't run purge on hitting an error.
+	// Run backfill and don't run purge on hitting an error.
 	// TODO(vivek): If this fails we can get into a permanent
 	// failure with some mutations, where subsequent schema
 	// changers keep attempting to apply and purge mutations.
 	// This is a theoretical problem at this stage (2015/12).
-	if pErr := sc.applyMutations(lease); pErr != nil {
+	if pErr := sc.runBackfill(lease); pErr != nil {
 		return pErr.GoError()
 	}
 
