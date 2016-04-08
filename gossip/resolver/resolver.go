@@ -34,17 +34,13 @@ type Resolver interface {
 }
 
 var validTypes = map[string]struct{}{
-	"tcp":     {},
-	"unix":    {},
-	"http-lb": {},
+	"tcp": {},
 }
 
 // NewResolver takes a resolver specification and returns a new resolver.
 // A specification is of the form: [<network type>=]<address>
 // Network type can be one of:
 // - tcp: plain hostname or ip address
-// - unix: unix sockets
-// - http-lb: http load balancer: queries http(s)://<lb>/_status/details/local
 //   for node addresses
 // If "network type" is not specified, "tcp" is assumed.
 func NewResolver(context *base.Context, spec string) (Resolver, error) {
@@ -72,23 +68,15 @@ func NewResolver(context *base.Context, spec string) (Resolver, error) {
 			"valid types are %s", typ, spec, validTypes)
 	}
 
-	// For non-unix resolvers, make sure we fill in the host when not specified (eg: ":26257")
-	if typ != "unix" {
-		// Ensure addr has port and host set.
-		addr = ensureHostPort(addr, base.DefaultPort)
-	}
-
-	// Create the actual resolver.
-	if typ == "http-lb" {
-		return &nodeLookupResolver{context: context, typ: typ, addr: addr}, nil
-	}
+	// Ensure addr has port and host set.
+	addr = ensureHostPort(addr, base.DefaultPort)
 	return &socketResolver{typ: typ, addr: addr}, nil
 }
 
 // NewResolverFromAddress takes a net.Addr and constructs a resolver.
 func NewResolverFromAddress(addr net.Addr) (Resolver, error) {
 	switch addr.Network() {
-	case "tcp", "unix":
+	case "tcp":
 		return &socketResolver{typ: addr.Network(), addr: addr.String()}, nil
 	default:
 		return nil, util.Errorf("unknown address network %q for %v", addr.Network(), addr)

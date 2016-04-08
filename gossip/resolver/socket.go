@@ -39,13 +39,6 @@ func (sr *socketResolver) Addr() string { return sr.addr }
 // GetAddress returns a net.Addr or error.
 func (sr *socketResolver) GetAddress() (net.Addr, error) {
 	switch sr.typ {
-	case "unix":
-		addr, err := net.ResolveUnixAddr("unix", sr.addr)
-		if err != nil {
-			return nil, err
-		}
-		sr.exhausted = true
-		return addr, nil
 	case "tcp":
 		_, err := net.ResolveTCPAddr("tcp", sr.addr)
 		if err != nil {
