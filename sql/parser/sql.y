@@ -738,7 +738,10 @@ alter_table_cmd:
     $$.val = &AlterTableSetDefault{columnKeyword: $2.bool(), Column: $3, Default: $4.expr()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
-| ALTER opt_column name DROP NOT NULL { unimplemented() }
+| ALTER opt_column name DROP NOT NULL
+  {
+    $$.val = &AlterTableDropNotNull{columnKeyword: $2.bool(), Column: $3}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL { unimplemented() }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
