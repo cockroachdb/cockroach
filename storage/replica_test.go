@@ -2116,17 +2116,41 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Abort the transaction twice. No error is returned.
-	for range []int{0, 1} {
-		args, h := endTxnArgs(txn, false)
-		resp, pErr := tc.SendWrappedWith(h, &args)
-		if pErr != nil {
-			t.Error(pErr)
-		}
-		reply := resp.(*roachpb.EndTransactionResponse)
-		if reply.Txn.Status != roachpb.ABORTED {
-			t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
-		}
+	// Abort the transaction by pushing it with a higher priority.
+	pusher := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
+	pusher.Priority = txn.Priority + 1 // will push successfully
+	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
+	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Check if the intent has not yet been resolved.
+	var ba roachpb.BatchRequest
+	gArgs := getArgs(key)
+	ba.Add(&gArgs)
+	if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
+		t.Fatal(err)
+	}
+	_, pErr := tc.Sender().Send(tc.rng.context(context.Background()), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+		t.Errorf("expected write intent error, but got %s", pErr)
+	}
+
+	// Abort the transaction again. No error is returned.
+	args, h := endTxnArgs(txn, false)
+	args.IntentSpans = []roachpb.Span{{Key: key}}
+	resp, pErr := tc.SendWrappedWith(h, &args)
+	if pErr != nil {
+		t.Error(pErr)
+	}
+	reply := resp.(*roachpb.EndTransactionResponse)
+	if reply.Txn.Status != roachpb.ABORTED {
+		t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
+	}
+
+	// Verify that the intent has been resolved.
+	if _, pErr := tc.Sender().Send(tc.rng.context(context.Background()), ba); pErr != nil {
+		t.Errorf("expected resolved intent, but got %s", pErr)
 	}
 }
 

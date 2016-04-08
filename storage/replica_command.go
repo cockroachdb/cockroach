@@ -412,8 +412,11 @@ func (r *Replica) EndTransaction(
 			// The transaction has already been aborted by other.
 			// Do not return TransactionAbortedError since the client anyway
 			// wanted to abort the transaction.
-			// TODO(kaneda): Resolve local intents here and add external intents to txn proto?
-			return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), nil
+			externalIntents, err := r.resolveExplicitIntents(batch, ms, args, reply.Txn)
+			if err != nil {
+				return reply, nil, err
+			}
+			return reply, externalIntents, nil
 		}
 		// If the transaction was previously aborted by a concurrent
 		// writer's push, any intents written are still open. It's only now
@@ -473,86 +476,9 @@ func (r *Replica) EndTransaction(
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	// Resolve any explicit intents. All that are local to this range get
-	// resolved synchronously in the same batch. The remainder are collected
-	// and handed off to asynchronous processing.
-	desc := r.Desc()
-	var preMergeDesc *roachpb.RangeDescriptor
-	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
-		// If this is a merge, then use the post-merge descriptor to determine
-		// which intents are local (note that for a split, we want to use the
-		// pre-split one instead because it's larger).
-		preMergeDesc = desc
-		desc = &mergeTrigger.UpdatedDesc
-	}
-
-	iterAndBuf := engine.GetIterAndBuf(batch)
-	defer iterAndBuf.Cleanup()
-
-	var externalIntents []roachpb.Intent
-	for _, span := range args.IntentSpans {
-		if err := func() error {
-			intent := roachpb.Intent{Span: span, Txn: reply.Txn.TxnMeta, Status: reply.Txn.Status}
-			if len(span.EndKey) == 0 {
-				// For single-key intents, do a KeyAddress-aware check of
-				// whether it's contained in our Range.
-				if !containsKey(*desc, span.Key) {
-					externalIntents = append(externalIntents, intent)
-					return nil
-				}
-				resolveMs := ms
-				if preMergeDesc != nil && !containsKey(*preMergeDesc, span.Key) {
-					// If this transaction included a merge and the intents
-					// are from the subsumed range, ignore the intent resolution
-					// stats, as they will already be accounted for during the
-					// merge trigger.
-					resolveMs = nil
-				}
-				return engine.MVCCResolveWriteIntentUsingIter(batch, iterAndBuf, resolveMs, intent)
-			}
-			// For intent ranges, cut into parts inside and outside our key
-			// range. Resolve locally inside, delegate the rest. In particular,
-			// an intent range for range-local data is correctly considered local.
-			inSpan, outSpans := intersectSpan(span, *desc)
-			for _, span := range outSpans {
-				outIntent := intent
-				outIntent.Span = span
-				externalIntents = append(externalIntents, outIntent)
-			}
-			if inSpan != nil {
-				intent.Span = *inSpan
-				_, err := engine.MVCCResolveWriteIntentRangeUsingIter(batch, iterAndBuf, ms, intent, 0)
-				return err
-			}
-			return nil
-		}(); err != nil {
-			// TODO(tschottdorf): any legitimate reason for this to happen?
-			// Figure that out and if not, should still be ReplicaCorruption
-			// and not a panic.
-			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, reply.Txn.Status, err))
-		}
-	}
-
-	// Persist the transaction record with updated status (& possibly timestamp).
-	// If we've already resolved all intents locally, we actually delete the
-	// record right away - no use in keeping it around.
-	{
-		var err error
-		if txnAutoGC && len(externalIntents) == 0 {
-			if log.V(1) {
-				log.Infof("auto-gc'ed %s (%d intents)", h.Txn.ID.Short(), len(args.IntentSpans))
-			}
-			err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
-		} else {
-			reply.Txn.Intents = make([]roachpb.Span, len(externalIntents))
-			for i := range externalIntents {
-				reply.Txn.Intents[i] = externalIntents[i].Span
-			}
-			err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, reply.Txn)
-		}
-		if err != nil {
-			return reply, nil, err
-		}
+	externalIntents, err := r.resolveExplicitIntents(batch, ms, args, reply.Txn)
+	if err != nil {
+		return reply, nil, err
 	}
 
 	// Run triggers if successfully committed.
@@ -619,6 +545,94 @@ func (r *Replica) EndTransaction(
 	// transaction to aborted. In both cases, the txn will be GC'd on
 	// the slow path.
 	return reply, externalIntents, nil
+}
+
+// resolveExplicitIntents resolve any explicit intents and persists e
+// transaction record with updated status. All that are local to this
+// range get resolved synchronously in the same batch. The remainder
+// are collected and returned so that they can be handed off to
+// asynchronous processing.
+func (r *Replica) resolveExplicitIntents(batch engine.Engine, ms *engine.MVCCStats, args roachpb.EndTransactionRequest, txn *roachpb.Transaction) ([]roachpb.Intent, error) {
+	desc := r.Desc()
+	var preMergeDesc *roachpb.RangeDescriptor
+	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
+		// If this is a merge, then use the post-merge descriptor to determine
+		// which intents are local (note that for a split, we want to use the
+		// pre-split one instead because it's larger).
+		preMergeDesc = desc
+		desc = &mergeTrigger.UpdatedDesc
+	}
+
+	iterAndBuf := engine.GetIterAndBuf(batch)
+	defer iterAndBuf.Cleanup()
+
+	var externalIntents []roachpb.Intent
+	for _, span := range args.IntentSpans {
+		log.Infof("Span: %s", span)
+		if err := func() error {
+			intent := roachpb.Intent{Span: span, Txn: txn.TxnMeta, Status: txn.Status}
+			if len(span.EndKey) == 0 {
+				// For single-key intents, do a KeyAddress-aware check of
+				// whether it's contained in our Range.
+				if !containsKey(*desc, span.Key) {
+					externalIntents = append(externalIntents, intent)
+					return nil
+				}
+				resolveMs := ms
+				if preMergeDesc != nil && !containsKey(*preMergeDesc, span.Key) {
+					// If this transaction included a merge and the intents
+					// are from the subsumed range, ignore the intent resolution
+					// stats, as they will already be accounted for during the
+					// merge trigger.
+					resolveMs = nil
+				}
+				log.Infof("Resolve this")
+				return engine.MVCCResolveWriteIntentUsingIter(batch, iterAndBuf, resolveMs, intent)
+			}
+			// For intent ranges, cut into parts inside and outside our key
+			// range. Resolve locally inside, delegate the rest. In particular,
+			// an intent range for range-local data is correctly considered local.
+			inSpan, outSpans := intersectSpan(span, *desc)
+			for _, span := range outSpans {
+				outIntent := intent
+				outIntent.Span = span
+				externalIntents = append(externalIntents, outIntent)
+			}
+			if inSpan != nil {
+				intent.Span = *inSpan
+				_, err := engine.MVCCResolveWriteIntentRangeUsingIter(batch, iterAndBuf, ms, intent, 0)
+				return err
+			}
+			return nil
+		}(); err != nil {
+			// TODO(tschottdorf): any legitimate reason for this to happen?
+			// Figure that out and if not, should still be ReplicaCorruption
+			// and not a panic.
+			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err))
+		}
+	}
+
+	// Persist the transaction record with updated status (& possibly timestamp).
+	// If we've already resolved all intents locally, we actually delete the
+	// record right away - no use in keeping it around.
+	key := keys.TransactionKey(txn.Key, txn.ID)
+	var err error
+	if txnAutoGC && len(externalIntents) == 0 {
+		if log.V(1) {
+			log.Infof("auto-gc'ed %s (%d intents)", txn.ID.Short(), len(args.IntentSpans))
+		}
+		err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
+	} else {
+		txn.Intents = make([]roachpb.Span, len(externalIntents))
+		for i := range externalIntents {
+			txn.Intents[i] = externalIntents[i].Span
+		}
+		err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, txn)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return externalIntents, nil
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
