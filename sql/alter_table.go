@@ -169,28 +169,25 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 				}
 			}
 
-		case *parser.AlterTableSetDefault:
-			status, i, err := tableDesc.FindColumnByName(t.Column)
+		case *parser.AlterTableSetDefault, *parser.AlterTableDropNotNull:
+			colMut := t.(parser.ColumnMutationCmd)
+			// Column mutations
+			status, i, err := tableDesc.FindColumnByName(colMut.GetColumn())
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
 
 			switch status {
 			case DescriptorActive:
-				if t.Default == nil {
-					tableDesc.Columns[i].DefaultExpr = nil
-				} else {
-					s := t.Default.String()
-					tableDesc.Columns[i].DefaultExpr = &s
-				}
+				applyColumnMutation(&tableDesc.Columns[i], colMut)
 				descriptorChanged = true
 
 			case DescriptorIncomplete:
 				switch tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return nil, roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.Column)
+					return nil, roachpb.NewUErrorf("column %q in the middle of being added, try again later", colMut.GetColumn())
 				case DescriptorMutation_DROP:
-					return nil, roachpb.NewUErrorf("column %q in the middle of being dropped", t.Column)
+					return nil, roachpb.NewUErrorf("column %q in the middle of being dropped", colMut.GetColumn())
 				}
 			}
 
@@ -224,4 +221,19 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	p.notifySchemaChange(tableDesc.ID, mutationID)
 
 	return &emptyNode{}, nil
+}
+
+func applyColumnMutation(col *ColumnDescriptor, mut parser.ColumnMutationCmd) {
+	switch t := mut.(type) {
+	case *parser.AlterTableSetDefault:
+		if t.Default == nil {
+			col.DefaultExpr = nil
+		} else {
+			s := t.Default.String()
+			col.DefaultExpr = &s
+		}
+
+	case *parser.AlterTableDropNotNull:
+		col.Nullable = true
+	}
 }

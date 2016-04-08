@@ -63,6 +63,14 @@ func (*AlterTableAddConstraint) alterTableCmd()  {}
 func (*AlterTableDropColumn) alterTableCmd()     {}
 func (*AlterTableDropConstraint) alterTableCmd() {}
 func (*AlterTableSetDefault) alterTableCmd()     {}
+func (*AlterTableDropNotNull) alterTableCmd()    {}
+
+// ColumnMutationCmd is the subset of AlterTableCmds that modify an
+// existing column.
+type ColumnMutationCmd interface {
+	AlterTableCmd
+	GetColumn() string
+}
 
 // AlterTableAddColumn represents an ADD COLUMN command.
 type AlterTableAddColumn struct {
@@ -124,11 +132,16 @@ func (node *AlterTableDropConstraint) String() string {
 }
 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
-// command.
+// or DROP DEFAULT command.
 type AlterTableSetDefault struct {
 	columnKeyword bool
 	Column        string
 	Default       Expr
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetDefault) GetColumn() string {
+	return node.Column
 }
 
 func (node *AlterTableSetDefault) String() string {
@@ -143,5 +156,28 @@ func (node *AlterTableSetDefault) String() string {
 	} else {
 		fmt.Fprintf(&buf, " SET DEFAULT %s", node.Default)
 	}
+	return buf.String()
+}
+
+// AlterTableDropNotNull represents an ALTER COLUMN DROP NOT NULL
+// command.
+type AlterTableDropNotNull struct {
+	columnKeyword bool
+	Column        string
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableDropNotNull) GetColumn() string {
+	return node.Column
+}
+
+func (node *AlterTableDropNotNull) String() string {
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("ALTER ")
+	if node.columnKeyword {
+		_, _ = buf.WriteString("COLUMN ")
+	}
+	_, _ = buf.WriteString(node.Column)
+	_, _ = buf.WriteString(" DROP NOT NULL")
 	return buf.String()
 }

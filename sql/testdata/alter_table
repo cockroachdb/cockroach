@@ -226,3 +226,14 @@ SELECT * FROM add_default
 ----
 2 42
 3 10
+
+statement ok
+ALTER TABLE add_default ALTER b DROP NOT NULL
+
+statement ok
+INSERT INTO add_default (a) VALUES (5)
+
+query II
+SELECT * from add_default WHERE a=5
+----
+5 NULL
