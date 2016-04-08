@@ -393,7 +393,6 @@ func NewSchemaChangeManager(db client.DB, gossip *gossip.Gossip, leaseMgr *Lease
 }
 
 var (
-	disableSyncSchemaChangeExec  = false
 	disableAsyncSchemaChangeExec = false
 	// How often does the SchemaChangeManager attempt to execute
 	// pending schema changes.
@@ -403,19 +402,15 @@ var (
 	asyncSchemaChangeExecDelay = 360 * time.Second
 )
 
-// TestDisableSyncSchemaChangeExec is used in tests to
-// disable the synchronous execution of schema changes,
-// so that the asynchronous schema changer can run the
-// schema changes.
-func TestDisableSyncSchemaChangeExec() func() {
-	disableSyncSchemaChangeExec = true
-	// Attempt to execute almost immediately.
-	asyncSchemaChangeExecInterval = 20 * time.Millisecond
-	asyncSchemaChangeExecDelay = 20 * time.Millisecond
+// TestSetAsyncSchemaChangerDelay can be used in tests to manipulate the async
+// executor timing. Returns a cleanup function restoring original values.
+func TestSetAsyncSchemaChangerDelay(execInterval time.Duration, delay time.Duration) func() {
+	origInterval, origDelay := asyncSchemaChangeExecInterval, asyncSchemaChangeExecDelay
+	asyncSchemaChangeExecDelay = delay
+	asyncSchemaChangeExecInterval = execInterval
 	return func() {
-		disableSyncSchemaChangeExec = false
-		asyncSchemaChangeExecInterval = 60 * time.Second
-		asyncSchemaChangeExecDelay = 360 * time.Second
+		asyncSchemaChangeExecDelay = origDelay
+		asyncSchemaChangeExecInterval = origInterval
 	}
 }
 

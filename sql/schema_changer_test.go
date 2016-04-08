@@ -289,14 +289,19 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Disable synchronous schema change execution so
-	// the asynchronous schema changer executes all
-	// schema changes.
-	defer csql.TestDisableSyncSchemaChangeExec()()
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer csql.TestDisableTableLeases()()
-	server, sqlDB, kvDB := setup(t)
+	// Disable synchronous schema change execution so the asynchronous schema
+	// changer executes all schema changes.
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+		func(tscc csql.TestingSchemaChangerCollection) {
+			tscc.ClearSchemaChangers()
+		}
+	defer csql.TestSetAsyncSchemaChangerDelay(20*time.Millisecond, 20*time.Millisecond)()
+
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
