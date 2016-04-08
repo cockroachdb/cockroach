@@ -39,11 +39,6 @@ func TestParseResolverSpec(t *testing.T) {
 		{"127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
 		{"tcp=127.0.0.1:23456", true, "tcp", "127.0.0.1:23456"},
-		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
-		{"http-lb=localhost:" + base.DefaultPort, true, "http-lb", "localhost:" + base.DefaultPort},
-		{"http-lb=newhost:1234", true, "http-lb", "newhost:1234"},
-		{"http-lb=:" + base.DefaultPort, true, "http-lb", def},
-		{"http-lb=:", true, "http-lb", def},
 		{"", false, "", ""},
 		{"foo=127.0.0.1", false, "", ""},
 		{"", false, "tcp", ""},
@@ -79,8 +74,6 @@ func TestGetAddress(t *testing.T) {
 		{"tcp=127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
 		{"tcp=localhost:80", true, "tcp", "localhost:80"},
-		// We should test unresolvable dns too, but this would be fragile.
-		{"unix=/tmp/foo", true, "unix", "/tmp/foo"},
 	}
 
 	for tcNum, tc := range testCases {
