@@ -22,11 +22,15 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
-	Tables QualifiedNames
+	Tables       QualifiedNames
+	DropBehavior DropBehavior
 }
 
 func (node *Truncate) String() string {
@@ -37,6 +41,9 @@ func (node *Truncate) String() string {
 			buf.WriteString(", ")
 		}
 		buf.WriteString(n.String())
+	}
+	if node.DropBehavior != DropDefault {
+		fmt.Fprintf(&buf, " %s", node.DropBehavior)
 	}
 	return buf.String()
 }

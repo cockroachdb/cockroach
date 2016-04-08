@@ -106,6 +106,7 @@ type AlterTableDropColumn struct {
 	columnKeyword bool
 	IfExists      bool
 	Column        string
+	DropBehavior  DropBehavior
 }
 
 func (node *AlterTableDropColumn) String() string {
@@ -118,17 +119,30 @@ func (node *AlterTableDropColumn) String() string {
 		_, _ = buf.WriteString(" IF EXISTS")
 	}
 	fmt.Fprintf(&buf, " %s", node.Column)
+	if node.DropBehavior != DropDefault {
+		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+	}
 	return buf.String()
 }
 
 // AlterTableDropConstraint represents a DROP CONSTRAINT command.
 type AlterTableDropConstraint struct {
-	IfExists   bool
-	Constraint string
+	IfExists     bool
+	Constraint   string
+	DropBehavior DropBehavior
 }
 
 func (node *AlterTableDropConstraint) String() string {
-	return fmt.Sprintf("DROP CONSTRAINT %s", node.Constraint)
+	var buf bytes.Buffer
+	_, _ = buf.WriteString("DROP CONSTRAINT ")
+	if node.IfExists {
+		_, _ = buf.WriteString("IF EXISTS ")
+	}
+	_, _ = buf.WriteString(node.Constraint)
+	if node.DropBehavior != DropDefault {
+		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+	}
+	return buf.String()
 }
 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
