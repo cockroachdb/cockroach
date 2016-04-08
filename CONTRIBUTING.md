@@ -98,6 +98,11 @@ func (s *someType) myFunctionName(
 }
 ```
 
+Exception when omitting repeated types for consecutive arguments:
+short and related arguments (e.g. `start, end int64`) should either go on the same line
+or the type should be repeated on each line -- no argument should appear by itself
+on a line with no type (confusing and brittle when edited).
+
 ### Code review workflow
 
 + All contributors need to sign the
