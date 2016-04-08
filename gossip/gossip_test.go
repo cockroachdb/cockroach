@@ -157,7 +157,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		})
 	}
 
-	const numClients = 100
+	const numClients = 50
 	disconnectedCh := make(chan *client)
 	numFailedConns := 0
 
