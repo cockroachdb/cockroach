@@ -411,6 +411,10 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
 		{`ALTER TABLE IF EXISTS a DROP COLUMN b, DROP CONSTRAINT a_idx`},
 		{`ALTER TABLE IF EXISTS a DROP COLUMN IF EXISTS b, DROP CONSTRAINT a_idx`},
+
+		{`ALTER TABLE a ALTER COLUMN b SET DEFAULT 42`},
+		{`ALTER TABLE a ALTER COLUMN b SET DEFAULT NULL`},
+		{`ALTER TABLE a ALTER COLUMN b DROP DEFAULT`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)

@@ -58,7 +58,7 @@ const (
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
-const invalidMutationID = 0
+const invalidMutationID MutationID = 0
 
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
