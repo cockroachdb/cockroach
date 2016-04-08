@@ -58,7 +58,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 
 	if p.evalCtx.PrepareOnly {
 		// Return the result column types.
-		return rh.getResults(), nil
+		return rh.getResults()
 	}
 
 	// Construct a map from column ID to the index the value appears at within a
@@ -91,7 +91,11 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	// TODO(dt): We could probably be smarter when presented with an index-join,
 	// but this goes away anyway once we push-down more of SQL.
 	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(n, scan, len(indexes)) {
-		return p.fastDelete(scan, rh.getResults(), autoCommit)
+		cols, err := rh.getResults()
+		if err != nil {
+			return nil, err
+		}
+		return p.fastDelete(scan, cols, autoCommit)
 	}
 
 	b := p.txn.NewBatch()
@@ -147,7 +151,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	return rh.getResults(), nil
+	return rh.getResults()
 }
 
 // Determine if the deletion of `rows` can be done without actually scanning them,

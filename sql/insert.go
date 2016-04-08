@@ -287,7 +287,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 
 	if p.evalCtx.PrepareOnly {
 		// Return the result column types.
-		return rh.getResults(), nil
+		return rh.getResults()
 	}
 
 	if isSystemConfigID(tableDesc.GetID()) {
@@ -306,7 +306,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	if pErr != nil {
 		return nil, convertBatchError(&tableDesc, *b, pErr)
 	}
-	return rh.getResults(), nil
+	return rh.getResults()
 }
 
 func (p *planner) processColumns(tableDesc *TableDescriptor,

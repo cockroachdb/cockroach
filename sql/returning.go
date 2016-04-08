@@ -16,7 +16,10 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/sql/parser"
+import (
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
+)
 
 // returningNode accumulates the results for a RETURNING clause. If the rows are empty, we just
 // keep track of the count.
@@ -67,12 +70,8 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 		if err != nil {
 			return returningHelper{}, err
 		}
-		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
-		if err != nil {
-			return returningHelper{}, err
-		}
 		rh.exprs = append(rh.exprs, expr)
-		rh.results.columns = append(rh.results.columns, ResultColumn{Name: outputName, Typ: typ})
+		rh.results.columns = append(rh.results.columns, ResultColumn{Name: outputName})
 	}
 	return rh, nil
 }
@@ -97,7 +96,16 @@ func (rh *returningHelper) append(rowVals parser.DTuple) error {
 	return nil
 }
 
-// getResults returns the results as a returningNode.
-func (rh *returningHelper) getResults() *returningNode {
-	return rh.results
+// getResults returns the results as a returningNode. The return column types are populated
+// from evalCtx.Args. This is needed because when makeReturningHelper is first
+// called, the MapArgs aren't yet inferred.
+func (rh *returningHelper) getResults() (*returningNode, *roachpb.Error) {
+	for i, expr := range rh.exprs {
+		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		rh.results.columns[i].Typ = typ
+	}
+	return rh.results, nil
 }
