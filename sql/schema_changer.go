@@ -448,10 +448,11 @@ var (
 	asyncSchemaChangeExecDelay = 360 * time.Second
 )
 
-// TestDisableSyncSchemaChangeExec is used in tests to
-// disable the synchronous execution of schema changes,
-// so that the asynchronous schema changer can run the
-// schema changes.
+// TestDisableSyncSchemaChangeExec is DEPRECATED.
+// It's used in tests to disable the synchronous execution of schema changes, so
+// that the asynchronous schema changer can run the schema changes.
+// DEPRECATED because it's global and hence racy. Use
+// ExecutorTestingKnobs.SyncSchemaChangersFilter.
 func TestDisableSyncSchemaChangeExec() func() {
 	disableSyncSchemaChangeExec = true
 	// Attempt to execute almost immediately.
