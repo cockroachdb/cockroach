@@ -285,10 +285,12 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	// Release the leases once a transaction is complete.
 	planMaker.releaseLeases()
-	if len(scc.schemaChangers) == 0 ||
-		// Disable execution in some tests.
-		disableSyncSchemaChangeExec {
+	// Disable execution in some tests.
+	if disableSyncSchemaChangeExec {
 		return
+	}
+	if e.ctx.TestingKnobs.SyncSchemaChangersFilter != nil {
+		e.ctx.TestingKnobs.SyncSchemaChangersFilter(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
