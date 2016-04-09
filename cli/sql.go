@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -61,6 +62,7 @@ const (
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+      \! to execute system command
       \? or "help" to print this help.
 
 More documentation about our SQL dialect is available online:
@@ -89,9 +91,12 @@ func handleInputLine(stmt *[]string, line string) int {
 	if len(line) > 0 && line[0] == '\\' {
 		// Client-side commands: process locally.
 
-		switch line {
+		cmd := strings.Fields(line)
+		switch cmd[0] {
 		case `\q`:
 			return cliExit
+		case `\!`:
+			runShell(cmd)
 		case `\`, `\?`:
 			printCliHelp()
 		default:
@@ -114,6 +119,19 @@ func handleInputLine(stmt *[]string, line string) int {
 	}
 
 	return cliProcessQuery
+}
+
+// runShell executes system commands on the interactive CLI.
+func runShell(cmd []string) {
+	var out []byte
+
+	if len(cmd) < 2 {
+		fmt.Printf("Usage:\n  %s [command]\n", cmd[0])
+	} else {
+		out, _ = exec.Command(cmd[1], cmd[2:]...).CombinedOutput()
+	}
+
+	fmt.Print(string(out))
 }
 
 // preparePrompts computes a full and short prompt for the interactive
