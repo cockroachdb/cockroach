@@ -698,7 +698,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 
 			if log.V(1) {
-				log.Warningf("failed to invoke %s: %s", ba, pErr)
+				log.Warningf("failed to invoke %s: err = %s", ba, pErr)
 			}
 			log.Trace(ctx, fmt.Sprintf("reply error: %T", pErr.GetDetail()))
 
