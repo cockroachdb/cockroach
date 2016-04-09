@@ -213,7 +213,7 @@ check:
 	@echo "ineffassign"
 	@! ineffassign . | grep -vF '.pb.go' # gogo/protobuf#152
 	@echo "errcheck"
-	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $(PKG)
+	@errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close,os/exec:Run' $(PKG)
 	@echo "returncheck"
 	@returncheck $(PKG)
 	@echo "vet"

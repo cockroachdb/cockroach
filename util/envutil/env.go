@@ -71,6 +71,18 @@ func GetEnvReport() string {
 	return b.String()
 }
 
+// GetShellEnv returns the path to the system shell.
+func GetShellEnv() string {
+	if shell := os.Getenv("SHELL"); len(shell) > 0 {
+		return shell
+	} else if shell := os.Getenv("COMSPEC"); runtime.GOOS == "windows" && len(shell) > 0 {
+		return shell
+	}
+
+	log.Errorf("Error: shell not found. Please check environmental variables SHELL or COMSPEC")
+	return ""
+}
+
 // EnvOrDefaultString returns the value set by the specified
 // environment variable, if any, otherwise the specified default
 // value.
