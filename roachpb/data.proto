@@ -285,6 +285,8 @@ message Transaction {
   // work required on txn restart.
   optional bool write_too_old = 12 [(gogoproto.nullable) = false];
   repeated Span intents = 11 [(gogoproto.nullable) = false];
+  // True if the transaction committed on the one phase commit path.
+  optional bool one_phase_commit = 13 [(gogoproto.nullable) = false];
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.

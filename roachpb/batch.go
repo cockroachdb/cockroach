@@ -75,6 +75,23 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 	return (ba.flags() & isTxnWrite) != 0
 }
 
+// IsOnePhaseCommit returns true iff the BatchRequest contains all
+// commands in the transaction, starting with BeginTransaction and
+// ending with EndTransaction.
+func (ba *BatchRequest) IsOnePhaseCommit() bool {
+	if ba.flags()&isTxnWrite == 0 {
+		return false
+	}
+	if len(ba.Requests) < 2 {
+		return false
+	}
+	if ba.Requests[0].GetInner().Method() != BeginTransaction ||
+		ba.Requests[len(ba.Requests)-1].GetInner().Method() != EndTransaction {
+		return false
+	}
+	return true
+}
+
 // GetArg returns a request of the given type if one is contained in the
 // Batch. The request returned is the first of its kind, with the exception
 // of EndTransaction, where it examines the very last request only.

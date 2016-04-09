@@ -270,7 +270,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TxnMeta, _internal_metadata_),
       -1);
   Transaction_descriptor_ = file->message_type(11);
-  static const int Transaction_offsets_[10] = {
+  static const int Transaction_offsets_[11] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, meta_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, status_),
@@ -281,6 +281,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, writing_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, write_too_old_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, intents_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, one_phase_commit_),
   };
   Transaction_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -493,7 +494,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\037\000\0225\n\ttimestamp\030\005 \001(\0132\034.cockroach.roachp"
     "b.TimestampB\004\310\336\037\000\022\026\n\010priority\030\006 \001(\005B\004\310\336\037"
     "\000\022\026\n\010sequence\030\007 \001(\005B\004\310\336\037\000\022\031\n\013batch_index"
-    "\030\010 \001(\005B\004\310\336\037\000\"\346\004\n\013Transaction\0222\n\004meta\030\001 \001"
+    "\030\010 \001(\005B\004\310\336\037\000\"\206\005\n\013Transaction\0222\n\004meta\030\001 \001"
     "(\0132\032.cockroach.roachpb.TxnMetaB\010\310\336\037\000\320\336\037\001"
     "\022\022\n\004name\030\002 \001(\tB\004\310\336\037\000\022:\n\006status\030\004 \001(\0162$.c"
     "ockroach.roachpb.TransactionStatusB\004\310\336\037\000"
@@ -506,29 +507,30 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "vedTimestampsEntryB\016\310\336\037\000\202\337\037\006NodeID\022\025\n\007wr"
     "iting\030\t \001(\010B\004\310\336\037\000\022\033\n\rwrite_too_old\030\014 \001(\010"
     "B\004\310\336\037\000\022.\n\007intents\030\013 \003(\0132\027.cockroach.roac"
-    "hpb.SpanB\004\310\336\037\000\032W\n\027ObservedTimestampsEntr"
-    "y\022\013\n\003key\030\001 \001(\005\022+\n\005value\030\002 \001(\0132\034.cockroac"
-    "h.roachpb.Timestamp:\0028\001:\004\230\240\037\000\"\244\001\n\006Intent"
-    "\022/\n\004span\030\001 \001(\0132\027.cockroach.roachpb.SpanB"
-    "\010\310\336\037\000\320\336\037\001\022-\n\003txn\030\002 \001(\0132\032.cockroach.roach"
-    "pb.TxnMetaB\004\310\336\037\000\022:\n\006status\030\003 \001(\0162$.cockr"
-    "oach.roachpb.TransactionStatusB\004\310\336\037\000\"\265\001\n"
-    "\005Lease\0221\n\005start\030\001 \001(\0132\034.cockroach.roachp"
-    "b.TimestampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034."
-    "cockroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007rep"
-    "lica\030\003 \001(\0132$.cockroach.roachpb.ReplicaDe"
-    "scriptorB\004\310\336\037\000:\004\230\240\037\000\"v\n\017AbortCacheEntry\022"
-    "\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\013"
-    "2\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022\026\n\010"
-    "priority\030\003 \001(\005B\004\310\336\037\000*l\n\tValueType\022\013\n\007UNK"
-    "NOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n"
-    "\004TIME\020\004\022\013\n\007DECIMAL\020\005\022\014\n\010DURATION\020\006\022\016\n\nTI"
-    "MESERIES\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_R"
-    "EPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIs"
-    "olationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHO"
-    "T\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDIN"
-    "G\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ"
-    "\007roachpbX\001", 3290);
+    "hpb.SpanB\004\310\336\037\000\022\036\n\020one_phase_commit\030\r \001(\010"
+    "B\004\310\336\037\000\032W\n\027ObservedTimestampsEntry\022\013\n\003key"
+    "\030\001 \001(\005\022+\n\005value\030\002 \001(\0132\034.cockroach.roachp"
+    "b.Timestamp:\0028\001:\004\230\240\037\000\"\244\001\n\006Intent\022/\n\004span"
+    "\030\001 \001(\0132\027.cockroach.roachpb.SpanB\010\310\336\037\000\320\336\037"
+    "\001\022-\n\003txn\030\002 \001(\0132\032.cockroach.roachpb.TxnMe"
+    "taB\004\310\336\037\000\022:\n\006status\030\003 \001(\0162$.cockroach.roa"
+    "chpb.TransactionStatusB\004\310\336\037\000\"\265\001\n\005Lease\0221"
+    "\n\005start\030\001 \001(\0132\034.cockroach.roachpb.Timest"
+    "ampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034.cockroac"
+    "h.roachpb.TimestampB\004\310\336\037\000\022;\n\007replica\030\003 \001"
+    "(\0132$.cockroach.roachpb.ReplicaDescriptor"
+    "B\004\310\336\037\000:\004\230\240\037\000\"v\n\017AbortCacheEntry\022\024\n\003key\030\001"
+    " \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockr"
+    "oach.roachpb.TimestampB\004\310\336\037\000\022\026\n\010priority"
+    "\030\003 \001(\005B\004\310\336\037\000*l\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007"
+    "\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022"
+    "\013\n\007DECIMAL\020\005\022\014\n\010DURATION\020\006\022\016\n\nTIMESERIES"
+    "\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000"
+    "\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationT"
+    "ype\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036"
+    "\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tC"
+    "OMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpb"
+    "X\001", 3322);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -5524,6 +5526,7 @@ const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kIntentsFieldNumber;
+const int Transaction::kOnePhaseCommitFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
@@ -5562,6 +5565,7 @@ void Transaction::SharedCtor() {
       &::cockroach::roachpb::Transaction_ObservedTimestampsEntry_descriptor_);
   writing_ = false;
   write_too_old_ = false;
+  one_phase_commit_ = false;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -5632,7 +5636,7 @@ void Transaction::Clear() {
       if (max_timestamp_ != NULL) max_timestamp_->::cockroach::roachpb::Timestamp::Clear();
     }
   }
-  write_too_old_ = false;
+  ZR_(write_too_old_, one_phase_commit_);
 
 #undef ZR_HELPER_
 #undef ZR_
@@ -5805,6 +5809,21 @@ bool Transaction::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(104)) goto parse_one_phase_commit;
+        break;
+      }
+
+      // optional bool one_phase_commit = 13;
+      case 13: {
+        if (tag == 104) {
+         parse_one_phase_commit:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &one_phase_commit_)));
+          set_has_one_phase_commit();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -5902,6 +5921,11 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(12, this->write_too_old(), output);
   }
 
+  // optional bool one_phase_commit = 13;
+  if (has_one_phase_commit()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(13, this->one_phase_commit(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -5987,6 +6011,11 @@ void Transaction::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(12, this->write_too_old(), target);
   }
 
+  // optional bool one_phase_commit = 13;
+  if (has_one_phase_commit()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(13, this->one_phase_commit(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -6046,11 +6075,18 @@ int Transaction::ByteSize() const {
     }
 
   }
-  // optional bool write_too_old = 12;
-  if (has_write_too_old()) {
-    total_size += 1 + 1;
-  }
+  if (_has_bits_[8 / 32] & 1280u) {
+    // optional bool write_too_old = 12;
+    if (has_write_too_old()) {
+      total_size += 1 + 1;
+    }
 
+    // optional bool one_phase_commit = 13;
+    if (has_one_phase_commit()) {
+      total_size += 1 + 1;
+    }
+
+  }
   // map<int32, .cockroach.roachpb.Timestamp> observed_timestamps = 8;
   total_size += 1 * this->observed_timestamps_size();
   {
@@ -6127,6 +6163,9 @@ void Transaction::MergeFrom(const Transaction& from) {
     if (from.has_write_too_old()) {
       set_write_too_old(from.write_too_old());
     }
+    if (from.has_one_phase_commit()) {
+      set_one_phase_commit(from.one_phase_commit());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -6165,6 +6204,7 @@ void Transaction::InternalSwap(Transaction* other) {
   std::swap(writing_, other->writing_);
   std::swap(write_too_old_, other->write_too_old_);
   intents_.UnsafeArenaSwap(&other->intents_);
+  std::swap(one_phase_commit_, other->one_phase_commit_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -6525,6 +6565,30 @@ const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
 Transaction::intents() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.intents)
   return intents_;
+}
+
+// optional bool one_phase_commit = 13;
+bool Transaction::has_one_phase_commit() const {
+  return (_has_bits_[0] & 0x00000400u) != 0;
+}
+void Transaction::set_has_one_phase_commit() {
+  _has_bits_[0] |= 0x00000400u;
+}
+void Transaction::clear_has_one_phase_commit() {
+  _has_bits_[0] &= ~0x00000400u;
+}
+void Transaction::clear_one_phase_commit() {
+  one_phase_commit_ = false;
+  clear_has_one_phase_commit();
+}
+ bool Transaction::one_phase_commit() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.one_phase_commit)
+  return one_phase_commit_;
+}
+ void Transaction::set_one_phase_commit(bool value) {
+  set_has_one_phase_commit();
+  one_phase_commit_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.one_phase_commit)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

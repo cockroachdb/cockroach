@@ -2644,8 +2644,12 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			var ba roachpb.BatchRequest
 			ba.Header = etH
 			ba.Add(&bt, &put, &et)
-			if _, err := tc.Sender().Send(context.Background(), ba); err != nil {
+			br, err := tc.Sender().Send(context.Background(), ba)
+			if err != nil {
 				t.Fatalf("commit=%t: %s", commit, err)
+			}
+			if !br.Txn.OnePhaseCommit {
+				t.Errorf("commit=%t: expected one phase commit", commit)
 			}
 
 			var entry roachpb.AbortCacheEntry

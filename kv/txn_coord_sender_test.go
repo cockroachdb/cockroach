@@ -973,7 +973,8 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 // checkTxnMetrics verifies that the provided Sender's transaction metrics match the expected
 // values. This is done through a series of retries with increasing backoffs, to work around
 // the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
-func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits, abandons, aborts, restarts int64) {
+func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
+	commits, commits1PC, abandons, aborts, restarts int64) {
 	metrics := sender.metrics
 
 	util.SucceedsSoon(t, func() error {
@@ -982,6 +983,7 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string, commits,
 			a, e int64
 		}{
 			{"commits", metrics.Commits.Count(), commits},
+			{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
 			{"abandons", metrics.Abandons.Count(), abandons},
 			{"aborts", metrics.Aborts.Count(), aborts},
 			{"durations", metrics.Durations[metric.Scale1M].Current().TotalCount(),
@@ -1059,7 +1061,27 @@ func TestTxnCommit(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "commit txn", 1, 0, 0, 0)
+	checkTxnMetrics(t, sender, "commit txn", 1, 0 /* not 1PC */, 0, 0, 0)
+}
+
+// TestTxnOnePhaseCommit verifies that 1PC metric tracking.
+func TestTxnOnePhaseCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, sender, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+	value := []byte("value")
+	db := client.NewDB(sender)
+
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		key := []byte("key-commit")
+		b := txn.NewBatch()
+		b.Put(key, value)
+		return txn.CommitInBatch(b)
+	}); pErr != nil {
+		t.Fatal(pErr)
+	}
+	teardownHeartbeats(sender)
+	checkTxnMetrics(t, sender, "commit 1PC txn", 1, 1 /* 1PC */, 0, 0, 0)
 }
 
 func TestTxnAbandonCount(t *testing.T) {
@@ -1087,7 +1109,7 @@ func TestTxnAbandonCount(t *testing.T) {
 
 		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))
 
-		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
+		checkTxnMetrics(t, sender, "abandon txn", 0, 0, 1, 0, 0)
 
 		return nil
 	}); !testutils.IsPError(pErr, "writing transaction timed out") {
@@ -1124,7 +1146,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 
 		manual.Increment(int64(sender.clientTimeout + sender.heartbeatInterval*2))
 
-		checkTxnMetrics(t, sender, "abandon txn", 0, 1, 0, 0)
+		checkTxnMetrics(t, sender, "abandon txn", 0, 0, 1, 0, 0)
 
 		_, pErr := txn.Get(key)
 		if pErr == nil {
@@ -1166,7 +1188,7 @@ func TestTxnAbortCount(t *testing.T) {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "abort txn", 0, 0, 1, 0)
+	checkTxnMetrics(t, sender, "abort txn", 0, 0, 0, 1, 0)
 }
 
 func TestTxnRestartCount(t *testing.T) {
@@ -1205,7 +1227,7 @@ func TestTxnRestartCount(t *testing.T) {
 	}
 
 	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "restart txn", 0, 0, 1, 1)
+	checkTxnMetrics(t, sender, "restart txn", 0, 0, 0, 1, 1)
 }
 
 func TestTxnDurations(t *testing.T) {
@@ -1234,7 +1256,7 @@ func TestTxnDurations(t *testing.T) {
 	}
 
 	teardownHeartbeats(sender)
-	checkTxnMetrics(t, sender, "txn durations", puts, 0, 0, 0)
+	checkTxnMetrics(t, sender, "txn durations", puts, 0, 0, 0, 0)
 
 	hist := sender.metrics.Durations[metric.Scale1M].Current()
 

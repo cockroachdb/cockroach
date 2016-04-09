@@ -78,6 +78,27 @@ func TestBatchSplit(t *testing.T) {
 	}
 }
 
+func TestBatchRequestOnePhaseCommit(t *testing.T) {
+	testCases := []struct {
+		bu     []RequestUnion
+		exp1PC bool
+	}{
+		{[]RequestUnion{}, false},
+		{[]RequestUnion{{Get: &GetRequest{}}}, false},
+		{[]RequestUnion{{Put: &PutRequest{}}}, false},
+		{[]RequestUnion{{BeginTransaction: &BeginTransactionRequest{}}, {Put: &PutRequest{}}}, false},
+		{[]RequestUnion{{BeginTransaction: &BeginTransactionRequest{}}, {Put: &PutRequest{}}, {EndTransaction: &EndTransactionRequest{}}}, true},
+		{[]RequestUnion{{Put: &PutRequest{}}, {EndTransaction: &EndTransactionRequest{}}}, false},
+	}
+
+	for i, c := range testCases {
+		br := BatchRequest{Requests: c.bu}
+		if is1PC := br.IsOnePhaseCommit(); is1PC != c.exp1PC {
+			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
+		}
+	}
+}
+
 func TestBatchRequestGetArg(t *testing.T) {
 	testCases := []struct {
 		bu         []RequestUnion

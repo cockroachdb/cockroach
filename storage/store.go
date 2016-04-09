@@ -386,6 +386,8 @@ type StoreTestingKnobs struct {
 	// A callback to be called instead of panicking due to a
 	// checksum mismatch in VerifyChecksum()
 	BadChecksumPanic func([]ReplicaSnapshotDiff)
+	// Disables the use of one phase commits.
+	DisableOnePhaseCommits bool
 }
 
 type storeMetrics struct {

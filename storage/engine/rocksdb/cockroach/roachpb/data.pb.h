@@ -1559,6 +1559,13 @@ class Transaction : public ::google::protobuf::Message {
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
       intents() const;
 
+  // optional bool one_phase_commit = 13;
+  bool has_one_phase_commit() const;
+  void clear_one_phase_commit();
+  static const int kOnePhaseCommitFieldNumber = 13;
+  bool one_phase_commit() const;
+  void set_one_phase_commit(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Transaction)
  private:
   inline void set_has_meta();
@@ -1577,6 +1584,8 @@ class Transaction : public ::google::protobuf::Message {
   inline void clear_has_writing();
   inline void set_has_write_too_old();
   inline void clear_has_write_too_old();
+  inline void set_has_one_phase_commit();
+  inline void clear_has_one_phase_commit();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1586,9 +1595,6 @@ class Transaction : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* last_heartbeat_;
   ::cockroach::roachpb::Timestamp* orig_timestamp_;
   ::cockroach::roachpb::Timestamp* max_timestamp_;
-  int status_;
-  bool writing_;
-  bool write_too_old_;
   typedef ::google::protobuf::internal::MapEntryLite<
       ::google::protobuf::int32, ::cockroach::roachpb::Timestamp,
       ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
@@ -1600,6 +1606,10 @@ class Transaction : public ::google::protobuf::Message {
       ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
       ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
       0 > observed_timestamps_;
+  int status_;
+  bool writing_;
+  bool write_too_old_;
+  bool one_phase_commit_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
@@ -3579,6 +3589,30 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
 Transaction::intents() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.intents)
   return intents_;
+}
+
+// optional bool one_phase_commit = 13;
+inline bool Transaction::has_one_phase_commit() const {
+  return (_has_bits_[0] & 0x00000400u) != 0;
+}
+inline void Transaction::set_has_one_phase_commit() {
+  _has_bits_[0] |= 0x00000400u;
+}
+inline void Transaction::clear_has_one_phase_commit() {
+  _has_bits_[0] &= ~0x00000400u;
+}
+inline void Transaction::clear_one_phase_commit() {
+  one_phase_commit_ = false;
+  clear_has_one_phase_commit();
+}
+inline bool Transaction::one_phase_commit() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.one_phase_commit)
+  return one_phase_commit_;
+}
+inline void Transaction::set_one_phase_commit(bool value) {
+  set_has_one_phase_commit();
+  one_phase_commit_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.one_phase_commit)
 }
 
 // -------------------------------------------------------------------

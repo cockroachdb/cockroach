@@ -793,6 +793,7 @@ func (t *Transaction) Update(o *Transaction) {
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
 	t.Writing = t.Writing || o.Writing
+	t.OnePhaseCommit = t.OnePhaseCommit || o.OnePhaseCommit
 	// This isn't or'd (similar to Writing) because we want WriteTooOld
 	// to be set each time according to "o". This allows a persisted
 	// txn to have its WriteTooOld flag reset on update.
@@ -824,8 +825,9 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t",
-		t.ID.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld)
+	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d ts=%s orig=%s max=%s wto=%t 1pc=%t",
+		t.ID.Short(), t.Key, t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.OnePhaseCommit)
 	return buf.String()
 }
 
