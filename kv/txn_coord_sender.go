@@ -140,32 +140,35 @@ func collectIntentSpans(keys interval.RangeGroup) []roachpb.Span {
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts    metric.Rates
-	Commits   metric.Rates
-	Abandons  metric.Rates
-	Durations metric.Histograms
+	Aborts     metric.Rates
+	Commits    metric.Rates
+	Commits1PC metric.Rates // Commits which finished in a single phase
+	Abandons   metric.Rates
+	Durations  metric.Histograms
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
 }
 
 const (
-	abortsPrefix    = "aborts"
-	commitsPrefix   = "commits"
-	abandonsPrefix  = "abandons"
-	durationsPrefix = "durations"
-	restartsKey     = "restarts"
+	abortsPrefix     = "aborts"
+	commitsPrefix    = "commits"
+	commits1PCPrefix = "commits1PC"
+	abandonsPrefix   = "abandons"
+	durationsPrefix  = "durations"
+	restartsKey      = "restarts"
 )
 
 // NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have
 // been registered with the provided Registry.
 func NewTxnMetrics(txnRegistry *metric.Registry) *TxnMetrics {
 	return &TxnMetrics{
-		Aborts:    txnRegistry.Rates(abortsPrefix),
-		Commits:   txnRegistry.Rates(commitsPrefix),
-		Abandons:  txnRegistry.Rates(abandonsPrefix),
-		Durations: txnRegistry.Latency(durationsPrefix),
-		Restarts:  txnRegistry.Histogram(restartsKey, 60*time.Second, 100, 3),
+		Aborts:     txnRegistry.Rates(abortsPrefix),
+		Commits:    txnRegistry.Rates(commitsPrefix),
+		Commits1PC: txnRegistry.Rates(commits1PCPrefix),
+		Abandons:   txnRegistry.Rates(abandonsPrefix),
+		Durations:  txnRegistry.Latency(durationsPrefix),
+		Restarts:   txnRegistry.Histogram(restartsKey, 60*time.Second, 100, 3),
 	}
 }
 
@@ -246,15 +249,17 @@ func (tc *TxnCoordSender) startStats() {
 			durations := metrics.Durations[scale].Current()
 			restarts := metrics.Restarts.Current()
 			commitRate := metrics.Commits.Rates[scale].Value()
+			commit1PCRate := metrics.Commits1PC.Rates[scale].Value()
 			abortRate := metrics.Aborts.Rates[scale].Value()
 			abandonRate := metrics.Abandons.Rates[scale].Value()
 
 			// Show transaction stats over the last minute. Maybe this should be shorter in the future.
 			// We'll revisit if we get sufficient feedback.
 			totalRate := commitRate + abortRate + abandonRate
-			var pCommitted, pAbandoned, pAborted float64
+			var pCommitted, pCommitted1PC, pAbandoned, pAborted float64
 			if totalRate > 0 {
 				pCommitted = 100 * (commitRate / totalRate)
+				pCommitted1PC = 100 * (commit1PCRate / totalRate)
 				pAborted = 100 * (abortRate / totalRate)
 				pAbandoned = 100 * (abandonRate / totalRate)
 			}
@@ -268,8 +273,8 @@ func (tc *TxnCoordSender) startStats() {
 			num := durations.TotalCount()
 
 			log.Infof(
-				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f %%cmmt/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples)",
-				totalRate, pCommitted, pAborted, pAbandoned,
+				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f/%.2f %%cmmt/cmmt1pc/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples)",
+				totalRate, pCommitted, pCommitted1PC, pAborted, pAbandoned,
 				util.TruncateDuration(time.Duration(dMean), res),
 				util.TruncateDuration(time.Duration(dDev), res),
 				util.TruncateDuration(time.Duration(dMax), res),
@@ -316,13 +321,13 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 	}
 
-	if err := tc.maybeBeginTxn(&ba); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	var startNS int64
+	startNS := tc.clock.PhysicalNow()
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
+		if err := tc.maybeBeginTxn(&ba); err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		txnID := *ba.Txn.ID
 		// Verify that if this Transaction is not read-only, we have it on file.
 		// If not, refuse further operations - the transaction was aborted due
@@ -345,9 +350,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
 			}
 			et.Key = ba.Txn.Key
-			// Remember when EndTransaction started in case we want to
-			// be linearizable.
-			startNS = tc.clock.PhysicalNow()
 			if len(et.IntentSpans) > 0 {
 				// TODO(tschottdorf): it may be useful to allow this later.
 				// That would be part of a possible plan to allow txns which
@@ -411,7 +413,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			br, pErr = tc.resendWithTxn(ba)
 		}
 
-		if pErr = tc.updateState(ctx, ba, br, pErr); pErr != nil {
+		if pErr = tc.updateState(startNS, ctx, ba, br, pErr); pErr != nil {
 			log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
 			return nil, pErr
 		}
@@ -460,9 +462,6 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // transaction request within the same batch. The exception is if the
 // transaction is already in state txn.Writing=true.
 func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
-	if ba.Txn == nil {
-		return nil
-	}
 	if len(ba.Requests) == 0 {
 		return util.Errorf("empty batch with txn")
 	}
@@ -532,8 +531,10 @@ func (tc *TxnCoordSender) cleanupTxn(ctx context.Context, txn roachpb.Transactio
 
 // unregisterTxn deletes a txnMetadata object from the sender
 // and collects its stats. It assumes the lock is held. Returns
-// the status and starts for the removed transaction.
-func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (duration, restarts int64, status roachpb.TransactionStatus) {
+// the duration, restarts, finalized txn status, and whether the
+// transaction committed on the 1PC fast path.
+func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (
+	duration, restarts int64, status roachpb.TransactionStatus) {
 	txnMeta := tc.txns[txnID] // guaranteed to exist
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
@@ -570,7 +571,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 		tc.Lock()
 		duration, restarts, status := tc.unregisterTxnLocked(txnID)
 		tc.Unlock()
-		tc.updateStats(duration, int64(restarts), status)
+		tc.updateStats(duration, int64(restarts), status, false)
 	}()
 
 	var closer <-chan struct{}
@@ -712,8 +713,8 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 // object when adequate. It also updates certain errors with the
 // updated transaction for use by client restarts.
 func (tc *TxnCoordSender) updateState(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-) *roachpb.Error {
+	startNS int64, ctx context.Context, ba roachpb.BatchRequest,
+	br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
 	newTxn := &roachpb.Transaction{}
 	newTxn.Update(ba.Txn)
 	if pErr == nil {
@@ -830,7 +831,7 @@ func (tc *TxnCoordSender) updateState(
 				txnMeta = &txnMetadata{
 					txn:              *newTxn,
 					keys:             intentGroup,
-					firstUpdateNanos: tc.clock.PhysicalNow(),
+					firstUpdateNanos: startNS,
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,
 					txnEnd:           make(chan struct{}),
@@ -847,6 +848,12 @@ func (tc *TxnCoordSender) updateState(
 					tc.unregisterTxnLocked(txnID)
 					return roachpb.NewError(&roachpb.NodeUnavailableError{})
 				}
+			} else {
+				// If this was a successful one phase commit, update stats
+				// directly as they won't otherwise be updated on heartbeat
+				// loop shutdown.
+				etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
+				tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
 			}
 		}
 	}
@@ -898,7 +905,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 }
 
 // updateStats updates transaction metrics after a transaction finishes.
-func (tc *TxnCoordSender) updateStats(duration, restarts int64, status roachpb.TransactionStatus) {
+func (tc *TxnCoordSender) updateStats(duration, restarts int64, status roachpb.TransactionStatus, onePC bool) {
 	tc.metrics.Durations.RecordValue(duration)
 	tc.metrics.Restarts.RecordValue(restarts)
 	switch status {
@@ -908,5 +915,8 @@ func (tc *TxnCoordSender) updateStats(duration, restarts int64, status roachpb.T
 		tc.metrics.Abandons.Add(1)
 	case roachpb.COMMITTED:
 		tc.metrics.Commits.Add(1)
+		if onePC {
+			tc.metrics.Commits1PC.Add(1)
+		}
 	}
 }

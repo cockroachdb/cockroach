@@ -236,8 +236,12 @@ message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Remaining time (ns).
   optional int64 commit_wait = 2 [(gogoproto.nullable) = false]; // TODO(tschottdorf): remove this
-  // List of intents resolved by EndTransaction call.
-  repeated bytes resolved = 3 [(gogoproto.casttype) = "Key"];
+  // Obsolete tag. Removed in #5966.
+  repeated bytes DEPRECATED_resolved = 3;
+  // True if the transaction committed on the one phase commit path.
+  // This means that all writes which were part of the transaction
+  // were written as a single, atomic write batch to just one range.
+  optional bool one_phase_commit = 4 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The

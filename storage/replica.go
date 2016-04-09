@@ -1510,8 +1510,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
-	ms := engine.MVCCStats{}
-	batch, br, intents, rErr := r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba, &ms)
+	batch, ms, br, intents, rErr := r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba)
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -1563,18 +1562,15 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 // for committing the batch, even on error.
 func (r *Replica) applyRaftCommandInBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, originReplica roachpb.ReplicaDescriptor,
-	ba roachpb.BatchRequest, ms *engine.MVCCStats) (
-	engine.Engine, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
-	// Create a new batch for the command to ensure all or nothing semantics.
-	btch := r.store.Engine().NewBatch()
-
+	ba roachpb.BatchRequest) (
+	engine.Engine, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
 		r.assert5725(ba)
-		if pErr := r.checkIfTxnAborted(btch, *ba.Txn); pErr != nil {
-			return btch, nil, nil, pErr
+		if pErr := r.checkIfTxnAborted(r.store.Engine(), *ba.Txn); pErr != nil {
+			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil, pErr
 		}
 	}
 
@@ -1595,7 +1591,8 @@ func (r *Replica) applyRaftCommandInBatch(
 			// since reads are served locally by the lease holder without going
 			// through Raft, a read which was not taken into account may have been
 			// served. Hence, we must retry at the current leader.
-			return btch, nil, nil, roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
+			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil,
+				roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 		}
 	}
 
@@ -1606,7 +1603,7 @@ func (r *Replica) applyRaftCommandInBatch(
 	// Execute the commands. If this returns without an error, the batch must
 	// be committed (EndTransaction with a CommitTrigger may unlock
 	// readOnlyCmdMu via a batch.Defer).
-	br, intents, pErr := r.executeBatch(ctx, idKey, btch, ms, ba)
+	btch, ms, br, intents, pErr := r.executeWriteBatch(ctx, idKey, ba)
 
 	if ba.IsWrite() {
 		if pErr != nil {
@@ -1622,7 +1619,7 @@ func (r *Replica) applyRaftCommandInBatch(
 				// prepare for the failed sequence cache entry.
 				btch.Close()
 				btch = r.store.Engine().NewBatch()
-				*ms = engine.MVCCStats{}
+				ms = engine.MVCCStats{}
 				// Restore the original txn's Writing bool if pErr specifies a transaction.
 				if txn := pErr.GetTxn(); txn != nil && txn.Equal(ba.Txn) {
 					txn.Writing = wasWriting
@@ -1631,7 +1628,7 @@ func (r *Replica) applyRaftCommandInBatch(
 		}
 	}
 
-	return btch, br, intents, pErr
+	return btch, ms, br, intents, pErr
 }
 
 // checkIfTxnAborted checks the txn abort cache for the given
@@ -1663,6 +1660,90 @@ func (r *Replica) checkIfTxnAborted(b engine.Engine, txn roachpb.Transaction) *r
 type intentsWithArg struct {
 	args    roachpb.Request
 	intents []roachpb.Intent
+}
+
+// executeWriteBatch attempts to execute transactional batches on the
+// 1-phase-commit path as just an atomic, non-transactional batch of
+// write commands. One phase commit batches contain transactional
+// writes sandwiched by BeginTransaction and EndTransaction requests.
+//
+// If the batch is transactional, and there's nothing to suggest that
+// the transaction will require retry or restart, the batch's txn is
+// stripped and it's executed as a normal batch write. If the writes
+// cannot all be completed at the intended timestamp, the batch's
+// txn is restored and it's re-executed as transactional.
+func (r *Replica) executeWriteBatch(
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest) (
+	engine.Engine, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+	batch := r.store.Engine().NewBatch()
+	ms := engine.MVCCStats{}
+	// If not transactional or there are indications that the batch's txn
+	// will require restart or retry, execute as normal.
+	if r.store.TestingKnobs().DisableOnePhaseCommits || !isOnePhaseCommit(ba) {
+		br, intents, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
+		return batch, ms, br, intents, pErr
+	}
+
+	// Try executing with transaction stripped.
+	strippedBa := ba
+	strippedBa.Txn = nil
+	strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
+
+	// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
+	br, intents, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
+	if pErr == nil && ba.Timestamp == br.Timestamp {
+		clonedTxn := ba.Txn.Clone()
+		clonedTxn.Writing = true
+		clonedTxn.Status = roachpb.COMMITTED
+
+		// If the end transaction is not committed, clear the batch and mark the status aborted.
+		arg, _ := ba.GetArg(roachpb.EndTransaction)
+		etArg := arg.(*roachpb.EndTransactionRequest)
+		if !etArg.Commit {
+			clonedTxn.Status = roachpb.ABORTED
+			batch.Close()
+			batch = r.store.Engine().NewBatch()
+			ms = engine.MVCCStats{}
+		} else {
+			// Run commit trigger manually.
+			if err := r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn); err != nil {
+				return batch, ms, br, intents, roachpb.NewErrorf("failed to run commit trigger: %s", err)
+			}
+		}
+
+		br.Txn = &clonedTxn
+		// Add placeholder responses for begin & end transaction requests.
+		br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
+		br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
+		return batch, ms, br, intents, nil
+	}
+
+	// Otherwise, re-execute with the original, transactional batch.
+	batch.Close()
+	batch = r.store.Engine().NewBatch()
+	ms = engine.MVCCStats{}
+	br, intents, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
+	return batch, ms, br, intents, pErr
+}
+
+// isOnePhaseCommit returns true iff the BatchRequest contains all
+// commands in the transaction, starting with BeginTransaction and
+// ending with EndTransaction. One phase commits are disallowed if the
+// transaction has already been flagged with a write too old error or
+// if isolation is serializable and the commit timestamp has been
+// forwarded.
+func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
+	if ba.Txn == nil || ba.Txn.WriteTooOld ||
+		(ba.Txn.Isolation == roachpb.SERIALIZABLE && ba.Txn.OrigTimestamp != ba.Txn.Timestamp) {
+		return false
+	}
+	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {
+		return false
+	}
+	if _, hasEnd := ba.GetArg(roachpb.EndTransaction); !hasEnd {
+		return false
+	}
+	return true
 }
 
 func (r *Replica) executeBatch(

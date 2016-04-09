@@ -339,6 +339,9 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("txn.commits-count"))
                 .nonNegativeRate()
                 .title("Commits"),
+              Metrics.Select.Avg(_nodeMetric("txn.commits1PC-count"))
+                .nonNegativeRate()
+                .title("Fast 1PC"),
               Metrics.Select.Avg(_nodeMetric("txn.aborts-count"))
                 .nonNegativeRate()
                 .title("Aborts"),
@@ -888,6 +891,10 @@ module AdminViews {
                 .sources([this._nodeId])
                 .nonNegativeRate()
                 .title("Commits"),
+              Metrics.Select.Avg(_nodeMetric("txn.commits1PC-count"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("Fast 1PC"),
               Metrics.Select.Avg(_nodeMetric("txn.aborts-count"))
                 .sources([this._nodeId])
                 .nonNegativeRate()

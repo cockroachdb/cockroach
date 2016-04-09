@@ -476,42 +476,7 @@ func (r *Replica) EndTransaction(
 
 	// Run triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
-		ct := args.InternalCommitTrigger
-		if ct != nil {
-			// Hold readMu across the application of any commit trigger.
-			// This makes sure that no reads are happening in parallel;
-			// see #3148.
-			r.readOnlyCmdMu.Lock()
-			batch.Defer(r.readOnlyCmdMu.Unlock)
-		}
-
-		if err := func() error {
-			if ct.GetSplitTrigger() != nil {
-				if err := r.splitTrigger(r.context(ctx), batch, ms, ct.SplitTrigger, reply.Txn.Timestamp); err != nil {
-					return err
-				}
-				*ms = engine.MVCCStats{} // clear stats, as split recomputed.
-			}
-			if ct.GetMergeTrigger() != nil {
-				if err := r.mergeTrigger(batch, ms, ct.MergeTrigger, reply.Txn.Timestamp); err != nil {
-					return err
-				}
-				*ms = engine.MVCCStats{} // clear stats, as merge recomputed.
-			}
-			if ct.GetChangeReplicasTrigger() != nil {
-				if err := r.changeReplicasTrigger(batch, ct.ChangeReplicasTrigger); err != nil {
-					return err
-				}
-			}
-			if ct.GetModifiedSpanTrigger() != nil {
-				if ct.ModifiedSpanTrigger.SystemConfigSpan {
-					// Check if we need to gossip the system config.
-					batch.Defer(r.maybeGossipSystemConfig)
-				}
-			}
-			return nil
-		}(); err != nil {
-			r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
+		if err := r.runCommitTrigger(ctx, batch, ms, args, reply.Txn); err != nil {
 			// TODO(tschottdorf): should an error here always amount to a
 			// ReplicaCorruptionError?
 			log.Errorf("Range %d transaction commit trigger fail: %s", r.RangeID, err)
@@ -675,6 +640,49 @@ func intersectSpan(span roachpb.Span, desc roachpb.RangeDescriptor) (middle *roa
 		middle = &span
 	}
 	return
+}
+
+func (r *Replica) runCommitTrigger(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats,
+	args roachpb.EndTransactionRequest, txn *roachpb.Transaction) error {
+	ct := args.InternalCommitTrigger
+	if ct != nil {
+		// Hold readMu across the application of any commit trigger.
+		// This makes sure that no reads are happening in parallel;
+		// see #3148.
+		r.readOnlyCmdMu.Lock()
+		batch.Defer(r.readOnlyCmdMu.Unlock)
+	}
+
+	if err := func() error {
+		if ct.GetSplitTrigger() != nil {
+			if err := r.splitTrigger(r.context(ctx), batch, ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+				return err
+			}
+			*ms = engine.MVCCStats{} // clear stats, as split recomputed.
+		}
+		if ct.GetMergeTrigger() != nil {
+			if err := r.mergeTrigger(batch, ms, ct.MergeTrigger, txn.Timestamp); err != nil {
+				return err
+			}
+			*ms = engine.MVCCStats{} // clear stats, as merge recomputed.
+		}
+		if ct.GetChangeReplicasTrigger() != nil {
+			if err := r.changeReplicasTrigger(batch, ct.ChangeReplicasTrigger); err != nil {
+				return err
+			}
+		}
+		if ct.GetModifiedSpanTrigger() != nil {
+			if ct.ModifiedSpanTrigger.SystemConfigSpan {
+				// Check if we need to gossip the system config.
+				batch.Defer(r.maybeGossipSystemConfig)
+			}
+		}
+		return nil
+	}(); err != nil {
+		r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
+		return err
+	}
+	return nil
 }
 
 // RangeLookup is used to look up RangeDescriptors - a RangeDescriptor
