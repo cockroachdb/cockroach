@@ -41,8 +41,6 @@ var validTypes = map[string]struct{}{
 // A specification is of the form: [<network type>=]<address>
 // Network type can be one of:
 // - tcp: plain hostname or ip address
-//   for node addresses
-// If "network type" is not specified, "tcp" is assumed.
 func NewResolver(context *base.Context, spec string) (Resolver, error) {
 	parts := strings.Split(spec, "=")
 	var typ, addr string

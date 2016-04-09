@@ -25,9 +25,8 @@ import (
 // socketResolver represents the different types of socket-based
 // address resolvers.
 type socketResolver struct {
-	typ       string
-	addr      string
-	exhausted bool // Can we try this resolver again?
+	typ  string
+	addr string
 }
 
 // Type returns the resolver type.
@@ -44,7 +43,6 @@ func (sr *socketResolver) GetAddress() (net.Addr, error) {
 		if err != nil {
 			return nil, err
 		}
-		sr.exhausted = true
 		return util.NewUnresolvedAddr("tcp", sr.addr), nil
 	}
 	return nil, util.Errorf("unknown address type: %q", sr.typ)
