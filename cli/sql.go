@@ -17,12 +17,15 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -61,6 +64,7 @@ const (
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+      \! to execute system command
       \? or "help" to print this help.
 
 More documentation about our SQL dialect is available online:
@@ -89,9 +93,14 @@ func handleInputLine(stmt *[]string, line string) int {
 	if len(line) > 0 && line[0] == '\\' {
 		// Client-side commands: process locally.
 
-		switch line {
+		cmd := strings.Fields(line)
+		switch cmd[0] {
 		case `\q`:
 			return cliExit
+		case `\!`:
+			return runSyscmd(line)
+		case `\|`:
+			return pipeSyscmd(stmt, line)
 		case `\`, `\?`:
 			printCliHelp()
 		default:
@@ -113,6 +122,62 @@ func handleInputLine(stmt *[]string, line string) int {
 		return cliNextLine
 	}
 
+	return cliProcessQuery
+}
+
+// execSyscmd executes system commands.
+func execSyscmd(command string) (string, error) {
+	var cmd *exec.Cmd
+
+	if shell := os.Getenv("SHELL"); len(shell) > 0 {
+		cmd = exec.Command(shell, "-c", command)
+	} else if shell := os.Getenv("COMSPEC"); runtime.GOOS == "windows" && len(shell) > 0 {
+		cmd = exec.Command(shell, "/C", command)
+	} else {
+		return "", fmt.Errorf("cannot find shell. Please check $PATH or %COMSPEC%")
+	}
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+
+	return out.String(), nil
+}
+
+// runSyscmd runs system commands on the interactive CLI.
+func runSyscmd(line string) int {
+	command := strings.Trim(line, `\!`)
+	if command == "" {
+		fmt.Printf("Usage:\n  \\! [command]\n")
+		return cliNextLine
+	}
+
+	cmdOut, err := execSyscmd(command)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return cliNextLine
+	}
+
+	fmt.Printf(cmdOut)
+	return cliNextLine
+}
+
+// pipeSyscmd executes system commands and pipe the output into the current SQL.
+func pipeSyscmd(stmt *[]string, line string) int {
+	command := strings.Trim(line, `\|`)
+	if command == "" {
+		fmt.Printf("Usage:\n  \\| [command]\n")
+		return cliNextLine
+	}
+
+	cmdOut, err := execSyscmd(command)
+	if err != nil {
+		fmt.Printf("Error:%s", err)
+		return cliNextLine
+	}
+
+	*stmt = append(*stmt, cmdOut)
 	return cliProcessQuery
 }
 
