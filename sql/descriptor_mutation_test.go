@@ -692,4 +692,18 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.makeMutationsActive()
 	// Column b changed to d.
 	_ = mt.checkQueryResponse("SHOW COLUMNS FROM t.test", [][]string{{"a", "STRING", "false", "NULL"}, {"d", "STRING", "true", "NULL"}, {"e", "STRING", "true", "NULL"}})
+
+	// Try to change column defaults while column is under mutation.
+	mt.writeColumnMutation("e", csql.DescriptorMutation{Direction: csql.DescriptorMutation_ADD})
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
+		err, `column "e" in the middle of being added`) {
+		t.Fatal(err)
+	}
+	mt.makeMutationsActive()
+	mt.writeColumnMutation("e", csql.DescriptorMutation{Direction: csql.DescriptorMutation_DROP})
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
+		err, `column "e" in the middle of being dropped`) {
+		t.Fatal(err)
+	}
+	mt.makeMutationsActive()
 }

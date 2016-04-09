@@ -60,7 +60,11 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, roachpb.NewError(err)
 	}
 
-	numMutations := len(tableDesc.Mutations)
+	// Commands can either change the descriptor directly (for
+	// alterations that don't require a backfill) or add a mutation to
+	// the list.
+	descriptorChanged := false
+	origNumMutations := len(tableDesc.Mutations)
 
 	for _, cmd := range n.Cmds {
 		switch t := cmd.(type) {
@@ -165,23 +169,47 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 				}
 			}
 
+		case *parser.AlterTableSetDefault, *parser.AlterTableDropNotNull:
+			colMut := t.(parser.ColumnMutationCmd)
+			// Column mutations
+			status, i, err := tableDesc.FindColumnByName(colMut.GetColumn())
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+
+			switch status {
+			case DescriptorActive:
+				applyColumnMutation(&tableDesc.Columns[i], colMut)
+				descriptorChanged = true
+
+			case DescriptorIncomplete:
+				switch tableDesc.Mutations[i].Direction {
+				case DescriptorMutation_ADD:
+					return nil, roachpb.NewUErrorf("column %q in the middle of being added, try again later", colMut.GetColumn())
+				case DescriptorMutation_DROP:
+					return nil, roachpb.NewUErrorf("column %q in the middle of being dropped", colMut.GetColumn())
+				}
+			}
+
 		default:
 			return nil, roachpb.NewErrorf("unsupported alter cmd: %T", cmd)
 		}
 	}
-	// Were some mutations added?
+	// Were some changes made?
 	//
 	// This is only really needed for the unittests that add dummy mutations
 	// before calling ALTER TABLE commands. We do not want to apply those
 	// dummy mutations. Most tests trigger errors above
 	// this line, but tests that run redundant operations like dropping
 	// a column when it's already dropped will hit this condition and exit.
-	if numMutations == len(tableDesc.Mutations) {
+	mutationID := invalidMutationID
+	if len(tableDesc.Mutations) > origNumMutations {
+		mutationID = tableDesc.NextMutationID
+		tableDesc.NextMutationID++
+	} else if !descriptorChanged {
 		return &emptyNode{}, nil
 	}
 	tableDesc.UpVersion = true
-	mutationID := tableDesc.NextMutationID
-	tableDesc.NextMutationID++
 
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, roachpb.NewError(err)
@@ -193,4 +221,19 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	p.notifySchemaChange(tableDesc.ID, mutationID)
 
 	return &emptyNode{}, nil
+}
+
+func applyColumnMutation(col *ColumnDescriptor, mut parser.ColumnMutationCmd) {
+	switch t := mut.(type) {
+	case *parser.AlterTableSetDefault:
+		if t.Default == nil {
+			col.DefaultExpr = nil
+		} else {
+			s := t.Default.String()
+			col.DefaultExpr = &s
+		}
+
+	case *parser.AlterTableDropNotNull:
+		col.Nullable = true
+	}
 }

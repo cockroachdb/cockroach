@@ -294,7 +294,8 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 %type <*Select> select_no_parens
 %type <SelectStatement> select_clause select_with_parens simple_select values_clause
 
-%type <empty> alter_column_default alter_using
+%type <empty> alter_using
+%type <Expr> alter_column_default
 %type <Direction> opt_asc_desc
 
 %type <AlterTableCmd> alter_table_cmd
@@ -732,9 +733,15 @@ alter_table_cmd:
     $$.val = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6.colDef()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
-| ALTER opt_column name alter_column_default { unimplemented() }
+| ALTER opt_column name alter_column_default
+  {
+    $$.val = &AlterTableSetDefault{columnKeyword: $2.bool(), Column: $3, Default: $4.expr()}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
-| ALTER opt_column name DROP NOT NULL { unimplemented() }
+| ALTER opt_column name DROP NOT NULL
+  {
+    $$.val = &AlterTableDropNotNull{columnKeyword: $2.bool(), Column: $3}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL { unimplemented() }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
@@ -771,8 +778,14 @@ alter_table_cmd:
   }
 
 alter_column_default:
-  SET DEFAULT a_expr { unimplemented() }
-| DROP DEFAULT { unimplemented() }
+  SET DEFAULT a_expr
+  {
+    $$.val = $3.expr()
+  }
+| DROP DEFAULT
+  {
+    $$.val = nil
+  }
 
 opt_drop_behavior:
   CASCADE { unimplemented() }
