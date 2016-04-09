@@ -17,15 +17,18 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -61,6 +64,8 @@ const (
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+      \! to run an external command and print its results on standard output.
+      \| to run an external command and run its output as SQL statements.
       \? or "help" to print this help.
 
 More documentation about our SQL dialect is available online:
@@ -89,9 +94,14 @@ func handleInputLine(stmt *[]string, line string) int {
 	if len(line) > 0 && line[0] == '\\' {
 		// Client-side commands: process locally.
 
-		switch line {
+		cmd := strings.Fields(line)
+		switch cmd[0] {
 		case `\q`:
 			return cliExit
+		case `\!`:
+			return runSyscmd(line)
+		case `\|`:
+			return pipeSyscmd(stmt, line)
 		case `\`, `\?`:
 			printCliHelp()
 		default:
@@ -113,6 +123,67 @@ func handleInputLine(stmt *[]string, line string) int {
 		return cliNextLine
 	}
 
+	return cliProcessQuery
+}
+
+// execSyscmd executes system commands.
+func execSyscmd(command string) (string, error) {
+	var cmd *exec.Cmd
+
+	shell, err := envutil.GetShellEnv()
+	if err != nil {
+		return "", err
+	}
+	cmd = exec.Command(shell[0], shell[1], command)
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("error in external command: %s", err)
+	}
+
+	return out.String(), nil
+}
+
+// runSyscmd runs system commands on the interactive CLI.
+func runSyscmd(line string) int {
+	command := strings.Trim(line, `\!`)
+	if command == "" {
+		fmt.Printf("Usage:\n  \\! [command]\n")
+		return cliNextLine
+	}
+
+	cmdOut, err := execSyscmd(command)
+	if err != nil {
+		if log.V(2) {
+			log.Errorf("command failed: %s", err)
+		}
+		return cliNextLine
+	}
+
+	fmt.Printf(cmdOut)
+	return cliNextLine
+}
+
+// pipeSyscmd executes system commands and pipe the output into the current SQL.
+func pipeSyscmd(stmt *[]string, line string) int {
+	command := strings.Trim(line, `\|`)
+	if command == "" {
+		fmt.Printf("Usage:\n  \\| [command]\n")
+		return cliNextLine
+	}
+
+	cmdOut, err := execSyscmd(command)
+	if err != nil {
+		if log.V(2) {
+			log.Errorf("command failed: %s", err)
+		}
+		return cliNextLine
+	}
+
+	*stmt = append(*stmt, cmdOut)
 	return cliProcessQuery
 }
 

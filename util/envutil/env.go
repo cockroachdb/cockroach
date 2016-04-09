@@ -2,6 +2,7 @@ package envutil
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -69,6 +70,17 @@ func GetEnvReport() string {
 		}
 	}
 	return b.String()
+}
+
+// GetShellEnv returns the path to the system shell.
+func GetShellEnv() ([]string, error) {
+	if shell := os.Getenv("SHELL"); len(shell) > 0 {
+		return []string{shell, "-c"}, nil
+	} else if shell := os.Getenv("COMSPEC"); runtime.GOOS == "windows" && len(shell) > 0 {
+		return []string{shell, "/C"}, nil
+	}
+
+	return nil, errors.New("shell not found, check SHELL(unix) or COMSPEC(Windows)")
 }
 
 // EnvOrDefaultString returns the value set by the specified
