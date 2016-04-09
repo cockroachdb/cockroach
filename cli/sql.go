@@ -17,10 +17,12 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -61,6 +63,7 @@ const (
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
+      \! to execute system command
       \? or "help" to print this help.
 
 More documentation about our SQL dialect is available online:
@@ -89,9 +92,12 @@ func handleInputLine(stmt *[]string, line string) int {
 	if len(line) > 0 && line[0] == '\\' {
 		// Client-side commands: process locally.
 
-		switch line {
+		cmd := strings.Fields(line)
+		switch cmd[0] {
 		case `\q`:
 			return cliExit
+		case `\!`:
+			return runSyscmd(stmt, line)
 		case `\`, `\?`:
 			printCliHelp()
 		default:
@@ -114,6 +120,66 @@ func handleInputLine(stmt *[]string, line string) int {
 	}
 
 	return cliProcessQuery
+}
+
+// runSyscmd executes system commands on the interactive CLI.
+func runSyscmd(stmt *[]string, line string) int {
+	line = strings.Trim(line, `\!`)
+	cmds := strings.Split(line, `|`)
+
+	if cmds[0] == "" {
+		fmt.Printf("Usage:\n  \\! [command]\n")
+		return cliNextLine
+	}
+
+	var cmdRun []*exec.Cmd
+	var stdinStatement bool
+	for _, cmd := range cmds {
+		cmd := strings.Fields(cmd)
+		if len(cmd) > 0 {
+			if cmd[0] == "-" {
+				stdinStatement = true
+				break
+			}
+			cmdRun = append(cmdRun, exec.Command(cmd[0], cmd[1:]...))
+		}
+	}
+
+	var err error
+	for i, cmd := range cmdRun {
+		if i > 0 {
+			if cmdRun[i].Stdin, err = cmdRun[i-1].StdoutPipe(); err != nil {
+				fmt.Fprintf(os.Stderr, "pipeline error: %s\n", err)
+				return cliNextLine
+			}
+		}
+		cmd.Stderr = os.Stderr
+	}
+
+	var out bytes.Buffer
+	if stdinStatement {
+		cmdRun[len(cmdRun)-1].Stdout = &out
+	} else {
+		cmdRun[len(cmdRun)-1].Stdout = os.Stdout
+	}
+
+	for _, cmd := range cmdRun {
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "command error: %s\n", err)
+			return cliNextLine
+		}
+	}
+	for _, cmd := range cmdRun {
+		// cmd.Wait() outputs exit code when the command failed.
+		// To keep same outputs with shell, ignore the error.
+		cmd.Wait()
+	}
+
+	if stdinStatement {
+		*stmt = append(*stmt, out.String())
+		return cliProcessQuery
+	}
+	return cliNextLine
 }
 
 // preparePrompts computes a full and short prompt for the interactive
