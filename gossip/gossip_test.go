@@ -61,8 +61,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
-		"tcp=127.0.0.1:9001",
-		"foo=127.0.0.1:9003", // error should not resolve.
+		"127.0.0.1:9001",
 		"localhost:9004",
 	}
 

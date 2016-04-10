@@ -19,7 +19,6 @@ package resolver
 import (
 	"net"
 	"os"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
@@ -33,42 +32,15 @@ type Resolver interface {
 	GetAddress() (net.Addr, error)
 }
 
-var validTypes = map[string]struct{}{
-	"tcp": {},
-}
-
-// NewResolver takes a resolver specification and returns a new resolver.
-// A specification is of the form: [<network type>=]<address>
-// Network type can be one of:
-// - tcp: plain hostname or ip address
-func NewResolver(context *base.Context, spec string) (Resolver, error) {
-	parts := strings.Split(spec, "=")
-	var typ, addr string
-	if len(parts) == 1 {
-		// No type specified: assume "tcp".
-		typ = "tcp"
-		addr = strings.TrimSpace(parts[0])
-	} else if len(parts) == 2 {
-		typ = strings.TrimSpace(parts[0])
-		addr = strings.TrimSpace(parts[1])
-	} else {
-		return nil, util.Errorf("unable to parse gossip resolver spec: %q", spec)
-	}
-
-	// We should not have an empty address at this point.
-	if len(addr) == 0 {
-		return nil, util.Errorf("invalid address value in gossip resolver spec: %q", spec)
-	}
-
-	// Validate the type.
-	if _, ok := validTypes[typ]; !ok {
-		return nil, util.Errorf("unknown address type %q in gossip resolver spec: %q, "+
-			"valid types are %s", typ, spec, validTypes)
+// NewResolver takes an address and returns a new resolver.
+func NewResolver(context *base.Context, address string) (Resolver, error) {
+	if len(address) == 0 {
+		return nil, util.Errorf("invalid address value: %q", address)
 	}
 
 	// Ensure addr has port and host set.
-	addr = ensureHostPort(addr, base.DefaultPort)
-	return &socketResolver{typ: typ, addr: addr}, nil
+	address = ensureHostPort(address, base.DefaultPort)
+	return &socketResolver{typ: "tcp", addr: address}, nil
 }
 
 // NewResolverFromAddress takes a net.Addr and constructs a resolver.
