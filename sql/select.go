@@ -456,9 +456,8 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		return nil
 	}
 	var err error
-	s.filter, err = s.resolveQNames(where.Expr)
-	s.pErr = roachpb.NewError(err)
-	if s.pErr != nil {
+	if s.filter, err = s.resolveQNames(where.Expr); err != nil {
+		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
 
@@ -475,13 +474,11 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 
 	// Normalize the expression (this will also evaluate any branches that are
 	// constant).
-	s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
-	if err != nil {
+	if s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter); err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
-	s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
-	if s.pErr != nil {
+	if s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1); s.pErr != nil {
 		return s.pErr
 	}
 
@@ -577,6 +574,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	if resolved, s.pErr = s.planner.expandSubqueries(resolved, 1); s.pErr != nil {
 		return s.pErr
 	}
+
 	var typ parser.Datum
 	typ, err = resolved.TypeCheck(s.planner.evalCtx.Args)
 	s.pErr = roachpb.NewError(err)

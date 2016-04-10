@@ -501,8 +501,7 @@ func makeDefaultExprs(
 		if err != nil {
 			return nil, err
 		}
-		expr, err = parse.NormalizeExpr(evalCtx, expr)
-		if err != nil {
+		if expr, err = parse.NormalizeExpr(evalCtx, expr); err != nil {
 			return nil, err
 		}
 		if parser.ContainsVars(expr) {
