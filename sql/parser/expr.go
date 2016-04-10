@@ -19,6 +19,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"go/constant"
 	"reflect"
 )
 
@@ -269,21 +270,33 @@ func (node *CoalesceExpr) String() string {
 	return fmt.Sprintf("%s(%s)", node.Name, node.Exprs)
 }
 
-// IntVal represents an integer.
-type IntVal struct {
-	Val DInt
-	Str string
+// ConstVal represents a constant numeric value.
+type ConstVal struct {
+	constant.Value
+
+	// We preserve the "original" string representation (before normalization).
+	OrigString string
+
+	// These fields are not part of the Expr AST.
+	ResolvedType Datum
 }
 
-func (node *IntVal) String() string {
-	return node.Str
+func (node ConstVal) String() string {
+	if node.OrigString != "" {
+		return node.OrigString
+	}
+	return node.Value.String()
 }
 
-// NumVal represents a number.
-type NumVal string
-
-func (node NumVal) String() string {
-	return string(node)
+func (node ConstVal) asInt() (int, error) {
+	if node.Value.Kind() != constant.Int {
+		return 0, fmt.Errorf("cannot represent %v as an int", node.Value)
+	}
+	i, exact := constant.Int64Val(node.Value)
+	if !exact {
+		return 0, fmt.Errorf("representing %v as an int would overflow", node.Value)
+	}
+	return int(i), nil
 }
 
 // DefaultVal represents the DEFAULT expression.
