@@ -95,17 +95,16 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 			return nil, roachpb.NewError(err)
 		}
 
-		having, err = p.parser.NormalizeExpr(p.evalCtx, having)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-
 		havingType, err := having.TypeCheck(p.evalCtx.Args)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		if !(havingType.TypeEqual(parser.DummyBool) || havingType == parser.DNull) {
 			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
+		}
+
+		if having, err = p.parser.NormalizeExpr(p.evalCtx, having); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 		n.Having.Expr = having
 	}
