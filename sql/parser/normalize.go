@@ -496,3 +496,90 @@ func ContainsVars(expr Expr) bool {
 	WalkExprConst(&v, expr)
 	return v.containsVars
 }
+
+type constantFolderVisitor struct{}
+
+func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	return expr != nil, expr
+}
+
+var unaryOpToToken = map[UnaryOperator]token.Token{
+	UnaryPlus:  token.ADD,
+	UnaryMinus: token.SUB,
+}
+var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{
+	UnaryComplement: token.XOR,
+}
+var binaryOpToToken = map[BinaryOp]token.Token{
+	Plus:  token.ADD,
+	Minus: token.SUB,
+	Mult:  token.MUL,
+	Div:   token.QUO, // token.QUO_ASSIGN to force integer division.
+}
+var binaryOpToTokenIntOnly = map[BinaryOp]token.Token{
+	Mod:    token.REM,
+	Bitand: token.AND,
+	Bitor:  token.OR,
+	Bitxor: token.XOR,
+}
+var binaryShiftOpToToken = map[BinaryOp]token.Token{
+	LShift: token.SHL,
+	RShift: token.SHR,
+}
+var comparisonOpToToken = map[ComparisonOp]token.Token{
+	EQ: token.EQL,
+	NE: token.NEQ,
+	LT: token.LSS,
+	LE: token.LEQ,
+	GT: token.GTR,
+	GE: token.GEQ,
+}
+
+func (constantFolderVisitor) VisitPost(expr Expr) Expr {
+	switch t := expr.(type) {
+	case *UnaryExpr:
+		if cv, ok := t.Expr.(*ConstVal); ok {
+			if token, ok := unaryOpToToken[t.Operator]; ok {
+				return &ConstVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+			}
+			if cv.Kind() == constant.Int {
+				if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
+					return &ConstVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+				}
+			}
+		}
+	case *BinaryExpr:
+		l, okL := t.Left.(*ConstVal)
+		r, okR := t.Right.(*ConstVal)
+		if okL && okR {
+			if token, ok := binaryOpToToken[t.Operator]; ok {
+				return &ConstVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+			}
+			if l.Kind() == constant.Int && r.Kind() == constant.Int {
+				if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
+					return &ConstVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+				}
+				if rInt, err := r.asInt(); err == nil && rInt >= 0 {
+					if token, ok := binaryShiftOpToToken[t.Operator]; ok {
+						return &ConstVal{Value: constant.Shift(l.Value, token, uint(rInt))}
+					}
+				}
+			}
+		}
+	case *ComparisonExpr:
+		l, okL := t.Left.(*ConstVal)
+		r, okR := t.Right.(*ConstVal)
+		if okL && okR {
+			if token, ok := comparisonOpToToken[t.Operator]; ok {
+				return MakeDBool(DBool(constant.Compare(l.Value, token, r.Value)))
+			}
+		}
+	}
+	return expr
+}
+
+func foldNumericConstants(expr Expr) (Expr, error) {
+	v := constantFolderVisitor{}
+	expr, _ = WalkExpr(v, expr)
+	return expr, nil
+}
