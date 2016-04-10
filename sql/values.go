@@ -55,7 +55,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 				return nil, pErr
 			}
 			var err error
-			typ, err := expr.TypeCheck(p.evalCtx.Args)
+			typ, err := parser.PerformTypeChecking(expr, p.evalCtx.Args)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}

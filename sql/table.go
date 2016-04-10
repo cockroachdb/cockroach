@@ -195,7 +195,7 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 
 	if d.DefaultExpr != nil {
 		// Verify the default expression type is compatible with the column type.
-		defaultType, err := d.DefaultExpr.TypeCheck(nil)
+		defaultType, err := parser.PerformTypeChecking(d.DefaultExpr, nil)
 		if err != nil {
 			return nil, nil, err
 		}

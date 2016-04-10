@@ -293,7 +293,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		d, err := target.TypeCheck(p.evalCtx.Args)
+		d, err := parser.PerformTypeChecking(target, p.evalCtx.Args)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}

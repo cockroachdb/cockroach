@@ -499,6 +499,8 @@ func ContainsVars(expr Expr) bool {
 
 type constantFolderVisitor struct{}
 
+var _ Visitor = constantFolderVisitor{}
+
 func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	return expr != nil, expr
 }
