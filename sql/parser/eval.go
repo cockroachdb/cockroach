@@ -19,6 +19,7 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"go/constant"
 	"math"
 	"math/big"
 	"reflect"
@@ -1507,30 +1508,29 @@ func (t DefaultVal) Eval(_ EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t *IntVal) Eval(_ EvalContext) (Datum, error) {
-	if t.Val < 0 {
-		return nil, fmt.Errorf("integer value out of range: %s", t)
+func (t *ConstVal) Eval(_ EvalContext) (Datum, error) {
+	switch t.ResolvedType {
+	case DummyInt:
+		i, exact := constant.Int64Val(t.Value)
+		if !exact {
+			return nil, fmt.Errorf("integer value out of range: %v", t.Value)
+		}
+		return NewDInt(DInt(i)), nil
+	case DummyFloat:
+		f, _ := constant.Float64Val(t.Value)
+		return NewDFloat(DFloat(f)), nil
+	case DummyDecimal:
+		dd := &DDecimal{}
+		if _, ok := dd.SetString(t.ExactString()); !ok {
+			return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal", t)
+		}
+		return dd, nil
+	default:
+		if _, err := t.TypeCheck(nil); err != nil {
+			return nil, err
+		}
+		return t.Eval(EvalContext{})
 	}
-	return &t.Val, nil
-}
-
-// Eval implements the Expr interface.
-func (t NumVal) Eval(_ EvalContext) (Datum, error) {
-	// TODO(nvanbenschoten) this should be changed to
-	// evaulate NumVals as DDecimals by default, once
-	// type coercion is improved.
-	//
-	// d := new(inf.Dec)
-	// if _, ok := d.SetString(string(t)); !ok {
-	//    return ...
-	// }
-	// return DDecimal{Dec: d}, nil
-
-	v, err := strconv.ParseFloat(string(t), 64)
-	if err != nil {
-		return DNull, err
-	}
-	return NewDFloat(DFloat(v)), nil
 }
 
 func evalExprs(ctx EvalContext, exprs []Expr) (Datum, error) {

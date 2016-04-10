@@ -619,7 +619,7 @@ SELECT round(-2.5, 0), round(-1.5, 0), round(1.5, 0), round(2.5, 0)
 query RRRRRR
 SELECT round(-2.5), round(-1.5), round(-0.0), round(0.0), round(1.5), round(2.5)
 ----
--2 -2 -0 0 2 2
+-2 -2 0 0 2 2
 
 # round up for decimals
 query RRRR
@@ -679,7 +679,7 @@ SELECT tan(-5.0), tan(0.0), tan(5.0)
 query RRRR
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
 ----
--0 0 1 19
+0 0 1 19
 
 query T
 SELECT translate('Techonthenet.com', 'e.to', '456')

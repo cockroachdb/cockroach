@@ -19,6 +19,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"go/constant"
+	"go/token"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -535,39 +537,25 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 	lval.str = s.in[start:s.pos]
 	if hasDecimal || hasExponent {
 		lval.id = FCONST
-		return
-	}
-
-	// We explicitly parse only decimal and hexadecimal literals here. We could
-	// parse octal as well, but have decided for the present time not to.
-	var err error
-	var uval uint64
-	if isHex {
-		if s.pos == start+2 {
+		floatConst := constant.MakeFromLiteral(lval.str, token.FLOAT, 0)
+		if floatConst.Kind() == constant.Unknown {
+			panic(fmt.Sprintf("could not make constant float from literal %q", lval.str))
+		}
+		lval.union.val = &ConstVal{Value: floatConst, OrigString: lval.str}
+	} else {
+		if isHex && s.pos == start+2 {
 			lval.id = ERROR
 			lval.str = "invalid hexadecimal literal"
 			return
 		}
-		uval, err = strconv.ParseUint(lval.str[2:], 16, 64)
-	} else {
-		uval, err = strconv.ParseUint(lval.str, 10, 64)
-	}
-	if err == strconv.ErrRange || uval > 1<<63 {
-		// Integers that would overflow an int64 should be parsed
-		// as NumVals so they can have arbitrary precision.
-		lval.id = FCONST
-		return
-	}
-	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
-	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = IntVal{Val: DInt(uval), Str: lval.str}
-	if err != nil {
-		lval.id = ERROR
-		lval.str = err.Error()
-		return
-	}
 
-	lval.id = ICONST
+		lval.id = ICONST
+		intConst := constant.MakeFromLiteral(lval.str, token.INT, 0)
+		if intConst.Kind() == constant.Unknown {
+			panic(fmt.Sprintf("could not make constant int from literal %q", lval.str))
+		}
+		lval.union.val = &ConstVal{Value: intConst, OrigString: lval.str}
+	}
 }
 
 func (s *scanner) scanParam(lval *sqlSymType) {
@@ -581,15 +569,15 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 	if err == nil && uval > 1<<63 {
 		err = fmt.Errorf("integer value out of range: %d", uval)
 	}
-	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
-	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = IntVal{Val: DInt(uval), Str: lval.str}
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
 		return
 	}
 
+	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
+	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
+	lval.union.val = &ConstVal{Value: constant.MakeUint64(uval)}
 	lval.id = PARAM
 }
 

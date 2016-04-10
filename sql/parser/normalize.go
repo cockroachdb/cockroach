@@ -18,7 +18,8 @@ package parser
 
 import (
 	"fmt"
-	"math"
+	"go/constant"
+	"go/token"
 )
 
 type normalizableExpr interface {
@@ -323,8 +324,8 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
 	// traversal. Or do it during the downward traversal for const
 	// UnaryExprs.
 	if expr.Operator == UnaryMinus {
-		if d, ok := expr.Expr.(*IntVal); ok && d.Val == math.MinInt64 {
-			return NewDInt(math.MinInt64)
+		if d, ok := expr.Expr.(*ConstVal); ok {
+			return &ConstVal{Value: constant.UnaryOp(token.SUB, d.Value, 0)}
 		}
 	}
 

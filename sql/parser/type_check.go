@@ -18,6 +18,7 @@ package parser
 
 import (
 	"fmt"
+	"go/constant"
 	"reflect"
 	"strings"
 
@@ -480,13 +481,16 @@ func (expr DefaultVal) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr IntVal) TypeCheck(args MapArgs) (Datum, error) {
-	return DummyInt, nil
-}
-
-// TypeCheck implements the Expr interface.
-func (expr NumVal) TypeCheck(args MapArgs) (Datum, error) {
-	return DummyFloat, nil
+func (expr *ConstVal) TypeCheck(args MapArgs) (Datum, error) {
+	switch expr.Kind() {
+	case constant.Int:
+		expr.ResolvedType = DummyInt
+	case constant.Float:
+		expr.ResolvedType = DummyFloat
+	default:
+		return nil, fmt.Errorf("could not type check ConstVal %v", expr.Value)
+	}
+	return expr.ResolvedType, nil
 }
 
 func typeCheckExprs(args MapArgs, exprs []Expr) (Datum, error) {
