@@ -258,7 +258,15 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 // See #2198.
 func (ba BatchRequest) String() string {
 	var str []string
-	for _, arg := range ba.Requests {
+	for count, arg := range ba.Requests {
+		// Limit the strings to provide just a summary. Without this limit
+		// a log message with a BatchRequest can be very long.
+		if count >= 20 && count < len(ba.Requests)-5 {
+			if count == 20 {
+				str = append(str, fmt.Sprintf("... %d skipped ...", len(ba.Requests)-25))
+			}
+			continue
+		}
 		req := arg.GetInner()
 		h := req.Header()
 		str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
