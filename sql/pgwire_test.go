@@ -412,6 +412,11 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
 			base.Params(10, 5).Results(10),
 		},
+		"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) LIMIT $1 OFFSET $2": {
+			base.Params(1, 0).Results(1),
+			base.Params(1, 1).Results(2),
+			base.Params(1, 2).Results(3),
+		},
 	}
 
 	s := server.StartTestServer(t)
