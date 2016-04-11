@@ -411,3 +411,35 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 	ex := integerPower(z, new(inf.Dec).Set(e), integer, s+2)
 	return smallExp(ex, y, s-2)
 }
+
+// Pow computes (x^y) as e^(y ln x) to the specified scale and stores
+// the result in z, which is also the return value.
+func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	s = s + 2
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	}
+	neg := x.Sign() < 0
+	tmp := new(inf.Dec).Abs(x)
+
+	integer, _ := new(inf.Dec).Round(x, 0, inf.RoundDown).Unscaled()
+	odd := integer%2 == 1
+
+	// We need more precision in something that we use for an exponent
+	// exponent precision = s + <the number of digits before decimal point in x> * y
+	// TODO (seif): Investigate tolerance level of <the num of digs before dec point in x>
+	bits := int32(x.UnscaledBig().BitLen()) + int32(digitsToBitsRatio)
+	es := s + inf.Scale(bits/4)*y.Scale()
+
+	Log(tmp, tmp, es)
+	tmp.Mul(tmp, y)
+	Exp(tmp, tmp, es)
+
+	if neg && odd {
+		tmp.Neg(tmp)
+	}
+
+	// Round to the desired scale.
+	return z.Round(tmp, s-2, inf.RoundHalfUp)
+}
