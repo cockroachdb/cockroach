@@ -19,7 +19,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/user"
@@ -146,7 +145,10 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 func runInteractive(conn *sqlConn) (exitErr error) {
 	fullPrompt, continuePrompt := preparePrompts(conn.url)
 
-	if isatty.IsTerminal(os.Stdout.Fd()) {
+	isInteractive := isatty.IsTerminal(os.Stdout.Fd()) &&
+		isatty.IsTerminal(os.Stdin.Fd())
+
+	if isInteractive {
 		// We only enable history management when the terminal is actually
 		// interactive. This saves on memory when e.g. piping a large SQL
 		// script through the command-line client.
@@ -162,17 +164,26 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 	}
 
-	fmt.Print(infoMessage)
+	if isInteractive {
+		fmt.Print(infoMessage)
+	}
 
 	var stmt []string
 
-	for {
+	for isFinished := false; !isFinished; {
 		thisPrompt := fullPrompt
-		if len(stmt) > 0 {
+		if !isInteractive {
+			thisPrompt = ""
+		} else if len(stmt) > 0 {
 			thisPrompt = continuePrompt
 		}
 		l, err := readline.Line(thisPrompt)
 
+		if !isInteractive && err == io.EOF {
+			// In non-interactive mode, we want EOF to finish the last statement.
+			err = nil
+			isFinished = true
+		}
 		if err == readline.ErrInterrupt || err == io.EOF {
 			break
 		} else if err != nil {
@@ -185,9 +196,13 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		// Check if this is a request for help or a client-side command.
 		// If so, process it directly and skip query processing below.
 		status := handleInputLine(&stmt, tl)
-		if status == cliNextLine {
+		if status == cliExit {
+			break
+		} else if status == cliNextLine && !isFinished {
+			// Ask for more input unless we reached EOF.
 			continue
-		} else if status == cliExit {
+		} else if isFinished && len(stmt) == 0 {
+			// Exit if we reached EOF and the currently built-up statement is empty.
 			break
 		}
 
@@ -198,22 +213,28 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		// statement.
 		fullStmt := strings.Join(stmt, "\n")
 
-		// We save the history between each statement, This enables
-		// reusing history in another SQL shell without closing the
-		// current shell.
-		//
-		// AddHistory will push command into memory and try to persist
-		// to disk (if readline.SetHistoryPath was called).
-		// err can be not nil only if it got a IO error while
-		// trying to persist.
-		if err := readline.AddHistory(strings.Join(stmt, " ")); err != nil {
-			log.Warningf("cannot save command-line history: %s", err)
-			log.Info("command-line history will not be saved in this session")
-			readline.SetHistoryPath("")
+		if isInteractive {
+			// We save the history between each statement, This enables
+			// reusing history in another SQL shell without closing the
+			// current shell.
+			//
+			// AddHistory will push command into memory and try to persist
+			// to disk (if readline.SetHistoryPath was called).
+			// err can be not nil only if it got a IO error while
+			// trying to persist.
+			if err := readline.AddHistory(strings.Join(stmt, " ")); err != nil {
+				log.Warningf("cannot save command-line history: %s", err)
+				log.Info("command-line history will not be saved in this session")
+				readline.SetHistoryPath("")
+			}
 		}
 
 		if exitErr = runPrettyQuery(conn, os.Stdout, makeQuery(fullStmt)); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
+		}
+
+		if !isInteractive && exitErr != nil {
+			break
 		}
 
 		// Clear the saved statement.
@@ -272,15 +293,6 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	if len(cliContext.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		return runStatements(conn, cliContext.execStmts)
-	} else if !isatty.IsTerminal(os.Stdin.Fd()) {
-		// Non-tty stdin (eg: commands piped into cockroach): run quietly.
-		// TODO(marc): we may have to read through until ';' is encountered, but
-		// handling escaped and quoted ';' would be tedious.
-		statements, err := ioutil.ReadAll(os.Stdin)
-		if err != nil {
-			return err
-		}
-		return runStatements(conn, []string{string(statements)})
 	}
 	return runInteractive(conn)
 }
