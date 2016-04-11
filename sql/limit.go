@@ -46,6 +46,23 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 
 	for _, datum := range data {
 		if datum.src != nil {
+			if p.evalCtx.PrepareOnly {
+				valType, err := datum.src.TypeCheck(p.evalCtx.Args)
+				if err != nil {
+					return 0, 0, err
+				}
+				if _, isParam := valType.(parser.DValArg); isParam {
+					_, err := p.evalCtx.Args.SetInferredType(valType, parser.DummyInt)
+					if err != nil {
+						return 0, 0, err
+					}
+				} else if !valType.TypeEqual(parser.DummyInt) && valType != parser.DNull {
+					return 0, 0, fmt.Errorf("argument of LIMIT must be type %s, not type %s",
+						parser.DummyInt.Type(), valType.Type())
+				}
+				continue
+			}
+
 			if parser.ContainsVars(datum.src) {
 				return 0, 0, util.Errorf("argument of %s must not contain variables", datum.name)
 			}
