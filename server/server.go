@@ -29,7 +29,6 @@ import (
 	"sync"
 	"time"
 
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 
@@ -45,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
-	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -396,15 +394,11 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	})
 }
 
+var uiFileSystem http.FileSystem
+
 // initHTTP registers http prefixes.
 func (s *Server) initHTTP() {
-	s.mux.Handle("/", http.FileServer(
-		&assetfs.AssetFS{
-			Asset:     ui.Asset,
-			AssetDir:  ui.AssetDir,
-			AssetInfo: ui.AssetInfo,
-		},
-	))
+	s.mux.Handle("/", http.FileServer(uiFileSystem))
 
 	// The admin server handles both /debug/ and /_admin/
 	// TODO(marc): when cookie-based authentication exists,
