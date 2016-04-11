@@ -1385,6 +1385,14 @@ func (r *Replica) LeaderLease(
 	}
 	r.mu.leaderLease = &args.Lease
 
+	// If the range leadership and raft leadership is splitted, then try to transfer
+	// the raft leadership to range leadership.
+	status := r.mu.raftGroup.Status()
+	if uint64(r.mu.replicaID) == status.Lead && r.mu.replicaID != r.mu.leaderLease.Replica.ReplicaID {
+		log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v", r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
+		r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+	}
+
 	// If this replica is a new holder of the lease, update the
 	// low water mark in the timestamp cache. We add the maximum
 	// clock offset to account for any difference in clocks
