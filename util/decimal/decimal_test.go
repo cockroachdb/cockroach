@@ -437,3 +437,17 @@ func BenchmarkDecimalExp(b *testing.B) {
 		Exp(z, vals[i%len(vals)], 16)
 	}
 }
+
+func TestDecimalPow(t *testing.T) {
+	tests := []decimalTwoArgsTestCase{
+		{"2", "0", "1"},
+		{"8.14", "1", "8.14"},
+		{"-3", "2", "9"},
+		{"2", "3", "8"},
+		{"4", "0.5", "2"},
+		{"2", "-3", "0.125"},
+		{"3.14", "9.604", "59225.9915180848144580"},
+		{"4.04", "86.9627324951673", "54023217245532808609366967050969724819847178460274526.2387663236899272"},
+	}
+	testDecimalDoubleArgFunc(t, Pow, 16, tests)
+}

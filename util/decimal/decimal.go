@@ -411,3 +411,29 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 	ex := integerPower(z, new(inf.Dec).Set(e), integer, s+2)
 	return smallExp(ex, y, s-2)
 }
+
+// Pow computes (x^y) as e^(y ln x) to the specified scale and stores
+// the result in z, which is also the return value.
+func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	}
+	neg := x.Sign() < 0
+	tmp := new(inf.Dec).Abs(x)
+
+	integer, _ := new(inf.Dec).Round(x, 0, inf.RoundDown).Unscaled()
+	odd := integer%2 == 1
+
+	// TODO (seif): Find a way to not have to increase the scale
+	Log(tmp, tmp, s*s)
+	tmp.Mul(tmp, y)
+	Exp(tmp, tmp, s)
+
+	if neg && odd {
+		tmp.Neg(tmp)
+	}
+
+	// Round to the desired scale.
+	return z.Round(tmp, s, inf.RoundUp)
+}
