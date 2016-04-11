@@ -754,7 +754,7 @@ Available Commands:
   debug       debugging commands
 
 Flags:
-      --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default ERROR)
+      --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr
       --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
       --log-dir value                  if non-empty, write log files in this directory
       --logtostderr value[=true]       log to standard error instead of files
