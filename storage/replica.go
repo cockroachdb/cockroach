@@ -738,6 +738,11 @@ func (r *Replica) RaftStatus() *raft.Status {
 	return r.mu.raftGroup.Status()
 }
 
+// raftStatusLocked returns the current raft status of the replica.
+func (r *Replica) raftStatusLocked() *raft.Status {
+	return r.mu.raftGroup.Status()
+}
+
 // Send adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched

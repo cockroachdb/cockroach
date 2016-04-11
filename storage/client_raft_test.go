@@ -1598,3 +1598,46 @@ func TestCheckInconsistent(t *testing.T) {
 		t.Fatal("didn't receive notification from VerifyChecksum() that should have panicked")
 	}
 }
+
+func TestTransferRaftLeadership(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numStores = 3
+	mtc := startMultiTestContext(t, numStores)
+	defer mtc.Stop()
+	// Setup replication of ramge 1 on store 0 to stores 1 and 2.
+	mtc.replicateRange(1, 1, 2)
+
+	// Write something to the DB to make range leadership and raft leadership to be located in stores[0].
+	pArgs := putArgs([]byte("a"), []byte("b"))
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &pArgs); err != nil {
+		t.Fatal(err)
+	}
+	rng, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := rng.RaftStatus()
+	if status.Lead != 1 {
+		t.Fatalf("raft leader should be 1, but got %v", status.Lead)
+	}
+
+	getArgs := getArgs([]byte("a"))
+	// Force the read command request a new lease.
+	clock := mtc.clocks[0]
+	header := roachpb.Header{}
+	header.Timestamp = clock.Update(clock.Now().Add(int64(storage.DefaultLeaderLeaseDuration), 0))
+
+	_, pErr := client.SendWrappedWith(rg1(mtc.stores[1]), nil, header, &getArgs)
+	if pErr != nil {
+		t.Fatalf("expect get nil, actual get %v ", pErr)
+	}
+	// Wait for raft leadership transferring to be finished.
+	util.SucceedsSoon(t, func() error {
+		status = rng.RaftStatus()
+		if status.Lead != 2 {
+			return util.Errorf("expected raft leader be 2; got %d", status.Lead)
+		}
+		return nil
+	})
+}
