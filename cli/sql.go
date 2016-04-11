@@ -19,6 +19,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"os/user"
@@ -271,6 +272,15 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	if len(cliContext.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		return runStatements(conn, cliContext.execStmts)
+	} else if !isatty.IsTerminal(os.Stdin.Fd()) {
+		// Non-tty stdin (eg: commands piped into cockroach): run quietly.
+		// TODO(marc): we may have to read through until ';' is encountered, but
+		// handling escaped and quoted ';' would be tedious.
+		statements, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		return runStatements(conn, []string{string(statements)})
 	}
 	return runInteractive(conn)
 }
