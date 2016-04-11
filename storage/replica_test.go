@@ -250,7 +250,7 @@ func newTransaction(name string, baseKey roachpb.Key, userPriority roachpb.UserP
 	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
 }
 
-// CreateReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
+// createReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
 // StoreIDs to aid in testing. Note that this does not actually produce any
 // replicas, it just creates the descriptors.
 func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescriptor {
@@ -261,6 +261,53 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 		})
 	}
 	return result
+}
+
+// TestIsOnePhaseCommit verifies the circumstances where a
+// transactional batch can be committed as an atomic write.
+func TestIsOnePhaseCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	txnReqs := []roachpb.RequestUnion{
+		{BeginTransaction: &roachpb.BeginTransactionRequest{}},
+		{Put: &roachpb.PutRequest{}},
+		{EndTransaction: &roachpb.EndTransactionRequest{}},
+	}
+	testCases := []struct {
+		bu      []roachpb.RequestUnion
+		isTxn   bool
+		isWTO   bool
+		isTSOff bool
+		exp1PC  bool
+	}{
+		{[]roachpb.RequestUnion{}, false, false, false, false},
+		{[]roachpb.RequestUnion{}, true, false, false, false},
+		{[]roachpb.RequestUnion{{Get: &roachpb.GetRequest{}}}, true, false, false, false},
+		{[]roachpb.RequestUnion{{Put: &roachpb.PutRequest{}}}, true, false, false, false},
+		{txnReqs[0 : len(txnReqs)-1], true, false, false, false},
+		{txnReqs[1:], true, false, false, false},
+		{txnReqs, true, false, false, true},
+		{txnReqs, true, true, false, false},
+		{txnReqs, true, false, true, false},
+		{txnReqs, true, true, true, false},
+	}
+
+	clock := hlc.NewClock(hlc.UnixNano)
+	for i, c := range testCases {
+		ba := roachpb.BatchRequest{Requests: c.bu}
+		if c.isTxn {
+			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, roachpb.SNAPSHOT, clock)
+			if c.isWTO {
+				ba.Txn.WriteTooOld = true
+			}
+			ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
+			if c.isTSOff {
+				ba.Txn.Isolation = roachpb.SERIALIZABLE
+			}
+		}
+		if is1PC := isOnePhaseCommit(ba); is1PC != c.exp1PC {
+			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
+		}
+	}
 }
 
 // TestReplicaContains verifies that the range uses Key.Address() in
@@ -2656,8 +2703,13 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			var ba roachpb.BatchRequest
 			ba.Header = etH
 			ba.Add(&bt, &put, &et)
-			if _, err := tc.Sender().Send(context.Background(), ba); err != nil {
+			br, err := tc.Sender().Send(context.Background(), ba)
+			if err != nil {
 				t.Fatalf("commit=%t: %s", commit, err)
+			}
+			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
+			if !ok || !etArgs.OnePhaseCommit {
+				t.Errorf("commit=%t: expected one phase commit", commit)
 			}
 
 			var entry roachpb.AbortCacheEntry

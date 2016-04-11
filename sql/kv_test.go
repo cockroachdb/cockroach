@@ -75,7 +75,7 @@ func (kv *kvNative) insert(rows, run int) error {
 		for i := firstRow; i < lastRow; i++ {
 			b.Put(fmt.Sprintf("%s%06d", kv.prefix, i), i)
 		}
-		return txn.Run(b)
+		return txn.CommitInBatch(b)
 	})
 	return pErr.GoError()
 }
@@ -96,7 +96,7 @@ func (kv *kvNative) update(rows, run int) error {
 			v := result.Rows[0].ValueInt()
 			wb.Put(fmt.Sprintf("%s%06d", kv.prefix, i), v+1)
 		}
-		if pErr := txn.Run(wb); pErr != nil {
+		if pErr := txn.CommitInBatch(wb); pErr != nil {
 			return pErr
 		}
 		return nil
@@ -110,20 +110,20 @@ func (kv *kvNative) del(rows, run int) error {
 		for i := 0; i < rows; i++ {
 			b.Del(fmt.Sprintf("%s%06d", kv.prefix, i))
 		}
-		return txn.Run(b)
+		return txn.CommitInBatch(b)
 	})
 	return pErr.GoError()
 }
 
 func (kv *kvNative) scan(rows, run int) error {
-	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		kvs, pErr := txn.Scan(fmt.Sprintf("%s%06d", kv.prefix, 0), fmt.Sprintf("%s%06d", kv.prefix, rows), int64(rows))
-		if len(kvs) != rows {
-			return roachpb.NewErrorf("expected %d rows; got %d", rows, len(kvs))
-		}
-		return pErr
-	})
-	return pErr.GoError()
+	kvs, pErr := kv.db.Scan(fmt.Sprintf("%s%06d", kv.prefix, 0), fmt.Sprintf("%s%06d", kv.prefix, rows), int64(rows))
+	if pErr != nil {
+		return pErr.GoError()
+	}
+	if len(kvs) != rows {
+		return util.Errorf("expected %d rows; got %d", rows, len(kvs))
+	}
+	return nil
 }
 
 func (kv *kvNative) prep(rows int, initData bool) error {
@@ -137,7 +137,7 @@ func (kv *kvNative) prep(rows int, initData bool) error {
 		for i := 0; i < rows; i++ {
 			b.Put(fmt.Sprintf("%s%06d", kv.prefix, i), i)
 		}
-		return txn.Run(b)
+		return txn.CommitInBatch(b)
 	})
 	return pErr.GoError()
 }
