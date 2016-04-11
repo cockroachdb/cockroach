@@ -43,7 +43,8 @@ GOPATH_BIN := $(GOPATH)/bin
 GO_BINDATA := $(GOPATH_BIN)/go-bindata
 
 TYPESCRIPT_TARGET       := build/app.js
-TYPESCRIPT_NEXT_TARGET  := next/build/app.js
+TYPESCRIPT_NEXT_TARGET  := next/build/browser.js
+TYPESCRIPT_TSC_OUTPUT   := next/build/app.js
 TEST_TARGET             := build/test.js
 CSS_TARGET              := build/app.css
 CSS_DEBUG_TARGET        := build/app_debug.css
@@ -125,6 +126,7 @@ $(TYPESCRIPT_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 
 $(TYPESCRIPT_NEXT_TARGET): $(shell find $(TS_NEXT_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TS_NEXT_ROOT)
+	browserify $(TYPESCRIPT_TSC_OUTPUT) > $(TYPESCRIPT_NEXT_TARGET)
 
 $(TEST_TARGET): $(shell find $(TS_ROOT)) $(REMOTE_DEPS)
 	tsc -p $(TEST_ROOT)
