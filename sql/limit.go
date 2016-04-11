@@ -22,7 +22,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
@@ -46,15 +45,25 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if parser.ContainsVars(datum.src) {
-				return 0, 0, util.Errorf("argument of %s must not contain variables", datum.name)
-			}
-
-			normalized, err := p.parser.NormalizeExpr(p.evalCtx, datum.src)
+			valType, err := datum.src.TypeCheck(p.evalCtx.Args)
 			if err != nil {
 				return 0, 0, err
 			}
-			dstDatum, err := normalized.Eval(p.evalCtx)
+
+			set, err := p.evalCtx.Args.SetInferredType(valType, parser.DummyInt)
+			if err != nil {
+				return 0, 0, err
+			}
+			if set == nil && !valType.TypeEqual(parser.DummyInt) && valType != parser.DNull {
+				return 0, 0, fmt.Errorf("argument of %s must be type %s, not type %s",
+					datum.name, parser.DummyInt.Type(), valType.Type())
+			}
+
+			if p.evalCtx.PrepareOnly {
+				continue
+			}
+
+			dstDatum, err := datum.src.Eval(p.evalCtx)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -64,17 +73,12 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 				continue
 			}
 
-			if dstDInt, ok := dstDatum.(parser.DInt); ok {
-				val := int64(dstDInt)
-				if val < 0 {
-					return 0, 0, fmt.Errorf("negative value for %s", datum.name)
-				}
-				*datum.dst = val
-				continue
+			dstDInt := dstDatum.(parser.DInt)
+			val := int64(dstDInt)
+			if val < 0 {
+				return 0, 0, fmt.Errorf("negative value for %s", datum.name)
 			}
-
-			return 0, 0, fmt.Errorf("argument of %s must be type %s, not type %s",
-				datum.name, parser.DummyInt.Type(), dstDatum.Type())
+			*datum.dst = val
 		}
 	}
 	return count, offset, nil
