@@ -19,9 +19,6 @@ package gossip
 import (
 	"bytes"
 	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -62,22 +59,9 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer resolver.SetLookupTimeout(time.Minute)()
 
-	// Set up an http server for testing the http load balancer.
-	i := 0
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		i++
-		fmt.Fprintf(w, `{"address": {"network": "tcp", "address": "10.10.0.%d:12345"}}`, i)
-	})
-	s := httptest.NewServer(handler)
-	defer s.Close()
-
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
-		"tcp=127.0.0.1:9001",
-		"unix=/tmp/unix-socket12345",
-		fmt.Sprintf("http-lb=%s", s.Listener.Addr()),
-		"foo=127.0.0.1:9003", // error should not resolve.
-		"http-lb=",           // error should not resolve.
+		"127.0.0.1:9001",
 		"localhost:9004",
 	}
 
@@ -88,24 +72,17 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 			resolvers = append(resolvers, resolver)
 		}
 	}
-	if len(resolvers) != 5 {
-		t.Errorf("expected 5 resolvers; got %d", len(resolvers))
+	if len(resolvers) != 3 {
+		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	g := New(nil, resolvers, nil)
 
-	// Using specified resolvers, fetch bootstrap addresses 10 times
+	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.
 	expAddresses := []string{
 		"127.0.0.1:9000",
 		"127.0.0.1:9001",
-		"/tmp/unix-socket12345",
-		"10.10.0.1:12345",
 		"localhost:9004",
-		"10.10.0.2:12345",
-		"10.10.0.3:12345",
-		"10.10.0.4:12345",
-		"10.10.0.5:12345",
-		"10.10.0.6:12345",
 	}
 	for i := 0; i < len(expAddresses); i++ {
 		if addr := g.getNextBootstrapAddress(); addr == nil {

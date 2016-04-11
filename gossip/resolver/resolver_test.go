@@ -25,7 +25,7 @@ import (
 
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
-func TestParseResolverSpec(t *testing.T) {
+func TestParseResolverAddress(t *testing.T) {
 	def := ensureHostPort(":", base.DefaultPort)
 	testCases := []struct {
 		input           string
@@ -37,19 +37,9 @@ func TestParseResolverSpec(t *testing.T) {
 		{"127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
 		{":" + base.DefaultPort, true, "tcp", def},
 		{"127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
-		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
-		{"tcp=127.0.0.1:23456", true, "tcp", "127.0.0.1:23456"},
-		{"unix=/tmp/unix-socket12345", true, "unix", "/tmp/unix-socket12345"},
-		{"http-lb=localhost:" + base.DefaultPort, true, "http-lb", "localhost:" + base.DefaultPort},
-		{"http-lb=newhost:1234", true, "http-lb", "newhost:1234"},
-		{"http-lb=:" + base.DefaultPort, true, "http-lb", def},
-		{"http-lb=:", true, "http-lb", def},
 		{"", false, "", ""},
-		{"foo=127.0.0.1", false, "", ""},
 		{"", false, "tcp", ""},
 		{":", true, "tcp", def},
-		{"tcp=", false, "tcp", ""},
-		{"tcp=:", true, "tcp", def},
 	}
 
 	for tcNum, tc := range testCases {
@@ -71,20 +61,18 @@ func TestParseResolverSpec(t *testing.T) {
 
 func TestGetAddress(t *testing.T) {
 	testCases := []struct {
-		resolverSpec string
+		address      string
 		success      bool
 		addressType  string
 		addressValue string
 	}{
-		{"tcp=127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
-		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
-		{"tcp=localhost:80", true, "tcp", "localhost:80"},
-		// We should test unresolvable dns too, but this would be fragile.
-		{"unix=/tmp/foo", true, "unix", "/tmp/foo"},
+		{"127.0.0.1:26222", true, "tcp", "127.0.0.1:26222"},
+		{"127.0.0.1", true, "tcp", "127.0.0.1:" + base.DefaultPort},
+		{"localhost:80", true, "tcp", "localhost:80"},
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(nodeTestBaseContext, tc.resolverSpec)
+		resolver, err := NewResolver(nodeTestBaseContext, tc.address)
 		if err != nil {
 			t.Fatal(err)
 		}
