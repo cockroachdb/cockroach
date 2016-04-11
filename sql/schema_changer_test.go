@@ -17,7 +17,9 @@
 package sql_test
 
 import (
+	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -405,5 +407,123 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	for i := 0; i < count; i++ {
 		indexQuery := fmt.Sprintf(`SELECT v FROM t.test@foo%d`, i)
 		_ = mTest.checkQueryResponse(indexQuery, [][]string{{"b"}, {"d"}})
+	}
+}
+
+// Test schema change backfills are not affected by various operations
+// that run simultaneously.
+func TestRaceWithBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	server, sqlDB, kvDB := setup(t)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	max_value := 2000
+	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, max_value)
+	for i := 1; i <= max_value; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, max_value-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read table descriptor for version.
+	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	gr, pErr := kvDB.Get(nameKey)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
+	desc := &csql.Descriptor{}
+	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+		t.Fatal(pErr)
+	}
+	version := desc.GetTable().Version
+
+	// Run the schema changes in a separate goroutine.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		start := timeutil.Now()
+		// Start schema change that eventually runs a number of backfills.
+		if _, err := sqlDB.Exec(`
+BEGIN;
+ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4');
+CREATE UNIQUE INDEX foo ON t.test (v);
+END;
+`); err != nil {
+			t.Error(err)
+		}
+		t.Logf("schema changes took %v", time.Since(start))
+		wg.Done()
+	}()
+
+	// Wait until the backfills for the schema changes above have
+	// started.
+	util.SucceedsSoon(t, func() error {
+		if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+			t.Fatal(pErr)
+		}
+		if desc.GetTable().Version == version+2 {
+			// Version upgrade has happened, backfills can proceed.
+			return nil
+		}
+		return errors.New("version not updated")
+	})
+
+	// TODO(vivek): uncomment these inserts when #5817 is fixed.
+	// Insert some new rows in the table while the backfills are running.
+	//num_values := 5
+	//for i := 0; i < num_values; i++ {
+	//	t.Logf("inserting a new value into the table")
+	//	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, max_value+i+1, max_value+i+1); err != nil {
+	//		t.Fatal(err)
+	//	}
+	//}
+
+	// Renaming an index in the middle of the backfills will not affect
+	// the backfills because the above schema changes have the schema change
+	// lease on the table. All future schema changes have to wait in line for
+	// the lease.
+	if _, err := sqlDB.Exec(`
+ALTER INDEX t.test@foo RENAME TO bar;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until schema changes have completed.
+	wg.Wait()
+
+	// Verify that the index over v is consistent.
+	rows, err := sqlDB.Query(`SELECT v from t.test@bar`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := 0
+	for ; rows.Next(); i++ {
+		var val int
+		if err := rows.Scan(&val); err != nil {
+			t.Fatal(err)
+		}
+		if i != val {
+			t.Errorf("e = %d, v = %d", i, val)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if max_value+1 != i {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", max_value+1, i)
 	}
 }
