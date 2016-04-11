@@ -450,13 +450,25 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	splitTestRange(tc.store, roachpb.RKey("a"), roachpb.RKey("a"), t)
-	gArgs := getArgs(roachpb.Key("b"))
+	key := roachpb.RKey("a")
+	firstRng := tc.store.LookupReplica(key, nil)
+	newRng := splitTestRange(tc.store, key, key, t)
+	if pErr := newRng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
 
+	gArgs := getArgs(roachpb.Key("b"))
 	_, pErr := tc.SendWrapped(&gArgs)
 
-	if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
+	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", pErr)
+	} else {
+		if mismatchedDesc := mismatchErr.MismatchedRange; mismatchedDesc == nil || mismatchedDesc.RangeID != firstRng.RangeID {
+			t.Errorf("expected mismatched range to be %d, found %v", firstRng.RangeID, mismatchedDesc)
+		}
+		if suggestedDesc := mismatchErr.SuggestedRange; suggestedDesc == nil || suggestedDesc.RangeID != newRng.RangeID {
+			t.Errorf("expected suggested range to be %d, found %v", newRng.RangeID, suggestedDesc)
+		}
 	}
 }
 

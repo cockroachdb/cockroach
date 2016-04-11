@@ -223,14 +223,14 @@ func (rdc *rangeDescriptorCache) makeEvictionToken(prevDesc *roachpb.RangeDescri
 // Evict instructs the evictionToken to evict the RangeDescriptor it was created
 // with from the rangeDescriptorCache.
 func (et *evictionToken) Evict() error {
-	return et.EvictAndReplace(nil)
+	return et.EvictAndReplace()
 }
 
 // EvictAndReplace instructs the evictionToken to evict the RangeDescriptor it was
-// created with from the rangeDescriptorCache. It also allows the user to provide a
-// new RangeDescriptor to insert into the cache, all atomically. If the newDesc pointer
-// is nil, this will behave the same as Evict().
-func (et *evictionToken) EvictAndReplace(newDesc *roachpb.RangeDescriptor) error {
+// created with from the rangeDescriptorCache. It also allows the user to provide
+// new RangeDescriptors to insert into the cache, all atomically. When called without
+// arguments, EvictAndReplace will behave the same as Evict.
+func (et *evictionToken) EvictAndReplace(newDescs ...roachpb.RangeDescriptor) error {
 	et.evictedLocker.Lock()
 	defer et.evictedLocker.Unlock()
 	var err error
@@ -240,8 +240,8 @@ func (et *evictionToken) EvictAndReplace(newDesc *roachpb.RangeDescriptor) error
 		et.doLocker.Lock()
 		defer et.doLocker.Unlock()
 		err = et.do()
-		if newDesc != nil && err == nil {
-			err = et.doReplace(*newDesc)
+		if err == nil && len(newDescs) > 0 {
+			err = et.doReplace(newDescs...)
 		}
 	}
 	return err

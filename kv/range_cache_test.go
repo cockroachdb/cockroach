@@ -339,7 +339,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	mismatchErrRange := &ranges[0]
+	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
 	if err := evictToken.EvictAndReplace(mismatchErrRange); err != nil {
@@ -377,7 +377,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	mismatchErrRange := &ranges[0]
+	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
 	if err := evictToken.EvictAndReplace(mismatchErrRange); err != nil {
