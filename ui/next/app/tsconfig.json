@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES5",
-    "outFile": "../build/app_next.js"
+    "module": "system",
+    "jsx": "react"
   },
   "files": [
-    "./app.ts"
+    "./app.tsx"
   ]
 }
