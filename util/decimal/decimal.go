@@ -411,3 +411,58 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 	ex := integerPower(z, new(inf.Dec).Set(e), integer, s+2)
 	return smallExp(ex, y, s-2)
 }
+
+// Pow computes (x^y) as e^(y ln x) to the specified scale and stores
+// the result in z, which is also the return value. If y is not an
+// integer and x is negative nil is returned.
+func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
+	s = s + 2
+	if z == nil {
+		z = new(inf.Dec)
+		z.SetUnscaled(1).SetScale(0)
+	}
+
+	// Check if y is of type int.
+	tmp := new(inf.Dec).Abs(y)
+	isInt := tmp.Cmp(new(inf.Dec).Round(tmp, 0, inf.RoundDown)) == 0
+
+	neg := x.Sign() < 0
+
+	if !isInt && neg {
+		return nil
+	}
+
+	// Exponent Precision Explanation (RaduBerinde):
+	// Say we compute the Log with a scale of k. That means that the result we get is:
+	// ln x +/- 10^-k.
+	// This leads to an error of y * 10^-k in the exponent, which leads to a
+	// multiplicative error of e^(y*10^-k) in the result.
+	// For small values of u, e^u can be approximated by 1 + u, so for large k
+	// that error is around 1 + y*10^-k. So the additive error will be x^y * y * 10^-k,
+	// and we want this to be less than 10^-s. This approximately means that k has to be
+	// s + the number of digits before the decimal point in x^y. Which roughly is
+	//
+	// s + <the number of digits before decimal point in x> * y.
+	//
+	// exponent precision = s + <the number of digits before decimal point in x> * y.
+	numDigits := float64(x.UnscaledBig().BitLen()) / digitsToBitsRatio
+	numDigits -= float64(x.Scale())
+
+	// Round up y which should provide us with a threshold in calculating the new scale.
+	yu := float64(new(inf.Dec).Round(y, 0, inf.RoundUp).UnscaledBig().Int64())
+
+	// exponent precision = s + <the number of digits before decimal point in x> * y
+	es := s + inf.Scale(int32(numDigits*yu))
+
+	tmp = new(inf.Dec).Abs(x)
+	Log(tmp, tmp, es)
+	tmp.Mul(tmp, y)
+	Exp(tmp, tmp, es)
+
+	if neg && y.Round(y, 0, inf.RoundDown).UnscaledBig().Bit(0) == 1 {
+		tmp.Neg(tmp)
+	}
+
+	// Round to the desired scale.
+	return z.Round(tmp, s-2, inf.RoundHalfUp)
+}
