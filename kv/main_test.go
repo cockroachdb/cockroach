@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/security/securitytest"
 )
 
+//go:generate ../util/leaktest/add-leaktest.sh *_test.go
+
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
 }
-
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go

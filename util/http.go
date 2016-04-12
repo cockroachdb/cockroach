@@ -27,8 +27,9 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
-
 	"gopkg.in/yaml.v1"
+
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 const (
@@ -217,7 +218,7 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 	if protoIdx < jsonIdx && protoIdx < yamlIdx {
 		// Protobuf-encode the config.
 		contentType = ProtoContentType
-		if body, err = proto.Marshal(value.(proto.Message)); err != nil {
+		if body, err = protoutil.Marshal(value.(proto.Message)); err != nil {
 			err = Errorf("unable to marshal %+v to protobuf: %s", value, err)
 		}
 	} else if yamlIdx < jsonIdx && yamlIdx < protoIdx {

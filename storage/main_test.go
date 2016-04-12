@@ -17,21 +17,57 @@
 package storage_test
 
 import (
+	"bytes"
+	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
+
+//go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
 }
 
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
-
 func TestMain(m *testing.M) {
+	stopTrackingAndGetTypes := storage.TrackRaftProtos()
+
 	randutil.SeedForTests()
-	os.Exit(m.Run())
+
+	code := m.Run()
+
+	notBelowRaftProtos := make(map[reflect.Type]struct{}, len(goldenProtos))
+	for typ := range goldenProtos {
+		notBelowRaftProtos[typ] = struct{}{}
+	}
+
+	var buf bytes.Buffer
+	for _, typ := range stopTrackingAndGetTypes() {
+		if _, ok := goldenProtos[typ]; ok {
+			delete(notBelowRaftProtos, typ)
+		} else {
+			fmt.Fprintf(&buf, "%s: missing fixture!\n", typ)
+		}
+	}
+
+	for typ := range notBelowRaftProtos {
+		fmt.Fprintf(&buf, "%s: not observed below raft!\n", typ)
+	}
+
+	if out := buf.String(); len(out) != 0 {
+		fmt.Print(out)
+
+		// In case the rest of the test suite passed, fail it.
+		if code == 0 {
+			code = 1
+		}
+	}
+
+	os.Exit(code)
 }

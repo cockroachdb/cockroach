@@ -24,6 +24,8 @@ import weak "gogoproto/gogo.proto";
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
+  option (gogoproto.populate) = true;
+
   optional roachpb.TxnMeta txn = 1;
   // The timestamp of the most recent versioned value if this is a
   // value that may have multiple versions. For values which may have
@@ -71,6 +73,8 @@ message MVCCMetadata {
 // so that it can predict its own impact on the size of the system-local
 // kv-pairs.
 message MVCCStats {
+  option (gogoproto.populate) = true;
+
   // last_update_nanos is a timestamp at which the ages were last
   // updated. See the comment on MVCCStats.
   optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false];

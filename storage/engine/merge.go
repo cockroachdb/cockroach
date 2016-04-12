@@ -20,6 +20,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 // MergeInternalTimeSeriesData exports the engine's C++ merge logic for
@@ -36,7 +37,7 @@ func MergeInternalTimeSeriesData(
 		if err := val.SetProto(&src); err != nil {
 			return roachpb.InternalTimeSeriesData{}, err
 		}
-		bytes, err := proto.Marshal(&MVCCMetadata{
+		bytes, err := protoutil.Marshal(&MVCCMetadata{
 			RawBytes: val.RawBytes,
 		})
 		if err != nil {
