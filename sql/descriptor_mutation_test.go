@@ -245,6 +245,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 		// The table only contains columns "k" and "v".
 		_ = mTest.checkQueryResponse(starQuery, [][]string{{"a", "z"}})
 
+		// The column backfill uses Put instead of CPut because it depends on
+		// an INSERT of a column in the WRITE_ONLY state failing. These two
+		// tests guarantee that.
+
 		// Inserting a row into the table while specifying column "i" results in an error.
 		if _, err := sqlDB.Exec(`INSERT INTO t.test (k, v, i) VALUES ('b', 'y', 'i')`); !testutils.IsError(err, `column "i" does not exist`) {
 			t.Fatal(err)
@@ -285,6 +289,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i');
 		// Notice that the default value of "i" is only written when the
 		// descriptor is in the WRITE_ONLY state.
 		_ = mTest.checkQueryResponse(starQuery, afterInsert)
+
+		// The column backfill uses Put instead of CPut because it depends on
+		// an UPDATE of a column in the WRITE_ONLY state failing. This test
+		// guarantees that.
 
 		// Make column "i" a mutation.
 		mTest.writeColumnMutation("i", csql.DescriptorMutation{State: state})

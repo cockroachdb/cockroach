@@ -279,6 +279,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 							}
 							writeBatch.Del(colKey)
 						}
+
 						// Add the new columns and backfill the values.
 						for i, expr := range defaultExprs {
 							if expr == nil {
@@ -294,10 +295,21 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 							if err != nil {
 								return roachpb.NewError(err)
 							}
+
 							if log.V(2) {
-								log.Infof("CPut %s -> %v", colKey, val)
+								log.Infof("Put %s -> %v", colKey, val)
 							}
-							writeBatch.CPut(colKey, val, nil)
+							// Insert default value into the column. If this row
+							// was recently added the default value might have
+							// already been populated, because the
+							// ColumnDescriptor is in the WRITE_ONLY state.
+							// Reinserting the default value is not a big deal.
+							//
+							// Note: a column in the WRITE_ONLY state cannot be
+							// populated directly through SQL. A SQL INSERT cannot
+							// directly reference the column, and the INSERT
+							// populates the column with the default value.
+							writeBatch.Put(colKey, val)
 						}
 					}
 				}
