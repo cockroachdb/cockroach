@@ -180,8 +180,8 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		case col.Type.Precision == 0 && col.Type.Width > 0:
 			// TODO (seif): Find right range for error message.
 			return nil, nil, errors.New("invalid NUMERIC precision 0")
-		case col.Type.Precision < col.Type.Width:
-			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+		case col.Type.Precision > 0 && col.Type.Precision <= col.Type.Width:
+			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and below precision %d",
 				col.Type.Width, col.Type.Precision)
 		}
 	}
