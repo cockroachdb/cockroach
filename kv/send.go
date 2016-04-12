@@ -239,7 +239,7 @@ func splitHealthy(clients []batchClient) (int, error) {
 
 // Allow local calls to be dispatched directly to the local server without
 // sending an RPC.
-var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", false)
+var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
 
 // sendOneFn is overwritten in tests to mock sendOne.
 var sendOneFn = sendOne
