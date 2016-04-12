@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -91,8 +92,8 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	desc := &sql.TableDescriptor{}
-	descBytes, err := desc.Marshal()
+	var desc sql.TableDescriptor
+	descBytes, err := protoutil.Marshal(&desc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +103,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
-		return txn.Put(k, desc)
+		return txn.Put(k, &desc)
 	}); pErr != nil {
 		t.Fatal(pErr)
 	}

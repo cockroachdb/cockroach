@@ -22,10 +22,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 func mvccKey(k interface{}) MVCCKey {
@@ -245,7 +247,7 @@ func TestBatchProto(t *testing.T) {
 	if keySize != 6 {
 		t.Errorf("expected key size 6; got %d", keySize)
 	}
-	data, err := val.Marshal()
+	data, err := protoutil.Marshal(&val)
 	if err != nil {
 		t.Fatal(err)
 	}

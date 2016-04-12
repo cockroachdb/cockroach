@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 var configID = sql.ID(1)
@@ -96,7 +96,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defaultZoneConfig.GC.TTLSeconds = 60
 
 	{
-		buf, err := proto.Marshal(&defaultZoneConfig)
+		buf, err := protoutil.Marshal(&defaultZoneConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func TestGetZoneConfig(t *testing.T) {
 		tb11: tb11Cfg,
 		tb21: tb21Cfg,
 	} {
-		buf, err := proto.Marshal(&objZone)
+		buf, err := protoutil.Marshal(&objZone)
 		if err != nil {
 			t.Fatal(err)
 		}

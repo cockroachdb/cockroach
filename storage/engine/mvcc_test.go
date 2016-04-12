@@ -991,11 +991,11 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	bytes1, err := value1.Marshal()
+	bytes1, err := protoutil.Marshal(&value1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bytes2, err := value2.Marshal()
+	bytes2, err := protoutil.Marshal(&value2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2593,7 +2593,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 
 // encodedSize returns the encoded size of the protobuf message.
 func encodedSize(msg proto.Message, t *testing.T) int64 {
-	data, err := proto.Marshal(msg)
+	data, err := protoutil.Marshal(msg)
 	if err != nil {
 		t.Fatal(err)
 	}

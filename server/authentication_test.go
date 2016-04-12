@@ -30,13 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 )
 
 func doHTTPReq(t *testing.T, client *http.Client, method, url string, body proto.Message) (*http.Response, error) {
 	var b io.Reader
 	if body != nil {
-		buf, err := proto.Marshal(body)
+		buf, err := protoutil.Marshal(body)
 		if err != nil {
 			t.Fatal(err)
 		}

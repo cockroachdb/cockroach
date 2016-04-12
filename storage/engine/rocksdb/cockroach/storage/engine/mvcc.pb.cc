@@ -125,23 +125,24 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fmvcc_2eproto() {
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n#cockroach/storage/engine/mvcc.proto\022\030c"
     "ockroach.storage.engine\032\034cockroach/roach"
-    "pb/data.proto\032\024gogoproto/gogo.proto\"\201\002\n\014"
+    "pb/data.proto\032\024gogoproto/gogo.proto\"\207\002\n\014"
     "MVCCMetadata\022\'\n\003txn\030\001 \001(\0132\032.cockroach.ro"
     "achpb.TxnMeta\0225\n\ttimestamp\030\002 \001(\0132\034.cockr"
     "oach.roachpb.TimestampB\004\310\336\037\000\022\025\n\007deleted\030"
     "\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\t"
     "val_bytes\030\005 \001(\003B\004\310\336\037\000\022\021\n\traw_bytes\030\006 \001(\014"
     "\0225\n\017merge_timestamp\030\007 \001(\0132\034.cockroach.ro"
-    "achpb.Timestamp\"\362\002\n\tMVCCStats\022\037\n\021last_up"
-    "date_nanos\030\001 \001(\020B\004\310\336\037\000\022\030\n\nintent_age\030\002 \001"
-    "(\020B\004\310\336\037\000\022(\n\014gc_bytes_age\030\003 \001(\020B\022\310\336\037\000\342\336\037\n"
-    "GCBytesAge\022\030\n\nlive_bytes\030\004 \001(\020B\004\310\336\037\000\022\030\n\n"
-    "live_count\030\005 \001(\020B\004\310\336\037\000\022\027\n\tkey_bytes\030\006 \001("
-    "\020B\004\310\336\037\000\022\027\n\tkey_count\030\007 \001(\020B\004\310\336\037\000\022\027\n\tval_"
-    "bytes\030\010 \001(\020B\004\310\336\037\000\022\027\n\tval_count\030\t \001(\020B\004\310\336"
-    "\037\000\022\032\n\014intent_bytes\030\n \001(\020B\004\310\336\037\000\022\032\n\014intent"
-    "_count\030\013 \001(\020B\004\310\336\037\000\022\027\n\tsys_bytes\030\014 \001(\020B\004\310"
-    "\336\037\000\022\027\n\tsys_count\030\r \001(\020B\004\310\336\037\000B\010Z\006engineX\001", 760);
+    "achpb.Timestamp:\004\270\240\037\001\"\370\002\n\tMVCCStats\022\037\n\021l"
+    "ast_update_nanos\030\001 \001(\020B\004\310\336\037\000\022\030\n\nintent_a"
+    "ge\030\002 \001(\020B\004\310\336\037\000\022(\n\014gc_bytes_age\030\003 \001(\020B\022\310\336"
+    "\037\000\342\336\037\nGCBytesAge\022\030\n\nlive_bytes\030\004 \001(\020B\004\310\336"
+    "\037\000\022\030\n\nlive_count\030\005 \001(\020B\004\310\336\037\000\022\027\n\tkey_byte"
+    "s\030\006 \001(\020B\004\310\336\037\000\022\027\n\tkey_count\030\007 \001(\020B\004\310\336\037\000\022\027"
+    "\n\tval_bytes\030\010 \001(\020B\004\310\336\037\000\022\027\n\tval_count\030\t \001"
+    "(\020B\004\310\336\037\000\022\032\n\014intent_bytes\030\n \001(\020B\004\310\336\037\000\022\032\n\014"
+    "intent_count\030\013 \001(\020B\004\310\336\037\000\022\027\n\tsys_bytes\030\014 "
+    "\001(\020B\004\310\336\037\000\022\027\n\tsys_count\030\r \001(\020B\004\310\336\037\000:\004\270\240\037\001"
+    "B\010Z\006engineX\001", 772);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/storage/engine/mvcc.proto", &protobuf_RegisterTypes);
   MVCCMetadata::default_instance_ = new MVCCMetadata();
