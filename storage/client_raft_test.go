@@ -1517,7 +1517,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	const numStores = 3
 	mtc := startMultiTestContext(t, numStores)
 	defer mtc.Stop()
-	// Setup replication of ramge 1 on store 0 to stores 1 and 2.
+	// Setup replication of range 1 on store 0 to stores 1 and 2.
 	mtc.replicateRange(1, 1, 2)
 
 	// Write something to the DB.
@@ -1547,7 +1547,7 @@ func TestCheckInconsistent(t *testing.T) {
 	const numStores = 3
 	mtc := startMultiTestContext(t, numStores)
 	defer mtc.Stop()
-	// Setup replication of ramge 1 on store 0 to stores 1 and 2.
+	// Setup replication of range 1 on store 0 to stores 1 and 2.
 	mtc.replicateRange(1, 1, 2)
 
 	// Write something to the DB.
@@ -1597,4 +1597,39 @@ func TestCheckInconsistent(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("didn't receive notification from VerifyChecksum() that should have panicked")
 	}
+}
+
+func TestTransferRaftLeadership(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numStores = 3
+	mtc := startMultiTestContext(t, numStores)
+	defer mtc.Stop()
+	// Setup replication of range 1 on store 0 to stores 1 and 2.
+	mtc.replicateRange(1, 1, 2)
+
+	rng, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := rng.RaftStatus()
+	if status.Lead != 1 {
+		t.Fatalf("raft leader should be 1, but got %v", status.Lead)
+	}
+
+	mtc.expireLeaderLeases()
+	// Force the read command request a new lease.
+	getArgs := getArgs([]byte("a"))
+	_, pErr := client.SendWrapped(rg1(mtc.stores[1]), nil, &getArgs)
+	if pErr != nil {
+		t.Fatalf("expect get nil, actual get %v ", pErr)
+	}
+	// Wait for raft leadership transferring to be finished.
+	util.SucceedsSoon(t, func() error {
+		status = rng.RaftStatus()
+		if status.Lead != 2 {
+			return util.Errorf("expected raft leader be 2; got %d", status.Lead)
+		}
+		return nil
+	})
 }

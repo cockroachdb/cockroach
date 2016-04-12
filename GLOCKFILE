@@ -28,7 +28,7 @@ github.com/cockroachdb/cmux 112f0506e7743d64a6eb8fedbcff13d9979bbf92
 github.com/cockroachdb/pq 3d7f893b32668bbf6dacfc59367d7a4c004457cc
 github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
 github.com/codahale/hdrhistogram 360314142131c2043d1346f197f86435b287c6da
-github.com/coreos/etcd 5d4ee7ac5f58b90111c80af25ac887349492f7a6
+github.com/coreos/etcd 6c8428c3939a7fa224ac8e97005b1967f3fd87f1
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/docker/engine-api 39e3fe4ff298dc302385b79eb8a9e02cc644464f
 github.com/docker/go-connections f549a9393d05688dff0992ef3efd8bbe6c628aeb
