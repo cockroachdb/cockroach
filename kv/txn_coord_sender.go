@@ -329,38 +329,8 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			return nil, roachpb.NewError(err)
 		}
 		txnID := *ba.Txn.ID
-		// Verify that if this Transaction is not read-only, we have it on file.
-		// If not, refuse further operations - the transaction was aborted due
-		// to a timeout or the client must have issued a write on another
-		// coordinator previously.
-		if ba.Txn.Writing {
-			tc.Lock()
-			txnMeta, ok := tc.txns[txnID]
-			// Check whether the transaction is still tracked and has a chance
-			// of completing. It's possible that the coordinator learns about
-			// the transaction having terminated from a heartbeat, and
-			// correctness (along with common sense) mandates that we don't let
-			// the client continue.
-			var pErr *roachpb.Error
-			switch {
-			case !ok:
-				pErr = roachpb.NewErrorf("writing transaction timed out, was aborted, " +
-					"or ran on multiple coordinators")
-			case txnMeta.txn.Status == roachpb.ABORTED:
-				txn := txnMeta.txn.Clone()
-				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(),
-					&txn)
-				tc.cleanupTxnLocked(ctx, txn)
-			case txnMeta.txn.Status == roachpb.COMMITTED:
-				txn := txnMeta.txn.Clone()
-				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
-					"transaction is already committed"), &txn)
-				tc.cleanupTxnLocked(ctx, txn)
-			}
-			tc.Unlock()
-			if pErr != nil {
-				return nil, pErr
-			}
+		if pErr := tc.maybeRejectClient(ctx, *ba.Txn); pErr != nil {
+			return nil, pErr
 		}
 
 		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
@@ -472,6 +442,48 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		tc.Unlock()
 	}
 	return br, nil
+}
+
+// maybeRejectClient checks whether the (transactional) request is in a state
+// that prevents it from continuing, such as the coordinator having considered
+// the client abandoned, or a heartbeat having reported an error.
+func (tc *TxnCoordSender) maybeRejectClient(
+	ctx context.Context,
+	txn roachpb.Transaction,
+) *roachpb.Error {
+
+	if !txn.Writing {
+		return nil
+	}
+	tc.Lock()
+	defer tc.Unlock()
+	txnMeta, ok := tc.txns[*txn.ID]
+	// Check whether the transaction is still tracked and has a chance of
+	// completing. It's possible that the coordinator learns about the
+	// transaction having terminated from a heartbeat, and GC queue correctness
+	// (along with common sense) mandates that we don't let the client
+	// continue.
+	switch {
+	case !ok:
+		// TODO(spencerkimball): Could add coordinator node ID to the
+		// transaction session so that we can definitively return the right
+		// error between these possible errors. Or update the code to make an
+		// educated guess based on the incoming transaction timestamp.
+		return roachpb.NewErrorf("writing transaction timed out " +
+			"or ran on multiple coordinators")
+	case txnMeta.txn.Status == roachpb.ABORTED:
+		txn := txnMeta.txn.Clone()
+		tc.cleanupTxnLocked(ctx, txn)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(),
+			&txn)
+	case txnMeta.txn.Status == roachpb.COMMITTED:
+		txn := txnMeta.txn.Clone()
+		tc.cleanupTxnLocked(ctx, txn)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
+			"transaction is already committed"), &txn)
+	default:
+		return nil
+	}
 }
 
 // maybeBeginTxn begins a new transaction if a txn has been specified
@@ -688,8 +700,8 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 
 	if txn.Status != roachpb.PENDING {
 		// A previous iteration has already determined that the transaction is
-		// not ongoing any more, we're just waiting for the client to realize
-		// and want to keep our state for the time being (to dish out the right
+		// already finalized, so we wait for the client to realize that and
+		// want to keep our state for the time being (to dish out the right
 		// error once it returns).
 		return true
 	}
@@ -733,11 +745,10 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 	}
 
-	// Give the news to the stored proto. This will give long-running
-	// transactions free updates (and more up-to-date information about whether
-	// they have to restart), but in particular makes sure that they notice
-	// when they've been aborted (in which case we'll give them an error on
-	// their next request).
+	// Give the news to the txn in the txns map. This will update long-running
+	// transactions (which may find out that they have to restart in that way),
+	// but in particular makes sure that they notice when they've been aborted
+	// (in which case we'll give them an error on their next request).
 	tc.Lock()
 	tc.txns[txnID].txn.Update(&txn)
 	tc.Unlock()
