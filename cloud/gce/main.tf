@@ -1,7 +1,7 @@
 provider "google" {
   region = "${var.gce_region}"
   project = "${var.gce_project}"
-  account_file = "${file(var.gce_account_file)}"
+  credentials = "${file(var.gce_account_file)}"
 }
 
 resource "google_compute_instance" "cockroach" {
@@ -32,9 +32,45 @@ resource "google_compute_instance" "cockroach" {
     key_file = "~/.ssh/${var.key_name}"
   }
 
+  service_account {
+    scopes = ["https://www.googleapis.com/auth/compute.readonly"]
+  }
+}
+
+# Generate contents of config.sh from its template file.
+#
+# TODO(cdo): support secure clusters
+resource "template_file" "config" {
+  count = "${var.num_instances}"
+
+  template = "${file("config.sh.tpl")}"
+  vars {
+    sql_port = "${var.sql_port}"
+    http_port = "${var.http_port}"
+    local_address = "${element(google_compute_instance.cockroach.*.network_interface.0.address, count.index)}"
+    # The value of the --join flag must be empty for the first node,
+    # and a running node for all others. We built a list of addresses
+    # shifted by one (first element is empty), then take the value at index "instance.index".
+    join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.address), count.index)}"
+  }
+}
+
+resource "null_resource" "cockroach-runner" {
+  count = "${var.num_instances}"
+
+  connection {
+    user = "ubuntu"
+    key_file = "~/.ssh/${var.key_name}"
+    host = "${element(google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip, count.index)}"
+  }
+
+  triggers {
+    instance_ids = "${element(google_compute_instance.cockroach.*.id, count.index)}"
+  }
+
   provisioner "file" {
-    source = "${var.cockroach_binary}"
-    destination = "/home/ubuntu/cockroach"
+    source = "download_binary.sh"
+    destination = "/home/ubuntu/download_binary.sh"
   }
 
   provisioner "file" {
@@ -42,20 +78,29 @@ resource "google_compute_instance" "cockroach" {
     destination = "/home/ubuntu/launch.sh"
   }
 
+  provisioner "file" {
+    # If no binary is specified, we'll copy /dev/null (always 0 bytes) to the
+    # instance. The "remote-exec" block will then overwrite that. There's no
+    # such thing as conditional file copying in Terraform, so we fake it.
+    source = "${coalesce(var.cockroach_binary, "/dev/null")}"
+    destination = "/home/ubuntu/cockroach"
+  }
+
+  # Create config.sh, which contains all configuration parameters.
+  provisioner "remote-exec" {
+    inline = <<FILE
+echo '${element(template_file.config.*.rendered, count.index)}' > config.sh
+FILE
+  }
+
+  # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
-      "echo 'PORT=${var.cockroach_port}' > config.sh",
-      "echo 'GOSSIP=${var.gossip}' >> config.sh",
-      "echo 'LB_ADDRESS=${var.load_balancer_address}' >> config.sh",
-      "echo 'LOCAL_ADDRESS=${self.network_interface.0.address}' >> config.sh",
       "chmod 755 launch.sh config.sh",
-      "./launch.sh ${var.action}",
-      "sleep 1",
+      # If the cockroach binary is empty (i.e. no cockroach_binary was
+      # specified), download the binary.
+      "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
+      "./launch.sh",
     ]
   }
-
-  service_account {
-    scopes = ["https://www.googleapis.com/auth/compute.readonly"]
-  }
 }
-
