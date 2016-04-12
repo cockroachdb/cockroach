@@ -785,7 +785,6 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	return br, pErr
 }
 
-// TODO(tschottdorf): almost obsolete.
 func (r *Replica) checkCmdHeader(header roachpb.Span) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		mismatchErr := roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
