@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 // A Stores provides methods to access a collection of stores. There's
@@ -308,7 +309,7 @@ func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	}
 	// Update the latest timestamp and set cached version.
 	ls.biLatestTS = bi.Timestamp
-	ls.latestBI = util.CloneProto(bi).(*gossip.BootstrapInfo)
+	ls.latestBI = protoutil.Clone(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
 	for _, s := range ls.storeMap {
 		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
