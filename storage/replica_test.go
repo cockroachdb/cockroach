@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -4317,7 +4318,7 @@ func TestReplicaDestroy(t *testing.T) {
 
 	// First try and fail with an outdated descriptor.
 	origDesc := rep.Desc()
-	newDesc := util.CloneProto(origDesc).(*roachpb.RangeDescriptor)
+	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
 	_, newRep := newDesc.FindReplica(tc.store.StoreID())
 	newRep.ReplicaID++
 	newDesc.NextReplicaID++

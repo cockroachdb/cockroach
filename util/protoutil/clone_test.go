@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package util_test
+package protoutil_test
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -49,7 +49,7 @@ func TestCloneProto(t *testing.T) {
 			defer func() {
 				panicObj = recover()
 			}()
-			clone = util.CloneProto(tc.pb)
+			clone = protoutil.Clone(tc.pb)
 		}()
 
 		if tc.shouldPanic {

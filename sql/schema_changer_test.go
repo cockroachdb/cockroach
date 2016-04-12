@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -226,7 +227,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	table := desc.GetTable()
 	expectedVersion = table.Version
 	// Make a copy of the index for use in a mutation.
-	index := util.CloneProto(&table.Indexes[0]).(*csql.IndexDescriptor)
+	index := protoutil.Clone(&table.Indexes[0]).(*csql.IndexDescriptor)
 	index.Name = "bar"
 	index.ID = table.NextIndexID
 	table.NextIndexID++
