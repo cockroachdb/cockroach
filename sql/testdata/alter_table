@@ -10,13 +10,6 @@ EXPLAIN (DEBUG) SELECT * FROM t
 RowIdx Key          Value Disposition
 0      /t/primary/1 NULL  ROW
 
-user testuser
-
-statement error user testuser does not have CREATE privilege on table t
-ALTER TABLE t ADD b INT
-
-user root
-
 statement ok
 ALTER TABLE t ADD b INT
 
@@ -237,3 +230,45 @@ query II
 SELECT * from add_default WHERE a=5
 ----
 5 NULL
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO privs VALUES (1)
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on table privs
+ALTER TABLE privs ADD c INT
+
+statement error user testuser does not have CREATE privilege on table privs
+ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
+
+user root
+
+query TTBT colnames
+SHOW COLUMNS FROM privs
+----
+Field Type Null  Default
+a     INT  false NULL
+b     INT  true  NULL
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE privs ADD c INT
+
+statement ok
+ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
+
+query TTBT colnames
+SHOW COLUMNS FROM privs
+----
+Field Type Null  Default
+a     INT  false NULL
+b     INT  true  NULL
+c     INT  true  NULL
