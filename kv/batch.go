@@ -17,8 +17,6 @@
 package kv
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -108,9 +106,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			// We omit this one, i.e. replace it with a Noop.
 			numNoop++
 			union := roachpb.RequestUnion{}
-			if !union.SetInner(&noopRequest) {
-				panic(fmt.Sprintf("%T excludes %T", union, noopRequest))
-			}
+			union.MustSetInner(&noopRequest)
 			ba.Requests[pos] = union
 		} else {
 			// Keep the old one. If we must adjust the header, must copy.
@@ -119,9 +115,8 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			} else {
 				shallowCopy := inner.ShallowCopy()
 				shallowCopy.SetHeader(newHeader)
-				if union := &ba.Requests[pos]; !union.SetInner(shallowCopy) {
-					panic(fmt.Sprintf("%T excludes %T", union, shallowCopy))
-				}
+				union := &ba.Requests[pos] // avoid operating on copy
+				union.MustSetInner(shallowCopy)
 			}
 		}
 		if err != nil {
