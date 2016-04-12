@@ -13,11 +13,6 @@ EXPLAIN (DEBUG) SELECT * FROM t
 0  /t/primary/1    NULL  PARTIAL
 0  /t/primary/1/b  1     ROW
 
-user testuser
-
-statement error user testuser does not have CREATE privilege on table t
-CREATE INDEX foo ON t (b)
-
 user root
 
 statement ok
@@ -93,6 +88,36 @@ t     b_desc  false  1   b      DESC       false
 t     b_asc   false  1   b      ASC        false
 t     b_asc   false  2   c      DESC       false
 
-
 statement ok
 INSERT INTO t VALUES (1,1,1)
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on table privs
+CREATE INDEX foo ON privs (b)
+
+user root
+
+query TTBITTB colnames
+SHOW INDEXES FROM privs
+----
+Table Name    Unique Seq Column Direction  Storing
+privs primary true   1   a      ASC        false
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+CREATE INDEX foo ON privs (b)
+
+query TTBITTB colnames
+SHOW INDEXES FROM privs
+----
+Table Name    Unique Seq Column Direction  Storing
+privs primary true   1   a      ASC        false
+privs foo     false  1   b      ASC        false
