@@ -4,6 +4,7 @@
 /// <reference path="../util/types.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../models/metrics.ts" />
+/// <reference path="tooltip.ts" />
 
 /**
  * Components defines reusable components which may be used on multiple pages,
@@ -228,7 +229,10 @@ module Components {
           ".visualization-wrapper" + warningClass,
           [
             // TODO: pass in and display info icon tooltip
-            m(".viz-top", m(".viz-info-icon", icon)),
+            m(".viz-top", ctrl.vm.axis.tooltip() ? [
+              m(".viz-info-icon", icon),
+              m.component(Components.Tooltip, {tooltipClass: ".viz-tooltip", title: ctrl.vm.axis.title(), content: ctrl.vm.axis.tooltip()}),
+            ] : []),
             g,
             m(".viz-bottom", m(".viz-title", ctrl.vm.axis.title())),
           ]

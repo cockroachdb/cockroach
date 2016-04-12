@@ -97,6 +97,7 @@ module AdminViews {
               format: "s",
               dataFn: function (allStats: Models.Proto.NodeStatus[]): { value: number; } { return {value: allStats && allStats.length || 0 }; },
             },
+            tooltip: "Current number of nodes in the cluster.",
           });
 
           this.axesSmall.push({
@@ -138,6 +139,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
                 .title("CPU Sys %")
             ).format(d3.format(".2%")).title("CPU Usage").stacked(true)
+              .tooltip("CPU usage is the average CPU usage across all nodes. Note that if you have more than one CPU or core, the value may go over 100%.")
           );
 
           // TODO: get total/average memory from all machines
@@ -146,6 +148,8 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("allocbytes"))
                 .title("Memory")
             ).format(Utils.Format.Bytes).title("Memory Usage")
+              .tooltip("Memory usage is the average memory used per node.")
+
           );
 
           this._addChart(

@@ -563,3 +563,50 @@ table
       text-decoration none
       color $main-gray
 
+.tooltip
+  position absolute
+  z-index $tooltip-layer
+  padding 35px
+  border 1px solid $secondary-gray-1
+  box-shadow 2px 2px 0 $secondary-gray-15
+  border-radius 4px
+  display none
+  background-color white
+  top 20px
+  &.right
+    left 95%
+    right auto
+  &.left
+    right 15%
+    left auto
+    bottom 100%
+    top auto
+  .content
+    font-size 11px
+    color $secondary-gray-16
+    font-family Lato-Regular
+  .title
+    font-size 13px
+    color $main-navy
+    font-family Lato-Heavy
+    text-align center
+    width 100%
+    padding-bottom 5px
+
+&.viz-tooltip
+    width 250px
+
+
+*:hover + .tooltip
+  display block
+
+div.charts
+  div:last-child .visualization-wrapper .tooltip
+    right 15%
+    left auto
+    bottom 100%
+    top auto
+
+  div:first-child .visualization-wrapper .tooltip
+    left 95%
+    right auto

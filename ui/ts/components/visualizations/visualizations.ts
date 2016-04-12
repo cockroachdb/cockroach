@@ -19,6 +19,7 @@ module Visualizations {
     virtualVisualizationElement: MithrilVirtualElement;
     visualizationArguments?: any;
     warning?: () => string;
+    tooltip?: string;
   }
 
   export module VisualizationWrapper {
@@ -40,7 +41,10 @@ module Visualizations {
         ".visualization-wrapper" + warningClass,
         [
           // TODO: pass in and display info icon tooltip
-          m(".viz-top", m(".viz-info-icon", icon)),
+          m(".viz-top", (info.tooltip) ? [
+            m(".viz-info-icon", icon),
+            m.component(Components.Tooltip, {tooltipClass: ".viz-tooltip", title: info.title, content: info.tooltip}),
+          ] : []),
           info.virtualVisualizationElement,
           m(".viz-bottom", m(".viz-title", info.title)),
         ]
