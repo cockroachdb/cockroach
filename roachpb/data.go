@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -409,7 +410,7 @@ func (v *Value) SetInt(i int64) {
 // receiver and clears the checksum. If the proto message is an
 // InternalTimeSeriesData, the tag will be set to TIMESERIES rather than BYTES.
 func (v *Value) SetProto(msg proto.Message) error {
-	data, err := proto.Marshal(msg)
+	data, err := protoutil.Marshal(msg)
 	if err != nil {
 		return err
 	}
