@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -54,8 +55,9 @@ import (
 )
 
 const (
-	// gossipStoresInterval is the interval for gossiping storage-related info.
-	gossipStoresInterval = 1 * time.Minute
+	// defaultGossipStoresInterval is the default interval for gossiping storage-
+	// related info.
+	defaultGossipStoresInterval = 1 * time.Minute
 	// gossipNodeDescriptorInterval is the interval for gossiping the node descriptor.
 	gossipNodeDescriptorInterval = 1 * time.Hour
 	// publishStatusInterval is the interval for publishing periodic statistics
@@ -519,6 +521,8 @@ func (n *Node) connectGossip() {
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		gossipStoresInterval := envutil.EnvOrDefaultDuration("gossip_stores_interval",
+			defaultGossipStoresInterval)
 		storesTicker := time.NewTicker(gossipStoresInterval)
 		nodeTicker := time.NewTicker(gossipNodeDescriptorInterval)
 		defer storesTicker.Stop()

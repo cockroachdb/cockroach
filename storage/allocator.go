@@ -22,11 +22,14 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -35,21 +38,19 @@ const (
 	// target and it will always be eligible to rebalance replicas to other
 	// stores.
 	maxFractionUsedThreshold = 0.95
-	// minFractionUsedThreshold: if the mean fraction used of a list of store
-	// descriptors is less than this, then range count will be used to make
-	// rebalancing decisions instead of the fraction of bytes used. This is
-	// useful for distributing load evenly on nascent deployments.
-	minFractionUsedThreshold = 0.02
-	// rebalanceFromMean is used to declare a range above and below the average
-	// used capacity of the cluster. If a store's usage is below this range, it
-	// is a rebalancing target and can accept new replicas; if usage is above
-	// this range, the store is eligible to rebalance replicas to other stores.
-	rebalanceFromMean = 0.025 // 2.5%
 
 	// priorities for various repair operations.
 	removeDeadReplicaPriority  float64 = 10000
 	addMissingReplicaPriority  float64 = 1000
 	removeExtraReplicaPriority float64 = 100
+
+	// defaultMinRebalanceInterval is the minimum interval that must elapse
+	// between replica rebalances. This should be slightly larger than
+	// server.gossipStoresInterval.
+	defaultMinRebalanceInterval = 65 * time.Second
+	// defaultMaxRebalanceInterval is the maximum interval that could elapse
+	// between opportunities for replica rebalances.
+	defaultMaxRebalanceInterval = 3 * time.Minute
 )
 
 // AllocatorAction enumerates the various replication adjustments that may be
@@ -133,26 +134,17 @@ type AllocatorOptions struct {
 	Deterministic bool
 }
 
-// Allocator makes allocation decisions based on available capacity
-// in other stores which match the required attributes for a desired
-// range replica.
-//
-// When choosing a new allocation target, three candidates from
-// available stores meeting a max fraction of bytes used threshold
-// (maxFractionUsedThreshold) are chosen at random and the least
-// loaded of the three is selected in order to bias loading towards a
-// more balanced cluster, while still spreading load over all
-// available servers. "Load" is defined according to fraction of bytes
-// used, if greater than minFractionUsedThreshold; otherwise it's
-// defined according to range count.
-//
-// When choosing a rebalance target, a random store is selected from
-// amongst the set of stores with fraction of bytes within
-// rebalanceFromMean from the mean.
+// Allocator tries to spread replicas as evenly as possible across the stores
+// in the cluster.
 type Allocator struct {
 	storePool *StorePool
 	randGen   allocatorRand
 	options   AllocatorOptions
+
+	minRebalanceInterval  time.Duration
+	maxRebalanceInterval  time.Duration
+	nextRebalance         time.Time
+	proposedNextRebalance time.Time
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -167,6 +159,10 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 		storePool: storePool,
 		options:   options,
 		randGen:   makeAllocatorRand(randSource),
+		minRebalanceInterval: envutil.EnvOrDefaultDuration("min_rebalance_interval",
+			defaultMinRebalanceInterval),
+		maxRebalanceInterval: envutil.EnvOrDefaultDuration("max_rebalance_interval",
+			defaultMaxRebalanceInterval),
 	}
 }
 
@@ -313,7 +309,7 @@ func (a Allocator) RebalanceTarget(
 
 // ShouldRebalance returns whether the specified store should attempt to
 // rebalance a replica to another store.
-func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
+func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !a.options.AllowRebalance {
 		return false
 	}
@@ -330,10 +326,44 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 
+	now := timeutil.Now()
+	if now.Before(a.nextRebalance) {
+		if log.V(2) {
+			log.Infof("ineligible for rebalance for %s", a.nextRebalance.Sub(now))
+		}
+		return false
+	}
+
 	sl, _ := a.storePool.getStoreList(*storeDesc.CombinedAttrs(), a.options.Deterministic)
 
 	// ShouldRebalance is true if a suitable replacement can be found.
-	return a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
+	shouldRebalance := a.improve(storeDesc, sl, makeNodeIDSet(storeDesc.Node.NodeID)) != nil
+	if shouldRebalance {
+		// Store time for the next rebalance opportunity, so that we don't have to
+		// reconstruct the StoreList when updating nextRebalance later. The period
+		// of time between rebalances is inversely proportional to the standard
+		// deviation of the range counts. With the constant values below, the next
+		// rebalance will occur between 65 seconds and ~3 minutes after the current
+		// rebalance.
+		delta := a.minRebalanceInterval +
+			time.Second*time.Duration(.9/(.006*(sl.count.stddev()+1.2)))
+		if delta > a.maxRebalanceInterval {
+			delta = a.maxRebalanceInterval
+		}
+		a.proposedNextRebalance = now.Add(delta)
+	}
+	return shouldRebalance
+}
+
+// UpdateNextRebalance signals that because rebalance has just occurred, we
+// update the time at which the next rebalance can occur. This spreads out
+// rebalances to prevent excessive replica movement.
+func (a *Allocator) UpdateNextRebalance() {
+	a.nextRebalance = a.proposedNextRebalance
+	if log.V(2) {
+		log.Infof("next rebalance opportunity in %s",
+			a.nextRebalance.Sub(timeutil.Now()))
+	}
 }
 
 // selectGood attempts to select a store from the supplied store list that it
@@ -341,38 +371,27 @@ func (a Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 // in the supplied 'exclude' list will be disqualified from selection. Returns
 // the selected store or nil if no such store can be found.
 func (a Allocator) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	if sl.used.mean < minFractionUsedThreshold {
-		rcb := rangeCountBalancer{a.randGen}
-		return rcb.selectGood(sl, excluded)
-	}
-	ucb := usedCapacityBalancer{a.randGen}
-	return ucb.selectGood(sl, excluded)
+	rcb := rangeCountBalancer{a.randGen}
+	return rcb.selectGood(sl, excluded)
 }
 
 // selectBad attempts to select a store from the supplied store list that it
 // considers to be 'Bad' relative to the other stores in the list. Returns the
 // selected store or nil if no such store can be found.
 func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	if sl.used.mean < minFractionUsedThreshold {
-		rcb := rangeCountBalancer{a.randGen}
-		return rcb.selectBad(sl)
-	}
-	ucb := usedCapacityBalancer{a.randGen}
-	return ucb.selectBad(sl)
+	rcb := rangeCountBalancer{a.randGen}
+	return rcb.selectBad(sl)
 }
 
 // improve attempts to select an improvement over the given store from the
 // stores in the given store list. Any nodes in the supplied 'exclude' list
 // will be disqualified from selection. Returns the selected store, or nil if
 // no such store can be found.
-func (a Allocator) improve(store *roachpb.StoreDescriptor, sl StoreList,
-	excluded nodeIDSet) *roachpb.StoreDescriptor {
-	if sl.used.mean < minFractionUsedThreshold {
-		rcb := rangeCountBalancer{a.randGen}
-		return rcb.improve(store, sl, excluded)
-	}
-	ucb := usedCapacityBalancer{a.randGen}
-	return ucb.improve(store, sl, excluded)
+func (a Allocator) improve(
+	store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet,
+) *roachpb.StoreDescriptor {
+	rcb := rangeCountBalancer{a.randGen}
+	return rcb.improve(store, sl, excluded)
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.

@@ -16,7 +16,12 @@
 
 package storage
 
-import "github.com/cockroachdb/cockroach/roachpb"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
+)
 
 type nodeIDSet map[roachpb.NodeID]struct{}
 
@@ -34,7 +39,9 @@ type rangeCountBalancer struct {
 	rand allocatorRand
 }
 
-func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) selectGood(
+	sl StoreList, excluded nodeIDSet,
+) *roachpb.StoreDescriptor {
 	// Consider a random sample of stores from the store list.
 	candidates := selectRandom(rcb.rand, 3, sl, excluded)
 	var best *roachpb.StoreDescriptor
@@ -64,88 +71,56 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	return worst
 }
 
-func (rcb rangeCountBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList,
-	excluded nodeIDSet) *roachpb.StoreDescriptor {
-	// If existing replica has a stable range count, return false immediately.
-	if float64(store.Capacity.RangeCount) < sl.count.mean*(1+rebalanceFromMean) {
+// improve returns a candidate StoreDescriptor to rebalance a replica to. The
+// strategy is to always converge on the mean range count. If that isn't
+// possible, we don't return any candidate.
+func (rcb rangeCountBalancer) improve(
+	store *roachpb.StoreDescriptor, sl StoreList, excluded nodeIDSet,
+) *roachpb.StoreDescriptor {
+	// Moving a replica from the given store makes its range count converge on
+	// the mean range count.
+	if store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
+		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
+			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean)) {
+		if log.V(2) {
+			log.Infof("not rebalancing: source store %d wouldn't converge on the mean",
+				store.StoreID)
+		}
 		return nil
 	}
 
 	// Attempt to select a better candidate from the supplied list.
-	// Only approve the candidate if its range count is sufficiently below the
-	// cluster mean.
 	candidate := rcb.selectGood(sl, excluded)
 	if candidate == nil {
-		return nil
-	}
-	if float64(candidate.Capacity.RangeCount) <= sl.count.mean*(1-rebalanceFromMean) {
-		return candidate
-	}
-	return nil
-}
-
-// usedCapacityBalancer attempts to balance ranges by considering the used
-// disk capacity of each store.
-type usedCapacityBalancer struct {
-	rand allocatorRand
-}
-
-func (ucb usedCapacityBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
-	// Consider a random sample of stores from the store list.
-	candidates := selectRandom(ucb.rand, 3, sl, excluded)
-	var best *roachpb.StoreDescriptor
-	for _, candidate := range candidates {
-		if best == nil {
-			best = candidate
-			continue
+		if log.V(2) {
+			log.Infof("not rebalancing: no candidate targets (all stores nearly full?)")
 		}
-		if candidate.Capacity.FractionUsed() <= best.Capacity.FractionUsed() {
-			best = candidate
-		}
-	}
-	return best
-}
-
-func (ucb usedCapacityBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
-	var worst *roachpb.StoreDescriptor
-	for _, candidate := range sl.stores {
-		if worst == nil {
-			worst = candidate
-			continue
-		}
-		if candidate.Capacity.FractionUsed() > worst.Capacity.FractionUsed() {
-			worst = candidate
-		}
-	}
-	return worst
-}
-
-func (ucb usedCapacityBalancer) improve(store *roachpb.StoreDescriptor, sl StoreList,
-	excluded nodeIDSet) *roachpb.StoreDescriptor {
-	storeFraction := store.Capacity.FractionUsed()
-
-	// If existing replica has stable capacity usage, return false immediately.
-	if float64(storeFraction) < sl.used.mean*(1+rebalanceFromMean) {
 		return nil
 	}
 
-	// Attempt to select a better candidate from the supplied list.  Only
-	// approve the candidate if its disk usage is sufficiently below the cluster
-	// mean.
-	candidate := ucb.selectGood(sl, excluded)
-	if candidate == nil {
+	// Adding a replica to the candidate must make its range count converge on the
+	// mean range count.
+	if math.Abs(float64(candidate.Capacity.RangeCount+1)-sl.candidateCount.mean) >=
+		math.Abs(float64(candidate.Capacity.RangeCount)-sl.candidateCount.mean) {
+		if log.V(2) {
+			log.Infof("not rebalancing: candidate store %d wouldn't converge on the mean",
+				store.StoreID)
+		}
 		return nil
 	}
-	if candidate.Capacity.FractionUsed() < sl.used.mean*(1-rebalanceFromMean) {
-		return candidate
+
+	if log.V(2) {
+		log.Infof("found candidate store %d", candidate.StoreID)
 	}
-	return nil
+
+	return candidate
 }
 
 // selectRandom chooses up to count random store descriptors from the given
-// store list.
-func selectRandom(randGen allocatorRand, count int, sl StoreList,
-	excluded nodeIDSet) []*roachpb.StoreDescriptor {
+// store list, excluding any stores that are too full to accept more replicas.
+func selectRandom(
+	randGen allocatorRand, count int, sl StoreList, excluded nodeIDSet,
+) []*roachpb.StoreDescriptor {
 	var descs []*roachpb.StoreDescriptor
 	// Randomly permute available stores matching the required attributes.
 	randGen.Lock()
@@ -156,6 +131,12 @@ func selectRandom(randGen allocatorRand, count int, sl StoreList,
 		if _, ok := excluded[desc.Node.NodeID]; ok {
 			continue
 		}
+
+		// Don't overfill stores.
+		if desc.Capacity.FractionUsed() > maxFractionUsedThreshold {
+			continue
+		}
+
 		// Add this store; exit loop if we've satisfied count.
 		descs = append(descs, sl.stores[idx])
 		if len(descs) >= count {
