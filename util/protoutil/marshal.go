@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,20 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Tamir Duberstein (tamird@gmail.com)
 
-package kv_test
+package protoutil
 
-import (
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
-)
+import "github.com/gogo/protobuf/proto"
 
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
+// Interceptor will be called with every proto before it is marshalled.
+// Interceptor is not safe to modify concurrently with calls to Marshal.
+var Interceptor = func(_ proto.Message) {}
 
-func init() {
-	security.SetReadFileFn(securitytest.Asset)
+// Marshal uses proto.Marshal to encode pb into the wire format. It is used in
+// some tests to intercept calls to proto.Marshal.
+func Marshal(pb proto.Message) ([]byte, error) {
+	Interceptor(pb)
+
+	return proto.Marshal(pb)
 }

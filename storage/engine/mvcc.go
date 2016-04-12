@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 const (
@@ -1252,7 +1253,7 @@ func MVCCMerge(
 	if !timestamp.Equal(roachpb.ZeroTimestamp) {
 		meta.MergeTimestamp = &timestamp
 	}
-	data, err := proto.Marshal(meta)
+	data, err := protoutil.Marshal(meta)
 	if err != nil {
 		return err
 	}

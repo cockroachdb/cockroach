@@ -17,6 +17,7 @@
 package uuid
 
 import (
+	"encoding/binary"
 	"errors"
 
 	"github.com/satori/go.uuid"
@@ -88,6 +89,16 @@ func MakeV4() UUID {
 // a UUID.
 func NewV4() *UUID {
 	return &UUID{uuid.NewV4()}
+}
+
+// NewPopulatedUUID returns a populated UUID.
+func NewPopulatedUUID(r interface {
+	Int63() int64
+}) *UUID {
+	var u uuid.UUID
+	binary.LittleEndian.PutUint64(u[:8], uint64(r.Int63()))
+	binary.LittleEndian.PutUint64(u[8:], uint64(r.Int63()))
+	return &UUID{u}
 }
 
 // FromBytes delegates to "github.com/satori/go.uuid".FromBytes and wraps the

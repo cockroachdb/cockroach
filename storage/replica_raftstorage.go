@@ -20,6 +20,9 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -27,10 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 )
 
 // All calls to raft.RawNode require that an exclusive lock is held. All of the
@@ -390,7 +391,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	}
 	snapData.LogEntries = entries
 
-	data, err := proto.Marshal(&snapData)
+	data, err := protoutil.Marshal(&snapData)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}

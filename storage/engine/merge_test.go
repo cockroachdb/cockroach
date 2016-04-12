@@ -23,9 +23,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 var testtime = int64(-446061360000000000)
@@ -47,7 +49,7 @@ func gibberishString(n int) string {
 }
 
 func mustMarshal(m proto.Message) []byte {
-	b, err := proto.Marshal(m)
+	b, err := protoutil.Marshal(m)
 	if err != nil {
 		panic(err)
 	}

@@ -121,7 +121,7 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		return r, nil
 	}
 
-	return r, fmt.Errorf("unable to marshal value: %v", v)
+	return r, fmt.Errorf("unable to marshal %T: %v", v, v)
 }
 
 func errInfo() string {
