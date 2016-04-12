@@ -46,7 +46,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const cacheSize = 1 << 30 // 1 GB
 
-	db, stopper := setupMVCCInMemRocksDB(t, "iter_read_own_write")
+	db, stopper := mvccInMemRocksDBMaker.new(t, "iter_read_own_write")
 	defer stopper.Stop()
 
 	b := db.NewBatch()

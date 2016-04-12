@@ -52,7 +52,10 @@ func readAllFiles(pattern string) {
 	}
 }
 
-type engineMaker func(testing.TB, string) (Engine, *stop.Stopper)
+type engineMaker struct {
+	new    func(testing.TB, string) (Engine, *stop.Stopper)
+	suffix string
+}
 
 // setupMVCCData writes up to numVersions values at each of numKeys
 // keys. The number of versions written for each key is chosen
@@ -70,14 +73,14 @@ type engineMaker func(testing.TB, string) (Engine, *stop.Stopper)
 // the current directory as "mvcc_scan_<versions>_<keys>_<valueBytes>" (which
 // is also returned).
 func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *testing.B) (Engine, string, *stop.Stopper) {
-	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", numVersions, numKeys, valueBytes)
+	loc := fmt.Sprintf("mvcc_data_%d_%d_%d_%s", numVersions, numKeys, valueBytes, emk.suffix)
 
 	exists := true
 	if _, err := os.Stat(loc); os.IsNotExist(err) {
 		exists = false
 	}
 
-	eng, stopper := emk(b, loc)
+	eng, stopper := emk.new(b, loc)
 
 	if exists {
 		readAllFiles(filepath.Join(loc, "*"))
@@ -223,7 +226,7 @@ func runMVCCPut(emk engineMaker, valueSize int, b *testing.B) {
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
-	eng, stopper := emk(b, fmt.Sprintf("put_%d", valueSize))
+	eng, stopper := emk.new(b, fmt.Sprintf("mvcc_data_put_%d", valueSize))
 	defer stopper.Stop()
 
 	b.SetBytes(int64(valueSize))
@@ -245,7 +248,7 @@ func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
-	eng, stopper := emk(b, fmt.Sprintf("cput_%d", valueSize))
+	eng, stopper := emk.new(b, fmt.Sprintf("mvcc_data_cput_%d", valueSize))
 	defer stopper.Stop()
 
 	b.SetBytes(int64(valueSize))
@@ -259,6 +262,11 @@ func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *
 			}
 		}
 		expected = &value
+	} else {
+		eng.Iterate(NilKey, MVCCKeyMax, func(kv MVCCKeyValue) (bool, error) {
+			b.Fatal("underlying engine is not empty")
+			return false, nil
+		})
 	}
 
 	b.ResetTimer()
@@ -279,7 +287,7 @@ func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	stopper := stop.NewStopper()
-	eng, stopper := emk(b, fmt.Sprintf("batch_put_%d_%d", valueSize, batchSize))
+	eng, stopper := emk.new(b, fmt.Sprintf("mvcc_data_batch_put_%d_%d", valueSize, batchSize))
 	defer stopper.Stop()
 
 	b.SetBytes(int64(valueSize))
@@ -313,7 +321,7 @@ func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 
 // runMVCCMerge merges value into numKeys separate keys.
 func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing.B) {
-	eng, stopper := emk(b, fmt.Sprintf("merge_%d", numKeys))
+	eng, stopper := emk.new(b, fmt.Sprintf("mvcc_data_merge_%d", numKeys))
 	defer stopper.Stop()
 
 	// Precompute keys so we don't waste time formatting them at each iteration.
@@ -364,7 +372,7 @@ func BenchmarkMVCCMergeTimeSeries_RocksDB(b *testing.B) {
 	if err := value.SetProto(ts); err != nil {
 		b.Fatal(err)
 	}
-	runMVCCMerge(setupMVCCInMemRocksDB, &value, 1024, b)
+	runMVCCMerge(mvccInMemRocksDBMaker, &value, 1024, b)
 }
 
 func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
@@ -387,7 +395,7 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		if err := shutil.CopyTree(dir, locDirty, nil); err != nil {
 			b.Fatal(err)
 		}
-		dupEng, stopper := emk(b, locDirty)
+		dupEng, stopper := emk.new(b, locDirty)
 
 		b.StartTimer()
 		_, err := MVCCDeleteRange(dupEng, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
@@ -428,7 +436,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 	const cacheSize = 1 << 30 // 1 GB
 
-	rocksdb, stopper := setupMVCCInMemRocksDB(b, "put_delete")
+	rocksdb, stopper := mvccInMemRocksDBMaker.new(b, "put_delete")
 	defer stopper.Stop()
 
 	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
