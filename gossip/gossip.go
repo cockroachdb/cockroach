@@ -61,6 +61,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -70,8 +71,8 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -509,7 +510,7 @@ func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 // AddInfoProto adds or updates an info object. Returns an error if info
 // couldn't be added.
 func (g *Gossip) AddInfoProto(key string, msg proto.Message, ttl time.Duration) error {
-	bytes, err := proto.Marshal(msg)
+	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return err
 	}
