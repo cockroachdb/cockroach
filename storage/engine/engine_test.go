@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -64,6 +65,11 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	if err := l.Open(); err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		if err := os.RemoveAll(path); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	defer l.Close()
 	test(inMem, t)
 	test(l, t)
@@ -830,4 +836,47 @@ func verifyApproximateSize(keys []MVCCKey, engine Engine, sizePerRecord int, rat
 	if sz < minSize || sz > maxSize {
 		t.Errorf("ApproximateSize %d outside of acceptable bounds %d - %d", sz, minSize, maxSize)
 	}
+}
+
+func TestIteratorRegression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(tschottdorf): need to substitute rocksDBComparator for LMDB")
+
+	runWithAllEngines(func(eng Engine, t *testing.T) {
+		var kvs []MVCCKeyValue
+		for i, k := range []string{"test", "testz"} {
+			kv := MVCCKeyValue{
+				Key: MVCCKey{
+					Key:       roachpb.Key(k),
+					Timestamp: roachpb.ZeroTimestamp.Add(0, int32(1+i)),
+				},
+				Value: []byte("test"),
+			}
+			if err := eng.Put(kv.Key, kv.Value); err != nil {
+				t.Fatal(err)
+			}
+			kv.Value = nil
+			kvs = append(kvs, kv)
+		}
+
+		next := func(k MVCCKey) MVCCKey {
+			newK := k
+			newK.Key = k.Key.Next()
+			//newK.Timestamp = newK.Timestamp.Add(0, 1)
+			return newK
+		}
+
+		var seen []MVCCKeyValue
+		if err := eng.Iterate(next(kvs[0].Key), MVCCKeyMax, func(kv MVCCKeyValue) (bool, error) {
+			kv.Value = nil
+			seen = append(seen, kv)
+			return false, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		exp := kvs[1:]
+		if !reflect.DeepEqual(exp, seen) {
+			t.Errorf("expected %v, got %v", exp, seen)
+		}
+	}, t)
 }

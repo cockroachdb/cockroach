@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"reflect"
 	"testing"
 
@@ -14,6 +15,12 @@ import (
 func TestLMDBEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	path := util.CreateTempDir(t, ".lmdbtest")
+	defer func() {
+		if err := os.RemoveAll(path); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	l := NewLMDB(10485760, path)
 	if err := l.Open(); err != nil {
 		t.Fatal(err)

@@ -7,6 +7,8 @@ import (
 	"github.com/bmatsuo/lmdb-go/lmdb"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -43,6 +45,7 @@ func (l *LMDB) Open() error {
 	if err != nil {
 		_ = env.Close()
 	}
+	log.Infof("opening lmdb instance at %q (%s)", l.path, humanize.Bytes(uint64(l.size)))
 	l.env = env
 	return err
 }
