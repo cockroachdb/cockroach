@@ -405,8 +405,8 @@ func (r *Replica) EndTransaction(
 			// The transaction has already been aborted by other.
 			// Do not return TransactionAbortedError since the client anyway
 			// wanted to abort the transaction.
-			externalIntents, err := r.resolveExplicitIntents(batch, ms, args, reply.Txn)
-			if err != nil {
+			externalIntents := r.resolveExplicitIntents(batch, ms, args, reply.Txn)
+			if err := updateTxnWithExternalIntents(batch, ms, args, reply.Txn, externalIntents); err != nil {
 				return reply, nil, err
 			}
 			return reply, externalIntents, nil
@@ -469,8 +469,8 @@ func (r *Replica) EndTransaction(
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	externalIntents, err := r.resolveExplicitIntents(batch, ms, args, reply.Txn)
-	if err != nil {
+	externalIntents := r.resolveExplicitIntents(batch, ms, args, reply.Txn)
+	if err := updateTxnWithExternalIntents(batch, ms, args, reply.Txn, externalIntents); err != nil {
 		return reply, nil, err
 	}
 
@@ -505,12 +505,11 @@ func (r *Replica) EndTransaction(
 	return reply, externalIntents, nil
 }
 
-// resolveExplicitIntents resolve any explicit intents and persists e
-// transaction record with updated status. All that are local to this
-// range get resolved synchronously in the same batch. The remainder
-// are collected and returned so that they can be handed off to
-// asynchronous processing.
-func (r *Replica) resolveExplicitIntents(batch engine.Engine, ms *engine.MVCCStats, args roachpb.EndTransactionRequest, txn *roachpb.Transaction) ([]roachpb.Intent, error) {
+// resolveExplicitIntents resolve any explicit intents. All that are
+// local to this range get resolved synchronously in the same batch.
+// The remainder are collected and returned so that they can be handed
+// off to asynchronous processing.
+func (r *Replica) resolveExplicitIntents(batch engine.Engine, ms *engine.MVCCStats, args roachpb.EndTransactionRequest, txn *roachpb.Transaction) []roachpb.Intent {
 	desc := r.Desc()
 	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
@@ -567,28 +566,27 @@ func (r *Replica) resolveExplicitIntents(batch engine.Engine, ms *engine.MVCCSta
 			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err))
 		}
 	}
+	return externalIntents
+}
 
-	// Persist the transaction record with updated status (& possibly timestamp).
-	// If we've already resolved all intents locally, we actually delete the
-	// record right away - no use in keeping it around.
+// updateTxnWithExternalIntents persists the transaction record with
+// updated status (& possibly timestamp). If we've already resolved
+// all intents locally, we actually delete the record right away - no
+// use in keeping it around.
+func updateTxnWithExternalIntents(batch engine.Engine, ms *engine.MVCCStats, args roachpb.EndTransactionRequest, txn *roachpb.Transaction, externalIntents []roachpb.Intent) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	var err error
 	if txnAutoGC && len(externalIntents) == 0 {
 		if log.V(1) {
 			log.Infof("auto-gc'ed %s (%d intents)", txn.ID.Short(), len(args.IntentSpans))
 		}
-		err = engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
+		return engine.MVCCDelete(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 	} else {
 		txn.Intents = make([]roachpb.Span, len(externalIntents))
 		for i := range externalIntents {
 			txn.Intents[i] = externalIntents[i].Span
 		}
-		err = engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, txn)
+		return engine.MVCCPutProto(batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */, txn)
 	}
-	if err != nil {
-		return nil, err
-	}
-	return externalIntents, nil
 }
 
 // intersectSpan takes an intent and a descriptor. It then splits the
