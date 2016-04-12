@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 func TestDropDatabase(t *testing.T) {
@@ -71,7 +71,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	// Add a zone config for both the table and database.
 	cfg := config.DefaultZoneConfig()
-	buf, err := proto.Marshal(&cfg)
+	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	// Add a zone config for the table.
 	cfg := config.DefaultZoneConfig()
-	buf, err := proto.Marshal(&cfg)
+	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

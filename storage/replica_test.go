@@ -3884,7 +3884,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 
 	// Write the new descriptor as an intent.
-	data, err := proto.Marshal(&newDesc)
+	data, err := protoutil.Marshal(&newDesc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3997,7 +3997,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
-			data, err := proto.Marshal(&r)
+			data, err := protoutil.Marshal(&r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -4049,7 +4049,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 
 	// Write the new descriptor as an intent.
 	intentRange := testRanges[withIntentRangeIndex]
-	data, err := proto.Marshal(&intentRange)
+	data, err := protoutil.Marshal(&intentRange)
 	if err != nil {
 		t.Fatal(err)
 	}
