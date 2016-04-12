@@ -54,7 +54,11 @@ func (sd *storeDetail) markDead(foundDeadOn roachpb.Timestamp) {
 	sd.dead = true
 	sd.foundDeadOn = foundDeadOn
 	sd.timesDied++
-	log.Warningf("store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID)
+	if sd.desc != nil {
+		// sd.desc can still be nil if it was markedAlive and enqueue'd in getStoreDetailLocked
+		// and never markedAlive again.
+		log.Warningf("store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID)
+	}
 }
 
 // markAlive sets the storeDetail to alive(active) and saves the updated time
