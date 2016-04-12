@@ -189,8 +189,8 @@ check:
 	@! git grep -E 'time\.Now' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go:'
 	@echo "checking for os.Getenv calls (use envutil.EnvOrDefault*() instead)"
 	@! git grep -e 'os\.Getenv' -- '*.go' | grep -vE '^(util/(log|envutil)|acceptance/.*)/\w+\.go:'
-	@echo "checking for proto.Clone calls (use util.CloneProto instead)"
-	@! git grep -E '\.Clone\([^)]+\)' -- '*.go' | grep -vE '^util/clone_proto(_test)?\.go:'
+	@echo "checking for proto.Clone calls (use protoutil.Clone instead)"
+	@! git grep -E '\.Clone\([^)]+\)' -- '*.go' | grep -vF 'protoutil.Clone' | grep -vE '^util/protoutil/clone(_test)?\.go:'
 	@echo "checking for grpc.NewServer calls (use rpc.NewServer instead)"
 	@! git grep -E 'grpc\.NewServer\(\)' -- '*.go' | grep -vE '^rpc/context(_test)?\.go:'
 	@echo "checking for missing defer leaktest.AfterTest"
