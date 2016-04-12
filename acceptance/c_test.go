@@ -29,6 +29,7 @@ func TestDockerC(t *testing.T) {
 const c = `
 set -e
 cat > main.c << 'EOF'
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,6 +81,6 @@ main(int argc, char **argv)
 	return 0;
 }
 EOF
-gcc -lpq main.c
+gcc -std=c99 -I/usr/include/postgresql/ -lpq main.c
 ./a.out
 `
