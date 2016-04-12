@@ -45,6 +45,8 @@ const (
 	floatPos     = floatZero + 1
 	floatNaNDesc = floatPos + 1 // NaN encoded descendingly
 
+	// The gap between floatNaNDesc and bytesMarker was left for
+	// compatibility reasons.
 	bytesMarker          byte = 0x12
 	bytesDescMarker      byte = bytesMarker + 1
 	timeMarker           byte = bytesDescMarker + 1
