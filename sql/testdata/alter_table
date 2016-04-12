@@ -231,6 +231,30 @@ SELECT * from add_default WHERE a=5
 ----
 5 NULL
 
+# Add a column with a default current_timestamp
+statement ok
+ALTER TABLE add_default ADD COLUMN c TIMESTAMP DEFAULT current_timestamp
+
+query II
+SELECT a,b FROM add_default WHERE current_timestamp > c AND current_timestamp - c < interval '10s'
+----
+2 42
+3 10
+5 NULL
+
+# Add a column with a default transaction_timestamp()
+statement ok
+ALTER TABLE add_default ADD COLUMN d TIMESTAMP DEFAULT transaction_timestamp()
+
+query II
+SELECT a,b FROM add_default WHERE d > c AND d - c < interval '10s'
+----
+2 42
+3 10
+5 NULL
+
+# Test privileges.
+
 statement ok
 CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 
