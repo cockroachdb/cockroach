@@ -446,9 +446,9 @@ func (v *Value) SetDuration(t duration.Duration) error {
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *inf.Dec) error {
-	decSize := encoding.UpperBoundDecimalSize(dec)
-	v.RawBytes = make([]byte, headerSize, headerSize+decSize)
-	v.RawBytes = encoding.EncodeDecimalAscending(v.RawBytes, dec)
+	encodingSizeOverestimate := headerSize + encoding.OverestimateDecimalSize(dec)
+	v.RawBytes = make([]byte, encodingSizeOverestimate)
+	v.RawBytes = encoding.EncodeDecimalAscending(v.RawBytes[:headerSize], dec)
 	v.setTag(ValueType_DECIMAL)
 	return nil
 }

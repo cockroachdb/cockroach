@@ -371,13 +371,13 @@ func TestDecodeInvalid(t *testing.T) {
 		},
 		{
 			name:    "Decimal, malformed uvarint",
-			buf:     []byte{decimalPosValPosExp},
+			buf:     []byte{decimalPosLarge},
 			pattern: "insufficient bytes to decode uvarint value",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalAscending(b, nil); return err },
 		},
 		{
 			name:    "DecimalDescending, malformed uvarint",
-			buf:     []byte{decimalPosValPosExp},
+			buf:     []byte{decimalPosLarge},
 			pattern: "insufficient bytes to decode uvarint value",
 			decode:  func(b []byte) error { _, _, err := DecodeDecimalDescending(b, nil); return err },
 		},
