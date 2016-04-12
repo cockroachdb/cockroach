@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -844,7 +845,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		} else if i == 5 {
 			txn = txn2
 		}
-		v := *util.CloneProto(&kv.Value).(*roachpb.Value)
+		v := *protoutil.Clone(&kv.Value).(*roachpb.Value)
 		v.Timestamp = roachpb.ZeroTimestamp
 		if err := MVCCPut(engine, nil, kv.Key, kv.Value.Timestamp, v, txn); err != nil {
 			t.Fatal(err)
@@ -3008,7 +3009,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					}
 					continue
 				}
-				valCpy := *util.CloneProto(&val).(*roachpb.Value)
+				valCpy := *protoutil.Clone(&val).(*roachpb.Value)
 				valCpy.Timestamp = roachpb.ZeroTimestamp
 				if err := MVCCPut(engine, ms, test.key, val.Timestamp, valCpy, nil); err != nil {
 					t.Fatal(err)
@@ -3117,7 +3118,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 
 	for _, test := range testData {
 		for _, val := range test.vals {
-			valCpy := *util.CloneProto(&val).(*roachpb.Value)
+			valCpy := *protoutil.Clone(&val).(*roachpb.Value)
 			valCpy.Timestamp = roachpb.ZeroTimestamp
 			if err := MVCCPut(engine, nil, test.key, val.Timestamp, valCpy, nil); err != nil {
 				t.Fatal(err)

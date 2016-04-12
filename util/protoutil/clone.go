@@ -14,7 +14,7 @@
 //
 // Author: Tamir Duberstein (tamird@gmail.com)
 
-package util
+package protoutil
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func init() {
 	types.known = make(map[typeKey]bool)
 }
 
-// CloneProto uses proto.Clone to return a deep copy of pb. It panics if pb
+// Clone uses proto.Clone to return a deep copy of pb. It panics if pb
 // recursively contains any instances of types which are known to be
 // unsupported by proto.Clone.
 //
@@ -54,7 +54,7 @@ func init() {
 //
 // The concrete case against which this is currently guarding may be resolved
 // upstream, see https://github.com/gogo/protobuf/issues/147.
-func CloneProto(pb proto.Message) proto.Message {
+func Clone(pb proto.Message) proto.Message {
 	for _, verbotenKind := range verbotenKinds {
 		if v := findVerboten(reflect.ValueOf(pb), verbotenKind); v != nil {
 			panic(fmt.Sprintf("attempt to clone %+v, which contains %+v", pb, v))
