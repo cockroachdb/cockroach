@@ -21,12 +21,19 @@
 package encoding
 
 import (
-	"math"
+	"math/big"
+	"strconv"
 	"unsafe"
 
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util"
+)
+
+var (
+	bigInt10   = big.NewInt(10)
+	bigInt100  = big.NewInt(100)
+	bigInt1000 = big.NewInt(1000)
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal
@@ -440,14 +447,356 @@ func decodeLargeNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, 
 	return int(ex), m, r[idx+1:], tmp, nil
 }
 
-var log2Of100 = math.Log2(100)
+// EncodeNonsortingDecimal returns the resulting byte slice with the
+// encoded decimal appended to b. The encoding is limited compared to
+// standard encodings in this package in that
+// - It will not sort lexicographical
+// - It does not encode its length or terminate itself, so decoding
+//   functions must be provided the exact encoded bytes
+//
+// The encoding assumes that any number can be written as ±0.xyz... * 10^exp,
+// where xyz is a digit string, x != 0, and the last decimal in xyz is also
+// not 0.
+//
+// The encoding uses its first byte to split decimals into 7 distinct
+// ordered groups (no NaN or Infinity support yet). The groups can
+// be seen in encoding.go's const definition. Following this, the
+// absolute value of the exponent of the decimal (as defined above)
+// is encoded as an unsigned varint. Second, the absolute value of
+// the digit string is added as a big-endian byte slice.
+//
+// All together, the encoding looks like:
+//   <marker><uvarint exponent><big-endian encoded big.Int>.
+//
+// The markers are shared with the sorting decimal encoding as follows:
+//  decimalNaN              -> decimalNaN
+//  decimalNegativeInfinity -> decimalNegativeInfinity
+//  decimalNegLarge         -> decimalNegValPosExp
+//  decimalNegMedium        -> decimalNegValZeroExp
+//  decimalNegSmall         -> decimalNegValNegExp
+//  decimalZero             -> decimalZero
+//  decimalPosSmall         -> decimalPosValNegExp
+//  decimalPosMedium        -> decimalPosValZeroExp
+//  decimalPosLarge         -> decimalPosValPosExp
+//  decimalInfinity         -> decimalInfinity
+//  decimalNaNDesc          -> decimalNaNDesc
+//
+func EncodeNonsortingDecimal(b []byte, d *inf.Dec) []byte {
+	tmp := b[len(b):]
+	neg := false
+	bi := d.UnscaledBig()
+	switch bi.Sign() {
+	case -1:
+		neg = true
 
-// OverestimateDecimalSize overestimates the size of the encoded decimal.
-func OverestimateDecimalSize(d *inf.Dec) int {
+		// Make a deep copy of the decimal's big.Int by calling Neg.
+		// We shouldn't be modifying the provided argument's
+		// internal big.Int, so this works like a copy-on-write scheme.
+		bi = new(big.Int)
+		bi = bi.Neg(d.UnscaledBig())
+	case 0:
+		return append(b, decimalZero)
+	}
+
+	// Determine the exponent of the decimal, with the
+	// exponent defined as .xyz * 10^exp.
+	nDigits, formatted := numDigits(bi, tmp)
+	e := nDigits - int(d.Scale())
+
+	// Handle big.Int having zeros at the end of its
+	// string by dividing them off (ie. 12300 -> 123).
+	bi = normalizeBigInt(bi, bi == d.UnscaledBig(), formatted, tmp)
+	bNat := bi.Bits()
+
+	var buf []byte
+	if n := UpperBoundNonsortingDecimalSize(d); n <= cap(b)-len(b) {
+		// We append the marker directly to the input buffer b below, so
+		// we are off by 1 for each of these, which explains the adjustments.
+		buf = b[len(b)+1 : len(b)+1]
+	} else {
+		buf = make([]byte, 0, n-1)
+	}
+
+	switch {
+	case neg && e > 0:
+		b = append(b, decimalNegLarge)
+		buf = encodeNonsortingDecimalValue(uint64(e), bNat, buf)
+		return append(b, buf...)
+	case neg && e == 0:
+		b = append(b, decimalNegMedium)
+		buf = encodeNonsortingDecimalValueWithoutExp(bNat, buf)
+		return append(b, buf...)
+	case neg && e < 0:
+		b = append(b, decimalNegSmall)
+		buf = encodeNonsortingDecimalValue(uint64(-e), bNat, buf)
+		return append(b, buf...)
+	case !neg && e < 0:
+		b = append(b, decimalPosSmall)
+		buf = encodeNonsortingDecimalValue(uint64(-e), bNat, buf)
+		return append(b, buf...)
+	case !neg && e == 0:
+		b = append(b, decimalPosMedium)
+		buf = encodeNonsortingDecimalValueWithoutExp(bNat, buf)
+		return append(b, buf...)
+	case !neg && e > 0:
+		b = append(b, decimalPosLarge)
+		buf = encodeNonsortingDecimalValue(uint64(e), bNat, buf)
+		return append(b, buf...)
+	}
+	panic("unreachable")
+}
+
+// encodeNonsortingDecimalValue encodes the absolute value of a decimal's
+// exponent and slice of digit bytes into buf, returning the populated buffer
+// after encoding. The function first encodes the the absolute value of a
+// decimal's exponent as an unsigned varint. Following this, it copies the
+// decimal's big-endian digits themselves into the buffer.
+func encodeNonsortingDecimalValue(exp uint64, digits []big.Word, buf []byte) []byte {
+	// Encode the exponent using a Uvarint.
+	buf = EncodeUvarintAscending(buf, exp)
+
+	// Encode the digits into the end of the byte slice.
+	return copyWords(buf, digits)
+}
+
+func encodeNonsortingDecimalValueWithoutExp(digits []big.Word, buf []byte) []byte {
+	// Encode the digits into the end of the byte slice.
+	return copyWords(buf, digits)
+}
+
+// normalizeBigInt divides off all trailing zeros from the provided big.Int.
+// It will only modify the provided big.Int if copyOnWrite is not set, and
+// it will use the formatted representation of the big.Int if it is provided.
+func normalizeBigInt(bi *big.Int, copyOnWrite bool, formatted, tmp []byte) *big.Int {
+	tens := 0
+	if formatted != nil {
+		tens = trailingZerosFromBytes(formatted)
+	} else {
+		tens = trailingZeros(bi, tmp)
+	}
+	if tens > 0 {
+		// If the decimal's big.Int hasn't been copied already, copy
+		// it now because we will be modifying it.
+		from := bi
+		if copyOnWrite {
+			bi = new(big.Int)
+		}
+
+		var div *big.Int
+		switch tens {
+		case 1:
+			div = bigInt10
+		case 2:
+			div = bigInt100
+		case 3:
+			div = bigInt1000
+		default:
+			div = big.NewInt(10)
+			pow := big.NewInt(int64(tens))
+			div.Exp(div, pow, nil)
+		}
+		bi.Div(from, div)
+	}
+	return bi
+}
+
+// DecodeNonsortingDecimal returns the decoded decimal from buf encoded with
+// EncodeNonsortingDecimal. buf is assumed to contain only the encoded decimal,
+// as the function does not know from the encoding itself what the length
+// of the encoded value is.
+func DecodeNonsortingDecimal(buf []byte, tmp []byte) (*inf.Dec, error) {
+	switch {
+	// TODO(nvanbenschoten) These cases are left unimplemented until we add support for
+	// Infinity and NaN Decimal values.
+	// case buf[0] == decimalNaN:
+	// case buf[0] == decimalNegativeInfinity:
+	// case buf[0] == decimalInfinity:
+	// case buf[0] == decimalNaNDesc:
+	case buf[0] == decimalZero:
+		return inf.NewDec(0, 0), nil
+	}
+
+	dec := new(inf.Dec)
+	switch {
+	case buf[0] == decimalNegLarge:
+		if err := decodeNonsortingDecimalValue(dec, false, buf[1:], tmp); err != nil {
+			return nil, err
+		}
+		dec.UnscaledBig().Neg(dec.UnscaledBig())
+		return dec, nil
+	case buf[0] == decimalNegMedium:
+		decodeNonsortingDecimalValueWithoutExp(dec, buf[1:], tmp)
+		dec.UnscaledBig().Neg(dec.UnscaledBig())
+		return dec, nil
+	case buf[0] == decimalNegSmall:
+		if err := decodeNonsortingDecimalValue(dec, true, buf[1:], tmp); err != nil {
+			return nil, err
+		}
+		dec.UnscaledBig().Neg(dec.UnscaledBig())
+		return dec, nil
+	case buf[0] == decimalPosSmall:
+		if err := decodeNonsortingDecimalValue(dec, true, buf[1:], tmp); err != nil {
+			return nil, err
+		}
+		return dec, nil
+	case buf[0] == decimalPosMedium:
+		decodeNonsortingDecimalValueWithoutExp(dec, buf[1:], tmp)
+		return dec, nil
+	case buf[0] == decimalPosLarge:
+		if err := decodeNonsortingDecimalValue(dec, false, buf[1:], tmp); err != nil {
+			return nil, err
+		}
+		return dec, nil
+	default:
+		return nil, util.Errorf("unknown prefix of the encoded byte slice: %q", buf)
+	}
+}
+
+func decodeNonsortingDecimalValue(dec *inf.Dec, negExp bool, buf, tmp []byte) error {
+	// Decode the exponent.
+	buf, e, err := DecodeUvarintAscending(buf)
+	if err != nil {
+		return err
+	}
+	if negExp {
+		e = -e
+	}
+
+	bi := dec.UnscaledBig()
+	bi.SetBytes(buf)
+
+	// Set the decimal's scale.
+	nDigits, _ := numDigits(bi, tmp)
+	exp := int(e) - nDigits
+	dec.SetScale(inf.Scale(-exp))
+	return nil
+}
+
+func decodeNonsortingDecimalValueWithoutExp(dec *inf.Dec, buf, tmp []byte) {
+	bi := dec.UnscaledBig()
+	bi.SetBytes(buf)
+
+	// Set the decimal's scale.
+	nDigits, _ := numDigits(bi, tmp)
+	dec.SetScale(inf.Scale(nDigits))
+}
+
+// UpperBoundNonsortingDecimalSize returns the upper bound number of bytes
+// that the decimal will need for the non-sorting encoding.
+func UpperBoundNonsortingDecimalSize(d *inf.Dec) int {
 	// Makeup of upper bound size:
 	// - 1 byte for the prefix
 	// - maxVarintSize for the exponent
-	// - ceil(bitLen / log2(100)) for the mantissa
-	// - 1 byte for the suffix
-	return 2 + maxVarintSize + int(float64(d.UnscaledBig().BitLen())/log2Of100+1)
+	// - wordLen for the big.Int bytes
+	return 1 + maxVarintSize + wordLen(d.UnscaledBig().Bits())
+}
+
+// Taken from math/big/arith.go.
+const bigWordSize = int(unsafe.Sizeof(big.Word(0)))
+
+func wordLen(nat []big.Word) int {
+	return len(nat) * bigWordSize
+}
+
+// copyWords was adapted from math/big/nat.go. It writes the value of
+// nat into buf using big-endian encoding. len(buf) must be >= len(nat)*bigWordSize.
+func copyWords(buf []byte, nat []big.Word) []byte {
+	// Omit leading zeros from the resulting byte slice, which is both
+	// safe and exactly what big.Int.Bytes() does. See big.nat.setBytes()
+	// and big.nat.norm() for how this is normalized on decoding.
+	leading := true
+	for w := len(nat) - 1; w >= 0; w-- {
+		d := nat[w]
+		for j := bigWordSize - 1; j >= 0; j-- {
+			by := byte(d >> (8 * big.Word(j)))
+			if by == 0 && leading {
+				continue
+			}
+			leading = false
+			buf = append(buf, by)
+		}
+	}
+	return buf
+}
+
+// digitsLookupTable is used to map binary digit counts to their corresponding
+// decimal border values. The map relies on the proof that (without leading zeros)
+// for any given number of binary digits r, such that the number represented is
+// between 2^r and 2^(r+1)-1, there are only two possible decimal digit counts
+// k and k+1 that the binary r digits could be representing.
+//
+// Using this proof, for a given digit count, the map will return the lower number
+// of decimal digits (k) the binary digit count could represenent, along with the
+// value of the border between the two decimal digit counts (10^k).
+const tableSize = 128
+
+var digitsLookupTable [tableSize + 1]tableVal
+
+type tableVal struct {
+	digits int
+	border big.Int
+}
+
+func init() {
+	curVal := big.NewInt(1)
+	curExp := new(big.Int)
+	for i := 1; i <= tableSize; i++ {
+		if i > 1 {
+			curVal.Lsh(curVal, 1)
+		}
+
+		elem := &digitsLookupTable[i]
+		elem.digits = len(curVal.String())
+
+		elem.border.SetInt64(10)
+		curExp.SetInt64(int64(elem.digits))
+		elem.border.Exp(&elem.border, curExp, nil)
+	}
+}
+
+func lookupBits(bitLen int) (tableVal, bool) {
+	if bitLen > 0 && bitLen < len(digitsLookupTable) {
+		return digitsLookupTable[bitLen], true
+	}
+	return tableVal{}, false
+}
+
+// numDigits returns the number of decimal digits that make up
+// big.Int value. The function first attempts to look this digit
+// count up in the digitsLookupTable. If the value is not there,
+// it defaults to constructing a string value for the big.Int and
+// using this to determine the number of digits. If a string value
+// is constructed, it will be returned so it can be used again.
+func numDigits(bi *big.Int, tmp []byte) (int, []byte) {
+	if val, ok := lookupBits(bi.BitLen()); ok {
+		if bi.Cmp(&val.border) < 0 {
+			return val.digits, nil
+		}
+		return val.digits + 1, nil
+	}
+	bs := bi.Append(tmp, 10)
+	return len(bs), bs
+}
+
+// trailingZeros counts the number of trailing zeros in the
+// big.Int value. It first attempts to use an unsigned integer
+// representation of the big.Int to compute this because it is
+// roughly 8x faster. If this unsigned integer would overflow,
+// it falls back to formatting the big.Int itself.
+func trailingZeros(bi *big.Int, tmp []byte) int {
+	if bi.BitLen() <= 64 {
+		i := bi.Uint64()
+		bs := strconv.AppendUint(tmp, i, 10)
+		return trailingZerosFromBytes(bs)
+	}
+	bs := bi.Append(tmp, 10)
+	return trailingZerosFromBytes(bs)
+}
+
+func trailingZerosFromBytes(bs []byte) int {
+	tens := 0
+	for bs[len(bs)-1-tens] == '0' {
+		tens++
+	}
+	return tens
 }
