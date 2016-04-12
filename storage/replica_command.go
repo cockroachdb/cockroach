@@ -307,7 +307,7 @@ func (r *Replica) ReverseScan(batch engine.Engine, h roachpb.Header, remScanResu
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 	if h.Txn == nil {
-		return util.Errorf("no transaction specified to HeartbeatTxn")
+		return util.Errorf("no transaction specified to %s", args.Method())
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
 		return util.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)

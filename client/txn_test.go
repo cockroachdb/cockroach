@@ -18,7 +18,6 @@ package client
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -74,9 +73,8 @@ func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse,
 			args := req.GetInner()
 			if _, ok := args.(*roachpb.PutRequest); ok {
 				testPutRespCopy := testPutResp
-				if union := &br.Responses[i]; !union.SetInner(&testPutRespCopy) {
-					panic(fmt.Sprintf("%T excludes %T", union, testPutRespCopy))
-				}
+				union := &br.Responses[i] // avoid operating on copy
+				union.MustSetInner(&testPutRespCopy)
 			}
 			if roachpb.IsTransactionWrite(args) {
 				writing = true
