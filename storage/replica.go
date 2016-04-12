@@ -31,7 +31,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
@@ -47,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -1240,7 +1240,7 @@ func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pending
 		return util.Errorf("can't propose Raft command with zero timestamp")
 	}
 
-	data, err := proto.Marshal(&p.raftCmd)
+	data, err := protoutil.Marshal(&p.raftCmd)
 	if err != nil {
 		return err
 	}
@@ -1261,7 +1261,7 @@ func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pending
 				Payload:   data,
 				Replica:   crt.Replica,
 			}
-			encodedCtx, err := ctx.Marshal()
+			encodedCtx, err := protoutil.Marshal(&ctx)
 			if err != nil {
 				return err
 			}
@@ -1576,9 +1576,11 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 // returns the batch containing the results. The caller is responsible
 // for committing the batch, even on error.
 func (r *Replica) applyRaftCommandInBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, originReplica roachpb.ReplicaDescriptor,
-	ba roachpb.BatchRequest) (
-	engine.Engine, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	originReplica roachpb.ReplicaDescriptor,
+	ba roachpb.BatchRequest,
+) (engine.Engine, engine.MVCCStats, *roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).

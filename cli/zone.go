@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 func unmarshalProto(val driver.Value, msg proto.Message) error {
@@ -477,7 +478,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	buf, err := proto.Marshal(zone)
+	buf, err := protoutil.Marshal(zone)
 	if err != nil {
 		return fmt.Errorf("unable to parse zone config file %q: %s", args[1], err)
 	}

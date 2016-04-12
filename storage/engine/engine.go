@@ -22,6 +22,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 // Iterator is an interface for iterating over key/value pairs in an
@@ -186,7 +187,7 @@ type Stats struct {
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
 func PutProto(engine Engine, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
-	bytes, err := proto.Marshal(msg)
+	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
 	}

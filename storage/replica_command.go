@@ -38,9 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/gogo/protobuf/proto"
 )
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
@@ -1614,7 +1614,7 @@ func (r *Replica) sha512(desc roachpb.RangeDescriptor, snap engine.Engine, snaps
 		if _, err := hasher.Write(key.Key); err != nil {
 			return nil, err
 		}
-		timestamp, err := key.Timestamp.Marshal()
+		timestamp, err := protoutil.Marshal(&key.Timestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -2426,13 +2426,13 @@ func updateRangeDescriptor(b *client.Batch, descKey roachpb.Key, oldDesc, newDes
 	// we're careful to construct an interface{}(nil) when oldDesc is nil.
 	var oldValue interface{}
 	if oldDesc != nil {
-		oldBytes, err := proto.Marshal(oldDesc)
+		oldBytes, err := protoutil.Marshal(oldDesc)
 		if err != nil {
 			return err
 		}
 		oldValue = oldBytes
 	}
-	newValue, err := proto.Marshal(newDesc)
+	newValue, err := protoutil.Marshal(newDesc)
 	if err != nil {
 		return err
 	}
