@@ -82,3 +82,28 @@ CREATE TABLE b.a (id INT PRIMARY KEY)
 query I
 SELECT * FROM b.a
 ----
+
+user testuser
+
+statement error only root is allowed to create databases
+CREATE DATABASE privs
+
+user root
+
+statement ok
+CREATE DATABASE privs
+
+user testuser
+
+statement error user testuser does not have DROP privilege on database privs
+DROP DATABASE privs
+
+user root
+
+statement ok
+GRANT DROP ON DATABASE privs TO testuser
+
+user testuser
+
+statement ok
+DROP DATABASE privs
