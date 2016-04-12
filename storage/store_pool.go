@@ -18,6 +18,7 @@ package storage
 
 import (
 	"container/heap"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -275,16 +276,25 @@ func (sp *StorePool) deadReplicas(repls []roachpb.ReplicaDescriptor) []roachpb.R
 	return deadReplicas
 }
 
-// stat provides a running sample size and mean.
+// stat provides a running sample size and running stats.
 type stat struct {
-	n, mean float64
+	n, mean, s float64
 }
 
-// Update adds the specified value to the stat, augmenting the sample
-// size & mean.
+// Update adds the specified value to the stat, augmenting the running stats.
 func (s *stat) update(x float64) {
 	s.n++
+	oldMean := s.mean
 	s.mean += (x - s.mean) / s.n
+
+	// Update variable used to calculate running standard deviation. See: Knuth
+	// TAOCP, vol 2, 3rd ed, page 232.
+	s.s = s.s + (x-oldMean)*(x-s.mean)
+}
+
+// stddev returns the running standard deviation.
+func (s *stat) stddev() float64 {
+	return math.Sqrt(s.s / (s.n - 1))
 }
 
 // StoreList holds a list of store descriptors and associated count and used
@@ -292,6 +302,11 @@ func (s *stat) update(x float64) {
 type StoreList struct {
 	stores      []*roachpb.StoreDescriptor
 	count, used stat
+
+	// candidateCount tracks range count stats for stores that are eligible to
+	// be rebalance targets (their used capacity percentage must be lower than
+	// maxFractionUsedThreshold).
+	candidateCount stat
 }
 
 // add includes the store descriptor to the list of stores and updates
@@ -300,6 +315,9 @@ func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
 	sl.stores = append(sl.stores, s)
 	sl.count.update(float64(s.Capacity.RangeCount))
 	sl.used.update(s.Capacity.FractionUsed())
+	if s.Capacity.FractionUsed() <= maxFractionUsedThreshold {
+		sl.candidateCount.update(float64(s.Capacity.RangeCount))
+	}
 }
 
 // GetStoreList returns a storeList that contains all active stores that

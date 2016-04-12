@@ -354,51 +354,6 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	}
 }
 
-// TestAllocatorRandomAllocation verifies that allocations bias
-// towards least loaded stores.
-func TestAllocatorRandomAllocation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
-	defer stopper.Stop()
-
-	stores := []*roachpb.StoreDescriptor{
-		{
-			StoreID:  1,
-			Node:     roachpb.NodeDescriptor{NodeID: 1},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200},
-		},
-		{
-			StoreID:  2,
-			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 150},
-		},
-		{
-			StoreID:  3,
-			Node:     roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 50},
-		},
-		{
-			StoreID:  4,
-			Node:     roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 0},
-		},
-	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
-
-	// Every allocation will randomly choose 3 of the 4, meaning either
-	// store 1 or store 2 will be chosen, as the least loaded of the
-	// three random choices is returned.
-	for i := 0; i < 10; i++ {
-		result, err := a.AllocateTarget(roachpb.Attributes{}, []roachpb.ReplicaDescriptor{}, false, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if result.StoreID != 1 && result.StoreID != 2 {
-			t.Errorf("expected store 1 or 2; got %d", result.StoreID)
-		}
-	}
-}
-
 // TestAllocatorRebalance verifies that rebalance targets are chosen
 // randomly from amongst stores over the minAvailCapacityThreshold.
 func TestAllocatorRebalance(t *testing.T) {
@@ -410,22 +365,42 @@ func TestAllocatorRebalance(t *testing.T) {
 		{
 			StoreID:  1,
 			Node:     roachpb.NodeDescriptor{NodeID: 1},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 1},
 		},
 		{
 			StoreID:  2,
 			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50, RangeCount: 1},
 		},
 		{
-			StoreID:  3,
-			Node:     roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100 - int64(100*maxFractionUsedThreshold)},
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{
+				Capacity:   100,
+				Available:  100 - int64(100*maxFractionUsedThreshold),
+				RangeCount: 5,
+			},
 		},
 		{
-			StoreID:  4,
-			Node:     roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: (100 - int64(100*maxFractionUsedThreshold)) / 2},
+			// This store must not be rebalanced to, because it's too full.
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{
+				Capacity:   100,
+				Available:  (100 - int64(100*maxFractionUsedThreshold)) / 2,
+				RangeCount: 10,
+			},
+		},
+		{
+			// This store will not be rebalanced to, because it already has more
+			// replias than the mean range count.
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{
+				Capacity:   100,
+				Available:  100,
+				RangeCount: 10,
+			},
 		},
 	}
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
@@ -446,55 +421,6 @@ func TestAllocatorRebalance(t *testing.T) {
 	for i, store := range stores {
 		result := a.ShouldRebalance(store.StoreID)
 		if expResult := (i >= 2); expResult != result {
-			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
-		}
-	}
-}
-
-// TestAllocatorRebalance verifies that only rebalance targets within
-// a standard deviation of the mean are chosen.
-func TestAllocatorRebalanceByCapacity(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
-	defer stopper.Stop()
-
-	stores := []*roachpb.StoreDescriptor{
-		{
-			StoreID:  1,
-			Node:     roachpb.NodeDescriptor{NodeID: 1},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
-		},
-		{
-			StoreID:  2,
-			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
-		},
-		{
-			StoreID:  3,
-			Node:     roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50},
-		},
-		{
-			StoreID:  4,
-			Node:     roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 80},
-		},
-	}
-	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
-
-	// Every rebalance target must be store 4 (if not nil).
-	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(1, roachpb.Attributes{}, []roachpb.ReplicaDescriptor{})
-		if result != nil && result.StoreID != 4 {
-			t.Errorf("expected store 4; got %d", result.StoreID)
-		}
-	}
-
-	// Verify ShouldRebalance results.
-	a.options.Deterministic = true
-	for i, store := range stores {
-		result := a.ShouldRebalance(store.StoreID)
-		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
 	}
@@ -597,12 +523,12 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		{
 			StoreID:  3,
 			Node:     roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 60, RangeCount: 10},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 60, RangeCount: 15},
 		},
 		{
 			StoreID:  4,
 			Node:     roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 5},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 65, RangeCount: 10},
 		},
 	}
 	sg := gossiputil.NewStoreGossiper(g)
@@ -613,40 +539,6 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a, e := targetRepl, replicas[2]; a != e {
-		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
-	}
-
-	// Setup the stores again so that store 2 is the worst, but with very low
-	// used capacity to force the range count criteria to be used.
-	stores = []*roachpb.StoreDescriptor{
-		{
-			StoreID:  1,
-			Node:     roachpb.NodeDescriptor{NodeID: 1},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
-		},
-		{
-			StoreID:  2,
-			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 18},
-		},
-		{
-			StoreID:  3,
-			Node:     roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 10},
-		},
-		{
-			StoreID:  4,
-			Node:     roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100, RangeCount: 5},
-		},
-	}
-	sg.GossipStores(stores, t)
-
-	targetRepl, err = a.RemoveTarget(replicas)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := targetRepl, replicas[1]; a != e {
 		t.Fatalf("RemoveTarget did not select expected replica; expected %v, got %v", e, a)
 	}
 }
@@ -1213,54 +1105,54 @@ func Example_rebalancing() {
 
 	// Output:
 	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 976 000 284 734 000 000 000 000 000 000 999 000 000 000 000 000 000 000 000 000
-	// 336 148 196 651 000 999 000 000 000 652 628 000 000 717 000 613 422 297 507 000
-	// 462 470 391 464 999 589 428 135 211 540 681 481 000 237 306 314 291 157 165 343
-	// 411 355 666 657 863 537 999 295 588 551 796 645 461 209 872 710 422 501 528 664
-	// 603 496 683 497 970 537 983 500 739 584 861 461 624 588 999 826 572 429 595 596
-	// 640 538 646 566 822 565 899 646 666 621 823 603 558 604 999 821 511 625 581 518
-	// 636 584 824 643 856 576 898 726 832 837 842 665 605 768 999 989 637 833 619 630
-	// 695 600 897 714 867 578 954 718 821 755 963 755 646 765 999 961 764 799 637 690
-	// 838 655 967 705 908 621 953 747 874 782 973 753 734 707 999 993 741 852 691 733
-	// 823 663 903 627 826 673 999 740 832 795 899 717 673 683 944 952 743 877 709 658
-	// 866 721 909 618 836 719 999 735 870 732 896 693 697 684 939 907 823 874 695 651
-	// 929 773 954 693 798 746 999 732 936 744 873 717 718 672 857 853 838 829 710 697
-	// 894 834 985 707 823 708 999 703 938 704 874 746 721 662 831 842 853 818 717 697
-	// 875 827 999 678 843 674 918 687 890 679 882 710 677 695 859 808 836 768 725 673
-	// 855 805 999 677 893 718 991 709 922 704 925 709 729 740 856 797 876 803 712 723
-	// 882 863 989 724 924 798 999 756 962 766 935 721 739 768 887 859 891 837 713 768
-	// 958 883 970 718 965 815 999 746 978 777 976 790 815 772 867 846 890 872 764 787
-	// 892 878 928 720 920 784 999 723 926 754 922 736 752 750 808 795 828 840 752 764
-	// 868 867 937 743 906 784 999 729 904 748 952 714 759 742 841 828 855 853 756 760
-	// 853 892 900 741 902 797 999 740 882 743 927 739 736 754 844 845 842 841 752 763
-	// 861 913 898 802 902 835 999 741 911 776 940 768 737 788 897 885 883 852 780 833
-	// 884 923 898 799 931 835 999 786 957 795 987 816 758 780 909 863 879 886 793 858
-	// 875 910 873 786 947 808 999 782 951 756 967 815 740 792 919 842 864 866 799 839
-	// 865 900 884 844 926 822 999 814 963 763 952 844 796 812 923 861 864 857 841 875
-	// 846 902 861 876 914 863 999 835 916 785 931 846 868 844 901 872 853 881 847 882
-	// 926 939 927 903 923 910 993 881 915 870 999 890 910 895 939 944 928 918 894 936
-	// 938 938 922 898 944 900 973 917 921 882 999 906 917 925 915 959 959 951 882 908
-	// 944 959 935 911 931 896 951 953 930 901 999 911 946 937 920 944 966 956 892 921
-	// 924 977 930 920 955 884 984 977 905 901 999 915 928 950 923 960 969 931 915 911
-	// 927 970 937 923 953 897 946 952 886 891 999 919 885 934 910 962 946 917 925 912
-	// 949 979 915 940 952 929 968 963 890 888 999 931 881 941 912 951 940 921 909 914
-	// 972 999 929 956 946 944 984 996 941 938 981 960 915 935 918 974 972 931 921 940
-	// 945 983 935 946 962 952 999 993 947 905 956 946 891 941 925 984 950 921 926 909
-	// 958 973 972 954 969 966 999 976 952 911 943 968 891 959 929 995 948 931 940 978
-	// 967 949 957 979 971 979 979 981 959 941 933 977 883 970 918 999 960 934 944 978
-	// 992 967 980 977 995 964 991 999 964 955 935 987 923 957 920 993 960 933 955 985
-	// 982 988 987 975 993 958 991 999 950 943 946 978 943 976 931 988 979 936 938 984
-	// 956 972 971 953 999 942 975 975 946 948 936 958 934 958 928 969 985 929 935 971
-	// 968 968 978 946 999 974 967 976 968 944 943 967 947 964 943 986 994 952 949 973
-	// 978 971 990 931 978 981 967 971 980 958 960 975 949 955 928 982 999 933 947 961
-	// 970 973 972 919 977 988 958 952 957 944 973 989 947 955 914 967 999 937 933 961
-	// 968 975 953 929 996 999 950 939 948 956 980 966 945 973 915 965 991 936 948 973
-	// 956 958 928 936 980 999 922 933 943 959 964 956 929 953 903 973 967 926 953 939
-	// 951 952 930 923 970 999 933 928 940 959 980 939 922 963 922 974 970 934 937 940
-	// 957 960 938 924 964 999 928 936 948 981 998 964 940 979 942 978 985 944 947 954
-	// 969 961 928 936 955 996 911 942 942 986 999 952 941 974 955 974 980 934 931 957
-	// 964 961 934 938 938 992 918 933 933 972 999 949 935 981 951 975 975 930 929 942
-	// 971 961 931 936 947 999 933 934 929 970 997 958 937 978 955 962 956 946 937 935
-	// 972 966 916 945 931 996 940 929 924 961 999 965 935 988 958 961 946 951 940 928
-	// Total bytes=990773690, ranges=1903
+	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
+	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
+	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
+	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
+	// 999 000 000 000 000 000 000 000 000 000 045 140 000 000 000 000 000 105 000 000
+	// 999 014 143 000 000 000 000 039 017 000 112 071 000 088 009 000 097 134 000 151
+	// 999 196 213 000 000 000 143 098 210 039 262 260 077 139 078 087 237 316 281 267
+	// 999 394 368 391 000 393 316 356 364 263 474 262 214 321 345 374 403 445 574 220
+	// 999 337 426 577 023 525 459 426 229 315 495 327 310 370 363 423 390 473 587 308
+	// 999 481 529 533 132 563 519 496 396 363 636 337 414 408 425 533 445 605 559 405
+	// 999 572 585 507 256 609 570 586 513 341 660 347 544 443 488 525 446 596 556 462
+	// 999 580 575 603 325 636 590 549 495 337 698 386 663 526 518 511 517 572 546 533
+	// 999 576 601 637 374 629 573 558 520 391 684 446 692 555 510 461 552 593 568 564
+	// 999 573 636 671 441 643 619 629 628 452 705 525 795 590 542 525 589 658 589 655
+	// 999 585 625 651 467 686 606 662 611 508 654 516 746 594 542 528 591 646 569 642
+	// 999 636 690 728 501 704 638 700 619 539 688 555 738 592 556 568 659 669 602 649
+	// 999 655 749 773 519 790 713 781 698 604 758 601 755 634 580 661 716 735 607 660
+	// 999 648 716 726 549 813 748 766 693 606 784 568 749 655 579 642 692 711 587 632
+	// 999 688 734 731 553 805 736 779 701 575 763 562 722 647 599 631 691 732 598 608
+	// 999 679 770 719 590 815 754 799 687 613 748 540 715 664 590 638 703 720 621 588
+	// 999 736 775 724 614 813 771 829 703 679 782 560 754 692 624 658 756 763 636 643
+	// 999 759 792 737 688 847 782 872 761 695 841 617 756 730 607 664 762 807 677 666
+	// 999 793 837 754 704 876 803 897 753 742 880 639 758 766 653 684 785 850 720 670
+	// 999 815 864 778 735 921 843 927 778 752 896 696 775 796 698 681 775 859 730 693
+	// 999 827 876 759 759 911 838 938 781 798 920 708 778 794 698 711 804 870 732 710
+	// 999 815 893 733 790 924 849 940 755 777 901 720 794 832 704 721 834 851 722 748
+	// 999 820 905 772 807 941 884 938 781 788 888 738 835 849 735 742 865 884 743 791
+	// 999 828 889 768 828 939 865 936 789 805 913 751 841 860 751 759 895 889 730 814
+	// 999 829 893 794 840 933 883 943 805 830 929 735 842 871 778 788 886 912 746 845
+	// 999 848 892 820 824 963 913 978 832 828 952 755 860 890 784 814 905 905 755 855
+	// 999 847 880 846 847 963 939 984 851 835 958 777 862 880 799 829 912 895 772 870
+	// 999 850 886 859 871 950 921 998 847 823 925 759 877 861 787 810 908 915 798 840
+	// 982 854 891 854 900 956 945 999 833 804 929 767 896 861 781 797 911 932 791 855
+	// 961 849 884 846 881 949 928 999 829 796 906 768 868 858 797 804 883 897 774 834
+	// 965 863 924 874 903 988 953 999 864 831 924 786 876 886 821 804 903 940 799 843
+	// 963 873 936 880 915 997 966 999 885 832 935 799 891 919 854 801 916 953 802 866
+	// 951 886 938 873 900 990 972 999 898 822 915 795 871 917 853 798 928 953 779 850
+	// 932 880 939 866 897 999 948 970 884 837 912 805 877 893 866 807 922 933 791 846
+	// 925 896 935 885 899 999 963 965 886 858 897 820 894 876 876 811 918 921 793 856
+	// 926 881 933 876 896 999 952 942 857 859 878 812 898 884 883 791 920 894 783 853
+	// 951 890 947 898 919 999 959 952 863 871 895 845 902 898 893 816 934 920 790 881
+	// 962 895 959 919 921 999 982 951 883 877 901 860 911 910 899 835 949 923 803 883
+	// 957 886 970 905 915 999 970 974 888 894 924 879 938 930 909 847 955 937 830 899
+	// 941 881 958 889 914 999 957 953 885 890 900 870 946 919 885 822 950 927 832 875
+	// 937 888 962 897 934 999 963 950 902 900 905 890 952 920 895 831 963 930 852 872
+	// 916 888 967 881 924 999 970 946 912 890 901 889 958 910 911 830 966 928 834 866
+	// 900 859 959 877 895 999 955 931 893 868 894 881 929 893 885 813 937 909 819 849
+	// 902 857 960 875 896 999 944 929 911 867 911 895 946 897 897 812 926 921 815 859
+	// 902 855 951 867 893 999 949 938 901 867 911 892 949 898 903 803 935 930 809 868
+	// Total bytes=909881714, ranges=1745
 }
