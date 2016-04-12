@@ -270,6 +270,11 @@ module Models {
        */
       yHigh: Utils.ChainProperty<number, Axis> = Utils.ChainProp(this, 1);
 
+      /**
+       *  tooltip is the informational tooltip for the chart
+       */
+      tooltip: Utils.ChainProperty<string, Axis> = Utils.ChainProp(this, null);
+
       // Stores the hard-coded title if one is set.
       private _title: string;
 
@@ -282,7 +287,7 @@ module Models {
       title(t: string): Axis;
 
       // TODO: allow computed chain props and move this code there
-      title(t?: string): any {
+      title(t?: string): (Axis|string) {
         if (typeof t === "string") {
           this._title = t;
           return this;
