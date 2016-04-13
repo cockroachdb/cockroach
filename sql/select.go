@@ -103,6 +103,10 @@ func (s *selectNode) DebugValues() debugValues {
 	return s.debugVals
 }
 
+func (s *selectNode) Start() *roachpb.Error {
+	return s.table.node.Start()
+}
+
 func (s *selectNode) Next() bool {
 	for {
 		if !s.table.node.Next() {

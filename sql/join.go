@@ -136,6 +136,13 @@ func (n *indexJoinNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
+func (n *indexJoinNode) Start() *roachpb.Error {
+	if err := n.table.Start(); err != nil {
+		return err
+	}
+	return n.index.Start()
+}
+
 func (n *indexJoinNode) Next() bool {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from
