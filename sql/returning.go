@@ -34,8 +34,8 @@ type returningHelper struct {
 }
 
 func makeReturningHelper(p *planner, r parser.ReturningExprs,
-	alias string, tablecols []ColumnDescriptor) (*returningHelper, error) {
-	rh := &returningHelper{p: p}
+	alias string, tablecols []ColumnDescriptor) (returningHelper, error) {
+	rh := returningHelper{p: p}
 	if len(r) == 0 {
 		return rh, nil
 	}
@@ -49,7 +49,7 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 	rh.exprs = make([]parser.Expr, 0, len(r))
 	for _, target := range r {
 		if isStar, cols, exprs, err := checkRenderStar(target, &table, rh.qvals); err != nil {
-			return nil, err
+			return returningHelper{}, err
 		} else if isStar {
 			rh.exprs = append(rh.exprs, exprs...)
 			rh.columns = append(rh.columns, cols...)
@@ -63,7 +63,7 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 
 		expr, err := resolveQNames(target.Expr, &table, rh.qvals, &p.qnameVisitor)
 		if err != nil {
-			return nil, err
+			return returningHelper{}, err
 		}
 		rh.exprs = append(rh.exprs, expr)
 		rh.columns = append(rh.columns, ResultColumn{Name: outputName})
