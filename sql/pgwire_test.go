@@ -447,7 +447,8 @@ func TestPGPreparedQuery(t *testing.T) {
 			if testing.Verbose() || log.V(1) {
 				fmt.Printf("query: %s\n", query)
 			}
-			if rows, err := queryFunc(test.params...); err != nil {
+			rows, err := queryFunc(test.params...)
+			if err != nil {
 				if test.error == "" {
 					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
 				} else if err.Error() != test.error {
@@ -605,15 +606,27 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
+			"INSERT INTO d.t VALUES ($1), ($2) RETURNING $3 + 1",
+			[]preparedExecTest{
+				base.Params(3, 4, 5).RowsAffected(2),
+			},
+		},
+		{
 			"UPDATE d.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
-				base.Params(true, true, 3).RowsAffected(3),
+				base.Params(true, true, 3).RowsAffected(5),
 			},
 		},
 		{
 			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
-				base.Params(1, 2, 3).RowsAffected(3),
+				base.Params(1, 2, 3).RowsAffected(5),
+			},
+		},
+		{
+			"DELETE FROM d.t RETURNING $1+1",
+			[]preparedExecTest{
+				base.Params(1).RowsAffected(5),
 			},
 		},
 		{
