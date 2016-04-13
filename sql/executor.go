@@ -451,11 +451,13 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 	return res
 }
 
-// If the plan is a returningNode we can just use the `rowCount`,
+// If the plan has a fast path we query that,
 // otherwise we fall back to counting via plan.Next().
 func countRowsAffected(p planNode) int {
-	if a, ok := p.(*returningNode); ok {
-		return a.rowCount
+	if a, ok := p.(planNodeFastPath); ok {
+		if count, res := a.FastPathResults(); res {
+			return count
+		}
 	}
 	count := 0
 	for p.Next() {
