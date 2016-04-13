@@ -270,9 +270,11 @@ SET DATABASE = test;
 func (t *logicTest) processTestFile(path string) {
 	file, err := os.Open(path)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return
 	}
 	defer file.Close()
+	defer t.traceStop()
 
 	t.lastProgress = timeutil.Now()
 
@@ -301,7 +303,8 @@ func (t *logicTest) processTestFile(path string) {
 				err = errors.New("invalid count")
 			}
 			if err != nil {
-				t.Fatalf("%s:%d invalid repeat line: %s", path, s.line, err)
+				t.Errorf("%s:%d invalid repeat line: %s", path, s.line, err)
+				return
 			}
 			repeat = count
 
@@ -338,7 +341,8 @@ func (t *logicTest) processTestFile(path string) {
 				query.expectErrCode = m[1]
 				query.expectErr = m[2]
 			} else if len(fields) < 2 {
-				t.Fatalf("%s: invalid test statement: %s", query.pos, s.Text())
+				t.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
+				return
 			} else {
 				// Parse "query <type-string> <sort-mode> <label>"
 				// The type string specifies the number of columns and their types:
@@ -375,7 +379,8 @@ func (t *logicTest) processTestFile(path string) {
 							query.colNames = true
 
 						default:
-							t.Fatalf("%s: unknown sort mode: %s", query.pos, opt)
+							t.Errorf("%s: unknown sort mode: %s", query.pos, opt)
+							return
 						}
 					}
 				}
@@ -389,7 +394,8 @@ func (t *logicTest) processTestFile(path string) {
 				line := s.Text()
 				if line == "----" {
 					if query.expectErr != "" {
-						t.Fatalf("%s: invalid ---- delimiter after a query expecting an error: %s", query.pos, query.expectErr)
+						t.Errorf("%s: invalid ---- delimiter after a query expecting an error: %s", query.pos, query.expectErr)
+						return
 					}
 					break
 				}
@@ -410,7 +416,8 @@ func (t *logicTest) processTestFile(path string) {
 						var err error
 						query.expectedValues, err = strconv.Atoi(m[1])
 						if err != nil {
-							t.Fatal(err)
+							t.Error(err)
+							return
 						}
 						query.expectedHash = m[2]
 					} else {
@@ -444,52 +451,62 @@ func (t *logicTest) processTestFile(path string) {
 
 		case "user":
 			if len(fields) < 2 {
-				t.Fatalf("user command requires one argument, found: %v", fields)
+				t.Errorf("user command requires one argument, found: %v", fields)
+				return
 			}
 			if len(fields[1]) == 0 {
-				t.Fatal("user command requires a non-blank argument")
+				t.Error("user command requires a non-blank argument")
+				return
 			}
 			cleanupUserFunc := t.setUser(fields[1])
 			defer cleanupUserFunc()
 
 		case "skipif":
 			if len(fields) < 2 {
-				t.Fatalf("skipif command requires one argument, found: %v", fields)
+				t.Errorf("skipif command requires one argument, found: %v", fields)
+				return
 			}
 			switch fields[1] {
 			case "":
-				t.Fatal("skipif command requires a non-blank argument")
+				t.Error("skipif command requires a non-blank argument")
+				return
 			case "mysql":
 			case "postgresql":
 				s.skip = true
 				continue
 			default:
-				t.Fatalf("unimplemented test statement: %s", s.Text())
+				t.Errorf("unimplemented test statement: %s", s.Text())
+				return
 			}
 
 		case "onlyif":
 			if len(fields) < 2 {
-				t.Fatalf("onlyif command requires one argument, found: %v", fields)
+				t.Errorf("onlyif command requires one argument, found: %v", fields)
+				return
 			}
 			switch fields[1] {
 			case "":
-				t.Fatal("onlyif command requires a non-blank argument")
+				t.Errorf("onlyif command requires a non-blank argument")
+				return
 			case "mysql":
 				s.skip = true
 				continue
 			default:
-				t.Fatalf("unimplemented test statement: %s", s.Text())
+				t.Errorf("unimplemented test statement: %s", s.Text())
+				return
 			}
 
 		case "traceon":
 			if len(fields) != 2 {
-				t.Fatalf("traceon requires a filename argument, found: %v", fields)
+				t.Errorf("traceon requires a filename argument, found: %v", fields)
+				return
 			}
 			t.traceStart(fields[1])
 
 		case "traceoff":
 			if t.traceFile == nil {
-				t.Fatalf("no trace active")
+				t.Errorf("no trace active")
+				return
 			}
 			t.traceStop()
 
@@ -500,22 +517,23 @@ func (t *logicTest) processTestFile(path string) {
 			// The change stays in effect for the duration of that particular
 			// test file.
 			if len(fields) != 1 {
-				t.Fatalf("fix-txn-priority takes no arguments, found: %v", fields[1:])
+				t.Errorf("fix-txn-priority takes no arguments, found: %v", fields[1:])
+				return
 			}
 			fmt.Println("Setting deterministic priorities.")
 
 			testingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 			defer func() { testingKnobs.ExecutorTestingKnobs.FixTxnPriority = false }()
 		default:
-			t.Fatalf("%s:%d: unknown command: %s", path, s.line, cmd)
+			t.Errorf("%s:%d: unknown command: %s", path, s.line, cmd)
+			return
 		}
 	}
 
 	if err := s.Err(); err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return
 	}
-
-	t.traceStop()
 
 	fmt.Printf("%s: %d\n", path, t.progress)
 }
