@@ -599,9 +599,9 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1), ($2)",
+			"INSERT INTO d.t VALUES ($1), ($2) RETURNING $3+1",
 			[]preparedExecTest{
-				base.Params(1, 2).RowsAffected(2),
+				base.Params(1, 2, 3).RowsAffected(2),
 			},
 		},
 		{
@@ -614,6 +614,12 @@ func TestPGPreparedExec(t *testing.T) {
 			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				base.Params(1, 2, 3).RowsAffected(3),
+			},
+		},
+		{
+			"DELETE FROM d.t RETURNING $1+1",
+			[]preparedExecTest{
+				base.Params(1).RowsAffected(3),
 			},
 		},
 		{
