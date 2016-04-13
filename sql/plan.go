@@ -325,6 +325,9 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 	if err != nil {
 		return nil, err
 	}
+	if err := plan.Start(); err != nil {
+		return nil, err
+	}
 	if !plan.Next() {
 		if pErr := plan.PErr(); pErr != nil {
 			return nil, pErr
@@ -421,8 +424,11 @@ type planNode interface {
 	// and Start/Next should be only called during "execute".
 	Start() *roachpb.Error
 
-	// Next advances to the next row, returning false if an error is encountered
-	// or if there is no next row.
+	// Next performs one unit of work, returning false if an error is
+	// encountered or if there is no more work to do. For statements
+	// that return a result set, the Value() method will return one row
+	// of results each time that Next() returns true.
+	// See executor.go: countRowsAffected() and execStmt() for an example.
 	Next() bool
 
 	// PErr returns the error, if any, encountered during iteration.
