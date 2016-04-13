@@ -244,6 +244,13 @@ func (n *unionNode) readLeft() bool {
 	return false
 }
 
+func (n *unionNode) Start() *roachpb.Error {
+	if err := n.right.Start(); err != nil {
+		return err
+	}
+	return n.left.Start()
+}
+
 func (n *unionNode) Next() bool {
 	switch {
 	case !n.rightDone:

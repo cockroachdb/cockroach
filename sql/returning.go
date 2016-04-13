@@ -32,6 +32,10 @@ func (r *returningNode) FastPathResults() (bool, int) {
 	return true, r.rowCount
 }
 
+func (r *returningNode) Start() *roachpb.Error {
+	return nil
+}
+
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
 type returningHelper struct {
