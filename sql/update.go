@@ -42,6 +42,12 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 
+	// TODO(dan): Consider caching this on the TableDescriptor.
+	primaryKeyCols := map[ColumnID]struct{}{}
+	for _, id := range tableDesc.PrimaryIndex.ColumnIDs {
+		primaryKeyCols[id] = struct{}{}
+	}
+
 	exprs := make([]parser.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
 		exprs[i] = *expr
@@ -82,14 +88,12 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Set of columns being updated
+	var primaryKeyColChange bool
 	colIDSet := map[ColumnID]struct{}{}
 	for _, c := range cols {
 		colIDSet[c.ID] = struct{}{}
-	}
-	// Don't allow updating any column that is part of the primary key.
-	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := colIDSet[id]; ok {
-			return nil, roachpb.NewUErrorf("primary key column %q cannot be updated", tableDesc.PrimaryIndex.ColumnNames[i])
+		if _, ok := primaryKeyCols[c.ID]; ok {
+			primaryKeyColChange = true
 		}
 	}
 
@@ -184,6 +188,10 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 
 	// Secondary indexes needing updating.
 	needsUpdate := func(index IndexDescriptor) bool {
+		// If the primary key changed, we need to update all of them.
+		if primaryKeyColChange {
+			return true
+		}
 		for _, id := range index.ColumnIDs {
 			if _, ok := colIDSet[id]; ok {
 				return true
@@ -270,6 +278,19 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
+		// Compute the new primary index key for this row.
+		newPrimaryIndexKey := primaryIndexKey
+		if primaryKeyColChange {
+			newPrimaryIndexKey, _, err = encodeIndexKey(
+				&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+		}
+		// Note that even if primaryIndexColChange is true, it's possible that
+		// primary key fields in this particular row didn't change.
+		rowPrimaryKeyChanged := !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
+
 		// Compute the new secondary index key:value pairs for this row.
 		newSecondaryIndexEntries, eErr := encodeSecondaryIndexes(
 			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
@@ -277,10 +298,69 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			return nil, roachpb.NewError(eErr)
 		}
 
+		if rowPrimaryKeyChanged {
+			// Delete all the data stored under the old primary key.
+			rowStartKey := roachpb.Key(primaryIndexKey)
+			rowEndKey := rowStartKey.PrefixEnd()
+			if log.V(2) {
+				log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
+			}
+			b.DelRange(rowStartKey, rowEndKey, false)
+
+			// Delete all the old secondary indexes.
+			for _, secondaryIndexEntry := range secondaryIndexEntries {
+				if log.V(2) {
+					log.Infof("Del %s", secondaryIndexEntry.key)
+				}
+				b.Del(secondaryIndexEntry.key)
+			}
+
+			// Write the new row sentinel. We want to write the sentinel first in case
+			// we are trying to insert a duplicate primary key: if we write the
+			// secondary indexes first, we may get an error that looks like a
+			// uniqueness violation on a non-unique index.
+			sentinelKey := keys.MakeNonColumnKey(newPrimaryIndexKey)
+			if log.V(2) {
+				log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
+			}
+			// This is subtle: An interface{}(nil) deletes the value, so we pass in
+			// []byte{} as a non-nil value.
+			b.CPut(sentinelKey, []byte{}, nil)
+
+			// Write any fields from the old row that were not modified by the UPDATE.
+			for i, col := range tableDesc.Columns {
+				if _, ok := colIDSet[col.ID]; ok {
+					continue
+				}
+				key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
+				val := rowVals[i]
+				marshalledVal, mErr := marshalColumnValue(col, val, p.evalCtx.Args)
+				if mErr != nil {
+					return nil, roachpb.NewError(mErr)
+				}
+
+				if log.V(2) {
+					log.Infof("Put %s -> %v", roachpb.Key(key), val)
+				}
+				b.Put(key, marshalledVal)
+			}
+			// At this point, we've deleted the old row and associated index data and
+			// written the sentinel keys and column keys for non-updated columns. Fall
+			// through to below where the index keys and updated column keys will be
+			// written.
+		}
+
 		// Update secondary indexes.
 		for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 			secondaryIndexEntry := secondaryIndexEntries[i]
-			if !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key) {
+			secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key)
+			if secondaryKeyChanged {
+				if log.V(2) {
+					log.Infof("Del %s", secondaryIndexEntry.key)
+				}
+				b.Del(secondaryIndexEntry.key)
+			}
+			if rowPrimaryKeyChanged || secondaryKeyChanged {
 				// Do not update Indexes in the DELETE_ONLY state.
 				if _, ok := deleteOnlyIndex[i]; !ok {
 					if log.V(2) {
@@ -289,10 +369,6 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 					}
 					b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
 				}
-				if log.V(2) {
-					log.Infof("Del %s", secondaryIndexEntry.key)
-				}
-				b.Del(secondaryIndexEntry.key)
 			}
 		}
 
@@ -300,13 +376,20 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		for i, val := range newVals {
 			col := cols[i]
 
-			key := keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
+			if _, ok := primaryKeyCols[col.ID]; ok {
+				// Skip primary key columns as their values are encoded in the row
+				// sentinel key which is guaranteed to exist for as long as the row
+				// exists.
+				continue
+			}
+
+			key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
 			if marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 				if log.V(2) {
-					log.Infof("Put %s -> %v", key, val)
+					log.Infof("Put %s -> %v", roachpb.Key(key), val)
 				}
 
 				b.Put(key, marshalled[i])
