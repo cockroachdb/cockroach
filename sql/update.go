@@ -29,31 +29,127 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-type updateNode struct {
-	// The following fields are populated during makePlan.
-	p                   *planner
-	n                   *parser.Update
-	rh                  *returningHelper
-	tableDesc           *TableDescriptor
-	defaultExprs        []parser.Expr
-	cols                []ColumnDescriptor
-	colIDSet            map[ColumnID]struct{}
-	primaryKeyColChange bool
-	primaryKeyCols      map[ColumnID]struct{}
-	autoCommit          bool
+// editNode (Base, Run) is shared between all row updating
+// statements (DELETE, UPDATE, INSERT).
 
-	// The following fields are populated during Start().
+type editNodeBase struct {
+	p          *planner
+	rh         returningHelper
+	tableDesc  *TableDescriptor
+	autoCommit bool
+}
+type editNodeRun struct {
 	rows                  planNode
-	colIDtoRowIndex       map[ColumnID]int
 	primaryIndex          IndexDescriptor
 	primaryIndexKeyPrefix []byte
-	deleteOnlyIndex       map[int]struct{}
-	marshalled            []interface{}
 	indexes               []IndexDescriptor
 	pErr                  *roachpb.Error
 	b                     *client.Batch
 	resultRow             parser.DTuple
 	done                  bool
+}
+
+// recordCreatorNode is shared by row creating statements
+// (UPDATE, INSERT).
+
+type rowCreatorNodeBase struct {
+	editNodeBase
+	defaultExprs    []parser.Expr
+	cols            []ColumnDescriptor
+	primaryKeyCols  map[ColumnID]struct{}
+	colIDtoRowIndex map[ColumnID]int
+}
+
+type rowCreatorNodeRun struct {
+	editNodeRun
+	marshalled []interface{}
+}
+
+type updateNode struct {
+	// The following fields are populated during makePlan.
+	rowCreatorNodeBase
+	n                   *parser.Update
+	colIDSet            map[ColumnID]struct{}
+	primaryKeyColChange bool
+
+	run struct {
+		// The following fields are populated during Start().
+		rowCreatorNodeRun
+		deleteOnlyIndex map[int]struct{}
+	}
+}
+
+func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, autoCommit bool, priv privilege.Kind) (editNodeBase, *roachpb.Error) {
+	// TODO(marcb): We can't use the cached descriptor here because a recent
+	// update of the schema (e.g. the addition of an index) might not be
+	// reflected in the cached version (yet). Perhaps schema modification
+	// routines such as CREATE INDEX should not return until the schema change
+	// has been pushed everywhere.
+	tableDesc, pErr := p.getAliasedTableLease(t)
+	if pErr != nil {
+		return editNodeBase{}, pErr
+	}
+
+	if err := p.checkPrivilege(tableDesc, priv); err != nil {
+		return editNodeBase{}, roachpb.NewError(err)
+	}
+
+	rh, err := makeReturningHelper(p, r, tableDesc.Name, tableDesc.Columns)
+	if err != nil {
+		return editNodeBase{}, roachpb.NewError(err)
+	}
+
+	return editNodeBase{
+		p:          p,
+		rh:         rh,
+		tableDesc:  tableDesc,
+		autoCommit: autoCommit,
+	}, nil
+}
+
+func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, indexes []IndexDescriptor) {
+	if isSystemConfigID(en.tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		en.p.txn.SetSystemConfigTrigger()
+	}
+
+	r.rows = rows
+	r.primaryIndex = en.tableDesc.PrimaryIndex
+	r.primaryIndexKeyPrefix = MakeIndexKeyPrefix(en.tableDesc.ID, r.primaryIndex.ID)
+	r.b = en.p.txn.NewBatch()
+	r.indexes = indexes
+}
+
+func (p *planner) makeRowCreatorNode(en editNodeBase, cols []ColumnDescriptor, colIDtoRowIndex map[ColumnID]int, forInsert bool) (rowCreatorNodeBase, *roachpb.Error) {
+
+	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
+	if err != nil {
+		return rowCreatorNodeBase{}, roachpb.NewError(err)
+	}
+
+	primaryKeyCols := map[ColumnID]struct{}{}
+	for i, id := range en.tableDesc.PrimaryIndex.ColumnIDs {
+		if forInsert {
+			// Verify we have at least the columns that are part of the primary key.
+			if _, ok := colIDtoRowIndex[id]; !ok {
+				return rowCreatorNodeBase{}, roachpb.NewUErrorf("missing %q primary key column", en.tableDesc.PrimaryIndex.ColumnNames[i])
+			}
+		}
+		primaryKeyCols[id] = struct{}{}
+	}
+
+	return rowCreatorNodeBase{
+		editNodeBase:    en,
+		defaultExprs:    defaultExprs,
+		cols:            cols,
+		primaryKeyCols:  primaryKeyCols,
+		colIDtoRowIndex: colIDtoRowIndex,
+	}, nil
+}
+
+func (r *rowCreatorNodeRun) startRowCreatorNode(en *rowCreatorNodeBase, rows planNode, indexes []IndexDescriptor) {
+	r.startEditNode(&en.editNodeBase, rows, indexes)
+	r.marshalled = make([]interface{}, len(en.cols))
 }
 
 // Update updates columns for a selection of rows from a table.
@@ -65,13 +161,9 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 
 	tracing.AnnotateTrace()
 
-	tableDesc, pErr := p.getAliasedTableLease(n.Table)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	if err := p.checkPrivilege(tableDesc, privilege.UPDATE); err != nil {
-		return nil, roachpb.NewError(err)
+	en, enErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.UPDATE)
+	if enErr != nil {
+		return nil, enErr
 	}
 
 	exprs := make([]parser.UpdateExpr, len(n.Exprs))
@@ -108,15 +200,14 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		names = append(names, expr.Names...)
 	}
 
-	cols, err := p.processColumns(tableDesc, names)
+	cols, err := p.processColumns(en.tableDesc, names)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	// TODO(dan): Consider caching this on the TableDescriptor.
-	primaryKeyCols := map[ColumnID]struct{}{}
-	for _, id := range tableDesc.PrimaryIndex.ColumnIDs {
-		primaryKeyCols[id] = struct{}{}
+	rc, rcErr := p.makeRowCreatorNode(en, cols, nil, false)
+	if rcErr != nil {
+		return nil, rcErr
 	}
 
 	// Set of columns being updated
@@ -124,23 +215,9 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	colIDSet := map[ColumnID]struct{}{}
 	for _, c := range cols {
 		colIDSet[c.ID] = struct{}{}
-		if _, ok := primaryKeyCols[c.ID]; ok {
+		if _, ok := rc.primaryKeyCols[c.ID]; ok {
 			primaryKeyColChange = true
 		}
-	}
-
-	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if pErr := rh.TypeCheck(); pErr != nil {
-		return nil, pErr
 	}
 
 	tracing.AnnotateTrace()
@@ -153,7 +230,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// "*, 1, 2", not "*, (1, 2)".
 	// TODO(radu): we only need to select columns necessary to generate primary and
 	// secondary indexes keys, and columns needed by returningHelper.
-	targets := tableDesc.allColumnsSelector()
+	targets := en.tableDesc.allColumnsSelector()
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
@@ -161,13 +238,13 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					e = fillDefault(e, i, defaultExprs)
+					e = fillDefault(e, i, rc.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					i++
 				}
 			}
 		} else {
-			e := fillDefault(expr.Expr, i, defaultExprs)
+			e := fillDefault(expr.Expr, i, rc.defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			i++
 		}
@@ -206,20 +283,16 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		}
 	}
 
-	res := &updateNode{
-		p:                   p,
-		n:                   n,
-		rh:                  rh,
-		tableDesc:           tableDesc,
-		autoCommit:          autoCommit,
-		defaultExprs:        defaultExprs,
-		primaryKeyColChange: primaryKeyColChange,
-		primaryKeyCols:      primaryKeyCols,
-
-		cols:     cols,
-		colIDSet: colIDSet,
+	if pErr := en.rh.TypeCheck(); pErr != nil {
+		return nil, pErr
 	}
-	return res, nil
+
+	return &updateNode{
+		n:                   n,
+		rowCreatorNodeBase:  rc,
+		primaryKeyColChange: primaryKeyColChange,
+		colIDSet:            colIDSet,
+	}, nil
 }
 
 func (u *updateNode) Start() *roachpb.Error {
@@ -280,8 +353,6 @@ func (u *updateNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	u.rows = rows
-
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex := map[ColumnID]int{}
@@ -289,9 +360,6 @@ func (u *updateNode) Start() *roachpb.Error {
 		colIDtoRowIndex[col.ID] = i
 	}
 	u.colIDtoRowIndex = colIDtoRowIndex
-
-	u.primaryIndex = u.tableDesc.PrimaryIndex
-	u.primaryIndexKeyPrefix = MakeIndexKeyPrefix(u.tableDesc.ID, u.primaryIndex.ID)
 
 	// Secondary indexes needing updating.
 	needsUpdate := func(index IndexDescriptor) bool {
@@ -333,42 +401,36 @@ func (u *updateNode) Start() *roachpb.Error {
 			}
 		}
 	}
-	u.deleteOnlyIndex = deleteOnlyIndex
-	u.indexes = indexes
 
-	if isSystemConfigID(u.tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		u.p.txn.SetSystemConfigTrigger()
-	}
+	u.run.startRowCreatorNode(&u.rowCreatorNodeBase, rows, indexes)
 
-	u.b = u.p.txn.NewBatch()
-	u.marshalled = make([]interface{}, len(u.cols))
+	u.run.deleteOnlyIndex = deleteOnlyIndex
 
 	return nil
 }
 
 func (u *updateNode) Next() bool {
-	if u.done || u.pErr != nil {
+	if u.run.done || u.run.pErr != nil {
 		return false
 	}
 
-	next := u.rows.Next()
+	next := u.run.rows.Next()
 	if next {
 		tracing.AnnotateTrace()
 
-		rowVals := u.rows.Values()
+		rowVals := u.run.rows.Values()
 
 		primaryIndexKey, _, err := encodeIndexKey(
-			&u.primaryIndex, u.colIDtoRowIndex, rowVals, u.primaryIndexKeyPrefix)
+			&u.run.primaryIndex, u.colIDtoRowIndex, rowVals, u.run.primaryIndexKeyPrefix)
 		if err != nil {
-			u.pErr = roachpb.NewError(err)
+			u.run.pErr = roachpb.NewError(err)
 			return false
 		}
 		// Compute the current secondary index key:value pairs for this row.
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			u.tableDesc.ID, u.indexes, u.colIDtoRowIndex, rowVals)
+			u.tableDesc.ID, u.run.indexes, u.colIDtoRowIndex, rowVals)
 		if err != nil {
-			u.pErr = roachpb.NewError(err)
+			u.run.pErr = roachpb.NewError(err)
 			return false
 		}
 
@@ -379,7 +441,7 @@ func (u *updateNode) Next() bool {
 		// Ensure that the values honor the specified column widths.
 		for i := range newVals {
 			if err := checkValueWidth(u.cols[i], newVals[i]); err != nil {
-				u.pErr = roachpb.NewError(err)
+				u.run.pErr = roachpb.NewError(err)
 				return false
 			}
 		}
@@ -388,7 +450,7 @@ func (u *updateNode) Next() bool {
 		for i, col := range u.cols {
 			val := newVals[i]
 			if !col.Nullable && val == parser.DNull {
-				u.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
+				u.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 				return false
 			}
 			rowVals[u.colIDtoRowIndex[col.ID]] = val
@@ -399,8 +461,8 @@ func (u *updateNode) Next() bool {
 		// cannot be used as index values.
 		for i, val := range newVals {
 			var mErr error
-			if u.marshalled[i], mErr = marshalColumnValue(u.cols[i], val); mErr != nil {
-				u.pErr = roachpb.NewError(mErr)
+			if u.run.marshalled[i], mErr = marshalColumnValue(u.cols[i], val); mErr != nil {
+				u.run.pErr = roachpb.NewError(mErr)
 				return false
 			}
 		}
@@ -410,9 +472,9 @@ func (u *updateNode) Next() bool {
 		var rowPrimaryKeyChanged bool
 		if u.primaryKeyColChange {
 			newPrimaryIndexKey, _, err = encodeIndexKey(
-				&u.primaryIndex, u.colIDtoRowIndex, rowVals, u.primaryIndexKeyPrefix)
+				&u.run.primaryIndex, u.colIDtoRowIndex, rowVals, u.run.primaryIndexKeyPrefix)
 			if err != nil {
-				u.pErr = roachpb.NewError(err)
+				u.run.pErr = roachpb.NewError(err)
 				return false
 			}
 			// Note that even if primaryIndexColChange is true, it's possible that
@@ -422,9 +484,9 @@ func (u *updateNode) Next() bool {
 
 		// Compute the new secondary index key:value pairs for this row.
 		newSecondaryIndexEntries, eErr := encodeSecondaryIndexes(
-			u.tableDesc.ID, u.indexes, u.colIDtoRowIndex, rowVals)
+			u.tableDesc.ID, u.run.indexes, u.colIDtoRowIndex, rowVals)
 		if eErr != nil {
-			u.pErr = roachpb.NewError(eErr)
+			u.run.pErr = roachpb.NewError(eErr)
 			return false
 		}
 
@@ -435,14 +497,14 @@ func (u *updateNode) Next() bool {
 			if log.V(2) {
 				log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
 			}
-			u.b.DelRange(rowStartKey, rowEndKey, false)
+			u.run.b.DelRange(rowStartKey, rowEndKey, false)
 
 			// Delete all the old secondary indexes.
 			for _, secondaryIndexEntry := range secondaryIndexEntries {
 				if log.V(2) {
 					log.Infof("Del %s", secondaryIndexEntry.key)
 				}
-				u.b.Del(secondaryIndexEntry.key)
+				u.run.b.Del(secondaryIndexEntry.key)
 			}
 
 			// Write the new row sentinel. We want to write the sentinel first in case
@@ -455,7 +517,7 @@ func (u *updateNode) Next() bool {
 			}
 			// This is subtle: An interface{}(nil) deletes the value, so we pass in
 			// []byte{} as a non-nil value.
-			u.b.CPut(sentinelKey, []byte{}, nil)
+			u.run.b.CPut(sentinelKey, []byte{}, nil)
 
 			// Write any fields from the old row that were not modified by the UPDATE.
 			for i, col := range u.tableDesc.Columns {
@@ -469,14 +531,14 @@ func (u *updateNode) Next() bool {
 				val := rowVals[i]
 				marshalledVal, mErr := marshalColumnValue(col, val)
 				if mErr != nil {
-					u.pErr = roachpb.NewError(mErr)
+					u.run.pErr = roachpb.NewError(mErr)
 					return false
 				}
 
 				if log.V(2) {
 					log.Infof("Put %s -> %v", roachpb.Key(key), val)
 				}
-				u.b.Put(key, marshalledVal)
+				u.run.b.Put(key, marshalledVal)
 			}
 			// At this point, we've deleted the old row and associated index data and
 			// written the sentinel keys and column keys for non-updated columns. Fall
@@ -492,16 +554,16 @@ func (u *updateNode) Next() bool {
 				if log.V(2) {
 					log.Infof("Del %s", secondaryIndexEntry.key)
 				}
-				u.b.Del(secondaryIndexEntry.key)
+				u.run.b.Del(secondaryIndexEntry.key)
 			}
 			if rowPrimaryKeyChanged || secondaryKeyChanged {
 				// Do not update Indexes in the DELETE_ONLY state.
-				if _, ok := u.deleteOnlyIndex[i]; !ok {
+				if _, ok := u.run.deleteOnlyIndex[i]; !ok {
 					if log.V(2) {
 						log.Infof("CPut %s -> %v", newSecondaryIndexEntry.key,
 							newSecondaryIndexEntry.value)
 					}
-					u.b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
+					u.run.b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
 				}
 			}
 		}
@@ -518,7 +580,7 @@ func (u *updateNode) Next() bool {
 			}
 
 			key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
-			if u.marshalled[i] != nil {
+			if u.run.marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
@@ -526,7 +588,7 @@ func (u *updateNode) Next() bool {
 					log.Infof("Put %s -> %v", roachpb.Key(key), val)
 				}
 
-				u.b.Put(key, u.marshalled[i])
+				u.run.b.Put(key, u.run.marshalled[i])
 			} else {
 				// The column might have already existed but is being set to NULL, so
 				// delete it.
@@ -534,7 +596,7 @@ func (u *updateNode) Next() bool {
 					log.Infof("Del %s", key)
 				}
 
-				u.b.Del(key)
+				u.run.b.Del(key)
 			}
 
 		}
@@ -542,25 +604,25 @@ func (u *updateNode) Next() bool {
 		// rowVals[:len(tableDesc.Columns)] have been updated with the new values above.
 		resultRow, err := u.rh.cookResultRow(rowVals[:len(u.tableDesc.Columns)])
 		if err != nil {
-			u.pErr = roachpb.NewError(err)
+			u.run.pErr = roachpb.NewError(err)
 			return false
 		}
-		u.resultRow = resultRow
+		u.run.resultRow = resultRow
 	} else {
 		// We're done. Finish the batch.
 		if u.autoCommit {
 			// An auto-txn can commit the transaction with the batch. This is an
 			// optimization to avoid an extra round-trip to the transaction
 			// coordinator.
-			u.pErr = u.p.txn.CommitInBatch(u.b)
+			u.run.pErr = u.p.txn.CommitInBatch(u.run.b)
 		} else {
-			u.pErr = u.p.txn.Run(u.b)
+			u.run.pErr = u.p.txn.Run(u.run.b)
 		}
-		if u.pErr != nil {
-			u.pErr = convertBatchError(u.tableDesc, *u.b, u.pErr)
+		if u.run.pErr != nil {
+			u.run.pErr = convertBatchError(u.tableDesc, *u.run.b, u.run.pErr)
 		}
-		u.done = true
-		u.b = nil
+		u.run.done = true
+		u.run.b = nil
 	}
 	return next
 }
@@ -578,23 +640,23 @@ func (u *updateNode) Columns() []ResultColumn {
 }
 
 func (u *updateNode) Values() parser.DTuple {
-	return u.resultRow
+	return u.run.resultRow
 }
 
 func (u *updateNode) MarkDebug(mode explainMode) {
-	u.rows.MarkDebug(mode)
+	u.run.rows.MarkDebug(mode)
 }
 
 func (u *updateNode) DebugValues() debugValues {
-	return u.rows.DebugValues()
+	return u.run.rows.DebugValues()
 }
 
 func (u *updateNode) Ordering() orderingInfo {
-	return u.rows.Ordering()
+	return u.run.rows.Ordering()
 }
 
 func (u *updateNode) PErr() *roachpb.Error {
-	return u.pErr
+	return u.run.pErr
 }
 
 func (u *updateNode) ExplainPlan() (name, description string, children []planNode) {
@@ -614,7 +676,7 @@ func (u *updateNode) ExplainPlan() (name, description string, children []planNod
 		fmt.Fprintf(&buf, "%s", col.Name)
 	}
 	fmt.Fprintf(&buf, ")")
-	return "update", buf.String(), []planNode{u.rows}
+	return "update", buf.String(), []planNode{u.run.rows}
 }
 
 func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}

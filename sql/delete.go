@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -28,23 +27,15 @@ import (
 )
 
 type deleteNode struct {
-	// The following fields are populated during makePlan.
-	p               *planner
-	n               *parser.Delete
-	rh              *returningHelper
-	tableDesc       *TableDescriptor
-	colIDtoRowIndex map[ColumnID]int
-	autoCommit      bool
-	// The following fields are populated during Start()
-	rows                  planNode
-	primaryIndex          IndexDescriptor
-	primaryIndexKeyPrefix []byte
-	indexes               []IndexDescriptor
-	pErr                  *roachpb.Error
-	b                     *client.Batch
-	resultRow             parser.DTuple
-	fastPath              bool
-	done                  bool
+	editNodeBase
+	n *parser.Delete
+
+	run struct {
+		editNodeRun
+
+		colIDtoRowIndex map[ColumnID]int
+		fastPath        bool
+	}
 }
 
 // Delete removes rows from a table.
@@ -52,22 +43,9 @@ type deleteNode struct {
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.Error) {
-	tableDesc, pErr := p.getAliasedTableLease(n.Table)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	if err := p.checkPrivilege(tableDesc, privilege.DELETE); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if pErr := rh.TypeCheck(); pErr != nil {
-		return nil, pErr
+	en, enErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.DELETE)
+	if enErr != nil {
+		return nil, enErr
 	}
 
 	// TODO(knz): Until we split the creation of the node from Start()
@@ -76,15 +54,21 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
 	if _, pErr := p.SelectClause(&parser.SelectClause{
-		Exprs: tableDesc.allColumnsSelector(),
+		Exprs: en.tableDesc.allColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
 	}); pErr != nil {
 		return nil, pErr
 	}
 
-	res := &deleteNode{p: p, n: n, rh: rh, tableDesc: tableDesc, autoCommit: autoCommit}
-	return res, nil
+	if pErr := en.rh.TypeCheck(); pErr != nil {
+		return nil, pErr
+	}
+
+	return &deleteNode{
+		n:            n,
+		editNodeBase: en,
+	}, nil
 }
 
 func (d *deleteNode) Start() *roachpb.Error {
@@ -102,18 +86,13 @@ func (d *deleteNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	d.rows = rows
-
 	// Construct a map from column ID to the index the value appears at within a
 	// row.
 	colIDtoRowIndex, err := makeColIDtoRowIndex(rows, d.tableDesc)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	d.colIDtoRowIndex = colIDtoRowIndex
-
-	d.primaryIndex = d.tableDesc.PrimaryIndex
-	d.primaryIndexKeyPrefix = MakeIndexKeyPrefix(d.tableDesc.ID, d.primaryIndex.ID)
+	d.run.colIDtoRowIndex = colIDtoRowIndex
 
 	// Determine the secondary indexes that need to be updated as well.
 	indexes := d.tableDesc.Indexes
@@ -124,14 +103,8 @@ func (d *deleteNode) Start() *roachpb.Error {
 			indexes = append(indexes, *index)
 		}
 	}
-	d.indexes = indexes
 
-	if isSystemConfigID(d.tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		d.p.txn.SetSystemConfigTrigger()
-	}
-
-	d.b = d.p.txn.NewBatch()
+	d.run.startEditNode(&d.editNodeBase, rows, indexes)
 
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
@@ -139,42 +112,42 @@ func (d *deleteNode) Start() *roachpb.Error {
 	// but this goes away anyway once we push-down more of SQL.
 	sel := rows.(*selectNode)
 	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, len(indexes)) {
-		d.fastPath = true
-		d.pErr = d.fastDelete()
-		d.done = true
-		return d.pErr
+		d.run.fastPath = true
+		d.run.pErr = d.fastDelete()
+		d.run.done = true
+		return d.run.pErr
 	}
 
 	return nil
 }
 
 func (d *deleteNode) FastPathResults() (int, bool) {
-	if d.fastPath {
+	if d.run.fastPath {
 		return d.rh.rowCount, true
 	}
 	return 0, false
 }
 
 func (d *deleteNode) Next() bool {
-	if d.done || d.pErr != nil {
+	if d.run.done || d.run.pErr != nil {
 		return false
 	}
 
-	next := d.rows.Next()
+	next := d.run.rows.Next()
 	if next {
-		rowVals := d.rows.Values()
+		rowVals := d.run.rows.Values()
 
 		primaryIndexKey, _, err := encodeIndexKey(
-			&d.primaryIndex, d.colIDtoRowIndex, rowVals, d.primaryIndexKeyPrefix)
+			&d.run.primaryIndex, d.run.colIDtoRowIndex, rowVals, d.run.primaryIndexKeyPrefix)
 		if err != nil {
-			d.pErr = roachpb.NewError(err)
+			d.run.pErr = roachpb.NewError(err)
 			return false
 		}
 
 		secondaryIndexEntries, err := encodeSecondaryIndexes(
-			d.tableDesc.ID, d.indexes, d.colIDtoRowIndex, rowVals)
+			d.tableDesc.ID, d.run.indexes, d.run.colIDtoRowIndex, rowVals)
 		if err != nil {
-			d.pErr = roachpb.NewError(err)
+			d.run.pErr = roachpb.NewError(err)
 			return false
 		}
 
@@ -182,7 +155,7 @@ func (d *deleteNode) Next() bool {
 			if log.V(2) {
 				log.Infof("Del %s", secondaryIndexEntry.key)
 			}
-			d.b.Del(secondaryIndexEntry.key)
+			d.run.b.Del(secondaryIndexEntry.key)
 		}
 
 		// Delete the row.
@@ -191,26 +164,26 @@ func (d *deleteNode) Next() bool {
 		if log.V(2) {
 			log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
 		}
-		d.b.DelRange(rowStartKey, rowEndKey, false)
+		d.run.b.DelRange(rowStartKey, rowEndKey, false)
 
 		resultRow, err := d.rh.cookResultRow(rowVals)
 		if err != nil {
-			d.pErr = roachpb.NewError(err)
+			d.run.pErr = roachpb.NewError(err)
 			return false
 		}
-		d.resultRow = resultRow
+		d.run.resultRow = resultRow
 	} else {
 		// We're done. Finish the batch.
 		if d.autoCommit {
 			// An auto-txn can commit the transaction with the batch. This is an
 			// optimization to avoid an extra round-trip to the transaction
 			// coordinator.
-			d.pErr = d.p.txn.CommitInBatch(d.b)
+			d.run.pErr = d.p.txn.CommitInBatch(d.run.b)
 		} else {
-			d.pErr = d.p.txn.Run(d.b)
+			d.run.pErr = d.p.txn.Run(d.run.b)
 		}
-		d.done = true
-		d.b = nil
+		d.run.done = true
+		d.run.b = nil
 	}
 	return next
 }
@@ -244,7 +217,7 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, indexCount int) bool
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
 func (d *deleteNode) fastDelete() *roachpb.Error {
-	scan := d.rows.(*selectNode).table.node.(*scanNode)
+	scan := d.run.rows.(*selectNode).table.node.(*scanNode)
 	if !scan.initScan() {
 		return scan.pErr
 	}
@@ -253,23 +226,23 @@ func (d *deleteNode) fastDelete() *roachpb.Error {
 		if log.V(2) {
 			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
 		}
-		d.b.DelRange(span.start, span.end, true)
+		d.run.b.DelRange(span.start, span.end, true)
 	}
 
 	if d.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		if pErr := d.p.txn.CommitInBatch(d.b); pErr != nil {
+		if pErr := d.p.txn.CommitInBatch(d.run.b); pErr != nil {
 			return pErr
 		}
 	} else {
-		if pErr := d.p.txn.Run(d.b); pErr != nil {
+		if pErr := d.p.txn.Run(d.run.b); pErr != nil {
 			return pErr
 		}
 	}
 
-	for _, r := range d.b.Results {
+	for _, r := range d.run.b.Results {
 		var prev []byte
 		for _, i := range r.Keys {
 			// If prefix is same, don't bother decoding key.
@@ -296,23 +269,23 @@ func (d *deleteNode) Columns() []ResultColumn {
 }
 
 func (d *deleteNode) Values() parser.DTuple {
-	return d.resultRow
+	return d.run.resultRow
 }
 
 func (d *deleteNode) MarkDebug(mode explainMode) {
-	d.rows.MarkDebug(mode)
+	d.run.rows.MarkDebug(mode)
 }
 
 func (d *deleteNode) DebugValues() debugValues {
-	return d.rows.DebugValues()
+	return d.run.rows.DebugValues()
 }
 
 func (d *deleteNode) Ordering() orderingInfo {
-	return d.rows.Ordering()
+	return d.run.rows.Ordering()
 }
 
 func (d *deleteNode) PErr() *roachpb.Error {
-	return d.pErr
+	return d.run.pErr
 }
 
 func (d *deleteNode) ExplainPlan() (name, description string, children []planNode) {
@@ -325,7 +298,7 @@ func (d *deleteNode) ExplainPlan() (name, description string, children []planNod
 		fmt.Fprintf(&buf, "%s", col.Name)
 	}
 	fmt.Fprintf(&buf, ")")
-	return "delete", buf.String(), []planNode{d.rows}
+	return "delete", buf.String(), []planNode{d.run.rows}
 }
 
 func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}

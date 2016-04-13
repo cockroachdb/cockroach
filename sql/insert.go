@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -31,31 +30,18 @@ import (
 
 type insertNode struct {
 	// The following fields are populated during makePlan.
-	p              *planner
-	n              *parser.Insert
-	rh             *returningHelper
-	tableDesc      *TableDescriptor
-	defaultExprs   []parser.Expr
-	cols           []ColumnDescriptor
-	qvals          qvalMap
-	insertRows     parser.SelectStatement
-	primaryKeyCols map[ColumnID]struct{}
-	checkExprs     []parser.Expr
-	autoCommit     bool
+	rowCreatorNodeBase
+	n          *parser.Insert
+	qvals      qvalMap
+	insertRows parser.SelectStatement
+	checkExprs []parser.Expr
 
-	// The following fields are populated during Start().
-	rows                  planNode
-	colIDtoRowIndex       map[ColumnID]int
-	primaryIndex          IndexDescriptor
-	primaryIndexKeyPrefix []byte
-	marshalled            []interface{}
-	indexes               []IndexDescriptor
-	rowIdxToRetIdx        []int
-	pErr                  *roachpb.Error
-	b                     *client.Batch
-	rowTemplate           parser.DTuple
-	resultRow             parser.DTuple
-	done                  bool
+	run struct {
+		// The following fields are populated during Start().
+		rowCreatorNodeRun
+		rowIdxToRetIdx []int
+		rowTemplate    parser.DTuple
+	}
 }
 
 // Insert inserts rows into the database.
@@ -63,27 +49,18 @@ type insertNode struct {
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.Error) {
-	// TODO(marcb): We can't use the cached descriptor here because a recent
-	// update of the schema (e.g. the addition of an index) might not be
-	// reflected in the cached version (yet). Perhaps schema modification
-	// routines such as CREATE INDEX should not return until the schema change
-	// has been pushed everywhere.
-	tableDesc, pErr := p.getAliasedTableLease(n.Table)
-	if pErr != nil {
-		return nil, pErr
-	}
-
-	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
-		return nil, roachpb.NewError(err)
+	en, enErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.INSERT)
+	if enErr != nil {
+		return nil, enErr
 	}
 
 	var cols []ColumnDescriptor
 	// Determine which columns we're inserting into.
 	if n.DefaultValues() {
-		cols = tableDesc.Columns
+		cols = en.tableDesc.Columns
 	} else {
 		var err error
-		if cols, err = p.processColumns(tableDesc, n.Columns); err != nil {
+		if cols, err = p.processColumns(en.tableDesc, n.Columns); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -109,12 +86,12 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Add any column that has a DEFAULT expression.
-	for _, col := range tableDesc.Columns {
+	for _, col := range en.tableDesc.Columns {
 		addIfDefault(col)
 	}
 	// Also add any column in a mutation that is WRITE_ONLY and has
 	// a DEFAULT expression.
-	for _, m := range tableDesc.Mutations {
+	for _, m := range en.tableDesc.Mutations {
 		if m.State != DescriptorMutation_WRITE_ONLY {
 			continue
 		}
@@ -123,24 +100,22 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		}
 	}
 
+	rc, rcErr := p.makeRowCreatorNode(en, cols, colIDtoRowIndex, true)
+	if rcErr != nil {
+		return nil, rcErr
+	}
+
 	// Verify we have at least the columns that are part of the primary key.
 	primaryKeyCols := map[ColumnID]struct{}{}
-	for i, id := range tableDesc.PrimaryIndex.ColumnIDs {
+	for i, id := range en.tableDesc.PrimaryIndex.ColumnIDs {
 		if _, ok := colIDtoRowIndex[id]; !ok {
-			return nil, roachpb.NewUErrorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+			return nil, roachpb.NewUErrorf("missing %q primary key column", en.tableDesc.PrimaryIndex.ColumnNames[i])
 		}
 		primaryKeyCols[id] = struct{}{}
 	}
 
-	// Construct the default expressions. The returned slice will be nil if no
-	// column in the table has a default expression.
-	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
+	insertRows, err := p.fillDefaults(rc.defaultExprs, cols, n)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -157,7 +132,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	if len(checkExprs) > 0 {
 		qvals = make(qvalMap)
 		table := tableInfo{
-			columns: makeResultColumns(tableDesc.Columns),
+			columns: makeResultColumns(en.tableDesc.Columns),
 		}
 		for i := range checkExprs {
 			expr, err := resolveQNames(checkExprs[i], &table, qvals, &p.qnameVisitor)
@@ -196,30 +171,17 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		}
 	}
 
-	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if pErr := rh.TypeCheck(); pErr != nil {
+	if pErr := en.rh.TypeCheck(); pErr != nil {
 		return nil, pErr
 	}
 
-	res := &insertNode{
-		p:               p,
-		n:               n,
-		rh:              rh,
-		tableDesc:       &tableDesc,
-		autoCommit:      autoCommit,
-		defaultExprs:    defaultExprs,
-		checkExprs:      checkExprs,
-		cols:            cols,
-		qvals:           qvals,
-		insertRows:      insertRows,
-		primaryKeyCols:  primaryKeyCols,
-		colIDtoRowIndex: colIDtoRowIndex,
-	}
-	return res, nil
+	return &insertNode{
+		n:                  n,
+		rowCreatorNodeBase: rc,
+		checkExprs:         checkExprs,
+		qvals:              qvals,
+		insertRows:         insertRows,
+	}, nil
 }
 
 func (n *insertNode) Start() *roachpb.Error {
@@ -239,11 +201,6 @@ func (n *insertNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	n.rows = rows
-
-	n.primaryIndex = n.tableDesc.PrimaryIndex
-	n.primaryIndexKeyPrefix = MakeIndexKeyPrefix(n.tableDesc.ID, n.primaryIndex.ID)
-
 	// Determine the secondary indexes that need to be updated as well.
 	indexes := n.tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
@@ -254,15 +211,8 @@ func (n *insertNode) Start() *roachpb.Error {
 			}
 		}
 	}
-	n.indexes = indexes
 
-	if isSystemConfigID(n.tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		n.p.txn.SetSystemConfigTrigger()
-	}
-
-	n.b = n.p.txn.NewBatch()
-	n.marshalled = make([]interface{}, len(n.cols))
+	n.run.startRowCreatorNode(&n.rowCreatorNodeBase, rows, indexes)
 
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
@@ -271,9 +221,9 @@ func (n *insertNode) Start() *roachpb.Error {
 		// will use rowTemplate for this. We also need a table that maps row indices to rowTemplate indices
 		// to fill in the row values; any absent values will be NULLs.
 
-		n.rowTemplate = make(parser.DTuple, len(n.tableDesc.Columns))
-		for i := range n.rowTemplate {
-			n.rowTemplate[i] = parser.DNull
+		n.run.rowTemplate = make(parser.DTuple, len(n.tableDesc.Columns))
+		for i := range n.run.rowTemplate {
+			n.run.rowTemplate[i] = parser.DNull
 		}
 
 		colIDToRetIndex := map[ColumnID]int{}
@@ -281,9 +231,9 @@ func (n *insertNode) Start() *roachpb.Error {
 			colIDToRetIndex[col.ID] = i
 		}
 
-		n.rowIdxToRetIdx = make([]int, len(n.cols))
+		n.run.rowIdxToRetIdx = make([]int, len(n.cols))
 		for i, col := range n.cols {
-			n.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+			n.run.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 		}
 	}
 
@@ -291,13 +241,13 @@ func (n *insertNode) Start() *roachpb.Error {
 }
 
 func (n *insertNode) Next() bool {
-	if n.done || n.pErr != nil {
+	if n.run.done || n.run.pErr != nil {
 		return false
 	}
 
-	next := n.rows.Next()
+	next := n.run.rows.Next()
 	if next {
-		rowVals := n.rows.Values()
+		rowVals := n.run.rows.Values()
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Generate default values for those columns using the
@@ -309,7 +259,7 @@ func (n *insertNode) Next() bool {
 			}
 			d, err := n.defaultExprs[i].Eval(n.p.evalCtx)
 			if err != nil {
-				n.pErr = roachpb.NewError(err)
+				n.run.pErr = roachpb.NewError(err)
 				return false
 			}
 			rowVals = append(rowVals, d)
@@ -319,7 +269,7 @@ func (n *insertNode) Next() bool {
 		for _, col := range n.tableDesc.Columns {
 			if !col.Nullable {
 				if i, ok := n.colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-					n.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
+					n.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 					return false
 				}
 			}
@@ -328,7 +278,7 @@ func (n *insertNode) Next() bool {
 		// Ensure that the values honor the specified column widths.
 		for i := range rowVals {
 			if err := checkValueWidth(n.cols[i], rowVals[i]); err != nil {
-				n.pErr = roachpb.NewError(err)
+				n.run.pErr = roachpb.NewError(err)
 				return false
 			}
 		}
@@ -339,21 +289,21 @@ func (n *insertNode) Next() bool {
 				// The colIdx is 0-based, we need to change it to 1-based.
 				ri, has := n.colIDtoRowIndex[ColumnID(ref.colIdx+1)]
 				if !has {
-					n.pErr = roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
+					n.run.pErr = roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
 					return false
 				}
 				qval.datum = rowVals[ri]
 			}
 			for _, expr := range n.checkExprs {
 				if d, err := expr.Eval(n.p.evalCtx); err != nil {
-					n.pErr = roachpb.NewError(err)
+					n.run.pErr = roachpb.NewError(err)
 					return false
 				} else if res, err := parser.GetBool(d); err != nil {
-					n.pErr = roachpb.NewError(err)
+					n.run.pErr = roachpb.NewError(err)
 					return false
 				} else if !res {
 					// Failed to satisfy CHECK constraint.
-					n.pErr = roachpb.NewUErrorf("failed to satisfy CHECK constraint (%s)", expr.String())
+					n.run.pErr = roachpb.NewUErrorf("failed to satisfy CHECK constraint (%s)", expr.String())
 					return false
 				}
 			}
@@ -365,16 +315,16 @@ func (n *insertNode) Next() bool {
 		for i, val := range rowVals {
 			// Make sure the value can be written to the column before proceeding.
 			var mErr error
-			if n.marshalled[i], mErr = marshalColumnValue(n.cols[i], val); mErr != nil {
-				n.pErr = roachpb.NewError(mErr)
+			if n.run.marshalled[i], mErr = marshalColumnValue(n.cols[i], val); mErr != nil {
+				n.run.pErr = roachpb.NewError(mErr)
 				return false
 			}
 		}
 
 		primaryIndexKey, _, eErr := encodeIndexKey(
-			&n.primaryIndex, n.colIDtoRowIndex, rowVals, n.primaryIndexKeyPrefix)
+			&n.run.primaryIndex, n.colIDtoRowIndex, rowVals, n.run.primaryIndexKeyPrefix)
 		if eErr != nil {
-			n.pErr = roachpb.NewError(eErr)
+			n.run.pErr = roachpb.NewError(eErr)
 			return false
 		}
 
@@ -388,12 +338,12 @@ func (n *insertNode) Next() bool {
 		}
 		// This is subtle: An interface{}(nil) deletes the value, so we pass in
 		// []byte{} as a non-nil value.
-		n.b.CPut(sentinelKey, []byte{}, nil)
+		n.run.b.CPut(sentinelKey, []byte{}, nil)
 
 		secondaryIndexEntries, eErr := encodeSecondaryIndexes(
-			n.tableDesc.ID, n.indexes, n.colIDtoRowIndex, rowVals)
+			n.tableDesc.ID, n.run.indexes, n.colIDtoRowIndex, rowVals)
 		if eErr != nil {
-			n.pErr = roachpb.NewError(eErr)
+			n.run.pErr = roachpb.NewError(eErr)
 			return false
 		}
 
@@ -402,14 +352,14 @@ func (n *insertNode) Next() bool {
 				log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
 					secondaryIndexEntry.value)
 			}
-			n.b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+			n.run.b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
 		}
 
 		// Write the row columns.
 		for i, val := range rowVals {
 			col := n.cols[i]
-			if n.rowTemplate != nil {
-				n.rowTemplate[n.rowIdxToRetIdx[i]] = val
+			if n.run.rowTemplate != nil {
+				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
 			}
 
 			if _, ok := n.primaryKeyCols[col.ID]; ok {
@@ -419,7 +369,7 @@ func (n *insertNode) Next() bool {
 				continue
 			}
 
-			if n.marshalled[i] != nil {
+			if n.run.marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
@@ -429,31 +379,31 @@ func (n *insertNode) Next() bool {
 					log.Infof("CPut %s -> %v", roachpb.Key(key), val)
 				}
 
-				n.b.CPut(key, n.marshalled[i], nil)
+				n.run.b.CPut(key, n.run.marshalled[i], nil)
 			}
 		}
 
-		resultRow, err := n.rh.cookResultRow(n.rowTemplate)
+		resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
 		if err != nil {
-			n.pErr = roachpb.NewError(err)
+			n.run.pErr = roachpb.NewError(err)
 			return false
 		}
-		n.resultRow = resultRow
+		n.run.resultRow = resultRow
 	} else {
 		// We're done. Finish the batch.
 		if n.autoCommit {
 			// An auto-txn can commit the transaction with the batch. This is an
 			// optimization to avoid an extra round-trip to the transaction
 			// coordinator.
-			n.pErr = n.p.txn.CommitInBatch(n.b)
+			n.run.pErr = n.p.txn.CommitInBatch(n.run.b)
 		} else {
-			n.pErr = n.p.txn.Run(n.b)
+			n.run.pErr = n.p.txn.Run(n.run.b)
 		}
-		if n.pErr != nil {
-			n.pErr = convertBatchError(n.tableDesc, *n.b, n.pErr)
+		if n.run.pErr != nil {
+			n.run.pErr = convertBatchError(n.tableDesc, *n.run.b, n.run.pErr)
 		}
-		n.done = true
-		n.b = nil
+		n.run.done = true
+		n.run.b = nil
 	}
 	return next
 }
@@ -611,23 +561,23 @@ func (n *insertNode) Columns() []ResultColumn {
 }
 
 func (n *insertNode) Values() parser.DTuple {
-	return n.resultRow
+	return n.run.resultRow
 }
 
 func (n *insertNode) MarkDebug(mode explainMode) {
-	n.rows.MarkDebug(mode)
+	n.run.rows.MarkDebug(mode)
 }
 
 func (n *insertNode) DebugValues() debugValues {
-	return n.rows.DebugValues()
+	return n.run.rows.DebugValues()
 }
 
 func (n *insertNode) Ordering() orderingInfo {
-	return n.rows.Ordering()
+	return n.run.rows.Ordering()
 }
 
 func (n *insertNode) PErr() *roachpb.Error {
-	return n.pErr
+	return n.run.pErr
 }
 
 func (n *insertNode) ExplainPlan() (name, description string, children []planNode) {
@@ -647,7 +597,7 @@ func (n *insertNode) ExplainPlan() (name, description string, children []planNod
 		fmt.Fprintf(&buf, "%s", col.Name)
 	}
 	fmt.Fprintf(&buf, ")")
-	return "insert", buf.String(), []planNode{n.rows}
+	return "insert", buf.String(), []planNode{n.run.rows}
 }
 
 func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}

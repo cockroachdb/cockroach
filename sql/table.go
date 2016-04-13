@@ -774,6 +774,9 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 	default:
 		return util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
+	// Check that the value cast has succeeded.
+	// We ignore the case where it has failed because val was a DArg,
+	// which is signalled by SetInferredType returning a non-nil assignment.
 	if !ok && set == nil {
 		return fmt.Errorf("value type %s doesn't match type %s of column %q",
 			val.Type(), col.Type.Kind, col.Name)
