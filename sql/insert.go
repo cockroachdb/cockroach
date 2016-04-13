@@ -17,8 +17,10 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -26,6 +28,33 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+type insertNode struct {
+	// The following fields are populated during makePlan.
+	p              *planner
+	n              *parser.Insert
+	rh             *returningHelper
+	tableDesc      *TableDescriptor
+	defaultExprs   []parser.Expr
+	cols           []ColumnDescriptor
+	insertRows     parser.SelectStatement
+	primaryKeyCols map[ColumnID]struct{}
+	autoCommit     bool
+
+	// The following fields are populated during Start().
+	rows                  planNode
+	colIDtoRowIndex       map[ColumnID]int
+	primaryIndex          IndexDescriptor
+	primaryIndexKeyPrefix []byte
+	marshalled            []interface{}
+	indexes               []IndexDescriptor
+	rowIdxToRetIdx        []int
+	pErr                  *roachpb.Error
+	b                     *client.Batch
+	rowTemplate           parser.DTuple
+	resultRow             parser.DTuple
+	done                  bool
+}
 
 // Insert inserts rows into the database.
 // Privileges: INSERT on table
@@ -109,10 +138,12 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	insertRows := p.fillDefaults(defaultExprs, cols, n)
+	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
-	// Transform the values into a rows object. This expands SELECT statements or
-	// generates rows from the values contained within the query.
+	// Analyze the expressions for column information and typing.
 	rows, pErr := p.makePlan(insertRows, false)
 	if pErr != nil {
 		return nil, pErr
@@ -122,85 +153,157 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, roachpb.NewUErrorf("INSERT has more expressions than target columns: %d/%d", expressions, numInputColumns)
 	}
 
-	primaryIndex := tableDesc.PrimaryIndex
-	primaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc.ID, primaryIndex.ID)
+	// Type check the tuples, if any, to collect placeholder types.
+	if values, ok := n.Rows.Select.(*parser.ValuesClause); ok {
+		for _, tuple := range values.Tuples {
+			for eIdx, val := range tuple.Exprs {
+				if _, ok := val.(parser.DefaultVal); ok {
+					continue
+				}
+				typ, err := val.TypeCheck(p.evalCtx.Args)
+				if err != nil {
+					return nil, roachpb.NewError(err)
+				}
+				if err := assignArgType(cols[eIdx], typ, p.evalCtx.Args); err != nil {
+					return nil, roachpb.NewError(err)
+				}
+			}
+		}
+	}
 
-	marshalled := make([]interface{}, len(cols))
-
-	b := p.txn.NewBatch()
 	rh, err := makeReturningHelper(p, n.Returning, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
+	if pErr := rh.TypeCheck(); pErr != nil {
+		return nil, pErr
+	}
+
+	res := &insertNode{
+		p:               p,
+		n:               n,
+		rh:              rh,
+		tableDesc:       &tableDesc,
+		autoCommit:      autoCommit,
+		defaultExprs:    defaultExprs,
+		cols:            cols,
+		insertRows:      insertRows,
+		primaryKeyCols:  primaryKeyCols,
+		colIDtoRowIndex: colIDtoRowIndex,
+	}
+	return res, nil
+}
+
+func (n *insertNode) Start() *roachpb.Error {
+	// TODO(knz): We need to re-run makePlan here again
+	// because that's when we can expand sub-queries.
+	// This goes away when sub-query expansion is moved
+	// to the Start() method of the insertRows object.
+
+	// Transform the values into a rows object. This expands SELECT statements or
+	// generates rows from the values contained within the query.
+	rows, pErr := n.p.makePlan(n.insertRows, false)
+	if pErr != nil {
+		return pErr
+	}
+
+	if pErr := rows.Start(); pErr != nil {
+		return pErr
+	}
+
+	n.rows = rows
+
+	n.primaryIndex = n.tableDesc.PrimaryIndex
+	n.primaryIndexKeyPrefix = MakeIndexKeyPrefix(n.tableDesc.ID, n.primaryIndex.ID)
+
+	// Determine the secondary indexes that need to be updated as well.
+	indexes := n.tableDesc.Indexes
+	// Also include the secondary indexes in mutation state WRITE_ONLY.
+	for _, m := range n.tableDesc.Mutations {
+		if m.State == DescriptorMutation_WRITE_ONLY {
+			if index := m.GetIndex(); index != nil {
+				indexes = append(indexes, *index)
+			}
+		}
+	}
+	n.indexes = indexes
+
+	if isSystemConfigID(n.tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		n.p.txn.SetSystemConfigTrigger()
+	}
+
+	n.b = n.p.txn.NewBatch()
+	n.marshalled = make([]interface{}, len(n.cols))
+
 	// Prepare structures for building values to pass to rh.
-	var retVals parser.DTuple
-	var rowIdxToRetIdx []int
-	if rh.exprs != nil {
+	if n.rh.exprs != nil {
 		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain all the table
 		// columns. We need to pass values for all table columns to rh, in the correct order; we
-		// will use retVals for this. We also need a table that maps row indices to retVals indices
+		// will use rowTemplate for this. We also need a table that maps row indices to rowTemplate indices
 		// to fill in the row values; any absent values will be NULLs.
 
-		retVals = make(parser.DTuple, len(tableDesc.Columns))
-		for i := range retVals {
-			retVals[i] = parser.DNull
+		n.rowTemplate = make(parser.DTuple, len(n.tableDesc.Columns))
+		for i := range n.rowTemplate {
+			n.rowTemplate[i] = parser.DNull
 		}
 
 		colIDToRetIndex := map[ColumnID]int{}
-		for i, col := range tableDesc.Columns {
+		for i, col := range n.tableDesc.Columns {
 			colIDToRetIndex[col.ID] = i
 		}
 
-		rowIdxToRetIdx = make([]int, len(cols))
-		for i, col := range cols {
-			rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+		n.rowIdxToRetIdx = make([]int, len(n.cols))
+		for i, col := range n.cols {
+			n.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 		}
 	}
 
-	for rows.Next() {
-		rowVals := rows.Values()
+	return nil
+}
+
+func (n *insertNode) Next() bool {
+	if n.done || n.pErr != nil {
+		return false
+	}
+
+	next := n.rows.Next()
+	if next {
+		rowVals := n.rows.Values()
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Generate default values for those columns using the
 		// default expressions.
-		for i := len(rowVals); i < len(cols); i++ {
-			if defaultExprs == nil {
+		for i := len(rowVals); i < len(n.cols); i++ {
+			if n.defaultExprs == nil {
 				rowVals = append(rowVals, parser.DNull)
 				continue
 			}
-			d, err := defaultExprs[i].Eval(p.evalCtx)
+			d, err := n.defaultExprs[i].Eval(n.p.evalCtx)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				n.pErr = roachpb.NewError(err)
+				return false
 			}
 			rowVals = append(rowVals, d)
 		}
 
 		// Check to see if NULL is being inserted into any non-nullable column.
-		for _, col := range tableDesc.Columns {
+		for _, col := range n.tableDesc.Columns {
 			if !col.Nullable {
-				if i, ok := colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
-					return nil, roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
+				if i, ok := n.colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
+					n.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
+					return false
 				}
 			}
 		}
 
 		// Ensure that the values honor the specified column widths.
 		for i := range rowVals {
-			if err := checkValueWidth(cols[i], rowVals[i]); err != nil {
-				return nil, roachpb.NewError(err)
+			if err := checkValueWidth(n.cols[i], rowVals[i]); err != nil {
+				n.pErr = roachpb.NewError(err)
+				return false
 			}
-		}
-
-		// Check that the row value types match the column types.
-		for i, val := range rowVals {
-			if err := assignArgType(cols[i], val, p.evalCtx.Args); err != nil {
-				return nil, roachpb.NewError(err)
-			}
-		}
-
-		if p.evalCtx.PrepareOnly {
-			continue
 		}
 
 		// Encode the values to the expected column type. This needs to
@@ -209,15 +312,17 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		for i, val := range rowVals {
 			// Make sure the value can be written to the column before proceeding.
 			var mErr error
-			if marshalled[i], mErr = marshalColumnValue(cols[i], val); mErr != nil {
-				return nil, roachpb.NewError(mErr)
+			if n.marshalled[i], mErr = marshalColumnValue(n.cols[i], val); mErr != nil {
+				n.pErr = roachpb.NewError(mErr)
+				return false
 			}
 		}
 
 		primaryIndexKey, _, eErr := encodeIndexKey(
-			&primaryIndex, colIDtoRowIndex, rowVals, primaryIndexKeyPrefix)
+			&n.primaryIndex, n.colIDtoRowIndex, rowVals, n.primaryIndexKeyPrefix)
 		if eErr != nil {
-			return nil, roachpb.NewError(eErr)
+			n.pErr = roachpb.NewError(eErr)
+			return false
 		}
 
 		// Write the row sentinel. We want to write the sentinel first in case
@@ -230,22 +335,13 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		}
 		// This is subtle: An interface{}(nil) deletes the value, so we pass in
 		// []byte{} as a non-nil value.
-		b.CPut(sentinelKey, []byte{}, nil)
+		n.b.CPut(sentinelKey, []byte{}, nil)
 
-		// Write the secondary indexes.
-		indexes := tableDesc.Indexes
-		// Also include the secondary indexes in mutation state WRITE_ONLY.
-		for _, m := range tableDesc.Mutations {
-			if m.State == DescriptorMutation_WRITE_ONLY {
-				if index := m.GetIndex(); index != nil {
-					indexes = append(indexes, *index)
-				}
-			}
-		}
 		secondaryIndexEntries, eErr := encodeSecondaryIndexes(
-			tableDesc.ID, indexes, colIDtoRowIndex, rowVals)
+			n.tableDesc.ID, n.indexes, n.colIDtoRowIndex, rowVals)
 		if eErr != nil {
-			return nil, roachpb.NewError(eErr)
+			n.pErr = roachpb.NewError(eErr)
+			return false
 		}
 
 		for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -253,24 +349,24 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 				log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
 					secondaryIndexEntry.value)
 			}
-			b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+			n.b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
 		}
 
 		// Write the row columns.
 		for i, val := range rowVals {
-			col := cols[i]
-			if retVals != nil {
-				retVals[rowIdxToRetIdx[i]] = val
+			col := n.cols[i]
+			if n.rowTemplate != nil {
+				n.rowTemplate[n.rowIdxToRetIdx[i]] = val
 			}
 
-			if _, ok := primaryKeyCols[col.ID]; ok {
+			if _, ok := n.primaryKeyCols[col.ID]; ok {
 				// Skip primary key columns as their values are encoded in the row
 				// sentinel key which is guaranteed to exist for as long as the row
 				// exists.
 				continue
 			}
 
-			if marshalled[i] != nil {
+			if n.marshalled[i] != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
@@ -280,40 +376,33 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 					log.Infof("CPut %s -> %v", roachpb.Key(key), val)
 				}
 
-				b.CPut(key, marshalled[i], nil)
+				n.b.CPut(key, n.marshalled[i], nil)
 			}
 		}
 
-		if err := rh.append(retVals); err != nil {
-			return nil, roachpb.NewError(err)
+		resultRow, err := n.rh.cookResultRow(n.rowTemplate)
+		if err != nil {
+			n.pErr = roachpb.NewError(err)
+			return false
 		}
-	}
-	if pErr := rows.PErr(); pErr != nil {
-		return nil, pErr
-	}
-
-	if p.evalCtx.PrepareOnly {
-		// Return the result column types.
-		return rh.getResults()
-	}
-
-	if isSystemConfigID(tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		p.txn.SetSystemConfigTrigger()
-	}
-
-	if autoCommit {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		pErr = p.txn.CommitInBatch(b)
+		n.resultRow = resultRow
 	} else {
-		pErr = p.txn.Run(b)
+		// We're done. Finish the batch.
+		if n.autoCommit {
+			// An auto-txn can commit the transaction with the batch. This is an
+			// optimization to avoid an extra round-trip to the transaction
+			// coordinator.
+			n.pErr = n.p.txn.CommitInBatch(n.b)
+		} else {
+			n.pErr = n.p.txn.Run(n.b)
+		}
+		if n.pErr != nil {
+			n.pErr = convertBatchError(n.tableDesc, *n.b, n.pErr)
+		}
+		n.done = true
+		n.b = nil
 	}
-	if pErr != nil {
-		return nil, convertBatchError(&tableDesc, *b, pErr)
-	}
-	return rh.getResults()
+	return next
 }
 
 func (p *planner) processColumns(tableDesc *TableDescriptor,
@@ -349,7 +438,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 }
 
 func (p *planner) fillDefaults(defaultExprs []parser.Expr,
-	cols []ColumnDescriptor, n *parser.Insert) parser.SelectStatement {
+	cols []ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, error) {
 	if n.DefaultValues() {
 		row := make(parser.Exprs, 0, len(cols))
 		for i := range cols {
@@ -359,12 +448,12 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 			row = append(row, defaultExprs[i])
 		}
-		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
+		return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}, nil
 	}
 
 	values, ok := n.Rows.Select.(*parser.ValuesClause)
 	if !ok {
-		return n.Rows.Select
+		return n.Rows.Select, nil
 	}
 
 	ret := values
@@ -389,7 +478,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 			}
 		}
 	}
-	return ret
+	return ret, nil
 }
 
 func makeDefaultExprs(
@@ -431,3 +520,49 @@ func makeDefaultExprs(
 	}
 	return defaultExprs, nil
 }
+
+func (n *insertNode) Columns() []ResultColumn {
+	return n.rh.columns
+}
+
+func (n *insertNode) Values() parser.DTuple {
+	return n.resultRow
+}
+
+func (n *insertNode) MarkDebug(mode explainMode) {
+	n.rows.MarkDebug(mode)
+}
+
+func (n *insertNode) DebugValues() debugValues {
+	return n.rows.DebugValues()
+}
+
+func (n *insertNode) Ordering() orderingInfo {
+	return n.rows.Ordering()
+}
+
+func (n *insertNode) PErr() *roachpb.Error {
+	return n.pErr
+}
+
+func (n *insertNode) ExplainPlan() (name, description string, children []planNode) {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "into %s (", n.tableDesc.Name)
+	for i, col := range n.cols {
+		if i > 0 {
+			fmt.Fprintf(&buf, ", ")
+		}
+		fmt.Fprintf(&buf, "%s", col.Name)
+	}
+	fmt.Fprintf(&buf, ") returning (")
+	for i, col := range n.rh.columns {
+		if i > 0 {
+			fmt.Fprintf(&buf, ", ")
+		}
+		fmt.Fprintf(&buf, "%s", col.Name)
+	}
+	fmt.Fprintf(&buf, ")")
+	return "insert", buf.String(), []planNode{n.rows}
+}
+
+func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}
