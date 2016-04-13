@@ -131,6 +131,10 @@ func (n *scanNode) nextKey() bool {
 	return true
 }
 
+func (n *scanNode) Start() *roachpb.Error {
+	return nil
+}
+
 func (n *scanNode) Next() bool {
 	tracing.AnnotateTrace()
 
