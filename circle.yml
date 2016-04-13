@@ -68,5 +68,6 @@ deployment:
           -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
           "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
 
-      - build/build-osx.sh
+      # TODO(tschottdorf): #6030
+      # - build/build-osx.sh
       - build/push-tagged-aws.sh
