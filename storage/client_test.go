@@ -835,7 +835,10 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 // expireLeaderLeases increments the context's manual clock far enough into the
 // future that current leader leases are expired. Useful for tests which modify
 // replica sets.
+// Will not work as expected when clocks with different MaxOffset are used.
 func (m *multiTestContext) expireLeaderLeases() {
+	// The extra tick is important, for otherwise we operate at the expiration
+	// of the old lease and logical ticks begin to play a role.
 	m.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration) + 1)
 }
 

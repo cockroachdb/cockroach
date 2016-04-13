@@ -1336,6 +1336,20 @@ func (r *Replica) LeaderLease(
 		Requested: args.Lease,
 	}
 
+	if mo := int64(args.Lease.MaxOffset); mo <= 0 {
+		// TODO(tschottdorf): some of our tests run with a zero MaxOffset. A
+		// real cluster must never do that (except in single-node mode, but it
+		// doesn't cost us anything in that case). Should stop using zero clock
+		// offsets in unit tests.
+		if r.store.Clock().MaxOffset() != 0 {
+			// Would panic here, but that's not migration safe.
+			log.Warningf("proposed lease %s has nonzero MaxOffset", args.Lease)
+		}
+	} else if !args.Lease.Start.Add(mo, 0).Less(args.Lease.Expiration) {
+		rErr.Message = "lease is consumed by grace period"
+		return reply, rErr
+	}
+
 	// Verify details of new lease request. The start of this lease must
 	// obviously precede its expiration.
 	if !args.Lease.Start.Less(args.Lease.Expiration) {
@@ -1375,8 +1389,16 @@ func (r *Replica) LeaderLease(
 			rErr.Message = "extension moved start timestamp backwards"
 			return reply, rErr
 		}
-		// Note that the lease expiration can be shortened by the holder.
-		// This could be used to effect a faster lease handoff.
+		// TODO(tschottdorf): We could allow shortening existing leases, which
+		// could be used to effect a faster lease handoff. This needs to be
+		// properly implemented though (the leader must not shorten the lease
+		// when it has already served commands at higher timestamps), so this
+		// is forbidden now but can be re-enabled when we properly implement
+		// it.
+		if args.Lease.Expiration.Less(prevLease.Expiration) {
+			rErr.Message = "lease shortening currently unsupported"
+			return reply, rErr
+		}
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return reply, rErr
@@ -1398,15 +1420,27 @@ func (r *Replica) LeaderLease(
 		r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
 	}
 
-	// If this replica is a new holder of the lease, update the
-	// low water mark in the timestamp cache. We add the maximum
-	// clock offset to account for any difference in clocks
-	// between the expiration (set by a remote node) and this
-	// node.
 	if r.mu.leaderLease.Replica.StoreID == r.store.StoreID() &&
 		prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
-		r.mu.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", r.RangeID, args.Lease)
+		// If this replica is a new holder of the lease, update the low water mark
+		// of the timestamp cache. Note that clock offset scenarios are handled via
+		// a grace period inherent in the lease which is documented in lease.Covers
+		// and the field comment on Lease.MaxOffset.
+		// Note also that in this case, we're never in a lease extension (in which
+		// case the previous lease could easily be almost the same lease, with an
+		// expiration timestamp far in the future), so the expiraton timestamp
+		// should be expired. Nodes are not allowed to request leases for
+		// artificial timestamps (in fact, nobody in the system must generate them).
+		now := r.store.Clock().PhysicalTime()
+		maxExpiration := now.Add(r.store.Clock().MaxOffset()).UnixNano()
+		if maxExpiration < prevLease.Expiration.WallTime {
+			log.Warningf("previous lease expiration violates clock offset bounds, "+
+				"should have expired before %s: %s", maxExpiration, prevLease)
+		}
+
+		log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
+			r.RangeID, args.Lease, prevLease, now)
+		r.mu.tsCache.SetLowWater(prevLease.Expiration)
 	}
 
 	return reply, nil

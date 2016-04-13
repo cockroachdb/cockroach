@@ -21,7 +21,6 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/security"
@@ -34,16 +33,6 @@ const (
 	defaultUser     = security.RootUser
 	httpScheme      = "http"
 	httpsScheme     = "https"
-
-	// From IANA Service Name and Transport Protocol Port Number Registry. See
-	// https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?search=cockroachdb
-	DefaultPort = "26257"
-
-	// The default port for HTTP-for-humans.
-	DefaultHTTPPort = "8080"
-
-	// NetworkTimeout is the timeout used for network operations.
-	NetworkTimeout = 3 * time.Second
 )
 
 type lazyTLSConfig struct {

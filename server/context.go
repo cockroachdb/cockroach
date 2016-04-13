@@ -49,7 +49,6 @@ const (
 	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	defaultAddr          = ":" + base.DefaultPort
 	defaultHTTPAddr      = ":" + base.DefaultHTTPPort
-	defaultMaxOffset     = 250 * time.Millisecond
 	defaultCacheSize     = 512 << 20 // 512 MB
 	// defaultMemtableBudget controls how much memory can be used for memory
 	// tables. The way we initialize RocksDB, 150% (24 MB) of this setting can be
@@ -230,7 +229,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.Context.InitDefaults()
 	ctx.Addr = defaultAddr
 	ctx.HTTPAddr = defaultHTTPAddr
-	ctx.MaxOffset = defaultMaxOffset
+	ctx.MaxOffset = base.DefaultMaxOffset
 	ctx.CacheSize = defaultCacheSize
 	ctx.MemtableBudget = defaultMemtableBudget
 	ctx.ScanInterval = defaultScanInterval
