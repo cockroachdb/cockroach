@@ -293,14 +293,24 @@ func (ru ResponseUnion) GetInner() Response {
 	return ru.GetValue().(Response)
 }
 
-// SetInner sets the Request contained in the union.
-func (ru *RequestUnion) SetInner(args Request) bool {
-	return ru.SetValue(args)
+// MustSetInner sets the Request contained in the union. It panics if the
+// request is not recognized by the union type. The RequestUnion is reset
+// before being repopulated.
+func (ru *RequestUnion) MustSetInner(args Request) {
+	ru.Reset()
+	if !ru.SetValue(args) {
+		panic(fmt.Sprintf("%T excludes %T", ru, args))
+	}
 }
 
-// SetInner sets the Response contained in the union.
-func (ru *ResponseUnion) SetInner(reply Response) bool {
-	return ru.SetValue(reply)
+// MustSetInner sets the Response contained in the union. It panics if the
+// response is not recognized by the union type. The ResponseUnion is reset
+// before being repopulated.
+func (ru *ResponseUnion) MustSetInner(reply Response) {
+	ru.Reset()
+	if !ru.SetValue(reply) {
+		panic(fmt.Sprintf("%T excludes %T", ru, reply))
+	}
 }
 
 // Bounded is implemented by request types which have a bounded number of

@@ -867,9 +867,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 						_ = req.GetInner().(*roachpb.ReverseScanRequest)
 						reply = &roachpb.ReverseScanResponse{}
 					}
-					if !union.SetInner(reply) {
-						panic(fmt.Sprintf("%T excludes %T", union, reply))
-					}
+					union.MustSetInner(reply)
 					br.Responses[i] = union
 				}
 				return br, nil, false
@@ -924,10 +922,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					// We've hit max results for this piece of the batch. Mask
 					// it out (we've copied the requests slice above, so this
 					// is kosher).
-					ba.Requests[i].Reset() // necessary (no one-of?)
-					if union := &ba.Requests[i]; !union.SetInner(&noopRequest) {
-						panic(fmt.Sprintf("%T excludes %T", union, noopRequest))
-					}
+					union := &ba.Requests[i] // avoid working on copy
+					union.MustSetInner(&noopRequest)
 					continue
 				}
 				// The request isn't saturated yet.

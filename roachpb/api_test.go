@@ -87,3 +87,23 @@ func TestCombinable(t *testing.T) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
 	}
 }
+
+// TestMustSetInner makes sure that calls to MustSetInner correctly reset the
+// union before repopulating to avoid having more than one value set.
+func TestMustSetInner(t *testing.T) {
+	req := RequestUnion{}
+	res := ResponseUnion{}
+
+	// GetRequest is checked first in the generated code for SetValue.
+	req.MustSetInner(&GetRequest{})
+	res.MustSetInner(&GetResponse{})
+	req.MustSetInner(&EndTransactionRequest{})
+	res.MustSetInner(&EndTransactionResponse{})
+
+	if m := req.GetInner().Method(); m != EndTransaction {
+		t.Fatalf("unexpected request: %s in %+v", m, req)
+	}
+	if _, isET := res.GetValue().(*EndTransactionResponse); !isET {
+		t.Fatalf("unexpected response union: %+v", res)
+	}
+}
