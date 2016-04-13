@@ -32,9 +32,6 @@ SELECT * FROM kv
 statement error column "m" does not exist
 UPDATE kv SET m = 9 WHERE k IN (1, 3)
 
-statement error primary key column "k" cannot be updated
-UPDATE kv SET k = 9 WHERE k IN (1, 3)
-
 statement ok
 CREATE TABLE kv2 (
   k CHAR PRIMARY KEY,
@@ -143,7 +140,8 @@ statement ok
 CREATE TABLE abc (
   a INT PRIMARY KEY,
   b INT,
-  c INT
+  c INT,
+  UNIQUE INDEX d (c)
 )
 
 statement ok
@@ -220,6 +218,21 @@ query III
 SELECT * FROM abc
 ----
 1 8 9
+
+query III
+UPDATE abc SET a = 2, b = 3 RETURNING *
+----
+2 3 9
+
+query III
+select * FROM abc
+----
+2 3 9
+
+query III
+select * FROM abc where c = 9
+----
+2 3 9
 
 statement error multiple assignments to same column "b"
 UPDATE abc SET b = 10, b = 11
