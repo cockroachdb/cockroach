@@ -413,7 +413,8 @@ func Exp(z, n *inf.Dec, s inf.Scale) *inf.Dec {
 }
 
 // Pow computes (x^y) as e^(y ln x) to the specified scale and stores
-// the result in z, which is also the return value.
+// the result in z, which is also the return value. If y is not an
+// integer nil is returned.
 func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
 	s = s + 2
 	if z == nil {
@@ -421,11 +422,15 @@ func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
 		z.SetUnscaled(1).SetScale(0)
 	}
 
-	neg := x.Sign() < 0
-	tmp := new(inf.Dec).Abs(x)
+	// Check if y is of type int.
+	tmp := new(inf.Dec).Abs(y)
+	isInt := tmp.Cmp(new(inf.Dec).Round(tmp, 0, inf.RoundDown)) == 0
 
-	integer, _ := new(inf.Dec).Round(x, 0, inf.RoundDown).Unscaled()
-	odd := integer%2 == 1
+	neg := x.Sign() < 0
+
+	if !isInt && neg {
+		return nil
+	}
 
 	// Exponent Precision Explanation (RaduBerinde):
 	// Say we compute the Log with a scale of k. That means that the result we get is:
@@ -441,22 +446,22 @@ func Pow(z, x, y *inf.Dec, s inf.Scale) *inf.Dec {
 	//
 	// exponent precision = s + <the number of digits before decimal point in x> * y.
 
-	// digitsToBitsRatio = 1 / Log10(2) which is approximately 3
-	digitsToBitsRatio := 1 / math.Log10(2)
-	n := float64(x.UnscaledBig().BitLen()) / digitsToBitsRatio
-	numDigits := n - float64(int64(x.Scale()))
+	numDigits := float64(x.UnscaledBig().BitLen()) / digitsToBitsRatio
+	numDigits -= float64(int64(x.Scale()))
 
-	// Round up y which should provide us with a threshold in calulcating the new scale.
+	// Round up y which should provide us with a threshold in calculating the new scale.
 	yu := float64(new(inf.Dec).Round(y, 0, inf.RoundUp).UnscaledBig().Int64())
 
 	// exponent precision = s + <the number of digits before decimal point in x> * y
 	es := s + inf.Scale(int32(numDigits*yu))
 
+	tmp = new(inf.Dec).Abs(x)
+
 	Log(tmp, tmp, es)
 	tmp.Mul(tmp, y)
 	Exp(tmp, tmp, es)
 
-	if neg && odd {
+	if neg && new(inf.Dec).Round(x, 0, inf.RoundDown).UnscaledBig().Int64()%2 == 1 {
 		tmp.Neg(tmp)
 	}
 
