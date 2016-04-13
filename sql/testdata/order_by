@@ -33,7 +33,8 @@ query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 0 sort +b
-1 scan t@primary -
+1 select (a, b)@t
+2 scan t@primary -
 
 query II
 SELECT a, b FROM t ORDER BY b DESC
@@ -46,7 +47,8 @@ query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 0 sort -b
-1 scan t@primary -
+1 select (a, b)@t
+2 scan t@primary -
 
 query I
 SELECT a FROM t ORDER BY 1 DESC
@@ -58,9 +60,10 @@ SELECT a FROM t ORDER BY 1 DESC
 query ITT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-0 limit count: 2, offset: 0
-1 sort  +b (top 2)
-2 scan  t@primary -
+0 limit  count: 2, offset: 0
+1 sort   +b (top 2)
+2 select (a, b)@t
+3 scan   t@primary -
 
 query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -74,7 +77,8 @@ EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
 0 limit    count: 2, offset: 0
 1 distinct
 2 sort     +b (iterative)
-3 scan     t@primary -
+3 select   (a, b)@t
+4 scan     t@primary -
 
 query I
 SELECT DISTINCT a FROM t ORDER BY b DESC LIMIT 2
@@ -114,19 +118,22 @@ query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 0 nosort -a
-1 revscan t@primary -
+1 select (b, a)@t
+2 revscan t@primary -
 
 query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 0 nosort -a,+b
-1 revscan t@primary -
+1 select (b, a)@t
+2 revscan t@primary -
 
 query ITT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 0 nosort -a,-b
-1 revscan t@primary -
+1 select (b, a)@t
+2 revscan t@primary -
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -237,7 +244,8 @@ EXPLAIN (DEBUG) SELECT * FROM abc ORDER BY a
 query ITT
 EXPLAIN SELECT * FROM abc ORDER BY a
 ----
-0 scan abc@primary -
+0 select (a, b, c, d)@abc
+1 scan abc@primary -
 
 query ITTT
 EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
@@ -248,50 +256,57 @@ EXPLAIN (DEBUG) SELECT a, b FROM abc ORDER BY b, a
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
-0 scan abc@ba -
+0 select (a, b)@abc
+1 scan abc@ba -
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
 query ITT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-0 scan abc@ba -
+0 select (a, b, c)@abc
+1 scan abc@ba -
 
 # We use the WHERE condition to force the use of index ba.
 query ITT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
 0 sort       +b,+a,+d
-1 index-join
-2 scan       abc@ba /11-
-2 scan       abc@primary
+1 select     (a, b, c, d)@abc
+2 index-join
+3 scan       abc@ba /11-
+3 scan       abc@primary
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
 query ITT
 EXPLAIN SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-0 index-join
-1 scan       abc@ba /11-
-1 scan       abc@primary
+0 select     (a, b, c, d)@abc
+1 index-join
+2 scan       abc@ba /11-
+2 scan       abc@primary
 
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 0 nosort +b,+c
-1 scan   abc@bc -
+1 select (a, b, c)@abc
+2 scan   abc@bc -
 
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 0 nosort +b,+c,+a
-1 scan   abc@bc -
+1 select (a, b, c)@abc
+2 scan   abc@bc -
 
 query ITT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 0 nosort +b,+c,-a
-1 scan   abc@bc -
+1 select (a, b, c)@abc
+2 scan   abc@bc -
 
 query ITTT
 EXPLAIN (DEBUG) SELECT b, c FROM abc ORDER BY b, c
@@ -316,7 +331,8 @@ EXPLAIN (DEBUG) SELECT a FROM abc ORDER BY a DESC
 query ITT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-0 revscan abc@primary -
+0 select  (a)@abc
+1 revscan abc@primary -
 
 query I
 SELECT a FROM abc ORDER BY a DESC
@@ -337,12 +353,14 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 query ITT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-0 scan abc@bc /2-/3
+0 select (c)@abc
+1 scan abc@bc /2-/3
 
 query ITT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-0 revscan abc@bc /2-/3
+0 select  (c)@abc
+1 revscan abc@bc /2-/3
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz));
@@ -372,19 +390,23 @@ INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
 query ITT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-0 scan abcd@abc /1/4-/1/5
+0 select (a, b, c)@abcd
+1 scan abcd@abc /1/4-/1/5
 
 query ITT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-0 scan abcd@abc /1/4-/1/5
+0 select (a, b, c)@abcd
+1 scan abcd@abc /1/4-/1/5
 
 query ITT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-0 scan abcd@abc /1/4-/1/5
+0 select (a, b, c)@abcd
+1 scan abcd@abc /1/4-/1/5
 
 query ITT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-0 scan abcd@abc /1/4-/1/5
+0 select (a, b, c)@abcd
+1 scan abcd@abc /1/4-/1/5

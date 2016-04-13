@@ -10,14 +10,16 @@ INSERT INTO t VALUES (1, 2)
 query ITT colnames
 EXPLAIN SELECT * FROM t
 ----
-Level  Type  Description
-0      scan  t@primary
+Level  Type   Description
+0      select (k, v)@t
+1      scan   t@primary
 
 query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-Level  Type  Description
-0      scan  t@primary /1-/2 /3-/4
+Level  Type   Description
+0      select (k, v)@t
+1      scan   t@primary /1-/2 /3-/4
 
 query ITT colnames
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
@@ -36,14 +38,16 @@ EXPLAIN SELECT * FROM t LIMIT 1 OFFSET 1
 ----
 Level  Type    Description
 0      limit   count: 1, offset:  1
-1      scan    t@primary
+1      select  (k, v)@t
+2      scan    t@primary
 
 query ITT colnames
 EXPLAIN SELECT DISTINCT * FROM t
 ----
 Level  Type     Description
 0      distinct k
-1      scan     t@primary
+1      select   (k, v)@t
+2      scan     t@primary
 
 query ITT colnames
 EXPLAIN SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
@@ -51,4 +55,5 @@ EXPLAIN SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
 Level  Type     Description
 0      limit    count: 1, offset:  1
 1      distinct k
-2      scan     t@primary
+2      select   (k, v)@t
+3      scan     t@primary

@@ -130,7 +130,8 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE a > 1 AND b > 'b'
 query ITT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-0 empty -
+0 select (a, b, c, d)@t
+1 empty -
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b
@@ -217,7 +218,8 @@ EXPLAIN (DEBUG) SELECT * FROM t@ab WHERE a + 1 = 4
 query ITT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-0 empty -
+0 select (a, b)@t
+1 empty -
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.
@@ -251,47 +253,56 @@ SELECT b FROM t WHERE c > 4.0 AND a < 4
 query ITT
 EXPLAIN SELECT a FROM t WHERE c > 1
 ----
-0 scan t@bc -
+0 select (a)@t
+1 scan t@bc -
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-0 scan t@bc /#-/4/1
+0 select (a)@t
+1 scan t@bc /#-/4/1
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
 ----
-0 scan t@bc -
+0 select (a)@t
+1 scan t@bc -
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c < 1.0
 ----
-0 scan t@bc -
+0 select (a)@t
+1 scan t@bc -
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-0 scan t@bc /#-/5
+0 select (a)@t
+1 scan t@bc /#-/5
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-0 scan t@bc -
+0 select (a)@t
+1 scan t@bc -
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-0 scan t@bc /5/1-/5/2
+0 select (a)@t
+1 scan t@bc /5/1-/5/2
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-0 scan t@bc -
+0 select (a)@t
+1 scan t@bc -
 
 query ITT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-0 scan t@b_desc -
+0 select (a)@t
+1 scan t@b_desc -
 
 statement ok
 CREATE TABLE abcd (
@@ -308,9 +319,11 @@ CREATE TABLE abcd (
 query ITT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
-0 scan abcd@abcd /1/4-/1/5
+0 select (b)@abcd
+1 scan abcd@abcd /1/4-/1/5
 
 query ITT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-0 scan abcd@abcd /1/4-/1/5 /2/9-/2/10
+0 select (b)@abcd
+1 scan abcd@abcd /1/4-/1/5 /2/9-/2/10
