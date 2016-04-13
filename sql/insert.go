@@ -201,36 +201,32 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 
 		// Used to check column constraints
 		table := tableInfo{
-			columns: makeResultColumns(tableDesc.Columns, 0),
+			columns: makeResultColumns(tableDesc.Columns),
 		}
-		for _, col := range tableDesc.Columns {
-			if col.CheckExpr != nil {
-				i, ok := colIDtoRowIndex[col.ID]
-				if ok {
-					qvals := make(qvalMap)
-					expr, err := resolveQNames(&table, qvals, checkExprs[i])
-					if err != nil {
-						return nil, roachpb.NewError(err)
-					}
-					// Populate qvals
-					for ref, qval := range qvals {
-						// The colIdx is 0-based, we need to change it to 1-based.
-						ri, has := colIDtoRowIndex[ColumnID(ref.colIdx+1)]
-						if !has {
-							return nil, roachpb.NewUErrorf("Internal error")
-						}
-						qval.datum = rowVals[ri]
-					}
 
-					if d, err := expr.Eval(p.evalCtx); err != nil {
-						return nil, roachpb.NewError(err)
-					} else if res, err := parser.GetBool(d); err != nil {
-						return nil, roachpb.NewError(err)
-					} else if !res {
-						// Failed to satisfy CHECK constraint
-						return nil, roachpb.NewUErrorf("Failed to satisfy CHECK constraint")
-					}
+		for _, val := range checkExprs {
+			qvals := make(qvalMap)
+			expr, err := resolveQNames(val, &table, qvals, nil)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			// Populate qvals
+			for ref, qval := range qvals {
+				// The colIdx is 0-based, we need to change it to 1-based.
+				ri, has := colIDtoRowIndex[ColumnID(ref.colIdx+1)]
+				if !has {
+					return nil, roachpb.NewUErrorf("Internal error")
 				}
+				qval.datum = rowVals[ri]
+			}
+
+			if d, err := expr.Eval(p.evalCtx); err != nil {
+				return nil, roachpb.NewError(err)
+			} else if res, err := parser.GetBool(d); err != nil {
+				return nil, roachpb.NewError(err)
+			} else if !res {
+				// Failed to satisfy CHECK constraint
+				return nil, roachpb.NewUErrorf("Failed to satisfy CHECK constraint")
 			}
 		}
 
@@ -481,10 +477,9 @@ func (p *planner) makeCheckExprs(cols []ColumnDescriptor) ([]parser.Expr, error)
 		return nil, nil
 	}
 
-	checkExprs := make([]parser.Expr, 0, len(cols))
+	var checkExprs []parser.Expr
 	for _, col := range cols {
 		if col.CheckExpr == nil {
-			checkExprs = append(checkExprs, parser.DNull)
 			continue
 		}
 		expr, err := parser.ParseExprTraditional(*col.CheckExpr)
