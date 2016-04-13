@@ -28,6 +28,10 @@ type returningNode struct {
 	rowCount int
 }
 
+func (r *returningNode) FastPathResults() (int, bool) {
+	return r.rowCount, true
+}
+
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
 type returningHelper struct {
