@@ -436,6 +436,12 @@ type planNode interface {
 	MarkDebug(mode explainMode)
 }
 
+type planNodeFastPath interface {
+	// FastPathResults returns the affected row count and true if the
+	// node has no result set and has already executed when Start() completes.
+	FastPathResults() (int, bool)
+}
+
 var _ planNode = &distinctNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &indexJoinNode{}
