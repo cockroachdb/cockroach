@@ -51,11 +51,12 @@ func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
 func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
 
 func (n *explainTraceNode) PErr() *roachpb.Error { return nil }
+func (n *explainTraceNode) Start() *roachpb.Error {
+	n.rows = []parser.DTuple{}
+	return n.plan.Start()
+}
 func (n *explainTraceNode) Next() bool {
-	first := n.rows == nil
-	if first {
-		n.rows = []parser.DTuple{}
-	}
+	count := 0
 	for !n.exhausted && len(n.rows) <= 1 {
 		var vals debugValues
 		if !n.plan.Next() {
@@ -109,20 +110,17 @@ func (n *explainTraceNode) Next() bool {
 
 				// Timestamp is added for sorting, but will be removed after sort.
 				n.rows = append(n.rows, append(cols, parser.DTimestamp{Time: entry.Timestamp}))
+				count++
 				n.lastTS, n.lastPos = entry.Timestamp, i
 			}
 		}
 		n.txn.CollectedSpans = nil
 	}
 
-	if first {
-		return len(n.rows) > 0
+	if len(n.rows) > 1 {
+		n.rows = n.rows[1:]
 	}
-	if len(n.rows) <= 1 {
-		return false
-	}
-	n.rows = n.rows[1:]
-	return true
+	return count > 0
 }
 
 func (n *explainTraceNode) ExplainPlan() (name, description string, children []planNode) {
