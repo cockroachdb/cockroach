@@ -45,24 +45,27 @@ const (
 	floatPos     = floatZero + 1
 	floatNaNDesc = floatPos + 1 // NaN encoded descendingly
 
-	decimalNaN              = floatNaNDesc + 1
-	decimalNegativeInfinity = decimalNaN + 1
-	decimalNegValPosExp     = decimalNegativeInfinity + 1
-	decimalNegValZeroExp    = decimalNegValPosExp + 1
-	decimalNegValNegExp     = decimalNegValZeroExp + 1
-	decimalZero             = decimalNegValNegExp + 1
-	decimalPosValNegExp     = decimalZero + 1
-	decimalPosValZeroExp    = decimalPosValNegExp + 1
-	decimalPosValPosExp     = decimalPosValZeroExp + 1
-	decimalInfinity         = decimalPosValPosExp + 1
-	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
-
-	bytesMarker          byte = decimalNaNDesc + 1
+	// The gap between floatNaNDesc and bytesMarker was left for
+	// compatibility reasons.
+	bytesMarker          byte = 0x12
 	bytesDescMarker      byte = bytesMarker + 1
 	timeMarker           byte = bytesDescMarker + 1
 	durationBigNegMarker byte = timeMarker + 1 // Only used for durations < MinInt64 nanos.
 	durationMarker       byte = durationBigNegMarker + 1
 	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
+
+	decimalNaN              = durationBigPosMarker + 1
+	decimalNegativeInfinity = decimalNaN + 1
+	decimalNegLarge         = decimalNegativeInfinity + 1
+	decimalNegMedium        = decimalNegLarge + 11
+	decimalNegSmall         = decimalNegMedium + 1
+	decimalZero             = decimalNegSmall + 1
+	decimalPosSmall         = decimalZero + 1
+	decimalPosMedium        = decimalPosSmall + 1
+	decimalPosLarge         = decimalPosMedium + 11
+	decimalInfinity         = decimalPosLarge + 1
+	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
+	decimalTerminator       = 0x00
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
