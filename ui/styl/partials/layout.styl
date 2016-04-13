@@ -38,11 +38,13 @@ body
 #page-container
   position relative
   min-height 100vh
+  display table // so the page will stretch if the window is small but the content exceeds the window
+  min-width 100%
 
 #root
   position relative
   padding-left $nav-width
-  min-height "calc(100vh - %s)" % $footer-height
+  min-height "calc(100vh - %s - 1px)" % $footer-height // 1 more than footer height to account for the border
 
   &:after
     content ""
