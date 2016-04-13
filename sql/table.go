@@ -729,10 +729,62 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 	return secondaryIndexEntries, nil
 }
 
+// checkColumnType verifies that a given value is compatible
+// with the type requested by the column. If the value is a
+// placeholder, the type of the placeholder gets populated.
+func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) error {
+	if val == parser.DNull {
+		return nil
+	}
+
+	var ok bool
+	var err error
+	var set parser.Datum
+	switch col.Type.Kind {
+	case ColumnType_BOOL:
+		_, ok = val.(parser.DBool)
+		set, err = args.SetInferredType(val, parser.DummyBool)
+	case ColumnType_INT:
+		_, ok = val.(parser.DInt)
+		set, err = args.SetInferredType(val, parser.DummyInt)
+	case ColumnType_FLOAT:
+		_, ok = val.(parser.DFloat)
+		set, err = args.SetInferredType(val, parser.DummyFloat)
+	case ColumnType_DECIMAL:
+		_, ok = val.(*parser.DDecimal)
+		set, err = args.SetInferredType(val, parser.DummyDecimal)
+	case ColumnType_STRING:
+		_, ok = val.(parser.DString)
+		set, err = args.SetInferredType(val, parser.DummyString)
+	case ColumnType_BYTES:
+		_, ok = val.(parser.DBytes)
+		if !ok {
+			_, ok = val.(parser.DString)
+		}
+		set, err = args.SetInferredType(val, parser.DummyBytes)
+	case ColumnType_DATE:
+		_, ok = val.(parser.DDate)
+		set, err = args.SetInferredType(val, parser.DummyDate)
+	case ColumnType_TIMESTAMP:
+		_, ok = val.(parser.DTimestamp)
+		set, err = args.SetInferredType(val, parser.DummyTimestamp)
+	case ColumnType_INTERVAL:
+		_, ok = val.(parser.DInterval)
+		set, err = args.SetInferredType(val, parser.DummyInterval)
+	default:
+		return util.Errorf("unsupported column type: %s", col.Type.Kind)
+	}
+	if !ok && set == nil {
+		return fmt.Errorf("value type %s doesn't match type %s of column %q",
+			val.Type(), col.Type.Kind, col.Name)
+	}
+	return err
+}
+
 // marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) (interface{}, error) {
+func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
 	if val == parser.DNull {
 		return nil, nil
 	}
@@ -742,46 +794,21 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 		if v, ok := val.(parser.DBool); ok {
 			return bool(v), nil
 		}
-		if set, err := args.SetInferredType(val, parser.DummyBool); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
-		}
 	case ColumnType_INT:
 		if v, ok := val.(parser.DInt); ok {
 			return int64(v), nil
-		}
-		if set, err := args.SetInferredType(val, parser.DummyInt); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
 		}
 	case ColumnType_FLOAT:
 		if v, ok := val.(parser.DFloat); ok {
 			return float64(v), nil
 		}
-		if set, err := args.SetInferredType(val, parser.DummyFloat); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
-		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
 			return v.Dec, nil
 		}
-		if set, err := args.SetInferredType(val, parser.DummyDecimal); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
-		}
 	case ColumnType_STRING:
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
-		}
-		if set, err := args.SetInferredType(val, parser.DummyString); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
 		}
 	case ColumnType_BYTES:
 		if v, ok := val.(parser.DBytes); ok {
@@ -790,37 +817,17 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum, args parser.MapA
 		if v, ok := val.(parser.DString); ok {
 			return string(v), nil
 		}
-		if set, err := args.SetInferredType(val, parser.DummyBytes); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
-		}
 	case ColumnType_DATE:
 		if v, ok := val.(parser.DDate); ok {
 			return int64(v), nil
-		}
-		if set, err := args.SetInferredType(val, parser.DummyDate); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
 		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(parser.DTimestamp); ok {
 			return v.Time, nil
 		}
-		if set, err := args.SetInferredType(val, parser.DummyTimestamp); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
-		}
 	case ColumnType_INTERVAL:
 		if v, ok := val.(parser.DInterval); ok {
 			return v.Duration, nil
-		}
-		if set, err := args.SetInferredType(val, parser.DummyInterval); err != nil {
-			return nil, err
-		} else if set != nil {
-			return nil, nil
 		}
 	default:
 		return nil, util.Errorf("unsupported column type: %s", col.Type.Kind)
