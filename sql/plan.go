@@ -346,6 +346,9 @@ func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 	if pErr != nil {
 		return 0, pErr
 	}
+	if pErr := plan.Start(); pErr != nil {
+		return 0, pErr
+	}
 	return countRowsAffected(plan), plan.PErr()
 }
 
@@ -410,6 +413,11 @@ type planNode interface {
 	// result is debugValueRow, a set of values is also available through
 	// Values().
 	DebugValues() debugValues
+
+	// Start begins the query/statement and initializes what needs to be
+	// initialized (e.g. final type checking of placeholders, first query
+	// plan). Returns an error if initialization fails.
+	Start() *roachpb.Error
 
 	// Next advances to the next row, returning false if an error is encountered
 	// or if there is no next row.
@@ -482,6 +490,10 @@ func (*emptyNode) DebugValues() debugValues {
 		value:  parser.DNull.String(),
 		output: debugValueRow,
 	}
+}
+
+func (e *emptyNode) Start() *roachpb.Error {
+	return nil
 }
 
 func (e *emptyNode) Next() bool {

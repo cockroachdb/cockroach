@@ -114,6 +114,10 @@ func (n *valuesNode) DebugValues() debugValues {
 	}
 }
 
+func (n *valuesNode) Start() *roachpb.Error {
+	return nil
+}
+
 func (n *valuesNode) Next() bool {
 	if n.nextRow >= len(n.rows) {
 		return false

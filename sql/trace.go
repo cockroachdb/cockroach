@@ -51,6 +51,9 @@ func (*explainTraceNode) Columns() []ResultColumn { return traceColumns }
 func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
 
 func (n *explainTraceNode) PErr() *roachpb.Error { return nil }
+func (n *explainTraceNode) Start() *roachpb.Error {
+	return n.plan.Start()
+}
 func (n *explainTraceNode) Next() bool {
 	first := n.rows == nil
 	if first {

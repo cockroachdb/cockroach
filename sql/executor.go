@@ -881,6 +881,10 @@ func (e *Executor) execStmt(
 		return result, pErr
 	}
 
+	if pErr := plan.Start(); pErr != nil {
+		return result, pErr
+	}
+
 	result.PGTag = stmt.StatementTag()
 	result.Type = stmt.StatementType()
 
