@@ -26,9 +26,10 @@ INSERT INTO t VALUES
 query ITT
 EXPLAIN SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 ----
-0 index-join
-1 scan       t@bc /2-/3
-1 scan       t@primary
+0 select     (a, b, c, s)@t
+1 index-join
+2 scan       t@bc /2-/3
+2 scan       t@primary
 
 # We do NOT look up the table row for '21' and '23'.
 query ITTT
@@ -45,9 +46,10 @@ EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
 query ITT
 EXPLAIN SELECT * FROM t WHERE b = 2 AND c != b
 ----
-0 index-join
-1 scan       t@bc /2-/3
-1 scan       t@primary
+0 select     (a, b, c, s)@t
+1 index-join
+2 scan       t@bc /2-/3
+2 scan       t@primary
 
 # We do NOT look up the table row for '22'.
 query ITTT

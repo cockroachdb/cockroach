@@ -14,9 +14,10 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 query ITT
 EXPLAIN SELECT * FROM t WHERE b = 2
 ----
-0 index-join
-1 scan       t@b /2-/3
-1 scan       t@primary
+0 select     (a, b, c, d)@t
+1 index-join
+2 scan       t@b /2-/3
+2 scan       t@primary
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE b = 2
@@ -35,9 +36,10 @@ SELECT * FROM t WHERE b = 2
 query ITT
 EXPLAIN SELECT * FROM t WHERE c = 6
 ----
-0 index-join
-1 scan       t@c /6-/7
-1 scan       t@primary
+0 select     (a, b, c, d)@t
+1 index-join
+2 scan       t@c /6-/7
+2 scan       t@primary
 
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM t WHERE c = 7
@@ -62,16 +64,18 @@ SELECT * FROM t WHERE c > 0 ORDER BY c DESC
 query ITT
 EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c DESC
 ----
-0 index-join
-1 revscan    t@c /1-
-1 scan       t@primary
+0 select     (a, b, c, d)@t
+1 index-join
+2 revscan    t@c /1-
+2 scan       t@primary
 
 query ITT
 EXPLAIN SELECT * FROM t WHERE c > 0 ORDER BY c
 ----
-0 index-join
-1 scan       t@c /1-
-1 scan       t@primary
+0 select     (a, b, c, d)@t
+1 index-join
+2 scan       t@c /1-
+2 scan       t@primary
 
 query IIII
 SELECT * FROM t WHERE c > 0 AND d = 8
@@ -81,9 +85,10 @@ SELECT * FROM t WHERE c > 0 AND d = 8
 query ITT
 EXPLAIN SELECT * FROM t WHERE c > 0 AND d = 8
 ----
-0 index-join
-1 scan       t@c /1-
-1 scan       t@primary
+0 select     (a, b, c, d)@t
+1 index-join
+2 scan       t@c /1-
+2 scan       t@primary
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
@@ -92,34 +97,39 @@ query ITT
 EXPLAIN SELECT * FROM t ORDER BY c
 ----
 0 sort       +c
-1 scan       t@primary -
+1 select     (a, b, c, d)@t
+2 scan       t@primary -
 
 query ITT
 EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5
 ----
 0 limit      count: 5, offset: 0
-1 index-join
-2 scan       t@c -
-2 scan       t@primary
+1 select     (a, b, c, d)@t
+2 index-join
+3 scan       t@c -
+3 scan       t@primary
 
 query ITT
 EXPLAIN SELECT * FROM t ORDER BY c OFFSET 5
 ----
 0 limit      count: ALL, offset: 5
 1 sort       +c
-2 scan       t@primary -
+2 select     (a, b, c, d)@t
+3 scan       t@primary -
 
 query ITT
 EXPLAIN SELECT * FROM t ORDER BY c LIMIT 5 OFFSET 5
 ----
 0 limit      count: 5, offset: 5
-1 index-join
-2 scan       t@c -
-2 scan       t@primary
+1 select     (a, b, c, d)@t
+2 index-join
+3 scan       t@c -
+3 scan       t@primary
 
 query ITT
 EXPLAIN SELECT * FROM t ORDER BY c LIMIT 1000000
 ----
 0 limit      count: 1000000, offset: 0
 1 sort       +c (top 1000000)
-2 scan       t@primary -
+2 select     (a, b, c, d)@t
+3 scan       t@primary -

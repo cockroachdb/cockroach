@@ -386,7 +386,8 @@ query ITT
 EXPLAIN SELECT COUNT(k) FROM kv
 ----
 0 group COUNT(k)
-1 scan  kv@primary
+1 select (COUNT(k))@kv
+2 scan  kv@primary
 
 statement ok
 CREATE TABLE abc (
@@ -452,8 +453,9 @@ SELECT MIN(x) FROM xyz
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz
 ----
-0 group MIN(x)
-1 scan  xyz@xy 1:-
+0 group  MIN(x)
+1 select (MIN(x))@xyz
+2 scan   xyz@xy 1:-
 
 query I
 SELECT MAX(x) FROM xyz
@@ -464,7 +466,8 @@ query ITT
 EXPLAIN SELECT MAX(x) FROM xyz
 ----
 0 group    MAX(x)
-1 revscan  xyz@xy 1:-
+1 select   (MAX(x))@xyz
+2 revscan  xyz@xy 1:-
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 1
@@ -474,8 +477,9 @@ SELECT MIN(y) FROM xyz WHERE x = 1
 query ITT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 1
 ----
-0 group MIN(y)
-1 scan  xyz@xy 1:/1/#-/2
+0 group  MIN(y)
+1 select (MIN(y))@xyz
+2 scan   xyz@xy 1:/1/#-/2
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 1
@@ -486,7 +490,8 @@ query ITT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 0 group   MAX(y)
-1 revscan xyz@xy 1:/1/#-/2
+1 select  (MAX(y))@xyz
+2 revscan xyz@xy 1:/1/#-/2
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 7
@@ -496,8 +501,9 @@ NULL
 query ITT
 EXPLAIN SELECT MIN(y) FROM xyz WHERE x = 7
 ----
-0 group MIN(y)
-1 scan  xyz@xy 1:/7/#-/8
+0 group  MIN(y)
+1 select (MIN(y))@xyz
+2 scan   xyz@xy 1:/7/#-/8
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 7
@@ -508,7 +514,8 @@ query ITT
 EXPLAIN SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 0 group   MAX(y)
-1 revscan xyz@xy 1:/7/#-/8
+1 select  (MAX(y))@xyz
+2 revscan xyz@xy 1:/7/#-/8
 
 query I
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
@@ -518,8 +525,9 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 query ITT
 EXPLAIN SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-0 group MIN(x)
-1 scan  xyz@zyx 1:/3/2/#-/3/3
+0 group  MIN(x)
+1 select (MIN(x))@xyz
+2 scan   xyz@zyx 1:/3/2/#-/3/3
 
 query ITTT
 EXPLAIN (DEBUG) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
@@ -536,7 +544,8 @@ query ITT
 EXPLAIN SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 0 group   MAX(x)
-1 revscan xyz@zyx 1:/3/2/#-/3/3
+1 select  (MAX(x))@xyz
+2 revscan xyz@zyx 1:/3/2/#-/3/3
 
 query RRR
 SELECT VARIANCE(x), VARIANCE(y::decimal), VARIANCE(z) FROM xyz
@@ -569,8 +578,9 @@ NULL
 query ITT
 EXPLAIN SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
-0 group VARIANCE(x)
-1 scan xyz@xy /1-/2
+0 group  VARIANCE(x)
+1 select (VARIANCE(x))@xyz
+2 scan   xyz@xy /1-/2
 
 query RRR
 SELECT STDDEV(x), STDDEV(y::decimal), STDDEV(z) FROM xyz

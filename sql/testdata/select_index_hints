@@ -23,7 +23,8 @@ SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 ----
-0 scan       abcd@primary /20-/31
+0 select     (a, b, c, d)@abcd
+1 scan       abcd@primary /20-/31
 
 # Force primary
 
@@ -36,7 +37,8 @@ SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 ----
-0 scan       abcd@primary /20-/31
+0 select     (a, b, c, d)@abcd
+1 scan       abcd@primary /20-/31
 
 # Force index b
 
@@ -49,9 +51,10 @@ SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-0 index-join
-1 scan       abcd@b       -
-1 scan       abcd@primary
+0 select     (a, b, c, d)@abcd
+1 index-join
+2 scan       abcd@b       -
+2 scan       abcd@primary
 
 # Force index cd
 
@@ -64,16 +67,18 @@ SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 ----
-0 index-join
-1 scan       abcd@cd      -
-1 scan       abcd@primary
+0 select     (a, b, c, d)@abcd
+1 index-join
+2 scan       abcd@cd      -
+2 scan       abcd@primary
 
 # Force index bcd
 
 query ITT
 EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 ----
-0 scan       abcd@bcd     -
+0 select     (a, b, c, d)@abcd
+1 scan       abcd@bcd     -
 
 query IIII
 SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
@@ -86,16 +91,18 @@ SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 query ITT
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-0 scan       abcd@b       -
+0 select     (b)@abcd
+1 scan       abcd@b       -
 
 # Force index b (non-covering due to WHERE clause)
 
 query ITT
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-0 index-join
-1 scan       abcd@b       -
-1 scan       abcd@primary
+0 select     (b)@abcd
+1 index-join
+2 scan       abcd@b       -
+2 scan       abcd@primary
 
 # No hint, should be using index cd
 
@@ -108,7 +115,8 @@ SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 query ITT
 EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 ----
-0 scan       abcd@cd /20-/40
+0 select     (c, d)@abcd
+1 scan       abcd@cd /20-/40
 
 # Force no index
 
@@ -121,7 +129,8 @@ SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 query ITT
 EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 ----
-0 scan       abcd@primary -
+0 select     (c, d)@abcd
+1 scan       abcd@primary -
 
 # Force index b
 
@@ -134,9 +143,10 @@ SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 query ITT
 EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ----
-0 index-join
-1 scan       abcd@b       -
-1 scan       abcd@primary
+0 select     (c, d)@abcd
+1 index-join
+2 scan       abcd@b       -
+2 scan       abcd@primary
 
 query error index \"badidx\" not found
 SELECT * FROM abcd@badidx
@@ -147,31 +157,36 @@ SELECT * FROM abcd@{FORCE_INDEX=badidx}
 query ITT
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 ----
-0 index-join
-1 scan       abcd@b       -
-1 scan       abcd@primary
+0 select     (a, b, c, d)@abcd
+1 index-join
+2 scan       abcd@b       -
+2 scan       abcd@primary
 
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
-0 index-join
-1 scan       abcd@cd      /10-/11
-1 scan       abcd@primary
+0 select     (b, c, d)@abcd
+1 index-join
+2 scan       abcd@cd      /10-/11
+2 scan       abcd@primary
 
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
-0 scan       abcd@bcd -
+0 select     (b, c, d)@abcd
+1 scan       abcd@bcd -
 
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
 ----
-0 scan       abcd@bcd -
+0 select     (b, c, d)@abcd
+1 scan       abcd@bcd -
 
 query ITT
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 10
 ----
-0 scan       abcd@primary -
+0 select     (b, c, d)@abcd
+1 scan       abcd@primary -
 
 query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10

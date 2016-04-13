@@ -138,8 +138,10 @@ query ITT rowsort
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 0 union -
-1 scan uniontest@primary
-1 scan uniontest@primary
+1 select (k)@uniontest
+1 select (v)@uniontest
+2 scan uniontest@primary
+2 scan uniontest@primary
 
 query error each UNION query must have the same number of columns: 2 vs 1
 SELECT 1, 2 UNION SELECT 3
