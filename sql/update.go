@@ -152,7 +152,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	// ValArgs have their types populated in the above Select if they are part
 	// of an expression ("SET a = 2 + $1") in the type check step where those
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
-	// using marshalColumnValue. This step also verifies that the expression
+	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
 	if p.evalCtx.PrepareOnly {
 		for i, target := range rows.(*selectNode).render[exprTargetIdx:] {
@@ -164,7 +164,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
-			if _, err := marshalColumnValue(cols[i], d, p.evalCtx.Args); err != nil {
+			if err := checkColumnType(cols[i], d, p.evalCtx.Args); err != nil {
 				return nil, roachpb.NewError(err)
 			}
 		}
