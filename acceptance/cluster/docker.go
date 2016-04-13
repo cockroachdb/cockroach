@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -39,6 +40,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+const matchNone = "^$"
 
 // Retrieve the IP address of docker itself.
 func dockerIP() net.IP {
@@ -379,8 +382,19 @@ type retryingDockerClient struct {
 	timeout  time.Duration
 }
 
-func (cli retryingDockerClient) retry(ctx context.Context, timeout time.Duration,
-	name string, f func(ctx context.Context) error) error {
+// retry invokes the supplied function with time-limited contexts as long as
+// returned error is a context timeout. When needing more than one attempt to
+// get a (non-timeout) result, any errors matching retryErrorsRE are swallowed.
+//
+// For example, retrying a container removal could fail on the second attempt
+// if the first request timed out (but still executed).
+func (cli retryingDockerClient) retry(
+	ctx context.Context,
+	timeout time.Duration,
+	name string,
+	retryErrorsRE string,
+	f func(ctx context.Context) error,
+) error {
 	for i := 0; i < cli.attempts; i++ {
 		timeoutCtx, _ := context.WithTimeout(ctx, timeout)
 		err := f(timeoutCtx)
@@ -391,8 +405,17 @@ func (cli retryingDockerClient) retry(ctx context.Context, timeout time.Duration
 			//
 			// TODO(pmattis): Perhaps use `timeoutCtx.Err()==context.DeadlineExceeded`.
 			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-				log.Infof("%s: %v", name, err)
 				continue
+			} else if i > 0 && retryErrorsRE != matchNone {
+				matched, reErr := regexp.MatchString(retryErrorsRE, err.Error())
+				if reErr != nil {
+					panic(reErr)
+				}
+				if matched {
+					log.Infof("%s: swallowing expected error after retry: %v",
+						name, err)
+					return nil
+				}
 			}
 		}
 		return err
@@ -407,6 +430,7 @@ func (cli retryingDockerClient) ContainerCreate(
 
 	var ret types.ContainerCreateResponse
 	return ret, cli.retry(ctx, cli.timeout, "ContainerCreate",
+		"The name .* is already in use",
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ContainerCreate(timeoutCtx, config, hostConfig, networkingConfig, containerName)
@@ -416,28 +440,22 @@ func (cli retryingDockerClient) ContainerCreate(
 }
 
 func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID string) error {
-	return cli.retry(ctx, cli.timeout, "ContainerStart",
+	return cli.retry(ctx, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
 			return cli.APIClient.ContainerStart(timeoutCtx, containerID)
 		})
 }
 
 func (cli retryingDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
-	return cli.retry(ctx, cli.timeout, "ContainerRemove",
+	return cli.retry(ctx, cli.timeout, "ContainerRemove", "No such container",
 		func(timeoutCtx context.Context) error {
-			err := cli.APIClient.ContainerRemove(timeoutCtx, options)
-			// Hack: At times, an error will be returned from ContainerRemove, but the
-			// remove will go through. The retry then fails with a "No such container"
-			// error, so these are ignored.
-			if err != nil && strings.Contains(err.Error(), "No such container") {
-				return nil
-			}
-			return err
+			return cli.APIClient.ContainerRemove(timeoutCtx, options)
 		})
 }
 
 func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
 	return cli.retry(ctx, cli.timeout, "ContainerKill",
+		"Container .* is not running",
 		func(timeoutCtx context.Context) error {
 			return cli.APIClient.ContainerKill(timeoutCtx, containerID, signal)
 		})
@@ -445,7 +463,7 @@ func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, 
 
 func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID string) (int, error) {
 	var ret int
-	return ret, cli.retry(ctx, cli.timeout, "ContainerWait",
+	return ret, cli.retry(ctx, cli.timeout, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ContainerWait(timeoutCtx, containerID)
@@ -458,7 +476,7 @@ func (cli retryingDockerClient) ImageList(
 	ctx context.Context, options types.ImageListOptions,
 ) ([]types.Image, error) {
 	var ret []types.Image
-	return ret, cli.retry(ctx, cli.timeout, "ImageList",
+	return ret, cli.retry(ctx, cli.timeout, "ImageList", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ImageList(timeoutCtx, options)
@@ -476,7 +494,7 @@ func (cli retryingDockerClient) ImagePull(
 		timeout = minTimeout
 	}
 	var ret io.ReadCloser
-	return ret, cli.retry(ctx, timeout, "ImagePull",
+	return ret, cli.retry(ctx, timeout, "ImagePull", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ImagePull(timeoutCtx, options, privilegeFunc)
