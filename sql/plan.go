@@ -419,8 +419,11 @@ type planNode interface {
 	// plan). Returns an error if initialization fails.
 	Start() *roachpb.Error
 
-	// Next advances to the next row, returning false if an error is encountered
-	// or if there is no next row.
+	// Next performs one unit of work, returning false if an error is
+	// encountered or if there is no more work to do. For statements
+	// that return a result set, the Value() method will return one row
+	// of results each time that Next() returns true.
+	// See executor.go: countRowsAffected() and execStmt() for an example.
 	Next() bool
 
 	// PErr returns the error, if any, encountered during iteration.

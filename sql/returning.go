@@ -21,39 +21,26 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
-// returningNode accumulates the results for a RETURNING clause. If the rows are empty, we just
-// keep track of the count.
-type returningNode struct {
-	valuesNode
-	rowCount int
-}
-
-func (r *returningNode) FastPathResults() (bool, int) {
-	return true, r.rowCount
-}
-
-func (r *returningNode) Start() *roachpb.Error {
-	return nil
-}
-
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
 type returningHelper struct {
-	p       *planner
-	results *returningNode
+	p *planner
+	// Expected columns.
+	columns []ResultColumn
 	// Processed copies of expressions from ReturningExprs.
-	exprs parser.Exprs
-	qvals qvalMap
+	exprs    parser.Exprs
+	qvals    qvalMap
+	rowCount int
 }
 
 func makeReturningHelper(p *planner, r parser.ReturningExprs,
-	alias string, tablecols []ColumnDescriptor) (returningHelper, error) {
-	rh := returningHelper{p: p, results: &returningNode{}}
+	alias string, tablecols []ColumnDescriptor) (*returningHelper, error) {
+	rh := &returningHelper{p: p}
 	if len(r) == 0 {
 		return rh, nil
 	}
 
-	rh.results.columns = make([]ResultColumn, 0, len(r))
+	rh.columns = make([]ResultColumn, 0, len(r))
 	table := tableInfo{
 		columns: makeResultColumns(tablecols),
 		alias:   alias,
@@ -62,10 +49,10 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 	rh.exprs = make([]parser.Expr, 0, len(r))
 	for _, target := range r {
 		if isStar, cols, exprs, err := checkRenderStar(target, &table, rh.qvals); err != nil {
-			return returningHelper{}, err
+			return nil, err
 		} else if isStar {
 			rh.exprs = append(rh.exprs, exprs...)
-			rh.results.columns = append(rh.results.columns, cols...)
+			rh.columns = append(rh.columns, cols...)
 			continue
 		}
 
@@ -76,44 +63,46 @@ func makeReturningHelper(p *planner, r parser.ReturningExprs,
 
 		expr, err := resolveQNames(target.Expr, &table, rh.qvals, &p.qnameVisitor)
 		if err != nil {
-			return returningHelper{}, err
+			return nil, err
 		}
 		rh.exprs = append(rh.exprs, expr)
-		rh.results.columns = append(rh.results.columns, ResultColumn{Name: outputName})
+		rh.columns = append(rh.columns, ResultColumn{Name: outputName})
 	}
 	return rh, nil
 }
 
-// append adds a result row. The row is computed according to the ReturningExprs, with input values
+// cookResultRow prepares a row according to the ReturningExprs, with input values
 // from rowVals.
-func (rh *returningHelper) append(rowVals parser.DTuple) error {
+func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, error) {
 	if rh.exprs == nil {
-		rh.results.rowCount++
-		return nil
+		rh.rowCount++
+		return rowVals, nil
 	}
 	rh.qvals.populateQVals(rowVals)
 	resrow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(rh.p.evalCtx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		resrow[i] = d
 	}
-	rh.results.rows = append(rh.results.rows, resrow)
-	return nil
+	return resrow, nil
 }
 
-// getResults returns the results as a returningNode. The return column types are populated
-// from evalCtx.Args. This is needed because when makeReturningHelper is first
-// called, the MapArgs aren't yet inferred.
-func (rh *returningHelper) getResults() (*returningNode, *roachpb.Error) {
+// TypeCheck ensures that the expressions mentioned in the
+// returningHelper have the right type.
+// TODO(knz): this both annotates the type of placeholders
+// (a task for prepare) and controls that provided values
+// for placeholders match their context (a task for exec). This
+// ought to be split into two phases.
+func (rh *returningHelper) TypeCheck() *roachpb.Error {
 	for i, expr := range rh.exprs {
 		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return roachpb.NewError(err)
 		}
-		rh.results.columns[i].Typ = typ
+		rh.columns[i].Typ = typ
 	}
-	return rh.results, nil
+	return nil
 }
