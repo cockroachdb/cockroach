@@ -1,11 +1,12 @@
 // source: components/outdatabanner.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../models/cockroachlabs.ts" />
 /// <reference path="banner.ts" />
 
 module Components {
   "use strict";
   /**
-   * HelpUs is used for the sign up flow to capture user information
+   * OutdatedBanner is used to prompt the user to update to the latest Cockroach version
    */
   export module OutdatedBanner {
 
