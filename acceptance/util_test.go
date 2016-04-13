@@ -284,7 +284,7 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 
 const (
 	postgresTestImage = "cockroachdb/postgres-test"
-	postgresTestTag   = "20160413-1457"
+	postgresTestTag   = "20160414-1710"
 )
 
 func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
@@ -307,13 +307,7 @@ func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 		},
 		Cmd: cmd,
 	}
-	hostConfig := container.HostConfig{
-		Binds:       []string{l.CertsDir + ":/certs"},
-		NetworkMode: "host",
-	}
-	ipo := types.ImagePullOptions{
-		ImageID: postgresTestImage,
-		Tag:     postgresTestTag,
-	}
+	hostConfig := container.HostConfig{NetworkMode: "host"}
+	ipo := types.ImagePullOptions{ImageID: postgresTestImage, Tag: postgresTestTag}
 	return l.OneShot(ipo, containerConfig, hostConfig, "docker-"+name)
 }
