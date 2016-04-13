@@ -270,14 +270,14 @@ func postJSON(url, rel string, reqBody interface{}, v interface{}) error {
 
 // testDockerFail ensures the specified docker cmd fails.
 func testDockerFail(t *testing.T, name string, cmd []string) {
-	if err := testDocker(t, name, cmd); err == nil {
+	if err := testDockerSingleNode(t, name, cmd); err == nil {
 		t.Error("expected failure")
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
 func testDockerSuccess(t *testing.T, name string, cmd []string) {
-	if err := testDocker(t, name, cmd); err != nil {
+	if err := testDockerSingleNode(t, name, cmd); err != nil {
 		t.Errorf("expected success: %s", err)
 	}
 }
@@ -287,10 +287,14 @@ const (
 	postgresTestTag   = "20160413-1457"
 )
 
-func testDocker(t *testing.T, name string, cmd []string) error {
+func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 	SkipUnlessLocal(t)
-	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
-
+	cfg := cluster.TestConfig{
+		Name:     name,
+		Duration: *flagDuration,
+		Nodes:    []cluster.NodeConfig{{Count: 1, Stores: []cluster.StoreConfig{{Count: 1}}}},
+	}
+	l := StartCluster(t, cfg).(*cluster.LocalCluster)
 	defer l.AssertAndStop(t)
 
 	containerConfig := container.Config{
