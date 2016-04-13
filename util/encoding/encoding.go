@@ -54,7 +54,7 @@ const (
 	durationMarker       byte = durationBigNegMarker + 1
 	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
-	decimalNaN              = 0x20
+	decimalNaN              = durationBigPosMarker + 1
 	decimalNegativeInfinity = decimalNaN + 1
 	decimalNegLarge         = decimalNegativeInfinity + 1
 	decimalNegMedium        = decimalNegLarge + 11
