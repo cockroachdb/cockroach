@@ -205,6 +205,7 @@ func (l *LocalCluster) OneShot(
 	if err := pullImage(l, ipo); err != nil {
 		return err
 	}
+	hostConfig.VolumesFrom = []string{l.vols.id}
 	container, err := createContainer(l, containerConfig, hostConfig, name)
 	if err != nil {
 		return err
