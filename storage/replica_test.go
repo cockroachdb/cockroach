@@ -3038,7 +3038,9 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		pushType    roachpb.PushTxnType
 		expSuccess  bool
 	}{
-		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false}, // using 0 as time is awkward
+		// Avoid using 0 as currentTime since our manualClock is at 0 and we
+		// don't want to have outcomes depend on random logical ticks.
+		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TIMESTAMP, false},
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_ABORT, false},
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_TOUCH, false},
 		{roachpb.ZeroTimestamp, 1, roachpb.PUSH_QUERY, true},
@@ -3065,7 +3067,6 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		tc.manualClock.Set(1)
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		pushee := newTransaction(fmt.Sprintf("test-%d", i), key, 1, roachpb.SERIALIZABLE, tc.clock)
 		pusher := newTransaction("pusher", key, 1, roachpb.SERIALIZABLE, tc.clock)
@@ -3091,8 +3092,8 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		reply, pErr := tc.SendWrapped(&args)
 
 		if test.expSuccess != (pErr == nil) {
-			t.Errorf("%d: expSuccess=%t; got pErr %s", i, test.expSuccess, pErr)
-			continue
+			t.Fatalf("%d: expSuccess=%t; got pErr %s, reply %+v", i,
+				test.expSuccess, pErr, reply)
 		}
 		if pErr != nil {
 			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
