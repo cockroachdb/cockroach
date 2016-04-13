@@ -34,6 +34,7 @@ import (
 
 	snappy "github.com/cockroachdb/c-snappy"
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
@@ -92,6 +93,13 @@ type Server struct {
 func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	if ctx == nil {
 		return nil, util.Errorf("ctx must not be null")
+	}
+
+	if ctx.MaxOffset > base.DefaultMaxOffset {
+		// Disallow increasing the max clock offset to allow DefaultMaxOffset
+		// to be used as a ceiling.
+		return nil, util.Errorf("MaxOffset %s exceeds maximum allowed value %s",
+			ctx.MaxOffset, base.DefaultMaxOffset)
 	}
 
 	if _, err := net.ResolveTCPAddr("tcp", ctx.Addr); err != nil {

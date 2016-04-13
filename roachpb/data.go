@@ -865,11 +865,12 @@ func (l Lease) String() string {
 	return fmt.Sprintf("replica %s %s %s", l.Replica, start, expiration.Sub(start))
 }
 
-// Covers returns true if the given timestamp is strictly less than the
-// Lease expiration, which indicates that the lease holder is authorized
-// to carry out operations with that timestamp.
+// Covers returns true if the given timestamp can be served by the Lease.
+// This is the case if the timestamp precedes the "grace period" which begins
+// MaxOffset before the expiration timestamp (and is explained in the field
+// comments on MaxOffset).
 func (l Lease) Covers(timestamp Timestamp) bool {
-	return timestamp.Less(l.Expiration)
+	return timestamp.Add(l.MaxOffset.Nanoseconds(), 0).Less(l.Expiration)
 }
 
 // OwnedBy returns whether the given store is the lease owner.

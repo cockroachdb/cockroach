@@ -83,7 +83,8 @@ func (*replicaGCQueue) shouldQueue(now roachpb.Timestamp, rng *Replica, _ config
 		return false, 0
 	}
 	// Return whether or not lease activity occurred within the inactivity threshold.
-	return rng.getLeaderLease().Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now), 0
+	lease, _ := rng.getLeaderLease()
+	return lease.Expiration.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0).Less(now), 0
 }
 
 // process performs a consistent lookup on the range descriptor to see if we are

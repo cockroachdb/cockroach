@@ -312,10 +312,11 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, _internal_metadata_),
       -1);
   Lease_descriptor_ = file->message_type(13);
-  static const int Lease_offsets_[3] = {
+  static const int Lease_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, start_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, expiration_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, replica_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, max_offset_),
   };
   Lease_reflection_ =
     ::google::protobuf::internal::GeneratedMessageReflection::NewGeneratedMessageReflection(
@@ -512,23 +513,24 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "\022/\n\004span\030\001 \001(\0132\027.cockroach.roachpb.SpanB"
     "\010\310\336\037\000\320\336\037\001\022-\n\003txn\030\002 \001(\0132\032.cockroach.roach"
     "pb.TxnMetaB\004\310\336\037\000\022:\n\006status\030\003 \001(\0162$.cockr"
-    "oach.roachpb.TransactionStatusB\004\310\336\037\000\"\265\001\n"
+    "oach.roachpb.TransactionStatusB\004\310\336\037\000\"\340\001\n"
     "\005Lease\0221\n\005start\030\001 \001(\0132\034.cockroach.roachp"
     "b.TimestampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034."
     "cockroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007rep"
     "lica\030\003 \001(\0132$.cockroach.roachpb.ReplicaDe"
-    "scriptorB\004\310\336\037\000:\004\230\240\037\000\"v\n\017AbortCacheEntry\022"
-    "\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001(\013"
-    "2\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022\026\n\010"
-    "priority\030\003 \001(\005B\004\310\336\037\000*l\n\tValueType\022\013\n\007UNK"
-    "NOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n"
-    "\004TIME\020\004\022\013\n\007DECIMAL\020\005\022\014\n\010DURATION\020\006\022\016\n\nTI"
-    "MESERIES\020d*>\n\021ReplicaChangeType\022\017\n\013ADD_R"
-    "EPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIs"
-    "olationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHO"
-    "T\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDIN"
-    "G\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ"
-    "\007roachpbX\001", 3290);
+    "scriptorB\004\310\336\037\000\022)\n\nmax_offset\030\004 \001(\003B\025\310\336\037\000"
+    "\372\336\037\rtime.Duration:\004\230\240\037\000\"v\n\017AbortCacheEnt"
+    "ry\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 "
+    "\001(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022"
+    "\026\n\010priority\030\003 \001(\005B\004\310\336\037\000*l\n\tValueType\022\013\n\007"
+    "UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003"
+    "\022\010\n\004TIME\020\004\022\013\n\007DECIMAL\020\005\022\014\n\010DURATION\020\006\022\016\n"
+    "\nTIMESERIES\020d*>\n\021ReplicaChangeType\022\017\n\013AD"
+    "D_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n"
+    "\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAP"
+    "SHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PEN"
+    "DING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000"
+    "B\tZ\007roachpbX\001", 3333);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -6979,6 +6981,7 @@ void Intent::clear_status() {
 const int Lease::kStartFieldNumber;
 const int Lease::kExpirationFieldNumber;
 const int Lease::kReplicaFieldNumber;
+const int Lease::kMaxOffsetFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Lease::Lease()
@@ -7006,6 +7009,7 @@ void Lease::SharedCtor() {
   start_ = NULL;
   expiration_ = NULL;
   replica_ = NULL;
+  max_offset_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -7048,7 +7052,7 @@ Lease* Lease::New(::google::protobuf::Arena* arena) const {
 }
 
 void Lease::Clear() {
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     if (has_start()) {
       if (start_ != NULL) start_->::cockroach::roachpb::Timestamp::Clear();
     }
@@ -7058,6 +7062,7 @@ void Lease::Clear() {
     if (has_replica()) {
       if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
     }
+    max_offset_ = GOOGLE_LONGLONG(0);
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   if (_internal_metadata_.have_unknown_fields()) {
@@ -7109,6 +7114,21 @@ bool Lease::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(32)) goto parse_max_offset;
+        break;
+      }
+
+      // optional int64 max_offset = 4;
+      case 4: {
+        if (tag == 32) {
+         parse_max_offset:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &max_offset_)));
+          set_has_max_offset();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -7156,6 +7176,11 @@ void Lease::SerializeWithCachedSizes(
       3, *this->replica_, output);
   }
 
+  // optional int64 max_offset = 4;
+  if (has_max_offset()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->max_offset(), output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -7187,6 +7212,11 @@ void Lease::SerializeWithCachedSizes(
         3, *this->replica_, target);
   }
 
+  // optional int64 max_offset = 4;
+  if (has_max_offset()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->max_offset(), target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -7198,7 +7228,7 @@ void Lease::SerializeWithCachedSizes(
 int Lease::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional .cockroach.roachpb.Timestamp start = 1;
     if (has_start()) {
       total_size += 1 +
@@ -7218,6 +7248,13 @@ int Lease::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->replica_);
+    }
+
+    // optional int64 max_offset = 4;
+    if (has_max_offset()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->max_offset());
     }
 
   }
@@ -7256,6 +7293,9 @@ void Lease::MergeFrom(const Lease& from) {
     if (from.has_replica()) {
       mutable_replica()->::cockroach::roachpb::ReplicaDescriptor::MergeFrom(from.replica());
     }
+    if (from.has_max_offset()) {
+      set_max_offset(from.max_offset());
+    }
   }
   if (from._internal_metadata_.have_unknown_fields()) {
     mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -7287,6 +7327,7 @@ void Lease::InternalSwap(Lease* other) {
   std::swap(start_, other->start_);
   std::swap(expiration_, other->expiration_);
   std::swap(replica_, other->replica_);
+  std::swap(max_offset_, other->max_offset_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -7430,6 +7471,30 @@ void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* repli
     clear_has_replica();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
+}
+
+// optional int64 max_offset = 4;
+bool Lease::has_max_offset() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+void Lease::set_has_max_offset() {
+  _has_bits_[0] |= 0x00000008u;
+}
+void Lease::clear_has_max_offset() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+void Lease::clear_max_offset() {
+  max_offset_ = GOOGLE_LONGLONG(0);
+  clear_has_max_offset();
+}
+ ::google::protobuf::int64 Lease::max_offset() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.max_offset)
+  return max_offset_;
+}
+ void Lease::set_max_offset(::google::protobuf::int64 value) {
+  set_has_max_offset();
+  max_offset_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.max_offset)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

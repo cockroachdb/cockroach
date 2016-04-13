@@ -1814,6 +1814,13 @@ class Lease : public ::google::protobuf::Message {
   ::cockroach::roachpb::ReplicaDescriptor* release_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
+  // optional int64 max_offset = 4;
+  bool has_max_offset() const;
+  void clear_max_offset();
+  static const int kMaxOffsetFieldNumber = 4;
+  ::google::protobuf::int64 max_offset() const;
+  void set_max_offset(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Lease)
  private:
   inline void set_has_start();
@@ -1822,6 +1829,8 @@ class Lease : public ::google::protobuf::Message {
   inline void clear_has_expiration();
   inline void set_has_replica();
   inline void clear_has_replica();
+  inline void set_has_max_offset();
+  inline void clear_has_max_offset();
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 _has_bits_[1];
@@ -1829,6 +1838,7 @@ class Lease : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* start_;
   ::cockroach::roachpb::Timestamp* expiration_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
+  ::google::protobuf::int64 max_offset_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2froachpb_2fdata_2eproto();
@@ -3827,6 +3837,30 @@ inline void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
     clear_has_replica();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
+}
+
+// optional int64 max_offset = 4;
+inline bool Lease::has_max_offset() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void Lease::set_has_max_offset() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void Lease::clear_has_max_offset() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void Lease::clear_max_offset() {
+  max_offset_ = GOOGLE_LONGLONG(0);
+  clear_has_max_offset();
+}
+inline ::google::protobuf::int64 Lease::max_offset() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.max_offset)
+  return max_offset_;
+}
+inline void Lease::set_max_offset(::google::protobuf::int64 value) {
+  set_has_max_offset();
+  max_offset_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.max_offset)
 }
 
 // -------------------------------------------------------------------
