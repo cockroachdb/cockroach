@@ -44,15 +44,15 @@ var (
 // E. If E is 11 or more, the value is large. For E between 0 and 10, the value
 // is medium. For E less than zero, the value is small.
 //
-// Large positive values are encoded as a single byte 0x3c followed by E as a
-// varint and then M. Medium positive values are a single byte of 0x31+E
-// followed by M. Small positive values are encoded as a single byte 0x30
+// Large positive values are encoded as a single byte 0x34 followed by E as a
+// varint and then M. Medium positive values are a single byte of 0x29+E
+// followed by M. Small positive values are encoded as a single byte 0x28
 // followed by a descending varint encoding for -E followed by M.
 //
-// Small negative values are encoded as a single byte 0x2e followed by -E as a
+// Small negative values are encoded as a single byte 0x26 followed by -E as a
 // varint and then the ones-complement of M. Medium negative values are encoded
-// as a byte 0x2d-E followed by the ones-complement of M. Large negative values
-// consist of the single byte 0x22 followed by a descending  varint encoding of
+// as a byte 0x25-E followed by the ones-complement of M. Large negative values
+// consist of the single byte 0x1a followed by a descending  varint encoding of
 // E followed by the ones-complement of M.
 func EncodeDecimalAscending(b []byte, d *inf.Dec) []byte {
 	return encodeDecimal(b, d, false)
@@ -390,7 +390,7 @@ func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte,
 
 	m = buf[1 : idx+1]
 	if negative {
-		e = decimalNegMedium - int(buf[0])
+		e = int(decimalNegMedium - buf[0])
 		var mCpy []byte
 		if k := len(m); k <= len(tmp) {
 			mCpy = tmp[:k]
@@ -402,7 +402,7 @@ func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte,
 		onesComplement(mCpy)
 		m = mCpy
 	} else {
-		e = int(buf[0]) - decimalPosMedium
+		e = int(buf[0] - decimalPosMedium)
 	}
 	return e, m, buf[idx+2:], tmp, nil
 }
