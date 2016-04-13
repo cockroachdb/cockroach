@@ -394,7 +394,6 @@ func (cli retryingDockerClient) retry(ctx context.Context, timeout time.Duration
 				log.Infof("%s: %v", name, err)
 				continue
 			}
-			log.Infof("%s: %T: %v", name, err, err)
 		}
 		return err
 	}
