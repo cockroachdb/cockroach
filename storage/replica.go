@@ -1748,8 +1748,7 @@ func (r *Replica) executeWriteBatch(
 // (2) if isolation is serializable and the commit timestamp has been
 // forwarded, or (3) the transaction exceeded its deadline.
 func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
-	if ba.Txn == nil || ba.Txn.WriteTooOld ||
-		(ba.Txn.Isolation == roachpb.SERIALIZABLE && ba.Txn.OrigTimestamp != ba.Txn.Timestamp) {
+	if ba.Txn == nil || isEndTransactionTriggeringRetryError(ba.Txn, ba.Txn) {
 		return false
 	}
 	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {
@@ -1759,10 +1758,8 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 	if !hasEnd {
 		return false
 	}
-	// TODO(kaneda): Factor out the preconditions for a commit and
-	// share it with the 1PC and EndTransaction.
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	return etArg.Deadline == nil || !etArg.Deadline.Less(ba.Timestamp)
+	return !isEndTransactionExceedingDeadline(ba.Header, *etArg)
 }
 
 func (r *Replica) executeBatch(
