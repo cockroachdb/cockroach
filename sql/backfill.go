@@ -291,7 +291,10 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 							if err != nil {
 								return roachpb.NewError(err)
 							}
-							val, err := marshalColumnValue(col, d, evalCtx.Args)
+							if err := assignArgType(col, d, evalCtx.Args); err != nil {
+								return roachpb.NewError(err)
+							}
+							val, err := marshalColumnValue(col, d)
 							if err != nil {
 								return roachpb.NewError(err)
 							}

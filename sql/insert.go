@@ -192,19 +192,26 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		// Check that the row value types match the column types. This needs to
-		// happen before index encoding because certain datum types (i.e. tuple)
-		// cannot be used as index values.
+		// Check that the row value types match the column types.
 		for i, val := range rowVals {
-			// Make sure the value can be written to the column before proceeding.
-			var mErr error
-			if marshalled[i], mErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mErr != nil {
-				return nil, roachpb.NewError(mErr)
+			if err := assignArgType(cols[i], val, p.evalCtx.Args); err != nil {
+				return nil, roachpb.NewError(err)
 			}
 		}
 
 		if p.evalCtx.PrepareOnly {
 			continue
+		}
+
+		// Encode the values to the expected column type. This needs to
+		// happen before index encoding because certain datum types (i.e. tuple)
+		// cannot be used as index values.
+		for i, val := range rowVals {
+			// Make sure the value can be written to the column before proceeding.
+			var mErr error
+			if marshalled[i], mErr = marshalColumnValue(cols[i], val); mErr != nil {
+				return nil, roachpb.NewError(mErr)
+			}
 		}
 
 		primaryIndexKey, _, eErr := encodeIndexKey(
