@@ -17,6 +17,7 @@ package acceptance
 import "testing"
 
 func TestDockerFinagle(t *testing.T) {
+	t.Skip("TODO(dt): #5951, #5928, and needs #5484")
 	testDockerSuccess(t, "finagle", []string{"/bin/sh", "-c", finagle})
 }
 
