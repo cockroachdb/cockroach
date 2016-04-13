@@ -281,6 +281,10 @@ func (n *sortNode) wrap(plan planNode) planNode {
 	return plan
 }
 
+func (n *sortNode) Start() *roachpb.Error {
+	return n.plan.Start()
+}
+
 func (n *sortNode) Next() bool {
 	if n.pErr != nil {
 		return false
