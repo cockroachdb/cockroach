@@ -196,22 +196,40 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 	if log.V(1) {
 		log.Infof("establishing Raft transport stream to node %d at %s", nodeID, addr)
 	}
-	stream, err := client.RaftMessage(ctx)
-	if err != nil {
-		if log.V(1) {
-			log.Errorf("failed to establish Raft transport stream to node %d at %s: %s", nodeID, addr, err)
+	// We start two streams; one will be used for snapshots, the other for all
+	// other traffic. This is done to prevent snapshots from blocking other
+	// traffic.
+	streams := make([]MultiRaft_RaftMessageClient, 2)
+	for i := range streams {
+		stream, err := client.RaftMessage(ctx)
+		if err != nil {
+			if log.V(1) {
+				log.Errorf("failed to establish Raft transport stream to node %d at %s: %s", nodeID, addr, err)
+			}
+			return
 		}
-		return
+		streams[i] = stream
 	}
 
-	errCh := make(chan error, 1)
+	errCh := make(chan error, len(streams))
 
 	// Starting workers in a task prevents data races during shutdown.
 	t.rpcContext.Stopper.RunTask(func() {
-		t.rpcContext.Stopper.RunWorker(func() {
-			errCh <- stream.RecvMsg(&RaftMessageResponse{})
-		})
+		for i := range streams {
+			// Avoid closing over a `range` binding.
+			stream := streams[i]
+
+			t.rpcContext.Stopper.RunWorker(func() {
+				// NB: only one error will ever be read from this channel. That's fine,
+				// given that the channel is buffered to the maximum number of errors
+				// that will be written to it.
+				errCh <- stream.RecvMsg(new(RaftMessageResponse))
+			})
+		}
 	})
+
+	snapStream := streams[0]
+	restStream := streams[1]
 
 	var raftIdleTimer util.Timer
 	defer raftIdleTimer.Stop()
@@ -237,13 +255,6 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			return
 		case req := <-ch:
 			if req.Message.Type == raftpb.MsgSnap {
-				ctx, cancel := context.WithCancel(context.TODO())
-				defer cancel()
-				snapStream, err := client.RaftMessage(ctx)
-				if err != nil {
-					log.Error(err)
-					return
-				}
 				t.rpcContext.Stopper.RunAsyncTask(func() {
 					err := snapStream.Send(req)
 					if err != nil {
@@ -254,7 +265,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 					t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}
 				})
 			} else {
-				if err := stream.Send(req); err != nil {
+				if err := restStream.Send(req); err != nil {
 					log.Error(err)
 					return
 				}
