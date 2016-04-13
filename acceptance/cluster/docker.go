@@ -411,7 +411,6 @@ func (cli retryingDockerClient) retry(
 					return nil
 				}
 			}
-			log.Infof("%s: %T: %v", name, err, err)
 		}
 		return err
 	}
