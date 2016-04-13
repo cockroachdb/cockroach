@@ -253,6 +253,9 @@ func (u *sqlSymUnion) idxElem() IndexElem {
 func (u *sqlSymUnion) idxElems() IndexElemList {
     return u.val.(IndexElemList)
 }
+func (u *sqlSymUnion) dropBehavior() DropBehavior {
+    return u.val.(DropBehavior)
+}
 
 %}
 
@@ -303,7 +306,7 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 
 %type <empty> opt_collate_clause
 
-%type <empty> opt_drop_behavior
+%type <DropBehavior> opt_drop_behavior
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
@@ -752,7 +755,12 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
 | DROP opt_column name opt_drop_behavior
   {
-    $$.val = &AlterTableDropColumn{columnKeyword: $2.bool(), IfExists: false, Column: $3}
+    $$.val = &AlterTableDropColumn{
+      columnKeyword: $2.bool(),
+      IfExists: false,
+      Column: $3,
+      DropBehavior: $4.dropBehavior(),
+    }
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
@@ -769,12 +777,20 @@ alter_table_cmd:
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior
   {
-    $$.val = &AlterTableDropConstraint{IfExists: true, Constraint: $5}
+    $$.val = &AlterTableDropConstraint{
+      IfExists: true,
+      Constraint: $5,
+      DropBehavior: $6.dropBehavior(),
+    }
   }
   // ALTER TABLE <name> DROP CONSTRAINT <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT name opt_drop_behavior
   {
-    $$.val = &AlterTableDropConstraint{IfExists: false, Constraint: $3}
+    $$.val = &AlterTableDropConstraint{
+      IfExists: false,
+      Constraint: $3,
+      DropBehavior: $4.dropBehavior(),
+    }
   }
 
 alter_column_default:
@@ -788,9 +804,18 @@ alter_column_default:
   }
 
 opt_drop_behavior:
-  CASCADE { unimplemented() }
-| RESTRICT { unimplemented() }
-| /* EMPTY */ {}
+  CASCADE
+  {
+    $$.val = DropCascade
+  }
+| RESTRICT
+  {
+    $$.val = DropRestrict
+  }
+| /* EMPTY */
+  {
+    $$.val = DropDefault
+  }
 
 opt_collate_clause:
   COLLATE any_name { unimplemented() }
@@ -825,11 +850,19 @@ drop_stmt:
   }
 | DROP INDEX table_name_with_index_list opt_drop_behavior
   {
-    $$.val = &DropIndex{IndexList: $3.tableWithIdxList(), IfExists: false}
+    $$.val = &DropIndex{
+      IndexList: $3.tableWithIdxList(),
+      IfExists: false,
+      DropBehavior: $4.dropBehavior(),
+    }
   }
 | DROP INDEX IF EXISTS table_name_with_index_list opt_drop_behavior
   {
-    $$.val = &DropIndex{IndexList: $5.tableWithIdxList(), IfExists: true}
+    $$.val = &DropIndex{
+      IndexList: $5.tableWithIdxList(),
+      IfExists: true,
+      DropBehavior: $6.dropBehavior(),
+    }
   }
 | DROP TABLE any_name_list
   {
@@ -1532,7 +1565,7 @@ numeric_only:
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$.val = &Truncate{Tables: $3.qnames()}
+    $$.val = &Truncate{Tables: $3.qnames(), DropBehavior: $4.dropBehavior()}
   }
 
 // CREATE INDEX

@@ -22,7 +22,30 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
+
+// DropBehavior represents options for dropping schema elements.
+type DropBehavior int
+
+// DropBehavior values.
+const (
+	DropDefault DropBehavior = iota
+	DropRestrict
+	DropCascade
+)
+
+var dropBehaviorName = [...]string{
+	DropDefault:  "",
+	DropRestrict: "RESTRICT",
+	DropCascade:  "CASCADE",
+}
+
+func (d DropBehavior) String() string {
+	return dropBehaviorName[d]
+}
 
 // DropDatabase represents a DROP DATABASE statement.
 type DropDatabase struct {
@@ -42,8 +65,9 @@ func (node *DropDatabase) String() string {
 
 // DropIndex represents a DROP INDEX statement.
 type DropIndex struct {
-	IndexList TableNameWithIndexList
-	IfExists  bool
+	IndexList    TableNameWithIndexList
+	IfExists     bool
+	DropBehavior DropBehavior
 }
 
 func (node *DropIndex) String() string {
@@ -53,6 +77,9 @@ func (node *DropIndex) String() string {
 		buf.WriteString("IF EXISTS ")
 	}
 	buf.WriteString(node.IndexList.String())
+	if node.DropBehavior != DropDefault {
+		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+	}
 	return buf.String()
 }
 
