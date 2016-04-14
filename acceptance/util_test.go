@@ -270,30 +270,35 @@ func postJSON(url, rel string, reqBody interface{}, v interface{}) error {
 
 // testDockerFail ensures the specified docker cmd fails.
 func testDockerFail(t *testing.T, name string, cmd []string) {
-	if err := testDocker(t, name, cmd); err == nil {
+	if err := testDockerSingleNode(t, name, cmd); err == nil {
 		t.Error("expected failure")
 	}
 }
 
 // testDockerSuccess ensures the specified docker cmd succeeds.
 func testDockerSuccess(t *testing.T, name string, cmd []string) {
-	if err := testDocker(t, name, cmd); err != nil {
+	if err := testDockerSingleNode(t, name, cmd); err != nil {
 		t.Errorf("expected success: %s", err)
 	}
 }
 
 const (
-	postgresTestTag = "20160406-1730"
+	postgresTestImage = "cockroachdb/postgres-test"
+	postgresTestTag   = "20160414-1710"
 )
 
-func testDocker(t *testing.T, name string, cmd []string) error {
-	const image = "cockroachdb/postgres-test"
+func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 	SkipUnlessLocal(t)
-	l := StartCluster(t, readConfigFromFlags()).(*cluster.LocalCluster)
-
+	cfg := cluster.TestConfig{
+		Name:     name,
+		Duration: *flagDuration,
+		Nodes:    []cluster.NodeConfig{{Count: 1, Stores: []cluster.StoreConfig{{Count: 1}}}},
+	}
+	l := StartCluster(t, cfg).(*cluster.LocalCluster)
 	defer l.AssertAndStop(t)
+
 	containerConfig := container.Config{
-		Image: fmt.Sprintf(image + ":" + postgresTestTag),
+		Image: fmt.Sprintf(postgresTestImage + ":" + postgresTestTag),
 		Env: []string{
 			"PGHOST=roach0",
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
@@ -302,13 +307,7 @@ func testDocker(t *testing.T, name string, cmd []string) error {
 		},
 		Cmd: cmd,
 	}
-	hostConfig := container.HostConfig{
-		Binds:       []string{l.CertsDir + ":/certs"},
-		NetworkMode: "host",
-	}
-	ipo := types.ImagePullOptions{
-		ImageID: image,
-		Tag:     postgresTestTag,
-	}
+	hostConfig := container.HostConfig{NetworkMode: "host"}
+	ipo := types.ImagePullOptions{ImageID: postgresTestImage, Tag: postgresTestTag}
 	return l.OneShot(ipo, containerConfig, hostConfig, "docker-"+name)
 }
