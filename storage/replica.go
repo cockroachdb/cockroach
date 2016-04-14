@@ -1743,22 +1743,23 @@ func (r *Replica) executeWriteBatch(
 
 // isOnePhaseCommit returns true iff the BatchRequest contains all
 // commands in the transaction, starting with BeginTransaction and
-// ending with EndTransaction. One phase commits are disallowed if the
+// ending with EndTransaction. One phase commits are disallowed if (1) the
 // transaction has already been flagged with a write too old error or
-// if isolation is serializable and the commit timestamp has been
-// forwarded.
+// (2) if isolation is serializable and the commit timestamp has been
+// forwarded, or (3) the transaction exceeded its deadline.
 func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
-	if ba.Txn == nil || ba.Txn.WriteTooOld ||
-		(ba.Txn.Isolation == roachpb.SERIALIZABLE && ba.Txn.OrigTimestamp != ba.Txn.Timestamp) {
+	if ba.Txn == nil || isEndTransactionTriggeringRetryError(ba.Txn, ba.Txn) {
 		return false
 	}
 	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {
 		return false
 	}
-	if _, hasEnd := ba.GetArg(roachpb.EndTransaction); !hasEnd {
+	arg, hasEnd := ba.GetArg(roachpb.EndTransaction)
+	if !hasEnd {
 		return false
 	}
-	return true
+	etArg := arg.(*roachpb.EndTransactionRequest)
+	return !isEndTransactionExceedingDeadline(ba.Header, *etArg)
 }
 
 func (r *Replica) executeBatch(

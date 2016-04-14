@@ -384,7 +384,7 @@ func (r *Replica) EndTransaction(
 		return roachpb.EndTransactionResponse{}, nil, roachpb.NewTransactionStatusError("does not exist")
 	}
 
-	if args.Deadline != nil && args.Deadline.Less(h.Timestamp) {
+	if isEndTransactionExceedingDeadline(h, args) {
 		reply.Txn.Status = roachpb.ABORTED
 		// FIXME(#3037):
 		// If the deadline has lapsed, return all the intents for
@@ -450,18 +450,9 @@ func (r *Replica) EndTransaction(
 	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
 
 	// Set transaction status to COMMITTED or ABORTED as per the
-	// args.Commit parameter. If the transaction deadline is set and has
-	// elapsed, abort.
+	// args.Commit parameter.
 	if args.Commit {
-		// If we saw any WriteTooOldErrors, we must restart to avoid lost
-		// update anomalies.
-		if h.Txn.WriteTooOld {
-			return reply, nil, roachpb.NewTransactionRetryError()
-		}
-		// If the isolation level is SERIALIZABLE, return a transaction
-		// retry error if the commit timestamp isn't equal to the txn
-		// timestamp.
-		if h.Txn.Isolation == roachpb.SERIALIZABLE && !reply.Txn.Timestamp.Equal(h.Txn.OrigTimestamp) {
+		if isEndTransactionTriggeringRetryError(h.Txn, reply.Txn) {
 			return reply, nil, roachpb.NewTransactionRetryError()
 		}
 		reply.Txn.Status = roachpb.COMMITTED
@@ -503,6 +494,27 @@ func (r *Replica) EndTransaction(
 	// transaction to aborted. In both cases, the txn will be GC'd on
 	// the slow path.
 	return reply, externalIntents, nil
+}
+
+// isEndTransactionExceedingDeadline returns true if the transaction
+// exceeded its deadline.
+func isEndTransactionExceedingDeadline(h roachpb.Header, args roachpb.EndTransactionRequest) bool {
+	return args.Deadline != nil && args.Deadline.Less(h.Timestamp)
+}
+
+// isEndTransactionTriggeringRetryError returns true if the
+// EndTransactionRequest cannot be committed and needs to return a
+// TransactionRetryError.
+func isEndTransactionTriggeringRetryError(headerTxn, currentTxn *roachpb.Transaction) bool {
+	// If we saw any WriteTooOldErrors, we must restart to avoid lost
+	// update anomalies.
+	if headerTxn.WriteTooOld {
+		return true
+	}
+	// If the isolation level is SERIALIZABLE, return a transaction
+	// retry error if the commit timestamp isn't equal to the txn
+	// timestamp.
+	return headerTxn.Isolation == roachpb.SERIALIZABLE && !currentTxn.Timestamp.Equal(headerTxn.OrigTimestamp)
 }
 
 // resolveLocalIntents synchronously resolves any intents that are
