@@ -754,10 +754,10 @@ Available Commands:
   debug       debugging commands
 
 Flags:
-      --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr
+      --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default NONE)
       --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
       --log-dir value                  if non-empty, write log files in this directory
-      --logtostderr value[=true]       log to standard error instead of files
+      --logtostderr                    log to standard error instead of files
       --no-color value                 disable standard error log colorization
       --verbosity value                log level for V logs
       --vmodule value                  comma-separated list of pattern=N settings for file-filtered logging

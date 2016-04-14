@@ -48,6 +48,10 @@ func (ab *atomicBool) Set(s string) error {
 	return nil
 }
 
+func (ab *atomicBool) Type() string {
+	return "bool"
+}
+
 var _ flag.Value = &atomicBool{}
 
 // LogToStderrName and others are flag names.
