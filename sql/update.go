@@ -333,6 +333,9 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 				if _, ok := colIDSet[col.ID]; ok {
 					continue
 				}
+				if _, ok := primaryKeyCols[col.ID]; ok {
+					continue
+				}
 				key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
 				val := rowVals[i]
 				marshalledVal, mErr := marshalColumnValue(col, val, p.evalCtx.Args)
