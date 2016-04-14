@@ -346,7 +346,6 @@ func initFlags(ctx *Context) {
 	pf.Lookup(logflags.LogDirName).DefValue = ""
 	// If no value is specified for --alsologtostderr output everything.
 	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
-	pf.Lookup(logflags.AlsoLogToStderrName).DefValue = ""
 
 	{
 		f := startCmd.Flags()

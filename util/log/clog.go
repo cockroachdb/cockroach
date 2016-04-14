@@ -58,10 +58,11 @@ const severityChar = "IWEF"
 
 // severityName provides a mapping from Severity level to a string.
 var severityName = []string{
-	InfoLog:    "INFO",
-	WarningLog: "WARNING",
-	ErrorLog:   "ERROR",
-	FatalLog:   "FATAL",
+	InfoLog:     "INFO",
+	WarningLog:  "WARNING",
+	ErrorLog:    "ERROR",
+	FatalLog:    "FATAL",
+	NumSeverity: "NONE",
 }
 
 const (
