@@ -114,35 +114,61 @@ header
           letter-spacing 1px
 
 .page
-  ul.nav
-    modular-font-size '1'
-    color $subnav-text-color
-    list-style-type none
-    line-height $subnav-height - $subnav-underline-height
+  .nav-container
 
-    font-family Lato-Bold
-    font-size 1.1rem
+    ul.nav
+      display flex
+      flex-flow row nowrap
+      justify-content flex-start
+      modular-font-size '1'
+      color $subnav-text-color
+      list-style-type none
+      line-height $subnav-height - $subnav-underline-height
 
-    li
-      display inline-block
-      margin-right 3rem
+      font-family Lato-Bold
+      font-size 1.1rem
+      max-width calc(100vw - 80px)
+      @media (min-width: 1300px)
+        max-width 1300px
 
-      &.active, &.active:hover
-        color $subnav-active-color
-        font-weight 600
-        border-bottom $subnav-underline-height solid $subnav-active-color
+      li
+        display inline-block
+        margin-right 3rem
+        height $subnav-height
 
-      &:hover
-        color $main-nav-hover
-      a
-        height 100%
-        display block
-        color inherit
-        text-decoration none
+        &.active, &.active:hover
+          color $subnav-active-color
+          font-weight 600
+          border-bottom $subnav-underline-height solid $subnav-active-color
+
         &:hover
-        &:visited
-        &:active
-          color @color
+          color $main-nav-hover
+        a
+          height 100%
+          display block
+          color inherit
+          text-decoration none
+          &:hover
+          &:visited
+          &:active
+            color @color
 
-        div
-          display inline
+          div
+            display inline
+
+        &.timescale-button
+          align-self flex-start
+          flex-basis 100%
+          // width 100%
+          display flex
+          justify-content flex-start
+          flex-flow row nowrap
+          align-items flex-start
+
+          button
+            margin-top auto
+            margin-bottom auto
+            align-self flex-start
+            text-transform none
+            &:focus
+              outline 0

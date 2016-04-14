@@ -346,7 +346,7 @@ module AdminViews {
 
         return m(".page.cluster", [
           m.component(Components.Topbar, {title: "Cluster", updated: mostRecentlyUpdated}),
-          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet(), timescaleSelector: true}),
           primaryContent,
         ]);
       }

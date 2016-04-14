@@ -5,6 +5,7 @@
 /// <reference path="../util/convert.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
+/// <reference path="../models/timescale.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 /**
@@ -318,13 +319,6 @@ module Models {
      */
     export class Query {
       /**
-       * timespan gets or sets the TimeSpan over which data should be
-       * queried. By default, the query will return the last ten minutes
-       * of data.
-       */
-      timespan: Utils.ChainProperty<Time.TimeSpan, Query> = Utils.ChainProp(this, Time.Recent(10 * 60 * 1000));
-
-      /**
        * title gets or sets the title of this query, which can be applied
        * to visualizations of the data from this query.
        */
@@ -356,6 +350,11 @@ module Models {
                   return result;
               });
       }
+
+      /**
+       * timespan gets the TimeSpan over which data should be queried.
+       */
+      timespan: () => Time.TimeSpan = () => Time.Recent(Models.Timescale.getCurrentTimescale());
 
       /**
        * execute dispatches a query to the server and returns a promise

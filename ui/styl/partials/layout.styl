@@ -45,6 +45,8 @@ body
   position relative
   padding-left $nav-width
   min-height "calc(100vh - %s - 1px)" % $footer-height // 1 more than footer height to account for the border
+  @media (max-height: 415px) // handles the case where the height is smaller than the side-nav
+    min-height 341px
 
   &:after
     content ""
@@ -76,7 +78,7 @@ body
     padding-top $top-bar-height + 10px
     width 100%
 
-  .nav + &
+  .nav-container + &
     padding-top "calc(%s + 3rem)" % ($top-bar-height + $subnav-height)
 
   &.table
@@ -84,7 +86,7 @@ body
     padding-left 0
     padding-right 0
 
-    .nav + &
+    .nav-container + &
       padding-top $top-bar-height + $subnav-height
 
   h1
@@ -183,6 +185,11 @@ button
     &:hover
       background-color $secondary-gray-14
 
+  &.timescale
+    whitespace nowrap
+    padding 10px
+    width auto
+
 .topbar
   padding 0 3rem 1rem
   background-color white
@@ -266,7 +273,7 @@ button
     strong
       font-family Lato-Bold
 
-.page .nav
+.page .nav-container
   padding 0 3rem 1rem
   background-color $subnav-background
   text-transform uppercase
@@ -568,7 +575,7 @@ table
       text-decoration none
       color $main-gray
 
-.tooltip
+.tooltip, .timescale-selector
   position absolute
   z-index $tooltip-layer
   padding 35px
@@ -606,3 +613,36 @@ div.charts
     left auto
     bottom 100%
     top auto
+
+.timescale-selector-container
+  position relative
+
+.timescale-selector
+  right auto
+  left 0
+  top auto
+  white-space nowrap
+  padding 15px 25px
+
+  .text
+    margin-right 30px
+
+  button
+    background-color white
+    color $main-navy
+    width auto
+    padding 10px
+    margin 5px
+    font-family Lato-Semibold
+    &:focus
+      outline 0
+
+    &.selected
+      background-color $secondary-blue
+      color white
+      border-radius 23px
+      font-family Lato-Heavy
+      font-size 13px
+
+  &.show
+    display flex
