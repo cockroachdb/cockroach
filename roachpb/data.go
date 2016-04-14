@@ -612,8 +612,8 @@ func NewTransaction(name string, baseKey Key, userPriority UserPriority,
 // occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() Timestamp {
 	candidate := t.OrigTimestamp
-	if t.LastHeartbeat != nil {
-		candidate.Forward(*t.LastHeartbeat)
+	if t.LastHeartbeat != nil && candidate.Less(*t.LastHeartbeat) {
+		candidate = *t.LastHeartbeat
 	}
 	return candidate
 }
