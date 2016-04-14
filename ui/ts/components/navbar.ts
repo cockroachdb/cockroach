@@ -2,6 +2,7 @@
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
 /// <reference path="../../typings/browser.d.ts" />
 /// <reference path="../util/property.ts" />
+/// <reference path="../components/timescaleselector.ts" />
 
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
@@ -32,8 +33,8 @@ module Components {
 
     export function controller(): void {}
 
-    export function view(ctrl: any, args: {ts: TargetSet; }): _mithril.MithrilVirtualElement {
-      return m(
+    export function view(ctrl: any, args: {ts: TargetSet; timescaleSelector?: boolean; }): _mithril.MithrilVirtualElement {
+      return m(".nav-container", m(
         "ul.nav",
         _.map(args.ts.targets(), function generateLinks(t: Target): MithrilVirtualElement {
           // settings for a relative URL using the mithril router
@@ -59,8 +60,8 @@ module Components {
               t.view
             )
           );
-        })
-      );
+        }).concat(args.timescaleSelector ? m("li.timescale-button", m.component(TimescaleSelector)) : [])
+      ));
     }
   }
 }

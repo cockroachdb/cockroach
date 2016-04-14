@@ -8,6 +8,8 @@
 /// <reference path="../components/topbar.ts" />
 /// <reference path="../util/format.ts" />
 /// <reference path="../components/visualizations/visualizations.ts" />
+/// <reference path="../models/metrics.ts" />
+/// <reference path="../models/timescale.ts" />
 
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 // Author: Matt Tracy (matt@cockroachlabs.com)
@@ -214,6 +216,8 @@ module AdminViews {
 
         public constructor(nodeId?: string) {
           this._query = Metrics.NewQuery();
+
+          this._query.timespan(Metrics.Time.GlobalTimeSpan());
 
           // General activity stats.
           this._addChart(
@@ -572,7 +576,7 @@ module AdminViews {
         let mostRecentlyUpdated: number = _.max(_.map(nodeStatuses.allStatuses(), (s: NodeStatus) => s.updated_at));
         return m(".page", [
           m.component(Components.Topbar, {title: "Nodes", updated: mostRecentlyUpdated}),
-          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet(), timescaleSelector: !isOverview}),
           primaryContent,
         ]);
       }
@@ -593,7 +597,7 @@ module AdminViews {
           },
           {
             view: "Graphs",
-            route: "graph",
+            route: "graphs",
           },
           {
             view: "Logs",
@@ -1046,7 +1050,7 @@ module AdminViews {
 
         // Primary content
         let primaryContent: MithrilElement;
-        if (detail === "graph") {
+        if (detail === "graphs") {
           primaryContent = ctrl.RenderGraphs();
         } else {
           primaryContent = [
@@ -1060,8 +1064,8 @@ module AdminViews {
 
         return m(".page", [
           m.component(Components.Topbar, {title: title, updated: updated}),
-          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
-          detail === "graph" ? m(".section.node", primaryContent) : primaryContent,
+          m.component(NavigationBar, {ts: ctrl.TargetSet(), timescaleSelector: m.route.param("detail") === "graphs"}),
+          detail === "graphs" ? m(".section.node", primaryContent) : primaryContent,
         ]);
       }
     }

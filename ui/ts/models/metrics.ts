@@ -5,6 +5,7 @@
 /// <reference path="../util/convert.ts" />
 /// <reference path="../util/http.ts" />
 /// <reference path="../util/querycache.ts" />
+/// <reference path="../models/timescale.ts" />
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 /**
@@ -201,6 +202,22 @@ module Models {
       export function Recent(duration: number): TimeSpan {
         return {
           timespan: function(): number[] {
+            let endTime: Date = new Date();
+            let startTime: Date = new Date(endTime.getTime() - duration);
+            return [startTime.getTime(), endTime.getTime()];
+          },
+        };
+      }
+
+      /**
+       * Recent selects a duration of constant size extending backwards
+       * from the current time. The current time is recomputed each time
+       * Recent's timespan() method is called.
+       */
+      export function GlobalTimeSpan(): TimeSpan {
+        return {
+          timespan: function(): number[] {
+            let duration: number = Models.Timescale.getCurrentTimescale();
             let endTime: Date = new Date();
             let startTime: Date = new Date(endTime.getTime() - duration);
             return [startTime.getTime(), endTime.getTime()];
