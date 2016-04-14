@@ -862,7 +862,9 @@ func TestReplicateAddAndRemove(t *testing.T) {
 		verify([]int64{39, 5, 39, 39})
 
 		// Wait out the leader lease and the unleased duration to make the replica GC'able.
-		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold+storage.DefaultLeaderLeaseDuration) + 1)
+		mtc.expireLeaderLeases()
+		mtc.manualClock.Increment(int64(
+			storage.ReplicaGCQueueInactivityThreshold + 1))
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
 
 		// The removed store no longer has any of the data from the range.
@@ -1310,7 +1312,8 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// TODO(bdarnell): if the call to RemoveReplica in replicaGCQueue.process can be
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	util.SucceedsSoon(t, func() error {
-		mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration+
+		mtc.expireLeaderLeases()
+		mtc.manualClock.Increment(int64(
 			storage.ReplicaGCQueueInactivityThreshold) + 1)
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
 
@@ -1358,7 +1361,8 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// lease will cause GC to do a consistent range lookup, where it
 	// will see that the range has been moved and delete the old
 	// replica.
-	mtc.manualClock.Increment(int64(storage.DefaultLeaderLeaseDuration+
+	mtc.expireLeaderLeases()
+	mtc.manualClock.Increment(int64(
 		storage.ReplicaGCQueueInactivityThreshold) + 1)
 	mtc.stores[2].ForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 0, 0})
@@ -1435,7 +1439,8 @@ func TestLeaderRemoveSelf(t *testing.T) {
 	// Force the read command request a new lease.
 	clock := mtc.clocks[0]
 	header := roachpb.Header{}
-	header.Timestamp = clock.Update(clock.Now().Add(int64(storage.DefaultLeaderLeaseDuration), 0))
+	header.Timestamp = clock.Update(clock.Now().Add(
+		storage.LeaderLeaseExpiration(clock), 0))
 
 	// Expect get a RangeNotFoundError.
 	_, pErr := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)

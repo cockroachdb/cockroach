@@ -92,8 +92,14 @@ const (
 	raftInitialLogIndex = 10
 	raftInitialLogTerm  = 5
 
-	// DefaultLeaderLeaseDuration is the default duration of the leader lease.
-	DefaultLeaderLeaseDuration = time.Second
+	// LeaderLeaseActiveDuration is the duration of the active period of leader
+	// leases requested.
+	LeaderLeaseActiveDuration = time.Second
+	// leaderLeaseRenewalDuration specifies a "time" interval at the
+	// end of the active lease interval (i.e. bounded to the right by the
+	// start of the stasis period) during which timestamps will trigger an
+	// asynchronous renewal of the lease.
+	leaderLeaseRenewalDuration = LeaderLeaseActiveDuration / 5
 )
 
 // consultsTimestampCacheMethods specifies the set of methods which
@@ -416,11 +422,12 @@ func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease
 	return lease, nil
 }
 
-// getLeaderLease returns the current leader lease.
-func (r *Replica) getLeaderLease() *roachpb.Lease {
+// getLeaderLease returns the current leader lease and a boolean which
+// indicates whether there is already an inflight lease request.
+func (r *Replica) getLeaderLease() (*roachpb.Lease, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.leaderLease
+	return r.mu.leaderLease, len(r.mu.llChans) > 0
 }
 
 // newNotLeaderError returns a NotLeaderError initialized with the
@@ -453,12 +460,12 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 
 	if !r.store.Stopper().RunAsyncTask(func() {
 		pErr := func() *roachpb.Error {
-			// TODO(Tobias): get duration from configuration, either as a config flag
-			// or, later, dynamically adjusted.
-			duration := DefaultLeaderLeaseDuration
+			// TODO(tschottdorf): get duration from configuration, either as a
+			// config flag or, later, dynamically adjusted.
+			startStasis := timestamp.Add(int64(LeaderLeaseActiveDuration), 0)
+			expiration := startStasis.Add(int64(r.store.Clock().MaxOffset()), 0)
 
 			// Prepare a Raft command to get a leader lease for this replica.
-			expiration := timestamp.Add(int64(duration), 0)
 			desc := r.Desc()
 			_, replica := desc.FindReplica(r.store.StoreID())
 			if replica == nil {
@@ -469,9 +476,10 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 					Key: desc.StartKey.AsRawKey(),
 				},
 				Lease: roachpb.Lease{
-					Start:      timestamp,
-					Expiration: expiration,
-					Replica:    *replica,
+					Start:       timestamp,
+					StartStasis: startStasis,
+					Expiration:  expiration,
+					Replica:     *replica,
 				},
 			}
 			ba := roachpb.BatchRequest{}
@@ -525,6 +533,8 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 // returning NotLeaderError. If the lease is expired, a renewal is
 // synchronously requested. This method uses the leader lease mutex
 // to guarantee only one request to grant the lease is pending.
+// Leases are eagerly renewed when a request with a timestamp close to
+// the beginning of the stasis period is served.
 //
 // TODO(spencer): implement threshold regrants to avoid latency in
 //  the presence of read or write pressure sufficiently close to the
@@ -540,13 +550,22 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
 		timestamp := r.store.Clock().Now()
-		if lease := r.getLeaderLease(); lease.Covers(timestamp) {
-			if lease.OwnedBy(r.store.StoreID()) {
-				// Happy path: We have an active lease, nothing to do.
-				return nil
+		if lease, inFlight := r.getLeaderLease(); lease.Covers(timestamp) {
+			if !lease.OwnedBy(r.store.StoreID()) {
+				// If lease is currently held by another, redirect to holder.
+				return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
 			}
-			// If lease is currently held by another, redirect to holder.
-			return roachpb.NewError(r.newNotLeaderError(lease, r.store.StoreID()))
+			if !inFlight && !timestamp.Less(lease.StartStasis) {
+				if log.V(2) {
+					log.Warningf("extending lease %s at %s", lease, timestamp)
+				}
+				// We had an active lease to begin with, but we want to trigger
+				// a lease extension. We don't need to wait for that extension
+				// to go through and simply ignore the returned channel (which
+				// is buffered).
+				r.requestLeaderLease(timestamp)
+			}
+			return nil
 		}
 
 		log.Trace(ctx, fmt.Sprintf("request leader lease (attempt #%d)", attempt))
@@ -562,7 +581,7 @@ func (r *Replica) redirectOnOrAcquireLeaderLease(ctx context.Context) *roachpb.E
 				// first, or the lease request was somehow invalid due to a
 				// concurrent change. Convert the error to a NotLeaderError.
 				if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
-					lease := r.getLeaderLease()
+					lease, _ := r.getLeaderLease()
 					if !lease.Covers(r.store.Clock().Now()) {
 						lease = nil
 					}
@@ -796,7 +815,7 @@ func (r *Replica) checkCmdHeader(header roachpb.Span) error {
 					// Only return the correct range descriptor as a hint
 					// if we know the current leader for that range, which
 					// indicates that our knowledge is not stale.
-					if lease := repl.getLeaderLease(); lease != nil && lease.Covers(r.store.Clock().Now()) {
+					if lease, _ := repl.getLeaderLease(); lease != nil && lease.Covers(r.store.Clock().Now()) {
 						mismatchErr.SuggestedRange = repl.Desc()
 					}
 				}
@@ -1593,7 +1612,7 @@ func (r *Replica) applyRaftCommandInBatch(
 
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
-		if lease := r.getLeaderLease(); args.Method() != roachpb.LeaderLease &&
+		if lease, _ := r.getLeaderLease(); args.Method() != roachpb.LeaderLease &&
 			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) {
 			// Verify the leader lease is held, unless this command is trying to
 			// obtain it. Any other Raft command has had the leader lease held
@@ -1966,7 +1985,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 
 // maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
 // The first call is on NewReplica. Further calls come from the trigger on an
-// EndTransactionRequest.
+// EndTransactionRequest or leader lease acquisition.
 //
 // Note that maybeGossipSystemConfig gossips information only when the
 // lease is actually held. The method does not request a leader lease
@@ -1982,7 +2001,7 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
-	if lease := r.getLeaderLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
+	if lease, _ := r.getLeaderLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
 		// Do not gossip when a leader lease is not held.
 		return
 	}
