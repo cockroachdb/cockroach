@@ -32,7 +32,7 @@ func testMarshal(t *testing.T, m json.Marshaler, exp string) {
 }
 
 func TestGauge(t *testing.T) {
-	g := NewGauge()
+	g := NewGauge("test_name")
 	g.Update(10)
 	if v := g.Value(); v != 10 {
 		t.Fatalf("unexpected value: %d", v)
@@ -41,7 +41,7 @@ func TestGauge(t *testing.T) {
 }
 
 func TestGaugeFloat64(t *testing.T) {
-	g := NewGaugeFloat64()
+	g := NewGaugeFloat64("test_name")
 	g.Update(10.4)
 	if v := g.Value(); v != 10.4 {
 		t.Fatalf("unexpected value: %f", v)
@@ -50,7 +50,7 @@ func TestGaugeFloat64(t *testing.T) {
 }
 
 func TestCounter(t *testing.T) {
-	c := NewCounter()
+	c := NewCounter("test_name")
 	c.Inc(100)
 	c.Dec(10)
 	if v := c.Count(); v != 90 {
@@ -108,7 +108,7 @@ func TestRateRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 	const interval = 10 * time.Second
-	r := NewRate(interval)
+	r := NewRate("test_name", interval)
 
 	// Skip the warmup phase of the wrapped EWMA for this test.
 	for i := 0; i < 100; i++ {

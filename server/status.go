@@ -92,6 +92,10 @@ const (
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
 	healthEndpoint = "/health"
+
+	// prometheusEndpoint is the prometheus metrics endpoint, not to be
+	// confused with the built-in cockroach metrics.
+	prometheusEndpoint = "/metrics"
 )
 
 // Pattern for local used when determining the node ID.
