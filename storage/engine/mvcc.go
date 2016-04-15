@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 const (
@@ -1243,22 +1244,24 @@ func MVCCMerge(
 	}
 	metaKey := MakeMVCCMetadataKey(key)
 
+	// Every type flows through here, so we can't use the typed getters.
+	rawBytes := value.RawBytes
+
 	// Encode and merge the MVCC metadata with inlined value.
-	meta := &MVCCMetadata{RawBytes: value.RawBytes}
+	meta := &MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
 	if !timestamp.Equal(roachpb.ZeroTimestamp) {
 		meta.MergeTimestamp = &timestamp
 	}
-	data, err := proto.Marshal(meta)
+	data, err := protoutil.Marshal(meta)
 	if err != nil {
 		return err
 	}
 	if err := engine.Merge(metaKey, data); err != nil {
 		return err
 	}
-	// Every type flows through here, so we can't use the typed getters.
 	if ms != nil {
-		ms.Add(updateStatsOnMerge(key, int64(len(value.RawBytes))+mvccVersionTimestampSize, timestamp.WallTime))
+		ms.Add(updateStatsOnMerge(key, int64(len(rawBytes))+mvccVersionTimestampSize, timestamp.WallTime))
 	}
 	return nil
 }

@@ -19,10 +19,10 @@
 package engine
 
 import (
-	"sync"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 )
 
 // Iterator is an interface for iterating over key/value pairs in an
@@ -183,34 +183,20 @@ type Stats struct {
 	TableReadersMemEstimate  int64
 }
 
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		return proto.NewBuffer(nil)
-	},
-}
-
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
 func PutProto(engine Engine, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
-	buf := bufferPool.Get().(*proto.Buffer)
-	buf.Reset()
-
-	if err = buf.Marshal(msg); err != nil {
-		bufferPool.Put(buf)
-		return
-	}
-	data := buf.Bytes()
-	if err = engine.Put(key, data); err != nil {
-		bufferPool.Put(buf)
-		return
+	bytes, err := protoutil.Marshal(msg)
+	if err != nil {
+		return 0, 0, err
 	}
 
-	keyBytes = int64(key.EncodedSize())
-	valBytes = int64(len(data))
+	if err := engine.Put(key, bytes); err != nil {
+		return 0, 0, err
+	}
 
-	bufferPool.Put(buf)
-	return
+	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
 
 // Scan returns up to max key/value objects starting from

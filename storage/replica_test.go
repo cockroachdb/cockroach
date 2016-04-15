@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -3884,7 +3885,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 
 	// Write the new descriptor as an intent.
-	data, err := proto.Marshal(&newDesc)
+	data, err := protoutil.Marshal(&newDesc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3997,7 +3998,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	for i, r := range testRanges {
 		if i != withIntentRangeIndex {
 			// Write the new descriptor as an intent.
-			data, err := proto.Marshal(&r)
+			data, err := protoutil.Marshal(&r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -4049,7 +4050,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 
 	// Write the new descriptor as an intent.
 	intentRange := testRanges[withIntentRangeIndex]
-	data, err := proto.Marshal(&intentRange)
+	data, err := protoutil.Marshal(&intentRange)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4346,7 +4347,7 @@ func TestReplicaDestroy(t *testing.T) {
 
 	// First try and fail with an outdated descriptor.
 	origDesc := rep.Desc()
-	newDesc := util.CloneProto(origDesc).(*roachpb.RangeDescriptor)
+	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
 	_, newRep := newDesc.FindReplica(tc.store.StoreID())
 	newRep.ReplicaID++
 	newDesc.NextReplicaID++

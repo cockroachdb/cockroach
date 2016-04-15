@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -846,7 +847,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		} else if i == 5 {
 			txn = txn2
 		}
-		v := *util.CloneProto(&kv.Value).(*roachpb.Value)
+		v := *protoutil.Clone(&kv.Value).(*roachpb.Value)
 		v.Timestamp = roachpb.ZeroTimestamp
 		if err := MVCCPut(context.Background(), engine, nil, kv.Key, kv.Value.Timestamp, v, txn); err != nil {
 			t.Fatal(err)
@@ -992,11 +993,11 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	bytes1, err := value1.Marshal()
+	bytes1, err := protoutil.Marshal(&value1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bytes2, err := value2.Marshal()
+	bytes2, err := protoutil.Marshal(&value2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2594,7 +2595,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 
 // encodedSize returns the encoded size of the protobuf message.
 func encodedSize(msg proto.Message, t *testing.T) int64 {
-	data, err := proto.Marshal(msg)
+	data, err := protoutil.Marshal(msg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3010,7 +3011,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					}
 					continue
 				}
-				valCpy := *util.CloneProto(&val).(*roachpb.Value)
+				valCpy := *protoutil.Clone(&val).(*roachpb.Value)
 				valCpy.Timestamp = roachpb.ZeroTimestamp
 				if err := MVCCPut(context.Background(), engine, ms, test.key, val.Timestamp, valCpy, nil); err != nil {
 					t.Fatal(err)
@@ -3119,7 +3120,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 
 	for _, test := range testData {
 		for _, val := range test.vals {
-			valCpy := *util.CloneProto(&val).(*roachpb.Value)
+			valCpy := *protoutil.Clone(&val).(*roachpb.Value)
 			valCpy.Timestamp = roachpb.ZeroTimestamp
 			if err := MVCCPut(context.Background(), engine, nil, test.key, val.Timestamp, valCpy, nil); err != nil {
 				t.Fatal(err)
