@@ -150,6 +150,7 @@ func (*gcQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 // fully before GCing the entry. The transaction records which can be gc'ed are
 // returned separately and are not added to txnMap nor intentSpanMap.
 func processTransactionTable(
+	ctx context.Context,
 	snap engine.Engine,
 	desc *roachpb.RangeDescriptor,
 	txnMap map[uuid.UUID]*roachpb.Transaction,
@@ -224,9 +225,11 @@ func processTransactionTable(
 	startKey := keys.TransactionKey(desc.StartKey.AsRawKey(), uuid.EmptyUUID)
 	endKey := keys.TransactionKey(desc.EndKey.AsRawKey(), uuid.EmptyUUID)
 
-	_, err := engine.MVCCIterate(snap, startKey, endKey, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
-		return false, handleOne(kv)
-	})
+	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey,
+		roachpb.ZeroTimestamp, true /* consistent */, nil, /* txn */
+		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+			return false, handleOne(kv)
+		})
 	return gcKeys, err
 }
 
@@ -240,6 +243,7 @@ func processTransactionTable(
 // handy to have it here for stats (though less performant due to sending
 // all of the keys over the wire).
 func processAbortCache(
+	ctx context.Context,
 	snap engine.Engine,
 	rangeID roachpb.RangeID,
 	now roachpb.Timestamp,
@@ -251,7 +255,7 @@ func processAbortCache(
 	abortCache := NewAbortCache(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
-	abortCache.Iterate(snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.AbortCacheEntry) {
+	abortCache.Iterate(ctx, snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.AbortCacheEntry) {
 		infoMu.AbortSpanTotal++
 		if v.Timestamp.Add(int64(minAge), 0).Less(now) {
 			infoMu.AbortSpanGCNum++
@@ -298,7 +302,7 @@ func (gcq *gcQueue) process(now roachpb.Timestamp, repl *Replica,
 		return util.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
-	gcKeys, info, err := RunGC(desc, snap, now, zone.GC,
+	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now roachpb.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(repl, now, txn, typ)
 		},
@@ -375,7 +379,7 @@ type lockableGCInfo struct {
 // resolveIntents to clarify the true status of and clean up after encountered
 // transactions. It returns a slice of gc'able keys from the data, transaction,
 // and abort spans.
-func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timestamp, policy config.GCPolicy,
+func RunGC(ctx context.Context, desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timestamp, policy config.GCPolicy,
 	pushTxn pushFunc, resolveIntents resolveFunc) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
 
 	iter := newReplicaDataIterator(desc, snap, true /* replicatedOnly */)
@@ -496,7 +500,7 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 	infoMu.IntentTxns = len(txnMap)
 	infoMu.GCKeys = len(gcKeys)
 
-	txnKeys, err := processTransactionTable(snap, desc, txnMap, txnExp, &infoMu, resolveIntents)
+	txnKeys, err := processTransactionTable(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntents)
 	if err != nil {
 		return nil, GCInfo{}, err
 	}
@@ -544,7 +548,7 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 	}
 
 	// Clean up the abort cache.
-	gcKeys = append(gcKeys, processAbortCache(snap, desc.RangeID, now,
+	gcKeys = append(gcKeys, processAbortCache(ctx, snap, desc.RangeID, now,
 		abortCacheAgeThreshold, &infoMu, pushTxn)...)
 	return gcKeys, infoMu.GCInfo, nil
 }

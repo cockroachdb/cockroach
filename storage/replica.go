@@ -410,7 +410,7 @@ func (r *Replica) IsFirstRange() bool {
 
 func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
 	lease := &roachpb.Lease{}
-	if _, err := engine.MVCCGetProto(eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
+	if _, err := engine.MVCCGetProto(context.Background(), eng, keys.RangeLeaderLeaseKey(rangeID), roachpb.ZeroTimestamp, true, nil, lease); err != nil {
 		return nil, err
 	}
 	return lease, nil
@@ -702,7 +702,7 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 func (r *Replica) getLastReplicaGCTimestamp() (roachpb.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return roachpb.ZeroTimestamp, err
 	}
@@ -711,7 +711,7 @@ func (r *Replica) getLastReplicaGCTimestamp() (roachpb.Timestamp, error) {
 
 func (r *Replica) setLastReplicaGCTimestamp(timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
 // getLastVerificationTimestamp reads the timestamp at which the replica's
@@ -719,7 +719,7 @@ func (r *Replica) setLastReplicaGCTimestamp(timestamp roachpb.Timestamp) error {
 func (r *Replica) getLastVerificationTimestamp() (roachpb.Timestamp, error) {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
 	timestamp := roachpb.Timestamp{}
-	_, err := engine.MVCCGetProto(r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
+	_, err := engine.MVCCGetProto(context.Background(), r.store.Engine(), key, roachpb.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return roachpb.ZeroTimestamp, err
 	}
@@ -728,7 +728,7 @@ func (r *Replica) getLastVerificationTimestamp() (roachpb.Timestamp, error) {
 
 func (r *Replica) setLastVerificationTimestamp(timestamp roachpb.Timestamp) error {
 	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
+	return engine.MVCCPutProto(context.Background(), r.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &timestamp)
 }
 
 // RaftStatus returns the current raft status of the replica.
@@ -1075,7 +1075,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		// Checking whether the transaction has been aborted on reads
 		// makes sure that we don't experience anomalous conditions as
 		// described in #2231.
-		pErr = r.checkIfTxnAborted(r.store.Engine(), *ba.Txn)
+		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
 	r.store.intentResolver.processIntentsAsync(r, intents)
 	return br, pErr
@@ -1584,7 +1584,7 @@ func (r *Replica) applyRaftCommandInBatch(
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
 		r.assert5725(ba)
-		if pErr := r.checkIfTxnAborted(r.store.Engine(), *ba.Txn); pErr != nil {
+		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
 			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil, pErr
 		}
 	}
@@ -1649,12 +1649,12 @@ func (r *Replica) applyRaftCommandInBatch(
 // checkIfTxnAborted checks the txn abort cache for the given
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error. Locks the replica.
-func (r *Replica) checkIfTxnAborted(b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
+func (r *Replica) checkIfTxnAborted(ctx context.Context, b engine.Engine, txn roachpb.Transaction) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	var entry roachpb.AbortCacheEntry
-	aborted, err := r.abortCache.Get(b, txn.ID, &entry)
+	aborted, err := r.abortCache.Get(ctx, b, txn.ID, &entry)
 	if err != nil {
 		return roachpb.NewError(newReplicaCorruptionError(util.Errorf("could not read from abort cache"), err))
 	}

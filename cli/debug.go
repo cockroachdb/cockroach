@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -191,9 +193,10 @@ func runDebugSplitKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("range %d not found", rangeID)
 	}
 
-	if splitKey, err := engine.MVCCFindSplitKey(snap, rangeID, desc.StartKey, desc.EndKey, func(msg string, args ...interface{}) {
-		fmt.Printf(msg+"\n", args...)
-	}); err != nil {
+	if splitKey, err := engine.MVCCFindSplitKey(context.Background(), snap, rangeID,
+		desc.StartKey, desc.EndKey, func(msg string, args ...interface{}) {
+			fmt.Printf(msg+"\n", args...)
+		}); err != nil {
 		fmt.Println("No SplitKey found:", err)
 	} else {
 		fmt.Println("Computed SplitKey:", splitKey)
@@ -433,7 +436,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var descs []roachpb.RangeDescriptor
 
-	if _, err := engine.MVCCIterate(db, start, end, roachpb.MaxTimestamp,
+	if _, err := engine.MVCCIterate(context.Background(), db, start, end, roachpb.MaxTimestamp,
 		false /* !consistent */, nil, /* txn */
 		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			var desc roachpb.RangeDescriptor
@@ -462,7 +465,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		_, info, err := storage.RunGC(&desc, snap, roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()},
+		_, info, err := storage.RunGC(context.Background(), &desc, snap, roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ roachpb.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
 			}, func(_ []roachpb.Intent, _, _ bool) error { return nil })
 		if err != nil {

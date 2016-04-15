@@ -19,6 +19,8 @@ package storage
 import (
 	"errors"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -79,14 +81,19 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 
 // Get looks up an abort cache entry recorded for this transaction ID.
 // Returns whether an abort record was found and any error.
-func (sc *AbortCache) Get(e engine.Engine, txnID *uuid.UUID, entry *roachpb.AbortCacheEntry) (bool, error) {
+func (sc *AbortCache) Get(
+	ctx context.Context,
+	e engine.Engine,
+	txnID *uuid.UUID,
+	entry *roachpb.AbortCacheEntry,
+) (bool, error) {
 	if txnID == nil {
 		return false, errEmptyTxnID
 	}
 
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	ok, err := engine.MVCCGetProto(e, key, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, entry)
+	ok, err := engine.MVCCGetProto(ctx, e, key, roachpb.ZeroTimestamp, true /* consistent */, nil /* txn */, entry)
 	return ok, err
 }
 
@@ -95,9 +102,11 @@ func (sc *AbortCache) Get(e engine.Engine, txnID *uuid.UUID, entry *roachpb.Abor
 // entry.
 // TODO(tschottdorf): should not use a pointer to UUID.
 func (sc *AbortCache) Iterate(
-	e engine.Engine, f func([]byte, *uuid.UUID, roachpb.AbortCacheEntry),
+	ctx context.Context,
+	e engine.Engine,
+	f func([]byte, *uuid.UUID, roachpb.AbortCacheEntry),
 ) {
-	_, _ = engine.MVCCIterate(e, sc.min(), sc.max(), roachpb.ZeroTimestamp,
+	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), roachpb.ZeroTimestamp,
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortCacheEntry
@@ -161,7 +170,11 @@ func copySeqCache(
 // CopyInto copies all the results from this abort cache into the destRangeID
 // abort cache. Failures decoding individual cache entries return an error.
 // On success, returns the number of entries (key-value pairs) copied.
-func (sc *AbortCache) CopyInto(e engine.Engine, ms *engine.MVCCStats, destRangeID roachpb.RangeID) (int, error) {
+func (sc *AbortCache) CopyInto(
+	e engine.Engine,
+	ms *engine.MVCCStats,
+	destRangeID roachpb.RangeID,
+) (int, error) {
 	return copySeqCache(e, ms, sc.rangeID, destRangeID,
 		engine.MakeMVCCMetadataKey(sc.min()), engine.MakeMVCCMetadataKey(sc.max()))
 }
@@ -172,29 +185,46 @@ func (sc *AbortCache) CopyInto(e engine.Engine, ms *engine.MVCCStats, destRangeI
 // entries return an error. The copy is done directly using the engine
 // instead of interpreting values through MVCC for efficiency.
 // On success, returns the number of entries (key-value pairs) copied.
-func (sc *AbortCache) CopyFrom(e engine.Engine, ms *engine.MVCCStats, originRangeID roachpb.RangeID) (int, error) {
+func (sc *AbortCache) CopyFrom(
+	ctx context.Context,
+	e engine.Engine,
+	ms *engine.MVCCStats,
+	originRangeID roachpb.RangeID,
+) (int, error) {
 	originMin := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMin))
 	originMax := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMax))
 	return copySeqCache(e, ms, originRangeID, sc.rangeID, originMin, originMax)
 }
 
 // Del removes all abort cache entries for the given transaction.
-func (sc *AbortCache) Del(e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID) error {
+func (sc *AbortCache) Del(
+	ctx context.Context,
+	e engine.Engine,
+	ms *engine.MVCCStats,
+	txnID *uuid.UUID,
+) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	return engine.MVCCDelete(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
+	return engine.MVCCDelete(ctx, e, ms, key, roachpb.ZeroTimestamp, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
 func (sc *AbortCache) Put(
-	e engine.Engine, ms *engine.MVCCStats, txnID *uuid.UUID, entry *roachpb.AbortCacheEntry) error {
+	ctx context.Context,
+	e engine.Engine,
+	ms *engine.MVCCStats,
+	txnID *uuid.UUID,
+	entry *roachpb.AbortCacheEntry,
+) error {
 	if txnID == nil {
 		return errEmptyTxnID
 	}
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
-	return engine.MVCCPutProto(e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, entry)
+	return engine.MVCCPutProto(ctx, e, ms, key, roachpb.ZeroTimestamp, nil /* txn */, entry)
 }
 
-func decodeAbortCacheMVCCKey(encKey engine.MVCCKey, dest []byte) (*uuid.UUID, error) {
+func decodeAbortCacheMVCCKey(
+	encKey engine.MVCCKey, dest []byte,
+) (*uuid.UUID, error) {
 	if encKey.IsValue() {
 		return nil, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}

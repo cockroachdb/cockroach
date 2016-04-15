@@ -683,7 +683,7 @@ func IterateRangeDescriptors(eng engine.Engine, fn func(desc roachpb.RangeDescri
 		return fn(desc)
 	}
 
-	_, err := engine.MVCCIterate(eng, start, end, roachpb.MaxTimestamp, false /* !consistent */, nil, /* txn */
+	_, err := engine.MVCCIterate(context.Background(), eng, start, end, roachpb.MaxTimestamp, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, kvToDesc)
 	return err
 }
@@ -712,7 +712,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -989,7 +989,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		ok, err := engine.MVCCGetProto(s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), roachpb.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
 		}
@@ -1002,7 +1002,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		}
 		return util.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
-	err = engine.MVCCPutProto(s.engine, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &s.Ident)
+	err = engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreIdentKey(), roachpb.ZeroTimestamp, nil, &s.Ident)
 	return err
 }
 
@@ -1098,21 +1098,22 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
 	now := s.ctx.Clock.Now()
+	ctx := context.Background()
 
 	// Range descriptor.
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
 	// Replica GC & Verification timestamps.
-	if err := engine.MVCCPutProto(batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
-	if err := engine.MVCCPutProto(batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), roachpb.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta2.
 	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
-	if err := engine.MVCCPutProto(batch, ms, meta2Key, now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, meta2Key, now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
@@ -1121,7 +1122,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	meta1Key := keys.RangeMetaKey(meta2KeyAddr)
-	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
 
@@ -1129,13 +1130,13 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	for _, kv := range initialValues {
 		// Initialize the checksums.
 		kv.Value.InitChecksum(kv.Key)
-		if err := engine.MVCCPut(batch, ms, kv.Key, now, kv.Value, nil); err != nil {
+		if err := engine.MVCCPut(ctx, batch, ms, kv.Key, now, kv.Value, nil); err != nil {
 			return err
 		}
 	}
 
 	// Range Tree setup.
-	if err := SetupRangeTree(batch, ms, now, desc.StartKey); err != nil {
+	if err := SetupRangeTree(ctx, batch, ms, now, desc.StartKey); err != nil {
 		return err
 	}
 
@@ -1143,7 +1144,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	if err := ms.AccountForSelf(desc.RangeID); err != nil {
 		return err
 	}
-	if err := engine.MVCCSetRangeStats(batch, desc.RangeID, ms); err != nil {
+	if err := engine.MVCCSetRangeStats(ctx, batch, desc.RangeID, ms); err != nil {
 		return err
 	}
 
@@ -1410,7 +1411,7 @@ func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: desc.NextReplicaID,
 	}
-	if err := engine.MVCCPutProto(batch, nil, tombstoneKey, roachpb.ZeroTimestamp, nil, tombstone); err != nil {
+	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, roachpb.ZeroTimestamp, nil, tombstone); err != nil {
 		return err
 	}
 
@@ -1937,7 +1938,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 	// would indicate that this is a stale message.
 	tombstoneKey := keys.RaftTombstoneKey(groupID)
 	var tombstone roachpb.RaftTombstone
-	if ok, err := engine.MVCCGetProto(s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
+	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, roachpb.ZeroTimestamp, true, nil, &tombstone); err != nil {
 		return nil, err
 	} else if ok {
 		if replicaID != 0 && replicaID < tombstone.NextReplicaID {

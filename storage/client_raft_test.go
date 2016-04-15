@@ -241,7 +241,7 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(rng.Desc().StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); !ok || err != nil {
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil, &desc); !ok || err != nil {
 		t.Fatalf("fetching range descriptor yielded %t, %s", ok, err)
 	}
 	// Verify that in time, no intents remain on meta addressing
@@ -257,7 +257,7 @@ func TestReplicateRange(t *testing.T) {
 		}
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
+			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); !ok || err != nil {
 				return util.Errorf("failed to resolve %s", key.AsRawKey())
 			}
 			if !reflect.DeepEqual(metaDesc, desc) {
@@ -767,7 +767,7 @@ func TestProgressWithDownNode(t *testing.T) {
 		util.SucceedsSoon(t, func() error {
 			values := []int64{}
 			for _, eng := range mtc.engines {
-				val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), mtc.clock.Now(), true, nil)
+				val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(), true, nil)
 				if err != nil {
 					return err
 				}
@@ -816,7 +816,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 			util.SucceedsSoon(t, func() error {
 				values := []int64{}
 				for _, eng := range mtc.engines {
-					val, _, err := engine.MVCCGet(eng, roachpb.Key("a"), mtc.clock.Now(), true, nil)
+					val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(), true, nil)
 					if err != nil {
 						return err
 					}
@@ -1475,7 +1475,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	// object is removed.
 	var desc roachpb.RangeDescriptor
 	descKey := keys.RangeDescriptorKey(roachpb.RKeyMin)
-	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), descKey,
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
 		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
 		t.Fatal(err)
 	} else if !ok {
@@ -1500,7 +1500,7 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	}
 
 	// And the data is no longer on disk.
-	if ok, err := engine.MVCCGetProto(mtc.stores[0].Engine(), descKey,
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
 		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
 		t.Fatal(err)
 	} else if ok {
@@ -1565,7 +1565,7 @@ func TestCheckInconsistent(t *testing.T) {
 	var val roachpb.Value
 	val.SetInt(42)
 	timestamp := mtc.stores[1].Clock().Timestamp()
-	if err := engine.MVCCPut(mtc.stores[1].Engine(), nil, key, timestamp, val, nil); err != nil {
+	if err := engine.MVCCPut(context.Background(), mtc.stores[1].Engine(), nil, key, timestamp, val, nil); err != nil {
 		t.Fatal(err)
 	}
 

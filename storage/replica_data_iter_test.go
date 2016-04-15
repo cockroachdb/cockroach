@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -89,7 +91,7 @@ func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
 
 	keys := []engine.MVCCKey{}
 	for _, keyTS := range keyTSs {
-		if err := engine.MVCCPut(r.store.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
+		if err := engine.MVCCPut(context.Background(), r.store.Engine(), nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
 		keys = append(keys, engine.MVCCKey{Key: keyTS.key, Timestamp: keyTS.ts})

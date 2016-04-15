@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -89,7 +91,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	defer stopper.Stop()
 
 	// Increment our key to a negative value.
-	newValue, err := engine.MVCCIncrement(store.Engine(), nil, keys.RangeIDGenerator, store.ctx.Clock.Now(), nil, -1024)
+	newValue, err := engine.MVCCIncrement(context.Background(), store.Engine(), nil, keys.RangeIDGenerator, store.ctx.Clock.Now(), nil, -1024)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"golang.org/x/net/context"
 )
 
 // cachedNode is an in memory cache for use during range tree manipulations.
@@ -40,7 +41,8 @@ type treeContext struct {
 
 // SetupRangeTree creates a new RangeTree. This should only be called as part
 // of store.BootstrapRange.
-func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb.Timestamp, startKey roachpb.RKey) error {
+// TODO(tschottdorf): other RangeTree operations should also propagate a Context.
+func SetupRangeTree(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb.Timestamp, startKey roachpb.RKey) error {
 	tree := &RangeTree{
 		RootKey: startKey,
 	}
@@ -48,10 +50,10 @@ func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp roachpb
 		Key:   startKey,
 		Black: true,
 	}
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeRoot, timestamp, nil, tree); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeTreeRoot, timestamp, nil, tree); err != nil {
 		return err
 	}
-	if err := engine.MVCCPutProto(batch, ms, keys.RangeTreeNodeKey(startKey), timestamp, nil, node); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeTreeNodeKey(startKey), timestamp, nil, node); err != nil {
 		return err
 	}
 	return nil
