@@ -389,14 +389,15 @@ type retryingDockerClient struct {
 //
 // For example, retrying a container removal could fail on the second attempt
 // if the first request timed out (but still executed).
-func (cli retryingDockerClient) retry(
+func retry(
 	ctx context.Context,
+	attempts int,
 	timeout time.Duration,
 	name string,
 	retryErrorsRE string,
 	f func(ctx context.Context) error,
 ) error {
-	for i := 0; i < cli.attempts; i++ {
+	for i := 0; i < attempts; i++ {
 		timeoutCtx, _ := context.WithTimeout(ctx, timeout)
 		err := f(timeoutCtx)
 		if err != nil {
@@ -417,7 +418,7 @@ func (cli retryingDockerClient) retry(
 		}
 		return err
 	}
-	return fmt.Errorf("%s: exceeded %d tries with a %s timeout", name, cli.attempts, cli.timeout)
+	return fmt.Errorf("%s: exceeded %d tries with a %s timeout", name, attempts, timeout)
 }
 
 func (cli retryingDockerClient) ContainerCreate(
@@ -431,7 +432,7 @@ func (cli retryingDockerClient) ContainerCreate(
 		// the retry. For that to be correct, we must bail out early here if
 		// the container really does exist before we try to create it.
 		var ret []types.Container
-		iErr := cli.retry(ctx, cli.timeout, "ContainerList", matchNone,
+		iErr := retry(ctx, cli.attempts, cli.timeout, "ContainerList", matchNone,
 			func(timeoutCtx context.Context) error {
 				var err error
 				fArgs := filters.NewArgs()
@@ -450,7 +451,7 @@ func (cli retryingDockerClient) ContainerCreate(
 		}
 	}
 	var ret types.ContainerCreateResponse
-	return ret, cli.retry(ctx, cli.timeout, "ContainerCreate",
+	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerCreate",
 		"The name .* is already in use",
 		func(timeoutCtx context.Context) error {
 			var err error
@@ -461,21 +462,21 @@ func (cli retryingDockerClient) ContainerCreate(
 }
 
 func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID string) error {
-	return cli.retry(ctx, cli.timeout, "ContainerStart", matchNone,
+	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
 			return cli.APIClient.ContainerStart(timeoutCtx, containerID)
 		})
 }
 
 func (cli retryingDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
-	return cli.retry(ctx, cli.timeout, "ContainerRemove", "No such container",
+	return retry(ctx, cli.attempts, cli.timeout, "ContainerRemove", "No such container",
 		func(timeoutCtx context.Context) error {
 			return cli.APIClient.ContainerRemove(timeoutCtx, options)
 		})
 }
 
 func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, signal string) error {
-	return cli.retry(ctx, cli.timeout, "ContainerKill",
+	return retry(ctx, cli.attempts, cli.timeout, "ContainerKill",
 		"Container .* is not running",
 		func(timeoutCtx context.Context) error {
 			return cli.APIClient.ContainerKill(timeoutCtx, containerID, signal)
@@ -484,7 +485,7 @@ func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, 
 
 func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID string) (int, error) {
 	var ret int
-	return ret, cli.retry(ctx, cli.timeout, "ContainerWait", matchNone,
+	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ContainerWait(timeoutCtx, containerID)
@@ -497,7 +498,7 @@ func (cli retryingDockerClient) ImageList(
 	ctx context.Context, options types.ImageListOptions,
 ) ([]types.Image, error) {
 	var ret []types.Image
-	return ret, cli.retry(ctx, cli.timeout, "ImageList", matchNone,
+	return ret, retry(ctx, cli.attempts, cli.timeout, "ImageList", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ImageList(timeoutCtx, options)
@@ -515,7 +516,7 @@ func (cli retryingDockerClient) ImagePull(
 		timeout = minTimeout
 	}
 	var ret io.ReadCloser
-	return ret, cli.retry(ctx, timeout, "ImagePull", matchNone,
+	return ret, retry(ctx, cli.attempts, timeout, "ImagePull", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
 			ret, err = cli.APIClient.ImagePull(timeoutCtx, options, privilegeFunc)
