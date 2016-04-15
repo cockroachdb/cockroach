@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package storage
 
@@ -57,6 +57,14 @@ const (
 	// TODO(tschottdorf): need to enforce at all times that this is much
 	// larger than the heartbeat interval used by the coordinator.
 	txnCleanupThreshold = time.Hour
+
+	// abortCacheAgeThreshold is the duration after which abort cache entries
+	// of transactions are garbage collected.
+	// It's important that this is kept aligned with the (maximum) heartbeat
+	// interval used by transaction coordinators throughout the cluster to make
+	// sure that no coordinator can run with a transaction which has been
+	// aborted and whose abort cache entry is being deleted.
+	abortCacheAgeThreshold = 5 * DefaultHeartbeatInterval
 
 	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
 	// or intent byte age larger than the threshold queues the replica for GC.
@@ -159,11 +167,7 @@ func processTransactionTable(
 			return err
 		}
 		infoMu.TransactionSpanTotal++
-		ts := txn.Timestamp
-		if heartbeatTS := txn.LastHeartbeat; heartbeatTS != nil {
-			ts.Forward(*heartbeatTS)
-		}
-		if !ts.Less(cutoff) {
+		if !txn.LastActive().Less(cutoff) {
 			return nil
 		}
 
@@ -226,85 +230,34 @@ func processTransactionTable(
 	return gcKeys, err
 }
 
-// processAbortCache iterates through the local abort cache entries,
-// pushing the transactions (in cleanup mode) for those entries which
-// appear to be old enough. In case the transaction indicates that
-// it's terminated, the abort cache keys are included in the result.
-// TODO(tschottdorf): update to strategy in #5639.
+// processAbortCache iterates through the local abort cache entries
+// and collects entries which indicate that a client which was running
+// this transaction must have realized that it has been aborted (due to
+// heartbeating having failed). The parameter minAge is typically a
+// multiple of the heartbeat timeout used by the coordinator.
+//
+// TODO(tschottdorf): this could be done in Replica.GC itself, but it's
+// handy to have it here for stats (though less performant due to sending
+// all of the keys over the wire).
 func processAbortCache(
 	snap engine.Engine,
 	rangeID roachpb.RangeID,
-	now, cutoff roachpb.Timestamp,
-	prevTxns map[uuid.UUID]*roachpb.Transaction,
+	now roachpb.Timestamp,
+	minAge time.Duration,
 	infoMu *lockableGCInfo,
 	pushTxn pushFunc,
 ) []roachpb.GCRequest_GCKey {
-	txns := make(map[uuid.UUID]*roachpb.Transaction)
-	idToKeys := make(map[uuid.UUID][]roachpb.GCRequest_GCKey)
+	var gcKeys []roachpb.GCRequest_GCKey
 	abortCache := NewAbortCache(rangeID)
 	infoMu.Lock()
+	defer infoMu.Unlock()
 	abortCache.Iterate(snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.AbortCacheEntry) {
-		txnID := *txnIDPtr
-		// If we've pushed this Txn previously, attempt cleanup (in case the
-		// push was successful). Initiate new pushes only for newly discovered
-		// "old" entries.
 		infoMu.AbortSpanTotal++
-		if prevTxn, ok := prevTxns[txnID]; ok && prevTxn.Status != roachpb.PENDING {
-			txns[txnID] = prevTxn
-			idToKeys[txnID] = append(idToKeys[txnID], roachpb.GCRequest_GCKey{Key: key})
-		} else if !cutoff.Less(v.Timestamp) {
-			infoMu.AbortSpanConsidered++
-			txns[txnID] = &roachpb.Transaction{
-				TxnMeta: roachpb.TxnMeta{ID: txnIDPtr, Key: v.Key},
-				Status:  roachpb.PENDING,
-			}
-			idToKeys[txnID] = append(idToKeys[txnID], roachpb.GCRequest_GCKey{Key: key})
+		if v.Timestamp.Add(int64(minAge), 0).Less(now) {
+			infoMu.AbortSpanGCNum++
+			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
 		}
 	})
-	infoMu.Unlock()
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, gcTaskLimit)
-	wg.Add(len(txns))
-	for _, txn := range txns {
-		if txn.Status != roachpb.PENDING {
-			wg.Done()
-			continue
-		}
-		// Avoid passing loop variable into closure.
-		txnCopy := txn
-		// Check if the Txn is still alive. If this indicates that the Txn is
-		// aborted and old enough to guarantee that any running coordinator
-		// would have realized that the transaction wasn't running by means
-		// of a heartbeat, then we're free to remove the abort cache entry.
-		// In the most likely case, there isn't even an entry (which will
-		// be apparent by a zero timestamp and nil last heartbeat).
-		sem <- struct{}{}
-		go func() {
-			defer func() {
-				<-sem
-				wg.Done()
-			}()
-			pushTxn(now, txnCopy, roachpb.PUSH_TOUCH)
-		}()
-	}
-	wg.Wait()
-
-	var gcKeys []roachpb.GCRequest_GCKey
-	for txnID, txn := range txns {
-		if txn.Status == roachpb.PENDING {
-			continue
-		}
-		ts := txn.Timestamp
-		if txn.LastHeartbeat != nil {
-			ts.Forward(*txn.LastHeartbeat)
-		}
-		if !cutoff.Less(ts) {
-			// This is it, we can delete our abort cache entries.
-			gcKeys = append(gcKeys, idToKeys[txnID]...)
-			infoMu.AbortSpanGCNum++
-		}
-	}
 	return gcKeys
 }
 
@@ -590,9 +543,9 @@ func RunGC(desc *roachpb.RangeDescriptor, snap engine.Engine, now roachpb.Timest
 		return nil, GCInfo{}, err
 	}
 
-	// Deal with any leftover abort cache keys.
-	leftoverAbortCacheKeys := processAbortCache(snap, desc.RangeID, now, txnExp, txnMap, &infoMu, pushTxn)
-	gcKeys = append(gcKeys, leftoverAbortCacheKeys...)
+	// Clean up the abort cache.
+	gcKeys = append(gcKeys, processAbortCache(snap, desc.RangeID, now,
+		abortCacheAgeThreshold, &infoMu, pushTxn)...)
 	return gcKeys, infoMu.GCInfo, nil
 }
 

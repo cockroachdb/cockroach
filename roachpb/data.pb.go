@@ -516,7 +516,8 @@ func (*Lease) Descriptor() ([]byte, []int) { return fileDescriptorData, []int{13
 type AbortCacheEntry struct {
 	// The key of the associated transaction.
 	Key Key `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	// The original timestamp of the associated transaction.
+	// The candidate commit timestamp the transaction record held at the time
+	// it was aborted.
 	Timestamp Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// The priority of the transaction.
 	Priority int32 `protobuf:"varint,3,opt,name=priority" json:"priority"`
