@@ -116,14 +116,16 @@ func (kv *kvNative) del(rows, run int) error {
 }
 
 func (kv *kvNative) scan(rows, run int) error {
-	kvs, pErr := kv.db.Scan(fmt.Sprintf("%s%06d", kv.prefix, 0), fmt.Sprintf("%s%06d", kv.prefix, rows), int64(rows))
-	if pErr != nil {
-		return pErr.GoError()
-	}
+	var kvs []client.KeyValue
+	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		kvs, pErr = txn.Scan(fmt.Sprintf("%s%06d", kv.prefix, 0), fmt.Sprintf("%s%06d", kv.prefix, rows), int64(rows))
+		return pErr
+	})
 	if len(kvs) != rows {
 		return util.Errorf("expected %d rows; got %d", rows, len(kvs))
 	}
-	return nil
+	return pErr.GoError()
 }
 
 func (kv *kvNative) prep(rows int, initData bool) error {
