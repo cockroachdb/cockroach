@@ -118,6 +118,21 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 
+	// Prepare the check expressions.
+	var qvals qvalMap
+	if len(checkExprs) > 0 {
+		qvals = make(qvalMap)
+		table := tableInfo{
+			columns: makeResultColumns(tableDesc.Columns),
+		}
+		for i := range checkExprs {
+			expr, err := resolveQNames(checkExprs[i], &table, qvals, &p.qnameVisitor)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			checkExprs[i] = expr
+		}
+	}
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
 	rows, pErr := p.makePlan(insertRows, false)
@@ -199,34 +214,25 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 			}
 		}
 
-		// Used to check column constraints
-		table := tableInfo{
-			columns: makeResultColumns(tableDesc.Columns),
-		}
-
-		for _, val := range checkExprs {
-			qvals := make(qvalMap)
-			expr, err := resolveQNames(val, &table, qvals, nil)
-			if err != nil {
-				return nil, roachpb.NewError(err)
-			}
-			// Populate qvals
+		if len(checkExprs) > 0 {
+			// Populate qvals.
 			for ref, qval := range qvals {
 				// The colIdx is 0-based, we need to change it to 1-based.
 				ri, has := colIDtoRowIndex[ColumnID(ref.colIdx+1)]
 				if !has {
-					return nil, roachpb.NewUErrorf("Internal error")
+					return nil, roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
 				}
 				qval.datum = rowVals[ri]
 			}
-
-			if d, err := expr.Eval(p.evalCtx); err != nil {
-				return nil, roachpb.NewError(err)
-			} else if res, err := parser.GetBool(d); err != nil {
-				return nil, roachpb.NewError(err)
-			} else if !res {
-				// Failed to satisfy CHECK constraint
-				return nil, roachpb.NewUErrorf("Failed to satisfy CHECK constraint")
+			for _, expr := range checkExprs {
+				if d, err := expr.Eval(p.evalCtx); err != nil {
+					return nil, roachpb.NewError(err)
+				} else if res, err := parser.GetBool(d); err != nil {
+					return nil, roachpb.NewError(err)
+				} else if !res {
+					// Failed to satisfy CHECK constraint.
+					return nil, roachpb.NewUErrorf("failed to satisfy CHECK constraint")
+				}
 			}
 		}
 
@@ -466,18 +472,18 @@ func makeDefaultExprs(
 func (p *planner) makeCheckExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
 	// Check to see if any of the columns have CHECK expressions. If there are
 	// no CHECK expressions, we don't bother with constructing it.
-	haveCheck := false
+	numCheck := 0
 	for _, col := range cols {
 		if col.CheckExpr != nil {
-			haveCheck = true
+			numCheck++
 			break
 		}
 	}
-	if !haveCheck {
+	if numCheck == 0 {
 		return nil, nil
 	}
 
-	var checkExprs []parser.Expr
+	checkExprs := make([]parser.Expr, 0, numCheck)
 	for _, col := range cols {
 		if col.CheckExpr == nil {
 			continue
