@@ -65,8 +65,8 @@ deployment:
       - mkdir -p "${CIRCLE_ARTIFACTS}/acceptance_deploy"
       - time acceptance/acceptance.test -test.v -test.timeout 10m
           -i cockroachdb/cockroach -nodes 3
-          -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy 2>&1 >
-          "${CIRCLE_ARTIFACTS}/acceptance_deploy.log"
+          -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy >
+          "${CIRCLE_ARTIFACTS}/acceptance_deploy.log" 2>&1
 
       - build/build-osx.sh
       - build/push-tagged-aws.sh
