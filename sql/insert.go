@@ -111,6 +111,28 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	// Replace any DEFAULT markers with the corresponding default expressions.
 	insertRows := p.fillDefaults(defaultExprs, cols, n)
 
+	// Construct the check expressions. The returned slice will be nil if no
+	// column in the table has a check expression.
+	checkExprs, err := p.makeCheckExprs(cols)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Prepare the check expressions.
+	var qvals qvalMap
+	if len(checkExprs) > 0 {
+		qvals = make(qvalMap)
+		table := tableInfo{
+			columns: makeResultColumns(tableDesc.Columns),
+		}
+		for i := range checkExprs {
+			expr, err := resolveQNames(checkExprs[i], &table, qvals, &p.qnameVisitor)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			checkExprs[i] = expr
+		}
+	}
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
 	rows, pErr := p.makePlan(insertRows, false)
@@ -189,6 +211,28 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		for i := range rowVals {
 			if err := checkValueWidth(cols[i], rowVals[i]); err != nil {
 				return nil, roachpb.NewError(err)
+			}
+		}
+
+		if len(checkExprs) > 0 {
+			// Populate qvals.
+			for ref, qval := range qvals {
+				// The colIdx is 0-based, we need to change it to 1-based.
+				ri, has := colIDtoRowIndex[ColumnID(ref.colIdx+1)]
+				if !has {
+					return nil, roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
+				}
+				qval.datum = rowVals[ri]
+			}
+			for _, expr := range checkExprs {
+				if d, err := expr.Eval(p.evalCtx); err != nil {
+					return nil, roachpb.NewError(err)
+				} else if res, err := parser.GetBool(d); err != nil {
+					return nil, roachpb.NewError(err)
+				} else if !res {
+					// Failed to satisfy CHECK constraint.
+					return nil, roachpb.NewUErrorf("failed to satisfy CHECK constraint (%s)", expr.String())
+				}
 			}
 		}
 
@@ -423,4 +467,36 @@ func makeDefaultExprs(
 		defaultExprs = append(defaultExprs, expr)
 	}
 	return defaultExprs, nil
+}
+
+func (p *planner) makeCheckExprs(cols []ColumnDescriptor) ([]parser.Expr, error) {
+	// Check to see if any of the columns have CHECK expressions. If there are
+	// no CHECK expressions, we don't bother with constructing it.
+	numCheck := 0
+	for _, col := range cols {
+		if col.CheckExpr != nil {
+			numCheck++
+			break
+		}
+	}
+	if numCheck == 0 {
+		return nil, nil
+	}
+
+	checkExprs := make([]parser.Expr, 0, numCheck)
+	for _, col := range cols {
+		if col.CheckExpr == nil {
+			continue
+		}
+		expr, err := parser.ParseExprTraditional(*col.CheckExpr)
+		if err != nil {
+			return nil, err
+		}
+		expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
+		if err != nil {
+			return nil, err
+		}
+		checkExprs = append(checkExprs, expr)
+	}
+	return checkExprs, nil
 }

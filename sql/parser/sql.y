@@ -1412,7 +1412,10 @@ col_qualification_elem:
   {
     $$.val = PrimaryKeyConstraint{}
   }
-| CHECK '(' a_expr ')' { unimplemented() }
+| CHECK '(' a_expr ')'
+  {
+    $$.val = &ColumnCheckConstraint{Expr: $3.expr()}
+  }
 | DEFAULT b_expr
   {
     if ContainsVars($2.expr()) {
