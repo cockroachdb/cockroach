@@ -464,12 +464,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(int64(test.orig)).UnixNano)
+		txnClock := hlc.NewClock(test.orig.Nanoseconds)
 		txn := newTransaction("txn1", baseKey, 1, enginepb.SERIALIZABLE, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
-			txn.LastHeartbeat = &hlc.Timestamp{WallTime: int64(test.hb)}
+			txn.LastHeartbeat = hlc.Timestamp{WallTime: int64(test.hb)}
 		}
 		// Set a high Timestamp to make sure it does not matter. Only
 		// OrigTimestamp (and heartbeat) are used for GC decisions.

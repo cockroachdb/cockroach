@@ -1305,12 +1305,13 @@ func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnTy
 	}
 }
 
-func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
+func heartbeatArgs(txn *roachpb.Transaction, now hlc.Timestamp) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
 		},
+		Now: now,
 	}, h
 }
 
@@ -2288,7 +2289,7 @@ func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args, h := heartbeatArgs(txn)
+	args, h := heartbeatArgs(txn, tc.clock.Now())
 	// If the abort cache were active for this request, we'd catch a txn retry.
 	// Instead, we expect the error from heartbeating a nonexistent txn.
 	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, "record not present") {
@@ -2441,7 +2442,8 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
-		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), context.Background(), btH, &put); pErr != nil {
+		beginReply, pErr := maybeWrapWithBeginTransaction(tc.Sender(), context.Background(), btH, &put)
+		if pErr != nil {
 			t.Fatal(pErr)
 		}
 		txn.Sequence++
@@ -2464,15 +2466,18 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		// committed txn back, but without last heartbeat timestamp set.
 		txn.Epoch++ // need to fake a higher epoch to sneak past sequence cache
 		txn.Sequence++
-		hBA, h := heartbeatArgs(txn)
+		hBA, h := heartbeatArgs(txn, tc.clock.Now())
 
 		resp, pErr = tc.SendWrappedWith(h, &hBA)
 		if pErr != nil {
 			t.Error(pErr)
 		}
 		hBR := resp.(*roachpb.HeartbeatTxnResponse)
-		if hBR.Txn.Status != expStatus || hBR.Txn.LastHeartbeat != nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
+		if hBR.Txn.Status != expStatus {
+			t.Errorf("expected transaction status to be %s, but got %s", hBR.Txn.Status, expStatus)
+		}
+		if initHeartbeat := beginReply.Header().Txn.LastHeartbeat; !hBR.Txn.LastHeartbeat.Equal(initHeartbeat) {
+			t.Errorf("expected transaction last heartbeat to be %s, but got %s", reply.Txn.LastHeartbeat, initHeartbeat)
 		}
 		key = roachpb.Key(key).Next()
 	}
@@ -2491,12 +2496,13 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
 		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
-		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), context.Background(), btH, &put); pErr != nil {
+		beginReply, pErr := maybeWrapWithBeginTransaction(tc.Sender(), context.Background(), btH, &put)
+		if pErr != nil {
 			t.Fatal(pErr)
 		}
 
 		// Start out with a heartbeat to the transaction.
-		hBA, h := heartbeatArgs(txn)
+		hBA, h := heartbeatArgs(txn, tc.clock.Now())
 		txn.Sequence++
 
 		resp, pErr := tc.SendWrappedWith(h, &hBA)
@@ -2504,8 +2510,11 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		hBR := resp.(*roachpb.HeartbeatTxnResponse)
-		if hBR.Txn.Status != roachpb.PENDING || hBR.Txn.LastHeartbeat == nil {
-			t.Errorf("unexpected heartbeat reply contents: %+v", hBR)
+		if hBR.Txn.Status != roachpb.PENDING {
+			t.Errorf("expected transaction status to be %s, but got %s", hBR.Txn.Status, roachpb.PENDING)
+		}
+		if initHeartbeat := beginReply.Header().Txn.LastHeartbeat; hBR.Txn.LastHeartbeat.Equal(initHeartbeat) {
+			t.Errorf("expected transaction last heartbeat to advance, but it remained at %s", initHeartbeat)
 		}
 
 		args, h := endTxnArgs(txn, commit)
@@ -2523,7 +2532,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if reply.Txn.Status != expStatus {
 			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
 		}
-		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hBR.Txn.LastHeartbeat) {
+		if !reply.Txn.LastHeartbeat.Equal(hBR.Txn.LastHeartbeat) {
 			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
 				reply.Txn.LastHeartbeat, hBR.Txn.LastHeartbeat)
 		}
@@ -2614,7 +2623,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	txn.Writing = true
 
 	// Start out with a heartbeat to the transaction.
-	hBA, h := heartbeatArgs(txn)
+	hBA, h := heartbeatArgs(txn, tc.clock.Now())
 	txn.Sequence++
 
 	_, pErr := tc.SendWrappedWith(h, &hBA)
@@ -3181,7 +3190,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	}
 
 	txn.Sequence++
-	hbArgs, h := heartbeatArgs(txn)
+	hbArgs, h := heartbeatArgs(txn, tc.clock.Now())
 	reply, pErr := tc.SendWrappedWith(h, &hbArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -3579,7 +3588,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		pushee.Timestamp = test.startTS
-		pushee.LastHeartbeat = &test.startTS
+		pushee.LastHeartbeat = test.startTS
 		_, btH := beginTxnArgs(key, pushee)
 		put := putArgs(key, key)
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), context.Background(), btH, &put); pErr != nil {
@@ -3599,7 +3608,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Epoch = pushee.Epoch // no change
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
-		expTxn.LastHeartbeat = &test.startTS
+		expTxn.LastHeartbeat = test.startTS
 		expTxn.Writing = true
 
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
@@ -3662,7 +3671,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via BeginTransaction.
 		if !test.heartbeat.Equal(hlc.ZeroTimestamp) {
-			pushee.LastHeartbeat = &test.heartbeat
+			pushee.LastHeartbeat = test.heartbeat
 		}
 		_, btH := beginTxnArgs(key, pushee)
 		btH.Timestamp = tc.rng.store.Clock().Now()

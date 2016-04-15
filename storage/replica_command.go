@@ -1151,9 +1151,6 @@ func (r *Replica) HeartbeatTxn(
 	}
 
 	if txn.Status == roachpb.PENDING {
-		if txn.LastHeartbeat == nil {
-			txn.LastHeartbeat = &hlc.Timestamp{}
-		}
 		txn.LastHeartbeat.Forward(args.Now)
 		if err := engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &txn); err != nil {
 			return reply, err

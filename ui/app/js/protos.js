@@ -582,7 +582,10 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "rule": "optional",
                             "type": "util.hlc.Timestamp",
                             "name": "last_heartbeat",
-                            "id": 5
+                            "id": 5,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
                         },
                         {
                             "rule": "optional",
