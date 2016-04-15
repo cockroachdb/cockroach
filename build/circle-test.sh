@@ -134,7 +134,7 @@ if is_shard 0; then
   # Run "make test".
   echo "make test"
   time ${builder} make test \
-    TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2,tracer=2' | \
+    TESTFLAGS='--verbosity=1 --vmodule=monitor=2,tracer=2' | \
     tr -d '\r' | tee "${outdir}/test.log" | \
     grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
     awk '{print "test:", $0}'
@@ -150,7 +150,7 @@ if is_shard 0; then
     # this one runs outside the builder container (and inside the
     # container, something is already combining stdout and stderr).
     time $(dirname $0)/../acceptance.test -nodes 3 -l ${outdir}/acceptance \
-      -test.v -test.timeout 10m \
+      -test.timeout 10m \
       --verbosity=1 --vmodule=monitor=2 2>&1 | \
       tr -d '\r' | tee "${outdir}/acceptance.log" | \
       grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
@@ -164,7 +164,7 @@ if is_shard 1; then
   # Run "make testrace".
   echo "make testrace"
   time ${builder} make testrace \
-    TESTFLAGS='-v --verbosity=1 --vmodule=monitor=2' | \
+    TESTFLAGS='--verbosity=1 --vmodule=monitor=2' | \
     tr -d '\r' | tee "${outdir}/testrace.log" | \
     grep -E "^\--- (PASS|FAIL)|^(FAIL|ok)|${match}" |
     awk '{print "race:", $0}'
