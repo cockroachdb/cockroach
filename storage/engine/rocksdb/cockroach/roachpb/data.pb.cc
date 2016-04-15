@@ -312,8 +312,9 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fdata_2eproto() {
       GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Intent, _internal_metadata_),
       -1);
   Lease_descriptor_ = file->message_type(13);
-  static const int Lease_offsets_[3] = {
+  static const int Lease_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, start_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, start_stasis_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, expiration_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, replica_),
   };
@@ -513,22 +514,24 @@ void protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto() {
     "kroach.roachpb.SpanB\010\310\336\037\000\320\336\037\001\022-\n\003txn\030\002 \001"
     "(\0132\032.cockroach.roachpb.TxnMetaB\004\310\336\037\000\022:\n\006"
     "status\030\003 \001(\0162$.cockroach.roachpb.Transac"
-    "tionStatusB\004\310\336\037\000\"\271\001\n\005Lease\0221\n\005start\030\001 \001("
-    "\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\0226\n"
-    "\nexpiration\030\002 \001(\0132\034.cockroach.roachpb.Ti"
-    "mestampB\004\310\336\037\000\022;\n\007replica\030\003 \001(\0132$.cockroa"
-    "ch.roachpb.ReplicaDescriptorB\004\310\336\037\000:\010\230\240\037\000"
-    "\270\240\037\001\"|\n\017AbortCacheEntry\022\024\n\003key\030\001 \001(\014B\007\372\336"
-    "\037\003Key\0225\n\ttimestamp\030\002 \001(\0132\034.cockroach.roa"
-    "chpb.TimestampB\004\310\336\037\000\022\026\n\010priority\030\003 \001(\005B\004"
-    "\310\336\037\000:\004\270\240\037\001*l\n\tValueType\022\013\n\007UNKNOWN\020\000\022\007\n\003"
-    "INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BYTES\020\003\022\010\n\004TIME\020\004\022\013\n"
-    "\007DECIMAL\020\005\022\014\n\010DURATION\020\006\022\016\n\nTIMESERIES\020d"
-    "*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022"
-    "\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationTyp"
-    "e\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*"
-    "B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOM"
-    "MITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\tZ\007roachpbX\001", 3320);
+    "tionStatusB\004\310\336\037\000\"\363\001\n\005Lease\0221\n\005start\030\001 \001("
+    "\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\0228\n"
+    "\014start_stasis\030\004 \001(\0132\034.cockroach.roachpb."
+    "TimestampB\004\310\336\037\000\0226\n\nexpiration\030\002 \001(\0132\034.co"
+    "ckroach.roachpb.TimestampB\004\310\336\037\000\022;\n\007repli"
+    "ca\030\003 \001(\0132$.cockroach.roachpb.ReplicaDesc"
+    "riptorB\004\310\336\037\000:\010\230\240\037\000\270\240\037\001\"|\n\017AbortCacheEntr"
+    "y\022\024\n\003key\030\001 \001(\014B\007\372\336\037\003Key\0225\n\ttimestamp\030\002 \001"
+    "(\0132\034.cockroach.roachpb.TimestampB\004\310\336\037\000\022\026"
+    "\n\010priority\030\003 \001(\005B\004\310\336\037\000:\004\270\240\037\001*l\n\tValueTyp"
+    "e\022\013\n\007UNKNOWN\020\000\022\007\n\003INT\020\001\022\t\n\005FLOAT\020\002\022\t\n\005BY"
+    "TES\020\003\022\010\n\004TIME\020\004\022\013\n\007DECIMAL\020\005\022\014\n\010DURATION"
+    "\020\006\022\016\n\nTIMESERIES\020d*>\n\021ReplicaChangeType\022"
+    "\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243"
+    "\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n"
+    "\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013"
+    "\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032"
+    "\004\210\243\036\000B\tZ\007roachpbX\001", 3378);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/roachpb/data.proto", &protobuf_RegisterTypes);
   Span::default_instance_ = new Span();
@@ -6977,6 +6980,7 @@ void Intent::clear_status() {
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Lease::kStartFieldNumber;
+const int Lease::kStartStasisFieldNumber;
 const int Lease::kExpirationFieldNumber;
 const int Lease::kReplicaFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -6989,6 +6993,7 @@ Lease::Lease()
 
 void Lease::InitAsDefaultInstance() {
   start_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
+  start_stasis_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
   expiration_ = const_cast< ::cockroach::roachpb::Timestamp*>(&::cockroach::roachpb::Timestamp::default_instance());
   replica_ = const_cast< ::cockroach::roachpb::ReplicaDescriptor*>(&::cockroach::roachpb::ReplicaDescriptor::default_instance());
 }
@@ -7004,6 +7009,7 @@ Lease::Lease(const Lease& from)
 void Lease::SharedCtor() {
   _cached_size_ = 0;
   start_ = NULL;
+  start_stasis_ = NULL;
   expiration_ = NULL;
   replica_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -7017,6 +7023,7 @@ Lease::~Lease() {
 void Lease::SharedDtor() {
   if (this != default_instance_) {
     delete start_;
+    delete start_stasis_;
     delete expiration_;
     delete replica_;
   }
@@ -7048,9 +7055,12 @@ Lease* Lease::New(::google::protobuf::Arena* arena) const {
 }
 
 void Lease::Clear() {
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     if (has_start()) {
       if (start_ != NULL) start_->::cockroach::roachpb::Timestamp::Clear();
+    }
+    if (has_start_stasis()) {
+      if (start_stasis_ != NULL) start_stasis_->::cockroach::roachpb::Timestamp::Clear();
     }
     if (has_expiration()) {
       if (expiration_ != NULL) expiration_->::cockroach::roachpb::Timestamp::Clear();
@@ -7109,6 +7119,19 @@ bool Lease::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(34)) goto parse_start_stasis;
+        break;
+      }
+
+      // optional .cockroach.roachpb.Timestamp start_stasis = 4;
+      case 4: {
+        if (tag == 34) {
+         parse_start_stasis:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_start_stasis()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -7156,6 +7179,12 @@ void Lease::SerializeWithCachedSizes(
       3, *this->replica_, output);
   }
 
+  // optional .cockroach.roachpb.Timestamp start_stasis = 4;
+  if (has_start_stasis()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      4, *this->start_stasis_, output);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -7187,6 +7216,13 @@ void Lease::SerializeWithCachedSizes(
         3, *this->replica_, target);
   }
 
+  // optional .cockroach.roachpb.Timestamp start_stasis = 4;
+  if (has_start_stasis()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        4, *this->start_stasis_, target);
+  }
+
   if (_internal_metadata_.have_unknown_fields()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -7198,12 +7234,19 @@ void Lease::SerializeWithCachedSizes(
 int Lease::ByteSize() const {
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional .cockroach.roachpb.Timestamp start = 1;
     if (has_start()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->start_);
+    }
+
+    // optional .cockroach.roachpb.Timestamp start_stasis = 4;
+    if (has_start_stasis()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->start_stasis_);
     }
 
     // optional .cockroach.roachpb.Timestamp expiration = 2;
@@ -7250,6 +7293,9 @@ void Lease::MergeFrom(const Lease& from) {
     if (from.has_start()) {
       mutable_start()->::cockroach::roachpb::Timestamp::MergeFrom(from.start());
     }
+    if (from.has_start_stasis()) {
+      mutable_start_stasis()->::cockroach::roachpb::Timestamp::MergeFrom(from.start_stasis());
+    }
     if (from.has_expiration()) {
       mutable_expiration()->::cockroach::roachpb::Timestamp::MergeFrom(from.expiration());
     }
@@ -7285,6 +7331,7 @@ void Lease::Swap(Lease* other) {
 }
 void Lease::InternalSwap(Lease* other) {
   std::swap(start_, other->start_);
+  std::swap(start_stasis_, other->start_stasis_);
   std::swap(expiration_, other->expiration_);
   std::swap(replica_, other->replica_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
@@ -7346,15 +7393,58 @@ void Lease::set_allocated_start(::cockroach::roachpb::Timestamp* start) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
-// optional .cockroach.roachpb.Timestamp expiration = 2;
-bool Lease::has_expiration() const {
+// optional .cockroach.roachpb.Timestamp start_stasis = 4;
+bool Lease::has_start_stasis() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void Lease::set_has_expiration() {
+void Lease::set_has_start_stasis() {
   _has_bits_[0] |= 0x00000002u;
 }
-void Lease::clear_has_expiration() {
+void Lease::clear_has_start_stasis() {
   _has_bits_[0] &= ~0x00000002u;
+}
+void Lease::clear_start_stasis() {
+  if (start_stasis_ != NULL) start_stasis_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_start_stasis();
+}
+const ::cockroach::roachpb::Timestamp& Lease::start_stasis() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.start_stasis)
+  return start_stasis_ != NULL ? *start_stasis_ : *default_instance_->start_stasis_;
+}
+::cockroach::roachpb::Timestamp* Lease::mutable_start_stasis() {
+  set_has_start_stasis();
+  if (start_stasis_ == NULL) {
+    start_stasis_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.start_stasis)
+  return start_stasis_;
+}
+::cockroach::roachpb::Timestamp* Lease::release_start_stasis() {
+  clear_has_start_stasis();
+  ::cockroach::roachpb::Timestamp* temp = start_stasis_;
+  start_stasis_ = NULL;
+  return temp;
+}
+void Lease::set_allocated_start_stasis(::cockroach::roachpb::Timestamp* start_stasis) {
+  delete start_stasis_;
+  start_stasis_ = start_stasis;
+  if (start_stasis) {
+    set_has_start_stasis();
+  } else {
+    clear_has_start_stasis();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start_stasis)
+}
+
+// optional .cockroach.roachpb.Timestamp expiration = 2;
+bool Lease::has_expiration() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void Lease::set_has_expiration() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void Lease::clear_has_expiration() {
+  _has_bits_[0] &= ~0x00000004u;
 }
 void Lease::clear_expiration() {
   if (expiration_ != NULL) expiration_->::cockroach::roachpb::Timestamp::Clear();
@@ -7391,13 +7481,13 @@ void Lease::set_allocated_expiration(::cockroach::roachpb::Timestamp* expiration
 
 // optional .cockroach.roachpb.ReplicaDescriptor replica = 3;
 bool Lease::has_replica() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 void Lease::set_has_replica() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 void Lease::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 void Lease::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();

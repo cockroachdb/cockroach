@@ -301,17 +301,42 @@ message Intent {
 }
 
 // Lease contains information about leader leases including the
-// expiration and lease holder.
+// expiration and lease holder. It defines the two intervals
+// [start, start_stasis) and [start_stasis, expiration). The
+// former encompasses those timestamps for which the lease is
+// active, while the latter is a cooldown period which avoids
+// inconsistencies during leadership changes as explained below.
 message Lease {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
   // The start is a timestamp at which the lease begins. This value
-  // must be greater than the last lease expiration or this call will
-  // fail.
+  // must be greater than the last lease expiration or the lease request
+  // is considered invalid.
   optional Timestamp start = 1 [(gogoproto.nullable) = false];
-  // The expiration is a timestamp at which the lease will expire.
+  // Before the lease expires, it enters a "stasis period" the length of which
+  // is usually determined by the lease holder's maximum allowed clock offset.
+  // During this stasis period, the lease must not be used (but can be extended
+  // by the owner instead). This prevents a failure of linearizability on a
+  // single register during lease changes. Without that stasis period, the
+  // following could occur:
+  // * a leader lease gets committed on the new leader (but not the old).
+  // * client proposes and commits a write on new leader (with a timestamp
+  //   just greater than the expiration of the old lease).
+  // * client tries to read what it wrote, but hits a slow coordinator
+  //   (which assigns a timestamp covered by the old lease).
+  // * the read is served by the old leader (which has not processed the
+  //   change in leadership).
+  // * the client fails to read their own write.
+  //
+  // Instead, the old leader must refuse to serve the client's command on the
+  // basis that its timestamp falls within the stasis period.
+  optional Timestamp start_stasis = 4 [(gogoproto.nullable) = false];
+
+  // The expiration is a timestamp at which the lease expires. This means that
+  // a new lease can be granted for a later timestamp.
   optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
+
   // The address of the would-be lease holder.
   optional ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 }
