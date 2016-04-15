@@ -17,7 +17,14 @@ package acceptance
 import "testing"
 
 func TestDockerReadWriteReferenceVersion(t *testing.T) {
-	t.Skip("TODO(dt): breaking deploy-time tests, where the binds are different in the container.")
+
+	if testDockerSingleNode(t, "reference", []string{"/cockroach", "version"}) != nil {
+		t.Skip(`TODO(dt): No /cockroach binary in one-shot container.
+		Deploy-time tests run acceptance tests with a real cockroach
+		docker image rather than a bound binary in a builder image. Consider
+		rewriting this test to spin up separate containers rather than running
+		different binaries in the same container.`)
+	}
 	testDockerSuccess(t, "reference", []string{"/bin/bash", "-c", `
 set -xe
 mkdir /old
@@ -40,7 +47,7 @@ $bin quit && wait # wait will block until all background jobs finish.
 bin=/cockroach
 $bin start &
 sleep 1
-echo "Read data written by referencce version using new binary"
+echo "Read data written by reference version using new binary"
 $bin sql -d old -e "SELECT * FROM testing" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
