@@ -35,7 +35,6 @@ func TestTransactionString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts1 := hlc.Timestamp{WallTime: 10, Logical: 11}
 	txn := roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
 			Isolation: enginepb.SERIALIZABLE,
@@ -47,7 +46,7 @@ func TestTransactionString(t *testing.T) {
 		},
 		Name:          "name",
 		Status:        roachpb.COMMITTED,
-		LastHeartbeat: &ts1,
+		LastHeartbeat: hlc.Timestamp{WallTime: 10, Logical: 11},
 		OrigTimestamp: hlc.Timestamp{WallTime: 30, Logical: 31},
 		MaxTimestamp:  hlc.Timestamp{WallTime: 40, Logical: 41},
 	}

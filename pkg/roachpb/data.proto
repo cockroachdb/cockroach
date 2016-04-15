@@ -223,8 +223,7 @@ message Transaction {
   // A free-text identifier for debug purposes.
   optional string name = 2 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
-  // The last heartbeat timestamp.
-  optional util.hlc.Timestamp last_heartbeat = 5;
+  optional util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
   // The original timestamp at which the transaction started. For serializable
   // transactions, if the timestamp drifts from the original timestamp, the
   // transaction will retry.

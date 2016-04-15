@@ -1380,7 +1380,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::storage::engine::enginepb::TxnMeta* release_meta();
   void set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMeta* meta);
 
-  // optional .cockroach.util.hlc.Timestamp last_heartbeat = 5;
   bool has_last_heartbeat() const;
   void clear_last_heartbeat();
   static const int kLastHeartbeatFieldNumber = 5;
@@ -3060,7 +3059,6 @@ inline void Transaction::set_status(::cockroach::roachpb::TransactionStatus valu
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.status)
 }
 
-// optional .cockroach.util.hlc.Timestamp last_heartbeat = 5;
 inline bool Transaction::has_last_heartbeat() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
