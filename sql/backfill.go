@@ -420,10 +420,10 @@ func (sc *SchemaChanger) backfillIndexes(
 
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
-						log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
+						log.Infof("InitPut %s -> %v", secondaryIndexEntry.key,
 							secondaryIndexEntry.value)
 					}
-					b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+					b.InitPut(secondaryIndexEntry.key, secondaryIndexEntry.value)
 				}
 			}
 		}
