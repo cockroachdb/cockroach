@@ -34,7 +34,6 @@ import (
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
-	"github.com/docker/engine-api/types/filters"
 	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
 	"golang.org/x/net/context"
@@ -378,7 +377,8 @@ func (cli resilientDockerClient) ContainerRemove(ctx context.Context, options ty
 // hang indefinitely and non-deterministically. This leads to flaky tests. To
 // avoid this, we wrap some of them in a timeout and retry loop.
 type retryingDockerClient struct {
-	client.APIClient
+	// Implements client.APIClient, but we use that it's resilient.
+	resilientDockerClient
 	attempts int
 	timeout  time.Duration
 }
@@ -422,40 +422,18 @@ func retry(
 }
 
 func (cli retryingDockerClient) ContainerCreate(
-	ctx context.Context, config *container.Config, hostConfig *container.HostConfig,
-	networkingConfig *network.NetworkingConfig, containerName string) (
-	types.ContainerCreateResponse, error) {
-
-	{
-		// Hacks incur hacks: We retry the ContainerCreate below, but we must
-		// swallow the error which occurs if the container already exists after
-		// the retry. For that to be correct, we must bail out early here if
-		// the container really does exist before we try to create it.
-		var ret []types.Container
-		iErr := retry(ctx, cli.attempts, cli.timeout, "ContainerList", matchNone,
-			func(timeoutCtx context.Context) error {
-				var err error
-				fArgs := filters.NewArgs()
-				fArgs.Add("name", containerName)
-				ret, err = cli.ContainerList(ctx, types.ContainerListOptions{
-					Filter: fArgs,
-				})
-				var _ = ret
-				return err
-			})
-		if iErr != nil {
-			return types.ContainerCreateResponse{}, iErr
-		}
-		if len(ret) > 0 {
-			return types.ContainerCreateResponse{}, fmt.Errorf("container %s already exists: %+v", containerName, ret)
-		}
-	}
+	ctx context.Context,
+	config *container.Config,
+	hostConfig *container.HostConfig,
+	networkingConfig *network.NetworkingConfig,
+	containerName string,
+) (types.ContainerCreateResponse, error) {
 	var ret types.ContainerCreateResponse
-	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerCreate",
-		"The name .* is already in use",
+	return ret, retry(ctx, cli.attempts, cli.timeout,
+		"ContainerCreate", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
-			ret, err = cli.APIClient.ContainerCreate(timeoutCtx, config, hostConfig, networkingConfig, containerName)
+			ret, err = cli.resilientDockerClient.ContainerCreate(timeoutCtx, config, hostConfig, networkingConfig, containerName)
 			_ = ret // silence incorrect unused warning
 			return err
 		})
@@ -464,14 +442,14 @@ func (cli retryingDockerClient) ContainerCreate(
 func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID string) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
-			return cli.APIClient.ContainerStart(timeoutCtx, containerID)
+			return cli.resilientDockerClient.ContainerStart(timeoutCtx, containerID)
 		})
 }
 
 func (cli retryingDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerRemove", "No such container",
 		func(timeoutCtx context.Context) error {
-			return cli.APIClient.ContainerRemove(timeoutCtx, options)
+			return cli.resilientDockerClient.ContainerRemove(timeoutCtx, options)
 		})
 }
 
@@ -479,7 +457,7 @@ func (cli retryingDockerClient) ContainerKill(ctx context.Context, containerID, 
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerKill",
 		"Container .* is not running",
 		func(timeoutCtx context.Context) error {
-			return cli.APIClient.ContainerKill(timeoutCtx, containerID, signal)
+			return cli.resilientDockerClient.ContainerKill(timeoutCtx, containerID, signal)
 		})
 }
 
@@ -488,7 +466,7 @@ func (cli retryingDockerClient) ContainerWait(ctx context.Context, containerID s
 	return ret, retry(ctx, cli.attempts, cli.timeout, "ContainerWait", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
-			ret, err = cli.APIClient.ContainerWait(timeoutCtx, containerID)
+			ret, err = cli.resilientDockerClient.ContainerWait(timeoutCtx, containerID)
 			_ = ret // silence incorrect unused warning
 			return err
 		})
@@ -501,7 +479,7 @@ func (cli retryingDockerClient) ImageList(
 	return ret, retry(ctx, cli.attempts, cli.timeout, "ImageList", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
-			ret, err = cli.APIClient.ImageList(timeoutCtx, options)
+			ret, err = cli.resilientDockerClient.ImageList(timeoutCtx, options)
 			_ = ret // silence incorrect unused warning
 			return err
 		})
@@ -519,7 +497,7 @@ func (cli retryingDockerClient) ImagePull(
 	return ret, retry(ctx, cli.attempts, timeout, "ImagePull", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
-			ret, err = cli.APIClient.ImagePull(timeoutCtx, options, privilegeFunc)
+			ret, err = cli.resilientDockerClient.ImagePull(timeoutCtx, options, privilegeFunc)
 			_ = ret // silence incorrect unused warning
 			return err
 		})

@@ -164,11 +164,10 @@ func CreateLocal(cfg TestConfig, logDir string, privileged bool, stopper chan st
 	cli, err := client.NewEnvClient()
 	maybePanic(err)
 
-	resilientClient := resilientDockerClient{APIClient: cli}
 	retryingClient := retryingDockerClient{
-		APIClient: resilientClient,
-		attempts:  10,
-		timeout:   10 * time.Second,
+		resilientDockerClient: resilientDockerClient{APIClient: cli},
+		attempts:              10,
+		timeout:               10 * time.Second,
 	}
 
 	return &LocalCluster{
