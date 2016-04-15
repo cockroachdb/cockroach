@@ -1560,6 +1560,120 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	}
 }
 
+func TestMVCCInitPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	err := MVCCInitPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A repeat of the command will still succeed
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, makeTS(0, 2), value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A repeat of the command with a different value will fail.
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, makeTS(0, 3), value2, nil)
+	switch e := err.(type) {
+	case *roachpb.ConditionFailedError:
+		if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				e.ActualValue.RawBytes, value1.RawBytes)
+		}
+	case nil:
+		t.Fatal("MVCCInitPut with a different value did not fail")
+	default:
+		t.Fatalf("unexpected error %T", e)
+	}
+
+	for _, ts := range []roachpb.Timestamp{makeTS(0, 1), makeTS(0, 2), makeTS(1, 0)} {
+		value, _, err := MVCCGet(context.Background(), engine, testKey1, ts, true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value1.RawBytes, value.RawBytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.RawBytes, value.RawBytes)
+		}
+		// Ensure that the timestamp didn't get updated.
+		if !value.Timestamp.Equal(makeTS(0, 1)) {
+			t.Errorf("value at timestamp %s seen", value.Timestamp)
+		}
+	}
+
+	value, _, pErr := MVCCGet(context.Background(), engine, testKey1, makeTS(0, 0), true, nil)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if value != nil {
+		t.Fatalf("%v present at old timestamp", value)
+	}
+}
+
+func TestMVCCInitPutWithTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
+
+	txn := *txn1
+	txn.Sequence++
+	err := MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A repeat of the command will still succeed.
+	txn.Sequence++
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A repeat of the command with a different value at a different epoch
+	// will still succeed.
+	txn.Sequence++
+	txn.Epoch = 2
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value2, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Commit value3.
+	txnCommit := txn
+	txnCommit.Status = roachpb.COMMITTED
+	txnCommit.Timestamp = makeTS(1, 0)
+	if err := MVCCResolveWriteIntent(context.Background(), engine, nil,
+		roachpb.Intent{
+			Span:   roachpb.Span{Key: testKey1},
+			Status: txnCommit.Status,
+			Txn:    txnCommit.TxnMeta,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write value4 with an old timestamp without txn...should get an error.
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value4, nil)
+	switch e := err.(type) {
+	case *roachpb.ConditionFailedError:
+		if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				e.ActualValue.RawBytes, value2.RawBytes)
+		}
+
+	default:
+		t.Fatalf("unexpected error %T", e)
+	}
+}
+
 // TestMVCCConditionalPutWriteTooOld verifies the differing behavior
 // of conditional puts when writing with an older timestamp than the
 // existing write. If there's no transaction, the conditional put

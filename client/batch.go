@@ -128,6 +128,12 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 				if result.PErr == nil {
 					row.Value = &req.Value
 				}
+			case *roachpb.InitPutRequest:
+				row := &result.Rows[k]
+				row.Key = []byte(req.Key)
+				if result.PErr == nil {
+					row.Value = &req.Value
+				}
 			case *roachpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
@@ -308,6 +314,27 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		return
 	}
 	b.reqs = append(b.reqs, roachpb.NewConditionalPut(k, v, ev))
+	b.initResult(1, 1, nil)
+}
+
+// InitPut sets the first value for a key to value. An error is reported if a
+// value already exists for the key and it's not equal to the value passed in.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc). It is illegal to
+// set value to nil.
+func (b *Batch) InitPut(key, value interface{}) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, err)
+		return
+	}
+	v, err := marshalValue(value)
+	if err != nil {
+		b.initResult(0, 1, err)
+		return
+	}
+	b.reqs = append(b.reqs, roachpb.NewInitPut(k, v))
 	b.initResult(1, 1, nil)
 }
 

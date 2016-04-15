@@ -266,6 +266,19 @@ func (db *DB) CPut(key, value, expValue interface{}) *roachpb.Error {
 	return pErr
 }
 
+// InitPut sets the first value for a key to value. An error is reported if a
+// value already exists for the key and it's not equal to the value passed in.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// proto.Message or any Go primitive type (bool, int, etc). It is illegal to
+// set value to nil.
+func (db *DB) InitPut(key, value interface{}) *roachpb.Error {
+	b := db.NewBatch()
+	b.InitPut(key, value)
+	_, pErr := runOneResult(db, b)
+	return pErr
+}
+
 // Inc increments the integer value at key. If the key does not exist it will
 // be created with an initial value of 0 which will then be incremented. If the
 // key exists but was set using Put or CPut an error will be returned.
