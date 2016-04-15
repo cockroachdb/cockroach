@@ -17,6 +17,7 @@
 package cluster
 
 import (
+	"net"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -34,6 +35,8 @@ type Cluster interface {
 	NewClient(*testing.T, int) (*client.DB, *stop.Stopper)
 	// PGUrl returns a URL string for the given node postgres server.
 	PGUrl(int) string
+	// InternalAddr returns the address used for inter-node communication.
+	InternalAddr(i int) net.Addr
 	// Assert verifies that the cluster state is as expected (i.e. no unexpected
 	// restarts or node deaths occurred). Tests can call this periodically to
 	// ascertain cluster health.
@@ -41,6 +44,8 @@ type Cluster interface {
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
 	AssertAndStop(*testing.T)
+	// ExecRoot executes the given command with super-user privileges.
+	ExecRoot(i int, cmd []string) error
 	// Kill terminates the cockroach process running on the given node number.
 	// The given integer must be in the range [0,NumNodes()-1].
 	Kill(int) error
