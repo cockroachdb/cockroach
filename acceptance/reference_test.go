@@ -17,6 +17,7 @@ package acceptance
 import "testing"
 
 func TestDockerReadWriteReferenceVersion(t *testing.T) {
+	t.Skip("TODO(dt): breaking deploy-time tests, where the binds are different in the container.")
 	testDockerSuccess(t, "reference", []string{"/bin/bash", "-c", `
 set -xe
 mkdir /old
