@@ -41,6 +41,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -218,7 +219,7 @@ func (s *adminServer) RegisterGRPCGateway(serverCtx *Context) error {
 			// TODO(tamird): remove this timeout. It is currently necessary because
 			// GRPC will not actually bail on a bad certificate error - it will just
 			// retry indefinitely. See https://github.com/grpc/grpc-go/issues/622.
-			grpc.WithTimeout(time.Second),
+			grpc.WithTimeout(base.NetworkTimeout),
 			grpc.WithBlock(),
 			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		)
