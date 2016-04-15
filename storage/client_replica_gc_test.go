@@ -109,8 +109,8 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	mtc.stores[1].DisableReplicaGCQueue(false)
 
 	// Increment the clock's timestamp to make the replica GC queue process the range.
-	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold+
-		storage.DefaultLeaderLeaseDuration) + 1)
+	mtc.expireLeaderLeases()
+	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 
 	// Make sure the range is removed from the store.
 	util.SucceedsSoon(t, func() error {

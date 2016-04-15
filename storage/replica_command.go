@@ -1349,20 +1349,22 @@ func (r *Replica) LeaderLease(
 	var reply roachpb.LeaderLeaseResponse
 
 	prevLease := r.mu.leaderLease
-	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
-	effectiveStart := args.Lease.Start
 	// We return this error in "normal" lease-overlap related failures.
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  *prevLease,
 		Requested: args.Lease,
 	}
 
-	// Verify details of new lease request. The start of this lease must
-	// obviously precede its expiration.
-	if !args.Lease.Start.Less(args.Lease.Expiration) {
-		rErr.Message = "expiration precedes start"
-		return reply, rErr
+	// Ensure Start < StartStasis <= Expiration.
+	if l := args.Lease; !l.Start.Less(l.StartStasis) ||
+		l.Expiration.Less(l.StartStasis) {
+		// This amounts to a bug.
+		return reply, util.Errorf("illegal lease interval: [%s, %s, %s]",
+			l.Start, l.StartStasis, l.Expiration)
 	}
+
+	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
+	effectiveStart := args.Lease.Start
 
 	// Verify that requestion replica is part of the current replica set.
 	if idx, _ := r.mu.desc.FindReplica(args.Lease.Replica.StoreID); idx == -1 {
@@ -1396,8 +1398,16 @@ func (r *Replica) LeaderLease(
 			rErr.Message = "extension moved start timestamp backwards"
 			return reply, rErr
 		}
-		// Note that the lease expiration can be shortened by the holder.
-		// This could be used to effect a faster lease handoff.
+		// TODO(tschottdorf): We could allow shortening existing leases, which
+		// could be used to effect a faster lease handoff. This needs to be
+		// properly implemented though (the leader must not shorten the lease
+		// when it has already served commands at higher timestamps), so this
+		// is forbidden now but can be re-enabled when we properly implement
+		// it.
+		if args.Lease.Expiration.Less(prevLease.Expiration) {
+			rErr.Message = "lease shortening currently unsupported"
+			return reply, rErr
+		}
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return reply, rErr
@@ -1419,15 +1429,15 @@ func (r *Replica) LeaderLease(
 		r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
 	}
 
-	// If this replica is a new holder of the lease, update the
-	// low water mark in the timestamp cache. We add the maximum
-	// clock offset to account for any difference in clocks
-	// between the expiration (set by a remote node) and this
-	// node.
 	if r.mu.leaderLease.Replica.StoreID == r.store.StoreID() &&
 		prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
-		r.mu.tsCache.SetLowWater(prevLease.Expiration.Add(int64(r.store.Clock().MaxOffset()), 0))
-		log.Infof("range %d: new leader lease %s", r.RangeID, args.Lease)
+		// If this replica is a new holder of the lease, update the low water
+		// mark of the timestamp cache. Note that clock offset scenarios are
+		// handled via a stasis period inherent in the lease which is documented
+		// in on the Lease struct.
+		log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
+			r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
+		r.mu.tsCache.SetLowWater(prevLease.Expiration)
 	}
 
 	return reply, nil
