@@ -408,6 +408,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Gossip channel should be dormant.
+	// TODO(tschottdorf): This test is likely flaky. Why can't some other
+	// process trigger gossip? It seems that a new leader lease being
+	// acquired will gossip a new system config since the hash changed and fail
+	// the test (seen in practice during some buggy WIP).
 	var systemConfig config.SystemConfig
 	select {
 	case <-resultChan:
