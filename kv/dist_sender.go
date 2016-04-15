@@ -636,6 +636,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// getDescriptors may fail retryably if the first range isn't
 			// available via Gossip.
 			if pErr != nil {
+				log.Trace(ctx, "range descriptor lookup failed: "+pErr.String())
 				if pErr.Retryable {
 					if log.V(1) {
 						log.Warning(pErr)
@@ -643,6 +644,8 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					continue
 				}
 				break
+			} else {
+				log.Trace(ctx, "looked up range descriptor")
 			}
 
 			if needAnother && br == nil {

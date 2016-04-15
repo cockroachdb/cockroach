@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -68,7 +70,7 @@ func TestAbortCachePutGetClearData(t *testing.T) {
 	sc, e := createTestAbortCache(t, 1, stopper)
 	// Start with a get for an uncached id.
 	entry := roachpb.AbortCacheEntry{}
-	if aborted, readErr := sc.Get(e, testTxnID, &entry); aborted {
+	if aborted, readErr := sc.Get(context.Background(), e, testTxnID, &entry); aborted {
 		t.Errorf("expected not aborted for id %s", testTxnID)
 	} else if readErr != nil {
 		t.Fatalf("unxpected read error: %s", readErr)
@@ -79,13 +81,13 @@ func TestAbortCachePutGetClearData(t *testing.T) {
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
 	}
-	if err := sc.Put(e, nil, testTxnID, &entry); err != nil {
+	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	tryHit := func(expAbort bool, expEntry roachpb.AbortCacheEntry) {
 		var actual roachpb.AbortCacheEntry
-		if aborted, readErr := sc.Get(e, testTxnID, &actual); readErr != nil {
+		if aborted, readErr := sc.Get(context.Background(), e, testTxnID, &actual); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
 		} else if expAbort != aborted {
 			t.Errorf("got aborted: %t; expected %t", aborted, expAbort)
@@ -114,13 +116,13 @@ func TestAbortCacheEmptyParams(t *testing.T) {
 		Priority:  testTxnPriority,
 	}
 	// Put value for test response.
-	if err := sc.Put(e, nil, testTxnID, &entry); err != nil {
+	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
-	if err := sc.Put(e, nil, nil, &entry); err != errEmptyTxnID {
+	if err := sc.Put(context.Background(), e, nil, nil, &entry); err != errEmptyTxnID {
 		t.Errorf("expected errEmptyTxnID error putting response; got %s", err)
 	}
-	if _, err := sc.Get(e, nil, nil); err != errEmptyTxnID {
+	if _, err := sc.Get(context.Background(), e, nil, nil); err != errEmptyTxnID {
 		t.Fatalf("expected errEmptyTxnID error; got %s", err)
 	}
 }
@@ -140,7 +142,7 @@ func TestAbortCacheCopyInto(t *testing.T) {
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
 	}
-	if err := rc1.Put(e, nil, testTxnID, &entry); err != nil {
+	if err := rc1.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting entry: %s", err)
 	}
 	// Copy the first cache into the second.
@@ -152,7 +154,7 @@ func TestAbortCacheCopyInto(t *testing.T) {
 	for _, cache := range []*AbortCache{rc1, rc2} {
 		var actual roachpb.AbortCacheEntry
 		// Get should return 1 for both caches.
-		if aborted, readErr := cache.Get(e, testTxnID, &actual); !aborted || readErr != nil {
+		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %t, %s", aborted, readErr)
 		} else if !reflect.DeepEqual(entry, actual) {
 			t.Fatalf("wanted %v, got %v", entry, actual)
@@ -174,12 +176,12 @@ func TestAbortCacheCopyFrom(t *testing.T) {
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
 	}
-	if err := rc1.Put(e, nil, testTxnID, &entry); err != nil {
+	if err := rc1.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
 	// Copy the first cache into the second.
-	if count, err := rc2.CopyFrom(e, nil, rc1.rangeID); err != nil {
+	if count, err := rc2.CopyFrom(context.Background(), e, nil, rc1.rangeID); err != nil {
 		t.Fatal(err)
 	} else if expCount := 1; count != expCount {
 		t.Errorf("unexpected number of copied entries: %d", count)
@@ -188,7 +190,7 @@ func TestAbortCacheCopyFrom(t *testing.T) {
 	// Get should hit both caches.
 	for i, cache := range []*AbortCache{rc1, rc2} {
 		var actual roachpb.AbortCacheEntry
-		if aborted, readErr := cache.Get(e, testTxnID, &actual); !aborted || readErr != nil {
+		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
 			t.Fatalf("%d: unxpected read error: %t, %s", i, aborted, readErr)
 		} else if !reflect.DeepEqual(entry, actual) {
 			t.Fatalf("expected %v, got %v", entry, actual)

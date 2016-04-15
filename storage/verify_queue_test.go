@@ -20,6 +20,8 @@ import (
 	"math"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -38,7 +40,7 @@ func TestVerifyQueueShouldQueue(t *testing.T) {
 
 	// Put empty verification timestamp
 	key := keys.RangeLastVerificationTimestampKey(tc.rng.RangeID)
-	if err := engine.MVCCPutProto(tc.rng.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.Timestamp{}); err != nil {
+	if err := engine.MVCCPutProto(context.Background(), tc.rng.store.Engine(), nil, key, roachpb.ZeroTimestamp, nil, &roachpb.Timestamp{}); err != nil {
 		t.Fatal(err)
 	}
 

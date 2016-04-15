@@ -19,6 +19,8 @@ package storage
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
@@ -44,7 +46,7 @@ type rangeStats struct {
 // require the values to be read from the engine).
 func newRangeStats(rangeID roachpb.RangeID, e engine.Engine) (*rangeStats, error) {
 	rs := &rangeStats{rangeID: rangeID}
-	if err := engine.MVCCGetRangeStats(e, rangeID, &rs.MVCCStats); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), e, rangeID, &rs.MVCCStats); err != nil {
 		return nil, err
 	}
 	return rs, nil
@@ -89,7 +91,7 @@ func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms engine.MVCCStats) error
 	rs.Lock()
 	defer rs.Unlock()
 	rs.MVCCStats.Add(ms)
-	return engine.MVCCSetRangeStats(e, rs.rangeID, &rs.MVCCStats)
+	return engine.MVCCSetRangeStats(context.Background(), e, rs.rangeID, &rs.MVCCStats)
 }
 
 // SetStats sets stats wholesale.
@@ -97,7 +99,7 @@ func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.MVCCStats = ms
-	return engine.MVCCSetRangeStats(e, rs.rangeID, &ms)
+	return engine.MVCCSetRangeStats(context.Background(), e, rs.rangeID, &ms)
 }
 
 // GetAvgIntentAge returns the average age of outstanding intents,

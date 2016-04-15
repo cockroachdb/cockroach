@@ -26,6 +26,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -131,7 +133,7 @@ func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *tes
 		counts[idx]++
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 		value.InitChecksum(key)
-		if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
+		if err := MVCCPut(context.Background(), batch, nil, key, ts, value, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -170,7 +172,7 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 		startKey := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := makeTS(walltime, 0)
-		kvs, _, err := MVCCScan(eng, startKey, keyMax, int64(numRows), ts, true, nil)
+		kvs, _, err := MVCCScan(context.Background(), eng, startKey, keyMax, int64(numRows), ts, true, nil)
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
@@ -204,7 +206,7 @@ func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := makeTS(walltime, 0)
-		if v, _, err := MVCCGet(eng, key, ts, true, nil); err != nil {
+		if v, _, err := MVCCGet(context.Background(), eng, key, ts, true, nil); err != nil {
 			b.Fatalf("failed get: %s", err)
 		} else if v == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
@@ -232,7 +234,7 @@ func runMVCCPut(emk engineMaker, valueSize int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := makeTS(timeutil.Now().UnixNano(), 0)
-		if err := MVCCPut(eng, nil, key, ts, value, nil); err != nil {
+		if err := MVCCPut(context.Background(), eng, nil, key, ts, value, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
 	}
@@ -254,7 +256,7 @@ func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := makeTS(timeutil.Now().UnixNano(), 0)
-			if err := MVCCPut(eng, nil, key, ts, value, nil); err != nil {
+			if err := MVCCPut(context.Background(), eng, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)
 			}
 		}
@@ -266,7 +268,7 @@ func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := makeTS(timeutil.Now().UnixNano(), 0)
-		if err := MVCCConditionalPut(eng, nil, key, ts, value, expected, nil); err != nil {
+		if err := MVCCConditionalPut(context.Background(), eng, nil, key, ts, value, expected, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
 	}
@@ -296,7 +298,7 @@ func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := makeTS(timeutil.Now().UnixNano(), 0)
-			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
+			if err := MVCCPut(context.Background(), batch, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)
 			}
 		}
@@ -330,7 +332,7 @@ func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing
 		for pb.Next() {
 			ms := MVCCStats{}
 			ts.Logical++
-			err := MVCCMerge(eng, &ms, keys[rand.Intn(numKeys)], ts, *value)
+			err := MVCCMerge(context.Background(), eng, &ms, keys[rand.Intn(numKeys)], ts, *value)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -339,7 +341,7 @@ func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing
 
 	// Read values out to force merge.
 	for _, key := range keys {
-		val, _, err := MVCCGet(eng, key, roachpb.ZeroTimestamp, true, nil)
+		val, _, err := MVCCGet(context.Background(), eng, key, roachpb.ZeroTimestamp, true, nil)
 		if err != nil {
 			b.Fatal(err)
 		} else if val == nil {
@@ -390,7 +392,7 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		dupEng, stopper := emk(b, locDirty)
 
 		b.StartTimer()
-		_, err := MVCCDeleteRange(dupEng, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
+		_, err := MVCCDeleteRange(context.Background(), dupEng, &MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, roachpb.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -442,10 +444,10 @@ func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if err := MVCCPut(rocksdb, nil, key, zeroTS, value, nil /* txn */); err != nil {
+		if err := MVCCPut(context.Background(), rocksdb, nil, key, zeroTS, value, nil /* txn */); err != nil {
 			b.Fatal(err)
 		}
-		if err := MVCCDelete(rocksdb, nil, key, zeroTS, nil /* txn */); err != nil {
+		if err := MVCCDelete(context.Background(), rocksdb, nil, key, zeroTS, nil /* txn */); err != nil {
 			b.Fatal(err)
 		}
 	}

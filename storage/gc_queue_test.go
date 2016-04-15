@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -443,12 +445,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
-			if err := engine.MVCCPutProto(tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
+			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, roachpb.ZeroTimestamp, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
 		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.rng.abortCache.Put(tc.engine, nil, txn.ID, &entry); err != nil {
+		if err := tc.rng.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -468,7 +470,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(tc.engine, key, roachpb.ZeroTimestamp, true, nil, txn)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, roachpb.ZeroTimestamp, true, nil, txn)
 			if err != nil {
 				return err
 			}
@@ -488,7 +490,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 					strKey, expIntents, resolved[strKey])
 			}
 			entry := &roachpb.AbortCacheEntry{}
-			abortExists, err := tc.rng.abortCache.Get(tc.store.Engine(), txns[strKey].ID, entry)
+			abortExists, err := tc.rng.abortCache.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -502,7 +504,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.EmptyUUID)
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.EmptyUUID)
 	var count int
-	if _, err := engine.MVCCIterate(tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, roachpb.ZeroTimestamp,
+	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, roachpb.ZeroTimestamp,
 		true, nil, false, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil

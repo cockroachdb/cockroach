@@ -274,7 +274,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	// Find the most recent bootstrap info.
 	for _, s := range ls.storeMap {
 		var storeBI gossip.BootstrapInfo
-		ok, err := engine.MVCCGetProto(s.engine, keys.StoreGossipKey(), roachpb.ZeroTimestamp, true, nil, &storeBI)
+		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreGossipKey(), roachpb.ZeroTimestamp, true, nil, &storeBI)
 		if err != nil {
 			return err
 		}
@@ -311,7 +311,7 @@ func (ls *Stores) updateBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.latestBI = util.CloneProto(bi).(*gossip.BootstrapInfo)
 	// Update all stores.
 	for _, s := range ls.storeMap {
-		if err := engine.MVCCPutProto(s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
+		if err := engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreGossipKey(), roachpb.ZeroTimestamp, nil, bi); err != nil {
 			return err
 		}
 	}
