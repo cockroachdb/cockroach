@@ -9,10 +9,10 @@ INSERT INTO t1 VALUES (3, -1)
 statement ok
 INSERT INTO t1 (a, b) VALUES (4, -2)
 
-statement error pq: Failed to satisfy CHECK constraint
+statement error pq: failed to satisfy CHECK constraint
 INSERT INTO t1 VALUES (-3, -1)
 
-statement error pq: Failed to satisfy CHECK constraint
+statement error pq: failed to satisfy CHECK constraint
 INSERT INTO t1 VALUES (3, 1)
 
 statement ok
@@ -27,8 +27,22 @@ INSERT INTO t1 (b) VALUES (-1)
 statement ok
 CREATE TABLE t2 (a INT DEFAULT -1 CHECK (a > 0), b INT CHECK (b < 0))
 
-statement error pq: Failed to satisfy CHECK constraint
+statement error pq: failed to satisfy CHECK constraint
 INSERT INTO t2 (b) VALUES (-1)
 
+### Rename column with check constraint
+
+# TODO(seif): On column rename we'll need to rewrite the CHECK expressions
+statement ok
+ALTER TABLE t2 RENAME COLUMN b TO c
+
+statement error pq: qualified name "b" not found
+INSERT INTO t2 (c) VALUES (-1)
+
+### Add check constraint to non-existing column
+# TODO(seif): this should fail on creation
+statement ok
+CREATE TABLE t3 (a INT CHECK (a > b))
+
 #### table CHECK constraints
-# TODO(guanqun):
+# TODO(seif):
