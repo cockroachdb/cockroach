@@ -1351,9 +1351,6 @@ func evalHeartbeatTxn(
 	}
 
 	if txn.Status == roachpb.PENDING {
-		if txn.LastHeartbeat == nil {
-			txn.LastHeartbeat = &hlc.Timestamp{}
-		}
 		txn.LastHeartbeat.Forward(args.Now)
 		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txn); err != nil {
 			return EvalResult{}, err

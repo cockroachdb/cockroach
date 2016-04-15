@@ -4060,7 +4060,6 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.util.hlc.Timestamp last_heartbeat = 5;
       case 5: {
         if (tag == 42u) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
@@ -4191,7 +4190,6 @@ void Transaction::SerializeWithCachedSizes(
       4, this->status(), output);
   }
 
-  // optional .cockroach.util.hlc.Timestamp last_heartbeat = 5;
   if (has_last_heartbeat()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       5, *this->last_heartbeat_, output);
@@ -4273,7 +4271,6 @@ size_t Transaction::ByteSizeLong() const {
           *this->meta_);
     }
 
-    // optional .cockroach.util.hlc.Timestamp last_heartbeat = 5;
     if (has_last_heartbeat()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -4528,7 +4525,6 @@ void Transaction::set_status(::cockroach::roachpb::TransactionStatus value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.status)
 }
 
-// optional .cockroach.util.hlc.Timestamp last_heartbeat = 5;
 bool Transaction::has_last_heartbeat() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
