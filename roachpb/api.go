@@ -366,6 +366,9 @@ func (*PutRequest) Method() Method { return Put }
 func (*ConditionalPutRequest) Method() Method { return ConditionalPut }
 
 // Method implements the Request interface.
+func (*InitPutRequest) Method() Method { return InitPut }
+
+// Method implements the Request interface.
 func (*IncrementRequest) Method() Method { return Increment }
 
 // Method implements the Request interface.
@@ -446,6 +449,12 @@ func (pr *PutRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (cpr *ConditionalPutRequest) ShallowCopy() Request {
 	shallowCopy := *cpr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (pr *InitPutRequest) ShallowCopy() Request {
+	shallowCopy := *pr
 	return &shallowCopy
 }
 
@@ -584,6 +593,7 @@ func (vcr *VerifyChecksumRequest) ShallowCopy() Request {
 func (*GetRequest) createReply() Response                { return &GetResponse{} }
 func (*PutRequest) createReply() Response                { return &PutResponse{} }
 func (*ConditionalPutRequest) createReply() Response     { return &ConditionalPutResponse{} }
+func (*InitPutRequest) createReply() Response            { return &InitPutResponse{} }
 func (*IncrementRequest) createReply() Response          { return &IncrementResponse{} }
 func (*DeleteRequest) createReply() Response             { return &DeleteResponse{} }
 func (*DeleteRangeRequest) createReply() Response        { return &DeleteRangeResponse{} }
@@ -669,6 +679,19 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 	}
 }
 
+// NewInitPut returns a Request initialized to put the value at key,
+// as long as the key doesn't exist, returning an error if the key
+// exists and the existing value is different from value.
+func NewInitPut(key Key, value Value) Request {
+	value.InitChecksum(key)
+	return &InitPutRequest{
+		Span: Span{
+			Key: key,
+		},
+		Value: value,
+	}
+}
+
 // NewDelete returns a Request initialized to delete the value at key.
 func NewDelete(key Key) Request {
 	return &DeleteRequest{
@@ -728,6 +751,7 @@ func NewReverseScan(key, endKey Key, maxResults int64) Request {
 func (*GetRequest) flags() int                { return isRead | isTxn }
 func (*PutRequest) flags() int                { return isWrite | isTxn | isTxnWrite }
 func (*ConditionalPutRequest) flags() int     { return isRead | isWrite | isTxn | isTxnWrite }
+func (*InitPutRequest) flags() int            { return isRead | isWrite | isTxn | isTxnWrite }
 func (*IncrementRequest) flags() int          { return isRead | isWrite | isTxn | isTxnWrite }
 func (*DeleteRequest) flags() int             { return isWrite | isTxn | isTxnWrite }
 func (*DeleteRangeRequest) flags() int        { return isWrite | isTxn | isTxnWrite | isRange }

@@ -96,6 +96,10 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		var resp roachpb.ConditionalPutResponse
 		resp, err = r.ConditionalPut(ctx, batch, ms, h, *tArgs)
 		reply = &resp
+	case *roachpb.InitPutRequest:
+		var resp roachpb.InitPutResponse
+		resp, err = r.InitPut(ctx, batch, ms, h, *tArgs)
+		reply = &resp
 	case *roachpb.IncrementRequest:
 		var resp roachpb.IncrementResponse
 		resp, err = r.Increment(ctx, batch, ms, h, *tArgs)
@@ -220,6 +224,17 @@ func (r *Replica) ConditionalPut(
 	var reply roachpb.ConditionalPutResponse
 
 	return reply, engine.MVCCConditionalPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+}
+
+// InitPut sets the value for a specified key only if it doesn't exist. It
+// returns an error if the key exists with an existing value that is different
+// from the value provided.
+func (r *Replica) InitPut(
+	ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, h roachpb.Header, args roachpb.InitPutRequest,
+) (roachpb.InitPutResponse, error) {
+	var reply roachpb.InitPutResponse
+
+	return reply, engine.MVCCInitPut(ctx, batch, ms, args.Key, h.Timestamp, args.Value, h.Txn)
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and

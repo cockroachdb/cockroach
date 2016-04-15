@@ -101,6 +101,20 @@ message ConditionalPutResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InitPutRequest is the argument to the InitPut() method.
+//
+// - If key doesn't exist, sets value.
+// - If key exists, returns an error if value != existing value.
+message InitPutRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// A InitPutResponse is the return value from the InitPut() method.
+message InitPutResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // An IncrementRequest is the argument to the Increment() method. It
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
@@ -588,6 +602,7 @@ message RequestUnion {
   optional GetRequest get = 1;
   optional PutRequest put = 2;
   optional ConditionalPutRequest conditional_put = 3;
+  optional InitPutRequest init_put = 26;
   optional IncrementRequest increment = 4;
   optional DeleteRequest delete = 5;
   optional DeleteRangeRequest delete_range = 6;
@@ -620,6 +635,7 @@ message ResponseUnion {
   optional GetResponse get = 1;
   optional PutResponse put = 2;
   optional ConditionalPutResponse conditional_put = 3;
+  optional InitPutResponse init_put = 26;
   optional IncrementResponse increment = 4;
   optional DeleteResponse delete = 5;
   optional DeleteRangeResponse delete_range = 6;

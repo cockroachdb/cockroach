@@ -19,6 +19,7 @@ package engine
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -1225,6 +1226,43 @@ func MVCCConditionalPut(
 		}
 		return value.RawBytes, nil
 	})
+}
+
+var errInitPutValueMatchesExisting = errors.New("the value matched the existing value")
+
+// MVCCInitPut sets the value for a specified key if the key doesn't exist. It
+// returns an error when the write fails or if the key exists with an
+// existing value that is different from the supplied value.
+func MVCCInitPut(
+	ctx context.Context,
+	engine Engine,
+	ms *MVCCStats,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	value roachpb.Value,
+	txn *roachpb.Transaction,
+) error {
+	iter := engine.NewIterator(key)
+	defer iter.Close()
+
+	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(existVal *roachpb.Value) ([]byte, error) {
+		if existVal != nil {
+			if !bytes.Equal(value.RawBytes, existVal.RawBytes) {
+				return nil, &roachpb.ConditionFailedError{
+					ActualValue: existVal.ShallowClone(),
+				}
+			}
+			// The existing value matches the supplied value; return an error
+			// to prevent rewriting the value.
+			return nil, errInitPutValueMatchesExisting
+		}
+		return value.RawBytes, nil
+	})
+	// Dummy error to prevent an unnecessary write.
+	if err == errInitPutValueMatchesExisting {
+		err = nil
+	}
+	return err
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,
