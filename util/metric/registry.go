@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/log"
 )
 
 const sep = "-"
@@ -105,7 +104,6 @@ func (r *Registry) Describe(descCh chan<- *prometheus.Desc) {
 	for _, metric := range r.tracked {
 		switch m := metric.(type) {
 		case prometheus.Metric:
-			log.Infof("Describing: %+v", m)
 			descCh <- m.Desc()
 		}
 	}
@@ -118,7 +116,6 @@ func (r *Registry) Collect(metricCh chan<- prometheus.Metric) {
 	for _, metric := range r.tracked {
 		switch m := metric.(type) {
 		case prometheus.Metric:
-			log.Infof("Collecting: %+v", m)
 			metricCh <- m
 		}
 	}
