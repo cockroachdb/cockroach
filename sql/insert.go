@@ -241,14 +241,21 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		// cannot be used as index values.
 		for i, val := range rowVals {
 			// Make sure the value can be written to the column before proceeding.
-			var mErr error
-			if marshalled[i], mErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mErr != nil {
+			if mErr := checkColumnType(cols[i], val, p.evalCtx.Args); mErr != nil {
 				return nil, roachpb.NewError(mErr)
 			}
 		}
 
 		if p.evalCtx.PrepareOnly {
 			continue
+		}
+
+		// Marshal the column values.
+		for i, val := range rowVals {
+			var mErr error
+			if marshalled[i], mErr = marshalColumnValue(cols[i], val); mErr != nil {
+				return nil, roachpb.NewError(mErr)
+			}
 		}
 
 		primaryIndexKey, _, eErr := encodeIndexKey(
