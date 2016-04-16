@@ -8,6 +8,7 @@
     "dependencies": {
       "react": "npm:react@^15.0.1",
       "react-dom": "npm:react-dom@^15.0.1",
+      "react-router": "npm:react-router@^2.1.1",
       "ts": "github:frankwallis/plugin-typescript@^4.0.5"
     },
     "devDependencies": {

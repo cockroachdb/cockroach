@@ -2,7 +2,8 @@
   "compilerOptions": {
     "target": "ES5",
     "module": "system",
-    "jsx": "react"
+    "jsx": "react",
+	"noImplicitAny": true
   },
   "files": [
     "./app.tsx"
