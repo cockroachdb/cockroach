@@ -320,7 +320,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %type <*QualifiedName> qualified_name
 %type <*QualifiedName> indirect_name_or_glob
-%type <*QualifiedName> insert_target
+%type <TableExpr> insert_target
 
 %type <*TableNameWithIndex> table_name_with_index
 %type <TableNameWithIndexList> table_name_with_index_list
@@ -1810,7 +1810,7 @@ insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest opt_on_conflict returning_clause
   {
     $$.val = $5.stmt()
-    $$.val.(*Insert).Table = $4.qname()
+    $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).Returning = $7.retExprs()
   }
 
@@ -1820,8 +1820,13 @@ insert_stmt:
 // divergence from other places. So just require AS for now.
 insert_target:
   qualified_name
+  {
+      $$.val = &AliasedTableExpr{Expr: $1.qname()}
+  }
 | qualified_name AS name
-  // TODO(pmattis): Support alias.
+  {
+      $$.val = &AliasedTableExpr{Expr: $1.qname(), As: AliasClause{Alias: Name($3)}}
+  }
 
 insert_rest:
   select_stmt
