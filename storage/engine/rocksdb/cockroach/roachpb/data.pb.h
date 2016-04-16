@@ -1796,6 +1796,15 @@ class Lease : public ::google::protobuf::Message {
   ::cockroach::roachpb::Timestamp* release_start();
   void set_allocated_start(::cockroach::roachpb::Timestamp* start);
 
+  // optional .cockroach.roachpb.Timestamp start_stasis = 4;
+  bool has_start_stasis() const;
+  void clear_start_stasis();
+  static const int kStartStasisFieldNumber = 4;
+  const ::cockroach::roachpb::Timestamp& start_stasis() const;
+  ::cockroach::roachpb::Timestamp* mutable_start_stasis();
+  ::cockroach::roachpb::Timestamp* release_start_stasis();
+  void set_allocated_start_stasis(::cockroach::roachpb::Timestamp* start_stasis);
+
   // optional .cockroach.roachpb.Timestamp expiration = 2;
   bool has_expiration() const;
   void clear_expiration();
@@ -1818,6 +1827,8 @@ class Lease : public ::google::protobuf::Message {
  private:
   inline void set_has_start();
   inline void clear_has_start();
+  inline void set_has_start_stasis();
+  inline void clear_has_start_stasis();
   inline void set_has_expiration();
   inline void clear_has_expiration();
   inline void set_has_replica();
@@ -1827,6 +1838,7 @@ class Lease : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::roachpb::Timestamp* start_;
+  ::cockroach::roachpb::Timestamp* start_stasis_;
   ::cockroach::roachpb::Timestamp* expiration_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fdata_2eproto();
@@ -3743,15 +3755,58 @@ inline void Lease::set_allocated_start(::cockroach::roachpb::Timestamp* start) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
-// optional .cockroach.roachpb.Timestamp expiration = 2;
-inline bool Lease::has_expiration() const {
+// optional .cockroach.roachpb.Timestamp start_stasis = 4;
+inline bool Lease::has_start_stasis() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Lease::set_has_expiration() {
+inline void Lease::set_has_start_stasis() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Lease::clear_has_expiration() {
+inline void Lease::clear_has_start_stasis() {
   _has_bits_[0] &= ~0x00000002u;
+}
+inline void Lease::clear_start_stasis() {
+  if (start_stasis_ != NULL) start_stasis_->::cockroach::roachpb::Timestamp::Clear();
+  clear_has_start_stasis();
+}
+inline const ::cockroach::roachpb::Timestamp& Lease::start_stasis() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.start_stasis)
+  return start_stasis_ != NULL ? *start_stasis_ : *default_instance_->start_stasis_;
+}
+inline ::cockroach::roachpb::Timestamp* Lease::mutable_start_stasis() {
+  set_has_start_stasis();
+  if (start_stasis_ == NULL) {
+    start_stasis_ = new ::cockroach::roachpb::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Lease.start_stasis)
+  return start_stasis_;
+}
+inline ::cockroach::roachpb::Timestamp* Lease::release_start_stasis() {
+  clear_has_start_stasis();
+  ::cockroach::roachpb::Timestamp* temp = start_stasis_;
+  start_stasis_ = NULL;
+  return temp;
+}
+inline void Lease::set_allocated_start_stasis(::cockroach::roachpb::Timestamp* start_stasis) {
+  delete start_stasis_;
+  start_stasis_ = start_stasis;
+  if (start_stasis) {
+    set_has_start_stasis();
+  } else {
+    clear_has_start_stasis();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start_stasis)
+}
+
+// optional .cockroach.roachpb.Timestamp expiration = 2;
+inline bool Lease::has_expiration() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void Lease::set_has_expiration() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void Lease::clear_has_expiration() {
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void Lease::clear_expiration() {
   if (expiration_ != NULL) expiration_->::cockroach::roachpb::Timestamp::Clear();
@@ -3788,13 +3843,13 @@ inline void Lease::set_allocated_expiration(::cockroach::roachpb::Timestamp* exp
 
 // optional .cockroach.roachpb.ReplicaDescriptor replica = 3;
 inline bool Lease::has_replica() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void Lease::set_has_replica() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void Lease::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void Lease::clear_replica() {
   if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();

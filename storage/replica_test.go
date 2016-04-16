@@ -82,6 +82,25 @@ const (
 	bootstrapRangeOnly
 )
 
+// LeaderLeaseExpiration returns an int64 to increment a manual clock with to
+// make sure that all active leader leases expire.
+func LeaderLeaseExpiration(clock *hlc.Clock) int64 {
+	// Due to lease extensions, the remaining interval can be longer than just
+	// the sum of the offset (=length of stasis period) and the active
+	// duration, but definitely not by 2x.
+	return 2 * int64(LeaderLeaseActiveDuration+clock.MaxOffset())
+}
+
+// leaseExpiry returns a duration in nanos after which any leader lease the
+// Replica may hold is expired. It is more precise than LeaderLeaseExpiration
+// in that it returns the minimal duration necessary.
+func leaseExpiry(rng *Replica) int64 {
+	if l, _ := rng.getLeaderLease(); l != nil {
+		return l.Expiration.WallTime + 1
+	}
+	return 0
+}
+
 // testContext contains all the objects necessary to test a Range.
 // In most cases, simply call Start(t) (and later Stop()) on a zero-initialized
 // testContext{}. Any fields which are initialized to non-nil values
@@ -357,7 +376,7 @@ func TestReplicaContains(t *testing.T) {
 	}
 }
 
-func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
+func setLeaderLease(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.LeaderLeaseRequest{Lease: *l})
@@ -367,9 +386,7 @@ func setLeaderLease(t *testing.T, r *Replica, l *roachpb.Lease) {
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
 		err = (<-pendingCmd.done).Err.GoError()
 	}
-	if err != nil {
-		t.Errorf("failed to set lease: %s", err)
-	}
+	return err
 }
 
 // TestReplicaReadConsistency verifies behavior of the range under
@@ -421,17 +438,20 @@ func TestReplicaReadConsistency(t *testing.T) {
 
 	// Lose the lease and verify CONSISTENT reads receive NotLeaderError
 	// and INCONSISTENT reads work as expected.
-	start := tc.rng.getLeaderLease().Expiration.Add(1, 0)
+	start := roachpb.ZeroTimestamp.Add(leaseExpiry(tc.rng), 0)
 	tc.manualClock.Set(start.WallTime)
-	setLeaderLease(t, tc.rng, &roachpb.Lease{
-		Start:      start,
-		Expiration: start.Add(10, 0),
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       start,
+		StartStasis: start.Add(10, 0),
+		Expiration:  start.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{ // a different node
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Send without Txn.
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
@@ -472,17 +492,20 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	pArgs := putArgs(roachpb.Key("a"), []byte("asd"))
 
 	// Lose the lease.
-	start := tc.rng.getLeaderLease().Expiration.Add(1, 0)
+	start := roachpb.ZeroTimestamp.Add(leaseExpiry(tc.rng), 0)
 	tc.manualClock.Set(start.WallTime)
-	setLeaderLease(t, tc.rng, &roachpb.Lease{
-		Start:      start,
-		Expiration: start.Add(10, 0),
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       start,
+		StartStasis: start.Add(10, 0),
+		Expiration:  start.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{ // a different node
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: tc.clock.Now().Add(-100, 0),
@@ -522,8 +545,8 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 
 // hasLease returns whether the most recent leader lease was held by the given
 // range replica and whether it's expired for the given timestamp.
-func hasLease(rng *Replica, timestamp roachpb.Timestamp) (bool, bool) {
-	l := rng.getLeaderLease()
+func hasLease(rng *Replica, timestamp roachpb.Timestamp) (owned bool, expired bool) {
+	l, _ := rng.getLeaderLease()
 	return l.OwnedBy(rng.store.StoreID()), !l.Covers(timestamp)
 }
 
@@ -532,6 +555,21 @@ func TestReplicaLeaderLease(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+
+	one := roachpb.ZeroTimestamp.Add(1, 0)
+
+	for _, lease := range []roachpb.Lease{
+		{StartStasis: one},
+		{Start: one, StartStasis: one},
+		{Expiration: one, StartStasis: one.Next()},
+	} {
+		if _, err := tc.rng.LeaderLease(context.Background(), tc.store.Engine(), nil,
+			roachpb.Header{}, roachpb.LeaderLeaseRequest{
+				Lease: lease,
+			}); !testutils.IsError(err, "illegal lease interval") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
 
 	// Modify range descriptor to include a second replica; leader lease can
 	// only be obtained by Replicas which are part of the range descriptor. This
@@ -548,13 +586,16 @@ func TestReplicaLeaderLease(t *testing.T) {
 	if held, _ := hasLease(tc.rng, tc.clock.Now()); !held {
 		t.Errorf("expected lease on range start")
 	}
-	tc.manualClock.Set(int64(DefaultLeaderLeaseDuration + 1))
+	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
-	setLeaderLease(t, tc.rng, &roachpb.Lease{
-		Start:      now.Add(10, 0),
-		Expiration: now.Add(20, 0),
-		Replica:    secondReplica,
-	})
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       now.Add(10, 0),
+		StartStasis: now.Add(20, 0),
+		Expiration:  now.Add(20, 0),
+		Replica:     secondReplica,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if held, expired := hasLease(tc.rng, tc.clock.Now().Add(15, 0)); held || expired {
 		t.Errorf("expected second replica to have leader lease")
 	}
@@ -612,17 +653,20 @@ func TestReplicaNotLeaderError(t *testing.T) {
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
-	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
+	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
-	setLeaderLease(t, tc.rng, &roachpb.Lease{
-		Start:      now,
-		Expiration: now.Add(10, 0),
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       now,
+		StartStasis: now.Add(10, 0),
+		Expiration:  now.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	header := roachpb.Span{
 		Key: roachpb.Key("a"),
@@ -691,34 +735,40 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 
 	// Expire our own lease which we automagically acquired due to being
 	// first range and config holder.
-	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
+	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
 
 	// Give lease to someone else.
-	setLeaderLease(t, tc.rng, &roachpb.Lease{
-		Start:      now,
-		Expiration: now.Add(10, 0),
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       now,
+		StartStasis: now.Add(10, 0),
+		Expiration:  now.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
 			StoreID:   2,
 		},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Expire that lease.
 	tc.manualClock.Increment(11 + int64(tc.clock.MaxOffset())) // advance time
 	now = tc.clock.Now()
 
 	// Give lease to this range.
-	setLeaderLease(t, tc.rng, &roachpb.Lease{
-		Start:      now.Add(11, 0),
-		Expiration: now.Add(20, 0),
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       now.Add(11, 0),
+		StartStasis: now.Add(20, 0),
+		Expiration:  now.Add(20, 0),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 1,
 			NodeID:    1,
 			StoreID:   1,
 		},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	util.SucceedsSoon(t, func() error {
 		cfg, ok := tc.gossip.GetSystemConfig()
@@ -759,7 +809,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
 	tc.rng.setDescWithoutProcessUpdate(rngDesc)
 
-	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
+	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := roachpb.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
 	tc.rng.mu.Lock()
@@ -767,34 +817,65 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.rng.mu.Unlock()
 	baseLowWater := baseRTS.WallTime
 
+	newLowWater := now.Add(50, 0).WallTime + baseLowWater
+
 	testCases := []struct {
 		storeID     roachpb.StoreID
 		start       roachpb.Timestamp
 		expiration  roachpb.Timestamp
 		expLowWater int64
+		expErr      string
 	}{
 		// Grant the lease fresh.
-		{tc.store.StoreID(), now, now.Add(10, 0), baseLowWater},
+		{storeID: tc.store.StoreID(),
+			start: now, expiration: now.Add(10, 0),
+			expLowWater: baseLowWater},
 		// Renew the lease.
-		{tc.store.StoreID(), now.Add(15, 0), now.Add(30, 0), baseLowWater},
-		// Renew the lease but shorten expiration.
-		{tc.store.StoreID(), now.Add(16, 0), now.Add(25, 0), baseLowWater},
-		// Lease is held by another.
-		{tc.store.StoreID() + 1, now.Add(29, 0), now.Add(50, 0), baseLowWater},
-		// Lease is regranted to this replica.
-		{tc.store.StoreID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + int64(maxClockOffset) + baseLowWater},
+		{storeID: tc.store.StoreID(),
+			start: now.Add(15, 0), expiration: now.Add(30, 0),
+			expLowWater: baseLowWater},
+		// Renew the lease but shorten expiration. This errors out.
+		{storeID: tc.store.StoreID(),
+			start: now.Add(16, 0), expiration: now.Add(25, 0),
+			expErr: "lease shortening currently unsupported",
+		},
+		// Another Store attempts to get the lease, but overlaps. If the
+		// previous lease expiration had worked, this would have too.
+		{storeID: tc.store.StoreID() + 1,
+			start: now.Add(29, 0), expiration: now.Add(50, 0),
+			expLowWater: baseLowWater,
+			expErr:      "overlaps previous",
+		},
+		// The other store tries again, this time without the overlap.
+		{storeID: tc.store.StoreID() + 1,
+			start: now.Add(31, 0), expiration: now.Add(50, 0),
+			expLowWater: baseLowWater},
+		// Lease is regranted to this replica. Store clock moves forward avoid
+		// influencing the result.
+		{storeID: tc.store.StoreID(),
+			start: now.Add(60, 0), expiration: now.Add(70, 0),
+			expLowWater: newLowWater},
+		// Lease is held by another once more.
+		{storeID: tc.store.StoreID() + 1,
+			start: now.Add(70, 0), expiration: now.Add(90, 0),
+			expLowWater: newLowWater},
 	}
 
 	for i, test := range testCases {
-		setLeaderLease(t, tc.rng, &roachpb.Lease{
-			Start:      test.start,
-			Expiration: test.expiration,
+		if err := setLeaderLease(tc.rng, &roachpb.Lease{
+			Start:       test.start,
+			StartStasis: test.expiration.Add(-1, 0), // smaller than durations used
+			Expiration:  test.expiration,
 			Replica: roachpb.ReplicaDescriptor{
 				ReplicaID: roachpb.ReplicaID(test.storeID),
 				NodeID:    roachpb.NodeID(test.storeID),
 				StoreID:   test.storeID,
 			},
-		})
+		}); err != nil {
+			if test.expErr == "" || !testutils.IsError(err, test.expErr) {
+				t.Fatalf("%d: unexpected error %s", i, err)
+			}
+		}
 		// Verify expected low water mark.
 		tc.rng.mu.Lock()
 		rTS, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
@@ -816,11 +897,12 @@ func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1))
+	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
 	lease := &roachpb.Lease{
-		Start:      now,
-		Expiration: now.Add(10, 0),
+		Start:       now,
+		StartStasis: now.Add(10, 0),
+		Expiration:  now.Add(10, 0),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
@@ -983,8 +1065,8 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	}
 
 	// Increment the clock's timestamp to expire the leader lease.
-	tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration) + 1)
-	if lease := tc.rng.getLeaderLease(); lease.Covers(tc.clock.Now()) {
+	tc.manualClock.Set(leaseExpiry(tc.rng))
+	if lease, _ := tc.rng.getLeaderLease(); lease.Covers(tc.clock.Now()) {
 		t.Fatal("leader lease should have been expired")
 	}
 
@@ -1148,7 +1230,7 @@ func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roa
 }
 
 // TestAcquireLeaderLease verifies that the leader lease is acquired
-// for read and write methods.
+// for read and write methods, and eagerly renewed.
 func TestAcquireLeaderLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1164,27 +1246,44 @@ func TestAcquireLeaderLease(t *testing.T) {
 		// the start of a lease as far as possible, and since there is an auto-
 		// matic lease for us at the beginning, we'll basically create a lease from
 		// then on.
-		expStart := tc.rng.getLeaderLease().Start
-		tc.manualClock.Increment(int64(DefaultLeaderLeaseDuration + 1000))
+		lease, _ := tc.rng.getLeaderLease()
+		expStart := lease.Start
+		tc.manualClock.Set(leaseExpiry(tc.rng))
 
 		ts := tc.clock.Now().Next()
 		if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, test); pErr != nil {
-			t.Fatal(pErr)
+			t.Error(pErr)
 		}
 		if held, expired := hasLease(tc.rng, ts); !held || expired {
-			t.Fatalf("%d: expected lease acquisition", i)
+			t.Errorf("%d: expected lease acquisition", i)
 		}
-		lease := tc.rng.getLeaderLease()
+		lease, _ = tc.rng.getLeaderLease()
 		if !lease.Start.Equal(expStart) {
 			t.Errorf("%d: unexpected lease start: %s; expected %s", i, lease.Start, expStart)
 		}
-		// The lease should last at least through our request timestamp, but may
-		// last longer in case the node's clock has advanced past the request
-		// timestamp.
-		if expExpiration := ts.Add(int64(DefaultLeaderLeaseDuration), 0); lease.Expiration.Less(expExpiration) {
-			t.Errorf("%d: unexpected lease expiration: %s; expected %s", i, lease.Expiration, expExpiration)
+
+		if !ts.Less(lease.StartStasis) {
+			t.Errorf("%d: %s already in stasis (or beyond): %+v", i, ts, lease)
 		}
+
+		shouldRenewTS := lease.StartStasis.Add(-1, 0)
+		tc.manualClock.Set(shouldRenewTS.WallTime + 1)
+		if _, pErr := tc.SendWrapped(test); pErr != nil {
+			t.Error(pErr)
+		}
+		// Since the command we sent above does not get blocked on the lease
+		// extension, we need to wait for it to go through.
+		util.SucceedsSoon(t, func() error {
+			newLease, _ := tc.rng.getLeaderLease()
+			if !lease.StartStasis.Less(newLease.StartStasis) {
+				return util.Errorf("%d: lease did not get extended: %+v to %+v", i, lease, newLease)
+			}
+			return nil
+		})
 		tc.Stop()
+		if t.Failed() {
+			return
+		}
 	}
 }
 
@@ -3490,7 +3589,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
+	expMS := engine.MVCCStats{LiveBytes: 25, KeyBytes: 14, ValBytes: 11, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 83, SysCount: 2, LastUpdateNanos: 0}
 
 	// Put a 2nd value transactionally.
 	pArgs = putArgs([]byte("b"), []byte("value2"))
@@ -3509,7 +3608,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 101, KeyBytes: 28, ValBytes: 73, IntentBytes: 23, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1, IntentAge: 0, GCBytesAge: 0, SysBytes: 91, SysCount: 2, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -3524,7 +3623,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 50, KeyBytes: 28, ValBytes: 22, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 91, SysCount: 2, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 
 	// Delete the 1st value.
@@ -3533,7 +3632,7 @@ func TestReplicaStatsComputation(t *testing.T) {
 	if _, pErr := tc.SendWrapped(&dArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 81, SysCount: 2, LastUpdateNanos: 0}
+	expMS = engine.MVCCStats{LiveBytes: 25, KeyBytes: 40, ValBytes: 22, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0, IntentAge: 0, GCBytesAge: 0, SysBytes: 91, SysCount: 2, LastUpdateNanos: 0}
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 
@@ -4163,7 +4262,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	gArgs := getArgs(roachpb.Key("a"))
 	// Force the read command request a new lease.
 	clock := tc.clock
-	ts := clock.Update(clock.Now().Add(int64(DefaultLeaderLeaseDuration), 0))
+	ts := clock.Update(clock.Now().Add(leaseExpiry(tc.rng), 0))
 	_, pErr := client.SendWrappedWith(tc.store, nil, roachpb.Header{
 		Timestamp: ts,
 		RangeID:   1,
