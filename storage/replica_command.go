@@ -1410,10 +1410,11 @@ func (r *Replica) LeaderLease(
 		// when it has already served commands at higher timestamps), so this
 		// is forbidden now but can be re-enabled when we properly implement
 		// it.
-		if args.Lease.Expiration.Less(prevLease.Expiration) {
-			rErr.Message = "lease shortening currently unsupported"
-			return reply, rErr
-		}
+		// TODO(tschottdorf): Unfortunately, dealing out an error on shortening
+		// leads to spurious test failures in the case of two lease requests
+		// from the same node racing and the one with the earlier expiration
+		// coming in last. So we just ignore any shortening instead.
+		args.Lease.Expiration.Forward(prevLease.Expiration)
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return reply, rErr
