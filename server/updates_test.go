@@ -22,8 +22,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -70,7 +70,7 @@ func TestCheckVersion(t *testing.T) {
 		t.Errorf("expected uuid %v, got %v", expected, actual)
 	}
 
-	if expected, actual := util.GetBuildInfo().Tag, version; expected != actual {
+	if expected, actual := build.GetInfo().Tag, version; expected != actual {
 		t.Errorf("expected version tag %v, got %v", expected, actual)
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
@@ -867,7 +868,7 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	}
 
 	// Verify Build Tag.
-	if a, e := fields[2], util.GetBuildInfo().Tag; a != e {
+	if a, e := fields[2], build.GetInfo().Tag; a != e {
 		t.Errorf("build tag (%s) != expected (%s)", a, e)
 	}
 
