@@ -37,12 +37,12 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	// reflected in the cached version (yet). Perhaps schema modification
 	// routines such as CREATE INDEX should not return until the schema change
 	// has been pushed everywhere.
-	tableDesc, pErr := p.getTableLease(n.Table)
+	tableDesc, pErr := p.getAliasedTableLease(n.Table)
 	if pErr != nil {
 		return nil, pErr
 	}
 
-	if err := p.checkPrivilege(&tableDesc, privilege.INSERT); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -52,7 +52,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		cols = tableDesc.Columns
 	} else {
 		var err error
-		if cols, err = p.processColumns(&tableDesc, n.Columns); err != nil {
+		if cols, err = p.processColumns(tableDesc, n.Columns); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -348,7 +348,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		pErr = p.txn.Run(b)
 	}
 	if pErr != nil {
-		return nil, convertBatchError(&tableDesc, *b, pErr)
+		return nil, convertBatchError(tableDesc, *b, pErr)
 	}
 	return rh.getResults()
 }
