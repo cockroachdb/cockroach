@@ -186,7 +186,7 @@ dupl:
 .PHONY: check
 check:
 	@echo "checking for time.Now calls (use timeutil.Now() instead)"
-	@! git grep -lF 'time\.Now' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go$$'
+	@! git grep -lF 'time.Now' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go$$'
 	@echo "checking for os.Getenv calls (use envutil.EnvOrDefault*() instead)"
 	@! git grep -lF 'os.Getenv' -- '*.go' | grep -vE '^((util/(log|envutil))|acceptance(/.*)?)/\w+\.go$$'
 	@echo "checking for proto.Clone calls (use protoutil.Clone instead)"
