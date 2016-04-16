@@ -15,6 +15,12 @@ For multi-user cooperation, please see [Terraform's documentation on remote stat
 1. Have a [Google Cloud Platform](https://cloud.google.com/compute/) account
 2. [Download terraform](https://terraform.io/downloads.html), *version 0.6.7 or greater*, unzip, and add to your `PATH`.
 3. [Create and download GCE credentials](https://developers.google.com/identity/protocols/application-default-credentials#howtheywork).
+4. Set your credentials in environment variables:
+```
+$ export GOOGLE_CREDENTIALS="contents of json credentials file"
+$ export GOOGLE_PROJECT="my-google-project"
+5. Save your GCE key as `~/.ssh/google_compute_engine`, or adjust the `key_name` variable.
+```
 
 ## Variables
 
@@ -25,8 +31,6 @@ The following variables are likely to change based on your account or setup:
 * `gce_zone`: availability zone for instances
 * `gce_region`: region for forwarding rules and target pools
 * `key_name`: base name of the Google Cloud SSH key
-* `gce_project`: name of the GCE project for your instances
-* `gce_account_file`: JSON-formatted Google Cloud app credentials
 
 The following variables can be modified if necessary:
 * `sql_port`: the port for the backends and load balancer
@@ -39,35 +43,31 @@ The following variables can be modified if necessary:
 #### Create a cockroach cluster with 3 nodes
 
 ```
-$ terraform apply --var=gce_account_file=/path/to/your/gce/credentials.json --var=gce_project=your-gce-project --var=num_instances=3 --var=gce_region=us-east1 --var=gce_zone=us-east1-b
+$ terraform apply --var=num_instances=3
 
 
 Outputs:
 
-  admin_lb_url = http://127.196.119.186:8080/
-  admin_urls   = http://127.196.142.127:8080/, http://127.196.17.15:8080/, http://127.196.139.40:8080/
-  instances    = cockroach-0, cockroach-1, cockroach-2
-  sql_urls     = postgresql://root@127.196.142.127:26257/?sslmode=disable, postgresql://root@127.196.17.15:26257/?sslmode=disable, postgresql://root@127.196.139.40:26257/?sslmode=disable
+  instances = 104.196.43.55,104.196.19.237,104.196.107.237
 ```
 
 To see the actions that will be performed by terraform, use `plan` instead of `apply`.
 
-The cluster is now running with three nodes and is reachable through the any of the `instances`
-or through the provided URLs (see `Using the cluster`).
+The cluster is now running with three nodes and is reachable through the any of the `instances`.
 
 ## Using the cluster
 
 #### Connect to the cluster
 
-Use one of the URLs in `sql_urls` in the terraform output to issue SQL queries
+Use one of the `instances` in the terraform output to issue SQL queries
 to your new cluster:
 
 ```
-$ cockroach sql --url postgresql://root@127.196.142.127:26257/?sslmode=disable
+$ cockroach sql --url postgresql://root@104.196.43.55:26257/?sslmode=disable
 # Welcome to the cockroach SQL interface.
 # All statements must be terminated by a semicolon.
 # To exit: CTRL + D.
-root@127.196.138.149:26257> show databases;
+root@104.196.43.55:26257> show databases;
 +----------+
 | Database |
 +----------+
@@ -77,9 +77,7 @@ root@127.196.138.149:26257> show databases;
 
 #### View the admin UI
 
-To view the admin web UI, visit the URL indicated in the `admin_lb_url` part
-of the terraform output. Alternatively, you can visit the admin UI through a
-particular instance by using one of the `admin_urls`.
+To view the admin web UI, visit any of the `instances` on the `http_port` (default 8080).
 
 #### SSH into individual instances
 
@@ -88,10 +86,10 @@ terraform output. Use the `gcloud` tool, included with the [Google Cloud SDK](ht
 to SSH into one of the machines:
 
 ```
-$ gcloud compute ssh ubuntu@cockroach-1 --zone=us-east1-b
+$ ssh -i ~/.ssh/google_compute_engine ubuntu@104.196.43.55
 
 ubuntu@cockroach-1:~$ ps -Af|grep cockroach
-ubuntu    1500     1  0 15:16 ?        00:00:01 ./cockroach start --log-dir=cockroach-data/logs --logtostderr=false --insecure --host=10.142.0.4 --port=26257 --http-port=8080 --join=10.142.0.3
+ubuntu    1500     1  0 15:16 ?        00:00:01 ./cockroach start --log-dir=cockroach-data/logs --logtostderr=false --insecure --host=10.240.0.12 --port=26257 --http-port=8080
 
 ubuntu@cockroach-1:~$ ls logs
 $ ls cockroach-data/logs
@@ -104,7 +102,7 @@ Note the `ubuntu` user in the above command-line.
 ## Destroy the cluster
 
 ```
-$ terraform destroy --var=gce_account_file=/path/to/your/gce/credentials.json --var=gce_project=your-gce-project
+$ terraform destroy
 
 ```
 
