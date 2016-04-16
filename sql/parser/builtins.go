@@ -38,8 +38,8 @@ import (
 
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -1003,7 +1003,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			Types:      ArgTypes{},
 			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return DString(util.GetBuildInfo().Short()), nil
+				return DString(build.GetInfo().Short()), nil
 			},
 		},
 	},

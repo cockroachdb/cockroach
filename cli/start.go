@@ -29,6 +29,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -155,7 +156,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	info := util.GetBuildInfo()
+	info := build.GetInfo()
 	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.GoVersion)
 
 	// Default user for servers.

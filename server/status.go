@@ -28,6 +28,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -244,10 +245,10 @@ func (s *statusServer) handleDetailsLocal(w http.ResponseWriter, r *http.Request
 	local := struct {
 		NodeID    roachpb.NodeID      `json:"nodeID"`
 		Address   util.UnresolvedAddr `json:"address"`
-		BuildInfo util.BuildInfo      `json:"buildInfo"`
+		BuildInfo build.Info          `json:"buildInfo"`
 	}{
 		NodeID:    s.gossip.GetNodeID(),
-		BuildInfo: util.GetBuildInfo(),
+		BuildInfo: build.GetInfo(),
 	}
 	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.GetNodeID()); err == nil {
 		local.Address = *addr

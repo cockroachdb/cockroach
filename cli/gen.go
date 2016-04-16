@@ -21,10 +21,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 var manPath string
@@ -42,7 +41,7 @@ many Unix-like systems, use "--path=/usr/local/share/man/man1".
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
-	info := util.GetBuildInfo()
+	info := build.GetInfo()
 	header := &doc.GenManHeader{
 		Section: "1",
 		Manual:  "CockroachDB Manual",
