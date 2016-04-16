@@ -169,7 +169,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
-			if _, err := marshalColumnValue(cols[i], d, p.evalCtx.Args); err != nil {
+			if err := checkColumnType(cols[i], d, p.evalCtx.Args); err != nil {
 				return nil, roachpb.NewError(err)
 			}
 		}
@@ -274,7 +274,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		// cannot be used as index values.
 		for i, val := range newVals {
 			var mErr error
-			if marshalled[i], mErr = marshalColumnValue(cols[i], val, p.evalCtx.Args); mErr != nil {
+			if marshalled[i], mErr = marshalColumnValue(cols[i], val); mErr != nil {
 				return nil, roachpb.NewError(mErr)
 			}
 		}
@@ -339,7 +339,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 				}
 				key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
 				val := rowVals[i]
-				marshalledVal, mErr := marshalColumnValue(col, val, p.evalCtx.Args)
+				marshalledVal, mErr := marshalColumnValue(col, val)
 				if mErr != nil {
 					return nil, roachpb.NewError(mErr)
 				}
