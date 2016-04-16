@@ -17,6 +17,7 @@
 package cluster
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -66,7 +67,6 @@ var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if i
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
-
 var maxRangeBytes = int64(config.DefaultZoneConfig().RangeMaxBytes)
 
 // keyLen is the length (in bits) of the generated CA and node certs.
@@ -139,12 +139,13 @@ type LocalCluster struct {
 	monitorCtxCancelFunc func()
 	logDir               string
 	networkID            string
+	privileged           bool // whether to run containers in privileged mode
 }
 
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalCluster {
+func CreateLocal(cfg TestConfig, logDir string, privileged bool, stopper chan struct{}) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.
@@ -173,6 +174,7 @@ func CreateLocal(cfg TestConfig, logDir string, stopper chan struct{}) *LocalClu
 		events:         make(chan Event, 1000),
 		expectedEvents: make(chan Event, 1000),
 		logDir:         logDir,
+		privileged:     privileged,
 	}
 }
 
@@ -375,6 +377,8 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 
 	hostConfig := container.HostConfig{
 		PublishAllPorts: true,
+		NetworkMode:     container.NetworkMode(l.networkID),
+		Privileged:      l.privileged,
 	}
 
 	if vols != nil {
@@ -698,7 +702,8 @@ func (l *LocalCluster) stop() {
 	l.Nodes = nil
 
 	if l.networkID != "" {
-		maybePanic(l.client.NetworkRemove(context.Background(), l.networkID))
+		maybePanic(
+			l.client.NetworkRemove(context.Background(), string(l.networkID)))
 		l.networkID = ""
 	}
 }
@@ -717,6 +722,16 @@ func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.St
 		t.Fatal(err)
 	}
 	return roachClient.NewDB(sender), stopper
+}
+
+// InternalIP returns the IP address used for inter-node communication.
+func (l *LocalCluster) InternalIP(i int) net.IP {
+	c := l.Nodes[i]
+	containerInfo, err := c.Inspect()
+	if err != nil {
+		return nil
+	}
+	return net.ParseIP(containerInfo.NetworkSettings.Networks[networkName].IPAddress)
 }
 
 // PGUrl returns a URL string for the given node postgres server.
@@ -759,4 +774,56 @@ func (l *LocalCluster) URL(i int) string {
 // Addr returns the host and port from the node in the format HOST:PORT.
 func (l *LocalCluster) Addr(i int) string {
 	return l.Nodes[i].Addr(defaultHTTP).String()
+}
+
+// ExecRoot runs a command as root.
+func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
+	execRoot := func(ctx context.Context) error {
+		cfg := types.ExecConfig{
+			Container:    l.Nodes[i].Container.id,
+			User:         "root",
+			Privileged:   true,
+			Cmd:          cmd,
+			AttachStderr: true,
+			AttachStdout: true,
+		}
+		resp, err := l.client.ContainerExecCreate(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		var outputStream, errorStream bytes.Buffer
+		{
+			resp, err := l.client.ContainerExecAttach(ctx, resp.ID, cfg)
+			if err != nil {
+				return err
+			}
+			defer resp.Close()
+			ch := make(chan error)
+			go func() {
+				_, err := StdCopy(&outputStream, &errorStream, resp.Reader)
+				ch <- err
+			}()
+			if err := <-ch; err != nil {
+				return err
+			}
+		}
+		{
+			resp, err := l.client.ContainerExecInspect(ctx, resp.ID)
+			if err != nil {
+				return err
+			}
+			if resp.Running {
+				return util.Errorf("command still running")
+			}
+			if resp.ExitCode != 0 {
+				return fmt.Errorf("error executing %s:\n%s\n%s",
+					cmd, outputStream.String(),
+					errorStream.String())
+			}
+		}
+		return nil
+	}
+
+	return retry(context.Background(), 3, 10*time.Second, "ExecRoot",
+		matchNone, execRoot)
 }
