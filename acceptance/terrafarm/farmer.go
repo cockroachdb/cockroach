@@ -173,6 +173,11 @@ func (f *Farmer) PGUrl(i int) string {
 	panic("unimplemented")
 }
 
+// InternalIP returns the address used for inter-node communication.
+func (f *Farmer) InternalIP(i int) net.IP {
+	panic("unimplemented")
+}
+
 // WaitReady waits until the infrastructure is in a state that *should* allow
 // for a healthy cluster. Currently, this means waiting for the load balancer
 // to resolve from all nodes.
@@ -231,6 +236,13 @@ func (f *Farmer) AssertAndStop(t *testing.T) {
 	if err := f.Destroy(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// ExecRoot executes the given command with super-user privileges.
+func (f *Farmer) ExecRoot(i int, cmd []string) error {
+	// We have `f.Exec(i, strings.Join(" ", cmd))`, so this should be
+	// easy to implement once we need it.
+	panic("unimplemented")
 }
 
 // Kill terminates the cockroach process running on the given node number.
