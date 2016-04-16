@@ -35,6 +35,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/build"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -937,10 +939,11 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 
 	// Write header.
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Log file created at: %s\n", now.Format("2006/01/02 15:04:05"))
-	fmt.Fprintf(&buf, "Running on machine: %s\n", host)
-	fmt.Fprintf(&buf, "Binary: Built with %s %s for %s/%s\n", runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH)
-	fmt.Fprintf(&buf, "Log line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n")
+	fmt.Fprintf(&buf, "[log] file created at: %s\n", now.Format("2006/01/02 15:04:05"))
+	fmt.Fprintf(&buf, "[log] running on machine: %s\n", host)
+	fmt.Fprintf(&buf, "[log] binary: %s\n", build.GetInfo().Short())
+	fmt.Fprintf(&buf, "[log] arguments: %s\n", os.Args)
+	fmt.Fprintf(&buf, "[log] line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n")
 	var n int
 	n, err = sb.file.Write(buf.Bytes())
 	sb.nbytes += uint64(n)
