@@ -20,10 +20,13 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -58,8 +61,23 @@ func newKVNative(b *testing.B) kvInterface {
 	enableTracing := tracing.Disable()
 	s := server.StartTestServer(b)
 
+	// TestServer.DB() returns the TxnCoordSender wrapped client. But that isn't
+	// a fair comparison with SQL as we want these client requests to be sent
+	// over the network.
+	sender, err := client.NewSender(
+		rpc.NewContext(&base.Context{
+			User:       security.NodeUser,
+			SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+			SSLCert:    filepath.Join(security.EmbeddedCertsDir, "node.crt"),
+			SSLCertKey: filepath.Join(security.EmbeddedCertsDir, "node.key"),
+		}, nil, s.Stopper()),
+		s.ServingAddr())
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	return &kvNative{
-		db: s.DB(),
+		db: client.NewDB(sender),
 		doneFn: func() {
 			s.Stop()
 			enableTracing()
