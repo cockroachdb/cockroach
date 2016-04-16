@@ -7,10 +7,14 @@ import (
 	"github.com/bmatsuo/lmdb-go/lmdb"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
 )
 
-// LMDB wraps Lightning Memory-Mapped Database.
+// LMDB wraps a Lightning Memory-Mapped Database.
+// On linux, should build with the 'pwritev' build tag for optimal performance,
+// see https://github.com/bmatsuo/lmdb-go.
 type LMDB struct {
 	size int64
 	path string
@@ -43,6 +47,7 @@ func (l *LMDB) Open() error {
 	if err != nil {
 		_ = env.Close()
 	}
+	log.Infof("opening lmdb instance at %q (%s)", l.path, humanize.Bytes(uint64(l.size)))
 	l.env = env
 	return err
 }
@@ -66,7 +71,7 @@ func (l *LMDB) Attrs() roachpb.Attributes {
 	return attr
 }
 
-func encode(key MVCCKey) []byte {
+func lmdbEncode(key MVCCKey) []byte {
 	hasTS := key.Timestamp != roachpb.ZeroTimestamp
 	var enc []byte
 	if hasTS {
@@ -83,7 +88,7 @@ func encode(key MVCCKey) []byte {
 	return append(enc, byte(len(enc)-len(key.Key)))
 }
 
-func decode(key, value []byte, dest *MVCCKeyValue) {
+func lmdbDecode(key, value []byte, dest *MVCCKeyValue) {
 	dest.Value = value
 	dest.Key.Timestamp = roachpb.ZeroTimestamp
 
@@ -126,7 +131,7 @@ func (l *LMDB) Put(key MVCCKey, value []byte) error {
 			return err
 		}
 
-		return lmdbPut(txn, db, encode(key), value)
+		return lmdbPut(txn, db, lmdbEncode(key), value)
 	})
 }
 
@@ -149,7 +154,7 @@ func (l *LMDB) Get(key MVCCKey) (r []byte, err error) {
 		if db, err = txn.OpenRoot(0); err != nil {
 			return err
 		}
-		r, err = lmdbGet(txn, db, encode(key))
+		r, err = lmdbGet(txn, db, lmdbEncode(key))
 		return nil
 	})
 	return
@@ -210,7 +215,7 @@ func (l *LMDB) Clear(key MVCCKey) error {
 		if err != nil {
 			return err
 		}
-		return lmdbClear(txn, db, encode(key))
+		return lmdbClear(txn, db, lmdbEncode(key))
 	})
 }
 

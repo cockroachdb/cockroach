@@ -38,16 +38,16 @@ func (l *lmdbBatch) Attrs() roachpb.Attributes {
 }
 
 func (l *lmdbBatch) Put(key MVCCKey, value []byte) error {
-	return lmdbPut(l.txn, l.db, encode(key), value)
+	return lmdbPut(l.txn, l.db, lmdbEncode(key), value)
 }
 
 func (l *lmdbBatch) Get(key MVCCKey) ([]byte, error) {
-	return lmdbGet(l.txn, l.db, encode(key))
+	return lmdbGet(l.txn, l.db, lmdbEncode(key))
 }
 
 func (l *lmdbBatch) GetProto(key MVCCKey, msg proto.Message) (ok bool, keyBytes, valBytes int64, err error) {
 	var data []byte
-	if data, err = l.txn.Get(l.db, encode(key)); err != nil {
+	if data, err = l.txn.Get(l.db, lmdbEncode(key)); err != nil {
 		return
 	}
 	return lmdbGetProto(key, data, msg)
@@ -76,7 +76,7 @@ func (l *lmdbBatch) NewIterator(prefix roachpb.Key) Iterator {
 }
 
 func (l *lmdbBatch) Clear(key MVCCKey) error {
-	return lmdbClear(l.txn, l.db, encode(key))
+	return lmdbClear(l.txn, l.db, lmdbEncode(key))
 }
 
 func (l *lmdbBatch) Merge(key MVCCKey, value []byte) error {

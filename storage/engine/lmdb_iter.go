@@ -29,7 +29,8 @@ func (l *lmdbIterator) Seek(key MVCCKey) {
 		if key.Equal(l.unsafeKey()) {
 			return
 		}
-		l.setState(l.cursor.Get(key.Key, nil, lmdb.SetRange))
+		enc := lmdbEncode(key)
+		l.setState(l.cursor.Get(enc, nil, lmdb.SetRange))
 	}
 }
 
@@ -60,25 +61,6 @@ func (l *lmdbIterator) SeekReverse(key MVCCKey) {
 			l.Prev()
 		}
 	}
-
-	/*
-		if len(key.Key) == 0 {
-			r.setState(C.DBIterSeekToLast(r.iter))
-		} else {
-			r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
-			// Maybe the key sorts after the last key in RocksDB.
-			if !r.Valid() {
-				r.setState(C.DBIterSeekToLast(r.iter))
-			}
-			if !r.Valid() {
-				return
-			}
-			// Make sure the current key is <= the provided key.
-			if key.Less(r.Key()) {
-				r.Prev()
-			}
-		}
-	*/
 }
 
 func (l *lmdbIterator) setState(k, v []byte, err error) {
@@ -87,7 +69,7 @@ func (l *lmdbIterator) setState(k, v []byte, err error) {
 	} else {
 		l.err = err
 		if err == nil {
-			decode(k, v, &l.curKV)
+			lmdbDecode(k, v, &l.curKV)
 		}
 	}
 }
