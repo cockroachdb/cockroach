@@ -29,7 +29,7 @@ import (
 
 // Insert represents an INSERT statement.
 type Insert struct {
-	Table     *QualifiedName
+	Table     TableExpr
 	Columns   QualifiedNames
 	Rows      *Select
 	Returning ReturningExprs
