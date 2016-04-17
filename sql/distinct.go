@@ -169,7 +169,7 @@ func (n *distinctNode) encodeValues(values parser.DTuple) ([]byte, []byte) {
 	return prefix, suffix
 }
 
-func (n *distinctNode) ExplainPlan() (string, string, []planNode) {
+func (n *distinctNode) ExplainPlan(_ bool) (string, string, []planNode) {
 	var description string
 	if n.columnsInOrder != nil {
 		columns := n.Columns()
