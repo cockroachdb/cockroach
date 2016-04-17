@@ -20,7 +20,7 @@ variable "gce_zone" {
 
 # GCE machine type.
 variable "gce_machine_type" {
-  default = "n1-highcpu-4"
+  default = "n1-highcpu-16"
 }
 
 # GCE image name.
