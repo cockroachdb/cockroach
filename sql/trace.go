@@ -125,8 +125,8 @@ func (n *explainTraceNode) Next() bool {
 	return true
 }
 
-func (n *explainTraceNode) ExplainPlan() (name, description string, children []planNode) {
-	return n.plan.ExplainPlan()
+func (n *explainTraceNode) ExplainPlan(v bool) (name, description string, children []planNode) {
+	return n.plan.ExplainPlan(v)
 }
 
 func (n *explainTraceNode) Values() parser.DTuple {
