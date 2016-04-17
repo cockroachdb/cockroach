@@ -144,8 +144,8 @@ func (s *selectNode) PErr() *roachpb.Error {
 	return s.table.node.PErr()
 }
 
-func (s *selectNode) ExplainPlan() (name, description string, children []planNode) {
-	return s.table.node.ExplainPlan()
+func (s *selectNode) ExplainPlan(v bool) (name, description string, children []planNode) {
+	return s.table.node.ExplainPlan(v)
 }
 
 func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
