@@ -671,23 +671,25 @@ func (u *updateNode) PErr() *roachpb.Error {
 	return u.run.pErr
 }
 
-func (u *updateNode) ExplainPlan() (name, description string, children []planNode) {
+func (u *updateNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "set %s (", u.tableDesc.Name)
-	for i, col := range u.cols {
-		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+	if v {
+		fmt.Fprintf(&buf, "set %s (", u.tableDesc.Name)
+		for i, col := range u.cols {
+			if i > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%s", col.Name)
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
-	}
-	fmt.Fprintf(&buf, ") returning (")
-	for i, col := range u.rh.columns {
-		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+		fmt.Fprintf(&buf, ") returning (")
+		for i, col := range u.rh.columns {
+			if i > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%s", col.Name)
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
+		fmt.Fprintf(&buf, ")")
 	}
-	fmt.Fprintf(&buf, ")")
 	return "update", buf.String(), []planNode{u.run.rows}
 }
 

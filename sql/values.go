@@ -220,7 +220,7 @@ func (n *valuesNode) InitMinHeap() {
 	heap.Init(n)
 }
 
-func (n *valuesNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	name = "values"
 	pluralize := func(n int) string {
 		if n == 1 {

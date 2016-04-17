@@ -163,7 +163,7 @@ func (n *unionNode) SetLimitHint(numRows int64, soft bool) {
 	n.left.SetLimitHint(numRows, true)
 }
 
-func (n *unionNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *unionNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "union", "-", []planNode{n.left, n.right}
 }
 

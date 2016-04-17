@@ -569,23 +569,25 @@ func (n *insertNode) PErr() *roachpb.Error {
 	return n.run.pErr
 }
 
-func (n *insertNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *insertNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "into %s (", n.tableDesc.Name)
-	for i, col := range n.cols {
-		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+	if v {
+		fmt.Fprintf(&buf, "into %s (", n.tableDesc.Name)
+		for i, col := range n.cols {
+			if i > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%s", col.Name)
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
-	}
-	fmt.Fprintf(&buf, ") returning (")
-	for i, col := range n.rh.columns {
-		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+		fmt.Fprintf(&buf, ") returning (")
+		for i, col := range n.rh.columns {
+			if i > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%s", col.Name)
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
+		fmt.Fprintf(&buf, ")")
 	}
-	fmt.Fprintf(&buf, ")")
 	return "insert", buf.String(), []planNode{n.run.rows}
 }
 

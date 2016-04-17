@@ -435,7 +435,7 @@ type planNode interface {
 	PErr() *roachpb.Error
 
 	// ExplainPlan returns a name and description and a list of child nodes.
-	ExplainPlan() (name, description string, children []planNode)
+	ExplainPlan(verbose bool) (name, description string, children []planNode)
 
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.
@@ -485,7 +485,7 @@ func (*emptyNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (*emptyNode) Values() parser.DTuple   { return nil }
 func (*emptyNode) PErr() *roachpb.Error    { return nil }
 
-func (*emptyNode) ExplainPlan() (name, description string, children []planNode) {
+func (*emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "empty", "-", nil
 }
 

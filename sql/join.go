@@ -216,7 +216,7 @@ func (n *indexJoinNode) PErr() *roachpb.Error {
 	return n.pErr
 }
 
-func (n *indexJoinNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *indexJoinNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "index-join", "", []planNode{n.index, n.table}
 }
 

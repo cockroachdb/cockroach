@@ -1,0 +1,47 @@
+query ITT colnames
+EXPLAIN (PLAN) SELECT 1
+----
+Level  Type  Description
+0      empty -
+
+query ITT colnames
+EXPLAIN (PLAN, VERBOSE) SELECT 1
+----
+Level  Type  Description
+0      empty -
+
+query ITT colnames
+EXPLAIN (VERBOSE, PLAN) SELECT 1
+----
+Level  Type  Description
+0      empty -
+
+query ITT colnames
+EXPLAIN (VERBOSE, PLAN) SELECT 1
+----
+Level  Type  Description
+0      empty -
+
+query ITTT colnames
+EXPLAIN (DEBUG) SELECT 1
+----
+RowIdx  Key  Value  Disposition
+0       NULL NULL   ROW
+
+query ITTT colnames
+EXPLAIN (DEBUG, VERBOSE) SELECT 1
+----
+RowIdx  Key  Value  Disposition
+0       NULL NULL   ROW
+
+query TTITTITTT
+EXPLAIN (TRACE) SELECT 1
+----
+0.000ms   1                                   0 NULL NULL t
+0.000ms   0 coordinator tracing completed     0 NULL NULL
+
+statement error cannot set EXPLAIN mode more than once
+EXPLAIN (TRACE, TRACE) SELECT 1
+
+statement error unsupported EXPLAIN option
+EXPLAIN (TRACE, UNKNOWN) SELECT 1
