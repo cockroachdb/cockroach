@@ -156,7 +156,7 @@ func (n *limitNode) Next() bool {
 	}
 }
 
-func (n *limitNode) ExplainPlan() (string, string, []planNode) {
+func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {
 	var count string
 	if n.count == math.MaxInt64 {
 		count = "ALL"

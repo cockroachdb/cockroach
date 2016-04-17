@@ -43,17 +43,29 @@ const (
 // Privileges: the same privileges as the statement being explained.
 func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachpb.Error) {
 	mode := explainNone
-	if len(n.Options) == 1 {
-		if strings.EqualFold(n.Options[0], "DEBUG") {
-			mode = explainDebug
-		} else if strings.EqualFold(n.Options[0], "TRACE") {
-			mode = explainTrace
+	verbose := false
+	for _, opt := range n.Options {
+		newMode := explainNone
+		if strings.EqualFold(opt, "DEBUG") {
+			newMode = explainDebug
+		} else if strings.EqualFold(opt, "TRACE") {
+			newMode = explainTrace
+		} else if strings.EqualFold(opt, "PLAN") {
+			newMode = explainPlan
+		} else if strings.EqualFold(opt, "VERBOSE") {
+			verbose = true
+		} else {
+			return nil, roachpb.NewUErrorf("unsupported EXPLAIN option: %s", opt)
 		}
-	} else if len(n.Options) == 0 {
-		mode = explainPlan
+		if newMode != explainNone {
+			if mode != explainNone {
+				return nil, roachpb.NewUErrorf("conflicting EXPLAIN mode: %s", opt)
+			}
+			mode = newMode
+		}
 	}
 	if mode == explainNone {
-		return nil, roachpb.NewUErrorf("unsupported EXPLAIN options: %s", n)
+		mode = explainPlan
 	}
 
 	if mode == explainTrace {
@@ -85,7 +97,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 			{Name: "Type", Typ: parser.DummyString},
 			{Name: "Description", Typ: parser.DummyString},
 		}
-		populateExplain(v, plan, 0)
+		populateExplain(verbose, v, plan, 0)
 		return v, nil
 
 	case explainTrace:
@@ -100,8 +112,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 	}
 }
 
-func populateExplain(v *valuesNode, plan planNode, level int) {
-	name, description, children := plan.ExplainPlan()
+func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) {
+	name, description, children := plan.ExplainPlan(verbose)
 
 	row := parser.DTuple{
 		parser.DInt(level),
@@ -111,7 +123,7 @@ func populateExplain(v *valuesNode, plan planNode, level int) {
 	v.rows = append(v.rows, row)
 
 	for _, child := range children {
-		populateExplain(v, child, level+1)
+		populateExplain(verbose, v, child, level+1)
 	}
 }
 
@@ -205,8 +217,8 @@ func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
 func (n *explainDebugNode) PErr() *roachpb.Error { return n.plan.PErr() }
 func (n *explainDebugNode) Next() bool           { return n.plan.Next() }
 
-func (n *explainDebugNode) ExplainPlan() (name, description string, children []planNode) {
-	return n.plan.ExplainPlan()
+func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
+	return n.plan.ExplainPlan(v)
 }
 
 func (n *explainDebugNode) Values() parser.DTuple {
