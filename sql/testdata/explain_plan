@@ -14,6 +14,14 @@ Level  Type  Description
 0      scan  t@primary
 
 query ITT colnames
+EXPLAIN (VERBOSE) SELECT * FROM t
+----
+Level  Type   Description
+0      select (k, v)@t 
+1      scan   t@primary
+
+
+query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
 Level  Type  Description

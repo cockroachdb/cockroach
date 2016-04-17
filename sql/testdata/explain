@@ -7,20 +7,16 @@ Level  Type  Description
 query ITT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1
 ----
-Level  Type  Description
-0      empty -
+Level  Type    Description
+0      select  (1)@
+1      empty   -
 
 query ITT colnames
 EXPLAIN (VERBOSE, PLAN) SELECT 1
 ----
 Level  Type  Description
-0      empty -
-
-query ITT colnames
-EXPLAIN (VERBOSE, PLAN) SELECT 1
-----
-Level  Type  Description
-0      empty -
+0      select  (1)@
+1      empty   -
 
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT 1
