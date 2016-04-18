@@ -117,6 +117,29 @@ func ExampleDB_CPut() {
 	// bb=4
 }
 
+func ExampleDB_InitPut() {
+	s, db := setup()
+	defer s.Stop()
+
+	if pErr := db.InitPut("aa", "1"); pErr != nil {
+		panic(pErr)
+	}
+	if pErr := db.InitPut("aa", "1"); pErr != nil {
+		panic(pErr)
+	}
+	if pErr := db.InitPut("aa", "2"); pErr == nil {
+		panic("expected error from init put")
+	}
+	result, pErr := db.Get("aa")
+	if pErr != nil {
+		panic(pErr)
+	}
+	fmt.Printf("aa=%s\n", result.ValueBytes())
+
+	// Output:
+	// aa=1
+}
+
 func ExampleDB_Inc() {
 	s, db := setup()
 	defer s.Stop()
