@@ -1,6 +1,6 @@
-// Go support for leveled logs, analogous to https://code.google.com/p/google-glog/
-//
 // Copyright 2013 Google Inc. All Rights Reserved.
+//
+// Go support for leveled logs, analogous to https://code.google.com/p/google-glog/
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
