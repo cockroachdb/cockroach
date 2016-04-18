@@ -450,7 +450,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
-	version := desc.GetTable().Version
+	tableDesc := desc.GetTable()
+	version := tableDesc.Version
 
 	// Run the schema changes in a separate goroutine.
 	var wg sync.WaitGroup
@@ -540,7 +541,7 @@ ALTER INDEX t.test@foo RENAME TO bar;
 	wg.Wait()
 
 	// Verify that the index over v is consistent.
-	rows, err := sqlDB.Query(`SELECT v from t.test@bar`)
+	rows, err := sqlDB.Query(`SELECT v, x from t.test@bar`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,17 +549,44 @@ ALTER INDEX t.test@foo RENAME TO bar;
 	count := 0
 	for ; rows.Next(); count++ {
 		var val int
-		if err := rows.Scan(&val); err != nil {
-			t.Fatal(err)
+		var x float64
+		if err := rows.Scan(&val, &x); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
 		}
 		if count != val {
 			t.Errorf("e = %d, v = %d", count, val)
+		}
+		if 1.4 != x {
+			t.Errorf("e = %f, v = %f", 1.4, x)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if eCount := maxValue + numInserts + 1; eCount != count {
+	eCount := maxValue + numInserts + 1
+	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// Test Drop column x.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	// number of keys == 4 * number of rows; 3 columns and 1 index entry for
+	// each row.
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 4 * eCount; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP x`); err != nil {
+		t.Fatal(err)
+	}
+	// number of keys == 3 * number of rows; 3 columns and 1 index entry for
+	// each row.
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 3 * eCount; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
