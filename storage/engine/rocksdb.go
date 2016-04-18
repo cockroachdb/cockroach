@@ -773,8 +773,19 @@ func goToCKey(key MVCCKey) C.DBKey {
 }
 
 func cToGoKey(key C.DBKey) MVCCKey {
+	// When converting a C.DBKey to an MVCCKey, give the underlying slice an
+	// extra byte of capacity in anticipation of roachpb.Key.Next() being
+	// called. The extra byte is trivial extra space, but allows callers to avoid
+	// an allocation and copy when calling roachpb.Key.Next(). Note that it is
+	// important that the extra byte contain the value 0 in order for the
+	// roachpb.Key.Next() fast-path to be invoked. This is true for the code
+	// below because make() zero initializes all of the bytes.
+	unsafeKey := cSliceToUnsafeGoBytes(key.key)
+	safeKey := make([]byte, len(unsafeKey), len(unsafeKey)+1)
+	copy(safeKey, unsafeKey)
+
 	return MVCCKey{
-		Key: cSliceToGoBytes(key.key),
+		Key: safeKey,
 		Timestamp: roachpb.Timestamp{
 			WallTime: int64(key.wall_time),
 			Logical:  int32(key.logical),
