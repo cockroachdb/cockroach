@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/pq"
 )
 
@@ -443,6 +444,9 @@ func TestPGPreparedQuery(t *testing.T) {
 
 	runTests := func(query string, tests []preparedQueryTest, queryFunc func(...interface{}) (*sql.Rows, error)) {
 		for _, test := range tests {
+			if testing.Verbose() || log.V(1) {
+				log.Infof("query: %s", query)
+			}
 			rows, err := queryFunc(test.params...)
 			if err != nil {
 				if test.error == "" {
@@ -654,6 +658,9 @@ func TestPGPreparedExec(t *testing.T) {
 
 	runTests := func(query string, tests []preparedExecTest, execFunc func(...interface{}) (sql.Result, error)) {
 		for _, test := range tests {
+			if testing.Verbose() || log.V(1) {
+				log.Infof("exec: %s", query)
+			}
 			if result, err := execFunc(test.params...); err != nil {
 				if test.error == "" {
 					t.Errorf("%s: %v: unexpected error: %s", query, test.params, err)
@@ -677,6 +684,9 @@ func TestPGPreparedExec(t *testing.T) {
 	}
 
 	for _, execTest := range execTests {
+		if testing.Verbose() || log.V(1) {
+			log.Infof("prepare: %s", execTest.query)
+		}
 		if stmt, err := db.Prepare(execTest.query); err != nil {
 			t.Errorf("%s: prepare error: %s", execTest.query, err)
 		} else {
