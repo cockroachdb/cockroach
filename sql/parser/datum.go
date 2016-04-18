@@ -622,6 +622,7 @@ func (d DDate) String() string {
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
 	time.Time
+	WithZone bool
 }
 
 // Type implements the Datum interface.

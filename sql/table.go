@@ -160,6 +160,9 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		colDatumType = parser.DummyDate
 	case *parser.TimestampType:
 		col.Type.Kind = ColumnType_TIMESTAMP
+		if t.WithZone {
+			col.Type.Width = 1
+		}
 		colDatumType = parser.DummyTimestamp
 	case *parser.IntervalType:
 		col.Type.Kind = ColumnType_INTERVAL
@@ -842,12 +845,12 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 // unmarshalColumnValue decodes the value from a key-value pair using the type
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
-func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Datum, error) {
+func unmarshalColumnValue(typ ColumnType, value *roachpb.Value) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}
 
-	switch kind {
+	switch typ.Kind {
 	case ColumnType_BOOL:
 		v, err := value.GetInt()
 		if err != nil {
@@ -897,7 +900,11 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.DTimestamp{Time: v}, nil
+		zone := false
+		if typ.Width == 1 {
+			zone = true
+		}
+		return parser.DTimestamp{Time: v, WithZone: zone}, nil
 	case ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
@@ -905,7 +912,7 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		}
 		return parser.DInterval{Duration: d}, nil
 	default:
-		return nil, util.Errorf("unsupported column type: %s", kind)
+		return nil, util.Errorf("unsupported column type: %s", typ.Kind)
 	}
 }
 
