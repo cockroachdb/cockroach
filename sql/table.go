@@ -334,7 +334,7 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 	var qualifiedNames parser.QualifiedNames
 	for _, row := range sr {
-		_, tableName, err := encoding.DecodeStringAscending(
+		_, tableName, err := encoding.DecodeUnsafeStringAscending(
 			bytes.TrimPrefix(row.Key, prefix), nil)
 		if err != nil {
 			return nil, roachpb.NewError(err)
@@ -737,9 +737,9 @@ func decodeTableKey(a *datumAlloc, valType parser.Datum, key []byte, dir encodin
 	case *parser.DString:
 		var r string
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeStringAscending(key, nil)
+			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 		} else {
-			rkey, r, err = encoding.DecodeStringDescending(key, nil)
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.newDString(parser.DString(r)), rkey, err
 	case *parser.DBytes:

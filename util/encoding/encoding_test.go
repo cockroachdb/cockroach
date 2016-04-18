@@ -494,7 +494,7 @@ func TestEncodeDecodeBytesDescending(t *testing.T) {
 	}
 }
 
-func TestEncodeDecodeString(t *testing.T) {
+func TestEncodeDecodeUnsafeString(t *testing.T) {
 	testCases := []struct {
 		value   string
 		encoded []byte
@@ -522,7 +522,7 @@ func TestEncodeDecodeString(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec, err := DecodeStringAscending(enc, nil)
+		remainder, dec, err := DecodeUnsafeStringAscending(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -535,7 +535,7 @@ func TestEncodeDecodeString(t *testing.T) {
 		}
 
 		enc = append(enc, "remainder"...)
-		remainder, _, err = DecodeStringAscending(enc, nil)
+		remainder, _, err = DecodeUnsafeStringAscending(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -546,7 +546,7 @@ func TestEncodeDecodeString(t *testing.T) {
 	}
 }
 
-func TestEncodeDecodeStringDescending(t *testing.T) {
+func TestEncodeDecodeUnsafeStringDescending(t *testing.T) {
 	testCases := []struct {
 		value   string
 		encoded []byte
@@ -574,7 +574,7 @@ func TestEncodeDecodeStringDescending(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
-		remainder, dec, err := DecodeStringDescending(enc, nil)
+		remainder, dec, err := DecodeUnsafeStringDescending(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -587,7 +587,7 @@ func TestEncodeDecodeStringDescending(t *testing.T) {
 		}
 
 		enc = append(enc, "remainder"...)
-		remainder, _, err = DecodeStringDescending(enc, nil)
+		remainder, _, err = DecodeUnsafeStringDescending(enc, nil)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -1025,7 +1025,7 @@ func BenchmarkEncodeStringDescending(b *testing.B) {
 	}
 }
 
-func BenchmarkDecodeString(b *testing.B) {
+func BenchmarkDecodeUnsafeString(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
@@ -1037,11 +1037,11 @@ func BenchmarkDecodeString(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeStringAscending(vals[i%len(vals)], buf)
+		_, _, _ = DecodeUnsafeStringAscending(vals[i%len(vals)], buf)
 	}
 }
 
-func BenchmarkDecodeStringDescending(b *testing.B) {
+func BenchmarkDecodeUnsafeStringDescending(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
@@ -1053,7 +1053,7 @@ func BenchmarkDecodeStringDescending(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = DecodeStringDescending(vals[i%len(vals)], buf)
+		_, _, _ = DecodeUnsafeStringDescending(vals[i%len(vals)], buf)
 	}
 }
 
