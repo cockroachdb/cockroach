@@ -8,9 +8,9 @@ import * as React from "react";
  * into TopBar as its child element.
  */
 export default class extends React.Component<{}, {}> {
-	render() {
-		return <div className="topbar">
-			{this.props.children}
-		</div>;
-	}
+  render() {
+    return <div className="topbar">
+      {this.props.children}
+    </div>;
+  }
 }

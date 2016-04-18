@@ -8,8 +8,8 @@ import Header from "../components/layoutHeader";
  * LayoutProps are the props supported by the Layout class.
  */
 interface LayoutProps<T, V> {
-	main: React.ReactElement<T>;
-	title: React.ReactElement<V>;
+  main: React.ReactElement<T>;
+  title: React.ReactElement<V>;
 }
 
 /**
@@ -20,21 +20,21 @@ interface LayoutProps<T, V> {
  * components "main" and "title".
  */
 class Layout<T, V> extends React.Component<LayoutProps<T, V>, {}> {
-	render() {
-		return <div id="content">
-			<SideBar/>
-			<div id="page-container">
-				<div id="root">
-					<div className="page">
-					<Header>
-						{this.props.title}
-					</Header>
-					{this.props.main}
-					</div>
-				</div>
-			</div>
-		</div>;
-	}
+  render() {
+    return <div id="content">
+      <SideBar/>
+      <div id="page-container">
+        <div id="root">
+          <div className="page">
+            <Header>
+            {this.props.title}
+            </Header>
+            {this.props.main}
+          </div>
+        </div>
+      </div>
+    </div>;
+  }
 }
 
 export default Layout;
