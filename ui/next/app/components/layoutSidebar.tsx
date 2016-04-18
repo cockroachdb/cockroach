@@ -5,19 +5,19 @@ import { Link, RouterOnContext } from "react-router";
 import * as Icons from "./icons.ts";
 
 function trustIcon(iconSvg: string) {
-	"use strict";
-	return {__html: iconSvg};
+  "use strict";
+  return {__html: iconSvg};
 }
 
 interface IconLinkProps {
-	to: string;
-	className?: string;
-	icon?: string;
-	title?: string;
+  to: string;
+  className?: string;
+  icon?: string;
+  title?: string;
 }
 
 interface IconLinkContext {
-	router: RouterOnContext;
+  router: RouterOnContext;
 }
 
 /**
@@ -32,32 +32,32 @@ interface IconLinkContext {
  * activeClass, rather than the logic below.
  */
 class IconLink extends React.Component<IconLinkProps, {}> {
-	static contextTypes = {
-		router: React.PropTypes.object,
-	};
+  static contextTypes = {
+    router: React.PropTypes.object,
+  };
 
-	static defaultProps = {
-		className: "normal",
-	};
+  static defaultProps = {
+    className: "normal",
+  };
 
-	context: IconLinkContext;
+  context: IconLinkContext;
 
-	render() {
-		let {to, className, icon, title} = this.props;
-		if (this.context.router.isActive(to)) {
-			if (className) {
-				className += " active";
-			} else {
-				className = "active";
-			}
-		}
-		return <li className={className}>
-			<Link to={to}>
-				<div className=".image-container"
-				     dangerouslySetInnerHTML={trustIcon(icon)}/>
-				<div>{title}</div>
-			</Link>
-		</li>;
+  render() {
+    let {to, className, icon, title} = this.props;
+    if (this.context.router.isActive(to)) {
+      if (className) {
+        className += " active";
+      } else {
+        className = "active";
+      }
+    }
+    return <li className={className}>
+      <Link to={to}>
+        <div className=".image-container"
+             dangerouslySetInnerHTML={trustIcon(icon)}/>
+        <div>{title}</div>
+      </Link>
+    </li>;
 	}
 }
 
@@ -67,17 +67,17 @@ class IconLink extends React.Component<IconLinkProps, {}> {
  * the page which is currently active will be highlighted.
  */
 export default class extends React.Component<{}, {}> {
-	render() {
-		return <div id="header">
-			<header>
-				<ul className="nav">
-					<IconLink to="/" icon={Icons.cockroachIcon} className="cockroach"/>
-					<IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster"/>
-					<IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
-					<IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
-					<IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
-				</ul>
-			</header>
-		</div>;
-	}
+  render() {
+    return <div id="header">
+      <header>
+        <ul className="nav">
+          <IconLink to="/" icon={Icons.cockroachIcon} className="cockroach"/>
+          <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster"/>
+          <IconLink to="/nodes" icon={Icons.nodesIcon} title="Nodes"/>
+          <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
+          <IconLink to="/help-us/reporting" icon={Icons.cockroachIconSmall} title="Help Us"/>
+        </ul>
+      </header>
+    </div>;
+  }
 }
