@@ -655,7 +655,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.replicaDescCache = cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
-		ShouldEvict: func(size int, key, value interface{}) bool {
+		ShouldEvict: func(size int, _, _ interface{}) bool {
 			return size > maxReplicaDescCacheSize
 		},
 	})
