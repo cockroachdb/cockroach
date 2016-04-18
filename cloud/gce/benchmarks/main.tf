@@ -1,4 +1,4 @@
-# Run the sql logic test suite on GCE.
+# Run the benchmarks on GCE.
 # Prerequisites:
 # - GCE account credentials file as specified in cockroach/cloud/gce/README.md
 #
