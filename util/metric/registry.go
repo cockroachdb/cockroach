@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const sep = "-"
@@ -95,6 +97,30 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// Describe publishes all descriptors to the `descCh` channel.
+func (r *Registry) Describe(descCh chan<- *prometheus.Desc) {
+	r.Lock()
+	defer r.Unlock()
+	for _, metric := range r.tracked {
+		switch m := metric.(type) {
+		case prometheus.Metric:
+			descCh <- m.Desc()
+		}
+	}
+}
+
+// Collect publishes all metrics to the `metricCh` channel.
+func (r *Registry) Collect(metricCh chan<- prometheus.Metric) {
+	r.Lock()
+	defer r.Unlock()
+	for _, metric := range r.tracked {
+		switch m := metric.(type) {
+		case prometheus.Metric:
+			metricCh <- m
+		}
+	}
+}
+
 // Histogram registers a new windowed HDRHistogram with the given parameters.
 // Data is kept in the active window for approximately the given duration.
 func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64,
@@ -123,7 +149,7 @@ func (r *Registry) Latency(prefix string) Histograms {
 
 // Counter registers new counter to the registry.
 func (r *Registry) Counter(name string) *Counter {
-	c := NewCounter()
+	c := NewCounter(name)
 	r.MustAdd(name, c)
 	return c
 }
@@ -147,7 +173,7 @@ func (r *Registry) GetCounter(name string) *Counter {
 
 // Gauge registers a new Gauge with the given name.
 func (r *Registry) Gauge(name string) *Gauge {
-	g := NewGauge()
+	g := NewGauge(name)
 	r.MustAdd(name, g)
 	return g
 }
@@ -171,7 +197,7 @@ func (r *Registry) GetGauge(name string) *Gauge {
 
 // GaugeFloat64 registers a new GaugeFloat64 with the given name.
 func (r *Registry) GaugeFloat64(name string) *GaugeFloat64 {
-	g := NewGaugeFloat64()
+	g := NewGaugeFloat64(name)
 	r.MustAdd(name, g)
 	return g
 }
@@ -179,7 +205,7 @@ func (r *Registry) GaugeFloat64(name string) *GaugeFloat64 {
 // Rate creates an EWMA rate over the given timescale. The comments on NewRate
 // apply.
 func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
-	e := NewRate(timescale)
+	e := NewRate(name, timescale)
 	r.MustAdd(name, e)
 	return e
 }

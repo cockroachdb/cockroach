@@ -30,6 +30,7 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 
 	snappy "github.com/cockroachdb/c-snappy"
@@ -408,6 +409,7 @@ func (s *Server) initHTTP() {
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(healthEndpoint, s.status)
 	s.mux.Handle(ts.URLPrefix, s.tsServer)
+	s.mux.Handle(prometheusEndpoint, prometheus.Handler())
 }
 
 // Stop stops the server.
@@ -443,21 +445,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type gzipResponseWriter struct {
 	io.WriteCloser
 	http.ResponseWriter
+	started bool
 }
 
 func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	var gz *gzip.Writer
-	if gzI := gzipWriterPool.Get(); gzI == nil {
-		gz = gzip.NewWriter(w)
-	} else {
-		gz = gzI.(*gzip.Writer)
-		gz.Reset(w)
-	}
-	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
+	return &gzipResponseWriter{WriteCloser: nil, ResponseWriter: w}
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.WriteCloser.Write(b)
+	if !w.started {
+		w.started = true
+		if strings.Contains(w.Header().Get("Content-Encoding"), util.GzipEncoding) {
+			// Response is already gzip, let's not do it again.
+		} else {
+			var gz *gzip.Writer
+			if gzI := gzipWriterPool.Get(); gzI == nil {
+				gz = gzip.NewWriter(w)
+			} else {
+				gz = gzI.(*gzip.Writer)
+				gz.Reset(w)
+			}
+			w.WriteCloser = gz
+		}
+	}
+
+	if w.WriteCloser != nil {
+		return w.WriteCloser.Write(b)
+	}
+	return w.ResponseWriter.Write(b)
 }
 
 func (w *gzipResponseWriter) Close() {

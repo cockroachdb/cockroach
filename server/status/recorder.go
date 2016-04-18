@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -116,8 +118,10 @@ func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
 // registry has a 'prefix format' which is used to add a prefix to the name of
 // all metrics in that registry while recording (see the metric.Registry object
 // for more information on prefix format strings).
+// This also registers the registry with prometheus.
 func (mr *MetricsRecorder) AddNodeRegistry(prefixFmt string, registry *metric.Registry) {
 	mr.nodeRegistry.MustAdd(prefixFmt, registry)
+	prometheus.MustRegister(registry)
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry

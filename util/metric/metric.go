@@ -19,17 +19,31 @@ package metric
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/VividCortex/ewma"
 	"github.com/codahale/hdrhistogram"
+	"github.com/gogo/protobuf/proto"
+	"github.com/prometheus/client_golang/prometheus"
+	prometheus_model "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const histWrapNum = 4 // number of histograms to keep in rolling window
+
+var (
+	nameReplaceRE = regexp.MustCompile("[.-]")
+)
+
+// exportedName takes a metric name and generates a valid prometheus name.
+// see nameReplaceRE for characters to be replaces with '_'.
+func exportedName(name string) string {
+	return nameReplaceRE.ReplaceAllString(name, "_")
+}
 
 // A TimeScale is a named duration.
 type TimeScale struct {
@@ -64,6 +78,15 @@ var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
 var _ Iterable = &Rate{}
+
+var _ prometheus.Metric = &Gauge{}
+var _ prometheus.Metric = &GaugeFloat64{}
+var _ prometheus.Metric = &Counter{}
+
+// TODO(marc): we probably need to rework the histogram to
+// properly export to prometheus' dto.Metric.
+//var _ prometheus.Metric = &Histogram{}
+var _ prometheus.Metric = &Rate{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
@@ -190,11 +213,15 @@ func (hs Histograms) RecordValue(v int64) {
 // A Counter holds a single mutable atomic value.
 type Counter struct {
 	metrics.Counter
+	desc *prometheus.Desc
 }
 
 // NewCounter creates a counter.
-func NewCounter() *Counter {
-	return &Counter{metrics.NewCounter()}
+func NewCounter(name string) *Counter {
+	return &Counter{
+		metrics.NewCounter(),
+		prometheus.NewDesc(exportedName(name), name, nil, nil),
+	}
 }
 
 // Each calls the given closure with the empty string and itself.
@@ -205,15 +232,29 @@ func (c *Counter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Counter.Count())
 }
 
+// Desc implements prometheus.Metric.
+func (c *Counter) Desc() *prometheus.Desc {
+	return c.desc
+}
+
+// Write implements prometheus.Metric.
+func (c *Counter) Write(met *prometheus_model.Metric) error {
+	met.Gauge = &prometheus_model.Gauge{Value: proto.Float64(float64(c.Count()))}
+	return nil
+}
+
 // A Gauge atomically stores a single integer value.
 type Gauge struct {
 	metrics.Gauge
+	desc *prometheus.Desc
 }
 
 // NewGauge creates a Gauge.
-func NewGauge() *Gauge {
-	g := &Gauge{metrics.NewGauge()}
-	return g
+func NewGauge(name string) *Gauge {
+	return &Gauge{
+		metrics.NewGauge(),
+		prometheus.NewDesc(exportedName(name), name, nil, nil),
+	}
 }
 
 // Each calls the given closure with the empty string and itself.
@@ -224,15 +265,29 @@ func (g *Gauge) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.Gauge.Value())
 }
 
+// Desc implements prometheus.Metric.
+func (g *Gauge) Desc() *prometheus.Desc {
+	return g.desc
+}
+
+// Write implements prometheus.Metric.
+func (g *Gauge) Write(met *prometheus_model.Metric) error {
+	met.Gauge = &prometheus_model.Gauge{Value: proto.Float64(float64(g.Value()))}
+	return nil
+}
+
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	metrics.GaugeFloat64
+	desc *prometheus.Desc
 }
 
 // NewGaugeFloat64 creates a GaugeFloat64.
-func NewGaugeFloat64() *GaugeFloat64 {
-	g := &GaugeFloat64{metrics.NewGaugeFloat64()}
-	return g
+func NewGaugeFloat64(name string) *GaugeFloat64 {
+	return &GaugeFloat64{
+		metrics.NewGaugeFloat64(),
+		prometheus.NewDesc(exportedName(name), name, nil, nil),
+	}
 }
 
 // Each calls the given closure with the empty string and itself.
@@ -243,8 +298,20 @@ func (g *GaugeFloat64) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.GaugeFloat64.Value())
 }
 
+// Desc implements prometheus.Metric.
+func (g *GaugeFloat64) Desc() *prometheus.Desc {
+	return g.desc
+}
+
+// Write implements prometheus.Metric.
+func (g *GaugeFloat64) Write(met *prometheus_model.Metric) error {
+	met.Gauge = &prometheus_model.Gauge{Value: proto.Float64(g.Value())}
+	return nil
+}
+
 // A Rate is a exponential weighted moving average.
 type Rate struct {
+	desc     *prometheus.Desc
 	mu       sync.Mutex // protects fields below
 	curSum   float64
 	wrapped  ewma.MovingAverage
@@ -254,14 +321,18 @@ type Rate struct {
 
 // NewRate creates an EWMA rate on the given timescale. Timescales at
 // or below 2s are illegal and will cause a panic.
-func NewRate(timescale time.Duration) *Rate {
+func NewRate(name string, timescale time.Duration) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
 	}
 	avgAge := float64(timescale) / float64(2*tickInterval)
 
+	// TODO(marc): use labels for durations rather than built into the name.
+	// We may also wish to leave rates unexported, relying on prometheus to
+	// do rate calculations on the counter.
 	return &Rate{
+		desc:     prometheus.NewDesc(exportedName(name), name, nil, nil),
 		interval: tickInterval,
 		nextT:    now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
@@ -312,6 +383,20 @@ func (e *Rate) MarshalJSON() ([]byte, error) {
 	defer e.mu.Unlock()
 	maybeTick(e)
 	return json.Marshal(e.wrapped.Value())
+}
+
+// Desc implements prometheus.Metric.
+func (e *Rate) Desc() *prometheus.Desc {
+	return e.desc
+}
+
+// Write implements prometheus.Metric.
+func (e *Rate) Write(met *prometheus_model.Metric) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	maybeTick(e)
+	met.Gauge = &prometheus_model.Gauge{Value: proto.Float64(e.wrapped.Value())}
+	return nil
 }
 
 // Rates is a counter and associated EWMA backed rates at different time scales.
