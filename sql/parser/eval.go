@@ -802,7 +802,7 @@ type EvalContext struct {
 	clusterTimestamp roachpb.Timestamp
 
 	ReCache     *RegexpCache
-	GetLocation func() (*time.Location, error)
+	GetLocation func() *time.Location
 	Args        MapArgs
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
@@ -879,17 +879,14 @@ func (ctx *EvalContext) SetClusterTimestamp(ts roachpb.Timestamp) {
 }
 
 var defaultContext = EvalContext{
-	GetLocation: func() (*time.Location, error) {
-		return time.UTC, nil
+	GetLocation: func() *time.Location {
+		return time.UTC
 	},
 }
 
 // makeDDate constructs a DDate from a time.Time in the session time zone.
 func (ctx EvalContext) makeDDate(t time.Time) (*DDate, error) {
-	loc, err := ctx.GetLocation()
-	if err != nil {
-		return NewDDate(0), err
-	}
+	loc := ctx.GetLocation()
 	year, month, day := t.In(loc).Date()
 	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
 	return NewDDate(DDate(secs / secondsInDay)), nil
@@ -1150,10 +1147,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case *DString:
 			return ctx.ParseTimestamp(*d)
 		case *DDate:
-			loc, err := ctx.GetLocation()
-			if err != nil {
-				return nil, err
-			}
+			loc := ctx.GetLocation()
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return &DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
 
@@ -1169,10 +1163,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			t, err := ctx.ParseTimestamp(*d)
 			return &DTimestampTZ{Time: t.Time}, err
 		case *DDate:
-			loc, err := ctx.GetLocation()
-			if err != nil {
-				return nil, err
-			}
+			loc := ctx.GetLocation()
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return &DTimestampTZ{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
 		case *DTimestamp:
@@ -1736,10 +1727,7 @@ func ParseDate(s DString) (*DDate, error) {
 func (ctx EvalContext) ParseTimestamp(s DString) (*DTimestamp, error) {
 	loc := time.UTC
 	if ctx.GetLocation != nil {
-		var err error
-		if loc, err = ctx.GetLocation(); err != nil {
-			return &DTimestamp{}, err
-		}
+		loc = ctx.GetLocation()
 	}
 
 	str := string(s)

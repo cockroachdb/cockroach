@@ -85,7 +85,7 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.evalCtx = parser.EvalContext{
 		NodeID:      e.nodeID,
 		ReCache:     e.reCache,
-		GetLocation: p.session.getLocation,
+		GetLocation: p.session.GetLocation,
 	}
 	p.session.TxnState.schemaChangers.curGroupNum++
 }

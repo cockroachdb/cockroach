@@ -37,10 +37,7 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 	case `DATABASE`:
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.session.Database)})
 	case `TIME ZONE`:
-		loc, err := p.evalCtx.GetLocation()
-		if err != nil {
-			return nil, err
-		}
+		loc := p.evalCtx.GetLocation()
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(loc.String())})
 	case `SYNTAX`:
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(parser.Syntax(p.session.Syntax).String())})
