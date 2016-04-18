@@ -206,6 +206,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
 	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor, ds, s.node)
+	s.stopper.AddCloser(s.admin)
+	RegisterAdminServer(s.grpc, s.admin)
+
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx)
@@ -370,9 +373,7 @@ func (s *Server) Start() error {
 		util.FatalIfUnexpected(m.Serve())
 	})
 
-	// Register admin service. Must happen after serving starts.
-	s.stopper.AddCloser(s.admin)
-	RegisterAdminServer(s.grpc, s.admin)
+	// Register GRPCGateway. Must happen after serving starts.
 	return s.admin.RegisterGRPCGateway(s.ctx)
 }
 
