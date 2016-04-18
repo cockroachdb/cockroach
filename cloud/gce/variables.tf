@@ -7,6 +7,11 @@ variable "http_port" {
   default = "8080"
 }
 
+# List of stores each with its own --store flag. (--store flags from the cockroach binary).
+variable "stores" {
+  default = "--store=data"
+}
+
 # GCE region to use.
 variable "gce_region" {
   default = "us-east1"
@@ -16,16 +21,6 @@ variable "gce_region" {
 variable "gce_zone" {
   default = "us-east1-b"
 }
-
-# The GCE project under which you want to run your cluster. You'll want to
-# change this.
-variable "gce_project" { }
-
-# Your JSON-format Google Cloud application credentials. You'll want to change this.
-# To learn how to download your credentials, go here:
-#
-# https://developers.google.com/identity/protocols/application-default-credentials#howtheywork
-variable "gce_account_file" { }
 
 # GCE image name.
 variable "gce_image" {
@@ -59,3 +54,7 @@ variable "cockroach_sha" {
   default = ""
 }
 
+# Sha of the block_writer binary to pull down. If none, the latest is fetched.
+variable "block_writer_sha" {
+  default = ""
+}

@@ -1,7 +1,5 @@
 provider "google" {
   region = "${var.gce_region}"
-  project = "${var.gce_project}"
-  credentials = "${file(var.gce_account_file)}"
 }
 
 resource "google_compute_instance" "cockroach" {
@@ -37,21 +35,18 @@ resource "google_compute_instance" "cockroach" {
   }
 }
 
-# Generate contents of config.sh from its template file.
-#
-# TODO(cdo): support secure clusters
-resource "template_file" "config" {
+resource "template_file" "supervisor" {
   count = "${var.num_instances}"
-
-  template = "${file("config.sh.tpl")}"
+  template = "${file("supervisor.conf.tpl")}"
   vars {
-    sql_port = "${var.sql_port}"
-    http_port = "${var.http_port}"
-    local_address = "${element(google_compute_instance.cockroach.*.network_interface.0.address, count.index)}"
+    stores = "${var.stores}"
+    cockroach_port = "${var.sql_port}"
     # The value of the --join flag must be empty for the first node,
     # and a running node for all others. We built a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
-    join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.address), count.index)}"
+    join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index)}"
+    # We need to provide one node address for the block writer.
+    node_address = "${google_compute_instance.cockroach.0.network_interface.0.access_config.0.assigned_nat_ip}"
   }
 }
 
@@ -64,18 +59,17 @@ resource "null_resource" "cockroach-runner" {
     host = "${element(google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip, count.index)}"
   }
 
-  triggers {
-    instance_ids = "${element(google_compute_instance.cockroach.*.id, count.index)}"
-  }
-
   provisioner "file" {
     source = "download_binary.sh"
     destination = "/home/ubuntu/download_binary.sh"
   }
 
-  provisioner "file" {
-    source = "launch.sh"
-    destination = "/home/ubuntu/launch.sh"
+  # This writes the filled-in supervisor template. It would be nice if we could
+  # use rendered templates in the file provisioner.
+  provisioner "remote-exec" {
+    inline = <<FILE
+echo '${element(template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
+FILE
   }
 
   provisioner "file" {
@@ -86,21 +80,16 @@ resource "null_resource" "cockroach-runner" {
     destination = "/home/ubuntu/cockroach"
   }
 
-  # Create config.sh, which contains all configuration parameters.
-  provisioner "remote-exec" {
-    inline = <<FILE
-echo '${element(template_file.config.*.rendered, count.index)}' > config.sh
-FILE
-  }
-
   # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
-      "chmod 755 launch.sh config.sh",
-      # If the cockroach binary is empty (i.e. no cockroach_binary was
-      # specified), download the binary.
+      "sudo apt-get -y update",
+      "sudo apt-get -y install supervisor",
+      "sudo service supervisor stop",
+      "mkdir -p logs",
       "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
-      "./launch.sh",
+      "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
+      "supervisorctl -c supervisor.conf start cockroach",
     ]
   }
 }
