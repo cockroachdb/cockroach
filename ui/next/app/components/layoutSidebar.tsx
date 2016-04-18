@@ -58,7 +58,7 @@ class IconLink extends React.Component<IconLinkProps, {}> {
         <div>{title}</div>
       </Link>
     </li>;
-	}
+  }
 }
 
 /**
