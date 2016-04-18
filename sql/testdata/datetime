@@ -482,3 +482,41 @@ SELECT '2015-08-25 04:45:45.53453'::timestamp
 # reset for what follows.
 statement ok
 SET TIME ZONE 'UTC'
+
+statement ok
+CREATE TABLE tz (
+  a INT PRIMARY KEY,
+  b TIMESTAMP,
+  c TIMESTAMP WITH TIME ZONE,
+  d TIMESTAMPTZ
+)
+
+query TTBB
+SHOW COLUMNS FROM tz
+----
+a     INT                       false     NULL
+b     TIMESTAMP                 true      NULL
+c     TIMESTAMP WITH TIME ZONE  true      NULL
+d     TIMESTAMP WITH TIME ZONE  true      NULL
+
+statement ok
+INSERT INTO tz VALUES
+  (1, timestamp '2015-08-30 03:34:45', timestamp '2015-08-30 03:34:45'),
+  (2, timestamptz '2015-08-30 03:34:45', timestamptz '2015-08-30 03:34:45'),
+  (3, timestamp '2015-08-30 03:34:45+01:00', timestamp '2015-08-30 03:34:45+01:00'),
+  (4, timestamptz '2015-08-30 03:34:45+01:00', timestamptz '2015-08-30 03:34:45+01:00')
+
+statement ok
+SET TIME ZONE -2
+
+query ITTT
+SELECT * FROM tz
+----
+1   2015-08-30 03:34:45 +0000 +0000     2015-08-30 01:34:45 -0200 -0200    NULL
+2   2015-08-30 03:34:45 +0000 +0000     2015-08-30 01:34:45 -0200 -0200    NULL
+3   2015-08-30 02:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200    NULL
+4   2015-08-30 02:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200    NULL
+
+# reset for what follows.
+statement ok
+SET TIME ZONE 'UTC'

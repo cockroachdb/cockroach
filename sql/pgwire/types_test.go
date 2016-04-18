@@ -53,14 +53,24 @@ func TestParseTs(t *testing.T) {
 
 func TestTimestampRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("UTC", 0))
+	est := time.FixedZone("America/New_York", 0)
+	pst := time.FixedZone("America/Los_Angeles", 0)
 
-	encoded := string(formatTs(ts))
-	decoded, err := parseTs(encoded)
-	if err != nil {
-		t.Fatal(err)
+	ts := time.Date(2006, 7, 8, 0, 0, 0, 123, est)
+
+	parseToUTC := func(encoded []byte) time.Time {
+		decoded, err := parseTs(string(encoded))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return decoded.UTC()
 	}
-	if !ts.Equal(decoded) {
-		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", decoded, ts)
+
+	if expected, actual := ts.UTC(), parseToUTC(formatTs(ts, nil)); !expected.Equal(actual) {
+		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, expected)
+	}
+
+	if expected, actual := ts.UTC(), parseToUTC(formatTs(ts, pst)); !expected.Equal(actual) {
+		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, expected)
 	}
 }
