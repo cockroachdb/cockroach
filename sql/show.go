@@ -35,22 +35,22 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 
 	switch name {
 	case `DATABASE`:
-		v.rows = append(v.rows, []parser.Datum{parser.DString(p.session.Database)})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.session.Database)})
 	case `TIME ZONE`:
 		loc, err := p.evalCtx.GetLocation()
 		if err != nil {
 			return nil, err
 		}
-		v.rows = append(v.rows, []parser.Datum{parser.DString(loc.String())})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(loc.String())})
 	case `SYNTAX`:
-		v.rows = append(v.rows, []parser.Datum{parser.DString(parser.Syntax(p.session.Syntax).String())})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(parser.Syntax(p.session.Syntax).String())})
 	case `DEFAULT_TRANSACTION_ISOLATION`:
 		level := p.session.DefaultIsolationLevel.String()
-		v.rows = append(v.rows, []parser.Datum{parser.DString(level)})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(level)})
 	case `TRANSACTION ISOLATION LEVEL`:
-		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.Proto.Isolation.String())})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.txn.Proto.Isolation.String())})
 	case `TRANSACTION PRIORITY`:
-		v.rows = append(v.rows, []parser.Datum{parser.DString(p.txn.UserPriority.String())})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(p.txn.UserPriority.String())})
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
@@ -78,12 +78,12 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, *roachpb.Error) 
 	for i, col := range desc.Columns {
 		defaultExpr := parser.Datum(parser.DNull)
 		if e := desc.Columns[i].DefaultExpr; e != nil {
-			defaultExpr = parser.DString(*e)
+			defaultExpr = parser.NewDString(*e)
 		}
 		v.rows = append(v.rows, []parser.Datum{
-			parser.DString(desc.Columns[i].Name),
-			parser.DString(col.Type.SQLString()),
-			parser.DBool(desc.Columns[i].Nullable),
+			parser.NewDString(desc.Columns[i].Name),
+			parser.NewDString(col.Type.SQLString()),
+			parser.MakeDBool(parser.DBool(desc.Columns[i].Nullable)),
 			defaultExpr,
 		})
 	}
@@ -111,7 +111,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, *roachpb.Err
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		v.rows = append(v.rows, []parser.Datum{parser.DString(name)})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(name)})
 	}
 	return v, nil
 }
@@ -159,9 +159,9 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 				}
 			}
 			v.rows = append(v.rows, []parser.Datum{
-				parser.DString(descriptor.GetName()),
-				parser.DString(userPriv.User),
-				parser.DString(userPriv.Privileges),
+				parser.NewDString(descriptor.GetName()),
+				parser.NewDString(userPriv.User),
+				parser.NewDString(userPriv.Privileges),
 			})
 		}
 	}
@@ -193,13 +193,13 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, *roachpb.Error) {
 	appendRow := func(index IndexDescriptor, colName string, sequence int,
 		direction string, isStored bool) {
 		v.rows = append(v.rows, []parser.Datum{
-			parser.DString(n.Table.Table()),
-			parser.DString(index.Name),
-			parser.DBool(index.Unique),
-			parser.DInt(sequence),
-			parser.DString(colName),
-			parser.DString(direction),
-			parser.DBool(isStored),
+			parser.NewDString(n.Table.Table()),
+			parser.NewDString(index.Name),
+			parser.MakeDBool(parser.DBool(index.Unique)),
+			parser.NewDInt(parser.DInt(sequence)),
+			parser.NewDString(colName),
+			parser.NewDString(direction),
+			parser.MakeDBool(parser.DBool(isStored)),
 		})
 	}
 	for _, index := range append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
@@ -245,7 +245,7 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, *roachpb.Error) {
 	}
 	v := &valuesNode{columns: []ResultColumn{{Name: "Table", Typ: parser.DummyString}}}
 	for _, name := range tableNames {
-		v.rows = append(v.rows, []parser.Datum{parser.DString(name.Table())})
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(name.Table())})
 	}
 
 	return v, nil

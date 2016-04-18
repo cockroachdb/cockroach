@@ -32,26 +32,38 @@ import (
 )
 
 var (
+	constDBoolTrue  DBool = true
+	constDBoolFalse DBool = false
+
+	// DBoolTrue is a pointer to the DBool(true) value and can be used in
+	// comparisons against Datum types.
+	DBoolTrue = &constDBoolTrue
+	// DBoolFalse is a pointer to the DBool(false) value and can be used in
+	// comparisons against Datum types.
+	DBoolFalse = &constDBoolFalse
+
 	// DummyBool is a placeholder DBool value.
-	DummyBool Datum = DBool(false)
+	DummyBool Datum = DBoolFalse
 	// DummyInt is a placeholder DInt value.
-	DummyInt Datum = DInt(0)
+	DummyInt Datum = NewDInt(0)
 	// DummyFloat is a placeholder DFloat value.
-	DummyFloat Datum = DFloat(0)
+	DummyFloat Datum = NewDFloat(0)
 	// DummyDecimal is a placeholder DDecimal value.
 	DummyDecimal Datum = &DDecimal{}
 	// DummyString is a placeholder DString value.
-	DummyString Datum = DString("")
+	DummyString Datum = NewDString("")
 	// DummyBytes is a placeholder DBytes value.
-	DummyBytes Datum = DBytes("")
+	DummyBytes Datum = NewDBytes("")
 	// DummyDate is a placeholder DDate value.
-	DummyDate Datum = DDate(0)
+	DummyDate Datum = NewDDate(0)
 	// DummyTimestamp is a placeholder DTimestamp value.
-	DummyTimestamp Datum = DTimestamp{}
+	DummyTimestamp Datum = &DTimestamp{}
 	// DummyInterval is a placeholder DInterval value.
-	DummyInterval Datum = DInterval{}
+	DummyInterval Datum = &DInterval{}
 	// dummyTuple is a placeholder DTuple value.
-	dummyTuple Datum = DTuple{}
+	dummyTuple Datum = &DTuple{}
+	// dummyTuple is a placeholder DValArg value.
+	dummyValArg Datum = &DValArg{}
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
 
@@ -66,7 +78,7 @@ var (
 	intervalType  = reflect.TypeOf(DummyInterval)
 	tupleType     = reflect.TypeOf(dummyTuple)
 	nullType      = reflect.TypeOf(DNull)
-	valargType    = reflect.TypeOf(DValArg{})
+	valargType    = reflect.TypeOf(dummyValArg)
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
@@ -116,10 +128,19 @@ type Datum interface {
 // DBool is the boolean Datum.
 type DBool bool
 
+// MakeDBool converts its argument to a *DBool, returning either DBoolTrue or
+// DBoolFalse.
+func MakeDBool(d DBool) *DBool {
+	if d {
+		return DBoolTrue
+	}
+	return DBoolFalse
+}
+
 // GetBool gets DBool or an error (also treats NULL as false, not an error).
 func GetBool(d Datum) (DBool, error) {
-	if v, ok := d.(DBool); ok {
-		return v, nil
+	if v, ok := d.(*DBool); ok {
+		return *v, nil
 	}
 	if d == DNull {
 		return DBool(false), nil
@@ -128,90 +149,95 @@ func GetBool(d Datum) (DBool, error) {
 }
 
 // Type implements the Datum interface.
-func (d DBool) Type() string {
+func (d *DBool) Type() string {
 	return "bool"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DBool) TypeEqual(other Datum) bool {
-	_, ok := other.(DBool)
+func (d *DBool) TypeEqual(other Datum) bool {
+	_, ok := other.(*DBool)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DBool) Compare(other Datum) int {
+func (d *DBool) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DBool)
+	v, ok := other.(*DBool)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if !d && v {
+	if !*d && *v {
 		return -1
 	}
-	if d && !v {
+	if *d && !*v {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DBool) HasPrev() bool {
+func (d *DBool) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d DBool) Prev() Datum {
-	return DBool(false)
+func (d *DBool) Prev() Datum {
+	return DBoolFalse
 }
 
 // HasNext implements the Datum interface.
-func (d DBool) HasNext() bool {
+func (d *DBool) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DBool) Next() Datum {
-	return DBool(true)
+func (d *DBool) Next() Datum {
+	return DBoolTrue
 }
 
 // IsMax implements the Datum interface.
-func (d DBool) IsMax() bool {
-	return d == true
+func (d *DBool) IsMax() bool {
+	return *d == true
 }
 
 // IsMin implements the Datum interface.
-func (d DBool) IsMin() bool {
-	return d == false
+func (d *DBool) IsMin() bool {
+	return *d == false
 }
 
-func (d DBool) String() string {
-	return strconv.FormatBool(bool(d))
+func (d *DBool) String() string {
+	return strconv.FormatBool(bool(*d))
 }
 
 // DInt is the int Datum.
 type DInt int64
 
+// NewDInt is a helper routine to create a *DInt initialized from its argument.
+func NewDInt(d DInt) *DInt {
+	return &d
+}
+
 // Type implements the Datum interface.
-func (d DInt) Type() string {
+func (d *DInt) Type() string {
 	return "int"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DInt) TypeEqual(other Datum) bool {
-	_, ok := other.(DInt)
+func (d *DInt) TypeEqual(other Datum) bool {
+	_, ok := other.(*DInt)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DInt) Compare(other Datum) int {
+func (d *DInt) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DInt)
+	v, ok := other.(*DInt)
 	if !ok {
 		cmp, ok := mixedTypeCompare(d, other)
 		if !ok {
@@ -219,70 +245,76 @@ func (d DInt) Compare(other Datum) int {
 		}
 		return cmp
 	}
-	if d < v {
+	if *d < *v {
 		return -1
 	}
-	if d > v {
+	if *d > *v {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DInt) HasPrev() bool {
+func (d *DInt) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d DInt) Prev() Datum {
-	return d - 1
+func (d *DInt) Prev() Datum {
+	return NewDInt(*d - 1)
 }
 
 // HasNext implements the Datum interface.
-func (d DInt) HasNext() bool {
+func (d *DInt) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DInt) Next() Datum {
-	return d + 1
+func (d *DInt) Next() Datum {
+	return NewDInt(*d + 1)
 }
 
 // IsMax implements the Datum interface.
-func (d DInt) IsMax() bool {
-	return d == math.MaxInt64
+func (d *DInt) IsMax() bool {
+	return *d == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
-func (d DInt) IsMin() bool {
-	return d == math.MinInt64
+func (d *DInt) IsMin() bool {
+	return *d == math.MinInt64
 }
 
-func (d DInt) String() string {
-	return strconv.FormatInt(int64(d), 10)
+func (d *DInt) String() string {
+	return strconv.FormatInt(int64(*d), 10)
 }
 
 // DFloat is the float Datum.
 type DFloat float64
 
+// NewDFloat is a helper routine to create a *DFloat initialized from its
+// argument.
+func NewDFloat(d DFloat) *DFloat {
+	return &d
+}
+
 // Type implements the Datum interface.
-func (d DFloat) Type() string {
+func (d *DFloat) Type() string {
 	return "float"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DFloat) TypeEqual(other Datum) bool {
-	_, ok := other.(DFloat)
+func (d *DFloat) TypeEqual(other Datum) bool {
+	_, ok := other.(*DFloat)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DFloat) Compare(other Datum) int {
+func (d *DFloat) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DFloat)
+	v, ok := other.(*DFloat)
 	if !ok {
 		cmp, ok := mixedTypeCompare(d, other)
 		if !ok {
@@ -290,53 +322,53 @@ func (d DFloat) Compare(other Datum) int {
 		}
 		return cmp
 	}
-	if d < v {
+	if *d < *v {
 		return -1
 	}
-	if d > v {
+	if *d > *v {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DFloat) HasPrev() bool {
+func (d *DFloat) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d DFloat) Prev() Datum {
-	return DFloat(math.Nextafter(float64(d), math.Inf(-1)))
+func (d *DFloat) Prev() Datum {
+	return NewDFloat(DFloat(math.Nextafter(float64(*d), math.Inf(-1))))
 }
 
 // HasNext implements the Datum interface.
-func (d DFloat) HasNext() bool {
+func (d *DFloat) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DFloat) Next() Datum {
-	return DFloat(math.Nextafter(float64(d), math.Inf(1)))
+func (d *DFloat) Next() Datum {
+	return NewDFloat(DFloat(math.Nextafter(float64(*d), math.Inf(1))))
 }
 
 // IsMax implements the Datum interface.
-func (d DFloat) IsMax() bool {
+func (d *DFloat) IsMax() bool {
 	// Using >= accounts for +inf as well.
-	return d >= math.MaxFloat64
+	return *d >= math.MaxFloat64
 }
 
 // IsMin implements the Datum interface.
-func (d DFloat) IsMin() bool {
+func (d *DFloat) IsMin() bool {
 	// Using <= accounts for -inf as well.
-	return d <= -math.MaxFloat64
+	return *d <= -math.MaxFloat64
 }
 
-func (d DFloat) String() string {
+func (d *DFloat) String() string {
 	fmt := byte('g')
 	prec := -1
-	if _, frac := math.Modf(float64(d)); frac == 0 {
+	if _, frac := math.Modf(float64(*d)); frac == 0 {
 		// d is a whole number.
-		if -1000000 < d && d < 1000000 {
+		if -1000000 < *d && *d < 1000000 {
 			// Small whole numbers are printed without exponents, and with one
 			// digit of decimal precision to ensure they will parse as floats.
 			fmt = 'f'
@@ -346,7 +378,7 @@ func (d DFloat) String() string {
 			fmt = 'e'
 		}
 	}
-	return strconv.FormatFloat(float64(d), fmt, prec, 64)
+	return strconv.FormatFloat(float64(*d), fmt, prec, 64)
 }
 
 // DDecimal is the decimal Datum.
@@ -419,204 +451,223 @@ func (d *DDecimal) String() string {
 // DString is the string Datum.
 type DString string
 
+// NewDString is a helper routine to create a *DString initialized from its
+// argument.
+func NewDString(d string) *DString {
+	r := DString(d)
+	return &r
+}
+
 // Type implements the Datum interface.
-func (d DString) Type() string {
+func (d *DString) Type() string {
 	return "string"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DString) TypeEqual(other Datum) bool {
-	_, ok := other.(DString)
+func (d *DString) TypeEqual(other Datum) bool {
+	_, ok := other.(*DString)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DString) Compare(other Datum) int {
+func (d *DString) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DString)
+	v, ok := other.(*DString)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if d < v {
+	if *d < *v {
 		return -1
 	}
-	if d > v {
+	if *d > *v {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DString) HasPrev() bool {
+func (d *DString) HasPrev() bool {
 	return false
 }
 
 // Prev implements the Datum interface.
-func (d DString) Prev() Datum {
+func (d *DString) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
 }
 
 // HasNext implements the Datum interface.
-func (d DString) HasNext() bool {
+func (d *DString) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DString) Next() Datum {
-	return DString(roachpb.Key(d).Next())
+func (d *DString) Next() Datum {
+	return NewDString(string(roachpb.Key(*d).Next()))
 }
 
 // IsMax implements the Datum interface.
-func (d DString) IsMax() bool {
+func (d *DString) IsMax() bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d DString) IsMin() bool {
-	return len(d) == 0
+func (d *DString) IsMin() bool {
+	return len(*d) == 0
 }
 
-func (d DString) String() string {
-	return encodeSQLString(string(d))
+func (d *DString) String() string {
+	return encodeSQLString(string(*d))
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
 // the immutability, but this may contain arbitrary bytes.
 type DBytes string
 
+// NewDBytes is a helper routine to create a *DBytes initialized from its
+// argument.
+func NewDBytes(d DBytes) *DBytes {
+	return &d
+}
+
 // Type implements the Datum interface.
-func (d DBytes) Type() string {
+func (d *DBytes) Type() string {
 	return "bytes"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DBytes) TypeEqual(other Datum) bool {
-	_, ok := other.(DBytes)
+func (d *DBytes) TypeEqual(other Datum) bool {
+	_, ok := other.(*DBytes)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DBytes) Compare(other Datum) int {
+func (d *DBytes) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DBytes)
+	v, ok := other.(*DBytes)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if d < v {
+	if *d < *v {
 		return -1
 	}
-	if d > v {
+	if *d > *v {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DBytes) HasPrev() bool {
+func (d *DBytes) HasPrev() bool {
 	return false
 }
 
 // Prev implements the Datum interface.
-func (d DBytes) Prev() Datum {
+func (d *DBytes) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
 }
 
 // HasNext implements the Datum interface.
-func (d DBytes) HasNext() bool {
+func (d *DBytes) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DBytes) Next() Datum {
-	return DBytes(roachpb.Key(d).Next())
+func (d *DBytes) Next() Datum {
+	return NewDBytes(DBytes(roachpb.Key(*d).Next()))
 }
 
 // IsMax implements the Datum interface.
-func (d DBytes) IsMax() bool {
+func (d *DBytes) IsMax() bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d DBytes) IsMin() bool {
-	return len(d) == 0
+func (d *DBytes) IsMin() bool {
+	return len(*d) == 0
 }
 
-func (d DBytes) String() string {
-	return encodeSQLBytes(string(d))
+func (d *DBytes) String() string {
+	return encodeSQLBytes(string(*d))
 }
 
 // DDate is the date Datum represented as the number of days after
 // the Unix epoch.
 type DDate int64
 
+// NewDDate is a helper routine to create a *DDate initialized from its
+// argument.
+func NewDDate(d DDate) *DDate {
+	return &d
+}
+
 // Type implements the Datum interface.
-func (d DDate) Type() string {
+func (d *DDate) Type() string {
 	return "date"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DDate) TypeEqual(other Datum) bool {
-	_, ok := other.(DDate)
+func (d *DDate) TypeEqual(other Datum) bool {
+	_, ok := other.(*DDate)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DDate) Compare(other Datum) int {
+func (d *DDate) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DDate)
+	v, ok := other.(*DDate)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	if d < v {
+	if *d < *v {
 		return -1
 	}
-	if v < d {
+	if *v < *d {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DDate) HasPrev() bool {
+func (d *DDate) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d DDate) Prev() Datum {
-	return d - 1
+func (d *DDate) Prev() Datum {
+	return NewDDate(*d - 1)
 }
 
 // HasNext implements the Datum interface.
-func (d DDate) HasNext() bool {
+func (d *DDate) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DDate) Next() Datum {
-	return d + 1
+func (d *DDate) Next() Datum {
+	return NewDDate(*d + 1)
 }
 
 // IsMax implements the Datum interface.
-func (d DDate) IsMax() bool {
-	return d == math.MaxInt64
+func (d *DDate) IsMax() bool {
+	return *d == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
-func (d DDate) IsMin() bool {
-	return d == math.MinInt64
+func (d *DDate) IsMin() bool {
+	return *d == math.MinInt64
 }
 
-func (d DDate) String() string {
-	return time.Unix(int64(d)*secondsInDay, 0).UTC().Format(dateFormat)
+func (d *DDate) String() string {
+	return time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat)
 }
 
 // DTimestamp is the timestamp Datum.
@@ -625,23 +676,23 @@ type DTimestamp struct {
 }
 
 // Type implements the Datum interface.
-func (d DTimestamp) Type() string {
+func (d *DTimestamp) Type() string {
 	return "timestamp"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DTimestamp) TypeEqual(other Datum) bool {
-	_, ok := other.(DTimestamp)
+func (d *DTimestamp) TypeEqual(other Datum) bool {
+	_, ok := other.(*DTimestamp)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DTimestamp) Compare(other Datum) int {
+func (d *DTimestamp) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DTimestamp)
+	v, ok := other.(*DTimestamp)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
@@ -655,38 +706,38 @@ func (d DTimestamp) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d DTimestamp) HasPrev() bool {
+func (d *DTimestamp) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d DTimestamp) Prev() Datum {
-	return DTimestamp{Time: d.Add(-1)}
+func (d *DTimestamp) Prev() Datum {
+	return &DTimestamp{Time: d.Add(-1)}
 }
 
 // HasNext implements the Datum interface.
-func (d DTimestamp) HasNext() bool {
+func (d *DTimestamp) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d DTimestamp) Next() Datum {
-	return DTimestamp{Time: d.Add(1)}
+func (d *DTimestamp) Next() Datum {
+	return &DTimestamp{Time: d.Add(1)}
 }
 
 // IsMax implements the Datum interface.
-func (d DTimestamp) IsMax() bool {
+func (d *DTimestamp) IsMax() bool {
 	// Adding 1 overflows to a smaller value
-	return d.After(d.Next().(DTimestamp).Time)
+	return d.After(d.Next().(*DTimestamp).Time)
 }
 
 // IsMin implements the Datum interface.
-func (d DTimestamp) IsMin() bool {
+func (d *DTimestamp) IsMin() bool {
 	// Subtracting 1 underflows to a larger value.
 	return d.Before(d.Add(-1))
 }
 
-func (d DTimestamp) String() string {
+func (d *DTimestamp) String() string {
 	return d.UTC().Format(timestampWithOffsetZoneFormat)
 }
 
@@ -696,23 +747,23 @@ type DInterval struct {
 }
 
 // Type implements the Datum interface.
-func (d DInterval) Type() string {
+func (d *DInterval) Type() string {
 	return "interval"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DInterval) TypeEqual(other Datum) bool {
-	_, ok := other.(DInterval)
+func (d *DInterval) TypeEqual(other Datum) bool {
+	_, ok := other.(*DInterval)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DInterval) Compare(other Datum) int {
+func (d *DInterval) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DInterval)
+	v, ok := other.(*DInterval)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
@@ -720,37 +771,37 @@ func (d DInterval) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d DInterval) HasPrev() bool {
+func (d *DInterval) HasPrev() bool {
 	return false
 }
 
 // Prev implements the Datum interface.
-func (d DInterval) Prev() Datum {
+func (d *DInterval) Prev() Datum {
 	panic(d.Type() + ".Prev() not supported")
 }
 
 // HasNext implements the Datum interface.
-func (d DInterval) HasNext() bool {
+func (d *DInterval) HasNext() bool {
 	return false
 }
 
 // Next implements the Datum interface.
-func (d DInterval) Next() Datum {
+func (d *DInterval) Next() Datum {
 	panic(d.Type() + ".Next() not supported")
 }
 
 // IsMax implements the Datum interface.
-func (d DInterval) IsMax() bool {
+func (d *DInterval) IsMax() bool {
 	return d.Months == math.MaxInt64 && d.Days == math.MaxInt64 && d.Nanos == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
-func (d DInterval) IsMin() bool {
+func (d *DInterval) IsMin() bool {
 	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
 }
 
 // String implements the Datum interface.
-func (d DInterval) String() string {
+func (d *DInterval) String() string {
 	if d.Months != 0 || d.Days != 0 {
 		return d.String()
 	}
@@ -761,21 +812,21 @@ func (d DInterval) String() string {
 type DTuple []Datum
 
 // Type implements the Datum interface.
-func (d DTuple) Type() string {
+func (d *DTuple) Type() string {
 	return "tuple"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DTuple) TypeEqual(other Datum) bool {
-	t, ok := other.(DTuple)
+func (d *DTuple) TypeEqual(other Datum) bool {
+	t, ok := other.(*DTuple)
 	if !ok {
 		return false
 	}
-	if len(d) != len(t) {
+	if len(*d) != len(*t) {
 		return false
 	}
-	for i := 0; i < len(d); i++ {
-		if !d[i].TypeEqual(t[i]) {
+	for i := 0; i < len(*d); i++ {
+		if !(*d)[i].TypeEqual((*t)[i]) {
 			return false
 		}
 	}
@@ -783,38 +834,38 @@ func (d DTuple) TypeEqual(other Datum) bool {
 }
 
 // Compare implements the Datum interface.
-func (d DTuple) Compare(other Datum) int {
+func (d *DTuple) Compare(other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(DTuple)
+	v, ok := other.(*DTuple)
 	if !ok {
 		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
 	}
-	n := len(d)
-	if n > len(v) {
-		n = len(v)
+	n := len(*d)
+	if n > len(*v) {
+		n = len(*v)
 	}
 	for i := 0; i < n; i++ {
-		c := d[i].Compare(v[i])
+		c := (*d)[i].Compare((*v)[i])
 		if c != 0 {
 			return c
 		}
 	}
-	if len(d) < len(v) {
+	if len(*d) < len(*v) {
 		return -1
 	}
-	if len(d) > len(v) {
+	if len(*d) > len(*v) {
 		return 1
 	}
 	return 0
 }
 
 // HasPrev implements the Datum interface.
-func (d DTuple) HasPrev() bool {
-	for i := len(d) - 1; i >= 0; i-- {
-		if d[i].HasPrev() {
+func (d *DTuple) HasPrev() bool {
+	for i := len(*d) - 1; i >= 0; i-- {
+		if (*d)[i].HasPrev() {
 			return true
 		}
 	}
@@ -822,22 +873,22 @@ func (d DTuple) HasPrev() bool {
 }
 
 // Prev implements the Datum interface.
-func (d DTuple) Prev() Datum {
-	n := make(DTuple, len(d))
-	copy(n, d)
+func (d *DTuple) Prev() Datum {
+	n := make(DTuple, len(*d))
+	copy(n, *d)
 	for i := len(n) - 1; i >= 0; i-- {
 		if n[i].HasPrev() {
 			n[i] = n[i].Prev()
-			return n
+			return &n
 		}
 	}
 	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
 }
 
 // HasNext implements the Datum interface.
-func (d DTuple) HasNext() bool {
-	for i := len(d) - 1; i >= 0; i-- {
-		if d[i].HasNext() {
+func (d *DTuple) HasNext() bool {
+	for i := len(*d) - 1; i >= 0; i-- {
+		if (*d)[i].HasNext() {
 			return true
 		}
 	}
@@ -845,20 +896,20 @@ func (d DTuple) HasNext() bool {
 }
 
 // Next implements the Datum interface.
-func (d DTuple) Next() Datum {
-	n := make(DTuple, len(d))
-	copy(n, d)
+func (d *DTuple) Next() Datum {
+	n := make(DTuple, len(*d))
+	copy(n, *d)
 	for i := len(n) - 1; i >= 0; i-- {
 		if n[i].HasNext() {
 			n[i] = n[i].Next()
-			return n
+			return &n
 		}
 	}
 	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
 }
 
 // IsMax implements the Datum interface.
-func (d DTuple) IsMax() bool {
+func (d *DTuple) IsMax() bool {
 	// Unimplemented for DTuple. Seems possible to provide an implementation
 	// which called IsMax for each of the elements, but currently this isn't
 	// needed.
@@ -866,17 +917,17 @@ func (d DTuple) IsMax() bool {
 }
 
 // IsMin implements the Datum interface.
-func (d DTuple) IsMin() bool {
+func (d *DTuple) IsMin() bool {
 	// Unimplemented for DTuple. Seems possible to provide an implementation
 	// which called IsMin for each of the elements, but currently this isn't
 	// needed.
 	return false
 }
 
-func (d DTuple) String() string {
+func (d *DTuple) String() string {
 	var buf bytes.Buffer
 	_ = buf.WriteByte('(')
-	for i, v := range d {
+	for i, v := range *d {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -886,16 +937,16 @@ func (d DTuple) String() string {
 	return buf.String()
 }
 
-func (d DTuple) Len() int {
-	return len(d)
+func (d *DTuple) Len() int {
+	return len(*d)
 }
 
-func (d DTuple) Less(i, j int) bool {
-	return d[i].Compare(d[j]) < 0
+func (d *DTuple) Less(i, j int) bool {
+	return (*d)[i].Compare((*d)[j]) < 0
 }
 
-func (d DTuple) Swap(i, j int) {
-	d[i], d[j] = d[j], d[i]
+func (d *DTuple) Swap(i, j int) {
+	(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
 }
 
 // Normalize sorts and uniques the datum tuple.
@@ -973,7 +1024,7 @@ func (d dNull) String() string {
 	return "NULL"
 }
 
-var _ VariableExpr = DValArg{}
+var _ VariableExpr = &DValArg{}
 
 // DValArg is the named bind var argument Datum.
 type DValArg struct {
@@ -981,55 +1032,55 @@ type DValArg struct {
 }
 
 // Variable implements the VariableExpr interface.
-func (DValArg) Variable() {}
+func (*DValArg) Variable() {}
 
 // Type implements the Datum interface.
-func (DValArg) Type() string {
+func (*DValArg) Type() string {
 	return "parameter"
 }
 
 // TypeEqual implements the Datum interface.
-func (d DValArg) TypeEqual(other Datum) bool {
-	_, ok := other.(DValArg)
+func (d *DValArg) TypeEqual(other Datum) bool {
+	_, ok := other.(*DValArg)
 	return ok
 }
 
 // Compare implements the Datum interface.
-func (d DValArg) Compare(other Datum) int {
+func (d *DValArg) Compare(other Datum) int {
 	panic(d.Type() + ".Compare not supported")
 }
 
 // HasPrev implements the Datum interface.
-func (d DValArg) HasPrev() bool {
+func (d *DValArg) HasPrev() bool {
 	return false
 }
 
 // Prev implements the Datum interface.
-func (d DValArg) Prev() Datum {
+func (d *DValArg) Prev() Datum {
 	panic(d.Type() + ".Prev not supported")
 }
 
 // HasNext implements the Datum interface.
-func (d DValArg) HasNext() bool {
+func (d *DValArg) HasNext() bool {
 	return false
 }
 
 // Next implements the Datum interface.
-func (d DValArg) Next() Datum {
+func (d *DValArg) Next() Datum {
 	panic(d.Type() + ".Next not supported")
 }
 
 // IsMax implements the Datum interface.
-func (DValArg) IsMax() bool {
+func (*DValArg) IsMax() bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (DValArg) IsMin() bool {
+func (*DValArg) IsMin() bool {
 	return true
 }
 
-func (d DValArg) String() string {
+func (d *DValArg) String() string {
 	return "$" + d.name
 }
 

@@ -438,8 +438,8 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 	for _, d := range testExprs {
 		expr := &ComparisonExpr{
 			Operator: d.op,
-			Left:     DString(d.left),
-			Right:    DString(d.right),
+			Left:     NewDString(d.left),
+			Right:    NewDString(d.right),
 		}
 		ctx := defaultContext
 		ctx.ReCache = NewRegexpCache(8)
@@ -520,7 +520,7 @@ func benchmarkLike(b *testing.B, ctx EvalContext) {
 	likeFn := CmpOps[CmpArgs{Like, stringType, stringType}].fn
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
-			if _, err := likeFn(ctx, DString("test"), DString(p)); err != nil {
+			if _, err := likeFn(ctx, NewDString("test"), NewDString(p)); err != nil {
 				b.Fatalf("LIKE evaluation failed with error: %v", err)
 			}
 		}

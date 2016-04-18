@@ -229,7 +229,7 @@ func (node *CoalesceExpr) String() string {
 
 // IntVal represents an integer.
 type IntVal struct {
-	Val int64
+	Val DInt
 	Str string
 }
 

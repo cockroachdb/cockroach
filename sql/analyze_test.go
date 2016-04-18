@@ -81,8 +81,13 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.
-	zero := parser.DInt(0)
-	for _, v := range []parser.Datum{zero, zero + 1, zero + 2, zero + 3, parser.DNull} {
+	for _, v := range []parser.Datum{
+		parser.NewDInt(0),
+		parser.NewDInt(1),
+		parser.NewDInt(2),
+		parser.NewDInt(3),
+		parser.DNull,
+	} {
 		for _, q := range qvals {
 			q.datum = v
 		}
@@ -97,7 +102,7 @@ func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
 		// This is tricky: we don't require the expressions to produce identical
 		// results, but to either both return true or both return not true (either
 		// false or NULL).
-		if (da == parser.DBool(true)) != (db == parser.DBool(true)) {
+		if (da == parser.DBoolTrue) != (db == parser.DBoolTrue) {
 			return fmt.Errorf("%s: %s: expected %s, but found %s", a, v, da, db)
 		}
 	}

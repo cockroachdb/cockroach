@@ -68,11 +68,11 @@ type SetTimeZone struct {
 func (node *SetTimeZone) String() string {
 	prefix := "SET TIME ZONE"
 	switch v := node.Value.(type) {
-	case DInterval:
+	case *DInterval:
 		return fmt.Sprintf("%s INTERVAL '%s'", prefix, v)
 
-	case DString:
-		if zone := string(v); zone == "DEFAULT" || zone == "LOCAL" {
+	case *DString:
+		if zone := string(*v); zone == "DEFAULT" || zone == "LOCAL" {
 			return fmt.Sprintf("%s %s", prefix, zone)
 		}
 	}

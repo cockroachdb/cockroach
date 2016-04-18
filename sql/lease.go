@@ -108,7 +108,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		return nil, roachpb.NewErrorf("table ID %d not found", tableID)
 	}
 	desc := &Descriptor{}
-	if err := proto.Unmarshal([]byte(values[0].(parser.DBytes)), desc); err != nil {
+	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -143,7 +143,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		p.session.User = security.RootUser
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
-		count, epErr := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
+		count, epErr := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
 		if epErr != nil {
 			return epErr
 		}
@@ -164,7 +164,7 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
-		count, pErr := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, lease.expiration)
+		count, pErr := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
 		if pErr != nil {
 			return pErr
 		}
@@ -306,7 +306,7 @@ func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration
 		if pErr != nil {
 			return pErr
 		}
-		count = int(values[0].(parser.DInt))
+		count = int(*(values[0].(*parser.DInt)))
 		return nil
 	})
 	return count, pErr.GoError()

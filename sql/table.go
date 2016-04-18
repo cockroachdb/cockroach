@@ -396,8 +396,8 @@ func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap
 }
 
 func encodeDatum(b []byte, d parser.Datum) ([]byte, error) {
-	if values, ok := d.(parser.DTuple); ok {
-		return encodeDTuple(b, values)
+	if values, ok := d.(*parser.DTuple); ok {
+		return encodeDTuple(b, *values)
 	}
 	return encodeTableKey(b, d, encoding.Ascending)
 }
@@ -427,9 +427,9 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 	}
 
 	switch t := val.(type) {
-	case parser.DBool:
+	case *parser.DBool:
 		var x int64
-		if t {
+		if *t {
 			x = 1
 		} else {
 			x = 0
@@ -438,42 +438,42 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeVarintAscending(b, x), nil
 		}
 		return encoding.EncodeVarintDescending(b, x), nil
-	case parser.DInt:
+	case *parser.DInt:
 		if dir == encoding.Ascending {
-			return encoding.EncodeVarintAscending(b, int64(t)), nil
+			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
-		return encoding.EncodeVarintDescending(b, int64(t)), nil
-	case parser.DFloat:
+		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+	case *parser.DFloat:
 		if dir == encoding.Ascending {
-			return encoding.EncodeFloatAscending(b, float64(t)), nil
+			return encoding.EncodeFloatAscending(b, float64(*t)), nil
 		}
-		return encoding.EncodeFloatDescending(b, float64(t)), nil
+		return encoding.EncodeFloatDescending(b, float64(*t)), nil
 	case *parser.DDecimal:
 		if dir == encoding.Ascending {
 			return encoding.EncodeDecimalAscending(b, &t.Dec), nil
 		}
 		return encoding.EncodeDecimalDescending(b, &t.Dec), nil
-	case parser.DString:
+	case *parser.DString:
 		if dir == encoding.Ascending {
-			return encoding.EncodeStringAscending(b, string(t)), nil
+			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
-		return encoding.EncodeStringDescending(b, string(t)), nil
-	case parser.DBytes:
+		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *parser.DBytes:
 		if dir == encoding.Ascending {
-			return encoding.EncodeStringAscending(b, string(t)), nil
+			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
-		return encoding.EncodeStringDescending(b, string(t)), nil
-	case parser.DDate:
+		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *parser.DDate:
 		if dir == encoding.Ascending {
-			return encoding.EncodeVarintAscending(b, int64(t)), nil
+			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
-		return encoding.EncodeVarintDescending(b, int64(t)), nil
-	case parser.DTimestamp:
+		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+	case *parser.DTimestamp:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
 		}
 		return encoding.EncodeTimeDescending(b, t.Time), nil
-	case parser.DInterval:
+	case *parser.DInterval:
 		if dir == encoding.Ascending {
 			return encoding.EncodeDurationAscending(b, t.Duration)
 		}
@@ -595,30 +595,30 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 	var rkey []byte
 	var err error
 	switch valType.(type) {
-	case parser.DBool:
+	case *parser.DBool:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return parser.DBool(i != 0), rkey, err
-	case parser.DInt:
+		return parser.MakeDBool(parser.DBool(i != 0)), rkey, err
+	case *parser.DInt:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return parser.DInt(i), rkey, err
-	case parser.DFloat:
+		return parser.NewDInt(parser.DInt(i)), rkey, err
+	case *parser.DFloat:
 		var f float64
 		if dir == encoding.Ascending {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
 		} else {
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
-		return parser.DFloat(f), rkey, err
+		return parser.NewDFloat(parser.DFloat(f)), rkey, err
 	case *parser.DDecimal:
 		var d *inf.Dec
 		if dir == encoding.Ascending {
@@ -629,46 +629,46 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		dd := &parser.DDecimal{}
 		dd.Set(d)
 		return dd, rkey, err
-	case parser.DString:
+	case *parser.DString:
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeStringAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeStringDescending(key, nil)
 		}
-		return parser.DString(r), rkey, err
-	case parser.DBytes:
+		return parser.NewDString(r), rkey, err
+	case *parser.DBytes:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
-		return parser.DBytes(r), rkey, err
-	case parser.DDate:
+		return parser.NewDBytes(parser.DBytes(r)), rkey, err
+	case *parser.DDate:
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
-		return parser.DDate(t), rkey, err
-	case parser.DTimestamp:
+		return parser.NewDDate(parser.DDate(t)), rkey, err
+	case *parser.DTimestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		return parser.DTimestamp{Time: t}, rkey, err
-	case parser.DInterval:
+		return &parser.DTimestamp{Time: t}, rkey, err
+	case *parser.DInterval:
 		var d duration.Duration
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDurationAscending(key)
 		} else {
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
-		return parser.DInterval{Duration: d}, rkey, err
+		return &parser.DInterval{Duration: d}, rkey, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
@@ -742,34 +742,34 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 	var set parser.Datum
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
-		_, ok = val.(parser.DBool)
+		_, ok = val.(*parser.DBool)
 		set, err = args.SetInferredType(val, parser.DummyBool)
 	case ColumnType_INT:
-		_, ok = val.(parser.DInt)
+		_, ok = val.(*parser.DInt)
 		set, err = args.SetInferredType(val, parser.DummyInt)
 	case ColumnType_FLOAT:
-		_, ok = val.(parser.DFloat)
+		_, ok = val.(*parser.DFloat)
 		set, err = args.SetInferredType(val, parser.DummyFloat)
 	case ColumnType_DECIMAL:
 		_, ok = val.(*parser.DDecimal)
 		set, err = args.SetInferredType(val, parser.DummyDecimal)
 	case ColumnType_STRING:
-		_, ok = val.(parser.DString)
+		_, ok = val.(*parser.DString)
 		set, err = args.SetInferredType(val, parser.DummyString)
 	case ColumnType_BYTES:
-		_, ok = val.(parser.DBytes)
+		_, ok = val.(*parser.DBytes)
 		if !ok {
-			_, ok = val.(parser.DString)
+			_, ok = val.(*parser.DString)
 		}
 		set, err = args.SetInferredType(val, parser.DummyBytes)
 	case ColumnType_DATE:
-		_, ok = val.(parser.DDate)
+		_, ok = val.(*parser.DDate)
 		set, err = args.SetInferredType(val, parser.DummyDate)
 	case ColumnType_TIMESTAMP:
-		_, ok = val.(parser.DTimestamp)
+		_, ok = val.(*parser.DTimestamp)
 		set, err = args.SetInferredType(val, parser.DummyTimestamp)
 	case ColumnType_INTERVAL:
-		_, ok = val.(parser.DInterval)
+		_, ok = val.(*parser.DInterval)
 		set, err = args.SetInferredType(val, parser.DummyInterval)
 	default:
 		return util.Errorf("unsupported column type: %s", col.Type.Kind)
@@ -794,42 +794,42 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
-		if v, ok := val.(parser.DBool); ok {
-			return bool(v), nil
+		if v, ok := val.(*parser.DBool); ok {
+			return bool(*v), nil
 		}
 	case ColumnType_INT:
-		if v, ok := val.(parser.DInt); ok {
-			return int64(v), nil
+		if v, ok := val.(*parser.DInt); ok {
+			return int64(*v), nil
 		}
 	case ColumnType_FLOAT:
-		if v, ok := val.(parser.DFloat); ok {
-			return float64(v), nil
+		if v, ok := val.(*parser.DFloat); ok {
+			return float64(*v), nil
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
 			return v.Dec, nil
 		}
 	case ColumnType_STRING:
-		if v, ok := val.(parser.DString); ok {
-			return string(v), nil
+		if v, ok := val.(*parser.DString); ok {
+			return string(*v), nil
 		}
 	case ColumnType_BYTES:
-		if v, ok := val.(parser.DBytes); ok {
-			return string(v), nil
+		if v, ok := val.(*parser.DBytes); ok {
+			return string(*v), nil
 		}
-		if v, ok := val.(parser.DString); ok {
-			return string(v), nil
+		if v, ok := val.(*parser.DString); ok {
+			return string(*v), nil
 		}
 	case ColumnType_DATE:
-		if v, ok := val.(parser.DDate); ok {
-			return int64(v), nil
+		if v, ok := val.(*parser.DDate); ok {
+			return int64(*v), nil
 		}
 	case ColumnType_TIMESTAMP:
-		if v, ok := val.(parser.DTimestamp); ok {
+		if v, ok := val.(*parser.DTimestamp); ok {
 			return v.Time, nil
 		}
 	case ColumnType_INTERVAL:
-		if v, ok := val.(parser.DInterval); ok {
+		if v, ok := val.(*parser.DInterval); ok {
 			return v.Duration, nil
 		}
 	default:
@@ -853,19 +853,19 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.DBool(v != 0), nil
+		return parser.MakeDBool(parser.DBool(v != 0)), nil
 	case ColumnType_INT:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DInt(v), nil
+		return parser.NewDInt(parser.DInt(v)), nil
 	case ColumnType_FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DFloat(v), nil
+		return parser.NewDFloat(parser.DFloat(v)), nil
 	case ColumnType_DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
@@ -879,31 +879,31 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.DString(v), nil
+		return parser.NewDString(string(v)), nil
 	case ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DBytes(v), nil
+		return parser.NewDBytes(parser.DBytes(v)), nil
 	case ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DDate(v), nil
+		return parser.NewDDate(parser.DDate(v)), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DTimestamp{Time: v}, nil
+		return &parser.DTimestamp{Time: v}, nil
 	case ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
 		}
-		return parser.DInterval{Duration: d}, nil
+		return &parser.DInterval{Duration: d}, nil
 	default:
 		return nil, util.Errorf("unsupported column type: %s", kind)
 	}
@@ -915,8 +915,8 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 func checkValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
 	case ColumnType_STRING:
-		if v, ok := val.(parser.DString); ok {
-			if col.Type.Width > 0 && utf8.RuneCountInString(string(v)) > int(col.Type.Width) {
+		if v, ok := val.(*parser.DString); ok {
+			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)", col.Type.SQLString(), col.Name)
 			}
 		}

@@ -4877,44 +4877,44 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1169
 		{
-			sqlVAL.union.val = DBool(true)
+			sqlVAL.union.val = MakeDBool(true)
 		}
 	case 127:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1173
 		{
-			sqlVAL.union.val = DBool(false)
+			sqlVAL.union.val = MakeDBool(false)
 		}
 	case 128:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1177
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 130:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1192
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 131:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1196
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 132:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1200
 		{
-			expr := &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
+			expr := &CastExpr{Expr: NewDString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
 			var ctx EvalContext
 			d, err := expr.Eval(ctx)
 			if err != nil {
 				sqllex.Error("cannot evaluate to an interval type")
 				return 1
 			}
-			if _, ok := d.(DInterval); !ok {
+			if _, ok := d.(*DInterval); !ok {
 				panic("not an interval type")
 			}
 			sqlVAL.union.val = d
@@ -4923,13 +4923,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1215
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 135:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1219
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 136:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -4952,13 +4952,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1230
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 140:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1234
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 141:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -5400,7 +5400,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1563
 		{
-			sqlVAL.union.val = DInt(sqlDollar[1].union.ival().Val)
+			sqlVAL.union.val = NewDInt(DInt(sqlDollar[1].union.ival().Val))
 		}
 	case 215:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -7035,25 +7035,25 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2964
 		{
-			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: DBool(true)}
+			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: MakeDBool(true)}
 		}
 	case 509:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2968
 		{
-			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: DBool(true)}
+			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: MakeDBool(true)}
 		}
 	case 510:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2972
 		{
-			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: DBool(false)}
+			sqlVAL.union.val = &ComparisonExpr{Operator: Is, Left: sqlDollar[1].union.expr(), Right: MakeDBool(false)}
 		}
 	case 511:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2976
 		{
-			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: DBool(false)}
+			sqlVAL.union.val = &ComparisonExpr{Operator: IsNot, Left: sqlDollar[1].union.expr(), Right: MakeDBool(false)}
 		}
 	case 512:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -7802,7 +7802,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3518
 		{
-			sqlVAL.union.val = Exprs{DString(sqlDollar[1].str), sqlDollar[3].union.expr()}
+			sqlVAL.union.val = Exprs{NewDString(sqlDollar[1].str), sqlDollar[3].union.expr()}
 		}
 	case 649:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -7856,7 +7856,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3590
 		{
-			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), DInt(1), sqlDollar[2].union.expr()}
+			sqlVAL.union.val = Exprs{sqlDollar[1].union.expr(), NewDInt(1), sqlDollar[2].union.expr()}
 		}
 	case 658:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -8201,13 +8201,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3910
 		{
-			sqlVAL.union.val = DString(sqlDollar[1].str)
+			sqlVAL.union.val = NewDString(sqlDollar[1].str)
 		}
 	case 718:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3914
 		{
-			sqlVAL.union.val = DBytes(sqlDollar[1].str)
+			sqlVAL.union.val = NewDBytes(DBytes(sqlDollar[1].str))
 		}
 	case 719:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
@@ -8219,31 +8219,31 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3919
 		{
-			sqlVAL.union.val = &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
+			sqlVAL.union.val = &CastExpr{Expr: NewDString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
 		}
 	case 721:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3923
 		{
-			sqlVAL.union.val = &CastExpr{Expr: DString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
+			sqlVAL.union.val = &CastExpr{Expr: NewDString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
 		}
 	case 722:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:3927
 		{
-			sqlVAL.union.val = &CastExpr{Expr: DString(sqlDollar[5].str), Type: sqlDollar[1].union.colType()}
+			sqlVAL.union.val = &CastExpr{Expr: NewDString(sqlDollar[5].str), Type: sqlDollar[1].union.colType()}
 		}
 	case 723:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3931
 		{
-			sqlVAL.union.val = DBool(true)
+			sqlVAL.union.val = MakeDBool(true)
 		}
 	case 724:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3935
 		{
-			sqlVAL.union.val = DBool(false)
+			sqlVAL.union.val = MakeDBool(false)
 		}
 	case 725:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

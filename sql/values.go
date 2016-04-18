@@ -71,11 +71,11 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		vals, ok := data.(parser.DTuple)
+		vals, ok := data.(*parser.DTuple)
 		if !ok {
 			return nil, roachpb.NewUErrorf("expected a tuple, but found %T", data)
 		}
-		v.rows = append(v.rows, vals)
+		v.rows = append(v.rows, *vals)
 	}
 
 	return v, nil

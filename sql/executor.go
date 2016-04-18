@@ -1014,9 +1014,9 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 		return t, true
 	// Time datatypes get special representation in the database.
 	case time.Time:
-		return parser.DTimestamp{Time: t}, true
+		return &parser.DTimestamp{Time: t}, true
 	case time.Duration:
-		return parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}, true
+		return &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}, true
 	case *inf.Dec:
 		dd := &parser.DDecimal{}
 		dd.Set(t)
@@ -1031,19 +1031,19 @@ func (gp golangParameters) Arg(name string) (parser.Datum, bool) {
 	val := reflect.ValueOf(arg)
 	switch val.Kind() {
 	case reflect.Bool:
-		return parser.DBool(val.Bool()), true
+		return parser.MakeDBool(parser.DBool(val.Bool())), true
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return parser.DInt(val.Int()), true
+		return parser.NewDInt(parser.DInt(val.Int())), true
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return parser.DInt(val.Uint()), true
+		return parser.NewDInt(parser.DInt(val.Uint())), true
 	case reflect.Float32, reflect.Float64:
-		return parser.DFloat(val.Float()), true
+		return parser.NewDFloat(parser.DFloat(val.Float())), true
 	case reflect.String:
-		return parser.DString(val.String()), true
+		return parser.NewDString(val.String()), true
 	case reflect.Slice:
 		// Handle byte slices.
 		if val.Type().Elem().Kind() == reflect.Uint8 {
-			return parser.DBytes(val.Bytes()), true
+			return parser.NewDBytes(parser.DBytes(val.Bytes())), true
 		}
 	}
 
@@ -1056,16 +1056,16 @@ func checkResultDatum(datum parser.Datum) error {
 	}
 
 	switch datum.(type) {
-	case parser.DBool:
-	case parser.DInt:
-	case parser.DFloat:
+	case *parser.DBool:
+	case *parser.DInt:
+	case *parser.DFloat:
 	case *parser.DDecimal:
-	case parser.DBytes:
-	case parser.DString:
-	case parser.DDate:
-	case parser.DTimestamp:
-	case parser.DInterval:
-	case parser.DValArg:
+	case *parser.DBytes:
+	case *parser.DString:
+	case *parser.DDate:
+	case *parser.DTimestamp:
+	case *parser.DInterval:
+	case *parser.DValArg:
 		return fmt.Errorf("could not determine data type of %s %s", datum.Type(), datum)
 	default:
 		return util.Errorf("unsupported result type: %s", datum.Type())

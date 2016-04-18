@@ -101,7 +101,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := dummyCond.(DValArg); ok {
+		if _, ok := dummyCond.(*DValArg); ok {
 			return nil, fmt.Errorf("could not determine data type of parameter %s", dummyCond)
 		}
 		condArgType = dummyCond
@@ -114,7 +114,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := dummyVal.(DValArg); ok {
+		if _, ok := dummyVal.(*DValArg); ok {
 			return nil, fmt.Errorf("could not determine data type of parameter %s", dummyVal)
 		}
 	}
@@ -139,7 +139,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := nextDummyVal.(DValArg); ok && dummyVal == DNull {
+		if _, ok := nextDummyVal.(*DValArg); ok && dummyVal == DNull {
 			return nil, fmt.Errorf("could not determine data type of parameter %s", nextDummyVal)
 		}
 		if set, err := args.SetInferredType(nextDummyVal, dummyVal); err != nil {
@@ -437,7 +437,7 @@ func (expr *RangeCond) TypeCheck(args MapArgs) (Datum, error) {
 		return nil, err
 	}
 
-	return cmpOpResultType, nil
+	return DBoolFalse, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -494,7 +494,7 @@ func typeCheckExprs(args MapArgs, exprs []Expr) (Datum, error) {
 		}
 		tuple = append(tuple, d)
 	}
-	return tuple, nil
+	return &tuple, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -512,46 +512,46 @@ func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
 	if v, ok := args[expr.name]; ok {
 		return v, nil
 	}
-	return DValArg{name: expr.name}, nil
+	return &DValArg{name: expr.name}, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DValArg) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DValArg) TypeCheck(args MapArgs) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DBool) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DBool) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyBool, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DBytes) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DBytes) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyBytes, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DDate) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DDate) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyDate, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DFloat) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DFloat) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyFloat, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DDecimal) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DDecimal) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyDecimal, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DInt) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DInt) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyInt, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DInterval) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DInterval) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyInterval, nil
 }
 
@@ -561,26 +561,26 @@ func (expr dNull) TypeCheck(args MapArgs) (Datum, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DString) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DString) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyString, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DTimestamp) TypeCheck(args MapArgs) (Datum, error) {
+func (expr *DTimestamp) TypeCheck(args MapArgs) (Datum, error) {
 	return DummyTimestamp, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DTuple) TypeCheck(args MapArgs) (Datum, error) {
-	tuple := make(DTuple, 0, len(expr))
-	for _, v := range expr {
+func (expr *DTuple) TypeCheck(args MapArgs) (Datum, error) {
+	tuple := make(DTuple, 0, len(*expr))
+	for _, v := range *expr {
 		d, err := v.TypeCheck(args)
 		if err != nil {
 			return nil, err
 		}
 		tuple = append(tuple, d)
 	}
-	return tuple, nil
+	return &tuple, nil
 }
 
 func typeCheckBooleanExprs(args MapArgs, op string, exprs ...Expr) (Datum, error) {
@@ -641,7 +641,7 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 			}
 		}
 
-		return cmpOpResultType, cmp, nil
+		return DBoolFalse, cmp, nil
 	}
 
 	return nil, CmpOp{}, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
@@ -649,8 +649,8 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 }
 
 func typeCheckTupleEQ(args MapArgs, lDummy, rDummy Datum) error {
-	lTuple := lDummy.(DTuple)
-	rTuple := rDummy.(DTuple)
+	lTuple := *lDummy.(*DTuple)
+	rTuple := *rDummy.(*DTuple)
 	if len(lTuple) != len(rTuple) {
 		return fmt.Errorf("unequal number of entries in tuple expressions: %d, %d", len(lTuple), len(rTuple))
 	}
@@ -669,7 +669,7 @@ func typeCheckTupleIN(args MapArgs, arg, values Datum) error {
 		return nil
 	}
 
-	vtuple := values.(DTuple)
+	vtuple := *values.(*DTuple)
 	for _, val := range vtuple {
 		if _, _, err := typeCheckComparisonOp(args, EQ, arg, val); err != nil {
 			return err

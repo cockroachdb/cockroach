@@ -67,7 +67,7 @@ func makeIntTestDatum(count int) []parser.Datum {
 
 	vals := make([]parser.Datum, count)
 	for i := range vals {
-		vals[i] = parser.DInt(rng.Int63())
+		vals[i] = parser.NewDInt(parser.DInt(rng.Int63()))
 	}
 	return vals
 }
@@ -77,7 +77,7 @@ func makeFloatTestDatum(count int) []parser.Datum {
 
 	vals := make([]parser.Datum, count)
 	for i := range vals {
-		vals[i] = parser.DFloat(rng.Float64())
+		vals[i] = parser.NewDFloat(parser.DFloat(rng.Float64()))
 	}
 	return vals
 }

@@ -344,40 +344,40 @@ func (expr NumVal) Walk(_ Visitor) Expr { return expr }
 func (expr ValArg) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DBool) Walk(_ Visitor) Expr { return expr }
+func (expr *DBool) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DBytes) Walk(_ Visitor) Expr { return expr }
+func (expr *DBytes) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DDate) Walk(_ Visitor) Expr { return expr }
+func (expr *DDate) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DFloat) Walk(_ Visitor) Expr { return expr }
+func (expr *DFloat) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DDecimal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DInt) Walk(_ Visitor) Expr { return expr }
+func (expr *DInt) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DInterval) Walk(_ Visitor) Expr { return expr }
+func (expr *DInterval) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr dNull) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DString) Walk(_ Visitor) Expr { return expr }
+func (expr *DString) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DTimestamp) Walk(_ Visitor) Expr { return expr }
+func (expr *DTimestamp) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DTuple) Walk(_ Visitor) Expr { return expr }
+func (expr *DTuple) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr DValArg) Walk(_ Visitor) Expr { return expr }
+func (expr *DValArg) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
@@ -753,7 +753,7 @@ func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 	if m == nil {
 		return nil, nil
 	}
-	v, ok := d.(DValArg)
+	v, ok := d.(*DValArg)
 	if !ok {
 		return nil, nil
 	}

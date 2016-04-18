@@ -103,15 +103,15 @@ func (n *explainTraceNode) Next() bool {
 					duration = fmt.Sprintf("%.3fms", time.Duration(entry.Timestamp.Sub(n.lastTS)).Seconds()*1000)
 				}
 				cols := append(parser.DTuple{
-					parser.DString(commulativeDuration),
-					parser.DString(duration),
-					parser.DInt(basePos + i),
-					parser.DString(sp.Operation),
-					parser.DString(entry.Event),
+					parser.NewDString(commulativeDuration),
+					parser.NewDString(duration),
+					parser.NewDInt(parser.DInt(basePos + i)),
+					parser.NewDString(sp.Operation),
+					parser.NewDString(entry.Event),
 				}, vals.AsRow()...)
 
 				// Timestamp is added for sorting, but will be removed after sort.
-				n.rows = append(n.rows, append(cols, parser.DTimestamp{Time: entry.Timestamp}))
+				n.rows = append(n.rows, append(cols, &parser.DTimestamp{Time: entry.Timestamp}))
 				n.lastTS, n.lastPos = entry.Timestamp, i
 			}
 		}

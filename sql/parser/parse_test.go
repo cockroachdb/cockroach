@@ -629,7 +629,7 @@ func TestParse2(t *testing.T) {
 		}
 		s := stmts.String()
 		if d.expected != s {
-			t.Errorf("%s: expected %s, but found (%d statements): %q", d.sql, d.expected, len(stmts), s)
+			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
 		if _, err := parseTraditional(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
