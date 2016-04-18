@@ -325,6 +325,9 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 	if err != nil {
 		return nil, err
 	}
+	if err := plan.Start(); err != nil {
+		return nil, err
+	}
 	if !plan.Next() {
 		if pErr := plan.PErr(); pErr != nil {
 			return nil, pErr
@@ -344,6 +347,9 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 	plan, pErr := p.query(sql, args...)
 	if pErr != nil {
+		return 0, pErr
+	}
+	if pErr := plan.Start(); pErr != nil {
 		return 0, pErr
 	}
 	return countRowsAffected(plan), plan.PErr()
@@ -411,8 +417,18 @@ type planNode interface {
 	// Values().
 	DebugValues() debugValues
 
-	// Next advances to the next row, returning false if an error is encountered
-	// or if there is no next row.
+	// Start begins the query/statement and initializes what needs to be
+	// initialized (e.g. final type checking of placeholders, first query
+	// plan). Returns an error if initialization fails.
+	// The SQL "prepare" phase should merely build the plan node(s),
+	// and Start/Next should be only called during "execute".
+	Start() *roachpb.Error
+
+	// Next performs one unit of work, returning false if an error is
+	// encountered or if there is no more work to do. For statements
+	// that return a result set, the Value() method will return one row
+	// of results each time that Next() returns true.
+	// See executor.go: countRowsAffected() and execStmt() for an example.
 	Next() bool
 
 	// PErr returns the error, if any, encountered during iteration.
@@ -434,6 +450,12 @@ type planNode interface {
 	// MarkDebug puts the node in a special debugging mode, which allows
 	// DebugValues to be used.
 	MarkDebug(mode explainMode)
+}
+
+type planNodeFastPath interface {
+	// FastPathResults returns the affected row count and true if the
+	// node has no result set and has already executed when Start() completes.
+	FastPathResults() (int, bool)
 }
 
 var _ planNode = &distinctNode{}
@@ -476,6 +498,10 @@ func (*emptyNode) DebugValues() debugValues {
 		value:  parser.DNull.String(),
 		output: debugValueRow,
 	}
+}
+
+func (e *emptyNode) Start() *roachpb.Error {
+	return nil
 }
 
 func (e *emptyNode) Next() bool {

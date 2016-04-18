@@ -461,8 +461,6 @@ func (stmt *Explain) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Insert) CopyNode() *Insert {
 	stmtCopy := *stmt
-	tableCopy := *stmt.Table
-	stmtCopy.Table = &tableCopy
 	stmtCopy.Columns = copyQualifiedNames(stmt.Columns)
 	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
 	return &stmtCopy
