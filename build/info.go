@@ -14,7 +14,7 @@
 //
 // Author: Peter Mattis (peter@cockroachlabs.com)
 
-package util
+package build
 
 import (
 	"fmt"
@@ -35,26 +35,26 @@ import "C"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	buildTag         string // Tag of this build (git describe)
-	buildTime        string // Build time in UTC (year/month/day hour:min:sec)
-	buildDeps        string // Git SHAs of dependencies
-	buildCgoCompiler = C.GoString(C.compilerVersion())
-	buildPlatform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
+	tag         string // Tag of this build (git describe)
+	time        string // Build time in UTC (year/month/day hour:min:sec)
+	deps        string // Git SHAs of dependencies
+	cgoCompiler = C.GoString(C.compilerVersion())
+	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 )
 
 // Short returns a pretty printed build and version summary.
-func (b BuildInfo) Short() string {
+func (b Info) Short() string {
 	return fmt.Sprintf("CockroachDB %s (%s, built %s, %s)", b.Tag, b.Platform, b.Time, b.GoVersion)
 }
 
-// GetBuildInfo ...
-func GetBuildInfo() BuildInfo {
-	return BuildInfo{
+// GetInfo ...
+func GetInfo() Info {
+	return Info{
 		GoVersion:   runtime.Version(),
-		Tag:         buildTag,
-		Time:        buildTime,
-		Deps:        buildDeps,
-		CgoCompiler: buildCgoCompiler,
-		Platform:    buildPlatform,
+		Tag:         tag,
+		Time:        time,
+		Deps:        deps,
+		CgoCompiler: cgoCompiler,
+		Platform:    platform,
 	}
 }

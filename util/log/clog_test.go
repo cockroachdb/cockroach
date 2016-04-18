@@ -469,7 +469,7 @@ func TestRollover(t *testing.T) {
 		err = e
 	}
 	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = 512
+	MaxSize = 1024
 
 	Info("x") // Be sure we have a file.
 	info, ok := logging.file[InfoLog].(*syncBuffer)

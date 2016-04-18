@@ -59,7 +59,7 @@ module Models {
     }
 
     /*****************************
-     * util/build.proto
+     * build/info.proto
      ****************************/
     export interface BuildInfo {
       goVersion: string;

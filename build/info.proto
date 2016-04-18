@@ -15,13 +15,13 @@
 // Author: Matt Tracy (matt@cockroachlabs.com)
 
 syntax = "proto2";
-package cockroach.util;
-option go_package = "util";
+package cockroach.build;
+option go_package = "build";
 
 import weak "gogoproto/gogo.proto";
 
-// BuildInfo describes build information for this CockroachDB binary.
-message BuildInfo {
+// Info describes build information for this CockroachDB binary.
+message Info {
   optional string go_version = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "goVersion"];
   optional string tag = 2 [(gogoproto.nullable) = false];
   optional string time = 3 [(gogoproto.nullable) = false];

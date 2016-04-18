@@ -22,9 +22,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/spf13/cobra"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // Proxy to allow overrides in tests.
@@ -39,7 +38,7 @@ var versionCmd = &cobra.Command{
 Output build version information.
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		info := util.GetBuildInfo()
+		info := build.GetInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 		fmt.Fprintf(tw, "Build Tag:   %s\n", info.Tag)
 		fmt.Fprintf(tw, "Build Time:  %s\n", info.Time)

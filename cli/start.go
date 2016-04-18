@@ -29,6 +29,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -155,9 +156,6 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	info := util.GetBuildInfo()
-	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.GoVersion)
-
 	// Default user for servers.
 	cliContext.User = security.NodeUser
 
@@ -190,6 +188,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	info := build.GetInfo()
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())

@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -230,7 +231,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 	// Generate an node status with no store data.
 	nodeStat := &NodeStatus{
 		Desc:          mr.mu.desc,
-		BuildInfo:     util.GetBuildInfo(),
+		BuildInfo:     build.GetInfo(),
 		UpdatedAt:     now,
 		StartedAt:     mr.mu.startedAt,
 		StoreStatuses: make([]StoreStatus, 0, mr.mu.lastSummaryCount),
