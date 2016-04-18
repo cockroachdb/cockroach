@@ -695,7 +695,7 @@ func runBenchmarkOrderBy(b *testing.B, db *sql.DB, count int, limit int, distinc
 	}
 	query := fmt.Sprintf(`SELECT %sv FROM bench.sort`, dist)
 	if limit != 0 {
-		query = fmt.Sprintf(`%s ORDER BY v DESC, w ASC, k DESC LIMIT %d`, query, limit)
+		query = fmt.Sprintf(`%s ORDER BY v ASC, w ASC, k DESC LIMIT %d`, query, limit)
 	}
 
 	b.ResetTimer()
@@ -735,10 +735,42 @@ func BenchmarkSort100000Limit10_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, false) })
 }
 
+func BenchmarkSort100000Limit100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 100, false) })
+}
+
+func BenchmarkSort100000Limit100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 100, false) })
+}
+
+func BenchmarkSort100000Limit500_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 500, false) })
+}
+
+func BenchmarkSort100000Limit500_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 500, false) })
+}
+
 func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
 }
 
 func BenchmarkSort100000Limit10Distinct_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
+}
+
+func BenchmarkSort100000Limit100Distinct_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 100, true) })
+}
+
+func BenchmarkSort100000Limit100Distinct_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 100, true) })
+}
+
+func BenchmarkSort100000Limit500Distinct_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 500, true) })
+}
+
+func BenchmarkSort100000Limit500Distinct_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 500, true) })
 }
