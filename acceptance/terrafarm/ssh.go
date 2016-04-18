@@ -29,7 +29,7 @@ func (f *Farmer) defaultKeyFile() string {
 	if err == nil {
 		base = me.HomeDir
 	}
-	return filepath.Join(base, ".ssh/"+f.KeyName+".pem")
+	return filepath.Join(base, ".ssh/"+f.KeyName)
 }
 
 func (f *Farmer) ssh(host, keyfile, cmd string) (stdout string, stderr string, _ error) {
