@@ -541,7 +541,7 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
+func decodeIndexKey(a *datumAlloc, desc *TableDescriptor, indexID IndexID,
 	valTypes, vals []parser.Datum, colDirs []encoding.Direction, key []byte) ([]byte, error) {
 	decodedIndexID, remaining, err := decodeIndexKeyPrefix(desc, key)
 	if err != nil {
@@ -551,7 +551,7 @@ func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
 	if decodedIndexID != indexID {
 		return nil, util.Errorf("%s: unexpected index ID: %d != %d", desc.Name, indexID, decodedIndexID)
 	}
-	return decodeKeyVals(valTypes, vals, colDirs, remaining)
+	return decodeKeyVals(a, valTypes, vals, colDirs, remaining)
 }
 
 // decodeKeyVals decodes the values that are part of the key. ValTypes is a
@@ -563,8 +563,8 @@ func decodeIndexKey(desc *TableDescriptor, indexID IndexID,
 // are returned. A slice of directions can be provided to enforce encoding
 // direction on each value in valTypes. If this slice is nil, the direction
 // used will default to encoding.Ascending.
-func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Direction,
-	key []byte) ([]byte, error) {
+func decodeKeyVals(a *datumAlloc, valTypes, vals []parser.Datum,
+	directions []encoding.Direction, key []byte) ([]byte, error) {
 	if directions != nil && len(directions) != len(valTypes) {
 		return nil, util.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
 			len(directions), len(valTypes))
@@ -575,7 +575,7 @@ func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Directio
 			direction = directions[j]
 		}
 		var err error
-		vals[j], key, err = decodeTableKey(valTypes[j], key, direction)
+		vals[j], key, err = decodeTableKey(a, valTypes[j], key, direction)
 		if err != nil {
 			return nil, err
 		}
@@ -583,7 +583,110 @@ func decodeKeyVals(valTypes, vals []parser.Datum, directions []encoding.Directio
 	return key, nil
 }
 
-func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
+const datumAllocSize = 16 // Arbitrary, could be tuned.
+
+// datumAlloc provides batch allocation of datum pointers, amortizing the cost
+// of the allocations.
+type datumAlloc struct {
+	dintAlloc       []parser.DInt
+	dfloatAlloc     []parser.DFloat
+	dstringAlloc    []parser.DString
+	dbytesAlloc     []parser.DBytes
+	ddecimalAlloc   []parser.DDecimal
+	ddateAlloc      []parser.DDate
+	dtimestampAlloc []parser.DTimestamp
+	dintervalAlloc  []parser.DInterval
+}
+
+func (a *datumAlloc) newDInt(v parser.DInt) *parser.DInt {
+	buf := &a.dintAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DInt, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDFloat(v parser.DFloat) *parser.DFloat {
+	buf := &a.dfloatAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DFloat, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDString(v parser.DString) *parser.DString {
+	buf := &a.dstringAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DString, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDBytes(v parser.DBytes) *parser.DBytes {
+	buf := &a.dbytesAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DBytes, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDDecimal(v parser.DDecimal) *parser.DDecimal {
+	buf := &a.ddecimalAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DDecimal, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDDate(v parser.DDate) *parser.DDate {
+	buf := &a.ddateAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DDate, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDTimestamp(v parser.DTimestamp) *parser.DTimestamp {
+	buf := &a.dtimestampAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DTimestamp, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func (a *datumAlloc) newDInterval(v parser.DInterval) *parser.DInterval {
+	buf := &a.dintervalAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DInterval, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+func decodeTableKey(a *datumAlloc, valType parser.Datum, key []byte, dir encoding.Direction) (
 	parser.Datum, []byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, nil, util.Errorf("invalid direction: %d", dir)
@@ -602,6 +705,8 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
+		// No need to chunk allocate DBool as MakeDBool returns either
+		// parser.DBoolTrue or parser.DBoolFalse.
 		return parser.MakeDBool(parser.DBool(i != 0)), rkey, err
 	case *parser.DInt:
 		var i int64
@@ -610,7 +715,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return parser.NewDInt(parser.DInt(i)), rkey, err
+		return a.newDInt(parser.DInt(i)), rkey, err
 	case *parser.DFloat:
 		var f float64
 		if dir == encoding.Ascending {
@@ -618,7 +723,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
-		return parser.NewDFloat(parser.DFloat(f)), rkey, err
+		return a.newDFloat(parser.DFloat(f)), rkey, err
 	case *parser.DDecimal:
 		var d *inf.Dec
 		if dir == encoding.Ascending {
@@ -626,7 +731,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		dd := &parser.DDecimal{}
+		dd := a.newDDecimal(parser.DDecimal{})
 		dd.Set(d)
 		return dd, rkey, err
 	case *parser.DString:
@@ -636,7 +741,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, r, err = encoding.DecodeStringDescending(key, nil)
 		}
-		return parser.NewDString(r), rkey, err
+		return a.newDString(parser.DString(r)), rkey, err
 	case *parser.DBytes:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -644,7 +749,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
-		return parser.NewDBytes(parser.DBytes(r)), rkey, err
+		return a.newDBytes(parser.DBytes(r)), rkey, err
 	case *parser.DDate:
 		var t int64
 		if dir == encoding.Ascending {
@@ -652,7 +757,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
-		return parser.NewDDate(parser.DDate(t)), rkey, err
+		return a.newDDate(parser.DDate(t)), rkey, err
 	case *parser.DTimestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
@@ -660,7 +765,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		return &parser.DTimestamp{Time: t}, rkey, err
+		return a.newDTimestamp(parser.DTimestamp{Time: t}), rkey, err
 	case *parser.DInterval:
 		var d duration.Duration
 		if dir == encoding.Ascending {
@@ -668,7 +773,7 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 		} else {
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
-		return &parser.DInterval{Duration: d}, rkey, err
+		return a.newDInterval(parser.DInterval{Duration: d}), rkey, err
 	default:
 		return nil, nil, util.Errorf("TODO(pmattis): decoded index key: %s", valType.Type())
 	}
@@ -842,7 +947,9 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 // unmarshalColumnValue decodes the value from a key-value pair using the type
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
-func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Datum, error) {
+func unmarshalColumnValue(
+	a *datumAlloc, kind ColumnType_Kind, value *roachpb.Value,
+) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}
@@ -859,19 +966,19 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.NewDInt(parser.DInt(v)), nil
+		return a.newDInt(parser.DInt(v)), nil
 	case ColumnType_FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
-		return parser.NewDFloat(parser.DFloat(v)), nil
+		return a.newDFloat(parser.DFloat(v)), nil
 	case ColumnType_DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
 			return nil, err
 		}
-		dd := &parser.DDecimal{}
+		dd := a.newDDecimal(parser.DDecimal{})
 		dd.Set(v)
 		return dd, nil
 	case ColumnType_STRING:
@@ -879,31 +986,31 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.NewDString(string(v)), nil
+		return a.newDString(parser.DString(v)), nil
 	case ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
-		return parser.NewDBytes(parser.DBytes(v)), nil
+		return a.newDBytes(parser.DBytes(v)), nil
 	case ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return parser.NewDDate(parser.DDate(v)), nil
+		return a.newDDate(parser.DDate(v)), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
-		return &parser.DTimestamp{Time: v}, nil
+		return a.newDTimestamp(parser.DTimestamp{Time: v}), nil
 	case ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
 		}
-		return &parser.DInterval{Duration: d}, nil
+		return a.newDInterval(parser.DInterval{Duration: d}), nil
 	default:
 		return nil, util.Errorf("unsupported column type: %s", kind)
 	}

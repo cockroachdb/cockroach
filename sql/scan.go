@@ -84,6 +84,9 @@ type scanNode struct {
 	kv        client.KeyValue
 	kvEnd     bool
 	limitHint int64
+
+	// Buffered allocation of decoded datums.
+	alloc datumAlloc
 }
 
 func (n *scanNode) Columns() []ResultColumn {
@@ -391,7 +394,7 @@ func (n *scanNode) computeOrdering(index *IndexDescriptor, exactPrefix int, reve
 }
 
 func (n *scanNode) readIndexKey(k roachpb.Key) ([]byte, error) {
-	return decodeIndexKey(&n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, k)
+	return decodeIndexKey(&n.alloc, &n.desc, n.index.ID, n.valTypes, n.vals, n.columnDirs, k)
 }
 
 func (n *scanNode) processKV(kv client.KeyValue) bool {
@@ -457,7 +460,7 @@ func (n *scanNode) processKV(kv client.KeyValue) bool {
 	} else {
 		if n.implicitVals != nil {
 			var err error
-			_, err = decodeKeyVals(n.implicitValTypes, n.implicitVals, nil, kv.ValueBytes())
+			_, err = decodeKeyVals(&n.alloc, n.implicitValTypes, n.implicitVals, nil, kv.ValueBytes())
 			n.pErr = roachpb.NewError(err)
 			if n.pErr != nil {
 				return false
@@ -597,7 +600,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		return nil, false
 	}
 	kind := n.desc.Columns[idx].Type.Kind
-	d, err := unmarshalColumnValue(kind, kv.Value)
+	d, err := unmarshalColumnValue(&n.alloc, kind, kv.Value)
 	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil
 }

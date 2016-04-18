@@ -140,6 +140,7 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
 	}
 	result := b.Results[index]
+	var alloc datumAlloc
 	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
 			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
@@ -163,7 +164,7 @@ func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roa
 				dirs = append(dirs, convertedDir)
 			}
 			vals := make([]parser.Datum, len(valTypes))
-			if _, err := decodeKeyVals(valTypes, vals, dirs, key); err != nil {
+			if _, err := decodeKeyVals(&alloc, valTypes, vals, dirs, key); err != nil {
 				return roachpb.NewError(err)
 			}
 
