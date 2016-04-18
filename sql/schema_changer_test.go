@@ -17,6 +17,7 @@
 package sql_test
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -24,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
@@ -421,24 +423,148 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 }
 
+// Run a particular schema change and run some OLTP operations in parallel, as
+// soon as the schema change starts executing its backfill.
+func runSchemaChangeWithOperations(
+	t *testing.T,
+	sqlDB *sql.DB,
+	kvDB *client.DB,
+	schemaChange string,
+	maxValue int,
+	keyMultiple int,
+	descKey roachpb.Key,
+) {
+	desc := &csql.Descriptor{}
+	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+		t.Fatal(pErr)
+	}
+	tableDesc := desc.GetTable()
+	version := tableDesc.Version
+
+	// Run the schema change in a separate goroutine.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		start := timeutil.Now()
+		// Start schema change that eventually runs a backfill.
+		if _, err := sqlDB.Exec(schemaChange); err != nil {
+			t.Error(err)
+		}
+		t.Logf("schema change %s took %v", schemaChange, timeutil.Since(start))
+		wg.Done()
+	}()
+
+	// Wait until the backfills for the schema change starts.
+	util.SucceedsSoon(t, func() error {
+		desc := &csql.Descriptor{}
+		if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+			t.Fatal(pErr)
+		}
+		table := desc.GetTable()
+		if table.Version == version+2 {
+			// Version upgrade has happened, backfills can proceed.
+			// Check that the descriptor is the right state.
+			for _, m := range table.Mutations {
+				if (m.Direction == csql.DescriptorMutation_ADD &&
+					m.State != csql.DescriptorMutation_WRITE_ONLY) ||
+					(m.Direction == csql.DescriptorMutation_DROP &&
+						m.State != csql.DescriptorMutation_DELETE_ONLY) {
+					t.Fatalf("mutation %v in a bad state", m)
+				}
+			}
+			return nil
+		}
+		return errors.New("version not updated")
+	})
+
+	// Run a variety of operations during the backfill.
+
+	// Grabbing a schema change lease on the table will fail, disallowing
+	// another schema change from being simultaneously executed.
+	sc := csql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil)
+	if l, err := sc.AcquireLease(); err == nil {
+		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
+	}
+
+	// Update some rows.
+	var updatedKeys []int
+	for i := 0; i < 10; i++ {
+		k := rand.Intn(maxValue)
+		v := maxValue + i + 1
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, v); err != nil {
+			t.Fatal(err)
+		}
+		updatedKeys = append(updatedKeys, k)
+	}
+
+	// Reupdate updated values back to what they were before.
+	for _, k := range updatedKeys {
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, maxValue-k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Delete some rows.
+	deleteStartKey := rand.Intn(maxValue - 10)
+	for i := 0; i < 10; i++ {
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Reinsert deleted rows.
+	for i := 0; i < 10; i++ {
+		k := deleteStartKey + i
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Insert some new rows.
+	numInserts := 10
+	for i := 0; i < numInserts; i++ {
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, maxValue+i+1, maxValue+i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	wg.Wait() // for schema change to complete.
+
+	// Verify the number of keys left behind in the table to validate schema
+	// change operations.
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := keyMultiple * (maxValue + numInserts + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// Delete the rows inserted.
+	for i := 0; i < numInserts; i++ {
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, maxValue+i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // Test schema change backfills are not affected by various operations
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("TODO(vivek): #6124")
-
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE UNIQUE INDEX vidx ON t.test (v);
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	// Bulk insert.
-	maxValue := 4000
+	// TODO(vivek): increase maxValue once #3274 is fixed.
+	maxValue := 800
 	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
 	for i := 1; i <= maxValue; i++ {
 		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
@@ -461,97 +587,62 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
-	version := desc.GetTable().Version
-
-	// Run the schema changes in a separate goroutine.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		start := timeutil.Now()
-		// Start schema change that eventually runs a number of backfills.
-		if _, err := sqlDB.Exec(`
-BEGIN;
-ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4');
-CREATE UNIQUE INDEX foo ON t.test (v);
-END;
-`); err != nil {
-			t.Error(err)
-		}
-		t.Logf("schema changes took %s", timeutil.Since(start))
-		wg.Done()
-	}()
-
-	// Wait until the backfills for the schema changes above have
-	// started.
-	util.SucceedsSoon(t, func() error {
-		if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-			t.Fatal(pErr)
-		}
-		if desc.GetTable().Version == version+2 {
-			// Version upgrade has happened, backfills can proceed.
-			return nil
-		}
-		return errors.New("version not updated")
-	})
-
-	// Run a variety of operations while the backfills are happening.
-
-	// Update some rows.
-	var updatedKeys []int
-	for i := 0; i < 10; i++ {
-		k := rand.Intn(maxValue)
-		v := maxValue + i + 1
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, v); err != nil {
-			t.Fatal(err)
-		}
-		updatedKeys = append(updatedKeys, k)
-	}
-
-	// Renaming an index in the middle of the backfills will not affect
-	// the backfills because the above schema changes have the schema change
-	// lease on the table. All future schema changes have to wait in line for
-	// the lease.
-	if _, err := sqlDB.Exec(`
-ALTER INDEX t.test@foo RENAME TO bar;
-`); err != nil {
+	tableDesc := desc.GetTable()
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	// number of keys == 4 * number of rows; 3 columns and 1 index entry for
+	// each row.
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
+	} else if e := 4 * (maxValue + 1); len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 
-	// Reupdate updated values back to what they were before.
-	for _, k := range updatedKeys {
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, maxValue-k); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Run some schema changes with operations.
 
-	// Delete some rows and reinsert them.
-	deleteStartKey := rand.Intn(maxValue - 10)
-	for i := 0; i < 10; i++ {
-		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Reinsert deleted keys.
-	for i := 0; i < 10; i++ {
-		k := deleteStartKey + i
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Add column.
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
+		maxValue,
+		5,
+		descKey)
 
-	// Insert some new rows.
-	numInserts := 10
-	for i := 0; i < numInserts; i++ {
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, maxValue+i+1, maxValue+i+1); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Drop column.
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		"ALTER TABLE t.test DROP pi",
+		maxValue,
+		4,
+		descKey)
 
-	// Wait until schema changes have completed.
-	wg.Wait()
+	// Add index.
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		"CREATE UNIQUE INDEX foo ON t.test (v)",
+		maxValue,
+		5,
+		descKey)
 
-	// Verify that the index over v is consistent.
-	rows, err := sqlDB.Query(`SELECT v from t.test@bar`)
+	// Drop index.
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		"DROP INDEX t.test@vidx",
+		maxValue,
+		4,
+		descKey)
+
+	// Verify that the index foo over v is consistent, and that column x has
+	// been backfilled properly.
+	rows, err := sqlDB.Query(`SELECT v, x from t.test@foo`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,17 +650,23 @@ ALTER INDEX t.test@foo RENAME TO bar;
 	count := 0
 	for ; rows.Next(); count++ {
 		var val int
-		if err := rows.Scan(&val); err != nil {
-			t.Fatal(err)
+		var x float64
+		if err := rows.Scan(&val, &x); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
 		}
 		if count != val {
 			t.Errorf("e = %d, v = %d", count, val)
+		}
+		if 1.4 != x {
+			t.Errorf("e = %f, v = %f", 1.4, x)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if eCount := maxValue + numInserts + 1; eCount != count {
+	eCount := maxValue + 1
+	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 }
