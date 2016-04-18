@@ -19,6 +19,7 @@ package sql_test
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -426,10 +427,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	max_value := 2000
-	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, max_value)
-	for i := 1; i <= max_value; i++ {
-		insert += fmt.Sprintf(` ,(%d, %d)`, i, max_value-i)
+	maxValue := 4000
+	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
 	}
 	if _, err := sqlDB.Exec(insert); err != nil {
 		t.Fatal(err)
@@ -482,15 +483,18 @@ END;
 		return errors.New("version not updated")
 	})
 
-	// TODO(vivek): uncomment these inserts when #5817 is fixed.
-	// Insert some new rows in the table while the backfills are running.
-	//num_values := 5
-	//for i := 0; i < num_values; i++ {
-	//	t.Logf("inserting a new value into the table")
-	//	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, max_value+i+1, max_value+i+1); err != nil {
-	//		t.Fatal(err)
-	//	}
-	//}
+	// Run a variety of operations while the backfills are happening.
+
+	// Update some rows.
+	var updatedKeys []int
+	for i := 0; i < 10; i++ {
+		k := rand.Intn(maxValue)
+		v := maxValue + i + 1
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, v); err != nil {
+			t.Fatal(err)
+		}
+		updatedKeys = append(updatedKeys, k)
+	}
 
 	// Renaming an index in the middle of the backfills will not affect
 	// the backfills because the above schema changes have the schema change
@@ -502,6 +506,36 @@ ALTER INDEX t.test@foo RENAME TO bar;
 		t.Fatal(err)
 	}
 
+	// Reupdate updated values back to what they were before.
+	for _, k := range updatedKeys {
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, maxValue-k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Delete some rows and reinsert them.
+	deleteStartKey := rand.Intn(maxValue - 10)
+	for i := 0; i < 10; i++ {
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Reinsert deleted keys.
+	for i := 0; i < 10; i++ {
+		k := deleteStartKey + i
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Insert some new rows.
+	numInserts := 10
+	for i := 0; i < numInserts; i++ {
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, maxValue+i+1, maxValue+i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Wait until schema changes have completed.
 	wg.Wait()
 
@@ -511,20 +545,20 @@ ALTER INDEX t.test@foo RENAME TO bar;
 		t.Fatal(err)
 	}
 
-	i := 0
-	for ; rows.Next(); i++ {
+	count := 0
+	for ; rows.Next(); count++ {
 		var val int
 		if err := rows.Scan(&val); err != nil {
 			t.Fatal(err)
 		}
-		if i != val {
-			t.Errorf("e = %d, v = %d", i, val)
+		if count != val {
+			t.Errorf("e = %d, v = %d", count, val)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if max_value+1 != i {
-		t.Fatalf("read the wrong number of rows: e = %d, v = %d", max_value+1, i)
+	if eCount := maxValue + numInserts + 1; eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 }
