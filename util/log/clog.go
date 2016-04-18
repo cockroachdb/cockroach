@@ -35,6 +35,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/build"
+	"github.com/cockroachdb/cockroach/util/caller"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -935,16 +938,30 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
-	// Write header.
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Log file created at: %s\n", now.Format("2006/01/02 15:04:05"))
-	fmt.Fprintf(&buf, "Running on machine: %s\n", host)
-	fmt.Fprintf(&buf, "Binary: Built with %s %s for %s/%s\n", runtime.Compiler, runtime.Version(), runtime.GOOS, runtime.GOARCH)
-	fmt.Fprintf(&buf, "Log line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n")
-	var n int
-	n, err = sb.file.Write(buf.Bytes())
-	sb.nbytes += uint64(n)
-	return err
+	f, l, _ := caller.Lookup(1)
+	for _, msg := range []string{
+		fmt.Sprintf("[config] file created at: %s\n", now.Format("2006/01/02 15:04:05")),
+		fmt.Sprintf("[config] running on machine: %s\n", host),
+		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
+		fmt.Sprintf("[config] arguments: %s\n", os.Args),
+		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n"),
+	} {
+		buf := formatLogEntry(Entry{
+			Severity: int(sb.sev),
+			Time:     now.UnixNano(),
+			File:     f,
+			Line:     l,
+			Message:  msg,
+		}, nil, nil)
+		var n int
+		n, err = sb.file.Write(buf.Bytes())
+		sb.nbytes += uint64(n)
+		if err != nil {
+			return err
+		}
+		logging.putBuffer(buf)
+	}
+	return nil
 }
 
 // bufferSize sizes the buffer associated with each log file. It's large
