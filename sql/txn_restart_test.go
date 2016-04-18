@@ -110,7 +110,6 @@ func injectErrors(
 
 	switch req := req.(type) {
 	case *roachpb.ConditionalPutRequest:
-		txnID := *hdr.Txn.TxnMeta.ID
 		for key, count := range magicVals.restartCounts {
 			checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn)
 			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
@@ -136,6 +135,7 @@ func injectErrors(
 		// keep track of the txn id so we can fail it later on.
 		for key, count := range magicVals.endTxnRestartCounts {
 			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
+				txnID := *hdr.Txn.TxnMeta.ID
 				if _, found := magicVals.txnsToFail[txnID]; found {
 					continue
 				}
