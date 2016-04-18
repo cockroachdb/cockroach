@@ -28,27 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
-
-type isSessionTimezone interface {
-	isSessionTimezone()
-}
-
-// SessionLocation ...
-type SessionLocation struct {
-	Location string
-}
-
-// SessionOffset ...
-type SessionOffset struct {
-	Offset int64
-}
-
-func (*SessionLocation) isSessionTimezone() {}
-func (*SessionOffset) isSessionTimezone()   {}
 
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
@@ -62,7 +44,7 @@ type Session struct {
 
 	planner planner
 
-	Timezone              isSessionTimezone
+	Location              *time.Location
 	DefaultIsolationLevel roachpb.IsolationType
 	Trace                 trace.Trace
 }
@@ -76,13 +58,13 @@ type SessionArgs struct {
 // NewSession creates and initializes new Session object.
 // remote can be nil.
 func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
-	s := Session{}
+	s := Session{Location: time.UTC}
 	s.Database = args.Database
 	s.User = args.User
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
 		// evalCtx is set in the Executor, for each Prepare or Execute.
-		evalCtx:       parser.EvalContext{},
+		evalCtx:       parser.EvalContext{Location: s.Location},
 		leaseMgr:      e.ctx.LeaseManager,
 		systemConfig:  cfg,
 		databaseCache: cache,
@@ -103,20 +85,6 @@ func (s *Session) Finish() {
 	if s.Trace != nil {
 		s.Trace.Finish()
 		s.Trace = nil
-	}
-}
-
-func (s *Session) getLocation() (*time.Location, error) {
-	switch t := s.Timezone.(type) {
-	case nil:
-		return time.UTC, nil
-	case *SessionLocation:
-		// TODO(vivek): Cache the location.
-		return time.LoadLocation(t.Location)
-	case *SessionOffset:
-		return time.FixedZone("", int(t.Offset)), nil
-	default:
-		return nil, util.Errorf("unhandled timezone variant type %T", t)
 	}
 }
 

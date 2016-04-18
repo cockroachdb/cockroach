@@ -115,10 +115,11 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		if location == "DEFAULT" || location == "LOCAL" {
 			location = "UTC"
 		}
-		if _, err := time.LoadLocation(location); err != nil {
+		loc, err := time.LoadLocation(location)
+		if err != nil {
 			return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
 		}
-		p.session.Timezone = &SessionLocation{Location: location}
+		p.session.Location = loc
 
 	case *parser.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
@@ -144,8 +145,8 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
 	}
 	if offset != 0 {
-		p.session.Timezone = &SessionOffset{Offset: offset}
+		p.session.Location = time.FixedZone("", int(offset))
 	}
-	p.evalCtx.GetLocation = p.session.getLocation
+	p.evalCtx.Location = p.session.Location
 	return &emptyNode{}, nil
 }
