@@ -3636,10 +3636,9 @@ func TestReplicaStatsComputation(t *testing.T) {
 	verifyRangeStats(tc.engine, tc.rng.RangeID, expMS, t)
 }
 
-// TestMerge verifies that the Merge command is behaving as
-// expected. Merge semantics for different data types are tested more
-// robustly at the engine level; this test is intended only to show
-// that values passed to Merge are being merged.
+// TestMerge verifies that the Merge command is behaving as expected. Time
+// series data is used, as it is the only data type currently fully supported by
+// the merge command.
 func TestMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -3647,12 +3646,33 @@ func TestMerge(t *testing.T) {
 	defer tc.Stop()
 
 	key := []byte("mergedkey")
-	stringArgs := []string{"a", "b", "c", "d"}
-	stringExpected := "abcd"
+	args := make([]roachpb.InternalTimeSeriesData, 3)
+	expected := roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: 0,
+		SampleDurationNanos: 1000,
+		Samples:             make([]roachpb.InternalTimeSeriesSample, len(args)),
+	}
 
-	for _, str := range stringArgs {
-		mergeArgs := internalMergeArgs(key, roachpb.MakeValueFromString(str))
+	for i := 0; i < len(args); i++ {
+		sample := roachpb.InternalTimeSeriesSample{
+			Offset: int32(i),
+			Count:  1,
+			Sum:    float64(i),
+		}
+		args[i] = roachpb.InternalTimeSeriesData{
+			StartTimestampNanos: expected.StartTimestampNanos,
+			SampleDurationNanos: expected.SampleDurationNanos,
+			Samples:             []roachpb.InternalTimeSeriesSample{sample},
+		}
+		expected.Samples[i] = sample
+	}
 
+	for _, arg := range args {
+		var v roachpb.Value
+		if err := v.SetProto(&arg); err != nil {
+			t.Fatal(err)
+		}
+		mergeArgs := internalMergeArgs(key, v)
 		if _, pErr := tc.SendWrapped(&mergeArgs); pErr != nil {
 			t.Fatalf("unexpected error from Merge: %s", pErr)
 		}
@@ -3668,12 +3688,14 @@ func TestMerge(t *testing.T) {
 	if resp.Value == nil {
 		t.Fatal("GetResponse had nil value")
 	}
-	a, err := resp.Value.GetBytes()
+
+	var actual roachpb.InternalTimeSeriesData
+	err := resp.Value.GetProto(&actual)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e := []byte(stringExpected); !bytes.Equal(a, e) {
-		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
+	if !proto.Equal(&actual, &expected) {
+		t.Errorf("Get did not return expected value: %v != %v", actual, expected)
 	}
 }
 
