@@ -3,7 +3,7 @@
     "target": "ES5",
     "module": "system",
     "jsx": "react",
-	"noImplicitAny": true
+    "noImplicitAny": true
   },
   "files": [
     "./app.tsx"

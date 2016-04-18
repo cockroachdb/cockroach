@@ -52,7 +52,7 @@ class IconLink extends React.Component<IconLinkProps, {}> {
 			}
 		}
 		return <li className={className}>
-			<Link to={to} activeClassName="active">
+			<Link to={to}>
 				<div className=".image-container"
 				     dangerouslySetInnerHTML={trustIcon(icon)}/>
 				<div>{title}</div>
