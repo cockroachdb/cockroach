@@ -1825,9 +1825,9 @@ func mvccResolveWriteIntent(
 		return nil
 	}
 
-	iterKey := iter.Key()
-	if !iterKey.IsValue() {
-		return util.Errorf("expected an MVCC value key: %s", iterKey)
+	unsafeIterKey := iter.unsafeKey()
+	if !unsafeIterKey.IsValue() {
+		return util.Errorf("expected an MVCC value key: %s", unsafeIterKey)
 	}
 	// Get the bytes for the next version so we have size for stat counts.
 	valueSize := int64(len(iter.unsafeValue()))
@@ -1846,7 +1846,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, &buf.newMeta, iterKey.Timestamp.WallTime,
+			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeIterKey.Timestamp.WallTime,
 			intent.Txn.Timestamp.WallTime))
 	}
 
@@ -1967,7 +1967,7 @@ func MVCCGarbageCollect(
 			continue
 		}
 		inlinedValue := meta.IsInline()
-		implicitMeta := iter.Key().IsValue()
+		implicitMeta := iter.unsafeKey().IsValue()
 		// First, check whether all values of the key are being deleted.
 		if !gcKey.Timestamp.Less(meta.Timestamp) {
 			// For version keys, don't allow GC'ing the meta key if it's
@@ -1985,11 +1985,12 @@ func MVCCGarbageCollect(
 					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
 					ms.AgeTo(timestamp.WallTime)
 				} else {
-					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime, timestamp.WallTime))
+					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize,
+						meta, meta.Timestamp.WallTime, timestamp.WallTime))
 				}
 			}
 			if !implicitMeta {
-				if err := engine.Clear(iter.Key()); err != nil {
+				if err := engine.Clear(iter.unsafeKey()); err != nil {
 					return err
 				}
 			}
@@ -2002,18 +2003,20 @@ func MVCCGarbageCollect(
 
 		// Now, iterate through all values, GC'ing ones which have expired.
 		for ; iter.Valid(); iter.Next() {
-			iterKey := iter.Key()
-			if !iterKey.Key.Equal(encKey.Key) {
+			unsafeIterKey := iter.unsafeKey()
+			if !unsafeIterKey.Key.Equal(encKey.Key) {
 				break
 			}
-			if !iterKey.IsValue() {
+			if !unsafeIterKey.IsValue() {
 				break
 			}
-			if !gcKey.Timestamp.Less(iterKey.Timestamp) {
+			if !gcKey.Timestamp.Less(unsafeIterKey.Timestamp) {
 				if ms != nil {
-					ms.Add(updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, iterKey.Timestamp.WallTime, timestamp.WallTime))
+					ms.Add(updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize,
+						int64(len(iter.unsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
+						timestamp.WallTime))
 				}
-				if err := engine.Clear(iterKey); err != nil {
+				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
 				}
 			}

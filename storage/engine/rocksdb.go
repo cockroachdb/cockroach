@@ -679,7 +679,7 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 			return
 		}
 		// Make sure the current key is <= the provided key.
-		if key.Less(r.Key()) {
+		if key.Less(r.unsafeKey()) {
 			r.Prev()
 		}
 	}
@@ -936,7 +936,7 @@ func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
 	it.Seek(start)
 	for ; it.Valid(); it.Next() {
 		k := it.Key()
-		if !it.Key().Less(end) {
+		if !k.Less(end) {
 			break
 		}
 		if done, err := f(MVCCKeyValue{Key: k, Value: it.Value()}); done || err != nil {
