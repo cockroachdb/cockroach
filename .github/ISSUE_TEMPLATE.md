@@ -1,15 +1,18 @@
-Please answer these questions **for each node in your cluster**:
+Please follow the steps below to help us help you.
 
-1. What version of CockroachDB are you using (`cockroach version`)?
+1. Please supply the the header (i.e. the first few lines) of your most recent
+   log file **for each node in your cluster**. On most unix-based systems
+   running with defaults, this boils down to the output of
 
-2. What operating system and processor architecture are you using?
+     grep -F '[config]' cockroach-data/logs/cockroach.INFO
 
-3. What flags/environment variables did you pass to `cockroach start`?
+   When log files are not available, supply the output of `cockroach version`
+   and all flags/environment variables passed to `cockroach start` instead.
 
-Please describe the issue you observed:
+2. Please describe the issue you observed:
 
-1. What did you do?
+- What did you do?
 
-2. What did you expect to see?
+- What did you expect to see?
 
-3. What did you see instead?
+- What did you see instead?
