@@ -19,6 +19,7 @@ module Visualizations {
     virtualVisualizationElement: MithrilVirtualElement;
     visualizationArguments?: any;
     warning?: () => string;
+    tooltip?: string;
   }
 
   export module VisualizationWrapper {
@@ -36,11 +37,22 @@ module Visualizations {
         warningClass = " .viz-faded";
       }
 
+      let topContent: _mithril.MithrilVirtualElement[] = [];
+      if (info.tooltip || (info.warning && info.warning())) {
+        topContent.push(m(".viz-info-icon", icon));
+      }
+      if (info.tooltip) {
+        topContent.push(m.component(Components.Tooltip, {
+          tooltipClass: ".viz-tooltip",
+          title: info.title,
+          content: info.tooltip,
+        }));
+      }
+
       return m(
         ".visualization-wrapper" + warningClass,
         [
-          // TODO: pass in and display info icon tooltip
-          m(".viz-top", m(".viz-info-icon", icon)),
+          m(".viz-top", topContent),
           info.virtualVisualizationElement,
           m(".viz-bottom", m(".viz-title", info.title)),
         ]

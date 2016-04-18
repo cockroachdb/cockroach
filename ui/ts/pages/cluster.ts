@@ -97,6 +97,7 @@ module AdminViews {
               format: "s",
               dataFn: function (allStats: Models.Proto.NodeStatus[]): { value: number; } { return {value: allStats && allStats.length || 0 }; },
             },
+            tooltip: "The total number of nodes in the cluster.",
           });
 
           this.axesSmall.push({
@@ -114,6 +115,11 @@ module AdminViews {
               },
               zoom: "50%",
             },
+            tooltipFn: function (allStats: Models.Proto.NodeStatus[], totalStats: Models.Proto.StatusMetrics): string {
+              let used: string = Utils.Format.Bytes(totalStats[MetricNames.liveBytes]);
+              let capacity: string = Utils.Format.Bytes(totalStats[MetricNames.capacity]);
+              return `You are using ${used} of ${capacity} storage capacity across all nodes.`;
+            },
           });
 
           let latencySelectors: Selector[] = _.map(
@@ -127,6 +133,7 @@ module AdminViews {
             .format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
             .title("Query Time")
             .label("Milliseconds")
+            .tooltip("The estimated time between query request and response, in milliseconds. Averaged across all nodes.")
           );
 
           // TODO: should we use load instead of CPU?
@@ -138,6 +145,7 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("cpu.sys.percent"))
                 .title("CPU Sys %")
             ).format(d3.format(".2%")).title("CPU Usage").stacked(true)
+              .tooltip("The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) across all nodes.")
           );
 
           // TODO: get total/average memory from all machines
@@ -146,13 +154,16 @@ module AdminViews {
               Metrics.Select.Avg(_sysMetric("allocbytes"))
                 .title("Memory")
             ).format(Utils.Format.Bytes).title("Memory Usage")
+              .tooltip("The average memory in use across all nodes.")
+
           );
 
           this._addChart(
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.conns"))
                 .title("Connections")
-              ).format(d3.format(".1")).title("SQL Connections")
+            ).format(d3.format(".1")).title("SQL Connections")
+              .tooltip("The total number of active SQL connections to the cluster.")
           );
 
           this._addChart(
@@ -164,6 +175,7 @@ module AdminViews {
                 .nonNegativeRate()
                 .title("Bytes Out")
             ).format(Utils.Format.Bytes).title("SQL Traffic")
+            .tooltip("The amount of network traffic sent to and from the SQL system, in bytes.")
           );
 
           this._addChart(
@@ -171,7 +183,8 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.select.count"))
                 .nonNegativeRate()
                 .title("Selects")
-            ).format(d3.format(".1")).title("Reads")
+            ).format(d3.format(".1")).title("Reads Per Second")
+            .tooltip("The number of SELECT statements, averaged over a 10 second period.")
           );
 
           this._addChart(
@@ -185,7 +198,8 @@ module AdminViews {
               Metrics.Select.Avg(_nodeMetric("sql.delete.count"))
                 .nonNegativeRate()
                 .title("Delete")
-            ).format(d3.format(".1")).title("Writes")
+            ).format(d3.format(".1")).title("Writes Per Second")
+            .tooltip("The number of INSERT, UPDATE, and DELETE statements, averaged over a 10 second period.")
           );
 
           this.exec = new Metrics.Executor(this._query);
@@ -215,6 +229,7 @@ module AdminViews {
 
               axis.title = axis.titleFn ? axis.titleFn(allStats) : axis.title;
               axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
+              axis.tooltip = axis.tooltipFn ? axis.tooltipFn(allStats, totalStats) : axis.tooltip;
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
               axis.warning = () => {
@@ -237,6 +252,7 @@ module AdminViews {
 
               axis.title = axis.titleFn ? axis.titleFn(allStats) : axis.title;
               axis.visualizationArguments.data = axis.visualizationArguments.dataFn(allStats, totalStats);
+              axis.tooltip = axis.tooltipFn ? axis.tooltipFn(allStats, totalStats) : axis.tooltip;
               axis.virtualVisualizationElement =
                 m.component(Visualizations.NumberVisualization, axis.visualizationArguments);
               axis.warning = () => {

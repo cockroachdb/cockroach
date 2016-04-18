@@ -4,6 +4,7 @@
 /// <reference path="../util/types.ts" />
 /// <reference path="../util/querycache.ts" />
 /// <reference path="../models/metrics.ts" />
+/// <reference path="tooltip.ts" />
 
 /**
  * Components defines reusable components which may be used on multiple pages,
@@ -224,11 +225,23 @@ module Components {
         } else {
           g = m("", "loading...");
         }
+
+        let topContent: _mithril.MithrilVirtualElement[] = [];
+        if (ctrl.vm.axis.tooltip() || ctrl.vm.query.error()) {
+          topContent.push(m(".viz-info-icon", icon));
+        }
+        if (ctrl.vm.axis.tooltip()) {
+          topContent.push(m.component(Components.Tooltip, {
+            tooltipClass: ".viz-tooltip",
+            title: ctrl.vm.axis.title(),
+            content: ctrl.vm.axis.tooltip(),
+          }));
+        }
+
         return m(
           ".visualization-wrapper" + warningClass,
           [
-            // TODO: pass in and display info icon tooltip
-            m(".viz-top", m(".viz-info-icon", icon)),
+            m(".viz-top", topContent),
             g,
             m(".viz-bottom", m(".viz-title", ctrl.vm.axis.title())),
           ]
