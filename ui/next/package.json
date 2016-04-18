@@ -8,7 +8,10 @@
     "dependencies": {
       "react": "npm:react@^15.0.1",
       "react-dom": "npm:react-dom@^15.0.1",
+      "react-redux": "npm:react-redux@^4.4.5",
       "react-router": "npm:react-router@^2.1.1",
+      "react-router-redux": "npm:react-router-redux@^4.0.2",
+      "redux": "npm:redux@^3.4.0",
       "ts": "github:frankwallis/plugin-typescript@^4.0.5"
     },
     "devDependencies": {
