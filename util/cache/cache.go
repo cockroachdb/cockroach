@@ -71,6 +71,7 @@ type Config struct {
 // which defines the eviction ordering.
 type Entry struct {
 	Key, Value interface{}
+	next, prev *Entry
 	le         *list.Element
 }
 
@@ -98,6 +99,53 @@ func (e *Entry) Range() interval.Range {
 	return e.Key.(*IntervalKey).Range
 }
 
+// entryList is a double-linked circular list of *Entry elements. The code is
+// derived from the stdlib container/list but customized to Entry in order to
+// avoid a separate allocation for every element.
+type entryList struct {
+	root Entry
+}
+
+func (l *entryList) init() {
+	l.root.next = &l.root
+	l.root.prev = &l.root
+}
+
+func (l *entryList) back() *Entry {
+	return l.root.prev
+}
+
+func (l *entryList) insertAfter(e, at *Entry) {
+	n := at.next
+	at.next = e
+	e.prev = at
+	e.next = n
+	n.prev = e
+}
+
+func (l *entryList) insertBefore(e, mark *Entry) {
+	l.insertAfter(e, mark.prev)
+}
+
+func (l *entryList) remove(e *Entry) *Entry {
+	e.prev.next = e.next
+	e.next.prev = e.prev
+	e.next = nil // avoid memory leaks
+	e.prev = nil // avoid memory leaks
+	return e
+}
+
+func (l *entryList) pushFront(e *Entry) {
+	l.insertAfter(e, &l.root)
+}
+
+func (l *entryList) moveToFront(e *Entry) {
+	if l.root.next == e {
+		return
+	}
+	l.insertAfter(l.remove(e), &l.root)
+}
+
 // cacheStore is an interface for the backing store used for the cache.
 type cacheStore interface {
 	// init initializes or clears all entries.
@@ -117,7 +165,7 @@ type cacheStore interface {
 type baseCache struct {
 	Config
 	store cacheStore
-	ll    list.List
+	ll    entryList
 }
 
 func newBaseCache(config Config) baseCache {
@@ -129,7 +177,7 @@ func newBaseCache(config Config) baseCache {
 // init initializes the baseCache with the provided cacheStore. It must be
 // called with a non-nil cacheStore before use of the cache.
 func (bc *baseCache) init(store cacheStore) {
-	bc.ll.Init()
+	bc.ll.init()
 	bc.store = store
 	bc.store.init()
 }
@@ -156,7 +204,7 @@ func (bc *baseCache) AddEntryAfter(entry, after *Entry) {
 
 // MoveToEnd moves the entry to the end of the eviction queue.
 func (bc *baseCache) MoveToEnd(entry *Entry) {
-	bc.ll.MoveToFront(entry.le)
+	bc.ll.moveToFront(entry)
 }
 
 func (bc *baseCache) add(key, value interface{}, entry, after *Entry) {
@@ -170,9 +218,9 @@ func (bc *baseCache) add(key, value interface{}, entry, after *Entry) {
 		e = &Entry{Key: key, Value: value}
 	}
 	if after != nil {
-		e.le = bc.ll.InsertBefore(e, after.le)
+		bc.ll.insertBefore(e, after)
 	} else {
-		e.le = bc.ll.PushFront(e)
+		bc.ll.pushFront(e)
 	}
 	bc.store.add(e)
 	// Evict as many elements as we can.
@@ -205,12 +253,11 @@ func (bc *baseCache) DelEntry(entry *Entry) {
 // Clear clears all entries from the cache.
 func (bc *baseCache) Clear() {
 	if bc.OnEvicted != nil {
-		for e := bc.ll.Back(); e != nil; e = e.Prev() {
-			entry := e.Value.(*Entry)
-			bc.OnEvicted(entry.Key, entry.Value)
+		for e := bc.ll.back(); e != &bc.ll.root; e = e.prev {
+			bc.OnEvicted(e.Key, e.Value)
 		}
 	}
-	bc.ll.Init()
+	bc.ll.init()
 	bc.store.init()
 }
 
@@ -221,12 +268,12 @@ func (bc *baseCache) Len() int {
 
 func (bc *baseCache) access(e *Entry) {
 	if bc.Policy == CacheLRU {
-		bc.ll.MoveToFront(e.le)
+		bc.ll.moveToFront(e)
 	}
 }
 
 func (bc *baseCache) removeElement(e *Entry) {
-	bc.ll.Remove(e.le)
+	bc.ll.remove(e)
 	bc.store.del(e.Key)
 	if bc.OnEvicted != nil {
 		bc.OnEvicted(e.Key, e.Value)
@@ -242,8 +289,7 @@ func (bc *baseCache) evict() bool {
 	}
 	l := bc.store.length()
 	if l > 0 {
-		ele := bc.ll.Back()
-		e := ele.Value.(*Entry)
+		e := bc.ll.back()
 		if bc.ShouldEvict(l, e.Key, e.Value) {
 			bc.removeElement(e)
 			return true
