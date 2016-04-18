@@ -513,8 +513,12 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		// Send result of leader lease to all waiter channels.
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		for _, llChan := range r.mu.llChans {
-			llChan <- pErr
+		for i, llChan := range r.mu.llChans {
+			if i == 0 {
+				llChan <- pErr
+			} else {
+				llChan <- protoutil.Clone(pErr).(*roachpb.Error)
+			}
 		}
 		r.mu.llChans = r.mu.llChans[:0]
 	}) {
