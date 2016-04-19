@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 )
@@ -62,7 +61,7 @@ type Session struct {
 
 	planner planner
 
-	Timezone              isSessionTimezone
+	Timezone              *time.Location
 	DefaultIsolationLevel roachpb.IsolationType
 	Trace                 trace.Trace
 }
@@ -106,18 +105,12 @@ func (s *Session) Finish() {
 	}
 }
 
-func (s *Session) getLocation() (*time.Location, error) {
-	switch t := s.Timezone.(type) {
-	case nil:
-		return time.UTC, nil
-	case *SessionLocation:
-		// TODO(vivek): Cache the location.
-		return time.LoadLocation(t.Location)
-	case *SessionOffset:
-		return time.FixedZone("", int(t.Offset)), nil
-	default:
-		return nil, util.Errorf("unhandled timezone variant type %T", t)
+// GetLocation returns the location (time zone) for the session.
+func (s *Session) GetLocation() *time.Location {
+	if s.Timezone == nil {
+		return time.UTC
 	}
+	return s.Timezone
 }
 
 // TxnStateEnum represents the state of a SQL txn.

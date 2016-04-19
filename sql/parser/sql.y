@@ -2771,9 +2771,13 @@ const_datetime:
   {
     $$.val = &TimestampType{}
   }
+| TIMESTAMP WITH_LA TIME ZONE
+  {
+    $$.val = &TimestampType{WithZone: true}
+  }
 | TIMESTAMPTZ
   {
-    $$.val = &TimestampType{withZone: true}
+    $$.val = &TimestampType{WithZone: true}
   }
 
 const_interval:

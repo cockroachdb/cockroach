@@ -59,7 +59,7 @@ func typeForDatum(d parser.Datum) pgType {
 	if d == parser.DNull {
 		return pgType{}
 	}
-	switch d.(type) {
+	switch t := d.(type) {
 	case parser.DBool:
 		return pgType{oid.T_bool, 1}
 
@@ -82,7 +82,10 @@ func typeForDatum(d parser.Datum) pgType {
 		return pgType{oid.T_date, 8}
 
 	case parser.DTimestamp:
-		return pgType{oid.T_timestamptz, 8}
+		if t.WithZone {
+			return pgType{oid.T_timestamptz, 8}
+		}
+		return pgType{oid.T_timestamp, 8}
 
 	case parser.DInterval:
 		return pgType{oid.T_interval, 8}
@@ -94,7 +97,7 @@ func typeForDatum(d parser.Datum) pgType {
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
+func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) error {
 	if log.V(2) {
 		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
@@ -151,14 +154,17 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
 
 	case parser.DDate:
 		t := time.Unix(int64(v)*secondsInDay, 0).UTC()
-		s := formatTs(t)
+		s := formatTs(t, nil)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
 
 	case parser.DTimestamp:
-		t := v.UTC()
-		s := formatTs(t)
+		var loc *time.Location
+		if v.WithZone {
+			loc = sessionLoc
+		}
+		s := formatTs(v.Time, loc)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
@@ -200,10 +206,19 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
 }
 
 const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
+const pgTimeStampFormatNoZone = "2006-01-02 15:04:05.999999999"
 
 // formatTs formats t into a format cockroachdb/pq understands.
 // Mostly cribbed from github.com/cockroachdb/pq.
-func formatTs(t time.Time) (b []byte) {
+// If a non-nil loction is passed, the time is rendered, with an offset,
+// in that location, otherwise with no offset in UTC.
+func formatTs(t time.Time, loc *time.Location) (b []byte) {
+	if loc != nil {
+		t = t.In(loc)
+	} else {
+		t = t.UTC()
+	}
+
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
@@ -213,21 +228,12 @@ func formatTs(t time.Time) (b []byte) {
 		t = t.AddDate((-t.Year())*2+1, 0, 0)
 		bc = true
 	}
-	b = []byte(t.Format(pgTimeStampFormat))
 
-	_, offset := t.Zone()
-	offset = offset % 60
-	if offset != 0 {
-		// RFC3339Nano already printed the minus sign
-		if offset < 0 {
-			offset = -offset
-		}
-
-		b = append(b, ':')
-		if offset < 10 {
-			b = append(b, '0')
-		}
-		b = strconv.AppendInt(b, int64(offset), 10)
+	// We don't do this above since bc may have changed t.
+	if loc == nil {
+		b = []byte(t.Format(pgTimeStampFormatNoZone))
+	} else {
+		b = []byte(t.Format(pgTimeStampFormat))
 	}
 
 	if bc {
