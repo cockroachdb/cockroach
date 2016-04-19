@@ -1227,11 +1227,10 @@ func TestStoreRangeRebalance(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		desc.Capacity.Capacity = 1024 * 1024
-		desc.Capacity.Available = 1024 * 1024
+		desc.Capacity.RangeCount = 1
 		// Make sure store[1] is chosen as removal target.
 		if desc.StoreID == mtc.stores[1].StoreID() {
-			desc.Capacity.Available = 0
+			desc.Capacity.RangeCount = 4
 		}
 		storeDescs = append(storeDescs, desc)
 	}
