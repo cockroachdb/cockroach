@@ -103,6 +103,10 @@ const (
 	// "useful" outgoing gossip connection to free up space for a more
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
+
+	// DefaultGossipStoresInterval is the default interval for gossiping storage-
+	// related info.
+	DefaultGossipStoresInterval = 1 * time.Minute
 )
 
 // Storage is an interface which allows the gossip instance
