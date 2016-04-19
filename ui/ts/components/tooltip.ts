@@ -1,5 +1,6 @@
 // source: component/tooltip.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../util/types.ts" />
 
 module Components {
   "use strict";
@@ -8,13 +9,11 @@ module Components {
    * Tooltip is a component that creates a configurable tooltip
    */
   export module Tooltip {
-    import MithrilVirtualElement = _mithril.MithrilVirtualElement;
-
-    interface TooltipConfig {
+    export interface TooltipConfig {
       // Class applied to the tooltip
       tooltipClass?: string;
-      title?: string;
-      content: (string|MithrilVirtualElement|MithrilVirtualElement[]|(MithrilVirtualElement|string)[]);
+      title?: MithrilChild;
+      content: MithrilChild;
       icon?: string;
       position?: string;
     }
