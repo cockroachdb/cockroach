@@ -900,10 +900,26 @@ func (e *Executor) execStmt(
 			}
 		}
 
+		// valuesAlloc is used to allocate the backing storage for the
+		// ResultRow.Values slices in chunks.
+		var valuesAlloc []parser.Datum
+		const maxChunkSize = 64 // Arbitrary, could use tuning.
+		chunkSize := 4          // Arbitrary as well.
+
 		for plan.Next() {
 			// The plan.Values DTuple needs to be copied on each iteration.
 			values := plan.Values()
-			row := ResultRow{Values: make([]parser.Datum, 0, len(values))}
+
+			n := len(values)
+			if len(valuesAlloc) < n {
+				valuesAlloc = make([]parser.Datum, len(result.Columns)*chunkSize)
+				if chunkSize < maxChunkSize {
+					chunkSize *= 2
+				}
+			}
+			row := ResultRow{Values: valuesAlloc[:0:n]}
+			valuesAlloc = valuesAlloc[n:]
+
 			for _, val := range values {
 				if err := checkResultDatum(val); err != nil {
 					return result, roachpb.NewError(err)
