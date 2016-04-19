@@ -40,7 +40,7 @@ func TestFillArgs(t *testing.T) {
 		{`$1 % $2`, `1 % 2`, MapArgs{`1`: DInt(1), `2`: DInt(2)}},
 		{`$1 / $2`, `1 / 2`, MapArgs{`1`: DInt(1), `2`: DInt(2)}},
 		{`$1 / $2`, `1 / 2`, MapArgs{`1`: DInt(1), `2`: DInt(2)}},
-		{`$1 + $2 + ($3 * $4)`, `1 + 2 + (3 * 4)`,
+		{`$1 + $2 + ($3 * $4)`, `(1 + 2) + (3 * 4)`,
 			MapArgs{`1`: DInt(1), `2`: DInt(2), `3`: DInt(3), `4`: DInt(4)}},
 		{`$1 || $2`, `'a' || 'b'`, MapArgs{`1`: DString("a"), `2`: DString("b")}},
 		{`$1 OR $2`, `true OR false`, MapArgs{`1`: DBool(true), `2`: DBool(false)}},

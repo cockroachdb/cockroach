@@ -52,13 +52,42 @@ type VariableExpr interface {
 	Variable()
 }
 
+// operatorExpr is used to identify expression types that involve operators;
+// used by exprStrWithParen.
+type operatorExpr interface {
+	Expr
+	operatorExpr()
+}
+
+var _ operatorExpr = &AndExpr{}
+var _ operatorExpr = &OrExpr{}
+var _ operatorExpr = &NotExpr{}
+var _ operatorExpr = &BinaryExpr{}
+var _ operatorExpr = &UnaryExpr{}
+var _ operatorExpr = &ComparisonExpr{}
+var _ operatorExpr = &RangeCond{}
+var _ operatorExpr = &IsOfTypeExpr{}
+
+// exprStrWithParen is a variant of e.String() which adds a set of outer parens
+// if the expression involves an operator. It is used internally when the
+// expression is part of another expression and we know it is preceded or
+// followed by an operator.
+func exprStrWithParen(e Expr) string {
+	if _, ok := e.(operatorExpr); ok {
+		return fmt.Sprintf("(%s)", e)
+	}
+	return e.String()
+}
+
 // AndExpr represents an AND expression.
 type AndExpr struct {
 	Left, Right Expr
 }
 
+func (*AndExpr) operatorExpr() {}
+
 func (node *AndExpr) String() string {
-	return fmt.Sprintf("%s AND %s", node.Left, node.Right)
+	return fmt.Sprintf("%s AND %s", exprStrWithParen(node.Left), exprStrWithParen(node.Right))
 }
 
 // OrExpr represents an OR expression.
@@ -66,8 +95,10 @@ type OrExpr struct {
 	Left, Right Expr
 }
 
+func (*OrExpr) operatorExpr() {}
+
 func (node *OrExpr) String() string {
-	return fmt.Sprintf("%s OR %s", node.Left, node.Right)
+	return fmt.Sprintf("%s OR %s", exprStrWithParen(node.Left), exprStrWithParen(node.Right))
 }
 
 // NotExpr represents a NOT expression.
@@ -75,8 +106,10 @@ type NotExpr struct {
 	Expr Expr
 }
 
+func (*NotExpr) operatorExpr() {}
+
 func (node *NotExpr) String() string {
-	return fmt.Sprintf("NOT %s", node.Expr)
+	return fmt.Sprintf("NOT %s", exprStrWithParen(node.Expr))
 }
 
 // ParenExpr represents a parenthesized expression.
@@ -144,8 +177,11 @@ type ComparisonExpr struct {
 	fn          CmpOp
 }
 
+func (*ComparisonExpr) operatorExpr() {}
+
 func (node *ComparisonExpr) String() string {
-	return fmt.Sprintf("%s %s %s", node.Left, node.Operator, node.Right)
+	return fmt.Sprintf("%s %s %s", exprStrWithParen(node.Left), node.Operator,
+		exprStrWithParen(node.Right))
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -155,11 +191,15 @@ type RangeCond struct {
 	From, To Expr
 }
 
+func (*RangeCond) operatorExpr() {}
+
 func (node *RangeCond) String() string {
+	notStr := ""
 	if node.Not {
-		return fmt.Sprintf("%s NOT BETWEEN %s AND %s", node.Left, node.From, node.To)
+		notStr = "NOT "
 	}
-	return fmt.Sprintf("%s BETWEEN %s AND %s", node.Left, node.From, node.To)
+	return fmt.Sprintf("%s %sBETWEEN %s AND %s", exprStrWithParen(node.Left), notStr,
+		exprStrWithParen(node.From), exprStrWithParen(node.To))
 }
 
 // IsOfTypeExpr represents an IS {,NOT} OF (type_list) expression.
@@ -168,6 +208,8 @@ type IsOfTypeExpr struct {
 	Expr  Expr
 	Types []ColumnType
 }
+
+func (*IsOfTypeExpr) operatorExpr() {}
 
 func (node *IsOfTypeExpr) String() string {
 	var buf bytes.Buffer
@@ -193,7 +235,7 @@ type ExistsExpr struct {
 }
 
 func (node *ExistsExpr) String() string {
-	return fmt.Sprintf("EXISTS %s", node.Subquery)
+	return fmt.Sprintf("EXISTS %s", exprStrWithParen(node.Subquery))
 }
 
 // IfExpr represents an IF expression.
@@ -638,8 +680,11 @@ type BinaryExpr struct {
 	rtype       reflect.Type
 }
 
+func (*BinaryExpr) operatorExpr() {}
+
 func (node *BinaryExpr) String() string {
-	return fmt.Sprintf("%s %s %s", node.Left, node.Operator, node.Right)
+	return fmt.Sprintf("%s %s %s", exprStrWithParen(node.Left), node.Operator,
+		exprStrWithParen(node.Right))
 }
 
 // UnaryOperator represents a unary operator.
@@ -673,8 +718,10 @@ type UnaryExpr struct {
 	dtype    reflect.Type
 }
 
+func (*UnaryExpr) operatorExpr() {}
+
 func (node *UnaryExpr) String() string {
-	return fmt.Sprintf("%s %s", node.Operator, node.Expr)
+	return fmt.Sprintf("%s %s", node.Operator, exprStrWithParen(node.Expr))
 }
 
 // FuncExpr represents a function call.

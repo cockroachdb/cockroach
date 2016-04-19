@@ -18,6 +18,7 @@ package parser
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils"
@@ -137,6 +138,71 @@ func TestNormalizeColumnName(t *testing.T) {
 		q.(*QualifiedName).ClearString()
 		if out := q.String(); tc.out != out {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
+		}
+	}
+}
+
+// TestExprString verifies that converting an expression to a string and back
+// doesn't change the (normalized) expression.
+func TestExprString(t *testing.T) {
+	testExprs := []string{
+		`a AND b`,
+		`a AND b OR c`,
+		`(a AND b) OR c`,
+		`a AND (b OR c)`,
+		`a AND NOT ((b OR c) AND (d AND e))`,
+		`~-a`,
+		`~-a`,
+		`-2*(a+3)*b-2/c`,
+		`a&b<<(b+c)&d AND (b&d)+c>>(d&a)`,
+		`a&(b<<b+c)&d AND b&(d+c>>d)&a`,
+		`a = b|c`,
+		`a != b|c`,
+		`NOT a AND b`,
+		`NOT (a AND b)`,
+		`(NOT a) AND b`,
+		`NOT (a = NOT b = c)`,
+		`NOT NOT a = b`,
+		`NOT NOT (a = b)`,
+		`NOT (NOT a) < b`,
+		`NOT (NOT a = b)`,
+		`(NOT NOT a) >= b`,
+		`(a OR (b BETWEEN (c+d) AND (e+f))) AND b`,
+		`(1 >= 2) IS OF (BOOL)`,
+		`(1 >= 2) = (2 IS OF (BOOL))`,
+	}
+	for _, exprStr := range testExprs {
+		expr, err := ParseExprTraditional(exprStr)
+		if err != nil {
+			t.Fatalf("%s: %v", exprStr, err)
+		}
+		// str may differ than exprStr (we may be adding some parens).
+		str := expr.String()
+		expr2, err := ParseExprTraditional(str)
+		if err != nil {
+			t.Fatalf("%s: %v", exprStr, err)
+		}
+		// Verify that when we stringify the expression again, the string is the
+		// same. This is important because we don't want cycles of parsing and
+		// printing an expression to keep adding parens.
+		if str2 := expr2.String(); str != str2 {
+			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
+		}
+		// Compare the normalized expressions.
+		normalized, err := defaultContext.NormalizeExpr(expr)
+		if err != nil {
+			t.Fatalf("%s: %v", exprStr, err)
+		}
+		normalized2, err := defaultContext.NormalizeExpr(expr2)
+		if err != nil {
+			t.Fatalf("%s: %v", exprStr, err)
+		}
+		if !reflect.DeepEqual(normalized, normalized2) {
+			t.Errorf("normalized expressions differ\n"+
+				"original:     %s\n"+
+				"intermediate: %s\n"+
+				"before: %#v\n"+
+				"after:  %#v", exprStr, str, normalized, normalized2)
 		}
 	}
 }
