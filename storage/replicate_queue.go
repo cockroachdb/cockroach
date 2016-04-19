@@ -104,7 +104,11 @@ func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	return shouldRebalance, 0
 }
 
-func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg config.SystemConfig) error {
+func (rq *replicateQueue) process(
+	now roachpb.Timestamp,
+	repl *Replica,
+	sysCfg config.SystemConfig,
+) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
@@ -173,6 +177,7 @@ func (rq *replicateQueue) process(now roachpb.Timestamp, repl *Replica, sysCfg c
 		if err = repl.ChangeReplicas(roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
+		rq.allocator.UpdateNextRebalance()
 	}
 
 	// Enqueue this replica again to see if there are more changes to be made.
