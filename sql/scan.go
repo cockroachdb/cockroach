@@ -596,8 +596,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		n.pErr = roachpb.NewUErrorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
-	kind := n.desc.Columns[idx].Type.Kind
-	d, err := unmarshalColumnValue(kind, kv.Value)
+	d, err := unmarshalColumnValue(n.desc.Columns[idx].Type, kv.Value)
 	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil
 }

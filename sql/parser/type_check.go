@@ -165,7 +165,7 @@ var (
 	stringCastTypes    = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes}
 	bytesCastTypes     = []Datum{DNull, DummyBytes, DummyString}
 	dateCastTypes      = []Datum{DNull, DummyString, DummyTimestamp}
-	timestampCastTypes = []Datum{DNull, DummyString, DummyDate}
+	timestampCastTypes = []Datum{DNull, DummyString, DummyDate, DummyTimestamp, DummyTimestampTz}
 	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt}
 )
 
@@ -215,6 +215,10 @@ func (expr *CastExpr) TypeCheck(args MapArgs) (Datum, error) {
 
 	case *TimestampType:
 		returnDatum = DummyTimestamp
+		validTypes = timestampCastTypes
+
+	case *TimestampTzType:
+		returnDatum = DummyTimestampTz
 		validTypes = timestampCastTypes
 
 	case *IntervalType:

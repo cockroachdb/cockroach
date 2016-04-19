@@ -678,6 +678,10 @@ func (c *ColumnType) SQLString() string {
 			}
 			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Precision)
 		}
+	case ColumnType_TIMESTAMP:
+		if c.Zone {
+			return "TIMESTAMP WITH TIME ZONE"
+		}
 	}
 	return c.Kind.String()
 }

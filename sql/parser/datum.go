@@ -48,6 +48,8 @@ var (
 	DummyDate Datum = DDate(0)
 	// DummyTimestamp is a placeholder DTimestamp value.
 	DummyTimestamp Datum = DTimestamp{}
+	// DummyTimestampTz is a placeholder DTimestamp value rendered in session offset.
+	DummyTimestampTz Datum = DTimestampTz{}
 	// DummyInterval is a placeholder DInterval value.
 	DummyInterval Datum = DInterval{}
 	// dummyTuple is a placeholder DTuple value.
@@ -55,18 +57,19 @@ var (
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
 
-	boolType      = reflect.TypeOf(DummyBool)
-	intType       = reflect.TypeOf(DummyInt)
-	floatType     = reflect.TypeOf(DummyFloat)
-	decimalType   = reflect.TypeOf(DummyDecimal)
-	stringType    = reflect.TypeOf(DummyString)
-	bytesType     = reflect.TypeOf(DummyBytes)
-	dateType      = reflect.TypeOf(DummyDate)
-	timestampType = reflect.TypeOf(DummyTimestamp)
-	intervalType  = reflect.TypeOf(DummyInterval)
-	tupleType     = reflect.TypeOf(dummyTuple)
-	nullType      = reflect.TypeOf(DNull)
-	valargType    = reflect.TypeOf(DValArg{})
+	boolType        = reflect.TypeOf(DummyBool)
+	intType         = reflect.TypeOf(DummyInt)
+	floatType       = reflect.TypeOf(DummyFloat)
+	decimalType     = reflect.TypeOf(DummyDecimal)
+	stringType      = reflect.TypeOf(DummyString)
+	bytesType       = reflect.TypeOf(DummyBytes)
+	dateType        = reflect.TypeOf(DummyDate)
+	timestampType   = reflect.TypeOf(DummyTimestamp)
+	timestampTzType = reflect.TypeOf(DummyTimestampTz)
+	intervalType    = reflect.TypeOf(DummyInterval)
+	tupleType       = reflect.TypeOf(dummyTuple)
+	nullType        = reflect.TypeOf(DNull)
+	valargType      = reflect.TypeOf(DValArg{})
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
@@ -688,6 +691,22 @@ func (d DTimestamp) IsMin() bool {
 
 func (d DTimestamp) String() string {
 	return d.UTC().Format(timestampWithOffsetZoneFormat)
+}
+
+// DTimestampTz is the timestamp Datum that is rendered with session offset.
+type DTimestampTz struct {
+	DTimestamp
+}
+
+// Type implements the Datum interface.
+func (d DTimestampTz) Type() string {
+	return "timestamptz"
+}
+
+// TypeEqual implements the Datum interface.
+func (d DTimestampTz) TypeEqual(other Datum) bool {
+	_, ok := other.(DTimestampTz)
+	return ok
 }
 
 // DInterval is the interval Datum.

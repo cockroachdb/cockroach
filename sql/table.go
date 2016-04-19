@@ -161,6 +161,10 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	case *parser.TimestampType:
 		col.Type.Kind = ColumnType_TIMESTAMP
 		colDatumType = parser.DummyTimestamp
+	case *parser.TimestampTzType:
+		col.Type.Kind = ColumnType_TIMESTAMP
+		col.Type.Zone = true
+		colDatumType = parser.DummyTimestampTz
 	case *parser.IntervalType:
 		col.Type.Kind = ColumnType_INTERVAL
 		colDatumType = parser.DummyInterval
@@ -505,7 +509,11 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 		case ColumnType_DATE:
 			vals[i] = parser.DummyDate
 		case ColumnType_TIMESTAMP:
-			vals[i] = parser.DummyTimestamp
+			if col.Type.Zone {
+				vals[i] = parser.DummyTimestampTz
+			} else {
+				vals[i] = parser.DummyTimestamp
+			}
 		case ColumnType_INTERVAL:
 			vals[i] = parser.DummyInterval
 		default:
@@ -661,6 +669,14 @@ func decodeTableKey(valType parser.Datum, key []byte, dir encoding.Direction) (
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return parser.DTimestamp{Time: t}, rkey, err
+	case parser.DTimestampTz:
+		var t time.Time
+		if dir == encoding.Ascending {
+			rkey, t, err = encoding.DecodeTimeAscending(key)
+		} else {
+			rkey, t, err = encoding.DecodeTimeDescending(key)
+		}
+		return parser.DTimestampTz{DTimestamp: parser.DTimestamp{Time: t}}, rkey, err
 	case parser.DInterval:
 		var d duration.Duration
 		if dir == encoding.Ascending {
@@ -766,8 +782,13 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 		_, ok = val.(parser.DDate)
 		set, err = args.SetInferredType(val, parser.DummyDate)
 	case ColumnType_TIMESTAMP:
-		_, ok = val.(parser.DTimestamp)
-		set, err = args.SetInferredType(val, parser.DummyTimestamp)
+		if col.Type.Zone {
+			_, ok = val.(parser.DTimestampTz)
+			set, err = args.SetInferredType(val, parser.DummyTimestampTz)
+		} else {
+			_, ok = val.(parser.DTimestamp)
+			set, err = args.SetInferredType(val, parser.DummyTimestamp)
+		}
 	case ColumnType_INTERVAL:
 		_, ok = val.(parser.DInterval)
 		set, err = args.SetInferredType(val, parser.DummyInterval)
@@ -828,6 +849,9 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 		if v, ok := val.(parser.DTimestamp); ok {
 			return v.Time, nil
 		}
+		if v, ok := val.(parser.DTimestampTz); ok {
+			return v.Time, nil
+		}
 	case ColumnType_INTERVAL:
 		if v, ok := val.(parser.DInterval); ok {
 			return v.Duration, nil
@@ -842,12 +866,12 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, er
 // unmarshalColumnValue decodes the value from a key-value pair using the type
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
-func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Datum, error) {
+func unmarshalColumnValue(typ ColumnType, value *roachpb.Value) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
 	}
 
-	switch kind {
+	switch typ.Kind {
 	case ColumnType_BOOL:
 		v, err := value.GetInt()
 		if err != nil {
@@ -897,7 +921,11 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		if err != nil {
 			return nil, err
 		}
-		return parser.DTimestamp{Time: v}, nil
+		ts := parser.DTimestamp{Time: v}
+		if typ.Zone {
+			return parser.DTimestampTz{DTimestamp: ts}, nil
+		}
+		return ts, nil
 	case ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
@@ -905,7 +933,7 @@ func unmarshalColumnValue(kind ColumnType_Kind, value *roachpb.Value) (parser.Da
 		}
 		return parser.DInterval{Duration: d}, nil
 	default:
-		return nil, util.Errorf("unsupported column type: %s", kind)
+		return nil, util.Errorf("unsupported column type: %s", typ.Kind)
 	}
 }
 

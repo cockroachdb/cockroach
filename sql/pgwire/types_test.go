@@ -55,12 +55,25 @@ func TestTimestampRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("UTC", 0))
 
-	encoded := string(formatTs(ts))
-	decoded, err := parseTs(encoded)
-	if err != nil {
-		t.Fatal(err)
+	{
+		encoded := string(formatTs(ts, false))
+		decoded, err := parseTs(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ts.Equal(decoded) {
+			t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", decoded, ts)
+		}
 	}
-	if !ts.Equal(decoded) {
-		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", decoded, ts)
+
+	{
+		encoded := string(formatTs(ts, true))
+		decoded, err := parseTs(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ts.Equal(decoded) {
+			t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", decoded, ts)
+		}
 	}
 }

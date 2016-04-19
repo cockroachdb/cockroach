@@ -43,6 +43,7 @@ message ColumnType {
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // FLOAT and DECIMAL.
   optional int32 precision = 3 [(gogoproto.nullable) = false];
+  optional bool zone = 4 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
