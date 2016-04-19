@@ -79,6 +79,6 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 		}
 	}
 
-	elapsed := time.Since(start)
+	elapsed := timeutil.Since(start)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }

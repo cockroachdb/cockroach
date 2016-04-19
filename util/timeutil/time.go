@@ -50,3 +50,9 @@ func initFakeTime() {
 func Now() time.Time {
 	return nowFunc()
 }
+
+// Since returns the time elapsed since t.
+// It is shorthand for Now().Sub(t).
+func Since(t time.Time) time.Duration {
+	return Now().Sub(t)
+}

@@ -91,7 +91,7 @@ func (s *Server) periodicallyCheckForUpdates() {
 			// duration until they should next be checked.
 			// Wait for the shorter of the durations returned by the two checks.
 			wait := s.maybeCheckForUpdates()
-			if reportWait := s.maybeReportUsage(timeutil.Now().Sub(startup)); reportWait < wait {
+			if reportWait := s.maybeReportUsage(timeutil.Since(startup)); reportWait < wait {
 				wait = reportWait
 			}
 			jitter := rand.Intn(updateCheckJitterSeconds) - updateCheckJitterSeconds/2

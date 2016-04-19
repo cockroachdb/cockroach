@@ -346,7 +346,7 @@ func testClusterRecoveryInner(t *testing.T, c cluster.Cluster, cfg cluster.TestC
 	// Verify accounts.
 	verifyAccounts(t, &state.clients[0])
 
-	elapsed := time.Since(start)
+	elapsed := timeutil.Since(start)
 	var count uint64
 	counts := state.counts()
 	for _, c := range counts {
@@ -405,7 +405,7 @@ func testNodeRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfi
 	// Verify accounts.
 	verifyAccounts(t, client)
 
-	elapsed := time.Since(start)
+	elapsed := timeutil.Since(start)
 	count := atomic.LoadUint64(&client.count)
 	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }

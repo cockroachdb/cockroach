@@ -88,7 +88,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 					return
 				}
 				atomic.AddInt64(&expected, 1)
-				latency := time.Since(start)
+				latency := timeutil.Since(start)
 				if r.maxLatency < latency {
 					r.maxLatency = latency
 				}

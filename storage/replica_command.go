@@ -1511,7 +1511,7 @@ func (r *Replica) CheckConsistency(
 	// the replicas have computed their checksum. We do this
 	// because VerifyChecksum blocks on every replica until the
 	// computed checksum is available.
-	computeChecksumDuration := time.Since(start)
+	computeChecksumDuration := timeutil.Since(start)
 	time.Sleep(computeChecksumDuration)
 
 	// Send a VerifyChecksum to all the replicas of the range.
@@ -1558,7 +1558,7 @@ func (r *Replica) getChecksum(id uuid.UUID) (replicaChecksum, bool) {
 	now := timeutil.Now()
 	<-c.notify
 	if log.V(1) {
-		log.Info("waited for compute checksum for %s", time.Since(now))
+		log.Info("waited for compute checksum for %s", timeutil.Since(now))
 	}
 	r.mu.Lock()
 	c, ok = r.mu.checksums[id]
