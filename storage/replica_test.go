@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1284,6 +1285,96 @@ func TestAcquireLeaderLease(t *testing.T) {
 		if t.Failed() {
 			return
 		}
+	}
+}
+
+func TestLeaderLeaseConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const num = 5
+
+	// The test was written to test this individual block below. The worry
+	// was that this would NPE (it does not).
+	{
+		if protoutil.Clone((*roachpb.Error)(nil)).(*roachpb.Error) != nil {
+			t.Fatal("could not clone nil *Error")
+		}
+	}
+
+	// Testing concurrent leader lease requests is still a good idea. We check
+	// that they work and clone *Error, which prevents regression of #6111.
+	const origMsg = "boom"
+	for _, withError := range []bool{false, true} {
+		func(withError bool) {
+			tc := testContext{}
+			tc.Start(t)
+			defer tc.Stop()
+
+			var wg sync.WaitGroup
+			wg.Add(num)
+			var captureTime atomic.Value
+			captureTime.Store(roachpb.ZeroTimestamp)
+
+			var seen int32
+			tc.rng.mu.Lock()
+			tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
+				ll, ok := cmd.raftCmd.Cmd.Requests[0].
+					GetInner().(*roachpb.LeaderLeaseRequest)
+				if !ok || !ll.Lease.Start.Equal(captureTime.Load().(roachpb.Timestamp)) {
+					return defaultProposeRaftCommandLocked(tc.rng, cmd)
+				}
+				if c := atomic.AddInt32(&seen, 1); c > 1 {
+					t.Fatal("expected only one leader lease request")
+				}
+				go func() {
+					wg.Wait()
+					if withError {
+						cmd.done <- roachpb.ResponseWithError{
+							Err: roachpb.NewErrorf(origMsg),
+						}
+					}
+					if err := defaultProposeRaftCommandLocked(tc.rng, cmd); err != nil {
+						panic(err) // unlikely, so punt on proper handling
+					}
+				}()
+				return nil
+			}
+			tc.rng.mu.Unlock()
+
+			tc.manualClock.Increment(leaseExpiry(tc.rng))
+			magicTime := tc.clock.Now()
+			captureTime.Store(magicTime)
+			pErrCh := make(chan *roachpb.Error, num)
+			for i := 0; i < num; i++ {
+				tc.stopper.RunAsyncTask(func() {
+					leaseCh := tc.rng.requestLeaderLease(magicTime)
+					wg.Done()
+					pErrCh <- (<-leaseCh)
+				})
+			}
+
+			pErrs := make([]*roachpb.Error, num)
+			for i := range pErrs {
+				// Make sure all of the responses are in (just so that we can
+				// mess with the "original" error knowing that all of the
+				// cloning must have happened by now).
+				pErrs[i] = <-pErrCh
+			}
+
+			newMsg := "moob"
+			for i, pErr := range pErrs {
+				if withError != (pErr != nil) {
+					t.Errorf("%d: wanted error: %t, got error %v", i, withError, pErr)
+				}
+				if testutils.IsPError(pErr, newMsg) {
+					t.Errorf("%d: errors shared memory: %v", i, pErr)
+				} else if testutils.IsPError(pErr, origMsg) {
+					// Mess with anyone holding the same reference.
+					pErr.Message = newMsg
+				} else if pErr != nil {
+					t.Errorf("%d: unexpected error: %s", i, pErr)
+				}
+			}
+		}(withError)
 	}
 }
 
