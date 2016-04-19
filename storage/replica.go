@@ -188,6 +188,10 @@ type Replica struct {
 	systemDBHash []byte      // sha1 hash of the system config @ last gossip
 	abortCache   *AbortCache // Avoids anomalous reads after abort
 
+	// creatingReplica is set when a replica is created as uninitialized
+	// via a raft message.
+	creatingReplica *roachpb.ReplicaDescriptor
+
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex.
@@ -618,7 +622,7 @@ func (r *Replica) IsInitialized() bool {
 // to an incoming message but we are waiting for our initial snapshot.
 // isInitializedLocked requires that the replica lock is held.
 func (r *Replica) isInitializedLocked() bool {
-	return len(r.mu.desc.EndKey) > 0
+	return r.mu.desc.IsInitialized()
 }
 
 // Desc returns the range's descriptor.

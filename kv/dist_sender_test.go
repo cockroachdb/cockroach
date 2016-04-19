@@ -286,7 +286,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			return []roachpb.RangeDescriptor{descriptor}, nil, nil
 		}),
 	}
@@ -359,12 +359,12 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-type mockRangeDescriptorDB func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
+type MockRangeDescriptorDB func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 
-func (mdb mockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (mdb MockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	return mdb(stripMeta(key), considerIntents, useReverseScan)
 }
-func (mdb mockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
 	rs, _, err := mdb.RangeLookup(nil, nil, false /* considerIntents */, false /* useReverseScan */)
 	if err != nil || len(rs) == 0 {
 		return nil, err
@@ -372,7 +372,7 @@ func (mdb mockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachp
 	return &rs[0], nil
 }
 
-var defaultMockRangeDescriptorDB = mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+var defaultMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 	}
@@ -532,7 +532,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			// Return next error and truncate the prefix of the errors array.
 			var pErr *roachpb.Error
 			if key != nil {
@@ -839,7 +839,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
@@ -942,7 +942,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
@@ -983,7 +983,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 
 	ctx := &DistSenderContext{
 		RPCSend: testFn,
-		RangeDescriptorDB: mockRangeDescriptorDB(func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if len(key) > 0 && !useReverseScan {
 				t.Fatalf("expected UseReverseScan to be set")
 			}
@@ -1070,7 +1070,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Fill mockRangeDescriptorDB with two descriptors. When a
+	// Fill MockRangeDescriptorDB with two descriptors. When a
 	// range descriptor is looked up by key "b", return the second
 	// descriptor whose range is ["a", "c") and partially overlaps
 	// with the first descriptor's range.
@@ -1096,7 +1096,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 			},
 		},
 	}
-	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1177,7 +1177,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Fill mockRangeDescriptorDB with two descriptors.
+	// Fill MockRangeDescriptorDB with two descriptors.
 	var descriptor1 = roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
@@ -1212,7 +1212,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		},
 	}
 
-	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		switch {
 		case bytes.HasPrefix(key, keys.Meta2Prefix):
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
@@ -1361,7 +1361,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 
 	}
 
-	// Fill mockRangeDescriptorDB with two descriptors.
+	// Fill MockRangeDescriptorDB with two descriptors.
 	var descriptor1 = roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
@@ -1384,7 +1384,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 			},
 		},
 	}
-	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1492,7 +1492,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 
 	}
 
-	// Fill mockRangeDescriptorDB with two descriptors.
+	// Fill MockRangeDescriptorDB with two descriptors.
 	var descriptor1 = roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
@@ -1515,7 +1515,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 			},
 		},
 	}
-	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1596,7 +1596,7 @@ func TestCountRanges(t *testing.T) {
 	}
 
 	// Mock out descriptor DB and sender function.
-	descDB := mockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
