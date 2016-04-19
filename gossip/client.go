@@ -21,7 +21,6 @@ import (
 	"net"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -67,7 +66,11 @@ func (c *client) start(g *Gossip, disconnected chan *client, ctx *rpc.Context, s
 			disconnected <- c
 		}()
 
-		conn, err := ctx.GRPCDial(c.addr.String(), grpc.WithBlock())
+		// Note: avoid using `grpc.WithBlock` here. This code is already
+		// asynchronous from the caller's perspective, so the only effect of
+		// `WithBlock` here is blocking shutdown - at the time of this writing,
+		// that ends ups up making `kv` tests take twice as long.
+		conn, err := ctx.GRPCDial(c.addr.String())
 		if err != nil {
 			log.Errorf("failed to dial: %v", err)
 			return
