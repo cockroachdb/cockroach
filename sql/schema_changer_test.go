@@ -415,6 +415,8 @@ ALTER INDEX t.test@foo RENAME TO ufo
 // Test schema change backfills are not affected by various operations
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
+	t.Skipf("TODO(vivek): #6124")
+
 	defer leaktest.AfterTest(t)()
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
