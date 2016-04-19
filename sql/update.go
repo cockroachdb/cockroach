@@ -211,8 +211,8 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 			switch t := newExpr.(type) {
 			case *parser.Tuple:
 				n = len(t.Exprs)
-			case parser.DTuple:
-				n = len(t)
+			case *parser.DTuple:
+				n = len(*t)
 			default:
 				return nil, roachpb.NewErrorf("unsupported tuple assignment: %T", newExpr)
 			}
@@ -349,8 +349,8 @@ func (u *updateNode) Start() *roachpb.Error {
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					i++
 				}
-			case parser.DTuple:
-				for _, e := range t {
+			case *parser.DTuple:
+				for _, e := range *t {
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					i++
 				}

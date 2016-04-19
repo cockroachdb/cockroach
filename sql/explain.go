@@ -107,9 +107,9 @@ func populateExplain(v *valuesNode, plan planNode, level int) {
 	name, description, children := plan.ExplainPlan()
 
 	row := parser.DTuple{
-		parser.DInt(level),
-		parser.DString(name),
-		parser.DString(description),
+		parser.NewDInt(parser.DInt(level)),
+		parser.NewDString(name),
+		parser.NewDString(description),
 	}
 	v.rows = append(v.rows, row)
 
@@ -165,7 +165,7 @@ type debugValues struct {
 func (vals *debugValues) AsRow() parser.DTuple {
 	keyVal := parser.DNull
 	if vals.key != "" {
-		keyVal = parser.DString(vals.key)
+		keyVal = parser.NewDString(vals.key)
 	}
 
 	// The "output" value is NULL for partial rows, or a DBool indicating if the row passed the
@@ -174,16 +174,16 @@ func (vals *debugValues) AsRow() parser.DTuple {
 
 	switch vals.output {
 	case debugValueFiltered:
-		outputVal = parser.DBool(false)
+		outputVal = parser.MakeDBool(false)
 
 	case debugValueRow:
-		outputVal = parser.DBool(true)
+		outputVal = parser.MakeDBool(true)
 	}
 
 	return parser.DTuple{
-		parser.DInt(vals.rowIdx),
+		parser.NewDInt(parser.DInt(vals.rowIdx)),
 		keyVal,
-		parser.DString(vals.value),
+		parser.NewDString(vals.value),
 		outputVal,
 	}
 }
@@ -219,14 +219,14 @@ func (n *explainDebugNode) Values() parser.DTuple {
 
 	keyVal := parser.DNull
 	if vals.key != "" {
-		keyVal = parser.DString(vals.key)
+		keyVal = parser.NewDString(vals.key)
 	}
 
 	return parser.DTuple{
-		parser.DInt(vals.rowIdx),
+		parser.NewDInt(parser.DInt(vals.rowIdx)),
 		keyVal,
-		parser.DString(vals.value),
-		parser.DString(vals.output.String()),
+		parser.NewDString(vals.value),
+		parser.NewDString(vals.output.String()),
 	}
 }
 

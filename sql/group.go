@@ -724,12 +724,12 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 		return sum, nil
 	}
 	switch t := sum.(type) {
-	case parser.DInt:
+	case *parser.DInt:
 		// TODO(nvanbenschoten) decimal: this should be a numeric, once
 		// better type coercion semantics are defined.
-		return parser.DFloat(t) / parser.DFloat(a.count), nil
-	case parser.DFloat:
-		return t / parser.DFloat(a.count), nil
+		return parser.NewDFloat(parser.DFloat(*t) / parser.DFloat(a.count)), nil
+	case *parser.DFloat:
+		return parser.NewDFloat(*t / parser.DFloat(a.count)), nil
 	case *parser.DDecimal:
 		count := inf.NewDec(int64(a.count), 0)
 		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
@@ -752,8 +752,8 @@ func (a *countAggregate) add(datum parser.Datum) error {
 		return nil
 	}
 	switch t := datum.(type) {
-	case parser.DTuple:
-		for _, d := range t {
+	case *parser.DTuple:
+		for _, d := range *t {
 			if d != parser.DNull {
 				a.count++
 				break
@@ -766,7 +766,7 @@ func (a *countAggregate) add(datum parser.Datum) error {
 }
 
 func (a *countAggregate) result() (parser.Datum, error) {
-	return parser.DInt(a.count), nil
+	return parser.NewDInt(parser.DInt(a.count)), nil
 }
 
 type maxAggregate struct {
@@ -854,15 +854,15 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 	}
 
 	switch t := datum.(type) {
-	case parser.DInt:
-		if v, ok := a.sum.(parser.DInt); ok {
-			a.sum = v + t
+	case *parser.DInt:
+		if v, ok := a.sum.(*parser.DInt); ok {
+			a.sum = parser.NewDInt(*v + *t)
 			return nil
 		}
 
-	case parser.DFloat:
-		if v, ok := a.sum.(parser.DFloat); ok {
-			a.sum = v + t
+	case *parser.DFloat:
+		if v, ok := a.sum.(*parser.DFloat); ok {
+			a.sum = parser.NewDFloat(*v + *t)
 			return nil
 		}
 
@@ -908,7 +908,7 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 
 	const unexpectedErrFormat = "unexpected VARIANCE argument type: %s"
 	switch t := datum.(type) {
-	case parser.DFloat:
+	case *parser.DFloat:
 		if a.typedAggregate == nil {
 			a.typedAggregate = newFloatVarianceAggregate()
 		} else {
@@ -919,7 +919,7 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 			}
 		}
 		return a.typedAggregate.add(t)
-	case parser.DInt:
+	case *parser.DInt:
 		if a.typedAggregate == nil {
 			a.typedAggregate = newDecimalVarianceAggregate()
 		} else {
@@ -929,7 +929,7 @@ func (a *varianceAggregate) add(datum parser.Datum) error {
 				return util.Errorf(unexpectedErrFormat, datum.Type())
 			}
 		}
-		a.tmpDec.SetUnscaled(int64(t))
+		a.tmpDec.SetUnscaled(int64(*t))
 		return a.typedAggregate.add(&a.tmpDec)
 	case *parser.DDecimal:
 		if a.typedAggregate == nil {
@@ -965,7 +965,7 @@ func newFloatVarianceAggregate() aggregateImpl {
 }
 
 func (a *floatVarianceAggregate) add(datum parser.Datum) error {
-	f := float64(datum.(parser.DFloat))
+	f := float64(*datum.(*parser.DFloat))
 
 	// Uses the Knuth/Welford method for accurately computing variance online in a
 	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
@@ -981,7 +981,7 @@ func (a *floatVarianceAggregate) result() (parser.Datum, error) {
 	if a.count < 2 {
 		return parser.DNull, nil
 	}
-	return parser.DFloat(a.sqrDiff / (float64(a.count) - 1)), nil
+	return parser.NewDFloat(parser.DFloat(a.sqrDiff / (float64(a.count) - 1))), nil
 }
 
 type decimalVarianceAggregate struct {
@@ -1044,8 +1044,8 @@ func (a *stddevAggregate) result() (parser.Datum, error) {
 		return variance, err
 	}
 	switch t := variance.(type) {
-	case parser.DFloat:
-		return parser.DFloat(math.Sqrt(float64(t))), nil
+	case *parser.DFloat:
+		return parser.NewDFloat(parser.DFloat(math.Sqrt(float64(*t)))), nil
 	case *parser.DDecimal:
 		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
 		return t, nil

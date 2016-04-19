@@ -1167,15 +1167,15 @@ user_priority:
 opt_boolean_or_string:
   TRUE
   {
-    $$.val = DBool(true)
+    $$.val = MakeDBool(true)
   }
 | FALSE
   {
-    $$.val = DBool(false)
+    $$.val = MakeDBool(false)
   }
 | ON
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
@@ -1190,22 +1190,22 @@ opt_boolean_or_string:
 zone_value:
   SCONST
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 | IDENT
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 | const_interval SCONST opt_interval
   {
-    expr := &CastExpr{Expr: DString($2), Type: $1.colType()}
+    expr := &CastExpr{Expr: NewDString($2), Type: $1.colType()}
     var ctx EvalContext
     d, err := expr.Eval(ctx)
     if err != nil {
       sqllex.Error("cannot evaluate to an interval type")
       return 1
     }
-    if _, ok := d.(DInterval); !ok {
+    if _, ok := d.(*DInterval); !ok {
       panic("not an interval type")
     }
     $$.val = d
@@ -1213,11 +1213,11 @@ zone_value:
 | numeric_only
 | DEFAULT
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 | LOCAL
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 
 opt_encoding:
@@ -1228,11 +1228,11 @@ opt_encoding:
 non_reserved_word_or_sconst:
   non_reserved_word
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 | SCONST
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 
 show_stmt:
@@ -1561,7 +1561,7 @@ numeric_only:
   }
 | signed_iconst
   {
-    $$.val = DInt($1.ival().Val)
+    $$.val = NewDInt(DInt($1.ival().Val))
   }
 
 // TRUNCATE table relname1, relname2, ...
@@ -2962,19 +2962,19 @@ a_expr:
 | row OVERLAPS row { unimplemented() }
 | a_expr IS TRUE %prec IS
   {
-    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DBool(true)}
+    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: MakeDBool(true)}
   }
 | a_expr IS NOT TRUE %prec IS
   {
-    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DBool(true)}
+    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: MakeDBool(true)}
   }
 | a_expr IS FALSE %prec IS
   {
-    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: DBool(false)}
+    $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: MakeDBool(false)}
   }
 | a_expr IS NOT FALSE %prec IS
   {
-    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DBool(false)}
+    $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: MakeDBool(false)}
   }
 | a_expr IS UNKNOWN %prec IS
   {
@@ -3516,7 +3516,7 @@ array_expr_list:
 extract_list:
   extract_arg FROM a_expr
   {
-    $$.val = Exprs{DString($1), $3.expr()}
+    $$.val = Exprs{NewDString($1), $3.expr()}
   }
 
 // TODO(vivek): Narrow down to just IDENT once the other
@@ -3588,7 +3588,7 @@ substr_list:
   }
 | a_expr substr_for
   {
-    $$.val = Exprs{$1.expr(), DInt(1), $2.expr()}
+    $$.val = Exprs{$1.expr(), NewDInt(1), $2.expr()}
   }
 | expr_list
   {
@@ -3908,32 +3908,32 @@ a_expr_const:
   }
 | SCONST
   {
-    $$.val = DString($1)
+    $$.val = NewDString($1)
   }
 | BCONST
   {
-    $$.val = DBytes($1)
+    $$.val = NewDBytes(DBytes($1))
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: DString($2), Type: $1.colType()}
+    $$.val = &CastExpr{Expr: NewDString($2), Type: $1.colType()}
   }
 | const_interval SCONST opt_interval
   {
-    $$.val = &CastExpr{Expr: DString($2), Type: $1.colType()}
+    $$.val = &CastExpr{Expr: NewDString($2), Type: $1.colType()}
   }
 | const_interval '(' ICONST ')' SCONST
   {
-    $$.val = &CastExpr{Expr: DString($5), Type: $1.colType()}
+    $$.val = &CastExpr{Expr: NewDString($5), Type: $1.colType()}
   }
 | TRUE
   {
-    $$.val = DBool(true)
+    $$.val = MakeDBool(true)
   }
 | FALSE
   {
-    $$.val = DBool(false)
+    $$.val = MakeDBool(false)
   }
 | NULL
   {

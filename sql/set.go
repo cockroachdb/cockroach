@@ -79,12 +79,12 @@ func (p *planner) getStringVal(name string, values parser.Exprs) (string, error)
 	if err != nil {
 		return "", err
 	}
-	s, ok := val.(parser.DString)
+	s, ok := val.(*parser.DString)
 	if !ok {
 		return "", fmt.Errorf("%s: requires a single string value: %s is a %s",
 			name, values[0], val.Type())
 	}
-	return string(s), nil
+	return string(*s), nil
 }
 
 func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
@@ -106,8 +106,8 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	}
 	var offset int64
 	switch v := d.(type) {
-	case parser.DString:
-		location := string(v)
+	case *parser.DString:
+		location := string(*v)
 		if location == "DEFAULT" || location == "LOCAL" {
 			location = "UTC"
 		}
@@ -116,17 +116,17 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 		}
 		p.session.Timezone = &SessionLocation{Location: location}
 
-	case parser.DInterval:
+	case *parser.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
 		if err != nil {
 			return nil, err
 		}
 
-	case parser.DInt:
-		offset = int64(v) * 60 * 60
+	case *parser.DInt:
+		offset = int64(*v) * 60 * 60
 
-	case parser.DFloat:
-		offset = int64(float64(v) * 60.0 * 60.0)
+	case *parser.DFloat:
+		offset = int64(float64(*v) * 60.0 * 60.0)
 
 	case *parser.DDecimal:
 		sixty := inf.NewDec(60, 0)

@@ -333,11 +333,11 @@ func (s *adminServer) Databases(ctx context.Context, req *DatabasesRequest) (*Da
 
 	var resp DatabasesResponse
 	for _, row := range r.ResultList[0].Rows {
-		dbname, ok := row.Values[0].(parser.DString)
+		dbname, ok := row.Values[0].(*parser.DString)
 		if !ok {
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row.Values[0])
 		}
-		resp.Databases = append(resp.Databases, string(dbname))
+		resp.Databases = append(resp.Databases, string(*dbname))
 	}
 
 	return &resp, nil
@@ -567,7 +567,7 @@ func (s *adminServer) Users(ctx context.Context, req *UsersRequest) (*UsersRespo
 
 	var resp UsersResponse
 	for _, row := range r.ResultList[0].Rows {
-		resp.Users = append(resp.Users, UsersResponse_User{string(row.Values[0].(parser.DString))})
+		resp.Users = append(resp.Users, UsersResponse_User{string(*row.Values[0].(*parser.DString))})
 	}
 	return &resp, nil
 }
@@ -586,13 +586,13 @@ func (s *adminServer) Events(ctx context.Context, req *EventsRequest) (*EventsRe
 	q.Append("FROM system.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
-		q.Append("AND eventType = $ ", parser.DString(req.Type))
+		q.Append("AND eventType = $ ", parser.NewDString(req.Type))
 	}
 	if req.TargetId > 0 {
-		q.Append("AND targetID = $ ", parser.DInt(req.TargetId))
+		q.Append("AND targetID = $ ", parser.NewDInt(parser.DInt(req.TargetId)))
 	}
 	q.Append("ORDER BY timestamp DESC ")
-	q.Append("LIMIT $", parser.DInt(apiEventLimit))
+	q.Append("LIMIT $", parser.NewDInt(parser.DInt(apiEventLimit)))
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
@@ -646,7 +646,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 		if i != 0 {
 			query.Append(",")
 		}
-		query.Append("$", parser.DString(key))
+		query.Append("$", parser.NewDString(key))
 	}
 	query.Append(");")
 	if err := query.Errors(); err != nil {
@@ -661,21 +661,21 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 	// Marshal results.
 	resp := GetUIDataResponse{KeyValues: make(map[string]GetUIDataResponse_Value)}
 	for _, row := range r.ResultList[0].Rows {
-		dKey, ok := row.Values[0].(parser.DString)
+		dKey, ok := row.Values[0].(*parser.DString)
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI key: %T", row.Values[0])
 		}
-		dValue, ok := row.Values[1].(parser.DBytes)
+		dValue, ok := row.Values[1].(*parser.DBytes)
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI value: %T", row.Values[1])
 		}
-		dLastUpdated, ok := row.Values[2].(parser.DTimestamp)
+		dLastUpdated, ok := row.Values[2].(*parser.DTimestamp)
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[2])
 		}
 
-		resp.KeyValues[string(dKey)] = GetUIDataResponse_Value{
-			Value:       []byte(dValue),
+		resp.KeyValues[string(*dKey)] = GetUIDataResponse_Value{
+			Value:       []byte(*dValue),
 			LastUpdated: GetUIDataResponse_Timestamp{Sec: dLastUpdated.Unix(), Nsec: uint32(dLastUpdated.Nanosecond())},
 		}
 	}
@@ -710,8 +710,8 @@ func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*Se
 		if alreadyExists {
 			query := "UPDATE system.ui SET value = $1, lastUpdated = NOW() WHERE key = $2; COMMIT;"
 			params := []parser.Datum{
-				parser.DString(val), // $1
-				parser.DString(key), // $2
+				parser.NewDString(string(val)), // $1
+				parser.NewDString(key),         // $2
 			}
 			r := s.sqlExecutor.ExecuteStatements(ctx, session, query, params)
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
@@ -723,8 +723,8 @@ func (s *adminServer) SetUIData(ctx context.Context, req *SetUIDataRequest) (*Se
 		} else {
 			query := "INSERT INTO system.ui (key, value, lastUpdated) VALUES ($1, $2, NOW()); COMMIT;"
 			params := []parser.Datum{
-				parser.DString(key), // $1
-				parser.DBytes(val),  // $2
+				parser.NewDString(key),               // $1
+				parser.NewDBytes(parser.DBytes(val)), // $2
 			}
 			r := s.sqlExecutor.ExecuteStatements(ctx, session, query, params)
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
@@ -869,37 +869,37 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 		if dst == nil {
 			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
 		}
-		s, ok := src.(parser.DString)
+		s, ok := src.(*parser.DString)
 		if !ok {
 			return util.ErrorfSkipFrames(1, "source type assertion failed")
 		}
-		*d = string(s)
+		*d = string(*s)
 
 	case *bool:
 		if dst == nil {
 			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
 		}
-		s, ok := src.(parser.DBool)
+		s, ok := src.(*parser.DBool)
 		if !ok {
 			return util.ErrorfSkipFrames(1, "source type assertion failed")
 		}
-		*d = bool(s)
+		*d = bool(*s)
 
 	case *int64:
 		if dst == nil {
 			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
 		}
-		s, ok := src.(parser.DInt)
+		s, ok := src.(*parser.DInt)
 		if !ok {
 			return util.ErrorfSkipFrames(1, "source type assertion failed")
 		}
-		*d = int64(s)
+		*d = int64(*s)
 
 	case *time.Time:
 		if dst == nil {
 			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
 		}
-		s, ok := src.(parser.DTimestamp)
+		s, ok := src.(*parser.DTimestamp)
 		if !ok {
 			return util.ErrorfSkipFrames(1, "source type assertion failed")
 		}
@@ -909,12 +909,12 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 		if dst == nil {
 			return util.ErrorfSkipFrames(1, "nil destination pointer passed in")
 		}
-		s, ok := src.(parser.DBytes)
+		s, ok := src.(*parser.DBytes)
 		if !ok {
 			return util.ErrorfSkipFrames(1, "source type assertion failed")
 		}
 		// Yes, this copies, but this probably isn't in the critical path.
-		*d = []byte(s)
+		*d = []byte(*s)
 
 	default:
 		return util.ErrorfSkipFrames(1, "unimplemented type for scanCol: %T", dst)

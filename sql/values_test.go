@@ -43,7 +43,7 @@ func TestValues(t *testing.T) {
 	unsupp := &parser.RangeCond{}
 
 	intVal := func(v int64) *parser.IntVal {
-		return &parser.IntVal{Val: v}
+		return &parser.IntVal{Val: parser.DInt(v)}
 	}
 	asRow := func(datums ...parser.Datum) []parser.DTuple {
 		return []parser.DTuple{datums}
@@ -63,32 +63,32 @@ func TestValues(t *testing.T) {
 	}{
 		{
 			makeValues(makeTuple(intVal(vInt))),
-			asRow(parser.DInt(vInt)),
+			asRow(parser.NewDInt(parser.DInt(vInt))),
 			true,
 		},
 		{
 			makeValues(makeTuple(intVal(vInt), intVal(vInt))),
-			asRow(parser.DInt(vInt), parser.DInt(vInt)),
+			asRow(parser.NewDInt(parser.DInt(vInt)), parser.NewDInt(parser.DInt(vInt))),
 			true,
 		},
 		{
 			makeValues(makeTuple(parser.NumVal(fmt.Sprintf("%0.5f", vNum)))),
-			asRow(parser.DFloat(vNum)),
+			asRow(parser.NewDFloat(parser.DFloat(vNum))),
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.DString(vStr))),
-			asRow(parser.DString(vStr)),
+			makeValues(makeTuple(parser.NewDString(vStr))),
+			asRow(parser.NewDString(vStr)),
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.DBytes(vStr))),
-			asRow(parser.DBytes(vStr)),
+			makeValues(makeTuple(parser.NewDBytes(parser.DBytes(vStr)))),
+			asRow(parser.NewDBytes(parser.DBytes(vStr))),
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.DBool(vBool))),
-			asRow(parser.DBool(vBool)),
+			makeValues(makeTuple(parser.MakeDBool(parser.DBool(vBool)))),
+			asRow(parser.MakeDBool(parser.DBool(vBool))),
 			true,
 		},
 		{

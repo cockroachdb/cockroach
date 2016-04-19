@@ -214,12 +214,13 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 	case In, NotIn:
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
-		tuple, ok := expr.Right.(DTuple)
+		tuple, ok := expr.Right.(*DTuple)
 		if ok {
-			tuple.Normalize()
+			tupleCopy := *tuple
+			tupleCopy.Normalize()
 			exprCopy := *expr
 			expr = &exprCopy
-			expr.Right = tuple
+			expr.Right = &tupleCopy
 		}
 	}
 
@@ -323,7 +324,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
 	// UnaryExprs.
 	if expr.Operator == UnaryMinus {
 		if d, ok := expr.Expr.(*IntVal); ok && d.Val == math.MinInt64 {
-			return DInt(math.MinInt64)
+			return NewDInt(math.MinInt64)
 		}
 	}
 

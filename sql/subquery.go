@@ -71,13 +71,13 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
 		if plan.Next() {
-			return true, parser.DBool(true)
+			return true, parser.MakeDBool(true)
 		}
 		v.pErr = plan.PErr()
 		if v.pErr != nil {
 			return false, expr
 		}
-		return true, parser.DBool(false)
+		return true, parser.MakeDBool(false)
 	}
 
 	columns, multipleRows := v.getSubqueryContext()
@@ -108,11 +108,11 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 				// plan.Next(), so make a copy.
 				valuesCopy := make(parser.DTuple, len(values))
 				copy(valuesCopy, values)
-				rows = append(rows, valuesCopy)
+				rows = append(rows, &valuesCopy)
 			}
 		}
 		rows.Normalize()
-		result = rows
+		result = &rows
 	} else {
 		result = parser.DNull
 		for plan.Next() {
@@ -123,7 +123,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			default:
 				valuesCopy := make(parser.DTuple, len(values))
 				copy(valuesCopy, values)
-				result = valuesCopy
+				result = &valuesCopy
 			}
 			if plan.Next() {
 				v.pErr = roachpb.NewUErrorf("more than one row returned by a subquery used as an expression")
@@ -162,8 +162,8 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, multipleRows bool) 
 			switch t := e.Left.(type) {
 			case *parser.Tuple:
 				columns = len(t.Exprs)
-			case parser.DTuple:
-				columns = len(t)
+			case *parser.DTuple:
+				columns = len(*t)
 			}
 
 			multipleRows = false

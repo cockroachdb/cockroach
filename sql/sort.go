@@ -143,8 +143,8 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 // Here "1" refers to the first render target "a". The returned index is 0.
 func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
 	switch i := expr.(type) {
-	case parser.DInt:
-		index := int(i)
+	case *parser.DInt:
+		index := int(*i)
 		if numCols := numOriginalCols; index < 1 || index > numCols {
 			return -1, fmt.Errorf("invalid column index: %d not in range [1, %d]", index, numCols)
 		}

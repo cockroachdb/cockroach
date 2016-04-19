@@ -125,7 +125,7 @@ func selectIndex(
 
 		// Check to see if the filter simplified to a constant.
 		if len(exprs) == 1 && len(exprs[0]) == 1 {
-			if d, ok := exprs[0][0].(parser.DBool); ok && bool(!d) {
+			if d, ok := exprs[0][0].(*parser.DBool); ok && bool(!*d) {
 				// The expression simplified to false.
 				return &emptyNode{}, nil
 			}
@@ -761,7 +761,7 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 func isMixedTypeComparison(c *parser.ComparisonExpr) (bool, error) {
 	switch c.Operator {
 	case parser.In, parser.NotIn:
-		tuple := c.Right.(parser.DTuple)
+		tuple := *c.Right.(*parser.DTuple)
 		for _, expr := range tuple {
 			if mixed, err := sameTypeExprs(c.Left, expr); mixed || err != nil {
 				return mixed, err
@@ -1015,7 +1015,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 	} else {
 		e = c.end
 	}
-	tuple := e.Right.(parser.DTuple)
+	tuple := *e.Right.(*parser.DTuple)
 	existingSpans := spans
 	spans = make([]span, 0, len(existingSpans)*len(tuple))
 	for _, datum := range tuple {
@@ -1024,7 +1024,7 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 		var start, end []byte
 
 		switch t := datum.(type) {
-		case parser.DTuple:
+		case *parser.DTuple:
 			// The constraint is a tuple of tuples, meaning something like
 			// (...) IN ((1,2),(3,4)).
 			for j, tupleIdx := range c.tupleMap {
@@ -1034,11 +1034,11 @@ func applyInConstraint(spans []span, c indexConstraint, firstCol int,
 					panic(err)
 				}
 
-				if start, err = encodeTableKey(start, t[tupleIdx], colDir); err != nil {
+				if start, err = encodeTableKey(start, (*t)[tupleIdx], colDir); err != nil {
 					panic(err)
 				}
 				end = encodeInclusiveEndValue(
-					end, t[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
+					end, (*t)[tupleIdx], colDir, isLastEndConstraint && (j == len(c.tupleMap)-1))
 			}
 		default:
 			// The constraint is a tuple of values, meaning something like
@@ -1238,7 +1238,7 @@ func (ic indexConstraints) exactPrefix() int {
 		case parser.EQ:
 			prefix++
 		case parser.In:
-			if tuple, ok := c.start.Right.(parser.DTuple); !ok || len(tuple) != 1 {
+			if tuple, ok := c.start.Right.(*parser.DTuple); !ok || len(*tuple) != 1 {
 				// TODO(radu): we may still have an exact prefix if the first
 				// value in each tuple is the same, e.g.
 				// `(a, b) IN ((1, 2), (1, 3))`
@@ -1272,10 +1272,10 @@ func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
 		case parser.EQ:
 			datums = append(datums, c.start.Right.(parser.Datum))
 		case parser.In:
-			right := c.start.Right.(parser.DTuple)[0]
+			right := (*c.start.Right.(*parser.DTuple))[0]
 			if _, ok := c.start.Left.(*parser.Tuple); ok {
 				// We have something like `(a,b,c) IN (1,2,3)`
-				rtuple := right.(parser.DTuple)
+				rtuple := *right.(*parser.DTuple)
 				for _, tupleIdx := range c.tupleMap {
 					datums = append(datums, rtuple[tupleIdx])
 					if len(datums) == num {
@@ -1374,13 +1374,13 @@ func applyConstraints(expr parser.Expr, constraints orIndexConstraints) parser.E
 			}
 			// The second case is that both the start and end constraint are an IN
 			// operator with only a single value.
-			if c.start.Operator == parser.In && len(c.start.Right.(parser.DTuple)) == 1 {
+			if c.start.Operator == parser.In && len(*c.start.Right.(*parser.DTuple)) == 1 {
 				continue
 			}
 		}
 		break
 	}
-	if expr == parser.DBool(true) {
+	if expr == parser.DBoolTrue {
 		return nil
 	}
 	return expr
@@ -1434,11 +1434,11 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				}
 				cmp := datum.Compare(cdatum)
 				if cmp == 0 {
-					return false, parser.DBool(true)
+					return false, parser.DBoolTrue
 				}
 			case parser.In:
 				// Expr: "a = <val>", constraint: "a IN (<vals>)".
-				ctuple := cdatum.(parser.DTuple)
+				ctuple := *cdatum.(*parser.DTuple)
 				if reflect.TypeOf(datum) != reflect.TypeOf(ctuple[0]) {
 					return true, expr
 				}
@@ -1446,7 +1446,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 					return ctuple[i].(parser.Datum).Compare(datum) >= 0
 				})
 				if i < len(ctuple) && ctuple[i].Compare(datum) == 0 {
-					return false, parser.DBool(true)
+					return false, parser.DBoolTrue
 				}
 			}
 
@@ -1461,9 +1461,9 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 				if reflect.TypeOf(datum) != reflect.TypeOf(cdatum) {
 					return true, expr
 				}
-				diff := diffSorted(datum.(parser.DTuple), cdatum.(parser.DTuple))
-				if len(diff) == 0 {
-					return false, parser.DBool(true)
+				diff := diffSorted(*datum.(*parser.DTuple), *cdatum.(*parser.DTuple))
+				if len(*diff) == 0 {
+					return false, parser.DBoolTrue
 				}
 				t.Right = diff
 			}
@@ -1473,7 +1473,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 			case parser.IsNot:
 				if datum == parser.DNull && cdatum == parser.DNull {
 					// Expr: "a IS NOT NULL", constraint: "a IS NOT NULL"
-					return false, parser.DBool(true)
+					return false, parser.DBoolTrue
 				}
 			}
 		}
@@ -1488,11 +1488,11 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	switch t := expr.(type) {
 	case *parser.AndExpr:
-		if t.Left == parser.DBool(true) && t.Right == parser.DBool(true) {
-			return parser.DBool(true)
-		} else if t.Left == parser.DBool(true) {
+		if t.Left == parser.DBoolTrue && t.Right == parser.DBoolTrue {
+			return parser.DBoolTrue
+		} else if t.Left == parser.DBoolTrue {
 			return t.Right
-		} else if t.Right == parser.DBool(true) {
+		} else if t.Right == parser.DBoolTrue {
 			return t.Left
 		}
 	}
@@ -1500,7 +1500,7 @@ func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 	return expr
 }
 
-func diffSorted(a, b parser.DTuple) parser.DTuple {
+func diffSorted(a, b parser.DTuple) *parser.DTuple {
 	var r parser.DTuple
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(b[0]) {
@@ -1514,5 +1514,5 @@ func diffSorted(a, b parser.DTuple) parser.DTuple {
 			b = b[1:]
 		}
 	}
-	return r
+	return &r
 }

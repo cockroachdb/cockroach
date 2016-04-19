@@ -256,7 +256,7 @@ func TestScanNumber(t *testing.T) {
 func TestScanParam(t *testing.T) {
 	testData := []struct {
 		sql      string
-		expected int64
+		expected DInt
 	}{
 		{`$1`, 1},
 		{`$1a`, 1},

@@ -114,37 +114,37 @@ func exprConvertVars(expr parser.Expr, conv varConvertFunc) parser.Expr {
 }
 
 func makeAnd(left parser.Expr, right parser.Expr) parser.Expr {
-	if left == parser.DBool(false) || right == parser.DBool(false) {
-		return parser.DBool(false)
+	if left == parser.DBoolFalse || right == parser.DBoolFalse {
+		return parser.DBoolFalse
 	}
-	if left == parser.DBool(true) {
+	if left == parser.DBoolTrue {
 		return right
 	}
-	if right == parser.DBool(true) {
+	if right == parser.DBoolTrue {
 		return left
 	}
 	return &parser.AndExpr{Left: left, Right: right}
 }
 
 func makeOr(left parser.Expr, right parser.Expr) parser.Expr {
-	if left == parser.DBool(true) || right == parser.DBool(true) {
-		return parser.DBool(true)
+	if left == parser.DBoolTrue || right == parser.DBoolTrue {
+		return parser.DBoolTrue
 	}
-	if left == parser.DBool(false) {
+	if left == parser.DBoolFalse {
 		return right
 	}
-	if right == parser.DBool(false) {
+	if right == parser.DBoolFalse {
 		return left
 	}
 	return &parser.OrExpr{Left: left, Right: right}
 }
 
 func makeNot(expr parser.Expr) parser.Expr {
-	if expr == parser.DBool(true) {
-		return parser.DBool(false)
+	if expr == parser.DBoolTrue {
+		return parser.DBoolFalse
 	}
-	if expr == parser.DBool(false) {
-		return parser.DBool(true)
+	if expr == parser.DBoolFalse {
+		return parser.DBoolTrue
 	}
 	return &parser.NotExpr{Expr: expr}
 }
@@ -167,7 +167,7 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 		// An "empty" filter is always true in the weaker (normal) case (where the filter is
 		// equivalent to RES AND REM) and always false in the stronger (inverted) case (where the
 		// filter is equivalent to RES OR REM).
-		return exprConvertVars(expr, conv), parser.DBool(weaker)
+		return exprConvertVars(expr, conv), parser.MakeDBool(parser.DBool(weaker))
 	}
 
 	switch t := expr.(type) {
@@ -220,7 +220,7 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 		// We can't split off anything (we already handled the case when expr contains only
 		// restricted vars above).
 		// For why we return DBool(weaker), see the comment above on "empty" filters.
-		return parser.DBool(weaker), expr
+		return parser.MakeDBool(parser.DBool(weaker)), expr
 	}
 }
 
@@ -245,10 +245,10 @@ func splitFilter(expr parser.Expr, conv varConvertFunc) (restricted, remainder p
 		return nil, nil
 	}
 	restricted, remainder = splitBoolExpr(expr, conv, true)
-	if restricted == parser.DBool(true) {
+	if restricted == parser.DBoolTrue {
 		restricted = nil
 	}
-	if remainder == parser.DBool(true) {
+	if remainder == parser.DBoolTrue {
 		remainder = nil
 	}
 	return restricted, remainder
@@ -265,5 +265,5 @@ func runFilter(filter parser.Expr, evalCtx parser.EvalContext) (bool, error) {
 		return false, err
 	}
 
-	return d != parser.DNull && bool(d.(parser.DBool)), nil
+	return d != parser.DNull && bool(*d.(*parser.DBool)), nil
 }
