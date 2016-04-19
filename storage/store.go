@@ -1636,6 +1636,19 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			pErr = roachpb.NewError(err)
 			return nil, pErr
 		}
+		if !rng.IsInitialized() {
+			// If we have an uninitialized copy of the range, then we are
+			// probably a valid member of the range, we're just in the
+			// process of getting our snapshot. If we returned
+			// RangeNotFoundError, the client would invalidate its cache,
+			// but we can be smarter: the replica that caused our
+			// uninitialized replica to be created is most likely the
+			// leader.
+			return nil, roachpb.NewError(&roachpb.NotLeaderError{
+				RangeID: ba.RangeID,
+				Leader:  rng.creatingReplica,
+			})
+		}
 		rng.assert5725(ba)
 		br, pErr = rng.Send(ctx, ba)
 		if pErr == nil {
@@ -1803,7 +1816,8 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	s.cacheReplicaDescriptorLocked(req.GroupID, req.FromReplica)
 	s.cacheReplicaDescriptorLocked(req.GroupID, req.ToReplica)
 	// Lazily create the group.
-	r, err := s.getOrCreateReplicaLocked(req.GroupID, req.ToReplica.ReplicaID)
+	r, err := s.getOrCreateReplicaLocked(req.GroupID, req.ToReplica.ReplicaID,
+		req.FromReplica)
 	// TODO(bdarnell): is it safe to release the store lock here?
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
@@ -1925,7 +1939,7 @@ func (s *Store) processRaft() {
 // getOrCreateReplicaLocked returns a replica for the given RangeID,
 // creating an uninitialized replica if necessary. The caller must
 // hold the store's lock.
-func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID) (*Replica, error) {
+func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica roachpb.ReplicaDescriptor) (*Replica, error) {
 	r, ok := s.mu.replicas[groupID]
 	if ok {
 		if err := r.setReplicaID(replicaID); err != nil {
@@ -1955,6 +1969,7 @@ func (s *Store) getOrCreateReplicaLocked(groupID roachpb.RangeID, replicaID roac
 	if err != nil {
 		return nil, err
 	}
+	r.creatingReplica = &creatingReplica
 	// Add the range to range map, but not rangesByKey since
 	// the range's start key is unknown. The range will be
 	// added to rangesByKey later when a snapshot is applied.
