@@ -253,6 +253,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)
+	case *parser.ShowCreateTable:
+		return p.ShowCreateTable(n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
@@ -289,6 +291,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)
+	case *parser.ShowCreateTable:
+		return p.ShowCreateTable(n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(n)
 	case *parser.ShowDatabases:

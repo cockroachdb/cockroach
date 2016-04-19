@@ -90,6 +90,81 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, *roachpb.Error) 
 	return v, nil
 }
 
+// ShowCreateTable returns a CREATE TABLE statement for the specified table in
+// Traditional syntax.
+// Privileges: None.
+func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, *roachpb.Error) {
+	desc, pErr := p.getTableDesc(n.Table)
+	if pErr != nil {
+		return nil, pErr
+	}
+	v := &valuesNode{
+		columns: []ResultColumn{
+			{Name: "Table", Typ: parser.DummyString},
+			{Name: "CreateTable", Typ: parser.DummyString},
+		},
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "CREATE TABLE %s (", quoteNames(n.Table.String()))
+	var primary string
+	for i, col := range desc.VisibleColumns() {
+		if i != 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString("\n\t")
+		fmt.Fprintf(&buf, "%s %s", quoteNames(col.Name), col.Type.SQLString())
+		if col.Nullable {
+			buf.WriteString(" NULL")
+		} else {
+			buf.WriteString(" NOT NULL")
+		}
+		if col.DefaultExpr != nil {
+			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
+		}
+		if desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+			// Only set primary if the primary key is on a visible column (not rowid).
+			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
+				quoteNames(desc.PrimaryIndex.Name),
+				quoteNames(desc.PrimaryIndex.ColumnNames...),
+			)
+		}
+	}
+	buf.WriteString(primary)
+	for _, idx := range desc.Indexes {
+		var storing string
+		if len(idx.StoreColumnNames) > 0 {
+			storing = fmt.Sprintf(" STORING (%s)", quoteNames(idx.StoreColumnNames...))
+		}
+		fmt.Fprintf(&buf, ",\n\t%sINDEX %s (%s)%s",
+			isUnique[idx.Unique],
+			quoteNames(idx.Name),
+			quoteNames(idx.ColumnNames...),
+			storing,
+		)
+	}
+	buf.WriteString("\n)")
+	v.rows = append(v.rows, []parser.Datum{
+		parser.NewDString(n.Table.String()),
+		parser.NewDString(buf.String()),
+	})
+	return v, nil
+}
+
+var isUnique = map[bool]string{true: "UNIQUE "}
+
+// quoteName quotes based on Traditional syntax and adds commas between names.
+func quoteNames(names ...string) string {
+	var buf bytes.Buffer
+	for i, n := range names {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, `"%s"`, strings.Replace(n, `"`, `""`, -1))
+	}
+	return buf.String()
+}
+
 // ShowDatabases returns all the databases.
 // Privileges: None.
 //   Notes: postgres does not have a "show databases"
