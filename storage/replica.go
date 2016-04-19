@@ -521,7 +521,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 			if i == 0 {
 				llChan <- pErr
 			} else {
-				llChan <- protoutil.Clone(pErr).(*roachpb.Error)
+				llChan <- protoutil.Clone(pErr).(*roachpb.Error) // works with `nil`
 			}
 		}
 		r.mu.llChans = r.mu.llChans[:0]
@@ -1249,7 +1249,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	}
 	r.mu.pendingCmds[idKey] = pendingCmd
 
-	if err := r.proposePendingCmdLocked(idKey, pendingCmd); err != nil {
+	if err := r.proposePendingCmdLocked(pendingCmd); err != nil {
 		delete(r.mu.pendingCmds, idKey)
 		return nil, err
 	}
@@ -1258,11 +1258,14 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
 // The replica lock must be held.
-func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pendingCmd) error {
+func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 	if r.mu.proposeRaftCommandFn != nil {
 		return r.mu.proposeRaftCommandFn(p)
 	}
+	return defaultProposeRaftCommandLocked(r, p)
+}
 
+func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
 		return util.Errorf("can't propose Raft command with zero timestamp")
 	}
@@ -1284,7 +1287,7 @@ func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pending
 			log.Infof("raft: proposing %s %v for range %d", crt.ChangeType, crt.Replica, p.raftCmd.RangeID)
 
 			ctx := ConfChangeContext{
-				CommandID: string(idKey),
+				CommandID: string(p.idKey),
 				Payload:   data,
 				Replica:   crt.Replica,
 			}
@@ -1301,7 +1304,7 @@ func (r *Replica) proposePendingCmdLocked(idKey storagebase.CmdIDKey, p *pending
 				})
 		}
 	}
-	return r.mu.raftGroup.Propose(encodeRaftCommand(string(idKey), data))
+	return r.mu.raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
 }
 
 func (r *Replica) handleRaftReady() error {
@@ -1435,8 +1438,8 @@ func (r *Replica) reproposePendingCmdsLocked() error {
 		if log.V(1) {
 			log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
 		}
-		for idKey, p := range r.mu.pendingCmds {
-			if err := r.proposePendingCmdLocked(idKey, p); err != nil {
+		for _, p := range r.mu.pendingCmds {
+			if err := r.proposePendingCmdLocked(p); err != nil {
 				return err
 			}
 		}
