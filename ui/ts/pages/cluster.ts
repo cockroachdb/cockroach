@@ -3,6 +3,7 @@
 /// <reference path="../../typings/browser.d.ts"/>
 /// <reference path="../models/status.ts" />
 /// <reference path="../models/events.ts" />
+/// <reference path="../models/metrics.ts" />
 /// <reference path="../components/metrics.ts" />
 /// <reference path="../components/table.ts" />
 /// <reference path="../components/navbar.ts" />
@@ -85,6 +86,8 @@ module AdminViews {
 
         public constructor(nodeId?: string) {
           this._query = Metrics.NewQuery();
+
+          this._query.timespan(Metrics.Time.GlobalTimeSpan());
 
           this.axesSmall.push({
             titleFn: (allStats: Models.Proto.NodeStatus[]): string => {
@@ -346,7 +349,7 @@ module AdminViews {
 
         return m(".page.cluster", [
           m.component(Components.Topbar, {title: "Cluster", updated: mostRecentlyUpdated}),
-          m.component(NavigationBar, {ts: ctrl.TargetSet()}),
+          m.component(NavigationBar, {ts: ctrl.TargetSet(), timescaleSelector: (detail !== "events")}),
           primaryContent,
         ]);
       }
