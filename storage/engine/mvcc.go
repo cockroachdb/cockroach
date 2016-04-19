@@ -550,8 +550,10 @@ func MVCCPutProto(
 }
 
 type getBuffer struct {
-	meta  MVCCMetadata
-	value roachpb.Value
+	meta             MVCCMetadata
+	value            roachpb.Value
+	allowUnsafeValue bool
+	isUnsafeValue    bool
 }
 
 var getBufferPool = sync.Pool{
@@ -561,7 +563,10 @@ var getBufferPool = sync.Pool{
 }
 
 func newGetBuffer() *getBuffer {
-	return getBufferPool.Get().(*getBuffer)
+	buf := getBufferPool.Get().(*getBuffer)
+	buf.allowUnsafeValue = false
+	buf.isUnsafeValue = false
+	return buf
 }
 
 func (b *getBuffer) release() {
@@ -730,6 +735,7 @@ func mvccGetInternal(
 		if err := value.Verify(metaKey.Key); err != nil {
 			return nil, nil, err
 		}
+		buf.isUnsafeValue = false
 		return value, nil, nil
 	}
 	var ignoredIntents []roachpb.Intent
@@ -842,7 +848,12 @@ func mvccGetInternal(
 	}
 
 	value := &buf.value
-	value.RawBytes = iter.Value()
+	buf.isUnsafeValue = buf.allowUnsafeValue
+	if buf.allowUnsafeValue {
+		value.RawBytes = iter.unsafeValue()
+	} else {
+		value.RawBytes = iter.Value()
+	}
 	value.Timestamp = unsafeKey.Timestamp
 	if err := value.Verify(metaKey.Key); err != nil {
 		return nil, nil, err
@@ -1348,8 +1359,12 @@ func MVCCDeleteRange(
 	return keys, err
 }
 
+// getScanMeta returns the MVCCMetadata the iterator is currently pointed at
+// (reconstructing it if the metadata is implicit). Note that the returned
+// MVCCKey is unsafe and will be invalidated by the next call to
+// Iterator.{Next,Prev,Seek,SeekReverse,Close}.
 func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (MVCCKey, error) {
-	metaKey := iter.Key()
+	metaKey := iter.unsafeKey()
 	if !metaKey.Less(encEndKey) {
 		return NilKey, iter.Error()
 	}
@@ -1370,8 +1385,12 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (MVCCKey,
 	return metaKey, nil
 }
 
+// getReverseScanMeta returns the MVCCMetadata the iterator is currently
+// pointed at (reconstructing it if the metadata is implicit). Note that the
+// returned MVCCKey is unsafe and will be invalidated by the next call to
+// Iterator.{Next,Prev,Seek,SeekReverse,Close}.
 func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (MVCCKey, error) {
-	metaKey := iter.Key()
+	metaKey := iter.unsafeKey()
 	// The metaKey < encEndKey is exceeding the boundary.
 	if metaKey.Less(encEndKey) {
 		return NilKey, iter.Error()
@@ -1381,6 +1400,8 @@ func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (M
 	// TODO(tschottdorf): can we save any work here or leverage
 	// getScanMetaKey() above after doing the Seek() below?
 	if metaKey.IsValue() {
+		// Need a "safe" key because we're seeking the iterator.
+		metaKey = iter.Key()
 		// The row with oldest version will be got by seeking reversely. We use the
 		// key of this row to get the MVCC metadata key.
 		iter.Seek(MakeMVCCMetadataKey(metaKey.Key))
@@ -1389,7 +1410,7 @@ func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *MVCCMetadata) (M
 		}
 
 		meta.Reset()
-		metaKey = iter.Key()
+		metaKey = iter.unsafeKey()
 		meta.Timestamp = metaKey.Timestamp
 		if metaKey.IsValue() {
 			// For values, the size of keys is always account for as
@@ -1543,6 +1564,7 @@ func MVCCIterate(ctx context.Context,
 	// Gathers up all the intents from WriteIntentErrors. We only get those if
 	// the scan is consistent.
 	var wiErr error
+	var alloc chunkAllocator
 
 	for {
 		metaKey, err := getMeta(iter, encEndKey, &buf.meta)
@@ -1554,9 +1576,18 @@ func MVCCIterate(ctx context.Context,
 			break
 		}
 
+		alloc, metaKey.Key = alloc.newChunk(metaKey.Key, 1)
+
+		// Indicate that we're fine with an unsafe Value.RawBytes being returned.
+		buf.allowUnsafeValue = true
+		buf.isUnsafeValue = false
 		value, newIntents, err := mvccGetInternal(ctx, iter, metaKey, timestamp, consistent, txn, buf)
 		intents = append(intents, newIntents...)
 		if value != nil {
+			if buf.isUnsafeValue {
+				// Copy the unsafe value into our allocation buffer.
+				alloc, value.RawBytes = alloc.newChunk(value.RawBytes, 0)
+			}
 			done, err := f(roachpb.KeyValue{Key: metaKey.Key, Value: *value})
 			if err != nil {
 				return nil, err
