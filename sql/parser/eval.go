@@ -1117,16 +1117,43 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		}
 
 	case *IntervalType:
-		switch d.(type) {
+		switch v := d.(type) {
 		case DString:
-			// We use the Golang format for specifying duration.
-			// TODO(vivek): we might consider using the postgres format as well.
-			d, err := time.ParseDuration(string(d.(DString)))
-			return DInterval{Duration: duration.Duration{Nanos: d.Nanoseconds()}}, err
+			// At this time the only supported interval formats are:
+			// - Postgres compatible.
+			// - iso8601 format (with designators only), see interval.go for
+			//   sources of documentation.
+			// - Golang time.parseDuration compatible.
 
+			// If it's a blank string, exit early.
+			if v == "" {
+				return nil, fmt.Errorf("could not parse string %s as an interval", v)
+			}
+
+			var (
+				dur time.Duration
+				err error
+				str string
+			)
+
+			str = string(v)
+
+			if str[0] == 'P' {
+				// If it has a leading P we're most likely working with an iso8601
+				// interval.
+				dur, err = iso8601ToDuration(str)
+			} else if strings.ContainsRune(str, ' ') {
+				// If it has a space, then we're most likely a postgres string,
+				// as neither iso8601 nor golang permit spaces.
+				dur, err = postgresToDuration(str)
+			} else {
+				// Fallback to golang durations.
+				dur, err = time.ParseDuration(str)
+			}
+			return DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, err
 		case DInt:
 			// An integer duration represents a duration in nanoseconds.
-			return DInterval{Duration: duration.Duration{Nanos: int64(d.(DInt))}}, nil
+			return DInterval{Duration: duration.Duration{Nanos: int64(v)}}, nil
 		}
 	}
 
