@@ -97,3 +97,12 @@ func (node *ShowGrants) String() string {
 	}
 	return buf.String()
 }
+
+// ShowCreateTable represents a SHOW CREATE TABLE statement.
+type ShowCreateTable struct {
+	Table *QualifiedName
+}
+
+func (node *ShowCreateTable) String() string {
+	return fmt.Sprintf("SHOW CREATE TABLE %s", node.Table)
+}
