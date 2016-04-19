@@ -5,7 +5,7 @@
 // clusterIcon, cockroachIcon, databaseIcon, gearIcon
 // nodesIcon, storesIcon, usersIcon
 
-	"use strict";
+"use strict";
 
 export var clusterIcon: string = `
   <svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
