@@ -82,6 +82,9 @@ func typeForDatum(d parser.Datum) pgType {
 		return pgType{oid.T_date, 8}
 
 	case *parser.DTimestamp:
+		return pgType{oid.T_timestamp, 8}
+
+	case *parser.DTimestampTz:
 		return pgType{oid.T_timestamptz, 8}
 
 	case *parser.DInterval:
@@ -151,14 +154,21 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum) error {
 
 	case *parser.DDate:
 		t := time.Unix(int64(*v)*secondsInDay, 0).UTC()
-		s := formatTs(t)
+		s := formatTs(t, false)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
 
 	case *parser.DTimestamp:
 		t := v.UTC()
-		s := formatTs(t)
+		s := formatTs(t, false)
+		b.putInt32(int32(len(s)))
+		_, err := b.Write(s)
+		return err
+
+	case *parser.DTimestampTz:
+		t := v.UTC()
+		s := formatTs(t, true)
 		b.putInt32(int32(len(s)))
 		_, err := b.Write(s)
 		return err
@@ -200,10 +210,11 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) error {
 }
 
 const pgTimeStampFormat = "2006-01-02 15:04:05.999999999-07:00"
+const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999999"
 
 // formatTs formats t into a format cockroachdb/pq understands.
 // Mostly cribbed from github.com/cockroachdb/pq.
-func formatTs(t time.Time) (b []byte) {
+func formatTs(t time.Time, includeOffset bool) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
@@ -213,21 +224,11 @@ func formatTs(t time.Time) (b []byte) {
 		t = t.AddDate((-t.Year())*2+1, 0, 0)
 		bc = true
 	}
-	b = []byte(t.Format(pgTimeStampFormat))
 
-	_, offset := t.Zone()
-	offset = offset % 60
-	if offset != 0 {
-		// RFC3339Nano already printed the minus sign
-		if offset < 0 {
-			offset = -offset
-		}
-
-		b = append(b, ':')
-		if offset < 10 {
-			b = append(b, '0')
-		}
-		b = strconv.AppendInt(b, int64(offset), 10)
+	if includeOffset {
+		b = []byte(t.Format(pgTimeStampFormat))
+	} else {
+		b = []byte(t.Format(pgTimeStampFormatNoOffset))
 	}
 
 	if bc {

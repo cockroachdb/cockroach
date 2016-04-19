@@ -255,7 +255,11 @@ func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 		case ColumnType_DATE:
 			typ = parser.DummyDate
 		case ColumnType_TIMESTAMP:
-			typ = parser.DummyTimestamp
+			if colDesc.Type.Zone {
+				typ = parser.DummyTimestampTz
+			} else {
+				typ = parser.DummyTimestamp
+			}
 		case ColumnType_INTERVAL:
 			typ = parser.DummyInterval
 		default:
@@ -599,8 +603,7 @@ func (n *scanNode) unmarshalValue(kv client.KeyValue) (parser.Datum, bool) {
 		n.pErr = roachpb.NewUErrorf("column-id \"%d\" does not exist", n.colID)
 		return nil, false
 	}
-	kind := n.desc.Columns[idx].Type.Kind
-	d, err := unmarshalColumnValue(&n.alloc, kind, kv.Value)
+	d, err := unmarshalColumnValue(&n.alloc, n.desc.Columns[idx].Type, kv.Value)
 	n.pErr = roachpb.NewError(err)
 	return d, n.pErr == nil
 }

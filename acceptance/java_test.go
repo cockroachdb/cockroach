@@ -50,13 +50,13 @@ public class main {
 		    throw new Exception("unexpected: CREATE DATABASE reports " + res + " rows changed, expecting 0");
 		}
 
-		stmt = conn.prepareStatement("CREATE TABLE test.f (x INT)");
+		stmt = conn.prepareStatement("CREATE TABLE test.f (x INT, ts TIMESTAMP)");
 		res = stmt.executeUpdate();
 		if (res != 0) {
 		    throw new Exception("unexpected: CREATE TABLE reports " + res + " rows changed, expecting 0");
 		}
 
-		stmt = conn.prepareStatement("INSERT INTO test.f VALUES (42)");
+		stmt = conn.prepareStatement("INSERT INTO test.f VALUES (42, timestamp '2015-05-07 18:20:00')");
 		res = stmt.executeUpdate();
 		if (res != 1) {
 		    throw new Exception("unexpected: INSERT reports " + res + " rows changed, expecting 1");
@@ -69,7 +69,11 @@ public class main {
 		if (a != 42) {
 		    throw new Exception("unexpected: SELECT can't find inserted value: read " + a + ", expecting 42");
 		}
-
+		Timestamp ts = rs.getTimestamp(2);
+		String tsStr = rs.getString(2);
+		if (!tsStr.equals("2015-05-07 18:20:00")) {
+			throw new Exception("unexpected value for ts: "+tsStr);
+		}
 		stmt = conn.prepareStatement("DROP TABLE test.f");
 		res = stmt.executeUpdate();
 		if (res != 0) {
