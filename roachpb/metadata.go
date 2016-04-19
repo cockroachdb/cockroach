@@ -125,6 +125,16 @@ func (r RangeDescriptor) FindReplica(storeID StoreID) (int, *ReplicaDescriptor) 
 	return -1, nil
 }
 
+// IsInitialized returns false if this descriptor represents an
+// uninitialized range.
+// TODO(bdarnell): unify this with Validate()
+func (r RangeDescriptor) IsInitialized() bool {
+	if len(r.EndKey) == 0 {
+		return false
+	}
+	return true
+}
+
 // Validate performs some basic validation of the contents of a range descriptor.
 func (r RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
