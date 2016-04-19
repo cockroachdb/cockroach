@@ -76,7 +76,7 @@ module AdminViews {
         private _quantiles: string[] = [
           "-max",
           "-p99",
-          "-p75",
+          "-p90",
           "-p50",
         ];
 
@@ -128,15 +128,17 @@ module AdminViews {
           let latencySelectors: Selector[] = _.map(
             this._quantiles,
             (q: string): Selector => {
-              return Metrics.Select.Avg(_nodeMetric("exec.latency-1m" + q))
+              return Metrics.Select.Max(_nodeMetric("exec.latency-1m" + q))
                 .title("Latency" + q);
             });
           let fmt: (v: number) => string = d3.format(".1f");
           this._addChartSmall(Metrics.NewAxis.apply(this, latencySelectors)
             .format((v: number): string => fmt(Utils.Convert.NanoToMilli(v)))
-            .title("Query Time")
+            .title([m("", "Query Time"), m("small", "(Max Per Percentile)")])
             .label("Milliseconds")
-            .tooltip("The estimated time between query request and response, in milliseconds. Averaged across all nodes.")
+            .tooltip(`The latency between query requests and responses over a 1 minute period.
+                      Percentiles are first calculated on each node.
+                      For each percentile, the maximum latency across all nodes is then shown.`)
           );
 
           // TODO: should we use load instead of CPU?

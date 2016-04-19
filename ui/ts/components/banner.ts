@@ -1,5 +1,6 @@
 // source: component/banner.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../util/types.ts" />
 
 module Components {
   "use strict";
@@ -8,14 +9,12 @@ module Components {
    * Banner is a component that displays a banner
    */
   export module Banner {
-    import MithrilVirtualElement = _mithril.MithrilVirtualElement;
-
     interface BannerConfig {
       // Class applied to the banner
       bannerClass: string;
 
       // Banner content
-      content: (string|MithrilVirtualElement|MithrilVirtualElement[]|(MithrilVirtualElement|string)[]);
+      content: MithrilChild;
 
       // Close callback for clicking the X or the screen
       onclose: () => void;

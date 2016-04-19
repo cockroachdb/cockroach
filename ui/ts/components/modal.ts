@@ -1,5 +1,6 @@
 // source: component/modal.ts
 /// <reference path="../../bower_components/mithriljs/mithril.d.ts" />
+/// <reference path="../util/types.ts" />
 
 module Components {
   "use strict";
@@ -8,8 +9,6 @@ module Components {
    * Modal is a component that displays a modal
    */
   export module Modal {
-    import MithrilVirtualElement = _mithril.MithrilVirtualElement;
-
     interface ModalConfig {
       // Class applied to the modal and screen container
       containerClass: string;
@@ -17,9 +16,9 @@ module Components {
       modalClass: string;
 
       // Modal title
-      title: (string|MithrilVirtualElement|MithrilVirtualElement[]|(MithrilVirtualElement|string)[]);
+      title: MithrilChild;
       // Modal content
-      content: (string|MithrilVirtualElement|MithrilVirtualElement[]|(MithrilVirtualElement|string)[]);
+      content: MithrilChild;
 
       // Close callback for clicking the X or the screen
       onclose: () => void;

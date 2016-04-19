@@ -226,7 +226,7 @@ module Components {
           g = m("", "loading...");
         }
 
-        let topContent: _mithril.MithrilVirtualElement[] = [];
+        let topContent: Array<_mithril.MithrilVirtualElement|_mithril.MithrilComponent<any>> = [];
         if (ctrl.vm.axis.tooltip() || ctrl.vm.query.error()) {
           topContent.push(m(".viz-info-icon", icon));
         }
