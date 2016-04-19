@@ -416,6 +416,8 @@ ALTER INDEX t.test@foo RENAME TO ufo
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("TODO(vivek): #6124")
+
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
