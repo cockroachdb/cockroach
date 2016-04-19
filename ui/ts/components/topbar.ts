@@ -2,6 +2,7 @@
 
 /// <reference path="./health.ts" />
 /// <reference path="../../typings/browser.d.ts" />
+/// <reference path="../util/types.ts" />
 
 // Author: Max Lang (max@cockroachlabs.com)
 
@@ -18,7 +19,7 @@ module Components {
     }
 
     interface TopbarInfo {
-      title: string|MithrilVirtualElement;
+      title: MithrilChild;
       updated: number;
       // TODO: currently the health indicator causes redraws when undesirable
       // hideHealth is set to true to disable the health indicator and prevent
