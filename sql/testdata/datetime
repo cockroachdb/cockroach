@@ -482,3 +482,67 @@ SELECT '2015-08-25 04:45:45.53453'::timestamp
 # reset for what follows.
 statement ok
 SET TIME ZONE 'UTC'
+
+statement ok
+CREATE TABLE tz (
+  a INT PRIMARY KEY,
+  b TIMESTAMP,
+  c TIMESTAMP WITH TIME ZONE,
+  d TIMESTAMPTZ
+)
+
+query TTBB
+SHOW COLUMNS FROM tz
+----
+a     INT                       false     NULL
+b     TIMESTAMP                 true      NULL
+c     TIMESTAMP WITH TIME ZONE  true      NULL
+d     TIMESTAMP WITH TIME ZONE  true      NULL
+
+statement ok
+INSERT INTO tz VALUES
+  (1, timestamp '2015-08-30 03:34:45', timestamptz '2015-08-30 03:34:45',  timestamptz '2015-08-30 03:34:45'),
+  (2, timestamp '2015-08-30 03:34:45+01:00', timestamptz '2015-08-30 03:34:45+01:00',  timestamptz '2015-08-30 03:34:45')
+
+statement ok
+SET TIME ZONE -2
+
+query ITT
+SELECT a, b, c FROM tz
+----
+1   2015-08-30 03:34:45 +0000 +0000     2015-08-30 03:34:45 +0000 +0000
+2   2015-08-30 02:34:45 +0000 +0000     2015-08-30 02:34:45 +0000 +0000
+
+query TTTT
+SELECT b + interval '1m', interval '1m' + b, c + interval '1m', interval '1m' + c FROM tz WHERE a = 1
+----
+2015-08-30 03:35:45 +0000 +0000		2015-08-30 03:35:45 +0000 +0000		2015-08-30 03:35:45 +0000 +0000		2015-08-30 03:35:45 +0000 +0000
+
+query I
+SELECT a FROM tz WHERE c = d
+----
+1
+
+query I
+SELECT a FROM tz WHERE c <= d
+----
+1
+2
+
+query I
+SELECT a FROM tz WHERE c < d
+----
+2
+
+query error unsupported comparison operator: <timestamp> = <timestamptz>
+SELECT a FROM tz WHERE b = c
+
+query I
+SELECT a FROM tz WHERE b = c::timestamp
+----
+1
+2
+
+# reset for what follows.
+statement ok
+SET TIME ZONE 'UTC'

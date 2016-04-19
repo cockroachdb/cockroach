@@ -196,6 +196,20 @@ var BinOps = map[BinArgs]BinOp{
 			return &DTimestamp{Time: duration.Add(right.(*DTimestamp).Time, left.(*DInterval).Duration)}, nil
 		},
 	},
+	BinArgs{Plus, timestampTZType, intervalType}: {
+		ReturnType: DummyTimestampTZ,
+		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration)
+			return &DTimestampTZ{t}, nil
+		},
+	},
+	BinArgs{Plus, intervalType, timestampTZType}: {
+		ReturnType: DummyTimestampTZ,
+		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			t := duration.Add(right.(*DTimestampTZ).Time, left.(*DInterval).Duration)
+			return &DTimestampTZ{t}, nil
+		},
+	},
 	BinArgs{Plus, intervalType, intervalType}: {
 		ReturnType: DummyInterval,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
@@ -243,10 +257,24 @@ var BinOps = map[BinArgs]BinOp{
 			return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 		},
 	},
+	BinArgs{Minus, timestampTZType, timestampTZType}: {
+		ReturnType: DummyInterval,
+		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
+			return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+		},
+	},
 	BinArgs{Minus, timestampType, intervalType}: {
 		ReturnType: DummyTimestamp,
 		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
 			return &DTimestamp{Time: duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1))}, nil
+		},
+	},
+	BinArgs{Minus, timestampTZType, intervalType}: {
+		ReturnType: DummyTimestampTZ,
+		fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+			t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
+			return &DTimestampTZ{t}, nil
 		},
 	},
 	BinArgs{Minus, intervalType, intervalType}: {
@@ -484,6 +512,11 @@ var CmpOps = map[CmpArgs]CmpOp{
 			return DBool(left.(*DTimestamp).Equal(right.(*DTimestamp).Time)), nil
 		},
 	},
+	CmpArgs{EQ, timestampTZType, timestampTZType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(left.(*DTimestampTZ).Equal(right.(*DTimestampTZ).Time)), nil
+		},
+	},
 	CmpArgs{EQ, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(*left.(*DInterval) == *right.(*DInterval)), nil
@@ -568,6 +601,11 @@ var CmpOps = map[CmpArgs]CmpOp{
 	CmpArgs{LT, timestampType, timestampType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(*DTimestamp).Before(right.(*DTimestamp).Time)), nil
+		},
+	},
+	CmpArgs{LT, timestampTZType, timestampTZType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return DBool(left.(*DTimestampTZ).Before(right.(*DTimestampTZ).Time)), nil
 		},
 	},
 	CmpArgs{LT, intervalType, intervalType}: {
@@ -656,6 +694,11 @@ var CmpOps = map[CmpArgs]CmpOp{
 			return !DBool(right.(*DTimestamp).Before(left.(*DTimestamp).Time)), nil
 		},
 	},
+	CmpArgs{LE, timestampTZType, timestampTZType}: {
+		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
+			return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestampTZ).Time)), nil
+		},
+	},
 	CmpArgs{LE, intervalType, intervalType}: {
 		fn: func(_ EvalContext, left Datum, right Datum) (DBool, error) {
 			return DBool(left.(*DInterval).Duration.Compare(right.(*DInterval).Duration) <= 0), nil
@@ -738,6 +781,7 @@ func init() {
 	CmpOps[CmpArgs{In, bytesType, tupleType}] = evalTupleIN
 	CmpOps[CmpArgs{In, dateType, tupleType}] = evalTupleIN
 	CmpOps[CmpArgs{In, timestampType, tupleType}] = evalTupleIN
+	CmpOps[CmpArgs{In, timestampTZType, tupleType}] = evalTupleIN
 	CmpOps[CmpArgs{In, intervalType, tupleType}] = evalTupleIN
 	CmpOps[CmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
@@ -1112,6 +1156,29 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 			}
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return &DTimestamp{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
+
+		case *DTimestamp:
+			return d, nil
+		case *DTimestampTZ:
+			return &DTimestamp{d.Time}, nil
+		}
+
+	case *TimestampTZType:
+		switch d := d.(type) {
+		case *DString:
+			t, err := ctx.ParseTimestamp(*d)
+			return &DTimestampTZ{Time: t.Time}, err
+		case *DDate:
+			loc, err := ctx.GetLocation()
+			if err != nil {
+				return nil, err
+			}
+			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
+			return &DTimestampTZ{Time: time.Date(year, month, day, 0, 0, 0, 0, loc)}, nil
+		case *DTimestamp:
+			return &DTimestampTZ{Time: d.Time}, nil
+		case *DTimestampTZ:
+			return d, nil
 		}
 
 	case *IntervalType:
@@ -1311,6 +1378,13 @@ func (expr *IsOfTypeExpr) Eval(ctx EvalContext) (Datum, error) {
 	case *DTimestamp:
 		for _, t := range expr.Types {
 			if _, ok := t.(*TimestampType); ok {
+				return MakeDBool(result), nil
+			}
+		}
+
+	case *DTimestampTZ:
+		for _, t := range expr.Types {
+			if _, ok := t.(*TimestampTZType); ok {
 				return MakeDBool(result), nil
 			}
 		}
@@ -1541,6 +1615,11 @@ func (t *DString) Eval(_ EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t *DTimestamp) Eval(_ EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the Expr interface.
+func (t *DTimestampTZ) Eval(_ EvalContext) (Datum, error) {
 	return t, nil
 }
 

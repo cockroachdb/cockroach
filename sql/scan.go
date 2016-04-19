@@ -256,6 +256,8 @@ func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 			typ = parser.DummyDate
 		case ColumnType_TIMESTAMP:
 			typ = parser.DummyTimestamp
+		case ColumnType_TIMESTAMPTZ:
+			typ = parser.DummyTimestampTZ
 		case ColumnType_INTERVAL:
 			typ = parser.DummyInterval
 		default:

@@ -36,6 +36,7 @@ message ColumnType {
     INTERVAL = 6;
     STRING = 7;     // STRING(width)
     BYTES = 8;
+    TIMESTAMPTZ = 9;
   }
 
   optional Kind kind = 1 [(gogoproto.nullable) = false];

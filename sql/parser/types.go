@@ -27,15 +27,16 @@ type ColumnType interface {
 	columnType()
 }
 
-func (*BoolType) columnType()      {}
-func (*IntType) columnType()       {}
-func (*FloatType) columnType()     {}
-func (*DecimalType) columnType()   {}
-func (*DateType) columnType()      {}
-func (*TimestampType) columnType() {}
-func (*IntervalType) columnType()  {}
-func (*StringType) columnType()    {}
-func (*BytesType) columnType()     {}
+func (*BoolType) columnType()        {}
+func (*IntType) columnType()         {}
+func (*FloatType) columnType()       {}
+func (*DecimalType) columnType()     {}
+func (*DateType) columnType()        {}
+func (*TimestampType) columnType()   {}
+func (*TimestampTZType) columnType() {}
+func (*IntervalType) columnType()    {}
+func (*StringType) columnType()      {}
+func (*BytesType) columnType()       {}
 
 // BoolType represents a BOOLEAN type.
 type BoolType struct {
@@ -106,14 +107,18 @@ func (node *DateType) String() string {
 
 // TimestampType represents a TIMESTAMP type.
 type TimestampType struct {
-	withZone bool
 }
 
 func (node *TimestampType) String() string {
-	if node.withZone {
-		return "TIMESTAMPTZ"
-	}
 	return "TIMESTAMP"
+}
+
+// TimestampTZType represents a TIMESTAMP type.
+type TimestampTZType struct {
+}
+
+func (node *TimestampTZType) String() string {
+	return "TIMESTAMP WITH TIME ZONE"
 }
 
 // IntervalType represents an INTERVAL type
