@@ -581,7 +581,7 @@ func (n *scanNode) prettyKey() string {
 	fmt.Fprintf(&buf, "/%s/%s%s", n.desc.Name, n.index.Name, prettyDatums(n.vals))
 	if n.colID > 0 {
 		// TODO(pmattis): This is inefficient, but does it matter?
-		col, err := n.desc.FindColumnByID(n.colID)
+		col, err := n.desc.FindActiveColumnByID(n.colID)
 		if err != nil {
 			panic(err)
 		}

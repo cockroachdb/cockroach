@@ -485,7 +485,7 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, error) {
 	vals := make([]parser.Datum, len(columnIDs))
 	for i, id := range columnIDs {
-		col, err := desc.FindColumnByID(id)
+		col, err := desc.FindActiveColumnByID(id)
 		if err != nil {
 			return nil, err
 		}
