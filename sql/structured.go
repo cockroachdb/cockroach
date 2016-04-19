@@ -550,8 +550,8 @@ func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescript
 	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
 }
 
-// FindColumnByID finds the active column with specified ID.
-func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, error) {
+// FindActiveColumnByID finds the active column with specified ID.
+func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
 	for i, c := range desc.Columns {
 		if c.ID == id {
 			return &desc.Columns[i], nil
@@ -580,13 +580,18 @@ func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int
 	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", name)
 }
 
-// FindIndexByID finds the active index with specified ID.
+// FindIndexByID finds an index (active or inactive) with the specified ID.
 func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
 	indexes := append(desc.Indexes, desc.PrimaryIndex)
 
 	for i, c := range indexes {
 		if c.ID == id {
 			return &indexes[i], nil
+		}
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil && idx.ID == id {
+			return idx, nil
 		}
 	}
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
