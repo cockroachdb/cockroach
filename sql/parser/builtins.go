@@ -828,9 +828,16 @@ var Builtins = map[string][]Builtin{
 	},
 
 	// TODO(nvanbenschoten) Add native support for decimal.
-	"exp": floatOrDecimalBuiltin1(func(x float64) (Datum, error) {
-		return NewDFloat(DFloat(math.Exp(x))), nil
-	}),
+	"exp": {
+		floatBuiltin1(func(x float64) (Datum, error) {
+			return NewDFloat(DFloat(math.Exp(x))), nil
+		}),
+		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
+			dd := &DDecimal{}
+			decimal.Exp(&dd.Dec, x, decimal.Precision)
+			return dd, nil
+		}),
+	},
 
 	"floor": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -1139,10 +1146,16 @@ var txnTSImpl = Builtin{
 	},
 }
 
-// TODO(nvanbenschoten) Add native support for decimal.
-var powImpls = floatOrDecimalBuiltin2(func(x, y float64) (Datum, error) {
-	return NewDFloat(DFloat(math.Pow(x, y))), nil
-})
+var powImpls = []Builtin{
+	floatBuiltin2(func(x, y float64) (Datum, error) {
+		return NewDFloat(DFloat(math.Pow(x, y))), nil
+	}),
+	decimalBuiltin2(func(x, y *inf.Dec) (Datum, error) {
+		dd := &DDecimal{}
+		decimal.Pow(&dd.Dec, x, y, decimal.Precision)
+		return dd, nil
+	}),
+}
 
 func decimalLogFn(logFn func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec) Builtin {
 	return decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
