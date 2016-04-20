@@ -742,7 +742,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 }
 
-// TestTxnCoordIdempotentCleanup verifies that cleanupTxn is idempotent.
+// TestTxnCoordIdempotentCleanup verifies that cleanupTxnLocked is idempotent.
 func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -757,13 +757,18 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	}
 
 	s.Sender.Lock()
+	// Clean up twice successively.
+	s.Sender.cleanupTxnLocked(context.Background(), txn.Proto)
 	s.Sender.cleanupTxnLocked(context.Background(), txn.Proto)
 	s.Sender.Unlock()
 
+	// For good measure, try to commit (which cleans up once more if it
+	// succeeds, which it may not if the previous cleanup has already
+	// terminated the heartbeat goroutine)
 	ba = txn.NewBatch()
 	ba.InternalAddRequest(&roachpb.EndTransactionRequest{})
 	pErr := txn.Run(ba)
-	if pErr != nil && !testutils.IsPError(pErr, "aborted") {
+	if pErr != nil && !testutils.IsPError(pErr, errNoState.Error()) {
 		t.Fatal(pErr)
 	}
 }

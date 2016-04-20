@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -45,6 +46,9 @@ const (
 	opTxnCoordSender  = "txn coordinator"
 	opHeartbeatLoop   = "heartbeat"
 )
+
+var errNoState = errors.New("writing transaction timed out " +
+	"or ran on multiple coordinators")
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -328,64 +332,65 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		if err := tc.maybeBeginTxn(&ba); err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		txnID := *ba.Txn.ID
-		if pErr := tc.maybeRejectClient(ctx, *ba.Txn); pErr != nil {
+		var et *roachpb.EndTransactionRequest
+		var hasET bool
+		{
+			var rArgs roachpb.Request
+			rArgs, hasET = ba.GetArg(roachpb.EndTransaction)
+			if hasET {
+				et = rArgs.(*roachpb.EndTransactionRequest)
+				if len(et.Key) != 0 {
+					return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
+				}
+				et.Key = ba.Txn.Key
+				if len(et.IntentSpans) > 0 {
+					// TODO(tschottdorf): it may be useful to allow this later.
+					// That would be part of a possible plan to allow txns which
+					// write on multiple coordinators.
+					return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
+				}
+			}
+		}
+
+		if pErr := func() *roachpb.Error {
+			tc.Lock()
+			defer tc.Unlock()
+			if pErr := tc.maybeRejectClientLocked(ctx, *ba.Txn); pErr != nil {
+				return pErr
+			}
+
+			if !hasET {
+				return nil
+			}
+			// Everything below is carried out only when trying to commit.
+
+			// Populate et.IntentSpans, taking into account both any existing
+			// and new writes, and taking care to perform proper deduplication.
+			var keys interval.RangeGroup
+			if txnMeta, metaOK := tc.txns[*ba.Txn.ID]; metaOK {
+				keys = txnMeta.keys
+			} else {
+				keys = interval.NewRangeTree()
+			}
+			ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
+				addKeyRange(keys, key, endKey)
+			})
+			et.IntentSpans = collectIntentSpans(keys)
+			if len(et.IntentSpans) == 0 {
+				// If there aren't any intents, then there's factually no
+				// transaction to end. Read-only txns have all of their state
+				// in the client.
+				return roachpb.NewErrorf("cannot commit a read-only transaction")
+			}
+			return nil
+		}(); pErr != nil {
 			return nil, pErr
 		}
 
-		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			et := rArgs.(*roachpb.EndTransactionRequest)
-			if len(et.Key) != 0 {
-				return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
-			}
-			et.Key = ba.Txn.Key
-			if len(et.IntentSpans) > 0 {
-				// TODO(tschottdorf): it may be useful to allow this later.
-				// That would be part of a possible plan to allow txns which
-				// write on multiple coordinators.
-				return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
-			}
-			tc.Lock()
-			txnMeta, metaOK := tc.txns[txnID]
-			{
-				// Populate et.IntentSpans, taking into account both existing
-				// writes (if any) and new writes in this batch, and taking
-				// care to perform proper deduplication.
-				var keys interval.RangeGroup
-				if metaOK {
-					keys = txnMeta.keys
-				} else {
-					keys = interval.NewRangeTree()
-				}
-				ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
-					addKeyRange(keys, key, endKey)
-				})
-				et.IntentSpans = collectIntentSpans(keys)
-			}
-			tc.Unlock()
-
-			if len(et.IntentSpans) > 0 {
-				// All good, proceed.
-			} else if !metaOK {
-				// If we don't have the transaction, then this must be a retry
-				// by the client. We can no longer reconstruct a correct
-				// request so we must fail.
-				//
-				// TODO(bdarnell): if we had a GetTransactionStatus API then
-				// we could lookup the transaction and return either nil or
-				// TransactionAbortedError instead of this ambivalent error.
-				return nil, roachpb.NewErrorf("transaction is already committed or aborted")
-			}
-			if len(et.IntentSpans) == 0 {
-				// If there aren't any intents, then there's factually no
-				// transaction to end. Read-only txns have all of their state in
-				// the client.
-				return nil, roachpb.NewErrorf("cannot commit a read-only transaction")
-			}
-			if log.V(1) {
-				for _, intent := range et.IntentSpans {
-					log.Trace(ctx, fmt.Sprintf("intent: [%s,%s)", intent.Key, intent.EndKey))
-				}
+		if hasET && log.V(1) {
+			for _, intent := range et.IntentSpans {
+				log.Trace(ctx, fmt.Sprintf("intent: [%s,%s)",
+					intent.Key, intent.EndKey))
 			}
 		}
 	}
@@ -444,10 +449,10 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	return br, nil
 }
 
-// maybeRejectClient checks whether the (transactional) request is in a state
-// that prevents it from continuing, such as the coordinator having considered
-// the client abandoned, or a heartbeat having reported an error.
-func (tc *TxnCoordSender) maybeRejectClient(
+// maybeRejectClientLocked checks whether the (transactional) request is in a
+// state that prevents it from continuing, such as the coordinator having
+// considered the client abandoned, or a heartbeat having reported an error.
+func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context,
 	txn roachpb.Transaction,
 ) *roachpb.Error {
@@ -455,8 +460,6 @@ func (tc *TxnCoordSender) maybeRejectClient(
 	if !txn.Writing {
 		return nil
 	}
-	tc.Lock()
-	defer tc.Unlock()
 	txnMeta, ok := tc.txns[*txn.ID]
 	// Check whether the transaction is still tracked and has a chance of
 	// completing. It's possible that the coordinator learns about the
@@ -469,8 +472,7 @@ func (tc *TxnCoordSender) maybeRejectClient(
 		// transaction session so that we can definitively return the right
 		// error between these possible errors. Or update the code to make an
 		// educated guess based on the incoming transaction timestamp.
-		return roachpb.NewErrorf("writing transaction timed out " +
-			"or ran on multiple coordinators")
+		return roachpb.NewError(errNoState)
 	case txnMeta.txn.Status == roachpb.ABORTED:
 		txn := txnMeta.txn.Clone()
 		tc.cleanupTxnLocked(ctx, txn)
