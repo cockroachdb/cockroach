@@ -469,7 +469,7 @@ SELECT div(1.0::decimal, 0.0::decimal)
 query RRR
 SELECT exp(-1.0), exp(1.0), exp(2.0::decimal)
 ----
-0.36787944117144233 2.718281828459045 7.38905609893065
+0.36787944117144233 2.718281828459045 7.3890560989306502
 
 query RRR
 SELECT floor(-1.5), floor(1.5), floor(9.123456789::decimal)
@@ -582,7 +582,12 @@ SELECT pi()
 query RRR
 SELECT pow(-3.0, 2.0), power(3.0, 2.0), pow(5.0::decimal, 2.0::decimal)
 ----
-9 9 25
+9 9 25.0000000000000000
+
+query R
+SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
+----
+9.8696044010893571
 
 query RR
 SELECT radians(-45.0), radians(45.0)
