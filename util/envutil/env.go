@@ -87,6 +87,21 @@ func GetEnvReport() string {
 	return b.String()
 }
 
+// GetShellCommand returns a complete command to run with a prefix of the command line.
+func GetShellCommand(cmd string) []string {
+	if runtime.GOOS == "windows" {
+		if shell := os.Getenv("COMSPEC"); len(shell) > 0 {
+			return []string{shell, "/C", cmd}
+		}
+		return []string{`C:\Windows\system32\cmd.exe`, "/C", cmd}
+	}
+	if shell := os.Getenv("SHELL"); len(shell) > 0 {
+		return []string{shell, "-c", cmd}
+	}
+
+	return []string{"/bin/sh", "-c", cmd}
+}
+
 // EnvOrDefaultString returns the value set by the specified
 // environment variable, if any, otherwise the specified default
 // value.
