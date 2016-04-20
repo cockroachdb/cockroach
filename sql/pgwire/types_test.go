@@ -55,25 +55,30 @@ func TestTimestampRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("UTC", 0))
 
-	{
-		encoded := string(formatTs(ts, false))
-		decoded, err := parseTs(encoded)
+	parse := func(encoded []byte) time.Time {
+		decoded, err := parseTs(string(encoded))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !ts.Equal(decoded) {
-			t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", decoded, ts)
-		}
+		return decoded.UTC()
 	}
 
-	{
-		encoded := string(formatTs(ts, true))
-		decoded, err := parseTs(encoded)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !ts.Equal(decoded) {
-			t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", decoded, ts)
-		}
+	if actual := parse(formatTs(ts, nil)); !ts.Equal(actual) {
+		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
+	}
+
+	// Also check with a 0, positive, and negative offset.
+	CET := time.FixedZone("Europe/Paris", 0)
+	EST := time.FixedZone("America/New_York", 0)
+
+	if actual := parse(formatTs(ts, time.UTC)); !ts.Equal(actual) {
+		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
+	}
+
+	if actual := parse(formatTs(ts, CET)); !ts.Equal(actual) {
+		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
+	}
+	if actual := parse(formatTs(ts, EST)); !ts.Equal(actual) {
+		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
 	}
 }
