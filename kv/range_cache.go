@@ -292,7 +292,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 	}
 
 	if log.V(2) {
-		log.Infof("lookup range descriptor: key=%s\n%s", key, rdc)
+		log.Infof("lookup range descriptor: key=%s\n%s", key, rdc.stringLocked())
 	} else if log.V(1) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
