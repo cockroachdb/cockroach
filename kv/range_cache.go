@@ -344,7 +344,10 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 			}
 		}
 
-		// We've released all locks at this point.
+		// We want to be assured that all goroutines which experienced a cache miss
+		// have joined our in-flight request, and all others will experience a
+		// cache hit. This requires atomicity across cache population and
+		// notification, hence this exclusive lock.
 		rdc.rangeCache.Lock()
 		if res.pErr == nil {
 			// These need to be separate because we need to preserve the pointer to rs[0]
