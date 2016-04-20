@@ -281,16 +281,18 @@ func (d *deleteNode) PErr() *roachpb.Error {
 	return d.run.pErr
 }
 
-func (d *deleteNode) ExplainPlan() (name, description string, children []planNode) {
+func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "from %s returning (", d.tableDesc.Name)
-	for i, col := range d.rh.columns {
-		if i > 0 {
-			fmt.Fprintf(&buf, ", ")
+	if v {
+		fmt.Fprintf(&buf, "from %s returning (", d.tableDesc.Name)
+		for i, col := range d.rh.columns {
+			if i > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%s", col.Name)
 		}
-		fmt.Fprintf(&buf, "%s", col.Name)
+		fmt.Fprintf(&buf, ")")
 	}
-	fmt.Fprintf(&buf, ")")
 	return "delete", buf.String(), []planNode{d.run.rows}
 }
 

@@ -352,7 +352,7 @@ func (n *groupNode) PErr() *roachpb.Error {
 	return n.pErr
 }
 
-func (n *groupNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	name = "group"
 	strs := make([]string, 0, len(n.funcs))
 	for _, f := range n.funcs {

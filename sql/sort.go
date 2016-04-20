@@ -209,7 +209,7 @@ func (n *sortNode) PErr() *roachpb.Error {
 	return n.pErr
 }
 
-func (n *sortNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	if n.needSort {
 		name = "sort"
 	} else {

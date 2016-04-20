@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -148,8 +149,21 @@ func (s *selectNode) PErr() *roachpb.Error {
 	return s.table.node.PErr()
 }
 
-func (s *selectNode) ExplainPlan() (name, description string, children []planNode) {
-	return s.table.node.ExplainPlan()
+func (s *selectNode) ExplainPlan(v bool) (name, description string, children []planNode) {
+	if !v {
+		return s.table.node.ExplainPlan(v)
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "(")
+	for i, col := range s.columns {
+		if i > 0 {
+			fmt.Fprintf(&buf, ", ")
+		}
+		fmt.Fprintf(&buf, "%s", col.Name)
+	}
+	fmt.Fprintf(&buf, ")@%s", s.table.alias)
+	return "select", buf.String(), []planNode{s.table.node}
 }
 
 func (s *selectNode) SetLimitHint(numRows int64, soft bool) {

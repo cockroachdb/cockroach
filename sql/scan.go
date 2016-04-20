@@ -185,7 +185,7 @@ func (n *scanNode) PErr() *roachpb.Error {
 	return n.pErr
 }
 
-func (n *scanNode) ExplainPlan() (name, description string, children []planNode) {
+func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	if n.reverse {
 		name = "revscan"
 	} else {
