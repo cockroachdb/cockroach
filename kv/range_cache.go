@@ -280,11 +280,11 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 	useReverseScan bool,
 ) (*roachpb.RangeDescriptor, evictionToken, *roachpb.Error) {
 	rdc.rangeCacheMu.RLock()
-	if _, desc, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); err != nil {
-		rdc.rangeCacheMu.RUnlock()
+	_, desc, err := rdc.getCachedRangeDescriptorLocked(key, useReverseScan)
+	rdc.rangeCacheMu.RUnlock()
+	if err != nil {
 		return nil, evictionToken{}, roachpb.NewError(err)
 	} else if desc != nil {
-		rdc.rangeCacheMu.RUnlock()
 		returnToken := rdc.makeEvictionToken(desc, func() error {
 			return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 		})
@@ -299,6 +299,7 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 
 	var res lookupResult
 	requestKey := makeLookupRequestKey(key, evictToken, considerIntents, useReverseScan)
+	rdc.rangeCacheMu.RLock()
 	rdc.lookupRequests.Lock()
 	if req, inflight := rdc.lookupRequests.inflight[requestKey]; inflight {
 		resC := make(chan lookupResult, 1)
