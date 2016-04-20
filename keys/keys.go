@@ -101,6 +101,29 @@ func MakeRangeIDReplicatedKey(rangeID roachpb.RangeID, suffix, detail roachpb.RK
 	return key
 }
 
+// DecodeRangeIDKey parses a local range ID key into range ID, infix,
+// suffix, and detail.
+func DecodeRangeIDKey(key roachpb.Key) (rangeID roachpb.RangeID, infix, suffix, detail roachpb.Key, err error) {
+	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
+		return 0, nil, nil, nil, util.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
+	}
+	// Cut the prefix, the Range ID, and the infix specifier.
+	b := key[len(LocalRangeIDPrefix):]
+	b, rangeInt, err := encoding.DecodeUvarintAscending(b)
+	if err != nil {
+		return 0, nil, nil, nil, err
+	}
+	if len(b) < localSuffixLength+1 {
+		return 0, nil, nil, nil, util.Errorf("malformed key does not contain range ID infix and suffix")
+	}
+	infix = b[:1]
+	b = b[1:]
+	suffix = b[:localSuffixLength]
+	b = b[localSuffixLength:]
+
+	return roachpb.RangeID(rangeInt), infix, suffix, b, nil
+}
+
 // AbortCacheKey returns a range-local key by Range ID for an
 // abort cache entry, with detail specified by encoding the
 // supplied transaction ID.
@@ -113,30 +136,21 @@ func AbortCacheKey(rangeID roachpb.RangeID, txnID *uuid.UUID) roachpb.Key {
 // DecodeAbortCacheKey decodes the provided abort cache entry,
 // returning the transaction ID.
 func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (*uuid.UUID, error) {
-	// TODO(tschottdorf): redundant check.
-	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
-		return nil, util.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
-	}
-	// Cut the prefix, the Range ID, and the infix specifier.
-	b := key[len(LocalRangeIDPrefix):]
-	b, _, err := encoding.DecodeUvarintAscending(b)
+	_, _, suffix, detail, err := DecodeRangeIDKey(key)
 	if err != nil {
 		return nil, err
 	}
-	b = b[1:]
-	if !bytes.HasPrefix(b, LocalAbortCacheSuffix) {
+	if !bytes.Equal(suffix, LocalAbortCacheSuffix) {
 		return nil, util.Errorf("key %s does not contain the abort cache suffix %s",
 			key, LocalAbortCacheSuffix)
 	}
-	// Cut the abort cache suffix.
-	b = b[len(LocalAbortCacheSuffix):]
 	// Decode the id.
-	b, idBytes, err := encoding.DecodeBytesAscending(b, dest)
+	detail, idBytes, err := encoding.DecodeBytesAscending(detail, dest)
 	if err != nil {
 		return nil, err
 	}
-	if len(b) > 0 {
-		return nil, util.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key", key, b)
+	if len(detail) > 0 {
+		return nil, util.Errorf("key %q has leftover bytes after decode: %s; indicates corrupt key", key, detail)
 	}
 	txnID, err := uuid.FromBytes(idBytes)
 	return txnID, err
@@ -149,12 +163,12 @@ func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
 func RaftAppliedIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRaftAppliedIndexSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRaftAppliedIndexSuffix, nil)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDReplicatedKey(rangeID, localRaftTruncatedStateSuffix, nil)
+	return MakeRangeIDReplicatedKey(rangeID, LocalRaftTruncatedStateSuffix, nil)
 }
 
 // RangeLeaderLeaseKey returns a system-local key for a range leader lease.
@@ -201,7 +215,7 @@ func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
 // RaftLogPrefix returns the system-local prefix shared by all entries
 // in a Raft log.
 func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDUnreplicatedKey(rangeID, localRaftLogSuffix, nil)
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRaftLogSuffix, nil)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
