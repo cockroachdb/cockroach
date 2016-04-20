@@ -53,15 +53,15 @@ var errTransactionUnsupported = errors.New("not supported within a transaction")
 func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey,
 	index int, batch engine.Engine, ms *engine.MVCCStats,
 	h roachpb.Header, remScanResults int64,
-	args roachpb.Request) (roachpb.Response, []roachpb.Intent, *roachpb.Error) {
+	args roachpb.Request, reply roachpb.Response) ([]roachpb.Intent, *roachpb.Error) {
 	ts := h.Timestamp
 
 	if _, ok := args.(*roachpb.NoopRequest); ok {
-		return &roachpb.NoopResponse{}, nil, nil
+		return nil, nil
 	}
 
 	if err := r.checkCmdHeader(args.Header()); err != nil {
-		return nil, nil, roachpb.NewErrorWithTxn(err, h.Txn)
+		return nil, roachpb.NewErrorWithTxn(err, h.Txn)
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
@@ -70,7 +70,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
 			log.Infof("test injecting error: %s", pErr)
-			return nil, nil, pErr
+			return nil, pErr
 		}
 	}
 
@@ -80,98 +80,78 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	// op already executed for overlapping keys.
 	r.store.Clock().Update(ts)
 
-	var reply roachpb.Response
 	var intents []roachpb.Intent
 	var err error
+
+	// Note that responses are populated even when an error is returned.
+	// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 	switch tArgs := args.(type) {
 	case *roachpb.GetRequest:
-		var resp roachpb.GetResponse
-		resp, intents, err = r.Get(ctx, batch, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.GetResponse)
+		*resp, intents, err = r.Get(ctx, batch, h, *tArgs)
 	case *roachpb.PutRequest:
-		var resp roachpb.PutResponse
-		resp, err = r.Put(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.PutResponse)
+		*resp, err = r.Put(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ConditionalPutRequest:
-		var resp roachpb.ConditionalPutResponse
-		resp, err = r.ConditionalPut(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.ConditionalPutResponse)
+		*resp, err = r.ConditionalPut(ctx, batch, ms, h, *tArgs)
 	case *roachpb.InitPutRequest:
-		var resp roachpb.InitPutResponse
-		resp, err = r.InitPut(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.InitPutResponse)
+		*resp, err = r.InitPut(ctx, batch, ms, h, *tArgs)
 	case *roachpb.IncrementRequest:
-		var resp roachpb.IncrementResponse
-		resp, err = r.Increment(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.IncrementResponse)
+		*resp, err = r.Increment(ctx, batch, ms, h, *tArgs)
 	case *roachpb.DeleteRequest:
-		var resp roachpb.DeleteResponse
-		resp, err = r.Delete(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.DeleteResponse)
+		*resp, err = r.Delete(ctx, batch, ms, h, *tArgs)
 	case *roachpb.DeleteRangeRequest:
-		var resp roachpb.DeleteRangeResponse
-		resp, err = r.DeleteRange(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.DeleteRangeResponse)
+		*resp, err = r.DeleteRange(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ScanRequest:
-		var resp roachpb.ScanResponse
-		resp, intents, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.ScanResponse)
+		*resp, intents, err = r.Scan(ctx, batch, h, remScanResults, *tArgs)
 	case *roachpb.ReverseScanRequest:
-		var resp roachpb.ReverseScanResponse
-		resp, intents, err = r.ReverseScan(ctx, batch, h, remScanResults, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.ReverseScanResponse)
+		*resp, intents, err = r.ReverseScan(ctx, batch, h, remScanResults, *tArgs)
 	case *roachpb.BeginTransactionRequest:
-		var resp roachpb.BeginTransactionResponse
-		resp, err = r.BeginTransaction(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.BeginTransactionResponse)
+		*resp, err = r.BeginTransaction(ctx, batch, ms, h, *tArgs)
 	case *roachpb.EndTransactionRequest:
-		var resp roachpb.EndTransactionResponse
-		resp, intents, err = r.EndTransaction(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.EndTransactionResponse)
+		*resp, intents, err = r.EndTransaction(ctx, batch, ms, h, *tArgs)
 	case *roachpb.RangeLookupRequest:
-		var resp roachpb.RangeLookupResponse
-		resp, intents, err = r.RangeLookup(ctx, batch, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.RangeLookupResponse)
+		*resp, intents, err = r.RangeLookup(ctx, batch, h, *tArgs)
 	case *roachpb.HeartbeatTxnRequest:
-		var resp roachpb.HeartbeatTxnResponse
-		resp, err = r.HeartbeatTxn(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.HeartbeatTxnResponse)
+		*resp, err = r.HeartbeatTxn(ctx, batch, ms, h, *tArgs)
 	case *roachpb.GCRequest:
-		var resp roachpb.GCResponse
-		resp, err = r.GC(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.GCResponse)
+		*resp, err = r.GC(ctx, batch, ms, h, *tArgs)
 	case *roachpb.PushTxnRequest:
-		var resp roachpb.PushTxnResponse
-		resp, err = r.PushTxn(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.PushTxnResponse)
+		*resp, err = r.PushTxn(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ResolveIntentRequest:
-		var resp roachpb.ResolveIntentResponse
-		resp, err = r.ResolveIntent(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.ResolveIntentResponse)
+		*resp, err = r.ResolveIntent(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ResolveIntentRangeRequest:
-		var resp roachpb.ResolveIntentRangeResponse
-		resp, err = r.ResolveIntentRange(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.ResolveIntentRangeResponse)
+		*resp, err = r.ResolveIntentRange(ctx, batch, ms, h, *tArgs)
 	case *roachpb.MergeRequest:
-		var resp roachpb.MergeResponse
-		resp, err = r.Merge(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.MergeResponse)
+		*resp, err = r.Merge(ctx, batch, ms, h, *tArgs)
 	case *roachpb.TruncateLogRequest:
-		var resp roachpb.TruncateLogResponse
-		resp, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.TruncateLogResponse)
+		*resp, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
 	case *roachpb.LeaderLeaseRequest:
-		var resp roachpb.LeaderLeaseResponse
-		resp, err = r.LeaderLease(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.LeaderLeaseResponse)
+		*resp, err = r.LeaderLease(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ComputeChecksumRequest:
-		var resp roachpb.ComputeChecksumResponse
-		resp, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.ComputeChecksumResponse)
+		*resp, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.VerifyChecksumRequest:
-		var resp roachpb.VerifyChecksumResponse
-		resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
-		reply = &resp
+		resp := reply.(*roachpb.VerifyChecksumResponse)
+		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
 	}
@@ -189,7 +169,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 		}
 		pErr = roachpb.NewErrorWithTxn(err, txn)
 	}
-	return reply, intents, pErr
+	return intents, pErr
 }
 
 // Get returns the value for a specified key.
