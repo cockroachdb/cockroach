@@ -1288,6 +1288,10 @@ show_stmt:
   {
     $$.val = Statement(nil)
   }
+| SHOW CREATE TABLE var_name
+  {
+    $$.val = &ShowCreateTable{Table: $4.qname()}
+  }
 
 opt_from_var_name_clause:
   FROM var_name

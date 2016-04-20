@@ -250,6 +250,12 @@ func (*ShowColumns) StatementType() StatementType { return Rows }
 func (*ShowColumns) StatementTag() string { return "SHOW COLUMNS" }
 
 // StatementType implements the Statement interface.
+func (*ShowCreateTable) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateTable) StatementTag() string { return "SHOW CREATE TABLE" }
+
+// StatementType implements the Statement interface.
 func (*ShowDatabases) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
