@@ -344,9 +344,8 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 			}
 		}
 
-		// We've released all locks at this point.
-		rdc.rangeCache.Lock()
 		if res.pErr == nil {
+			rdc.rangeCache.Lock()
 			// These need to be separate because we need to preserve the pointer to rs[0]
 			// so that the seenDesc logic works correctly in EvictCachedRangeDescriptor. An
 			// append could cause a copy, which would change the address of rs[0]. We insert
@@ -357,17 +356,15 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 			if err := rdc.insertRangeDescriptorsLocked(rs...); err != nil {
 				res = lookupResult{pErr: roachpb.NewError(err)}
 			}
+			rdc.rangeCache.Unlock()
 		}
 
-		// rdc.lookupRequests does not need to be locked here because we hold an exclusive
-		// write lock on rdc.rangeCache. However, we do anyway for clarity and future proofing.
 		rdc.lookupRequests.Lock()
 		for _, observer := range rdc.lookupRequests.inflight[requestKey].observers {
 			observer <- res
 		}
 		delete(rdc.lookupRequests.inflight, requestKey)
 		rdc.lookupRequests.Unlock()
-		rdc.rangeCache.Unlock()
 	}
 
 	// It rarely may be possible that we somehow got grouped in with the
