@@ -38,7 +38,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	}
 
 	// Check that the database exists.
-	dbDesc, pErr := p.getDatabaseDescEx(string(n.Name))
+	dbDesc, pErr := p.getDatabaseDesc(string(n.Name))
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -125,8 +125,11 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		if pErr != nil {
 			return nil, pErr
 		}
+		if tableDesc == nil {
+			return nil, roachpb.NewError(tableDoesNotExistError(index.Table.String()))
+		}
 
-		if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
+		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		idxName := string(index.Index)
@@ -158,7 +161,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		if err := tableDesc.Validate(); pErr != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if pErr := p.writeTableDesc(&tableDesc); pErr != nil {
+		if pErr := p.writeTableDesc(tableDesc); pErr != nil {
 			return nil, pErr
 		}
 		p.notifySchemaChange(tableDesc.ID, mutationID)
@@ -214,6 +217,9 @@ func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableD
 	dbDesc, pErr := p.getDatabaseDesc(tableQualifiedName.Database())
 	if pErr != nil {
 		return nil, pErr
+	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(tableQualifiedName.Database()))
 	}
 
 	tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}

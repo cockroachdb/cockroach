@@ -42,8 +42,12 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
-			if _, pErr := p.getDatabaseDesc(dbName); pErr != nil {
+			dbDesc, pErr := p.getDatabaseDesc(dbName)
+			if pErr != nil {
 				return nil, pErr
+			}
+			if dbDesc == nil {
+				return nil, roachpb.NewError(databaseDoesNotExistError(dbName))
 			}
 		}
 		p.session.Database = dbName

@@ -35,6 +35,9 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	if pErr != nil {
 		return nil, pErr
 	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(n.Table.Database()))
+	}
 
 	// Check if table exists.
 	tbKey := tableKey{dbDesc.ID, n.Table.Table()}.Key()
@@ -55,8 +58,11 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	if pErr != nil {
 		return nil, pErr
 	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+	}
 
-	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -217,7 +223,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 		return nil, roachpb.NewError(err)
 	}
 
-	if pErr = p.writeTableDesc(&tableDesc); pErr != nil {
+	if pErr := p.writeTableDesc(tableDesc); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)
