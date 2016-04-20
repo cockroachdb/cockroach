@@ -23,6 +23,7 @@ import (
 
 func (p *planner) expandSubqueries(expr parser.Expr, columns int) (parser.Expr, *roachpb.Error) {
 	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns}
+	p.subqueryVisitor.path = p.subqueryVisitor.pathBuf[:0]
 	expr, _ = parser.WalkExpr(&p.subqueryVisitor, expr)
 	return expr, p.subqueryVisitor.pErr
 }
@@ -31,6 +32,7 @@ type subqueryVisitor struct {
 	*planner
 	columns int
 	path    []parser.Expr // parent expressions
+	pathBuf [4]parser.Expr
 	pErr    *roachpb.Error
 }
 
