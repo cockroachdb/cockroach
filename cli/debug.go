@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -477,6 +478,109 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var debugCheckStoreCmd = &cobra.Command{
+	Use:   "check-store [directory]",
+	Short: "consistency check for a single store",
+	Long: `
+Perform local consistency checks of a single store.
+
+Capable of detecting the following errors:
+* Raft logs that are inconsistent with their metadata
+`,
+	RunE: runDebugCheckStoreCmd,
+}
+
+type replicaCheckInfo struct {
+	truncatedIndex uint64
+	appliedIndex   uint64
+	firstIndex     uint64
+	lastIndex      uint64
+}
+
+func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	if len(args) != 1 {
+		return errors.New("required arguments: dir")
+	}
+
+	db, err := openStore(cmd, args[0], stopper)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the entire range-id-local space.
+	start := roachpb.Key(keys.LocalRangeIDPrefix)
+	end := start.PrefixEnd()
+
+	replicaInfo := map[roachpb.RangeID]*replicaCheckInfo{}
+	getReplicaInfo := func(rangeID roachpb.RangeID) *replicaCheckInfo {
+		if info, ok := replicaInfo[rangeID]; ok {
+			return info
+		}
+		replicaInfo[rangeID] = &replicaCheckInfo{}
+		return replicaInfo[rangeID]
+	}
+
+	if _, err := engine.MVCCIterate(context.Background(), db, start, end, roachpb.MaxTimestamp,
+		false /* !consistent */, nil, /* txn */
+		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)
+			if err != nil {
+				return false, err
+			}
+
+			switch {
+			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
+				var trunc roachpb.RaftTruncatedState
+				if err := kv.Value.GetProto(&trunc); err != nil {
+					return false, err
+				}
+				getReplicaInfo(rangeID).truncatedIndex = trunc.Index
+			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexSuffix):
+				idx, err := kv.Value.GetInt()
+				if err != nil {
+					return false, err
+				}
+				getReplicaInfo(rangeID).appliedIndex = uint64(idx)
+			case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
+				_, index, err := encoding.DecodeUint64Ascending(detail)
+				if err != nil {
+					return false, err
+				}
+				ri := getReplicaInfo(rangeID)
+				if ri.firstIndex == 0 {
+					ri.firstIndex = index
+					ri.lastIndex = index
+				} else {
+					if index != ri.lastIndex+1 {
+						fmt.Printf("range %s: log index anomaly: %v followed by %v\n",
+							rangeID, ri.lastIndex, index)
+					}
+					ri.lastIndex = index
+				}
+			}
+
+			return false, nil
+		}); err != nil {
+		return err
+	}
+
+	for rangeID, info := range replicaInfo {
+		if info.truncatedIndex != info.firstIndex-1 {
+			fmt.Printf("range %s: truncated index %v should equal first index %v - 1\n",
+				rangeID, info.truncatedIndex, info.firstIndex)
+		}
+		if info.appliedIndex < info.firstIndex || info.appliedIndex > info.lastIndex {
+			fmt.Printf("range %s: applied index %v should be between first index %v and last index %v\n",
+				rangeID, info.appliedIndex, info.firstIndex, info.lastIndex)
+		}
+	}
+
+	return nil
+}
+
 var debugEnvCmd = &cobra.Command{
 	Use:   "env",
 	Short: "output environment settings",
@@ -499,6 +603,7 @@ var debugCmds = []*cobra.Command{
 	debugRaftLogCmd,
 	debugGCCmd,
 	debugSplitKeyCmd,
+	debugCheckStoreCmd,
 	kvCmd,
 	rangeCmd,
 	debugEnvCmd,
