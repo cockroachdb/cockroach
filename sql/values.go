@@ -33,29 +33,29 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 		rows: make([]parser.DTuple, 0, len(n.Tuples)),
 	}
 
-	for num, tupleOrig := range n.Tuples {
+	var rowBuf parser.DTuple
+	for num, tuple := range n.Tuples {
 		if num == 0 {
-			v.columns = make([]ResultColumn, 0, len(tupleOrig.Exprs))
-		} else if a, e := len(tupleOrig.Exprs), len(v.columns); a != e {
+			v.columns = make([]ResultColumn, 0, len(tuple.Exprs))
+			rowBuf = make(parser.DTuple, len(n.Tuples)*len(tuple.Exprs))
+		} else if a, e := len(tuple.Exprs), len(v.columns); a != e {
 			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
-		// We must not modify the ValuesClause node in-place (or the changes will leak if we retry this
-		// transaction).
-		tuple := parser.Tuple{Exprs: parser.Exprs(append([]parser.Expr(nil), tupleOrig.Exprs...))}
+		row := rowBuf[:len(tuple.Exprs):len(tuple.Exprs)]
+		rowBuf = rowBuf[len(tuple.Exprs):]
 
-		for i := range tuple.Exprs {
-			var pErr *roachpb.Error
-			tuple.Exprs[i], pErr = p.expandSubqueries(tuple.Exprs[i], 1)
+		for i, expr := range tuple.Exprs {
+			expr, pErr := p.expandSubqueries(expr, 1)
 			if pErr != nil {
 				return nil, pErr
 			}
 			var err error
-			typ, err := tuple.Exprs[i].TypeCheck(p.evalCtx.Args)
+			typ, err := expr.TypeCheck(p.evalCtx.Args)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
-			tuple.Exprs[i], err = p.parser.NormalizeExpr(p.evalCtx, tuple.Exprs[i])
+			expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
@@ -66,16 +66,12 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 			} else if typ != parser.DNull && !typ.TypeEqual(v.columns[i].Typ) {
 				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
+			row[i], err = expr.Eval(p.evalCtx)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
 		}
-		data, err := tuple.Eval(p.evalCtx)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		vals, ok := data.(*parser.DTuple)
-		if !ok {
-			return nil, roachpb.NewUErrorf("expected a tuple, but found %T", data)
-		}
-		v.rows = append(v.rows, *vals)
+		v.rows = append(v.rows, row)
 	}
 
 	return v, nil
