@@ -95,7 +95,9 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // is insufficient.
 // Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	return entries(r.store.Engine(), r.RangeID, r.isInitializedLocked(), lo, hi, maxBytes)
+	snap := r.store.NewSnapshot()
+	defer snap.Close()
+	return entries(snap, r.RangeID, r.isInitializedLocked(), lo, hi, maxBytes)
 }
 
 func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
@@ -180,7 +182,9 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 // Term implements the raft.Storage interface.
 // Term requires that the replica lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
-	return term(r.store.Engine(), r.RangeID, r.isInitializedLocked(), i)
+	snap := r.store.NewSnapshot()
+	defer snap.Close()
+	return term(snap, r.RangeID, r.isInitializedLocked(), i)
 }
 
 func term(eng engine.Engine, rangeID roachpb.RangeID, isInitialized bool, i uint64) (uint64, error) {
@@ -311,7 +315,9 @@ func setAppliedIndex(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.Ra
 }
 
 func (r *Replica) loadLastIndexLocked() (uint64, error) {
-	return loadLastIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
+	snap := r.store.NewSnapshot()
+	defer snap.Close()
+	return loadLastIndex(snap, r.RangeID, r.isInitializedLocked())
 }
 
 // loadLastIndex retrieves the last index from storage.
