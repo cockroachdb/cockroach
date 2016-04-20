@@ -72,11 +72,18 @@ The "effects" contain
   now.
 * parameters for any "triggers" which must run with the *application* of the
   command. In particular, this is necessary on `EndTransaction` with a commit
-  trigger, when a transaction is aborted (in which case the abort cache must
-  be populated), and when leadership changes (to apply the new lease).
-  There are likely more, but this already shows that these triggers (which are
+  trigger, or when leadership changes (to apply the new lease).
+  There are more of them, but this already shows that these triggers (which are
   downstream of Raft) will require various pieces of data to be passed around
   with them.
+
+Note that for the "triggers" above, a lot of the work they currently do can
+move pre-Raft as well. For example, for `LeaderLease` below we must change some
+in-memory state on `*Replica` (lease proto and timestamp cache) plus call out
+to Gossip. Still, the bulk of the code in `(*Replica).LeaderLease` (i.e. the
+actual logic) will move pre-Raft, and the remaining trigger is conditional on
+being on the leader (so that one could even remove it completely from the
+"effects" and hack their execution into the leader role itself).
 
 Thus, we arrive at the following (proto-backed) candidate struct:
 
@@ -88,16 +95,42 @@ message RaftCmd {
   repeated oneof effect {
     # Applied in field and slice order.
     repeated Write writes = ...; # see MVCC section
+    # Carries out the following:
+    # * sanity checks
+    # * compute stats for new left hand side (LHS)      [move pre-raft]
+    # * copy some data to new range (abort cache)       [move pre-raft]
+    # * make right-hand side `*Replica`
+    # * copy tsCache (in-mem; only relevant on leader)  [leader-only]
+    # * r.store.SplitRange
+    # * maybe trigger Raft election
     optional Split ...;
+    # Carries out the following:
+    # * sanity checks
+    # * stats computations                              [move pre-raft]
+    # * copy some data to new range (abort cache)       [move pre-raft]
+    # * remove some metadata                            [move pre-raft]
+    #   careful: this is a DeleteRange; could benefit from a ClearRange
+    #   Raft effect (all inline values; no versioning needed)
+    # * clear tsCache (not really necessary)
     optional Merge ...:
+    # Carries out the following:
+    # * `(*Replica).setDesc`
+    # * maybe add to GC queue                           [leader only]
     optional ChangeReplicas ...;
+    # Carries out the following:
+    # * maybe gossips system config                     [leader only]
     optional ModifiedSpan ...;
+    # Carries out the following:
+    # * sanity checks (in particular FindReplica)
+    # * update in-memory lease
+    # * on Raft(!) leader: maybe try to elect new lease holder
+    # * on (new) lease holder: update tsCache low water mark
+    #   (might be easier to do this unconditionally on all nodes)
+    # * on (new) lease holder: maybe gossip system configs
     optional LeaderLease ...;
-    optional AbortCache ...;
-    optional TSCache ...;    # if effect not computable from `Writes`
     # Those below may not be required, but something to think about
-    optional GCRange ...;    # allow optimized GC (some logic downstream of Raft?)
-    optional ClearRange ...; # allow for dropping all kv-pairs without huge cmd
+    optional GCRange ...;    # allow optimized GC (some logic below of Raft?)
+    optional ClearRange ...; # allow erasing key range without huge proposal
   }
 }
 ```
@@ -205,7 +238,17 @@ However, as @bdarnell pointed out, as of recently (#5973) we (mostly) colocate
 the Raft leader and the leader lease holder on the same node and have more
 options for dealing with this (i.e. making the application of a command
 conditional on the Raft log position it was originally proposed at).
-This needs to be fleshed out further, but does appear to be manageable.
+
+More concretely (via @bdarnell):
+
+> The RaftCmd would also include a term and log index, to be populated with the
+> leader's latest log information when it is proposed. The writes would only be
+> applied if it committed at that index; they would be dropped (and reproposed)
+> if they committed at any other index. This would only be a possibility when
+> the lease holder is not the raft leader (and even then it's unlikely in
+> stable lease situations). We may be able to be even stricter about colocating
+> the two roles (in which case we could perhaps remove raft-level replays
+> completely), but I'm wary of forcing too many raft elections.
 
 ### Test changes
 
@@ -229,43 +272,59 @@ separately. This seems wise since it's an absolute necessity.
 The goal here should be to identify all the necessary refactors to keep them
 out of the remaining "forklift" portion of the change.
 
-## Implementation strategy
+This also includes the next section:
 
-My suggestion (which aims for minimal developer burden while allowing for some
-palatable version of "update path") is the following:
+## Migration strategy
 
-The offical up (and downgrade) path is changing all zone configs to hold only
-one replica, and doing a stop-the-world upgrade. We supply a tool that, when
-run against a cluster, "truncates" all the Raft logs by replacing any
-command within them with `NoopRequest` (or, if we have an assertion against
-trivial batches somewhere, a `CPut` against a practically impossible
-existing value). Stopping all nodes, running the tool, restarting with new
-binaries, and then restoring the zone config is the official version change
-across this version (or just dump-restore if available by then).
+We implement the `Freeze`/`Unfreeze` Raft commands suggested by @bdarnell in
+\#5985: everything proposed between `Freeze` and `Unfreeze` applies as a a
+non-retryable error (and in particular, does not change state). Assuming a
+working implementation of this (which will need to be hashed out separately and
+may require its own migration considerations), a migration entails the
+following:
 
-That is not a good migration story by any means, but everything else is
-dangerously involved. It draws justification from the fact that it is the basic
-change that allows for a well-defined migration process and in fact lays much
-of the groundwork for it.
+* **apply** `Freeze` on all Replicas
+* stop all nodes (possibly through a special shutdown mode which terminates
+  a node when all Replicas are in fact frozen)
+* replace the binary
+* start all nodes
+* apply `Unfreeze` on all Replicas.
 
-I'm happy to discuss more involved options, but I doubt there's any free lunch
-here.
+Since the replaced binary will not have to apply Raft log entries proposed by
+the previous binary, all is well.
+
+This work is nicely isolated from the remainder of this RFC, and can (should)
+be tackled separately as soon as consensus is reached.
+
+This migration strategy also has other upshots:
+
+* it can migrate Raft changes while this RFC is being implemented
+* it can be used for future stop-the-world upgrades even when a Raft log freeze
+  isn't necessary(since it also introduces a "stop for upgrade" mode with user
+  tooling, etc).
 
 # Drawbacks
 
-* DeleteRange could create very large writes
+* The amount of data sent over the wire is expected to increase. In particular,
+DeleteRange could be problematic.
+It seems worthwhile to get a sense of expectations by means of a prototype.
+* While the amount of code downstream of raft is drastically reduced, it is not
+  zero, so we will still need online Raft migrations (#5985) eventually.
+* The change may complicate getting rid of write/write blocking (which means a
+  write having to wait for an overlapping prior write to be applied)
 
-## Is this a scary change?
+## Is this a feasible change?
 
-Yes and no. It's certainly scary
+It's scary
 
-* if you try to migrate it properly (see above)
+* if you try to migrate it properly (but see above for an option which seems
+  viable)
 * if you try to forklift it all
 * that with a change of this magnitude we could stumble upon surprises
   in late-ish stages which call the whole change into question
-* that we need this RFC to materialize in code soon and that a proper migration
-  story is blocked on it. That means we'll have to have a bunch of people
-  working on it simultaneously without too much distraction.
+* that it requires a large concerted effort to be carried out, with lots of
+  moving parts touched.
+* that performance implications aren't 100% clear (need prototyping)
 
 As I understand it, the change is very ambitious, but not as vast in scope as,
 for example, the plans we have with distributed SQL (which, of course, are not
@@ -278,4 +337,25 @@ migration story, none.
 
 # Unresolved questions
 
-(Updated as comments roll in)
+## Best batch implementation
+
+This proposal currently suggests using an augmented RocksDB write batch as the
+basis implementation of the new `Batch` interface.
+
+@bdarnell suggested just computing the effects in-memory:
+
+> We had a pure go batch implementation prior to 7d4e2fc. Would it be better to revive that than to wrap a batch with something that saves a second copy of all writes?
+
+It's hard to say which one is better. The RocksDB write batch (at least in that
+commit) was measurably faster (at least on the MVCC level) and does most of the
+work in C++ (where it can manage memory efficiently). The Go option does more
+work in Go, is slower and it's not clear whether memory-related performance
+would overall increase (due to keeping a more complicated state in Go).
+
+The proposed `Batch` interface would allow us to experiment with both, and to
+switch to the better one (maybe even opportunistically depending on the cmd).
+
+A third alternative is an implementation in which the `RocksDB` batch exposes
+a read-only view of the mutations it contains, which would obviate any
+additional state-keeping in Go. This is likely upstream work, but does seem
+like an interesting venue (again, can be explored separately).
