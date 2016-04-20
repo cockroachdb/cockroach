@@ -161,9 +161,9 @@ func (ba *BatchRequest) Add(requests ...Request) {
 
 // Add adds a response to the batch response.
 func (br *BatchResponse) Add(reply Response) {
-	union := ResponseUnion{}
-	union.MustSetInner(reply)
-	br.Responses = append(br.Responses, union)
+	n := len(br.Responses)
+	br.Responses = append(br.Responses, ResponseUnion{})
+	br.Responses[n].MustSetInner(reply)
 }
 
 // Methods returns a slice of the contained methods.
