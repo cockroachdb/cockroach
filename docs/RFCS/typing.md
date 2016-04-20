@@ -1,8 +1,8 @@
 - Feature Name: SQL typing
-- Status: accepted
+- Status: in-progress
 - Authors: Andrei, knz, Nathan
 - Start date: 2016-01-29
-- RFC PR: #4121
+- RFC PR: #4121 #6189
 - Cockroach Issue: #4024  #4026  #3633  #4073  #4088  #3271 #1795
 
 # Summary
@@ -26,17 +26,18 @@ To reach these goals the RFC proposes to:
   expressions (`SELECT` as an expression is already a prerequisite for
   sub-selects)
 - structure typing as a visitor that annotates types as attributes in AST nodes
-- extend `EXPLAIN` to pretty-print the inferred types.
+- extend `EXPLAIN` to pretty-print the inferred types. This will be approached
+  by adding a new `EXPLAIN (TYPES)` command.
 
 As with all in software engineering, more intelligence requires more
 work, and has the potential to make software less predictable.
 Among the spectrum of possible design points, this RFC settles
-on a typing system we call *Morty*, which can be implemented
+on a typing system we call *Summer*, which can be implemented
 as a rule-based depth-first traversal of the query AST.
 
-An alternate earlier proposal called *Rick* is also recorded for posterity.
-# Motivation
+Alternate earlier proposals called *Rick* and *Morty* are also recorded for posterity.
 
+# Motivation
 
 ## Overview
 
@@ -304,6 +305,665 @@ For example:
    type of your placeholder inside your cast first".
 
 # Detailed design
+
+Summary: Nathan spent some time trying to implement the first version of
+this RFC. While doing so, he discovered it was more comfortable, performant,
+and desirable to implement something in-between the current proposals
+for Rick and Morty. 
+
+Since this new code is already largely written and seems to behave in
+as expected in almost all scenarios (all tests pass, examples from the
+previous RFC are handled at least as well as Morty), we figured it warrants
+a specification *a posteriori*. This will allow us to consider the new system
+orthogonally from the code, and directly compare it to Rick and Morty.
+
+The resulting type system is called **Summer**, after the name of
+Morty's sister in the show. Summer is more mature and more
+predictable than Morty, and gives the same or more desirable in almost
+all scenarios while all the while being more easy to understand externally.
+
+## Overview of Summer
+
+- Summer is also based on a set of rules that can be applied using
+  using a regular tree recursion
+- Summer does slightly more work than Morty (more conditions checked
+  at every level) but is not iterative like Rick.
+- Summer requires constant folding early in the type resolution
+- Summer does not require or allow implicit type conversions, as opposed
+  to Morty. In a similar approach to Go, it uses untyped literals
+  to cover 90% of the use cases for implicit type conversions, and deems
+  that it's preferable to require explicit programmer clarification for 
+  the other 10%
+- Summer only uses exact arithmetic during initial constant folding,
+  and performs all further operations using SQL types, whereas Morty
+  sometimes uses exact arithmetic during evaluation.
+
+Criticism of Morty where Summer is better: EXPLAIN on Morty will
+basically say to the user "I don't really know what the type of these
+expressions is" (eval-time type assertions with an exact argument).
+Where Summer will always pick a type and be able to explain it.
+
+## Proposed typing strategy
+
+### Language extension
+
+We introduce a new expression node "type annotation".
+Noted in input syntax as "E : T".
+
+For example: `1:int` 
+
+The meaning of this at a first order approximation is "interpret the expression on the left giving
+a preference to the type on the right".
+
+This is different from casts, see below.
+
+The need for this type of extension was also part of both Rick and Morty.
+
+### First pass: placeholder annotation assertion
+
+For the first pass, we walk through the expression tree and assign the placeholders
+that are direct arguments of explicit type annotations to those types.
+
+(= for each placeholder, if there is a type annotation around it,
+assign this annotation as the placeholder's type before the rest of type checking
+starts; fail if another earlier annotation provides a conflicting type.)
+
+### Second pass: constant folding
+
+The second pass performs constant folding and annotates constant literals with
+their possible types. Note that in practice, the first two passes could actually be implemented in a
+single pass, but for the sake of understanding, it is easier to separate them
+logically.
+
+Constant expressions are folded using exact arithmetic. This is accomplished using a
+depth-first, post-order traversal of the syntax tree. At the end of this phase,
+the parents of constant values are either statements, or expression nodes where
+one of the children is not a constant (either a column reference, a placeholder, or a
+more complex non-constant expression).
+
+Constant values are broken into two categories: **Numeric** and **String-like** constants,
+which will be represented as the types `NumVal` and `StrVal` in the implemented typing system.
+Numeric constants are stored internally as exact numeric values using the 
+[`go/constant`](https://golang.org/pkg/go/constant/) package. String-like constants are 
+stored internally using a `string` value.
+
+After constant folding has occurred the remaining constants are represented as
+literal constants in the syntax tree and annotated by an ordered list of SQL types that can 
+represent them with the least loss of information. We call this list the *resolvable type
+ordered set*, or *resolved type set* for short, and the head of this list the *natural type* of the 
+constant.
+
+#### Numeric Constant Examples
+
+| value                  | resolvable type set
+|:----------------------:|:--------------------------
+| 1                      | [int, float, decimal]
+| 1.0                    | [float, int, decimal]
+| 1.1                    | [float, decimal]
+| null                   | [null, int, float, decimal, string, bytes, timestamp, ...]
+| 123..overflowInt..4567 | [decimal, float]
+| 12..overflowFloat..567 | [decimal]
+| 1/2                    | [float, decimal]
+| 1/3                    | [float, decimal] // perhaps future feature: [fractional, float, decimal]
+
+Notice: we use the lowercase SQL types in the RFC, these are reified in the code using either zero 
+values of `Datum` (original implementation) or optionally the enum values of a new `Type` type.
+
+#### String-like Constant Examples
+
+| value                  | resolvable type set
+|:----------------------:|:--------------------------
+| 'abc'                  | [string, bytes]
+| b'abc'                 | [bytes, string]
+| b'a\00bc'              | [bytes]
+
+These traits will be used later during the type resolution phase of constants.
+
+### Third pass: expression typing, a recursive traversal of the syntax tree
+
+The recursive typing function T takes two input parameters: the node to work
+on, and a specification of **desired types**. 
+
+Desired types are simple for expressions: that's the desired type of the 
+result of evaluating the expression. For a sub-select or other syntax nodes 
+that return tables, the specification is a map from column name to requested 
+type for that column. 
+
+A desired type is merely a hint to the sub-expression
+being type checked, it is up to the caller to assert a specific type
+is returned from the expression typing and throw a type checking error
+if necessary. 
+
+The alternative would be to propagate the desired type down as a constraint,
+and fail as soon as this constraint is violated. However by doing so we would
+dilute the clarity of the origin of the error. Consider for example `insert into (text_column) values (1+floor(1.5))`;
+if we had desired types as constraints the error would be `1 is not a string` whereas by making the caller
+that demands a type the checker, the error becomes `1+floor(1.5) is not a string`, which is arguably more desirable.
+Meanwhile, the type checking of a node retains the option to accept
+the type found for a sub-tree even if it's different from the desired type.
+
+FIXME: we need an example for this. If we don't find an example, perhaps this 
+opportunity is not that useful, in which case it may be possible to always throw 
+an error if a type resolves for a node that is different from the desired type.
+Logically, this would mean changing the optional "desired" type propagated
+down during type checking into a "required" type propagated down during type 
+checking.
+
+As an important optimization, we annotate the results of typing in the syntax
+node. This way during normalization when the syntax structure is changed,
+the new nodes created by normalization can reuse the types of their sub-trees
+without having to recompute them (since normalization does not change
+the type of the sub-trees). A new method on syntax node provides read access to
+the type annotation.
+
+The output of T is a new "typed expression" which is capable of returning
+(without checking again) the type it will return when evaluated. T also stores
+the inferred type in the input node itself (at every level) before returning.
+In effect, this means that type checking will transform an untyped expression
+tree where each node is unable to be properly introspect about its own return 
+type into a typed tree which can provide its inferred result type, and as such 
+can be evaluated later. 
+
+#### Implementation Note
+
+_In an effort to make this distinction clearer in code, a `TypedExpr` interface 
+will be created, which is a superset of the `Expr` interface, but also has the 
+ability to return its annotation and evaluate itself. This means that the `Eval` 
+method in `Expr` will be moved to `TypedExpr`, and that the `TypeCheck` method on
+`Expr`s will return a `TypedExpr`._
+
+The function then works as follows:
+   
+1. if the node is a constant literal: if the desired type is within the constant's 
+   **resolvable type set**, convert the literal to the desired type. Otherwise, resolve
+   the literal as its **natural type**.
+   
+2. if the node is a column reference or a datum: use the type determined by the node regardless
+   of the desired type. 
+   
+3. if the node is a placeholder: if there is no desired type, report an error.
+   if there is a desired type, and the placeholder was not yet assigned a type,
+   assign the desired type to the placeholder and return that type as natural type, and the set of all types
+   as resolvable type set. If the placeholder was already assigned a different natural type, report an error.
+
+4. if the node is NULL: if there is a desired type, annotate the node with the desired type and return that,
+   otherwise return the NULL type as natural type and a resolve set containing all types.
+
+5. if the node is a simple statement (or sub-select, not CASE!). Propagate the desired types down, then look at what comes
+   up when the recursion returns, then check the inferred type are compatible with the statement semantics.
+
+6. for statements or variadic function calls with an homogeneity requirement, we use the rules in the section 
+   [below](#required-homogeneity) for typing.
+
+7. if the node is a function call not otherwise handled in step #6 [incl a binary or unary operation, or a comparison
+   operation], perform overload resolution on the set of possible overloaded 
+   functions that could be used. See [below](#overload-resolution) for how 
+   this is performed.
+   
+8. if the node is a type annotation, then the desired type provided from the parent is ignored and the annotated
+   type required instead (sent down as desired type, checked upon type resolution, if they don't match an error is reported).
+   The annotated type is resolved.
+   
+### Overload resolution
+
+In the case of a function call (and all call-like expressions) there
+are a set of overloads that must be chosen from to resolve the correct operation implementation
+for to dispatch to during evaluation. This resolution can be broken down into a series of filtering 
+steps, whereby candidates which do not pass a filter are eliminated from the resolution process. 
+
+The resolution is based on an initial classification of all the argument expressions to the call into
+3 categories (implemented as 3 vectors of (position, expression) in the implementation):
+
+- constant numeric literals
+- unresolved arguments: placeholder nodes that do not have an assigned type yet
+- "pre-typable nodes" (which happens to be either unambiguously resolvable expressions or previously resolved placeholders or constant
+string literals)
+
+The **first three** steps below are run unconditionally. After the 3rd step and after each 
+subsequent step, we check the remaining overload set:
+
+- If there are no candidate left, type checking fails ("no matching overload").
+- if there is only one candidate left, this is used as the implementation function to use for the call, any
+  yet untyped placeholder or constant literal is typed recursively using the type defined by its argument position as desired type,
+  (it is possible to prove, and we could assert here, that the inferred type here is always the desired type)
+  then subsequent steps are skipped.
+- if there is more than one candidate left, the next filter is applied and the resolution 
+  continues.
+  
+
+1. (7.1) candidates are filtered based on the number of arguments
+
+2. (7.2) the pre-typable sub-nodes (and only those) are typed, starting without a desired type. 
+   At every sub-node, the candidate list is filtered using the types found so far. If at 
+   any point there is only one candidate remaining, further pre-typable sub-nodes are typed using 
+   the remaining candidate's argument type at that position as desired type.
+  
+   Possible extension: if at any point the remaining candidates all accept the same type at the 
+   current argument position, that type is also used as desired type.
+  
+   Then the overload candidates are filtered based on the resulting types. If any argument of the call 
+   receives type null, then it is not used for filtering.
+   
+3. (7.3) candidates are filtered based on the resolvable type set types of constant number literals. 
+   Remember at this point all constant literals already have a resolvable type set since constant folding.
+  
+   The filtering is done left to right, eliminating at each argument all candidates that do not accept
+   one of the types in the resolvable set at that position.
+  
+   After this point,
+   the number of candidates left will be checked now and after each following step.
+   
+4. (7.4) candidates are filtered based on the desired return type, if one is provided
+
+   Example: `insert into (int_col) values (max(1,2))`
+   We only steps 2 and 3 above we still have 2 candidates:
+   With candidates `max(int, int) and max(float, float)`
+
+5. (7.5) If there are constant number literals in the argument list, then try to filter the candidate list
+   down to 1 candidate using the natural type of the constants. If that fails (either 0 candidates left or >1), try again
+   this time trying to find a candidate that accepts the "best" mutual type in the resolvable type set of all constants.
+   (in the order defined in the resolvable type set)
+  
+   Example: `select max(1,2)`
+   We only steps 2 and 3 above we still have 2 candidates:
+   With candidates `max(int, int) and max(float, float)`
+  
+   Example: `select max(1,2.5)`
+   We only steps 2 and 3 above we still have 2 candidates:
+   With candidates `max(float, float) and max(decimal, decimal)`
+  
+6. (7.6) *for the final step, we look to prefer homogeneous argument types across candidates. This could
+   be argued as incorrect or unnecessary, but it seems to be what Postgres does. For instance, overloads
+   for `int + int` and `int + date` exist, so without preferring homogeneous overloads, `1 + $1` would
+   be resolved as ambiguous. Therefore, we check if all previously resolved types are the same, and if
+   so, follow the filtering step.*
+  
+   if there is at least one argument with a resolved type, and all resolved types for arguments so far are homogeneous in type 
+   and all remaining constants have this type in their resolvable type set, and there is at least one candidate.
+   that accepts this type in the yet untyped positions,
+   choose that candidate.
+  
+   Example: `select (1 + $1)`
+
+Another approach would be to go through each overload and attempt to type check each 
+argument expression with the parameter's type. If any of these expressions type checked to a 
+different type then we could discard the overload. This would avoid some of the issues noted in
+step 2, but would create a few other issues
+- it would ignore constant's **natural** types. This could be special cased, but only one level deep
+- it could be expensive if the function was high up in an expression tree
+- it would ignore preferred homogeneity. Again though, this could be special cased
+Because of these issues, this approach is not being considered
+   
+### Required homogeneity
+
+There are a number of cases where it is required that the type of all expressions are the
+same. For example: COALESCE, CASE (conditions and values), IF, NULLIF, RANGE, CONCAT, LEAST/GREATEST (MIN/MAX variadic)....
+
+These situations may or may not also desire a given type for all subexpressions. Two
+examples of this type of situation are in CASE statements (both for the condition set and the
+value set) and in COALESCE statements. Because this is a common need for a number of statement
+types, the typing resolution of this situation should be specified. Here we present a list of
+rules to be applied to a given list of untyped expressions and an optional desired type.
+
+1. (6.1) as we did with overload resolution, split the provided expressions into three groups:
+  - pre-typable nodes unambiguously resolvable expressions, previously resolved arguments, and constant string literals
+  - constant numeric literals
+  - unresolved placeholders
+
+2. (6.2) if there is a desired type, type all the sub-nodes using this type as desired type. If any
+   of the sub-nodes resolves to a different type, report an error (expecting X, got Y).
+   
+3. (6.3) otherwise (no desired type), if there is any pre-typable node, then
+   type this node without a desired type. 
+   Call the resulting type T.
+   Then for all remaining sub-nodes, type it desiring T. If the resulting type is different from T, report an error.
+   The result of typing is T.
+
+4. (6.4) (no desired type, no pre-typable node, all remaining nodes are either constant number literals or untyped placeholders)
+
+   If there is at least one constant literal, then pick the best mutual type of all constant literals, if any, call that T,  
+   type all sub-nodes using T as desired type, and return T as resolved type. 
+   
+5. (6.5) Fail with ambiguous typing.
+  
+## Examples with Summer
+
+```sql
+    prepare a as select 3 + case (4) when 4 then $1 end
+  Tree:
+       select
+       |
+         +
+       /   \
+      3    case
+        /  |  \
+       4   4   $1
+```
+  
+Constant folding happens, nothing changes. 
+  
+Typing of the select begins. Since this is not a sub-select there is no demanded type.
+Typing of "+" begins. Again no demanded type. 
+
+Rule 7.1 then 7.2 applies.
+
+Typing of "case" begins without a desired type.
+
+Then "case" recursively types its condition variable without demanded type.
+Typing of "4" begins. No demanded type here, resolves to int as natural type, [int, float, dec] as resolvable type set.
+Typing of "case" continues. Now it knows the condition is an "int" it will demand "int" for the WHEN branches.
+Typing of "4" (the 2nd one) begins. Type "int" is demanded so the 2nd "4" is typed to that.
+Typing of "case" continues. Here rule 6.4 applies, and a failure occurs.
+
+```sql
+ prepare a as select 3 + case (4) when 4 then $1 else 42 end
+```
+
+Typing of the select begins. Since this is not a sub-select there is no demanded type.
+Typing of "+" begins. Again no demanded type. 
+
+Rule 7.1 then 7.2 applies.
+
+Typing of "case" begins without a desired type.
+
+Then "case" recursively types its condition variable without demanded type.
+Typing of "4" begins. No demanded type here, resolves to int as natural type, [int, float, dec] as resolvable type set.
+Typing of "case" continues. Now it knows the condition is an "int" it will demand "int" for the WHEN branches.
+Typing of "4" (the 2nd one) begins. Type "int" is demanded so the 2nd "4" is typed to that.
+
+Here rule 6.4 applies. "42" decides int, so $1 gets assigned "int" and
+case resolves as "int".
+
+Then typing of "+" resumes.
+
+Based on the resolved type for case, "+" reduces the overload set to
+(int, int), (date, int), (timestamp, int).
+
+Rule 7.3 applies. This eliminates the candidates that take non-number as 1st argument. Only (int, int) remains.
+This decides the overload, "1" gets typed as "int", and the
+typing completes for "+" with "int".
+Typing completes.
+
+
+Another example:
+
+```sql
+    create table t (x float);
+  insert into t(x) values (1e10000 * 1e-9999);
+```
+
+First pass: constant folding using exact arithmetic. The expression 1e10000 * 1e-9999 gets simplified to 10.
+
+Typing insert. The target of the insert is looked at first. This determines desired type "float" for the 1st column in the values clause.
+Typing of the values clause begins, with desired type "float".
+Typing of "10" begins with desired type "float". "10" gets converted to float.
+Typing of insert ends. All is well. Result:
+
+```
+       insert
+       |
+     10:float
+```
+
+Other example:
+
+```
+   select floor($1 + $2)
+```
+
+Assuming `floor` is only defined for floats.
+Typing of "floor" begins with no desired type. 
+
+Rule 7.2 applies.
+There is only one candidate, so there is a desired type for the remaining arguments (here the only one of them) based on the arguments taken by floor.
+
+Typing of "+" begins with desired type "float".
+
+Rule 7.2 applies: nothing to do.
+Rule 7.3 applies: nothing to do.
+Rule 7.4 applies: +(float, float) is selected.
+Then $1 and $2 are assigned the types demanded by the remaining candidate.
+
+Typing of "floor" resumes, finds an "float" argument.
+rules 7.2 completes with 1 candidate, and
+typing of "floor" completes with type "float".
+
+Typing completes..
+
+
+```
+   select
+    |
+   floor:float
+  /          \
+$1:float    $2:float
+```
+
+Another example: 
+
+```sql
+   select ($1+$1)+current_date()
+     select
+         +(a) 
+     +(b)     current_date()
+   $1 $1
+```
+
+Typing of "+(a)" begins without a desired type.
+Rule 7.2 applies. 
+All candidates for "+" take different types,
+so we don't find any desired type
+
+Typing of "+(b)" begins without a desired type.
+Rules 7.1 to 7.6 fail to reduce the overload set, so typing fails with ambiguous types.
+
+Possible fix: 
+- annotate during constant folding all the nodes known to not contain placeholders or constants underneath
+- in rule 7.2 order the typing of pre-typable sub-nodes by starting
+with those nodes.
+
+
+Another example:
+
+Consider a library containing the following functions::
+  
+   f(int) -> int
+   f(float) -> float
+   g(int) -> int
+
+Then consider the following statement::
+               
+```sql
+  prepare a as select g(f($1))
+```
+
+Typing starts for "select".
+Typing starts for the call to "g" without a desired type. 
+Rule 7.2 applies. Only 1 candidate so the sub-nodes are typed
+with its argument type as desired type.
+
+Typing starts for the call to "f" with desired type "int". 
+Rule 7.4 applies, select only 1 candidate.
+then typing of "f" completes, "$1" gets assigned "int",
+"f" resolves to "int".
+
+"g" sees only 1 candidate, resolves to that candidate's
+return type "int"
+Typing completes.
+
+```sql
+  INSERT INTO t(int_col) VALUES (4.5)
+```
+
+Insert demands "int", "4.5" has natural type float and doesn't have
+"int" in its resolvable type set.
+Typing fails (like in Rick and Morty).
+
+```sql
+    INSERT INTO t(int_col) VALUES ($1 + 1)
+```
+
+Insert demands "int", 
+Typing of "+" begins with desired type "int"
+Rule 7.4 applies, choses +(int, int).
+Only 1 candidate, $1 and 1 gets assigned 'int"
+Typing completes.
+
+```sql
+    insert into (int_col) values ($1 - $2)
+```
+
+  do not forget:
+  -(int, int) -> int
+  -(date, date) -> int
+
+Ambiguous on overload resolution of "-"
+
+Example:
+
+```sql
+  insert into (str_col) values (coalesce(1, "foo"))
+  -- must say "1" is not string
+  select coalesce(1, "foo")
+  -- must say "foo" is not int
+```
+
+(to check in testing: Rules 6.1-6.5 do this)
+
+```sql
+    SELECT ($1 + 2) + ($1 + 2.5)
+```
+
+($1 + 2) types as int, $1 gets assigned int
+then ($2 + 2.5) doesn't type.
+
+(Morty would have done $1 = exact)
+
+Another example:
+
+```sql
+      create table t (x float);
+      insert into t(x) values (3 / 2)
+```
+Constant folding reduces 3/2 into 1.5.
+
+Typing "1.5" stars with desired type float, succeeds, 1.5 gets inserted.
+
+```sql
+      create table u (x int);
+      insert into u(x) values (((9 / 3) * (1 / 3))::int)
+```
+Constant folding folds this down to ... values("1") with "1" 
+annotated with natural type "int" and resolvable type set [int].
+
+Then typing succeeds.
+
+Another example:
+
+```sql
+     create table t (x int, s text);
+     insert into t (x, s)  values ($1, "hello " + $1::text)
+```
+
+First "$1" gets typed with desired type "int", gets assigned "int".
+Then "+"  is typed.
+Rule 7.2 applies.
+The cast "cast ($1 as text)" is typed with no desired type.
+This succeeds, leaves the $1 unchanged (it is agnostic of its argument)
+and resolves to type "text".
+"+" resolves to 1 candidate, is typed as "string"
+Typing ends. $1 is int.
+(better than Morty!)
+
+Another example:
+
+```sql
+    select $1::int
+```
+
+This is cast expression! A cast accepts any type as argument,
+so typing fails with an error.
+(In Rick/Morty the syntax :: is also a hint. Not with Summer. We
+like to give a separate meaning to casts here.)
+
+Next example:
+
+```sql
+    f:int,int->int
+    f:float,float->int
+    PREPARE a AS SELECT f($1, $2), $2:float
+```
+
+$2 is assigned to "float" during the first phase.
+then typing of "f" starts,
+the argument have reduced the candidate set to just one.
+Typing completes
+$1 is assigned "float"
+
+```sql
+    PREPARE a AS SELECT ($1 + 4) + $1:int
+```
+
+"$1" gets assigned "int"
+"+" resolves 1 candidate
+Typing ends.
+
+```sql
+    PREPARE a AS SELECT ($2 - $2) * $1:int, $2:int
+```
+
+Typing of "*" begins.
+It sees that its 2nd argument already has type.
+So the candidate list is reduced to *(int,int)
+so Typing of "-" starts with desired type "int".
+There are still 2 candidates:
+-(int, int) -> int
+-(date, date) -> int
+
+Rules 7.1 to 7.6 fail to reduce further.
+So we fail with ambiguous typing.
+
+Now, if the rule about type annotations discussed above
+is introduced, then $2 would have received the type "int"
+early, and then all would be well.
+
+```sql
+    f : int -> int
+    INSERT INTO t (int_a, int_b) VALUES (f($1), $1 - $2)
+    -- succeeds (f types $1::int first, then $2 gets typed int),
+    -- however:
+    INSERT INTO t (int_b, int_a) VALUES ($1 - $2, f($1))
+    -- fails with ambiguous typing for $1-$2, f not visited yet.
+```
+
+Same as morty.
+
+```sql
+   SELECT CASE a_int
+      WHEN 1 THEN 'one'
+      WHEN 2 THEN
+         CASE language_str
+           WHEN 'en' THEN $1
+         END
+   END
+```
+
+Rule 6.3 applies for the outer case, "one" gets typed as "string"
+Then "string" is desired for the inner case.
+Then typing of "$1" assigns "string" (desired).
+Then typing completes.
+
+
+Example:
+
+```sql
+  select max($1, $1):int
+```
+
+Annotation demands "int" so rule 6 demands "int" from max, resolves "int" for $1 and max.
+
+
+# Alternatives
 
 ## Overview of Morty
 
@@ -678,7 +1338,7 @@ expressions as long as it manages to type new placeholders. This way:
     -- all is well!
 ```
 
-# Implementation notes
+## Implementation notes
 
 (these may evolve as the RFC gets implemented. This section
 is likely to become outdated a few months after the RFC gets accepted.)
@@ -740,13 +1400,11 @@ query (which ideally should have been already saved from the prepare
 phase)).
 
 
-# Alternatives
+## Overview of Rick
 
 The precursor of, and an alternative to, Morty was called *Rick*.  We
 present it here to keep historical records and possibly serve as other
 point of reference if the topic is revisited in the future.
-
-## Overview of Rick
 
 - Rick is an iterative (multiple traversals) algorithm that tries
   harder to find a type for placeholders that accommodates all their
