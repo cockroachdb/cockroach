@@ -58,6 +58,8 @@ var (
 	DummyDate Datum = NewDDate(0)
 	// DummyTimestamp is a placeholder DTimestamp value.
 	DummyTimestamp Datum = &DTimestamp{}
+	// DummyTimestampTZ is a placeholder DTimestamp value rendered in session offset.
+	DummyTimestampTZ Datum = &DTimestampTZ{}
 	// DummyInterval is a placeholder DInterval value.
 	DummyInterval Datum = &DInterval{}
 	// dummyTuple is a placeholder DTuple value.
@@ -67,18 +69,19 @@ var (
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
 
-	boolType      = reflect.TypeOf(DummyBool)
-	intType       = reflect.TypeOf(DummyInt)
-	floatType     = reflect.TypeOf(DummyFloat)
-	decimalType   = reflect.TypeOf(DummyDecimal)
-	stringType    = reflect.TypeOf(DummyString)
-	bytesType     = reflect.TypeOf(DummyBytes)
-	dateType      = reflect.TypeOf(DummyDate)
-	timestampType = reflect.TypeOf(DummyTimestamp)
-	intervalType  = reflect.TypeOf(DummyInterval)
-	tupleType     = reflect.TypeOf(dummyTuple)
-	nullType      = reflect.TypeOf(DNull)
-	valargType    = reflect.TypeOf(dummyValArg)
+	boolType        = reflect.TypeOf(DummyBool)
+	intType         = reflect.TypeOf(DummyInt)
+	floatType       = reflect.TypeOf(DummyFloat)
+	decimalType     = reflect.TypeOf(DummyDecimal)
+	stringType      = reflect.TypeOf(DummyString)
+	bytesType       = reflect.TypeOf(DummyBytes)
+	dateType        = reflect.TypeOf(DummyDate)
+	timestampType   = reflect.TypeOf(DummyTimestamp)
+	timestampTZType = reflect.TypeOf(DummyTimestampTZ)
+	intervalType    = reflect.TypeOf(DummyInterval)
+	tupleType       = reflect.TypeOf(dummyTuple)
+	nullType        = reflect.TypeOf(DNull)
+	valargType      = reflect.TypeOf(dummyValArg)
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
@@ -738,6 +741,77 @@ func (d *DTimestamp) IsMin() bool {
 }
 
 func (d *DTimestamp) String() string {
+	return d.UTC().Format(timestampWithOffsetZoneFormat)
+}
+
+// DTimestampTZ is the timestamp Datum that is rendered with session offset.
+type DTimestampTZ struct {
+	time.Time
+}
+
+// Type implements the Datum interface.
+func (d *DTimestampTZ) Type() string {
+	return "timestamptz"
+}
+
+// TypeEqual implements the Datum interface.
+func (d *DTimestampTZ) TypeEqual(other Datum) bool {
+	_, ok := other.(*DTimestampTZ)
+	return ok
+}
+
+// Compare implements the Datum interface.
+func (d *DTimestampTZ) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DTimestampTZ)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	if d.Before(v.Time) {
+		return -1
+	}
+	if v.Before(d.Time) {
+		return 1
+	}
+	return 0
+}
+
+// HasPrev implements the Datum interface.
+func (d *DTimestampTZ) HasPrev() bool {
+	return true
+}
+
+// Prev implements the Datum interface.
+func (d *DTimestampTZ) Prev() Datum {
+	return &DTimestampTZ{Time: d.Add(-1)}
+}
+
+// HasNext implements the Datum interface.
+func (d *DTimestampTZ) HasNext() bool {
+	return true
+}
+
+// Next implements the Datum interface.
+func (d *DTimestampTZ) Next() Datum {
+	return &DTimestampTZ{Time: d.Add(1)}
+}
+
+// IsMax implements the Datum interface.
+func (d *DTimestampTZ) IsMax() bool {
+	// Adding 1 overflows to a smaller value
+	return d.After(d.Next().(*DTimestampTZ).Time)
+}
+
+// IsMin implements the Datum interface.
+func (d *DTimestampTZ) IsMin() bool {
+	// Subtracting 1 underflows to a larger value.
+	return d.Before(d.Add(-1))
+}
+
+func (d *DTimestampTZ) String() string {
 	return d.UTC().Format(timestampWithOffsetZoneFormat)
 }
 
