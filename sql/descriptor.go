@@ -177,6 +177,9 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 			if pErr != nil {
 				return nil, pErr
 			}
+			if descriptor == nil {
+				return nil, roachpb.NewError(databaseDoesNotExistError(database))
+			}
 			descs = append(descs, descriptor)
 		}
 		return descs, nil
@@ -196,7 +199,10 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 			if err != nil {
 				return nil, err
 			}
-			descs = append(descs, &descriptor)
+			if descriptor == nil {
+				return nil, roachpb.NewError(tableDoesNotExistError(table.String()))
+			}
+			descs = append(descs, descriptor)
 		}
 	}
 	return descs, nil
@@ -230,6 +236,9 @@ func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
 		dbDesc, pErr := p.getDatabaseDesc(string(expr.Base))
 		if pErr != nil {
 			return nil, pErr
+		}
+		if dbDesc == nil {
+			return nil, roachpb.NewError(databaseDoesNotExistError(string(expr.Base)))
 		}
 		tableNames, pErr := p.getTableNames(dbDesc)
 		if pErr != nil {

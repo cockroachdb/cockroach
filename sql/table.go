@@ -235,17 +235,20 @@ func getKeysForTableDescriptor(
 	return
 }
 
-// getTableDescEx returns a table descriptor, or nil if the descriptor is not
+// getTableDesc returns a table descriptor, or nil if the descriptor is not
 // found.
-func (p *planner) getTableDescEx(
-	qname *parser.QualifiedName,
-) (*TableDescriptor, *roachpb.Error) {
+// If you want to transform the not found condition into an error, use
+// tableDoesNotExistError().
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *roachpb.Error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	dbDesc, pErr := p.getDatabaseDesc(qname.Database())
 	if pErr != nil {
 		return nil, pErr
+	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(qname.Database()))
 	}
 
 	desc := TableDescriptor{}
@@ -257,20 +260,6 @@ func (p *planner) getTableDescEx(
 		return nil, nil
 	}
 	return &desc, nil
-}
-
-// getTableDesc is like getTableDescEx(), but returns an error if the table is not found.
-func (p *planner) getTableDesc(
-	qname *parser.QualifiedName,
-) (TableDescriptor, *roachpb.Error) {
-	desc, pErr := p.getTableDescEx(qname)
-	if pErr != nil {
-		return TableDescriptor{}, pErr
-	}
-	if desc == nil {
-		return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
-	}
-	return *desc, nil
 }
 
 // get the table descriptor for the ID passed in using an existing txn.
@@ -305,7 +294,14 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
 		// chicken&egg problem.
-		return p.getTableDesc(qname)
+		desc, pErr := p.getTableDesc(qname)
+		if pErr != nil {
+			return TableDescriptor{}, pErr
+		}
+		if desc == nil {
+			return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
+		}
+		return *desc, nil
 	}
 
 	tableID, pErr := p.getTableID(qname)
