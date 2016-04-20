@@ -20,12 +20,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type insertNode struct {
@@ -38,7 +36,9 @@ type insertNode struct {
 
 	run struct {
 		// The following fields are populated during Start().
-		rowCreatorNodeRun
+		editNodeRun
+
+		ri             rowInserter
 		rowIdxToRetIdx []int
 		rowTemplate    parser.DTuple
 	}
@@ -201,18 +201,13 @@ func (n *insertNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	// Determine the secondary indexes that need to be updated as well.
-	indexes := n.tableDesc.Indexes
-	// Also include the secondary indexes in mutation state WRITE_ONLY.
-	for _, m := range n.tableDesc.Mutations {
-		if m.State == DescriptorMutation_WRITE_ONLY {
-			if index := m.GetIndex(); index != nil {
-				indexes = append(indexes, *index)
-			}
-		}
+	ri, err := makeRowInserter(n.tableDesc, n.colIDtoRowIndex, n.cols)
+	if err != nil {
+		return roachpb.NewError(err)
 	}
+	n.run.ri = ri
 
-	n.run.startRowCreatorNode(&n.rowCreatorNodeBase, rows, indexes)
+	n.run.startEditNode(&n.editNodeBase, rows)
 
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
@@ -313,77 +308,14 @@ func (n *insertNode) Next() bool {
 		}
 	}
 
-	// Encode the values to the expected column type. This needs to
-	// happen before index encoding because certain datum types (i.e. tuple)
-	// cannot be used as index values.
-	for i, val := range rowVals {
-		// Make sure the value can be written to the column before proceeding.
-		var mErr error
-		if n.run.marshalled[i], mErr = marshalColumnValue(n.cols[i], val); mErr != nil {
-			n.run.pErr = roachpb.NewError(mErr)
-			return false
-		}
-	}
-
-	primaryIndexKey, _, eErr := encodeIndexKey(
-		&n.run.primaryIndex, n.colIDtoRowIndex, rowVals, n.run.primaryIndexKeyPrefix)
-	if eErr != nil {
-		n.run.pErr = roachpb.NewError(eErr)
+	n.run.pErr = n.run.ri.InsertRow(n.run.b, rowVals)
+	if n.run.pErr != nil {
 		return false
 	}
 
-	// Write the row sentinel. We want to write the sentinel first in case
-	// we are trying to insert a duplicate primary key: if we write the
-	// secondary indexes first, we may get an error that looks like a
-	// uniqueness violation on a non-unique index.
-	sentinelKey := keys.MakeNonColumnKey(primaryIndexKey)
-	if log.V(2) {
-		log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
-	}
-	// This is subtle: An interface{}(nil) deletes the value, so we pass in
-	// []byte{} as a non-nil value.
-	n.run.b.CPut(sentinelKey, []byte{}, nil)
-
-	secondaryIndexEntries, eErr := encodeSecondaryIndexes(
-		n.tableDesc.ID, n.run.indexes, n.colIDtoRowIndex, rowVals)
-	if eErr != nil {
-		n.run.pErr = roachpb.NewError(eErr)
-		return false
-	}
-
-	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		if log.V(2) {
-			log.Infof("CPut %s -> %v", secondaryIndexEntry.key,
-				secondaryIndexEntry.value)
-		}
-		n.run.b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
-	}
-
-	// Write the row columns.
 	for i, val := range rowVals {
-		col := n.cols[i]
 		if n.run.rowTemplate != nil {
 			n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
-		}
-
-		if _, ok := n.primaryKeyCols[col.ID]; ok {
-			// Skip primary key columns as their values are encoded in the row
-			// sentinel key which is guaranteed to exist for as long as the row
-			// exists.
-			continue
-		}
-
-		if n.run.marshalled[i] != nil {
-			// We only output non-NULL values. Non-existent column keys are
-			// considered NULL during scanning and the row sentinel ensures we know
-			// the row exists.
-
-			key := keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
-			if log.V(2) {
-				log.Infof("CPut %s -> %v", roachpb.Key(key), val)
-			}
-
-			n.run.b.CPut(key, n.run.marshalled[i], nil)
 		}
 	}
 

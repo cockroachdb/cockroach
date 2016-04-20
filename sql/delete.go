@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -31,10 +32,11 @@ type deleteNode struct {
 	n *parser.Delete
 
 	run struct {
+		// The following fields are populated during Start().
 		editNodeRun
 
-		colIDtoRowIndex map[ColumnID]int
-		fastPath        bool
+		rd       rowDeleter
+		fastPath bool
 	}
 }
 
@@ -93,26 +95,21 @@ func (d *deleteNode) Start() *roachpb.Error {
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	d.run.colIDtoRowIndex = colIDtoRowIndex
 
-	// Determine the secondary indexes that need to be updated as well.
-	indexes := d.tableDesc.Indexes
-	// Also include all the indexes under mutation; mutation state is
-	// irrelevant for deletions.
-	for _, m := range d.tableDesc.Mutations {
-		if index := m.GetIndex(); index != nil {
-			indexes = append(indexes, *index)
-		}
+	rd, err := makeRowDeleter(d.tableDesc, colIDtoRowIndex)
+	if err != nil {
+		return roachpb.NewError(err)
 	}
+	d.run.rd = rd
 
-	d.run.startEditNode(&d.editNodeBase, rows, indexes)
+	d.run.startEditNode(&d.editNodeBase, rows)
 
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	// TODO(dt): We could probably be smarter when presented with an index-join,
 	// but this goes away anyway once we push-down more of SQL.
 	sel := rows.(*selectNode)
-	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, len(indexes)) {
+	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, d.run.rd) {
 		d.run.fastPath = true
 		d.run.pErr = d.fastDelete()
 		d.run.done = true
@@ -142,34 +139,10 @@ func (d *deleteNode) Next() bool {
 
 	rowVals := d.run.rows.Values()
 
-	primaryIndexKey, _, err := encodeIndexKey(
-		&d.run.primaryIndex, d.run.colIDtoRowIndex, rowVals, d.run.primaryIndexKeyPrefix)
-	if err != nil {
-		d.run.pErr = roachpb.NewError(err)
+	d.run.pErr = d.run.rd.DeleteRow(d.run.b, rowVals)
+	if d.run.pErr != nil {
 		return false
 	}
-
-	secondaryIndexEntries, err := encodeSecondaryIndexes(
-		d.tableDesc.ID, d.run.indexes, d.run.colIDtoRowIndex, rowVals)
-	if err != nil {
-		d.run.pErr = roachpb.NewError(err)
-		return false
-	}
-
-	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		if log.V(2) {
-			log.Infof("Del %s", secondaryIndexEntry.key)
-		}
-		d.run.b.Del(secondaryIndexEntry.key)
-	}
-
-	// Delete the row.
-	rowStartKey := roachpb.Key(primaryIndexKey)
-	rowEndKey := rowStartKey.PrefixEnd()
-	if log.V(2) {
-		log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
-	}
-	d.run.b.DelRange(rowStartKey, rowEndKey, false)
 
 	resultRow, err := d.rh.cookResultRow(rowVals)
 	if err != nil {
@@ -184,11 +157,8 @@ func (d *deleteNode) Next() bool {
 // Determine if the deletion of `rows` can be done without actually scanning them,
 // i.e. if we do not need to know their values for filtering expressions or a
 // RETURNING clause or for updating secondary indexes.
-func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, indexCount int) bool {
-	if indexCount != 0 {
-		if log.V(2) {
-			log.Infof("delete forced to scan: values required to update %d secondary indexes", indexCount)
-		}
+func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, rd rowDeleter) bool {
+	if !rd.HasFast() {
 		return false
 	}
 	if n.Returning != nil {
@@ -215,43 +185,25 @@ func (d *deleteNode) fastDelete() *roachpb.Error {
 		return scan.pErr
 	}
 
-	for _, span := range scan.spans {
-		if log.V(2) {
-			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
-		}
-		d.run.b.DelRange(span.start, span.end, true)
+	rowCount, pErr := d.run.rd.FastDelete(d.run.b, scan, d.fastDeleteCommitFunc)
+	if pErr != nil {
+		return pErr
 	}
+	d.rh.rowCount += rowCount
+	return nil
+}
 
+func (d *deleteNode) fastDeleteCommitFunc(b *client.Batch) *roachpb.Error {
 	if d.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		if pErr := d.p.txn.CommitInBatch(d.run.b); pErr != nil {
+		if pErr := d.p.txn.CommitInBatch(b); pErr != nil {
 			return pErr
 		}
 	} else {
-		if pErr := d.p.txn.Run(d.run.b); pErr != nil {
+		if pErr := d.p.txn.Run(b); pErr != nil {
 			return pErr
-		}
-	}
-
-	for _, r := range d.run.b.Results {
-		var prev []byte
-		for _, i := range r.Keys {
-			// If prefix is same, don't bother decoding key.
-			if len(prev) > 0 && bytes.HasPrefix(i, prev) {
-				continue
-			}
-
-			after, err := scan.readIndexKey(i)
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-			k := i[:len(i)-len(after)]
-			if !bytes.Equal(k, prev) {
-				prev = k
-				d.rh.rowCount++
-			}
 		}
 	}
 	return nil
