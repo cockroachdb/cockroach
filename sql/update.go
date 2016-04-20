@@ -21,11 +21,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -67,27 +65,21 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, auto
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows                  planNode
-	primaryIndex          IndexDescriptor
-	primaryIndexKeyPrefix []byte
-	indexes               []IndexDescriptor
-	pErr                  *roachpb.Error
-	b                     *client.Batch
-	resultRow             parser.DTuple
-	done                  bool
+	rows      planNode
+	pErr      *roachpb.Error
+	b         *client.Batch
+	resultRow parser.DTuple
+	done      bool
 }
 
-func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, indexes []IndexDescriptor) {
+func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode) {
 	if isSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}
 
 	r.rows = rows
-	r.primaryIndex = en.tableDesc.PrimaryIndex
-	r.primaryIndexKeyPrefix = MakeIndexKeyPrefix(en.tableDesc.ID, r.primaryIndex.ID)
 	r.b = en.p.txn.NewBatch()
-	r.indexes = indexes
 }
 
 func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
@@ -100,6 +92,7 @@ func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
 		r.pErr = en.p.txn.Run(r.b)
 	}
 	if r.pErr != nil && convertError {
+		// TODO(dan): Move this logic into rowInsert/rowUpdate.
 		r.pErr = convertBatchError(en.tableDesc, *r.b, r.pErr)
 	}
 
@@ -146,29 +139,17 @@ func (p *planner) makeRowCreatorNode(en editNodeBase, cols []ColumnDescriptor, c
 	}, nil
 }
 
-// rowCreatorNodeBase holds the runtime (execute) state needed to run
-// statements that create row values.
-type rowCreatorNodeRun struct {
-	editNodeRun
-	marshalled []interface{}
-}
-
-func (r *rowCreatorNodeRun) startRowCreatorNode(en *rowCreatorNodeBase, rows planNode, indexes []IndexDescriptor) {
-	r.startEditNode(&en.editNodeBase, rows, indexes)
-	r.marshalled = make([]interface{}, len(en.cols))
-}
-
 type updateNode struct {
 	// The following fields are populated during makePlan.
 	rowCreatorNodeBase
-	n                   *parser.Update
-	colIDSet            map[ColumnID]struct{}
-	primaryKeyColChange bool
+	n        *parser.Update
+	colIDSet map[ColumnID]int
 
 	run struct {
 		// The following fields are populated during Start().
-		rowCreatorNodeRun
-		deleteOnlyIndex map[int]struct{}
+		editNodeRun
+
+		ru rowUpdater
 	}
 }
 
@@ -230,13 +211,9 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Set of columns being updated
-	var primaryKeyColChange bool
-	colIDSet := map[ColumnID]struct{}{}
-	for _, c := range cols {
-		colIDSet[c.ID] = struct{}{}
-		if _, ok := rc.primaryKeyCols[c.ID]; ok {
-			primaryKeyColChange = true
-		}
+	colIDSet := make(map[ColumnID]int, len(cols))
+	for i, c := range en.tableDesc.Columns {
+		colIDSet[c.ID] = i
 	}
 
 	tracing.AnnotateTrace()
@@ -307,10 +284,9 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	}
 
 	return &updateNode{
-		n:                   n,
-		rowCreatorNodeBase:  rc,
-		primaryKeyColChange: primaryKeyColChange,
-		colIDSet:            colIDSet,
+		n:                  n,
+		rowCreatorNodeBase: rc,
+		colIDSet:           colIDSet,
 	}, nil
 }
 
@@ -380,50 +356,13 @@ func (u *updateNode) Start() *roachpb.Error {
 	}
 	u.colIDtoRowIndex = colIDtoRowIndex
 
-	// Secondary indexes needing updating.
-	needsUpdate := func(index IndexDescriptor) bool {
-		// If the primary key changed, we need to update all of them.
-		if u.primaryKeyColChange {
-			return true
-		}
-		for _, id := range index.ColumnIDs {
-			if _, ok := u.colIDSet[id]; ok {
-				return true
-			}
-		}
-		return false
+	ru, err := makeRowUpdater(u.tableDesc, u.colIDSet, u.cols)
+	if err != nil {
+		return roachpb.NewError(err)
 	}
+	u.run.ru = ru
 
-	indexes := make([]IndexDescriptor, 0, len(u.tableDesc.Indexes)+len(u.tableDesc.Mutations))
-	var deleteOnlyIndex map[int]struct{}
-
-	for _, index := range u.tableDesc.Indexes {
-		if needsUpdate(index) {
-			indexes = append(indexes, index)
-		}
-	}
-	for _, m := range u.tableDesc.Mutations {
-		if index := m.GetIndex(); index != nil {
-			if needsUpdate(*index) {
-				indexes = append(indexes, *index)
-
-				switch m.State {
-				case DescriptorMutation_DELETE_ONLY:
-					if deleteOnlyIndex == nil {
-						// Allocate at most once.
-						deleteOnlyIndex = make(map[int]struct{}, len(u.tableDesc.Mutations))
-					}
-					deleteOnlyIndex[len(indexes)-1] = struct{}{}
-
-				case DescriptorMutation_WRITE_ONLY:
-				}
-			}
-		}
-	}
-
-	u.run.startRowCreatorNode(&u.rowCreatorNodeBase, rows, indexes)
-
-	u.run.deleteOnlyIndex = deleteOnlyIndex
+	u.run.startEditNode(&u.editNodeBase, rows)
 
 	return nil
 }
@@ -440,29 +379,16 @@ func (u *updateNode) Next() bool {
 
 	tracing.AnnotateTrace()
 
-	rowVals := u.run.rows.Values()
-
-	primaryIndexKey, _, err := encodeIndexKey(
-		&u.run.primaryIndex, u.colIDtoRowIndex, rowVals, u.run.primaryIndexKeyPrefix)
-	if err != nil {
-		u.run.pErr = roachpb.NewError(err)
-		return false
-	}
-	// Compute the current secondary index key:value pairs for this row.
-	secondaryIndexEntries, err := encodeSecondaryIndexes(
-		u.tableDesc.ID, u.run.indexes, u.colIDtoRowIndex, rowVals)
-	if err != nil {
-		u.run.pErr = roachpb.NewError(err)
-		return false
-	}
+	oldValues := u.run.rows.Values()
 
 	// Our updated value expressions occur immediately after the plain
 	// columns in the output.
-	newVals := rowVals[len(u.tableDesc.Columns):]
+	updateValues := oldValues[len(u.tableDesc.Columns):]
+	oldValues = oldValues[:len(u.tableDesc.Columns)]
 
 	// Ensure that the values honor the specified column widths.
-	for i := range newVals {
-		if err := checkValueWidth(u.cols[i], newVals[i]); err != nil {
+	for i := range updateValues {
+		if err := checkValueWidth(u.cols[i], updateValues[i]); err != nil {
 			u.run.pErr = roachpb.NewError(err)
 			return false
 		}
@@ -470,161 +396,20 @@ func (u *updateNode) Next() bool {
 
 	// Update the row values.
 	for i, col := range u.cols {
-		val := newVals[i]
+		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
 			u.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 			return false
 		}
-		rowVals[u.colIDtoRowIndex[col.ID]] = val
 	}
 
-	// Check that the new value types match the column types. This needs to
-	// happen before index encoding because certain datum types (i.e. tuple)
-	// cannot be used as index values.
-	for i, val := range newVals {
-		var mErr error
-		if u.run.marshalled[i], mErr = marshalColumnValue(u.cols[i], val); mErr != nil {
-			u.run.pErr = roachpb.NewError(mErr)
-			return false
-		}
-	}
-
-	// Compute the new primary index key for this row.
-	newPrimaryIndexKey := primaryIndexKey
-	var rowPrimaryKeyChanged bool
-	if u.primaryKeyColChange {
-		newPrimaryIndexKey, _, err = encodeIndexKey(
-			&u.run.primaryIndex, u.colIDtoRowIndex, rowVals, u.run.primaryIndexKeyPrefix)
-		if err != nil {
-			u.run.pErr = roachpb.NewError(err)
-			return false
-		}
-		// Note that even if primaryIndexColChange is true, it's possible that
-		// primary key fields in this particular row didn't change.
-		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
-	}
-
-	// Compute the new secondary index key:value pairs for this row.
-	newSecondaryIndexEntries, eErr := encodeSecondaryIndexes(
-		u.tableDesc.ID, u.run.indexes, u.colIDtoRowIndex, rowVals)
-	if eErr != nil {
-		u.run.pErr = roachpb.NewError(eErr)
+	newValues, pErr := u.run.ru.updateRow(u.run.b, oldValues, updateValues)
+	if pErr != nil {
+		u.run.pErr = pErr
 		return false
 	}
 
-	if rowPrimaryKeyChanged {
-		// Delete all the data stored under the old primary key.
-		rowStartKey := roachpb.Key(primaryIndexKey)
-		rowEndKey := rowStartKey.PrefixEnd()
-		if log.V(2) {
-			log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
-		}
-		u.run.b.DelRange(rowStartKey, rowEndKey, false)
-
-		// Delete all the old secondary indexes.
-		for _, secondaryIndexEntry := range secondaryIndexEntries {
-			if log.V(2) {
-				log.Infof("Del %s", secondaryIndexEntry.key)
-			}
-			u.run.b.Del(secondaryIndexEntry.key)
-		}
-
-		// Write the new row sentinel. We want to write the sentinel first in case
-		// we are trying to insert a duplicate primary key: if we write the
-		// secondary indexes first, we may get an error that looks like a
-		// uniqueness violation on a non-unique index.
-		sentinelKey := keys.MakeNonColumnKey(newPrimaryIndexKey)
-		if log.V(2) {
-			log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
-		}
-		// This is subtle: An interface{}(nil) deletes the value, so we pass in
-		// []byte{} as a non-nil value.
-		u.run.b.CPut(sentinelKey, []byte{}, nil)
-
-		// Write any fields from the old row that were not modified by the UPDATE.
-		for i, col := range u.tableDesc.Columns {
-			if _, ok := u.colIDSet[col.ID]; ok {
-				continue
-			}
-			if _, ok := u.primaryKeyCols[col.ID]; ok {
-				continue
-			}
-			key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
-			val := rowVals[i]
-			marshalledVal, mErr := marshalColumnValue(col, val)
-			if mErr != nil {
-				u.run.pErr = roachpb.NewError(mErr)
-				return false
-			}
-
-			if log.V(2) {
-				log.Infof("Put %s -> %v", roachpb.Key(key), val)
-			}
-			u.run.b.Put(key, marshalledVal)
-		}
-		// At this point, we've deleted the old row and associated index data and
-		// written the sentinel keys and column keys for non-updated columns. Fall
-		// through to below where the index keys and updated column keys will be
-		// written.
-	}
-
-	// Update secondary indexes.
-	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
-		secondaryIndexEntry := secondaryIndexEntries[i]
-		secondaryKeyChanged := !bytes.Equal(newSecondaryIndexEntry.key, secondaryIndexEntry.key)
-		if secondaryKeyChanged {
-			if log.V(2) {
-				log.Infof("Del %s", secondaryIndexEntry.key)
-			}
-			u.run.b.Del(secondaryIndexEntry.key)
-		}
-		if rowPrimaryKeyChanged || secondaryKeyChanged {
-			// Do not update Indexes in the DELETE_ONLY state.
-			if _, ok := u.run.deleteOnlyIndex[i]; !ok {
-				if log.V(2) {
-					log.Infof("CPut %s -> %v", newSecondaryIndexEntry.key,
-						newSecondaryIndexEntry.value)
-				}
-				u.run.b.CPut(newSecondaryIndexEntry.key, newSecondaryIndexEntry.value, nil)
-			}
-		}
-	}
-
-	// Add the new values.
-	for i, val := range newVals {
-		col := u.cols[i]
-
-		if _, ok := u.primaryKeyCols[col.ID]; ok {
-			// Skip primary key columns as their values are encoded in the row
-			// sentinel key which is guaranteed to exist for as long as the row
-			// exists.
-			continue
-		}
-
-		key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
-		if u.run.marshalled[i] != nil {
-			// We only output non-NULL values. Non-existent column keys are
-			// considered NULL during scanning and the row sentinel ensures we know
-			// the row exists.
-			if log.V(2) {
-				log.Infof("Put %s -> %v", roachpb.Key(key), val)
-			}
-
-			u.run.b.Put(key, u.run.marshalled[i])
-		} else {
-			// The column might have already existed but is being set to NULL, so
-			// delete it.
-			if log.V(2) {
-				log.Infof("Del %s", key)
-			}
-
-			u.run.b.Del(key)
-		}
-
-	}
-
-	// rowVals[:len(tableDesc.Columns)] have been updated with the new values above.
-	resultRow, err := u.rh.cookResultRow(rowVals[:len(u.tableDesc.Columns)])
+	resultRow, err := u.rh.cookResultRow(newValues)
 	if err != nil {
 		u.run.pErr = roachpb.NewError(err)
 		return false
