@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -363,7 +362,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	return snapshot(snap, r.RangeID, r.isInitializedLocked(), r.mu.desc.StartKey, r.store.Clock())
+	return snapshot(snap, r.RangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
 }
 
 func snapshot(
@@ -371,7 +370,6 @@ func snapshot(
 	rangeID roachpb.RangeID,
 	isInitialized bool,
 	startKey roachpb.RKey,
-	clock *hlc.Clock,
 ) (raftpb.Snapshot, error) {
 	start := timeutil.Now()
 	var snapData roachpb.RaftSnapshotData
@@ -394,7 +392,7 @@ func snapshot(
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := engine.MVCCGetProto(context.Background(), snap, keys.RangeDescriptorKey(startKey),
-		clock.Now(), false /* !consistent */, nil, &desc)
+		roachpb.MaxTimestamp, false /* !consistent */, nil, &desc)
 	if err != nil {
 		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
 	}
