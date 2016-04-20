@@ -468,7 +468,7 @@ END;
 `); err != nil {
 			t.Error(err)
 		}
-		t.Logf("schema changes took %v", time.Since(start))
+		t.Logf("schema changes took %s", timeutil.Since(start))
 		wg.Done()
 	}()
 

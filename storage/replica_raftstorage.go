@@ -408,7 +408,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	}
 
 	log.Infof("generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
-		r.RangeID, appliedIndex, timeutil.Now().Sub(start), len(data), len(snapData.KV), len(snapData.LogEntries))
+		r.RangeID, appliedIndex, timeutil.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
 
 	return raftpb.Snapshot{
 		Data: data,
@@ -504,7 +504,7 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 	log.Infof("received snapshot for range %s at index %d. encoded size=%d, %d KV pairs, %d log entries",
 		r.RangeID, snap.Metadata.Index, len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof("applied snapshot for range %s in %s", r.RangeID, timeutil.Now().Sub(start))
+		log.Infof("applied snapshot for range %s in %s", r.RangeID, timeutil.Since(start))
 	}(timeutil.Now())
 
 	rangeID := r.RangeID

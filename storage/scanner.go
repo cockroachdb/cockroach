@@ -213,7 +213,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				// Increment iteration count.
 				rs.completedScan.L.Lock()
 				rs.count++
-				rs.total += timeutil.Now().Sub(start)
+				rs.total += timeutil.Since(start)
 				rs.completedScan.Broadcast()
 				rs.completedScan.L.Unlock()
 				if log.V(6) {

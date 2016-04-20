@@ -31,7 +31,7 @@ func TestSucceedsSoon(t *testing.T) {
 	start := timeutil.Now()
 	duration := time.Millisecond * 10
 	SucceedsSoon(t, func() error {
-		elapsed := time.Since(start)
+		elapsed := timeutil.Since(start)
 		if elapsed > duration {
 			return nil
 		}

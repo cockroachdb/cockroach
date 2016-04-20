@@ -735,7 +735,7 @@ func (n *Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
 		}
-		n.metrics.callComplete(timeutil.Now().Sub(tStart), pErr)
+		n.metrics.callComplete(timeutil.Since(tStart), pErr)
 		br.Error = pErr
 	}
 

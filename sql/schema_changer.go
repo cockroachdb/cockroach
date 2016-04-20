@@ -531,7 +531,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 			case <-timer.C:
 				for _, sc := range s.schemaChangers {
-					if time.Since(sc.execAfter) > 0 {
+					if timeutil.Since(sc.execAfter) > 0 {
 						pErr := sc.exec()
 						if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); !ok && pErr != nil {
 							log.Info(pErr)
