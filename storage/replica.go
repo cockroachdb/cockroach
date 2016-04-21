@@ -271,12 +271,12 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	r.setDescWithoutProcessUpdateLocked(desc)
 
 	var err error
-	r.mu.lastIndex, err = r.loadLastIndexLocked()
+	r.mu.lastIndex, err = loadLastIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
 	if err != nil {
 		return err
 	}
 
-	r.mu.appliedIndex, err = r.loadAppliedIndexLocked(r.store.Engine())
+	r.mu.appliedIndex, err = loadAppliedIndex(r.store.Engine(), r.RangeID, r.isInitializedLocked())
 	if err != nil {
 		return err
 	}
