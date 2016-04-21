@@ -19,7 +19,6 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"go/constant"
 )
 
 // Expr represents an expression.
@@ -329,54 +328,6 @@ type CoalesceExpr struct {
 
 func (node *CoalesceExpr) String() string {
 	return fmt.Sprintf("%s(%s)", node.Name, node.Exprs)
-}
-
-// ConstVal represents a constant numeric value.
-type ConstVal struct {
-	constant.Value
-
-	// We preserve the "original" string representation (before normalization).
-	OrigString string
-}
-
-func (node *ConstVal) String() string {
-	if node.OrigString != "" {
-		return node.OrigString
-	}
-	return node.Value.String()
-}
-
-// canBeInt64 checks if it's possible for the value to become an int64:
-//  1   = yes
-//  1.0 = yes
-//  1.1 = no
-//  123...overflow...456 = no
-func (node *ConstVal) canBeInt64() bool {
-	_, err := node.asInt()
-	return err == nil
-}
-
-// shouldBeInt64 checks if the value naturally is an int64:
-//  1   = yes
-//  1.0 = no
-//  1.1 = no
-//  123...overflow...456 = no
-func (node *ConstVal) shouldBeInt64() bool {
-	return node.Kind() == constant.Int && node.canBeInt64()
-}
-
-// asInt returns the value as an integer if possible, or returns an
-// error if not possible.
-func (node *ConstVal) asInt() (int, error) {
-	intVal := constant.ToInt(node.Value)
-	if intVal.Kind() == constant.Unknown {
-		return 0, fmt.Errorf("cannot represent %v as an int", node.Value)
-	}
-	i, exact := constant.Int64Val(intVal)
-	if !exact {
-		return 0, fmt.Errorf("representing %v as an int would overflow", intVal)
-	}
-	return int(i), nil
 }
 
 // DefaultVal represents the DEFAULT expression.

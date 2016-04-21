@@ -151,7 +151,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
 func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
-	expr, err := parser.TypeNumericConstants(expr)
+	expr, err := parser.TypeConstants(expr)
 	if err != nil {
 		return 0, err
 	}

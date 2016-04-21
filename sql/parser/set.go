@@ -66,14 +66,26 @@ type SetTimeZone struct {
 }
 
 func (node *SetTimeZone) String() string {
+	// TODO(knz) clean up this when refactoring the pretty-printer.
 	prefix := "SET TIME ZONE"
+	onZoneStr := func(zone string) (string, bool) {
+		if zone == "DEFAULT" || zone == "LOCAL" {
+			return fmt.Sprintf("%s %s", prefix, zone), true
+		}
+		return "", false
+	}
 	switch v := node.Value.(type) {
 	case *DInterval:
 		return fmt.Sprintf("%s INTERVAL '%s'", prefix, v)
 
+	case *StrVal:
+		if s, ok := onZoneStr(v.s); ok {
+			return s
+		}
+
 	case *DString:
-		if zone := string(*v); zone == "DEFAULT" || zone == "LOCAL" {
-			return fmt.Sprintf("%s %s", prefix, zone)
+		if s, ok := onZoneStr(string(*v)); ok {
+			return s
 		}
 	}
 	return fmt.Sprintf("%s %s", prefix, node.Value)

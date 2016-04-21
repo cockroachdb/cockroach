@@ -176,7 +176,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		if expr, err = TypeNumericConstants(expr); err != nil {
+		if expr, err = TypeConstants(expr); err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
 		// str may differ than exprStr (we may be adding some parens).
@@ -185,7 +185,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		if expr2, err = TypeNumericConstants(expr2); err != nil {
+		if expr2, err = TypeConstants(expr2); err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}
 		// Verify that when we stringify the expression again, the string is the

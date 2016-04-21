@@ -54,10 +54,10 @@ func makeTestOverload(retType Datum, params ...Datum) overload {
 
 func TestTypeCheckOverloadedExprs(t *testing.T) {
 	intConst := func(s string) Expr {
-		return &ConstVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
 	}
 	floatConst := func(s string) Expr {
-		return &ConstVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
 	}
 
 	unaryIntFn := makeTestOverload(DummyInt, DummyInt)
