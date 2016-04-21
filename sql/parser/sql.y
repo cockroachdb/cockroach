@@ -1201,8 +1201,13 @@ zone_value:
 | const_interval SCONST opt_interval
   {
     expr := &CastExpr{Expr: NewDString($2), Type: $1.colType()}
+    typedExpr, err := TypeCheck(expr, nil, nil)
+    if err != nil {
+      sqllex.Error("cannot type check interval type")
+      return 1
+    }
     var ctx EvalContext
-    d, err := expr.Eval(ctx)
+    d, err := typedExpr.Eval(ctx)
     if err != nil {
       sqllex.Error("cannot evaluate to an interval type")
       return 1
@@ -1906,7 +1911,7 @@ single_set_clause:
 multiple_set_clause:
   '(' qualified_name_list ')' '=' ctext_row
   {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Tuple{$5.exprs()}}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Tuple{Exprs: $5.exprs()}}
   }
 | '(' qualified_name_list ')' '=' select_with_parens
   {
@@ -2297,12 +2302,12 @@ having_clause:
 values_clause:
   VALUES ctext_row
   {
-    $$.val = &ValuesClause{[]*Tuple{{$2.exprs()}}}
+    $$.val = &ValuesClause{[]*Tuple{{Exprs: $2.exprs()}}}
   }
 | values_clause ',' ctext_row
   {
     valNode := $1.selectStmt().(*ValuesClause)
-    valNode.Tuples = append(valNode.Tuples, &Tuple{$3.exprs()})
+    valNode.Tuples = append(valNode.Tuples, &Tuple{Exprs: $3.exprs()})
     $$.val = valNode
   }
 
@@ -3463,31 +3468,31 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$.val = &Row{$3.exprs()}
+    $$.val = &Row{Exprs: $3.exprs()}
   }
 | ROW '(' ')'
   {
-    $$.val = &Row{nil}
+    $$.val = &Row{Exprs: nil}
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$.val = &Tuple{append($2.exprs(), $4.expr())}
+    $$.val = &Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
 
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$.val = &Row{$3.exprs()}
+    $$.val = &Row{Exprs: $3.exprs()}
   }
 | ROW '(' ')'
   {
-    $$.val = &Row{nil}
+    $$.val = &Row{Exprs: nil}
   }
 
 implicit_row:
   '(' expr_list ',' a_expr ')'
   {
-    $$.val = &Tuple{append($2.exprs(), $4.expr())}
+    $$.val = &Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
 
 // sub_type:
@@ -3688,7 +3693,7 @@ in_expr:
   }
 | '(' expr_list ')'
   {
-    $$.val = &Tuple{$2.exprs()}
+    $$.val = &Tuple{Exprs: $2.exprs()}
   }
 
 // Define SQL-style CASE clause.

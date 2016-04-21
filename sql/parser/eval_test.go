@@ -409,13 +409,14 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if expr, _, err = TypeCheck(expr, nil, nil); err != nil {
+		typedExpr, err := TypeCheck(expr, nil, nil)
+		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if expr, err = defaultContext.NormalizeExpr(expr); err != nil {
+		if typedExpr, err = defaultContext.NormalizeExpr(typedExpr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		r, err := expr.Eval(defaultContext)
+		r, err := typedExpr.Eval(defaultContext)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -449,7 +450,11 @@ func TestEvalError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := expr.Eval(defaultContext); !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
+		typedExpr, err := TypeCheck(expr, nil, nil)
+		if err == nil {
+			_, err = typedExpr.Eval(defaultContext)
+		}
+		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
@@ -479,10 +484,14 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		}
 		ctx := defaultContext
 		ctx.ReCache = NewRegexpCache(8)
-		if _, err := expr.Eval(ctx); err != nil {
+		typedExpr, err := TypeCheck(expr, nil, nil)
+		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if expr.fn.fn == nil {
+		if _, err := typedExpr.Eval(ctx); err != nil {
+			t.Fatalf("%v: %v", d, err)
+		}
+		if typedExpr.(*ComparisonExpr).fn.fn == nil {
 			t.Errorf("%s: expected the comparison function to be looked up and memoized, but it wasn't", expr)
 		}
 		if count := ctx.ReCache.Len(); count != d.cacheCount {

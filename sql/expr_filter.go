@@ -240,22 +240,28 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 //  - the implementation is best-effort (it tries to get as much of the expression into RES as
 //    possible, and make REM as small as possible).
 //  - the original expression is modified in-place and should not be used again.
-func splitFilter(expr parser.Expr, conv varConvertFunc) (restricted, remainder parser.Expr) {
+func splitFilter(expr parser.TypedExpr, conv varConvertFunc) (restricted, remainder parser.TypedExpr) {
 	if expr == nil {
 		return nil, nil
 	}
-	restricted, remainder = splitBoolExpr(expr, conv, true)
-	if restricted == parser.DBoolTrue {
-		restricted = nil
+	res, rem := splitBoolExpr(expr, conv, true)
+	if res == parser.DBoolTrue {
+		res = nil
 	}
-	if remainder == parser.DBoolTrue {
-		remainder = nil
+	if res != nil {
+		restricted = res.(parser.TypedExpr)
+	}
+	if rem == parser.DBoolTrue {
+		rem = nil
+	}
+	if rem != nil {
+		remainder = rem.(parser.TypedExpr)
 	}
 	return restricted, remainder
 }
 
 // runFilter runs a filter expression and returs whether the filter passes.
-func runFilter(filter parser.Expr, evalCtx parser.EvalContext) (bool, error) {
+func runFilter(filter parser.TypedExpr, evalCtx parser.EvalContext) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}

@@ -19,7 +19,6 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"go/constant"
 	"math"
 	"math/big"
 	"regexp"
@@ -58,8 +57,24 @@ func (op UnaryOp) params() typeList {
 	return SingleType{op.Typ}
 }
 
+func (op UnaryOp) matchParams(t Datum) bool {
+	return op.params().matchAt(t, 0)
+}
+
 func (op UnaryOp) returnType() Datum {
 	return op.ReturnType
+}
+
+// TODO(nvanbenschoten) TODO Replace with method.
+func lookupUnaryOp(op UnaryOperator, typ Datum) (UnaryOp, bool) {
+	if fns, ok := UnaryOps[op]; ok {
+		for _, fn := range fns {
+			if fn.matchParams(typ) {
+				return fn, true
+			}
+		}
+	}
+	return UnaryOp{}, false
 }
 
 // UnaryOps contains the unary operations indexed by operation type.
@@ -139,8 +154,25 @@ func (op BinOp) params() typeList {
 	return ArgTypes(op.types[:])
 }
 
+func (op BinOp) matchParams(l, r Datum) bool {
+	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
+}
+
 func (op BinOp) returnType() Datum {
 	return op.ReturnType
+}
+
+// TODO(nvanbenschoten) TODO Replace with method.
+func lookupBinOp(op BinaryOperator, left, right Datum) (BinOp, bool) {
+	if fns, ok := BinOps[op]; ok {
+		for _, fn := range fns {
+			if fn.matchParams(left, right) {
+				return fn, true
+			}
+		}
+	}
+	fmt.Println(op)
+	return BinOp{}, false
 }
 
 // BinOps contains the binary operations indexed by operation type.
@@ -376,6 +408,23 @@ var BinOps = map[BinaryOperator][]BinOp{
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
 		},
+		// The following two overloads are needed becauase DInt/DInt = DFloat.
+		BinOp{
+			LeftType:   DummyFloat,
+			RightType:  DummyInt,
+			ReturnType: DummyFloat,
+			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDFloat(*left.(*DFloat) * DFloat(*right.(*DInt))), nil
+			},
+		},
+		BinOp{
+			LeftType:   DummyInt,
+			RightType:  DummyFloat,
+			ReturnType: DummyFloat,
+			fn: func(_ EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDFloat(DFloat(*left.(*DInt)) * *right.(*DFloat)), nil
+			},
+		},
 		BinOp{
 			LeftType:   DummyDecimal,
 			RightType:  DummyDecimal,
@@ -573,6 +622,18 @@ func (op CmpOp) matchParams(l, r Datum) bool {
 
 func (op CmpOp) returnType() Datum {
 	return DummyBool
+}
+
+// TODO(nvanbenschoten) TODO Replace with method.
+func lookupCmpOp(op ComparisonOp, left, right Datum) (CmpOp, bool) {
+	if fns, ok := CmpOps[op]; ok {
+		for _, fn := range fns {
+			if fn.matchParams(left, right) {
+				return fn, true
+			}
+		}
+	}
+	return CmpOp{}, false
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
@@ -1168,7 +1229,7 @@ func (ctx EvalContext) makeDDate(t time.Time) (*DDate, error) {
 
 // Eval implements the Expr interface.
 func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
-	left, err := expr.Left.Eval(ctx)
+	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1179,7 +1240,7 @@ func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
 			return left, nil
 		}
 	}
-	right, err := expr.Right.Eval(ctx)
+	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1196,27 +1257,26 @@ func (expr *AndExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
-	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(ctx.Args, nil); err != nil {
-			return nil, err
-		}
-	}
-
-	left, err := expr.Left.Eval(ctx)
+	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if left == DNull {
 		return DNull, nil
 	}
-	right, err := expr.Right.Eval(ctx)
+	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if right == DNull {
 		return DNull, nil
 	}
-
+	if expr.fn.fn == nil {
+		var ok bool
+		if expr.fn, ok = lookupBinOp(expr.Operator, left, right); !ok {
+			panic(fmt.Sprintf("lookup for TypedBinaryExpr %v's BinOp failed", expr))
+		}
+	}
 	return expr.fn.fn(ctx, left, right)
 }
 
@@ -1226,13 +1286,13 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 		// CASE <val> WHEN <expr> THEN ...
 		//
 		// For each "when" expression we compare for equality to <val>.
-		val, err := expr.Expr.Eval(ctx)
+		val, err := expr.Expr.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return DNull, err
 		}
 
 		for _, when := range expr.Whens {
-			arg, err := when.Cond.Eval(ctx)
+			arg, err := when.Cond.(TypedExpr).Eval(ctx)
 			if err != nil {
 				return DNull, err
 			}
@@ -1243,33 +1303,33 @@ func (expr *CaseExpr) Eval(ctx EvalContext) (Datum, error) {
 			if v, err := GetBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return when.Val.Eval(ctx)
+				return when.Val.(TypedExpr).Eval(ctx)
 			}
 		}
 	} else {
 		// CASE WHEN <bool-expr> THEN ...
 		for _, when := range expr.Whens {
-			d, err := when.Cond.Eval(ctx)
+			d, err := when.Cond.(TypedExpr).Eval(ctx)
 			if err != nil {
 				return DNull, err
 			}
 			if v, err := GetBool(d); err != nil {
 				return DNull, err
 			} else if v {
-				return when.Val.Eval(ctx)
+				return when.Val.(TypedExpr).Eval(ctx)
 			}
 		}
 	}
 
 	if expr.Else != nil {
-		return expr.Else.Eval(ctx)
+		return expr.Else.(TypedExpr).Eval(ctx)
 	}
 	return DNull, nil
 }
 
 // Eval implements the Expr interface.
 func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
-	d, err := expr.Expr.Eval(ctx)
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1491,7 +1551,7 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 // Eval implements the Expr interface.
 func (expr *CoalesceExpr) Eval(ctx EvalContext) (Datum, error) {
 	for _, e := range expr.Exprs {
-		d, err := e.Eval(ctx)
+		d, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return DNull, err
 		}
@@ -1507,16 +1567,15 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 	// Make sure the expression's cmpOp function is memoized and that
 	// type checking has taken place.
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(ctx.Args, nil); err != nil {
-			return DNull, err
-		}
+		op, leftExpr, rightExpr, _, _ := foldComparisonExpr(expr.Operator, expr.Left, expr.Right)
+		expr.fn, _ = lookupCmpOp(op, leftExpr.(TypedExpr).ReturnType(), rightExpr.(TypedExpr).ReturnType())
 	}
 
-	left, err := expr.Left.Eval(ctx)
+	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
-	right, err := expr.Right.Eval(ctx)
+	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1543,7 +1602,7 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 			left.Type(), expr.Operator, right.Type())
 	}
 
-	_, newLeft, newRight, not := foldComparisonExpr(expr.Operator, left, right)
+	_, newLeft, newRight, _, not := foldComparisonExpr(expr.Operator, left, right)
 	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
 	if err == nil && not {
 		return MakeDBool(!d), nil
@@ -1561,7 +1620,7 @@ func (t *ExistsExpr) Eval(ctx EvalContext) (Datum, error) {
 func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 	args := make(DTuple, 0, len(expr.Exprs))
 	for _, e := range expr.Exprs {
-		arg, err := e.Eval(ctx)
+		arg, err := e.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -1569,8 +1628,21 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(ctx.Args, nil); err != nil {
-			return nil, err
+		name := string(expr.Name.Base)
+		candidates, _ := Builtins[strings.ToLower(name)]
+		for _, fn := range candidates {
+			if fn.Types.match(ArgTypes(args)) {
+				expr.fn = fn
+				break
+			}
+		}
+		if expr.fn.fn == nil {
+			// The argument types no longer match the memoized function. This happens
+			// when a non-NULL argument becomes NULL and the function does not support
+			// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
+			// nullable. The SELECT does not error, but returns a NULL value for that
+			// select expression.
+			return DNull, nil
 		}
 	}
 
@@ -1591,20 +1663,25 @@ func (expr *FuncExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
+func (expr *OverlayExpr) Eval(ctx EvalContext) (Datum, error) {
+	return nil, util.Errorf("unhandled type %T", expr)
+}
+
+// Eval implements the Expr interface.
 func (expr *IfExpr) Eval(ctx EvalContext) (Datum, error) {
-	cond, err := expr.Cond.Eval(ctx)
+	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
 	if cond == DBoolTrue {
-		return expr.True.Eval(ctx)
+		return expr.True.(TypedExpr).Eval(ctx)
 	}
-	return expr.Else.Eval(ctx)
+	return expr.Else.(TypedExpr).Eval(ctx)
 }
 
 // Eval implements the Expr interface.
 func (expr *IsOfTypeExpr) Eval(ctx EvalContext) (Datum, error) {
-	d, err := expr.Expr.Eval(ctx)
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1691,7 +1768,7 @@ func (expr *IsOfTypeExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (expr *NotExpr) Eval(ctx EvalContext) (Datum, error) {
-	d, err := expr.Expr.Eval(ctx)
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1707,11 +1784,11 @@ func (expr *NotExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (expr *NullIfExpr) Eval(ctx EvalContext) (Datum, error) {
-	expr1, err := expr.Expr1.Eval(ctx)
+	expr1, err := expr.Expr1.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
-	expr2, err := expr.Expr2.Eval(ctx)
+	expr2, err := expr.Expr2.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1727,7 +1804,7 @@ func (expr *NullIfExpr) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
-	left, err := expr.Left.Eval(ctx)
+	left, err := expr.Left.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1738,7 +1815,7 @@ func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
 			return left, nil
 		}
 	}
-	right, err := expr.Right.Eval(ctx)
+	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
@@ -1757,30 +1834,31 @@ func (expr *OrExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t *QualifiedName) Eval(_ EvalContext) (Datum, error) {
-	return nil, fmt.Errorf("qualified name \"%s\" not found", t)
+func (expr *ParenExpr) Eval(ctx EvalContext) (Datum, error) {
+	return expr.Expr.(TypedExpr).Eval(ctx)
 }
 
 // Eval implements the Expr interface.
-func (t *RangeCond) Eval(_ EvalContext) (Datum, error) {
-	return nil, util.Errorf("unhandled type %T", t)
+func (expr *RangeCond) Eval(_ EvalContext) (Datum, error) {
+	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
-func (t *Subquery) Eval(_ EvalContext) (Datum, error) {
+func (expr *Subquery) Eval(_ EvalContext) (Datum, error) {
 	// Subquery expressions are handled during subquery expansion.
-	return nil, util.Errorf("unhandled type %T", t)
+	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 // Eval implements the Expr interface.
 func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
-	d, err := expr.Expr.Eval(ctx)
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return DNull, err
 	}
 	if expr.fn.fn == nil {
-		if _, err := expr.TypeCheck(ctx.Args, nil); err != nil {
-			return DNull, err
+		var ok bool
+		if expr.fn, ok = lookupUnaryOp(expr.Operator, expr.Expr.(TypedExpr).ReturnType()); !ok {
+			panic(fmt.Sprintf("lookup for TypedUnaryExpr %v's UnaryOp failed", expr))
 		}
 	}
 	// if expr.dtype != reflect.TypeOf(d) {
@@ -1794,77 +1872,19 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 }
 
 // Eval implements the Expr interface.
-func (t Array) Eval(_ EvalContext) (Datum, error) {
-	return nil, util.Errorf("unhandled type %T", t)
-}
-
-// Eval implements the Expr interface.
 func (t DefaultVal) Eval(_ EvalContext) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", t)
 }
 
 // Eval implements the Expr interface.
-func (t *ConstVal) Eval(_ EvalContext) (Datum, error) {
-	switch t.ResolvedType {
-	case DummyInt:
-		i, exact := constant.Int64Val(constant.ToInt(t.Value))
-		if !exact {
-			return nil, fmt.Errorf("integer value out of range: %v", t.Value)
-		}
-		return NewDInt(DInt(i)), nil
-	case DummyFloat:
-		f, _ := constant.Float64Val(constant.ToFloat(t.Value))
-		return NewDFloat(DFloat(f)), nil
-	case DummyDecimal:
-		dd := &DDecimal{}
-		s := t.ExactString()
-		if idx := strings.IndexRune(s, '/'); idx != -1 {
-			// Handle constant.ratVal, which will return a rational string
-			// like 6/7. If only we could call big.Rat.FloatString() on it...
-			num, den := s[:idx], s[idx+1:]
-			if _, ok := dd.SetString(num); !ok {
-				return nil, fmt.Errorf("could not evaluate numerator of %v as Datum type DDecimal from string %q", t, num)
-			}
-			denDec := new(inf.Dec)
-			if _, ok := denDec.SetString(den); !ok {
-				return nil, fmt.Errorf("could not evaluate denominator %v as Datum type DDecimal from string %q", t, den)
-			}
-			dd.QuoRound(&dd.Dec, denDec, decimal.Precision, inf.RoundHalfUp)
-
-			// Get rid of trailing zeros. We probaby want to remove this
-			if s = dd.Dec.String(); strings.ContainsRune(s, '.') {
-				for {
-					switch s[len(s)-1] {
-					case '0':
-						s = s[:len(s)-1]
-						continue
-					case '.':
-						s = s[:len(s)-1]
-					}
-					break
-				}
-				if _, ok := dd.SetString(s); !ok {
-					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from string %q", t, s)
-				}
-			}
-		} else {
-			if _, ok := dd.SetString(s); !ok {
-				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from string %q", t, s)
-			}
-		}
-		return dd, nil
-	default:
-		if _, err := t.TypeCheck(nil, nil); err != nil {
-			return nil, err
-		}
-		return t.Eval(EvalContext{})
-	}
+func (expr *QualifiedName) Eval(_ EvalContext) (Datum, error) {
+	panic(fmt.Sprintf("unhandled type %T", expr))
 }
 
 func evalExprs(ctx EvalContext, exprs []Expr) (Datum, error) {
 	tuple := make(DTuple, 0, len(exprs))
 	for _, v := range exprs {
-		d, err := v.Eval(ctx)
+		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return DNull, err
 		}
@@ -1881,11 +1901,6 @@ func (t *Row) Eval(ctx EvalContext) (Datum, error) {
 // Eval implements the Expr interface.
 func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
 	return evalExprs(ctx, t.Exprs)
-}
-
-// Eval implements the Expr interface.
-func (t ValArg) Eval(_ EvalContext) (Datum, error) {
-	return &DValArg{name: t.name}, nil
 }
 
 // Eval implements the Expr interface.
@@ -1958,13 +1973,9 @@ func evalComparison(ctx EvalContext, op ComparisonOp, left, right Datum) (Datum,
 		return DNull, nil
 	}
 
-	if fns, ok := CmpOps[op]; ok {
-		for _, fn := range fns {
-			if fn.matchParams(left, right) {
-				v, err := fn.fn(ctx, left, right)
-				return MakeDBool(v), err
-			}
-		}
+	if fn, ok := lookupCmpOp(op, left, right); ok {
+		v, err := fn.fn(ctx, left, right)
+		return MakeDBool(v), err
 	}
 
 	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
@@ -1973,53 +1984,54 @@ func evalComparison(ctx EvalContext, op ComparisonOp, left, right Datum) (Datum,
 
 // foldComparisonExpr folds a given comparison operation and its expressions
 // into an equivalent operation that will hit in the cmpOps map, returning
-// this new operation, along with potentially flipped operands and a "not" flag.
-func foldComparisonExpr(op ComparisonOp, left, right Expr) (ComparisonOp, Expr, Expr, bool) {
+// this new operation, along with potentially flipped operands and "flipped"
+// and "not" flags.
+func foldComparisonExpr(op ComparisonOp, left, right Expr) (ComparisonOp, Expr, Expr, bool, bool) {
 	switch op {
 	case NE:
 		// NE(left, right) is implemented as !EQ(left, right).
-		return EQ, left, right, true
+		return EQ, left, right, false, true
 	case GT:
 		// GT(left, right) is implemented as LT(right, left)
-		return LT, right, left, false
+		return LT, right, left, true, false
 	case GE:
 		// GE(left, right) is implemented as LE(right, left)
-		return LE, right, left, false
+		return LE, right, left, true, false
 	case NotIn:
 		// NotIn(left, right) is implemented as !IN(left, right)
-		return In, left, right, true
+		return In, left, right, false, true
 	case NotLike:
 		// NotLike(left, right) is implemented as !Like(left, right)
-		return Like, left, right, true
+		return Like, left, right, false, true
 	case NotSimilarTo:
 		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
-		return SimilarTo, left, right, true
+		return SimilarTo, left, right, false, true
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
 		//
 		// Note the special handling of NULLs and IS DISTINCT FROM is needed
 		// before this expression fold.
-		return EQ, left, right, true
+		return EQ, left, right, false, true
 	case IsNotDistinctFrom:
 		// IsNotDistinctFrom(left, right) is implemented as EQ(left, right)
 		//
 		// Note the special handling of NULLs and IS NOT DISTINCT FROM is needed
 		// before this expression fold.
-		return EQ, left, right, false
+		return EQ, left, right, false, false
 	case Is:
 		// Is(left, right) is implemented as EQ(left, right)
 		//
 		// Note the special handling of NULLs and IS is needed before this
 		// expression fold.
-		return EQ, left, right, false
+		return EQ, left, right, false, false
 	case IsNot:
 		// IsNot(left, right) is implemented as !EQ(left, right)
 		//
 		// Note the special handling of NULLs and IS NOT is needed before this
 		// expression fold.
-		return EQ, left, right, true
+		return EQ, left, right, false, true
 	}
-	return op, left, right, false
+	return op, left, right, false, false
 }
 
 // time.Time formats.

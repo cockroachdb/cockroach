@@ -90,14 +90,17 @@ type qvalue struct {
 
 type qvalMap map[columnRef]*qvalue
 
+var _ parser.TypedExpr = &qvalue{}
 var _ parser.VariableExpr = &qvalue{}
 
+// Variable implements the VariableExpr interface.
 func (*qvalue) Variable() {}
 
 func (q *qvalue) String() string {
 	return q.colRef.get().Name
 }
 
+// Walk implements the Expr interface.
 func (q *qvalue) Walk(v parser.Visitor) parser.Expr {
 	e, _ := parser.WalkExpr(v, q.datum)
 	// Typically Walk implementations are not supposed to modify nodes in-place, in order to
@@ -107,12 +110,19 @@ func (q *qvalue) Walk(v parser.Visitor) parser.Expr {
 	return q
 }
 
-func (q *qvalue) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.Datum, error) {
-	return q.datum.TypeCheck(args, nil)
+// TypeCheck implements the Expr interface.
+func (q *qvalue) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
+	return q, nil
 }
 
+// Eval implements the TypedExpr interface.
 func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return q.datum.Eval(ctx)
+}
+
+// ReturnType implements the TypedExpr interface.
+func (q *qvalue) ReturnType() parser.Datum {
+	return q.datum.ReturnType()
 }
 
 // getQVal creates a qvalue for a column reference. Created qvalues are
@@ -254,20 +264,30 @@ func (q qvalMap) populateQVals(row parser.DTuple) {
 type starDatum struct{}
 
 var starDatumInstance = &starDatum{}
+var _ parser.TypedExpr = starDatumInstance
 var _ parser.VariableExpr = starDatumInstance
 
+// Variable implements the VariableExpr interface.
 func (*starDatum) Variable() {}
 
 func (*starDatum) String() string {
 	return "*"
 }
 
+// Walk implements the Expr interface.
 func (e *starDatum) Walk(v parser.Visitor) parser.Expr { return e }
 
-func (*starDatum) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.Datum, error) {
-	return parser.DummyInt.TypeCheck(args, nil)
+// TypeCheck implements the Expr interface.
+func (e *starDatum) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
+	return e, nil
 }
 
+// Eval implements the TypedExpr interface.
 func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 	return parser.DummyInt.Eval(ctx)
+}
+
+// ReturnType implements the TypedExpr interface.
+func (*starDatum) ReturnType() parser.Datum {
+	return parser.DummyInt.ReturnType()
 }

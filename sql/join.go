@@ -81,7 +81,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 			iv := expr.(*parser.IndexedVar)
 			return true, table.filterVars.IndexedVar(iv.Idx)
 		}
-		table.filter = exprConvertVars(indexScan.filter, convFunc)
+		table.filter = exprConvertVars(indexScan.filter, convFunc).(parser.TypedExpr)
 
 		// Now we split the filter by extracting the part that can be evaluated using just the index
 		// columns.
