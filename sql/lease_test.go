@@ -347,7 +347,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t.expectLeases(descID, "/3/1")
 }
 
-func getDescriptorID(db *client.DB, database string, table string) csql.ID {
+func getTableDescriptor(db *client.DB, database string, table string) *csql.TableDescriptor {
 	dbNameKey := csql.MakeNameMetadataKey(keys.RootNamespaceID, database)
 	gr, err := db.Get(dbNameKey)
 	if err != nil {
@@ -366,36 +366,13 @@ func getDescriptorID(db *client.DB, database string, table string) csql.ID {
 	if !gr.Exists() {
 		panic("table missing")
 	}
-	return csql.ID(gr.ValueInt())
-}
 
-// TODO(andrei): these function are copied from the sql package. Delete them
-// after they're not used any more.
-func getKeysForTableDescriptor(
-	tableDesc *csql.TableDescriptor,
-) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = csql.MakeZoneKey(tableDesc.ID)
-	nameKey = csql.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
-	descKey = csql.MakeDescMetadataKey(tableDesc.ID)
-	return
-}
-
-// get the table descriptor for the ID passed in using an existing txn.
-// returns nil if the descriptor doesn't exist.
-func getTableDescFromID(txn *client.Txn, id csql.ID) (*csql.TableDescriptor, *roachpb.Error) {
+	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
 	desc := &csql.Descriptor{}
-	descKey := csql.MakeDescMetadataKey(id)
-
-	if pErr := txn.GetProto(descKey, desc); pErr != nil {
-		return nil, pErr
+	if pErr := db.GetProto(descKey, desc); pErr != nil {
+		panic("proto missing")
 	}
-	tableDesc := desc.GetTable()
-	if tableDesc == nil {
-		// TODO(andrei): We're theoretically hiding the error where desc exists, but
-		// is not a TableDescriptor.
-		return nil, nil
-	}
-	return tableDesc, nil
+	return desc.GetTable()
 }
 
 // Test that we fail to lease a table that was marked for deletion.
@@ -403,7 +380,17 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer csql.TestDisableAsyncSchemaChangeExec()()
 
+	var mu sync.Mutex
+	clearSchemaChangers := false
 	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+		func(tscc csql.TestingSchemaChangerCollection) {
+			mu.Lock()
+			defer mu.Unlock()
+			if clearSchemaChangers {
+				tscc.ClearSchemaChangers()
+			}
+		}
 	t := newLeaseTest(testingT, ctx)
 	defer t.cleanup()
 
@@ -416,35 +403,23 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	// Write the deleted bit.
-	// TODO(andrei): just do a DROP table here once DROP starts setting that bit.
-	tableID := getDescriptorID(t.kvDB, "test", "t")
-	var tableDesc *csql.TableDescriptor
-	pErr := t.kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		tableDesc, pErr = getTableDescFromID(txn, tableID)
-		return pErr
-	})
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if tableDesc == nil {
-		t.Fatalf("descriptor missing")
-	}
-	tableDesc.Deleted = true
-	tableDesc.Version++
-	_, _, descKey := getKeysForTableDescriptor(tableDesc)
-	desc := csql.Descriptor{
-		Union: &csql.Descriptor_Table{
-			Table: tableDesc,
-		},
-	}
-	if err := t.kvDB.Put(descKey, &desc); err != nil {
+	// Block schema changers so that the table we're about to DROP is not actually
+	// dropped; it will be left in a "deleted" state.
+	mu.Lock()
+	clearSchemaChangers = true
+	mu.Unlock()
+
+	// DROP the table
+	_, err = t.db.Exec(`DROP TABLE test.t`)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Make sure we can't get a lease on the descriptor.
-	_, err = t.acquire(1, tableID, tableDesc.Version)
+	tableDesc := getTableDescriptor(t.kvDB, "test", "t")
+	// try to acquire at a bogus version to make sure we don't get back a lease we
+	// already had.
+	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
 	if !testutils.IsError(err, "descriptor deleted") {
 		t.Fatalf("got a different error than expected: %s", err)
 	}
@@ -481,8 +456,17 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer csql.TestDisableAsyncSchemaChangeExec()()
 
-	ctx, _ := createTestServerContext()
 	var mu sync.Mutex
+	clearSchemaChangers := false
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+		func(tscc csql.TestingSchemaChangerCollection) {
+			mu.Lock()
+			defer mu.Unlock()
+			if clearSchemaChangers {
+				tscc.ClearSchemaChangers()
+			}
+		}
 	var waitTableID csql.ID
 	deleted := make(chan bool)
 	ctx.TestingKnobs.LeaseManagerTestingKnobs.TestingLeasesRefreshedEvent =
@@ -507,58 +491,36 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableID := getDescriptorID(kvDB, "test", "t")
+	tableDesc := getTableDescriptor(kvDB, "test", "t")
 
-	lease1, err := acquire(s.TestServer, tableID, 0)
+	lease1, err := acquire(s.TestServer, tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease2, err := acquire(s.TestServer, tableID, 0)
+	lease2, err := acquire(s.TestServer, tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Write the deleted bit.
-	// TODO(andrei): just do a DROP table here once DROP starts setting that bit.
-	var tableDesc *csql.TableDescriptor
-	pErr := kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		tableDesc, pErr = getTableDescFromID(txn, tableID)
-		return pErr
-	})
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if tableDesc == nil {
-		t.Fatal("descriptor missing")
-	}
-	tableDesc.Deleted = true
-	_, _, descKey := getKeysForTableDescriptor(tableDesc)
-	desc := csql.Descriptor{
-		Union: &csql.Descriptor_Table{
-			Table: tableDesc,
-		},
-	}
-
-	// Install a way to wait for the config update to be processed.
+	// Block schema changers so that the table we're about to DROP is not actually
+	// dropped; it will be left in a "deleted" state.
+	// Also install a way to wait for the config update to be processed.
 	mu.Lock()
-	waitTableID = tableID
+	clearSchemaChangers = true
+	waitTableID = tableDesc.ID
 	mu.Unlock()
 
-	if pErr := kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
-		if pErr := txn.Put(descKey, &desc); pErr != nil {
-			return pErr
-		}
-		txn.SetSystemConfigTrigger()
-		return nil
-	}); pErr != nil {
-		t.Fatal(pErr)
+	// DROP the table
+	_, err = db.Exec(`DROP TABLE test.t`)
+	if err != nil {
+		t.Fatal(err)
 	}
+
 	// Block until the LeaseManager has processed the gossip update.
 	<-deleted
 
 	// We should still be able to acquire, because we have an active lease.
-	lease3, err := acquire(s.TestServer, tableID, 0)
+	lease3, err := acquire(s.TestServer, tableDesc.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -574,7 +536,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
-	_, err = acquire(s.TestServer, tableID, 0)
+	_, err = acquire(s.TestServer, tableDesc.ID, 0)
 	if !testutils.IsError(err, "descriptor deleted") {
 		t.Fatalf("got a different error than expected: %s", err)
 	}
