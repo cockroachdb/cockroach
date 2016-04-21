@@ -3853,7 +3853,7 @@ func (m *EventsResponse_Event) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.UniqueID = append(m.UniqueID[:0], data[iNdEx:postIndex]...)
+			m.UniqueID = data[iNdEx:postIndex]
 			if m.UniqueID == nil {
 				m.UniqueID = []byte{}
 			}
@@ -4567,7 +4567,7 @@ func (m *GetUIDataResponse_Value) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = append(m.Value[:0], data[iNdEx:postIndex]...)
+			m.Value = data[iNdEx:postIndex]
 			if m.Value == nil {
 				m.Value = []byte{}
 			}

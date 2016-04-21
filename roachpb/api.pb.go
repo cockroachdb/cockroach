@@ -7906,7 +7906,7 @@ func (m *AdminSplitRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SplitKey = append(m.SplitKey[:0], data[iNdEx:postIndex]...)
+			m.SplitKey = data[iNdEx:postIndex]
 			if m.SplitKey == nil {
 				m.SplitKey = []byte{}
 			}
@@ -8809,7 +8809,7 @@ func (m *GCRequest_GCKey) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = data[iNdEx:postIndex]
 			if m.Key == nil {
 				m.Key = []byte{}
 			}
@@ -10773,7 +10773,7 @@ func (m *VerifyChecksumRequest) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Checksum = append(m.Checksum[:0], data[iNdEx:postIndex]...)
+			m.Checksum = data[iNdEx:postIndex]
 			if m.Checksum == nil {
 				m.Checksum = []byte{}
 			}

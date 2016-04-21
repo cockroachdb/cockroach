@@ -74,6 +74,7 @@ $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	  sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $$dir/*.pb.go; \
 	  sed -i~ -E 's!$(IMPORT_PREFIX)(errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $$dir/*.pb.go; \
 	  sed -i~ -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $$dir/*.pb.go; \
+	  sed -i~ -E 's!append\(.*, (data\[[^]]+\])\.\.\.)!\1!g' $$dir/*.pb.go; \
 	  gofmt -s -w $$dir/*.pb.go; \
 	done
 

@@ -251,7 +251,7 @@ func (m *RangeTree) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RootKey = append(m.RootKey[:0], data[iNdEx:postIndex]...)
+			m.RootKey = data[iNdEx:postIndex]
 			if m.RootKey == nil {
 				m.RootKey = []byte{}
 			}
@@ -332,7 +332,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = data[iNdEx:postIndex]
 			if m.Key == nil {
 				m.Key = []byte{}
 			}
@@ -383,7 +383,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ParentKey = append(m.ParentKey[:0], data[iNdEx:postIndex]...)
+			m.ParentKey = data[iNdEx:postIndex]
 			if m.ParentKey == nil {
 				m.ParentKey = []byte{}
 			}
@@ -414,7 +414,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LeftKey = append(m.LeftKey[:0], data[iNdEx:postIndex]...)
+			m.LeftKey = data[iNdEx:postIndex]
 			if m.LeftKey == nil {
 				m.LeftKey = []byte{}
 			}
@@ -445,7 +445,7 @@ func (m *RangeTreeNode) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RightKey = append(m.RightKey[:0], data[iNdEx:postIndex]...)
+			m.RightKey = data[iNdEx:postIndex]
 			if m.RightKey == nil {
 				m.RightKey = []byte{}
 			}
