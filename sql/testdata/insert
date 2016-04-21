@@ -284,7 +284,7 @@ INSERT INTO kv5 VALUES('a', NULL)
 query ITTT
 EXPLAIN (DEBUG) SELECT * FROM kv5@a
 ----
-0 /kv5/a/NULL/'a' ROW
+0 /kv5/a/NULL/'a' NULL ROW
 
 query TT
 SELECT v, k FROM kv5@a
