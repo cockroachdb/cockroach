@@ -140,10 +140,10 @@ func forEachPerm(exprs []Expr, i int, fn func([]Expr)) {
 
 func TestTypeCheckSameTypedExprs(t *testing.T) {
 	intConst := func(s string) Expr {
-		return &ConstVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
 	}
 	floatConst := func(s string) Expr {
-		return &ConstVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
 	}
 
 	testData := []struct {
@@ -217,7 +217,7 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	floatConst := func(s string) Expr {
-		return &ConstVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
 	}
 
 	floatIntMismatchErr := `expected .* to be of type (float|int), found type (float|int)`

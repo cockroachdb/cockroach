@@ -356,7 +356,10 @@ func (expr *QualifiedName) Walk(_ Visitor) Expr { return expr }
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *ConstVal) Walk(_ Visitor) Expr { return expr }
+func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr ValArg) Walk(_ Visitor) Expr { return expr }

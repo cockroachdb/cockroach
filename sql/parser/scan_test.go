@@ -269,7 +269,7 @@ func TestScanParam(t *testing.T) {
 		if id != PARAM {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PARAM, id)
 		}
-		i, err := lval.union.constVal().asInt()
+		i, err := lval.union.numVal().asInt()
 		if err != nil {
 			t.Errorf("%s: expected success, but found %v", d.sql, err)
 		}
