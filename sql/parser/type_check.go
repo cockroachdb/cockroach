@@ -18,13 +18,9 @@ package parser
 
 import (
 	"fmt"
-	"go/constant"
 	"strings"
 
-	"gopkg.in/inf.v0"
-
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/decimal"
 )
 
 var (
@@ -463,125 +459,13 @@ func (expr DefaultVal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ConstVal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	if desired != nil && expr.canBecomeType(desired) {
-		return expr.resolveAsType(desired)
-	}
-
-	natural := expr.naturalType()
-	if natural != nil {
-		return expr.resolveAsType(natural)
-	}
-	return nil, fmt.Errorf("could not determine prefered type for ConstVal %v", expr.Value)
+func (expr *NumVal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
+	return typeCheckConstant(expr, desired)
 }
 
-func (expr *ConstVal) resolveAsType(typ Datum) (TypedExpr, error) {
-	switch typ {
-	case DummyInt:
-		i, exact := constant.Int64Val(constant.ToInt(expr.Value))
-		if !exact {
-			return nil, fmt.Errorf("integer value out of range: %v", expr.Value)
-		}
-		return NewDInt(DInt(i)), nil
-	case DummyFloat:
-		f, _ := constant.Float64Val(constant.ToFloat(expr.Value))
-		return NewDFloat(DFloat(f)), nil
-	case DummyDecimal:
-		dd := &DDecimal{}
-		s := expr.ExactString()
-		if idx := strings.IndexRune(s, '/'); idx != -1 {
-			// Handle constant.ratVal, which will return a rational string
-			// like 6/7. If only we could call big.Rat.FloatString() on it...
-			num, den := s[:idx], s[idx+1:]
-			if _, ok := dd.SetString(num); !ok {
-				return nil, fmt.Errorf("could not evaluate numerator of %v as Datum type DDecimal from string %q", expr, num)
-			}
-			denDec := new(inf.Dec)
-			if _, ok := denDec.SetString(den); !ok {
-				return nil, fmt.Errorf("could not evaluate denominator %v as Datum type DDecimal from string %q", expr, den)
-			}
-			dd.QuoRound(&dd.Dec, denDec, decimal.Precision, inf.RoundHalfUp)
-
-			// Get rid of trailing zeros. We probaby want to remove this
-			if s = dd.Dec.String(); strings.ContainsRune(s, '.') {
-				for {
-					switch s[len(s)-1] {
-					case '0':
-						s = s[:len(s)-1]
-						continue
-					case '.':
-						s = s[:len(s)-1]
-					}
-					break
-				}
-				if _, ok := dd.SetString(s); !ok {
-					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from string %q", expr, s)
-				}
-			}
-		} else {
-			if _, ok := dd.SetString(s); !ok {
-				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from string %q", expr, s)
-			}
-		}
-		return dd, nil
-	default:
-		return nil, fmt.Errorf("could not evaluate ConstVal %v into a %T", expr, typ)
-	}
-}
-
-var constTypePreference = []Datum{DummyInt, DummyFloat, DummyDecimal}
-
-var intFloatDecimalAvailable = map[Datum]struct{}{
-	DummyInt:     {},
-	DummyFloat:   {},
-	DummyDecimal: {},
-}
-
-// var intDecimalAvailable = map[Datum]struct{}{
-// 	DummyInt:     {},
-// 	DummyDecimal: {},
-// }
-var floatDecimalAvailable = map[Datum]struct{}{
-	DummyFloat:   {},
-	DummyDecimal: {},
-}
-var decimalAvailable = map[Datum]struct{}{
-	DummyDecimal: {},
-}
-
-func (expr *ConstVal) canBecomeType(desired Datum) bool {
-	switch desired {
-	case DummyInt:
-		return expr.canBeInt64()
-	case DummyFloat:
-		// TODO(nvanbenschoten) float overflow?
-		return true
-	case DummyDecimal:
-		return true
-	default:
-		return false
-	}
-}
-
-func (expr *ConstVal) availableTypes() map[Datum]struct{} {
-	switch {
-	case expr.shouldBeInt64():
-		return intFloatDecimalAvailable
-	case expr.Kind() == constant.Float:
-		return floatDecimalAvailable
-	default:
-		return decimalAvailable
-	}
-}
-
-func (expr *ConstVal) naturalType() Datum {
-	available := expr.availableTypes()
-	for _, t := range constTypePreference {
-		if _, ok := available[t]; ok {
-			return t
-		}
-	}
-	return nil
+// TypeCheck implements the Expr interface.
+func (expr *StrVal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
+	return typeCheckConstant(expr, desired)
 }
 
 func typeCheckExprs(args MapArgs, exprs []Expr, desired Datum) ([]Expr, *DTuple, error) {
@@ -732,14 +616,6 @@ func verifyTupleIN(args MapArgs, arg, values Datum) error {
 	return nil
 }
 
-func isUnresolvedConstVal(expr Expr) bool {
-	// TODO(nvanbenschoten) move to const.go
-	if _, ok := expr.(*ConstVal); ok {
-		return true
-	}
-	return false
-}
-
 func isUnresolvedArgument(args MapArgs, expr Expr) bool {
 	if t, ok := expr.(ValArg); ok {
 		if _, ok := args[t.name]; !ok {
@@ -787,7 +663,7 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
-		case isUnresolvedConstVal(expr):
+		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
 		case isUnresolvedVariable(args, expr):
 			valExprs = append(valExprs, idxExpr)
@@ -814,12 +690,12 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 	// required shared type using the second parameter.
 	typeCheckSameTypedConsts := func(typ Datum, required bool) (Datum, error) {
 		setTypeForConsts := func(typ Datum) error {
-			for _, constVal := range constExprs {
-				typedExpr, err := constVal.e.TypeCheck(args, typ)
+			for _, numVal := range constExprs {
+				typedExpr, err := numVal.e.TypeCheck(args, typ)
 				if err != nil {
 					return err
 				}
-				typedExprs[constVal.i] = typedExpr
+				typedExprs[numVal.i] = typedExpr
 			}
 			return nil
 		}
@@ -827,14 +703,14 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		// If typ is not nil, all consts try to become typ.
 		if typ != nil {
 			all := true
-			for _, constVal := range constExprs {
-				if !constVal.e.(*ConstVal).canBecomeType(typ) {
+			for _, numVal := range constExprs {
+				if !canConstantBecome(numVal.e.(*NumVal), typ) {
 					if required {
-						typedExpr, err := constVal.e.TypeCheck(args, nil)
+						typedExpr, err := numVal.e.TypeCheck(args, nil)
 						if err != nil {
 							return nil, err
 						}
-						return nil, fmt.Errorf("expected %s to be of type %s, found type %s", constVal.e, typ.Type(), typedExpr.ReturnType().Type())
+						return nil, fmt.Errorf("expected %s to be of type %s, found type %s", numVal.e, typ.Type(), typedExpr.ReturnType().Type())
 					}
 					all = false
 					break
@@ -846,11 +722,11 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		}
 
 		// If all consts could not become typ, use their best shared type.
-		constValExprs := make([]*ConstVal, len(constExprs))
-		for i, constVal := range constExprs {
-			constValExprs[i] = constVal.e.(*ConstVal)
+		numValExprs := make([]*NumVal, len(constExprs))
+		for i, numVal := range constExprs {
+			numValExprs[i] = numVal.e.(*NumVal)
 		}
-		bestType := commonConstantType(constValExprs...)
+		bestType := commonNumericConstantType(numValExprs...)
 		return bestType, setTypeForConsts(bestType)
 	}
 
@@ -927,23 +803,4 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		}
 		return typedExprs, firstValidType, nil
 	}
-}
-
-func commonConstantType(vals ...*ConstVal) Datum {
-	bestType := 0
-	for _, c := range vals {
-		avail := c.availableTypes()
-		for {
-			// This will not work if the available types are not strictly
-			// supersets of their previous types in order of preference.
-			if _, ok := avail[constTypePreference[bestType]]; ok {
-				break
-			}
-			bestType++
-			if bestType == len(constTypePreference)-1 {
-				return constTypePreference[bestType]
-			}
-		}
-	}
-	return constTypePreference[bestType]
 }

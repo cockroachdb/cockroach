@@ -52,8 +52,8 @@ type sqlSymUnion struct {
 // becomes a nil instance of the empty interface and therefore will fail a
 // direct type assertion. Instead, a guarded type assertion must be used,
 // which returns nil if the type assertion fails.
-func (u *sqlSymUnion) constVal() *ConstVal {
-	return u.val.(*ConstVal)
+func (u *sqlSymUnion) numVal() *NumVal {
+	return u.val.(*NumVal)
 }
 func (u *sqlSymUnion) bool() bool {
 	return u.val.(bool)
@@ -4893,25 +4893,25 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1179
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 130:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1194
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 131:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1198
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 132:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1202
 		{
-			expr := &CastExpr{Expr: NewDString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
+			expr := &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType()}
 			typedExpr, err := TypeCheck(expr, nil, nil)
 			if err != nil {
 				sqllex.Error("cannot type check interval type")
@@ -4932,13 +4932,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1222
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 135:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1226
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 136:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -4961,13 +4961,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1237
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 140:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1241
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 141:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -5403,19 +5403,19 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1566
 		{
-			sqlVAL.union.val = sqlDollar[1].union.constVal()
+			sqlVAL.union.val = sqlDollar[1].union.numVal()
 		}
 	case 214:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:1570
 		{
-			sqlVAL.union.val = &ConstVal{Value: constant.UnaryOp(token.SUB, sqlDollar[2].union.constVal().Value, 0)}
+			sqlVAL.union.val = &NumVal{Value: constant.UnaryOp(token.SUB, sqlDollar[2].union.numVal().Value, 0)}
 		}
 	case 215:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1574
 		{
-			sqlVAL.union.val = sqlDollar[1].union.constVal()
+			sqlVAL.union.val = sqlDollar[1].union.numVal()
 		}
 	case 216:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -6551,7 +6551,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2626
 		{
-			prec, err := sqlDollar[2].union.constVal().asInt()
+			prec, err := sqlDollar[2].union.numVal().asInt()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
@@ -6562,12 +6562,12 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2635
 		{
-			prec, err := sqlDollar[2].union.constVal().asInt()
+			prec, err := sqlDollar[2].union.numVal().asInt()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
-			scale, err := sqlDollar[4].union.constVal().asInt()
+			scale, err := sqlDollar[4].union.numVal().asInt()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
@@ -6620,7 +6620,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2680
 		{
-			prec, err := sqlDollar[2].union.constVal().asInt()
+			prec, err := sqlDollar[2].union.numVal().asInt()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
@@ -6682,19 +6682,19 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2730
 		{
-			sqlVAL.union.val = sqlDollar[2].union.constVal()
+			sqlVAL.union.val = sqlDollar[2].union.numVal()
 		}
 	case 434:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
 		//line sql.y:2734
 		{
-			sqlVAL.union.val = &ConstVal{Value: constant.MakeInt64(0)}
+			sqlVAL.union.val = &NumVal{Value: constant.MakeInt64(0)}
 		}
 	case 439:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2752
 		{
-			n, err := sqlDollar[4].union.constVal().asInt()
+			n, err := sqlDollar[4].union.numVal().asInt()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
@@ -6711,7 +6711,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2779
 		{
-			n, err := sqlDollar[3].union.constVal().asInt()
+			n, err := sqlDollar[3].union.numVal().asInt()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
@@ -7869,7 +7869,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3579
 		{
-			sqlVAL.union.val = Exprs{NewDString(sqlDollar[1].str), sqlDollar[3].union.expr()}
+			sqlVAL.union.val = Exprs{&StrVal{s: sqlDollar[1].str}, sqlDollar[3].union.expr()}
 		}
 	case 651:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -8256,25 +8256,25 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3963
 		{
-			sqlVAL.union.val = sqlDollar[1].union.constVal()
+			sqlVAL.union.val = sqlDollar[1].union.numVal()
 		}
 	case 718:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3967
 		{
-			sqlVAL.union.val = sqlDollar[1].union.constVal()
+			sqlVAL.union.val = sqlDollar[1].union.numVal()
 		}
 	case 719:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3971
 		{
-			sqlVAL.union.val = NewDString(sqlDollar[1].str)
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str}
 		}
 	case 720:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3975
 		{
-			sqlVAL.union.val = NewDBytes(DBytes(sqlDollar[1].str))
+			sqlVAL.union.val = &StrVal{s: sqlDollar[1].str, bytesEsc: true}
 		}
 	case 721:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
@@ -8286,19 +8286,19 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3980
 		{
-			sqlVAL.union.val = &CastExpr{Expr: NewDString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
+			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType()}
 		}
 	case 723:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3984
 		{
-			sqlVAL.union.val = &CastExpr{Expr: NewDString(sqlDollar[2].str), Type: sqlDollar[1].union.colType()}
+			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType()}
 		}
 	case 724:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:3988
 		{
-			sqlVAL.union.val = &CastExpr{Expr: NewDString(sqlDollar[5].str), Type: sqlDollar[1].union.colType()}
+			sqlVAL.union.val = &CastExpr{Expr: &StrVal{s: sqlDollar[5].str}, Type: sqlDollar[1].union.colType()}
 		}
 	case 725:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -8322,13 +8322,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:4007
 		{
-			sqlVAL.union.val = sqlDollar[2].union.constVal()
+			sqlVAL.union.val = sqlDollar[2].union.numVal()
 		}
 	case 730:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:4011
 		{
-			sqlVAL.union.val = &ConstVal{Value: constant.UnaryOp(token.SUB, sqlDollar[2].union.constVal().Value, 0)}
+			sqlVAL.union.val = &NumVal{Value: constant.UnaryOp(token.SUB, sqlDollar[2].union.numVal().Value, 0)}
 		}
 	case 735:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]

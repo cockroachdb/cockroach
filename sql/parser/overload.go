@@ -181,8 +181,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
-		case isUnresolvedConstVal(expr):
-			// case isNumericConstant(expr):
+		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
 		case isUnresolvedVariable(args, expr):
 			valExprs = append(valExprs, idxExpr)
@@ -258,11 +257,9 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 
 	// Filter out overloads which constants cannot become.
 	for _, expr := range constExprs {
-		constExpr := expr.e.(*ConstVal)
-		// constExpr := expr.e.(*NumVal)
+		constExpr := expr.e.(*NumVal)
 		filterOverloads(func(o overload) bool {
-			return constExpr.canBecomeType(o.params().getAt(expr.i))
-			// return canConstantBecome(constExpr, o.params().getAt(expr.i))
+			return canConstantBecome(constExpr, o.params().getAt(expr.i))
 		})
 	}
 
@@ -326,10 +323,9 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 
 	var bestConstType Datum
 	if len(constExprs) > 0 {
-		numVals := make([]*ConstVal, len(constExprs))
-		// numVals := make([]*NumVal, len(constExprs))
+		numVals := make([]*NumVal, len(constExprs))
 		for i, expr := range constExprs {
-			numVals[i] = expr.e.(*ConstVal)
+			numVals[i] = expr.e.(*NumVal)
 		}
 		before := overloads
 
@@ -337,8 +333,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		if homogeneousTyp != nil {
 			all := true
 			for _, constExpr := range numVals {
-				if !constExpr.canBecomeType(homogeneousTyp) {
-					// if !canConstantBecome(constExpr, homogeneousTyp) {
+				if !canConstantBecome(constExpr, homogeneousTyp) {
 					all = false
 					break
 				}
@@ -361,8 +356,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 
 		// Check if an overload fits with the natural constant types.
 		for i, expr := range constExprs {
-			natural := numVals[i].naturalType()
-			// natural := naturalConstantType(numVals[i])
+			natural := naturalConstantType(numVals[i])
 			if natural != nil {
 				filterOverloads(func(o overload) bool {
 					return o.params().getAt(expr.i).TypeEqual(natural)
@@ -378,8 +372,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		overloads = before
 
 		// Check if an overload fits with the "best" mutual constant types.
-		bestConstType = commonConstantType(numVals...)
-		// bestConstType = commonNumericConstantType(numVals...)
+		bestConstType = commonNumericConstantType(numVals...)
 		for _, expr := range constExprs {
 			filterOverloads(func(o overload) bool {
 				return o.params().getAt(expr.i).TypeEqual(bestConstType)
