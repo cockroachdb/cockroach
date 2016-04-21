@@ -263,7 +263,8 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *
 }
 
 // get the table descriptor for the ID passed in using an existing txn.
-// returns nil if the descriptor doesn't exist.
+// returns nil if the descriptor doesn't exist or if it exists but is not a
+// table.
 func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
@@ -271,13 +272,9 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 	if pErr := txn.GetProto(descKey, desc); pErr != nil {
 		return nil, pErr
 	}
-	tableDesc := desc.GetTable()
-	if tableDesc == nil {
-		// TODO(andrei): We're theoretically hiding the error where desc exists, but
-		// is not a TableDescriptor.
-		return nil, nil
-	}
-	return tableDesc, nil
+	// TODO(andrei): We're theoretically hiding the error where desc exists, but
+	// is not a TableDescriptor.
+	return desc.GetTable(), nil
 }
 
 // getTableLease acquires a lease for the specified table. The lease will be
@@ -321,6 +318,11 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		var pErr *roachpb.Error
 		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if pErr != nil {
+			if _, ok := pErr.GetDetail().(*roachpb.DescriptorNotFoundError); ok {
+				// Transform the descriptor error into an error that references the
+				// table's name.
+				return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
+			}
 			return TableDescriptor{}, pErr
 		}
 		p.leases = append(p.leases, lease)
@@ -345,6 +347,10 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 	// Lookup the ID of the table in the cache. The use of the cache might cause
 	// the usage of a recently renamed table, but that's a race that could occur
 	// anyways.
+	// TODO(andrei): remove the used of p.systemConfig as a cache for table names,
+	// replace it with using the leases for resolving names, and do away with any
+	// races due to renames. We'll probably have to rewrite renames to perform
+	// an async schema change.
 	nameKey := tableKey{dbID, qname.Table()}
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
@@ -357,7 +363,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 		return 0, pErr
 	}
 	if !gr.Exists() {
-		return 0, roachpb.NewErrorf("table %q does not exist", nameKey.Name())
+		return 0, roachpb.NewError(tableDoesNotExistError(qname.String()))
 	}
 	return ID(gr.ValueInt()), nil
 }
