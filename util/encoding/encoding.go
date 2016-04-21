@@ -529,23 +529,33 @@ func EncodeStringDescending(b []byte, s string) []byte {
 	return EncodeBytesDescending(b, arg)
 }
 
-// DecodeStringAscending decodes a string value from the input buffer which was encoded
-// using EncodeString or EncodeBytes. The r []byte is used as a temporary
-// buffer in order to avoid memory allocations. The remainder of the input
-// buffer and the decoded string are returned.
-func DecodeStringAscending(b []byte, r []byte) ([]byte, string, error) {
-	b, r, err := DecodeBytesAscending(b, r)
-	return b, string(r), err
+// unsafeString performs an unsafe conversion from a []byte to a string. The
+// returned string will share the underlying memory with the []byte which thus
+// allows the string to be mutable through the []byte. We're careful to use
+// this method only in situations in which the []byte will not be modified.
+func unsafeString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
 
-// DecodeStringDescending decodes a string value from the input buffer which
+// DecodeUnsafeStringAscending decodes a string value from the input buffer which was
+// encoded using EncodeString or EncodeBytes. The r []byte is used as a
+// temporary buffer in order to avoid memory allocations. The remainder of the
+// input buffer and the decoded string are returned. Note that the returned
+// string may share storage with the input buffer.
+func DecodeUnsafeStringAscending(b []byte, r []byte) ([]byte, string, error) {
+	b, r, err := DecodeBytesAscending(b, r)
+	return b, unsafeString(r), err
+}
+
+// DecodeUnsafeStringDescending decodes a string value from the input buffer which
 // was encoded using EncodeStringDescending or EncodeBytesDescending. The r
 // []byte is used as a temporary buffer in order to avoid memory
 // allocations. The remainder of the input buffer and the decoded string are
-// returned.
-func DecodeStringDescending(b []byte, r []byte) ([]byte, string, error) {
+// returned. Note that the returned string may share storage with the input
+// buffer.
+func DecodeUnsafeStringDescending(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesDescending(b, r)
-	return b, string(r), err
+	return b, unsafeString(r), err
 }
 
 // EncodeNullAscending encodes a NULL value. The encodes bytes are appended to the
@@ -844,14 +854,14 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		return b, d.String(), nil
 	case Bytes:
 		var s string
-		b, s, err = DecodeStringAscending(b, nil)
+		b, s, err = DecodeUnsafeStringAscending(b, nil)
 		if err != nil {
 			return b, "", err
 		}
 		return b, strconv.Quote(s), nil
 	case BytesDesc:
 		var s string
-		b, s, err = DecodeStringDescending(b, nil)
+		b, s, err = DecodeUnsafeStringDescending(b, nil)
 		if err != nil {
 			return b, "", err
 		}
