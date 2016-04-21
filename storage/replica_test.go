@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -1312,19 +1313,22 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 
 			var wg sync.WaitGroup
 			wg.Add(num)
-			var captureTime atomic.Value
-			captureTime.Store(roachpb.ZeroTimestamp)
+			var active atomic.Value
+			active.Store(false)
 
 			var seen int32
 			tc.rng.mu.Lock()
 			tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
 				ll, ok := cmd.raftCmd.Cmd.Requests[0].
 					GetInner().(*roachpb.LeaderLeaseRequest)
-				if !ok || !ll.Lease.Start.Equal(captureTime.Load().(roachpb.Timestamp)) {
+				if !ok || !active.Load().(bool) {
 					return defaultProposeRaftCommandLocked(tc.rng, cmd)
 				}
 				if c := atomic.AddInt32(&seen, 1); c > 1 {
-					t.Fatal("expected only one leader lease request")
+					// Morally speaking, this is an error, but reproposals can
+					// happen and so we warn (in case this trips the test up
+					// in more unexpected ways).
+					log.Infof("reproposal of %+v", ll)
 				}
 				go func() {
 					wg.Wait()
@@ -1332,6 +1336,7 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 						cmd.done <- roachpb.ResponseWithError{
 							Err: roachpb.NewErrorf(origMsg),
 						}
+						return
 					}
 					if err := defaultProposeRaftCommandLocked(tc.rng, cmd); err != nil {
 						panic(err) // unlikely, so punt on proper handling
@@ -1341,13 +1346,13 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 			}
 			tc.rng.mu.Unlock()
 
+			active.Store(true)
 			tc.manualClock.Increment(leaseExpiry(tc.rng))
-			magicTime := tc.clock.Now()
-			captureTime.Store(magicTime)
+			ts := tc.clock.Now()
 			pErrCh := make(chan *roachpb.Error, num)
 			for i := 0; i < num; i++ {
 				tc.stopper.RunAsyncTask(func() {
-					leaseCh := tc.rng.requestLeaderLease(magicTime)
+					leaseCh := tc.rng.requestLeaderLease(ts)
 					wg.Done()
 					pErrCh <- (<-leaseCh)
 				})
