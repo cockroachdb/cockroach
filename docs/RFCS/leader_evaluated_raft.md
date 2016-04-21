@@ -361,7 +361,14 @@ Tackle the following in parallel (and roughly in that order):
 * flesh out the WriteBatch encoding. Ideally, this includes a parser in Go (to
   avoid an obstruction to switching storage engines), but the critical part
   here for the purpose of this RFC is hooking up the `RocksDB`-specific
-  implementation.
+  implementation and guarding against upstream changes.
+  We can trust RocksDB to be backwards-compatible in any changes they make, but
+  we require bidirectional compatibility. We create a batch on the leader and
+  ship it off to the follower to be applied, and the follower might be running
+  either an older or a newer version of the code. If they add a new record
+  type, we either need to be able to guarantee that the new record types won't
+  be used in our case, or translate them back to something the old version can
+  understand.
 * introduce and implement the `Batch` interface. This could be done after the
   `WriteBatch` encoding is done or, if required to unblock the implementation
   of this RFC, start with a less performant version based on an auxiliary map
