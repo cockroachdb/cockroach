@@ -905,9 +905,9 @@ func TestParsePrecedence(t *testing.T) {
 		return &OrExpr{Left: left, Right: right}
 	}
 
-	one := &ConstVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	two := &ConstVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	three := &ConstVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
 
 	testData := []struct {
 		sql      string

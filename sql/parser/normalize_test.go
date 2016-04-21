@@ -181,7 +181,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`random()`, `random()`},
 		{`version(a)`, `version(a)`},
 		{`notARealMethod()`, `notARealMethod()`},
-		{`9223372036854775808`, `9223372036854775808`},
+		{`9223372036854775808`, `9.223372036854776e+18`},
 		{`-9223372036854775808`, `-9223372036854775808`},
 		{`(SELECT 1)`, `(SELECT 1)`},
 		{`(1, 2, 3) = (SELECT 1, 2, 3)`, `(1, 2, 3) = (SELECT 1, 2, 3)`},
@@ -193,7 +193,7 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if expr, err = TypeNumericConstants(expr); err != nil {
+		if expr, err = TypeConstants(expr); err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := expr.String()
