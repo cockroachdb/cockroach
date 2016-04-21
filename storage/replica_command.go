@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/coreos/etcd/raft"
 )
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
@@ -1447,23 +1448,28 @@ func (r *Replica) LeaderLease(
 	}
 	r.mu.leaderLease = &args.Lease
 
-	// If the range leadership and raft leadership is splitted, then try to transfer
-	// the raft leadership to range leadership.
-	status := r.mu.raftGroup.Status()
-	if uint64(r.mu.replicaID) == status.Lead && r.mu.replicaID != r.mu.leaderLease.Replica.ReplicaID {
-		log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v", r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
-		r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
-	}
+	if prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
+		// The lease is changing hands. Is this replica the new lease holder?
+		thisReplica := r.mu.leaderLease.Replica.ReplicaID == r.mu.replicaID
 
-	if r.mu.leaderLease.Replica.StoreID == r.store.StoreID() &&
-		prevLease.Replica.StoreID != r.mu.leaderLease.Replica.StoreID {
-		// If this replica is a new holder of the lease, update the low water
-		// mark of the timestamp cache. Note that clock offset scenarios are
-		// handled via a stasis period inherent in the lease which is documented
-		// in on the Lease struct.
-		log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
-			r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
-		r.mu.tsCache.SetLowWater(prevLease.Expiration)
+		// If this replica is the raft leader but it is not the new lease
+		// holder, then try to transfer the raft leadership to match the
+		// lease.
+		if !thisReplica && r.mu.raftGroup.Status().RaftState == raft.StateLeader {
+			log.Infof("range %v: replicaID %v transfer raft leadership to replicaID %v",
+				r.RangeID, r.mu.replicaID, r.mu.leaderLease.Replica.ReplicaID)
+			r.mu.raftGroup.TransferLeader(uint64(r.mu.leaderLease.Replica.ReplicaID))
+		}
+
+		if thisReplica {
+			// If this replica is a new holder of the lease, update the low water
+			// mark of the timestamp cache. Note that clock offset scenarios are
+			// handled via a stasis period inherent in the lease which is documented
+			// in on the Lease struct.
+			log.Infof("range %d: new leader lease %s following %s [physicalTime=%s]",
+				r.RangeID, args.Lease, prevLease, r.store.Clock().PhysicalTime())
+			r.mu.tsCache.SetLowWater(prevLease.Expiration)
+		}
 	}
 
 	return reply, nil
