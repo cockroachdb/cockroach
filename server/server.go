@@ -211,7 +211,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.NewServer(s.tsDB)
-	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx)
+	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx, s.node.stores)
 
 	return s, nil
 }
