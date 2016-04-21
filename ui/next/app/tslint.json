@@ -105,9 +105,7 @@
       }
     ],
     "use-strict": [
-      true,
-      "check-module",
-      "check-function"
+      false
     ],
     "variable-name": [
       true,

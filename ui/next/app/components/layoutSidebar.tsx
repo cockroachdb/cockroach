@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Link, RouterOnContext } from "react-router";
-import * as Icons from "./icons.ts";
+import * as Icons from "./icons";
 
 function trustIcon(iconSvg: string) {
   "use strict";

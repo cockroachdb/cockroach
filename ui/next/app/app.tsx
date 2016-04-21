@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { createStore, combineReducers } from "redux";
+import { createStore, combineReducers, applyMiddleware } from "redux";
 import { Provider } from "react-redux";
 import { Router, Route, IndexRedirect, hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer } from "react-router-redux";
+import thunk from "redux-thunk";
+
+import nodesReducer from "./redux/nodes";
 
 import Layout from "./containers/layout";
 import { ClusterMain, ClusterTitle } from "./containers/cluster";
@@ -16,7 +19,9 @@ import { NodesMain, NodesTitle } from "./containers/nodes";
 const store = createStore(
   combineReducers({
     routing: routerReducer,
-  })
+    nodes: nodesReducer,
+  }),
+  applyMiddleware(thunk)
 );
 
 // Connect react-router history with redux.

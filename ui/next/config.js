@@ -3,7 +3,8 @@ System.config({
   transpiler: "ts",
   typescriptOptions: {
     "typeCheck": "strict",
-    "tsconfig": "app/tsconfig.json"
+    "tsconfig": "app/tsconfig.json",
+    "targetLib": "ES5"
   },
   paths: {
     "github:*": "jspm_packages/github/*",
@@ -15,10 +16,31 @@ System.config({
       "main": "app.tsx",
       "defaultExtension": "tsx",
       "meta": {
+        "*.tsx": {
+          "loader": "ts"
+        }
+      }
+    },
+    "app/interfaces": {
+      "defaultExtension": "d.ts",
+      "meta": {
+        "*.d.ts": {
+          "loader": "ts"
+        }
+      }
+    },
+    "app/util": {
+      "defaultExtension": "ts",
+      "meta": {
         "*.ts": {
           "loader": "ts"
-        },
-        "*.tsx": {
+        }
+      }
+    },
+    "app/redux": {
+      "defaultExtension": "ts",
+      "meta": {
+        "*.ts": {
           "loader": "ts"
         }
       }
@@ -26,15 +48,20 @@ System.config({
   },
 
   map: {
+    "es6-promise": "npm:es6-promise@3.1.2",
+    "lodash": "npm:lodash@4.11.1",
+    "object-assign": "npm:object-assign@4.0.1",
     "react": "npm:react@15.0.1",
     "react-dom": "npm:react-dom@15.0.1",
     "react-redux": "npm:react-redux@4.4.5",
     "react-router": "npm:react-router@2.1.1",
     "react-router-redux": "npm:react-router-redux@4.0.2",
     "redux": "npm:redux@3.4.0",
+    "redux-thunk": "npm:redux-thunk@2.0.1",
     "ts": "github:frankwallis/plugin-typescript@4.0.5",
     "ts-runtime": "npm:babel-runtime@5.8.38",
     "typescript": "npm:typescript@1.8.9",
+    "whatwg-fetch": "npm:whatwg-fetch@0.11.0",
     "github:frankwallis/plugin-typescript@4.0.5": {
       "typescript": "npm:typescript@1.8.9"
     },
@@ -135,6 +162,9 @@ System.config({
     "npm:encoding@0.1.12": {
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
       "iconv-lite": "npm:iconv-lite@0.4.13"
+    },
+    "npm:es6-promise@3.1.2": {
+      "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:falafel@1.2.0": {
       "acorn": "npm:acorn@1.2.2",
