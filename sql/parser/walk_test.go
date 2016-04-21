@@ -79,6 +79,7 @@ func TestFillArgs(t *testing.T) {
 		{`ROW($1, $2, $3)`, `ROW(1, 2, '3')`, MapArgs{`1`: dint(1), `2`: dint(2), `3`: dstring("3")}},
 		{`(SELECT $1)`, `(SELECT 'a')`, MapArgs{`1`: dstring("a")}},
 		{`EXISTS (SELECT $1)`, `EXISTS (SELECT 'a')`, MapArgs{`1`: dstring("a")}},
+		{`($1 >= $2) IS OF (BOOL)`, `(1 >= 2) IS OF (BOOL)`, MapArgs{`1`: dint(1), `2`: dint(2)}},
 	}
 
 	for _, d := range testData {

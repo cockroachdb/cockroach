@@ -211,7 +211,15 @@ func (expr *IfExpr) Walk(v Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
-func (expr *IsOfTypeExpr) Walk(_ Visitor) Expr { return expr }
+func (expr *IsOfTypeExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
 
 // Walk implements the Expr interface.
 func (expr *NotExpr) Walk(v Visitor) Expr {
