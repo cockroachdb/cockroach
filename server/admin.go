@@ -137,6 +137,13 @@ table tr td {
 <td><a href="./metrics">variables</a></td>
 </tr>
 <tr>
+<td>node status</td>
+<td>
+<a href="/_status/gossip/local">gossip</a><br />
+<a href="/_status/ranges/local">ranges</a><br />
+</td>
+</tr>
+<tr>
 <td>pprof</td>
 <td>
 <!-- cribbed from the /debug/pprof endpoint -->
