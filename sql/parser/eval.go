@@ -731,28 +731,69 @@ var CmpOps = map[CmpArgs]CmpOp{
 			return DBool(re.MatchString(string(*left.(*DString)))), nil
 		},
 	},
-}
 
-var evalTupleEQ = CmpOp{
-	fn: func(ctx EvalContext, ldatum, rdatum Datum) (DBool, error) {
-		left := *ldatum.(*DTuple)
-		right := *rdatum.(*DTuple)
-		if len(left) != len(right) {
-			return DBool(false), nil
-		}
-		for i := range left {
-			d, err := evalComparison(ctx, EQ, left[i], right[i])
-			if err != nil {
-				return DBool(false), err
+	CmpArgs{EQ, tupleType, tupleType}: {
+		fn: func(ctx EvalContext, ldatum, rdatum Datum) (DBool, error) {
+			left := *ldatum.(*DTuple)
+			right := *rdatum.(*DTuple)
+			n := len(left)
+			if n != len(right) {
+				return DBool(false), errors.New("unequal number of entries in tuples")
 			}
-			if v, err := GetBool(d); err != nil {
-				return DBool(false), err
-			} else if !v {
-				return v, nil
+			for i := 0; i < n; i++ {
+				c := left[i].Compare(right[i])
+				if c != 0 {
+					return DBool(false), nil
+				}
 			}
-		}
-		return DBool(true), nil
+			return DBool(true), nil
+		},
 	},
+	CmpArgs{LE, tupleType, tupleType}: {
+		fn: func(ctx EvalContext, ldatum, rdatum Datum) (DBool, error) {
+			left := *ldatum.(*DTuple)
+			right := *rdatum.(*DTuple)
+			n := len(left)
+			if n != len(right) {
+				return DBool(false), errors.New("unequal number of entries in tuples")
+			}
+			for i := 0; i < n; i++ {
+				c := left[i].Compare(right[i])
+				if c != 0 {
+					return DBool(c < 0), nil
+				}
+			}
+			return DBool(true), nil
+		},
+	},
+	CmpArgs{LT, tupleType, tupleType}: {
+		fn: func(ctx EvalContext, ldatum, rdatum Datum) (DBool, error) {
+			left := *ldatum.(*DTuple)
+			right := *rdatum.(*DTuple)
+			n := len(left)
+			if n != len(right) {
+				return DBool(false), errors.New("unequal number of entries in tuples")
+			}
+			for i := 0; i < n; i++ {
+				c := left[i].Compare(right[i])
+				if c != 0 {
+					return DBool(c < 0), nil
+				}
+			}
+			return DBool(false), nil
+		},
+	},
+
+	CmpArgs{In, boolType, tupleType}:        evalTupleIN,
+	CmpArgs{In, intType, tupleType}:         evalTupleIN,
+	CmpArgs{In, floatType, tupleType}:       evalTupleIN,
+	CmpArgs{In, stringType, tupleType}:      evalTupleIN,
+	CmpArgs{In, bytesType, tupleType}:       evalTupleIN,
+	CmpArgs{In, dateType, tupleType}:        evalTupleIN,
+	CmpArgs{In, timestampType, tupleType}:   evalTupleIN,
+	CmpArgs{In, timestampTZType, tupleType}: evalTupleIN,
+	CmpArgs{In, intervalType, tupleType}:    evalTupleIN,
+	CmpArgs{In, tupleType, tupleType}:       evalTupleIN,
 }
 
 var evalTupleIN = CmpOp{
@@ -766,24 +807,6 @@ var evalTupleIN = CmpOp{
 		found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
 		return DBool(found), nil
 	},
-}
-
-func init() {
-	// This avoids an init-loop if we try to initialize this operation when
-	// cmpOps is declared. The loop is caused by evalTupleEQ using cmpOps
-	// internally.
-	CmpOps[CmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
-
-	CmpOps[CmpArgs{In, boolType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, intType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, floatType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, stringType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, bytesType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, dateType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, timestampType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, timestampTZType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, intervalType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
