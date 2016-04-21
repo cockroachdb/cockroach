@@ -131,6 +131,11 @@ func initInsecure() error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
+	info := build.GetInfo()
+	// We log build information to stdout (for the short summary), but also
+	// to stderr to coincide with the full logs.
+	log.Infof(info.Short())
+
 	if err := initInsecure(); err != nil {
 		return err
 	}
@@ -188,7 +193,6 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	info := build.GetInfo()
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
