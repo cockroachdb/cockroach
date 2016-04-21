@@ -159,7 +159,7 @@ func makeTestIndexFromStr(t *testing.T, columnsStr string) (*TableDescriptor, *I
 }
 
 func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
-	index *IndexDescriptor) (orIndexConstraints, parser.Expr) {
+	index *IndexDescriptor) (orIndexConstraints, parser.TypedExpr) {
 	expr, _ := parseAndNormalizeExpr(t, sql)
 	exprs, equiv := analyzeExpr(expr)
 
@@ -170,7 +170,7 @@ func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
 	}
 	c.analyzeExprs(exprs)
 	if equiv && len(exprs) == 1 {
-		expr = joinAndExprs(exprs[0])
+		expr = joinAndExprs(exprs[0]).(parser.TypedExpr)
 	}
 	return c.constraints, expr
 }

@@ -54,14 +54,14 @@ type selectNode struct {
 	pErr *roachpb.Error
 
 	// Rendering expressions for rows and corresponding output columns.
-	render  []parser.Expr
+	render  []parser.TypedExpr
 	columns []ResultColumn
 
 	// The rendered row, with one value for each render expression.
 	row parser.DTuple
 
 	// Filtering expression for rows.
-	filter parser.Expr
+	filter parser.TypedExpr
 
 	// The number of initial columns - before adding any internal render targets for grouping or
 	// ordering. The original columns are columns[:numOriginalCols], the internally added ones are
@@ -268,7 +268,7 @@ func (p *planner) initSelect(
 
 	if s.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		s.filter = group.isNotNullFilter(s.filter)
+		s.filter = group.isNotNullFilter(s.filter).(parser.TypedExpr)
 	}
 
 	// Get the ordering for index selection (if any).
@@ -459,19 +459,25 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 	if where == nil {
 		return nil
 	}
-	var err error
-	s.filter, err = s.resolveQNames(where.Expr)
-	s.pErr = roachpb.NewError(err)
+
+	var untypedFilter parser.Expr
+	untypedFilter, s.pErr = s.planner.expandSubqueries(where.Expr, 1)
 	if s.pErr != nil {
 		return s.pErr
 	}
 
-	var whereType parser.Datum
-	if s.filter, whereType, err = parser.TypeCheck(s.filter, s.planner.evalCtx.Args, parser.DummyBool); err != nil {
+	untypedFilter, err := s.resolveQNames(untypedFilter)
+	if err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
-	if !(whereType.TypeEqual(parser.DummyBool) || whereType == parser.DNull) {
+
+	s.filter, err = parser.TypeCheck(untypedFilter, s.planner.evalCtx.Args, parser.DummyBool)
+	if err != nil {
+		s.pErr = roachpb.NewError(err)
+		return s.pErr
+	}
+	if whereType := s.filter.ReturnType(); !(whereType.TypeEqual(parser.DummyBool) || whereType == parser.DNull) {
 		s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
 			parser.DummyBool.Type(), whereType.Type())
 		return s.pErr
@@ -482,10 +488,6 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 	s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
 	if err != nil {
 		s.pErr = roachpb.NewError(err)
-		return s.pErr
-	}
-	s.filter, s.pErr = s.planner.expandSubqueries(s.filter, 1)
-	if s.pErr != nil {
 		return s.pErr
 	}
 
@@ -505,7 +507,7 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 // ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, table *tableInfo, qvals qvalMap,
-) (isStar bool, columns []ResultColumn, exprs []parser.Expr, err error) {
+) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
 	qname, ok := target.Expr.(*parser.QualifiedName)
 	if !ok {
 		return false, nil, nil, nil
@@ -556,12 +558,12 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// outputName will be empty if the target is not aliased.
 	outputName := string(target.As)
 
-	if isStar, cols, exprs, err := checkRenderStar(target, &s.table, s.qvals); err != nil {
+	if isStar, cols, typedExprs, err := checkRenderStar(target, &s.table, s.qvals); err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	} else if isStar {
 		s.columns = append(s.columns, cols...)
-		s.render = append(s.render, exprs...)
+		s.render = append(s.render, typedExprs...)
 		return nil
 	}
 
@@ -582,14 +584,13 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 		return s.pErr
 	}
 
-	resolved, typ, err := parser.TypeCheck(resolved, s.planner.evalCtx.Args, desiredType)
+	typedResolved, err := parser.TypeCheck(resolved, s.planner.evalCtx.Args, desiredType)
 	if err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
 
-	var normalized parser.Expr
-	normalized, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, resolved)
+	normalized, err := s.planner.parser.NormalizeExpr(s.planner.evalCtx, typedResolved)
 	s.pErr = roachpb.NewError(err)
 	if s.pErr != nil {
 		return s.pErr
@@ -604,7 +605,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 			outputName = t.Column()
 		}
 	}
-	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: typ})
+	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: normalized.ReturnType()})
 	return nil
 }
 

@@ -107,7 +107,7 @@ func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
 // to run statements that create row values.
 type rowCreatorNodeBase struct {
 	editNodeBase
-	defaultExprs    []parser.Expr
+	defaultExprs    []parser.TypedExpr
 	cols            []ColumnDescriptor
 	primaryKeyCols  map[ColumnID]struct{}
 	colIDtoRowIndex map[ColumnID]int
@@ -236,16 +236,18 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					e = fillDefault(e, i, rc.defaultExprs)
+					typ := getTypeForColumn(cols[i])
+					e := fillDefault(e, typ, i, rc.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
-					desiredTypesFromSelect = append(desiredTypesFromSelect, getTypeForColumn(cols[i]))
+					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 					i++
 				}
 			}
 		} else {
-			e := fillDefault(expr.Expr, i, rc.defaultExprs)
+			typ := getTypeForColumn(cols[i])
+			e := fillDefault(expr.Expr, typ, i, rc.defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
-			desiredTypesFromSelect = append(desiredTypesFromSelect, getTypeForColumn(cols[i]))
+			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 			i++
 		}
 	}
@@ -274,11 +276,11 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		_, d, err := parser.TypeCheck(target, p.evalCtx.Args, desiredTypesFromSelect[i])
+		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, getTypeForColumn(cols[i]))
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if err := checkColumnType(cols[i], d, p.evalCtx.Args); err != nil {
+		if err := checkColumnType(cols[i], typedTarget.ReturnType(), p.evalCtx.Args); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -321,7 +323,7 @@ func (u *updateNode) Start() *roachpb.Error {
 			case *parser.Tuple:
 				//panic("unreachable xz")
 				for _, e := range t.Exprs {
-					e = fillDefault(e, i, u.defaultExprs)
+					e = fillDefault(e, u.desiredTypes[i], i, u.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					i++
 				}
@@ -332,7 +334,7 @@ func (u *updateNode) Start() *roachpb.Error {
 				}
 			}
 		} else {
-			e := fillDefault(expr.Expr, i, u.defaultExprs)
+			e := fillDefault(expr.Expr, u.desiredTypes[i], i, u.defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			i++
 		}
@@ -424,7 +426,7 @@ func (u *updateNode) Next() bool {
 	return true
 }
 
-func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) parser.Expr {
+func fillDefault(expr parser.Expr, desired parser.Datum, index int, defaultExprs []parser.TypedExpr) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:
 		return defaultExprs[index]

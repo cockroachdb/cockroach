@@ -29,11 +29,21 @@ type Expr interface {
 	// copy of this node updated to point to the new children. Otherwise the receiver is returned.
 	// For childless (leaf) Exprs, its implementation is empty.
 	Walk(Visitor) Expr
-	// TypeCheck returns the zero value of the expression's type, or an
-	// error if the expression doesn't type-check. args maps bind var argument
-	// names to types. desired signifies the desired type that the expressions
-	// parent wants as a hint.
-	TypeCheck(args MapArgs, desired Datum) (Datum, error)
+	// TypeCheck transforms the Expr into a well-typed TypedExpr, which further permits
+	// evaluation and type introspection, or an error if the expression cannot be well-typed.
+	// When type checking is complete, if no error was reported, the expression and all
+	// sub-expressions will be guaranteed to be well-typed, meaning that the method effectively
+	// maps the Expr tree into a TypedExpr tree.
+	//
+	// The args parameter map bind var argument names to types inferred while type-checking.
+	// The desired parameter hints the desired type that the method's caller wants from
+	// the resulting TypedExpr.
+	TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
+}
+
+// TypedExpr represents a well-typed expression.
+type TypedExpr interface {
+	Expr
 	// Eval evaluates an SQL expression. Expression evaluation is a mostly
 	// straightforward walk over the parse tree. The only significant complexity is
 	// the handling of types and implicit conversions. See binOps and cmpOps for
@@ -43,6 +53,9 @@ type Expr interface {
 	// WalkExpr. For example, ValArg should be replace by the argument passed from
 	// the client.
 	Eval(EvalContext) (Datum, error)
+	// ReturnType provides the type of the TypedExpr, which is the type of Datum that
+	// the TypedExpr will return when evaluated.
+	ReturnType() Datum
 }
 
 // VariableExpr is an Expr that may change per row. It is used to
@@ -80,9 +93,37 @@ func exprStrWithParen(e Expr) string {
 	return e.String()
 }
 
+// typeAnnotation is an embeddable struct to provide a TypedExpr with a dynamic
+// type annotation.
+type typeAnnotation struct {
+	typ Datum
+}
+
+func (ta typeAnnotation) ReturnType() Datum {
+	if ta.typ == nil {
+		return DNull
+	}
+	return ta.typ
+}
+
+// boolTypeAnnotation is an embeddable struct to provide a TypedExpr with a static
+// boolean type annotation.
+type boolTypeAnnotation struct {
+	null bool
+}
+
+func (ta boolTypeAnnotation) ReturnType() Datum {
+	if ta.null {
+		return DNull
+	}
+	return DummyBool
+}
+
 // AndExpr represents an AND expression.
 type AndExpr struct {
 	Left, Right Expr
+
+	boolTypeAnnotation
 }
 
 func (*AndExpr) operatorExpr() {}
@@ -94,6 +135,8 @@ func (node *AndExpr) String() string {
 // OrExpr represents an OR expression.
 type OrExpr struct {
 	Left, Right Expr
+
+	boolTypeAnnotation
 }
 
 func (*OrExpr) operatorExpr() {}
@@ -105,6 +148,8 @@ func (node *OrExpr) String() string {
 // NotExpr represents a NOT expression.
 type NotExpr struct {
 	Expr Expr
+
+	boolTypeAnnotation
 }
 
 func (*NotExpr) operatorExpr() {}
@@ -115,7 +160,9 @@ func (node *NotExpr) String() string {
 
 // ParenExpr represents a parenthesized expression.
 type ParenExpr struct {
-	Expr
+	Expr Expr
+
+	typeAnnotation
 }
 
 func (node *ParenExpr) String() string {
@@ -175,7 +222,9 @@ func (i ComparisonOp) String() string {
 type ComparisonExpr struct {
 	Operator    ComparisonOp
 	Left, Right Expr
-	fn          CmpOp
+
+	boolTypeAnnotation
+	fn CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -190,6 +239,8 @@ type RangeCond struct {
 	Not      bool
 	Left     Expr
 	From, To Expr
+
+	boolTypeAnnotation
 }
 
 func (*RangeCond) operatorExpr() {}
@@ -208,6 +259,8 @@ type IsOfTypeExpr struct {
 	Not   bool
 	Expr  Expr
 	Types []ColumnType
+
+	boolTypeAnnotation
 }
 
 func (*IsOfTypeExpr) operatorExpr() {}
@@ -233,6 +286,8 @@ func (node *IsOfTypeExpr) String() string {
 // ExistsExpr represents an EXISTS expression.
 type ExistsExpr struct {
 	Subquery Expr
+
+	boolTypeAnnotation
 }
 
 func (node *ExistsExpr) String() string {
@@ -244,6 +299,8 @@ type IfExpr struct {
 	Cond Expr
 	True Expr
 	Else Expr
+
+	typeAnnotation
 }
 
 func (node *IfExpr) String() string {
@@ -254,6 +311,8 @@ func (node *IfExpr) String() string {
 type NullIfExpr struct {
 	Expr1 Expr
 	Expr2 Expr
+
+	typeAnnotation
 }
 
 func (node *NullIfExpr) String() string {
@@ -264,6 +323,8 @@ func (node *NullIfExpr) String() string {
 type CoalesceExpr struct {
 	Name  string
 	Exprs Exprs
+
+	typeAnnotation
 }
 
 func (node *CoalesceExpr) String() string {
@@ -276,9 +337,6 @@ type ConstVal struct {
 
 	// We preserve the "original" string representation (before normalization).
 	OrigString string
-
-	// ResolvedType holds the type that the ConstVal should resolve to when evaluated.
-	ResolvedType Datum
 }
 
 func (node *ConstVal) String() string {
@@ -328,6 +386,9 @@ func (node DefaultVal) String() string {
 	return "DEFAULT"
 }
 
+// ReturnType implements the TypedExpr interface.
+func (DefaultVal) ReturnType() Datum { return nil }
+
 var _ VariableExpr = ValArg{}
 
 // ValArg represents a named bind var argument.
@@ -361,6 +422,9 @@ type QualifiedName struct {
 	// We preserve the "original" string representation (before normalization).
 	origString string
 }
+
+// ReturnType implements the TypedExpr interface.
+func (*QualifiedName) ReturnType() Datum { return nil }
 
 // Variable implements the VariableExpr interface.
 func (*QualifiedName) Variable() {}
@@ -619,20 +683,34 @@ func (n TableNameWithIndexList) String() string {
 // Tuple represents a parenthesized list of expressions.
 type Tuple struct {
 	Exprs Exprs
+
+	types *DTuple
 }
 
 func (node *Tuple) String() string {
 	return fmt.Sprintf("(%s)", node.Exprs)
 }
 
+// ReturnType implements the TypedExpr interface.
+func (node *Tuple) ReturnType() Datum {
+	return node.types
+}
+
 // Row represents a parenthesized list of expressions. Similar to Tuple except
 // in how it is textually represented.
 type Row struct {
 	Exprs Exprs
+
+	types *DTuple
 }
 
 func (node *Row) String() string {
 	return fmt.Sprintf("ROW(%s)", node.Exprs)
+}
+
+// ReturnType implements the TypedExpr interface.
+func (node *Row) ReturnType() Datum {
+	return node.types
 }
 
 // Array represents an array constructor.
@@ -665,6 +743,11 @@ type Subquery struct {
 
 func (node *Subquery) String() string {
 	return node.Select.String()
+}
+
+// ReturnType implements the TypedExpr interface.
+func (node *Subquery) ReturnType() Datum {
+	return DNull
 }
 
 // BinaryOperator represents a binary operator.
@@ -710,7 +793,9 @@ func (i BinaryOperator) String() string {
 type BinaryExpr struct {
 	Operator    BinaryOperator
 	Left, Right Expr
-	fn          BinOp
+
+	typeAnnotation
+	fn BinOp
 }
 
 func (*BinaryExpr) operatorExpr() {}
@@ -747,7 +832,9 @@ func (i UnaryOperator) String() string {
 type UnaryExpr struct {
 	Operator UnaryOperator
 	Expr     Expr
-	fn       UnaryOp
+
+	typeAnnotation
+	fn UnaryOp
 }
 
 func (*UnaryExpr) operatorExpr() {}
@@ -762,7 +849,7 @@ type FuncExpr struct {
 	Type  funcType
 	Exprs Exprs
 
-	// These fields are not part of the Expr AST.
+	typeAnnotation
 	fn Builtin
 }
 
@@ -806,6 +893,8 @@ type CaseExpr struct {
 	Expr  Expr
 	Whens []*When
 	Else  Expr
+
+	typeAnnotation
 }
 
 func (node *CaseExpr) String() string {
@@ -838,6 +927,8 @@ func (node *When) String() string {
 type CastExpr struct {
 	Expr Expr
 	Type ColumnType
+
+	typeAnnotation
 }
 
 func (n *CastExpr) String() string {

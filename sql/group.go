@@ -66,12 +66,12 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 
 		// We could potentially skip this, since it will be checked in addRender,
 		// but checking now allows early err return.
-		resolved, _, err = parser.TypeCheck(resolved, p.evalCtx.Args, nil /* no preference */)
+		typedExpr, err := parser.TypeCheck(resolved, p.evalCtx.Args, nil /* no preference */)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
-		norm, err := p.parser.NormalizeExpr(p.evalCtx, resolved)
+		norm, err := p.parser.NormalizeExpr(p.evalCtx, typedExpr)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -90,24 +90,26 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 	}
 
 	// Normalize and check the HAVING expression too if it exists.
+	var typedHaving parser.TypedExpr
 	if n.Having != nil {
 		having, err := s.resolveQNames(n.Having.Expr)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
-		having, havingType, err := parser.TypeCheck(having, p.evalCtx.Args, parser.DummyBool)
+		typedHaving, err = parser.TypeCheck(having, p.evalCtx.Args, parser.DummyBool)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if !(havingType.TypeEqual(parser.DummyBool) || havingType == parser.DNull) {
-			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), havingType.Type())
+		if retType := typedHaving.ReturnType(); !(retType.TypeEqual(parser.DummyBool) || retType == parser.DNull) {
+			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), retType.Type())
 		}
 
-		if having, err = p.parser.NormalizeExpr(p.evalCtx, having); err != nil {
+		typedHaving, err = p.parser.NormalizeExpr(p.evalCtx, typedHaving)
+		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		n.Having.Expr = having
+		n.Having.Expr = typedHaving
 	}
 
 	group := &groupNode{
@@ -138,19 +140,20 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 	// After extraction, group.render will be entirely rendered from aggregateFuncs,
 	// and group.funcs will contain all the functions which need to be fed values.
 	for i := range group.render {
-		expr, err := visitor.extract(group.render[i])
+		typedExpr, err := visitor.extract(group.render[i])
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		group.render[i] = expr
+		group.render[i] = typedExpr
 	}
 
-	if n.Having != nil {
-		having, err := visitor.extract(n.Having.Expr)
+	if typedHaving != nil {
+		var err error
+		typedHaving, err = visitor.extract(typedHaving)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		group.having = having
+		group.having = typedHaving
 	}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
@@ -168,7 +171,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 
 	// Replace the render expressions in the scanNode with expressions that
 	// compute only the arguments to the aggregate expressions.
-	s.render = make([]parser.Expr, len(group.funcs))
+	s.render = make([]parser.TypedExpr, len(group.funcs))
 	for i, f := range group.funcs {
 		s.render[i] = f.arg
 	}
@@ -192,8 +195,8 @@ type groupNode struct {
 	// The "wrapped" node (which returns ungrouped results).
 	plan planNode
 
-	render []parser.Expr
-	having parser.Expr
+	render []parser.TypedExpr
+	having parser.TypedExpr
 
 	funcs []*aggregateFunc
 	// The set of bucket keys.
@@ -478,7 +481,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 			f := &aggregateFunc{
 				expr:    t,
-				arg:     t.Exprs[0],
+				arg:     t.Exprs[0].(parser.TypedExpr),
 				create:  impl,
 				group:   v.n,
 				buckets: make(map[string]aggregateImpl),
@@ -529,9 +532,12 @@ func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { retur
 // - `k` appears in GROUP BY, so `UPPER(k)` is OK, but...
 // Invalid:    `SELECT k, SUM(v) FROM kv GROUP BY UPPER(k)`
 // - `k` does not appear in GROUP BY; UPPER(k) does nothing to help here.
-func (v extractAggregatesVisitor) extract(expr parser.Expr) (parser.Expr, error) {
-	expr, _ = parser.WalkExpr(&v, expr)
-	return expr, v.err
+func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) (parser.TypedExpr, error) {
+	expr, _ := parser.WalkExpr(&v, typedExpr)
+	if v.err != nil {
+		return nil, v.err
+	}
+	return expr.(parser.TypedExpr), nil
 }
 
 var _ parser.Visitor = &isAggregateVisitor{}
@@ -586,11 +592,12 @@ func (p *planner) isAggregate(n *parser.SelectClause) bool {
 	return false
 }
 
+var _ parser.TypedExpr = &aggregateFunc{}
 var _ parser.VariableExpr = &aggregateFunc{}
 
 type aggregateFunc struct {
-	expr    parser.Expr
-	arg     parser.Expr
+	expr    parser.TypedExpr
+	arg     parser.TypedExpr
 	create  func() aggregateImpl
 	group   *groupNode
 	buckets map[string]aggregateImpl
@@ -630,8 +637,8 @@ func (a *aggregateFunc) String() string {
 
 func (a *aggregateFunc) Walk(v parser.Visitor) parser.Expr { return a }
 
-func (a *aggregateFunc) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.Datum, error) {
-	return a.expr.TypeCheck(args, nil)
+func (a *aggregateFunc) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
+	return a, nil
 }
 
 func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
@@ -654,6 +661,10 @@ func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
 
 	// This is almost certainly the identity. Oh well.
 	return datum.Eval(ctx)
+}
+
+func (a *aggregateFunc) ReturnType() parser.Datum {
+	return a.expr.ReturnType()
 }
 
 type aggregateImpl interface {
