@@ -89,10 +89,10 @@ var (
 	LocalAbortCacheSuffix = []byte("abc-")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
 	localRaftTombstoneSuffix = []byte("rftb")
-	// localRaftAppliedIndexSuffix is the suffix for the raft applied index.
-	localRaftAppliedIndexSuffix = []byte("rfta")
+	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
+	LocalRaftAppliedIndexSuffix = []byte("rfta")
 	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
-	localRaftTruncatedStateSuffix = []byte("rftt")
+	LocalRaftTruncatedStateSuffix = []byte("rftt")
 	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
 	localRangeLeaderLeaseSuffix = []byte("rll-")
 	// localRangeStatsSuffix is the suffix for range statistics.
@@ -108,8 +108,8 @@ var (
 	localRaftHardStateSuffix = []byte("rfth")
 	// localRaftLastIndexSuffix is the suffix for raft's last index.
 	localRaftLastIndexSuffix = []byte("rfti")
-	// localRaftLogSuffix is the suffix for the raft log.
-	localRaftLogSuffix = []byte("rftl")
+	// LocalRaftLogSuffix is the suffix for the raft log.
+	LocalRaftLogSuffix = []byte("rftl")
 	// localRangeLastReplicaGCTimestampSuffix is the suffix for a range's
 	// last replica GC timestamp (for GC of old replicas).
 	localRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
