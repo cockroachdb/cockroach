@@ -83,9 +83,9 @@ func (p *planner) resetForBatch(e *Executor) {
 	p.parser = parser.Parser{}
 
 	p.evalCtx = parser.EvalContext{
-		NodeID:      e.nodeID,
-		ReCache:     e.reCache,
-		GetLocation: p.session.getLocation,
+		NodeID:   e.nodeID,
+		ReCache:  e.reCache,
+		Location: p.session.Location,
 	}
 	p.session.TxnState.schemaChangers.curGroupNum++
 }
@@ -159,7 +159,7 @@ func (p *planner) checkTestingVerifyMetadataOrDie(
 func makePlanner() *planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
-	return &planner{session: &Session{}}
+	return &planner{session: &Session{Location: time.UTC}}
 }
 
 func (p *planner) setTxn(txn *client.Txn) {

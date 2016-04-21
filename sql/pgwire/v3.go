@@ -755,7 +755,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 					}
 					switch fmtCode {
 					case formatText:
-						if err := c.writeBuf.writeTextDatum(col); err != nil {
+						if err := c.writeBuf.writeTextDatum(col, c.session.Location); err != nil {
 							return err
 						}
 					case formatBinary:
