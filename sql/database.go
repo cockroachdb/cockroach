@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+func databaseDoesNotExistError(name string) error {
+	return fmt.Errorf("database %q does not exist", name)
+}
+
 // databaseKey implements descriptorKey.
 type databaseKey struct {
 	name string
@@ -76,12 +80,15 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 }
 
 // getDatabaseDesc looks up the database descriptor given its name.
+// Returns nil if the descriptor is not found. If you want to turn the "not
+// found" condition into an error, use databaseDoesNotExistError().
 func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
 	desc := &DatabaseDescriptor{}
-	if pErr := p.getDescriptor(databaseKey{name}, desc); pErr != nil {
+	found, pErr := p.getDescriptor(databaseKey{name}, desc)
+	if !found {
 		return nil, pErr
 	}
-	return desc, nil
+	return desc, pErr
 }
 
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
@@ -121,6 +128,15 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 	return database, database.Validate()
 }
 
+func getKeysForDatabaseDescriptor(
+	dbDesc *DatabaseDescriptor,
+) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
+	zoneKey = MakeZoneKey(dbDesc.ID)
+	nameKey = MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
+	descKey = MakeDescMetadataKey(dbDesc.ID)
+	return
+}
+
 func (p *planner) getDatabaseID(name string) (ID, *roachpb.Error) {
 	if id := p.databaseCache.getID(name); id != 0 {
 		return id, nil
@@ -138,6 +154,9 @@ func (p *planner) getDatabaseID(name string) (ID, *roachpb.Error) {
 		desc, pErr = p.getDatabaseDesc(name)
 		if pErr != nil {
 			return 0, pErr
+		}
+		if desc == nil {
+			return 0, roachpb.NewError(databaseDoesNotExistError(name))
 		}
 	}
 

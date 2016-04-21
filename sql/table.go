@@ -46,6 +46,10 @@ func TestDisableTableLeases() func() {
 	}
 }
 
+func tableDoesNotExistError(name string) error {
+	return fmt.Errorf("table %q does not exist", name)
+}
+
 // tableKey implements descriptorKey.
 type tableKey struct {
 	parentID ID
@@ -222,23 +226,44 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	return col, idx, nil
 }
 
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (TableDescriptor, *roachpb.Error) {
+func getKeysForTableDescriptor(
+	tableDesc *TableDescriptor,
+) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
+	zoneKey = MakeZoneKey(tableDesc.ID)
+	nameKey = MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
+	descKey = MakeDescMetadataKey(tableDesc.ID)
+	return
+}
+
+// getTableDesc returns a table descriptor, or nil if the descriptor is not
+// found.
+// If you want to transform the not found condition into an error, use
+// tableDoesNotExistError().
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *roachpb.Error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return TableDescriptor{}, roachpb.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	dbDesc, pErr := p.getDatabaseDesc(qname.Database())
 	if pErr != nil {
-		return TableDescriptor{}, pErr
+		return nil, pErr
+	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(qname.Database()))
 	}
 
 	desc := TableDescriptor{}
-	if pErr := p.getDescriptor(tableKey{dbDesc.ID, qname.Table()}, &desc); pErr != nil {
-		return TableDescriptor{}, pErr
+	found, pErr := p.getDescriptor(tableKey{parentID: dbDesc.ID, name: qname.Table()}, &desc)
+	if pErr != nil {
+		return nil, pErr
 	}
-	return desc, nil
+	if !found {
+		return nil, nil
+	}
+	return &desc, nil
 }
 
-// get the table descriptor for the ID passed in using the planner's txn.
+// get the table descriptor for the ID passed in using an existing txn.
+// returns nil if the descriptor doesn't exist.
 func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
@@ -248,7 +273,9 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 	}
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
-		return nil, roachpb.NewErrorf("ID %d is not a table", id)
+		// TODO(andrei): We're theoretically hiding the error where desc exists, but
+		// is not a TableDescriptor.
+		return nil, nil
 	}
 	return tableDesc, nil
 }
@@ -267,7 +294,14 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
 		// chicken&egg problem.
-		return p.getTableDesc(qname)
+		desc, pErr := p.getTableDesc(qname)
+		if pErr != nil {
+			return TableDescriptor{}, pErr
+		}
+		if desc == nil {
+			return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
+		}
+		return *desc, nil
 	}
 
 	tableID, pErr := p.getTableID(qname)

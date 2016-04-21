@@ -67,6 +67,9 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		return nil, pErr
 	}
+	if desc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+	}
 	v := &valuesNode{
 		columns: []ResultColumn{
 			{Name: "Field", Typ: parser.DummyString},
@@ -97,6 +100,9 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, *roachpb
 	desc, pErr := p.getTableDesc(n.Table)
 	if pErr != nil {
 		return nil, pErr
+	}
+	if desc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -248,6 +254,9 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, *roachpb.Error) {
 	if pErr != nil {
 		return nil, pErr
 	}
+	if desc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+	}
 
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -308,6 +317,9 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, *roachpb.Error) {
 	dbDesc, pErr := p.getDatabaseDesc(string(name.Base))
 	if pErr != nil {
 		return nil, pErr
+	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(string(name.Base)))
 	}
 
 	tableNames, pErr := p.getTableNames(dbDesc)

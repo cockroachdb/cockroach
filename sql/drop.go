@@ -19,7 +19,6 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -38,30 +37,17 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil, roachpb.NewError(errEmptyDatabaseName)
 	}
 
-	nameKey := MakeNameMetadataKey(keys.RootNamespaceID, string(n.Name))
-	gr, pErr := p.txn.Get(nameKey)
+	// Check that the database exists.
+	dbDesc, pErr := p.getDatabaseDesc(string(n.Name))
 	if pErr != nil {
 		return nil, pErr
 	}
-	if !gr.Exists() {
+	if dbDesc == nil {
 		if n.IfExists {
 			// Noop.
 			return &emptyNode{}, nil
 		}
-		return nil, roachpb.NewUErrorf("database %q does not exist", n.Name)
-	}
-
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	desc := &Descriptor{}
-	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
-		return nil, pErr
-	}
-	dbDesc := desc.GetDatabase()
-	if dbDesc == nil {
-		return nil, roachpb.NewErrorf("%q is not a database", n.Name)
-	}
-	if err := dbDesc.Validate(); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, roachpb.NewError(databaseDoesNotExistError(string(n.Name)))
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
@@ -87,7 +73,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		tbNameStrings[i] = tbDesc.Name
 	}
 
-	zoneKey := MakeZoneKey(dbDesc.ID)
+	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(dbDesc)
 
 	b := &client.Batch{}
 	b.Del(descKey)
@@ -139,8 +125,11 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		if pErr != nil {
 			return nil, pErr
 		}
+		if tableDesc == nil {
+			return nil, roachpb.NewError(tableDoesNotExistError(index.Table.String()))
+		}
 
-		if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
+		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		idxName := string(index.Index)
@@ -153,6 +142,7 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 			// Index does not exist, but we want it to: error out.
 			return nil, roachpb.NewError(err)
 		}
+		// Queue the mutation.
 		switch status {
 		case DescriptorActive:
 			tableDesc.addIndexMutation(tableDesc.Indexes[i], DescriptorMutation_DROP)
@@ -167,14 +157,11 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 				return &emptyNode{}, nil
 			}
 		}
-		tableDesc.UpVersion = true
-		mutationID := tableDesc.NextMutationID
-		tableDesc.NextMutationID++
-		if err := tableDesc.Validate(); err != nil {
+		mutationID := tableDesc.finalizeMutation()
+		if err := tableDesc.Validate(); pErr != nil {
 			return nil, roachpb.NewError(err)
 		}
-
-		if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); pErr != nil {
+		if pErr := p.writeTableDesc(tableDesc); pErr != nil {
 			return nil, pErr
 		}
 		p.notifySchemaChange(tableDesc.ID, mutationID)
@@ -187,8 +174,6 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
-	// TODO(XisiHuang): should do truncate and delete descriptor in
-	// the same txn
 	for i := range n.Names {
 		droppedDesc, err := p.dropTableImpl(n.Names, i)
 		if err != nil {
@@ -199,7 +184,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, roachpb.NewUErrorf("table %q does not exist", n.Names[i].Table())
+			return nil, roachpb.NewError(tableDoesNotExistError(n.Names[i].Table()))
 		}
 		// Log a Drop Table event for this table.
 		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
@@ -232,6 +217,9 @@ func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableD
 	dbDesc, pErr := p.getDatabaseDesc(tableQualifiedName.Database())
 	if pErr != nil {
 		return nil, pErr
+	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(tableQualifiedName.Database()))
 	}
 
 	tbKey := tableKey{dbDesc.ID, tableQualifiedName.Table()}

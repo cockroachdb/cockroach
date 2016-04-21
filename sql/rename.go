@@ -50,6 +50,9 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, *roachpb.E
 	if pErr != nil {
 		return nil, pErr
 	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(string(n.Name)))
+	}
 
 	if n.Name == n.NewName {
 		// Noop.
@@ -116,6 +119,9 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		return nil, pErr
 	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(n.Name.Database()))
+	}
 
 	tbKey := tableKey{dbDesc.ID, n.Name.Table()}.Key()
 
@@ -137,6 +143,9 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		return nil, pErr
 	}
+	if targetDbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(n.NewName.Database()))
+	}
 
 	if err := p.checkPrivilege(targetDbDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
@@ -151,8 +160,11 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		return nil, pErr
 	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Name.String()))
+	}
 
-	if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -167,7 +179,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, *roachpb.Error) 
 	}
 
 	descID := tableDesc.GetID()
-	descDesc := wrapDescriptor(&tableDesc)
+	descDesc := wrapDescriptor(tableDesc)
 
 	b := client.Batch{}
 	b.Put(descKey, descDesc)
@@ -212,6 +224,9 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		return nil, pErr
 	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Index.Table.String()))
+	}
 
 	idxName := string(n.Index.Index)
 	status, i, err := tableDesc.FindIndexByName(idxName)
@@ -224,7 +239,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 		return nil, roachpb.NewError(err)
 	}
 
-	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -248,7 +263,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, *roachpb.Error) 
 	if err := tableDesc.Validate(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	if pErr := p.txn.Put(descKey, wrapDescriptor(&tableDesc)); pErr != nil {
+	if pErr := p.txn.Put(descKey, wrapDescriptor(tableDesc)); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
@@ -273,6 +288,9 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 	if pErr != nil {
 		return nil, pErr
 	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(n.Table.Database()))
+	}
 
 	// Check if table exists.
 	tbKey := tableKey{dbDesc.ID, n.Table.Table()}.Key()
@@ -293,6 +311,9 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 	if pErr != nil {
 		return nil, pErr
 	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+	}
 
 	colName := string(n.Name)
 	status, i, err := tableDesc.FindColumnByName(colName)
@@ -307,7 +328,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 		column = tableDesc.Mutations[i].GetColumn()
 	}
 
-	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -343,7 +364,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, *roachpb.Error
 	if err := tableDesc.Validate(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	if pErr := p.txn.Put(descKey, wrapDescriptor(&tableDesc)); pErr != nil {
+	if pErr := p.txn.Put(descKey, wrapDescriptor(tableDesc)); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)

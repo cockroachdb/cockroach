@@ -639,6 +639,16 @@ func (desc *TableDescriptor) addMutation(m DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
+// finalizeMutation returns the id that has been used by mutations appended
+// with addMutation() since the last time this function was called.
+// Future mutations will use a new ID.
+func (desc *TableDescriptor) finalizeMutation() MutationID {
+	desc.UpVersion = true
+	mutationID := desc.NextMutationID
+	desc.NextMutationID++
+	return mutationID
+}
+
 // VisibleColumns returns all non hidden columns.
 func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	var cols []ColumnDescriptor

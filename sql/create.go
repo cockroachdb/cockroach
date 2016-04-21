@@ -69,6 +69,9 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 	if pErr != nil {
 		return nil, pErr
 	}
+	if tableDesc == nil {
+		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+	}
 
 	status, i, err := tableDesc.FindIndexByName(string(n.Name))
 	if err == nil {
@@ -87,7 +90,7 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		}
 	}
 
-	if err := p.checkPrivilege(&tableDesc, privilege.CREATE); err != nil {
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -101,14 +104,12 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 	}
 
 	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
-	tableDesc.UpVersion = true
-	mutationID := tableDesc.NextMutationID
-	tableDesc.NextMutationID++
+	mutationID := tableDesc.finalizeMutation()
 	if err := tableDesc.AllocateIDs(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(&tableDesc)); pErr != nil {
+	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
 		return nil, pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)
@@ -127,6 +128,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 	dbDesc, pErr := p.getDatabaseDesc(n.Table.Database())
 	if pErr != nil {
 		return nil, pErr
+	}
+	if dbDesc == nil {
+		return nil, roachpb.NewError(databaseDoesNotExistError(n.Table.Database()))
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
