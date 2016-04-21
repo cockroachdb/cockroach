@@ -32,7 +32,7 @@ type insertNode struct {
 	n          *parser.Insert
 	qvals      qvalMap
 	insertRows parser.SelectStatement
-	checkExprs []parser.Expr
+	checkExprs []parser.TypedExpr
 
 	desiredTypes []parser.Datum // This will go away when we only type check once.
 
@@ -133,6 +133,7 @@ func (p *planner) Insert(
 
 	// Prepare the check expressions.
 	var qvals qvalMap
+	typedCheckExprs := make([]parser.TypedExpr, 0, len(checkExprs))
 	if len(checkExprs) > 0 {
 		qvals = make(qvalMap)
 		table := tableInfo{
@@ -143,7 +144,14 @@ func (p *planner) Insert(
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
-			checkExprs[i] = expr
+			typedExpr, err := parser.TypeCheck(expr, nil, parser.DummyBool)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			if typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr); err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			typedCheckExprs = append(typedCheckExprs, typedExpr)
 		}
 	}
 
@@ -168,11 +176,11 @@ func (p *planner) Insert(
 				if _, ok := val.(parser.DefaultVal); ok {
 					continue
 				}
-				_, typ, err := parser.TypeCheck(val, p.evalCtx.Args, desiredTypesFromSelect[eIdx])
+				typedExpr, err := parser.TypeCheck(val, p.evalCtx.Args, desiredTypesFromSelect[eIdx])
 				if err != nil {
 					return nil, roachpb.NewError(err)
 				}
-				if err := checkColumnType(cols[eIdx], typ, p.evalCtx.Args); err != nil {
+				if err := checkColumnType(cols[eIdx], typedExpr.ReturnType(), p.evalCtx.Args); err != nil {
 					return nil, roachpb.NewError(err)
 				}
 			}
@@ -186,7 +194,7 @@ func (p *planner) Insert(
 	return &insertNode{
 		n:                  n,
 		rowCreatorNodeBase: rc,
-		checkExprs:         checkExprs,
+		checkExprs:         typedCheckExprs,
 		qvals:              qvals,
 		insertRows:         insertRows,
 		desiredTypes:       desiredTypesFromSelect,
@@ -370,7 +378,7 @@ func (p *planner) processColumns(tableDesc *TableDescriptor,
 	return cols, nil
 }
 
-func (p *planner) fillDefaults(defaultExprs []parser.Expr,
+func (p *planner) fillDefaults(defaultExprs []parser.TypedExpr,
 	cols []ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, error) {
 	if n.DefaultValues() {
 		row := make(parser.Exprs, 0, len(cols))
@@ -416,7 +424,7 @@ func (p *planner) fillDefaults(defaultExprs []parser.Expr,
 
 func makeDefaultExprs(
 	cols []ColumnDescriptor, parse *parser.Parser, evalCtx parser.EvalContext,
-) ([]parser.Expr, error) {
+) ([]parser.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
 	// defaults map as the defaults are all NULL.
@@ -432,7 +440,7 @@ func makeDefaultExprs(
 	}
 
 	// Build the default expressions map from the parsed SELECT statement.
-	defaultExprs := make([]parser.Expr, 0, len(cols))
+	defaultExprs := make([]parser.TypedExpr, 0, len(cols))
 	for _, col := range cols {
 		if col.DefaultExpr == nil {
 			defaultExprs = append(defaultExprs, parser.DNull)
@@ -442,13 +450,17 @@ func makeDefaultExprs(
 		if err != nil {
 			return nil, err
 		}
-		if expr, err = parse.NormalizeExpr(evalCtx, expr); err != nil {
+		typedExpr, err := parser.TypeCheck(expr, nil, getTypeForColumn(col))
+		if err != nil {
 			return nil, err
 		}
-		if parser.ContainsVars(expr) {
+		if typedExpr, err = parse.NormalizeExpr(evalCtx, typedExpr); err != nil {
+			return nil, err
+		}
+		if parser.ContainsVars(typedExpr) {
 			return nil, util.Errorf("default expression contains variables")
 		}
-		defaultExprs = append(defaultExprs, expr)
+		defaultExprs = append(defaultExprs, typedExpr)
 	}
 	return defaultExprs, nil
 }
@@ -473,10 +485,6 @@ func (p *planner) makeCheckExprs(cols []ColumnDescriptor) ([]parser.Expr, error)
 			continue
 		}
 		expr, err := parser.ParseExprTraditional(*col.CheckExpr)
-		if err != nil {
-			return nil, err
-		}
-		expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
 		if err != nil {
 			return nil, err
 		}

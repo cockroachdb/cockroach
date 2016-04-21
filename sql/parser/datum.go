@@ -69,7 +69,7 @@ var (
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
-	Expr
+	TypedExpr
 	// Type returns the (user-friendly) name of the type.
 	Type() string
 	// TypeEqual determines if the receiver and the other Datum have the same
@@ -128,8 +128,17 @@ func GetBool(d Datum) (DBool, error) {
 	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DBool) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DBool) ReturnType() Datum {
+	return DummyBool
+}
+
 // Type implements the Datum interface.
-func (d *DBool) Type() string {
+func (*DBool) Type() string {
 	return "bool"
 }
 
@@ -159,22 +168,22 @@ func (d *DBool) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DBool) HasPrev() bool {
+func (*DBool) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d *DBool) Prev() Datum {
+func (*DBool) Prev() Datum {
 	return DBoolFalse
 }
 
 // HasNext implements the Datum interface.
-func (d *DBool) HasNext() bool {
+func (*DBool) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d *DBool) Next() Datum {
+func (*DBool) Next() Datum {
 	return DBoolTrue
 }
 
@@ -200,8 +209,17 @@ func NewDInt(d DInt) *DInt {
 	return &d
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DInt) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DInt) ReturnType() Datum {
+	return DummyInt
+}
+
 // Type implements the Datum interface.
-func (d *DInt) Type() string {
+func (*DInt) Type() string {
 	return "int"
 }
 
@@ -235,7 +253,7 @@ func (d *DInt) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DInt) HasPrev() bool {
+func (*DInt) HasPrev() bool {
 	return true
 }
 
@@ -245,7 +263,7 @@ func (d *DInt) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DInt) HasNext() bool {
+func (*DInt) HasNext() bool {
 	return true
 }
 
@@ -277,8 +295,17 @@ func NewDFloat(d DFloat) *DFloat {
 	return &d
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DFloat) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DFloat) ReturnType() Datum {
+	return DummyFloat
+}
+
 // Type implements the Datum interface.
-func (d *DFloat) Type() string {
+func (*DFloat) Type() string {
 	return "float"
 }
 
@@ -312,7 +339,7 @@ func (d *DFloat) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DFloat) HasPrev() bool {
+func (*DFloat) HasPrev() bool {
 	return true
 }
 
@@ -322,7 +349,7 @@ func (d *DFloat) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DFloat) HasNext() bool {
+func (*DFloat) HasNext() bool {
 	return true
 }
 
@@ -366,8 +393,17 @@ type DDecimal struct {
 	inf.Dec
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DDecimal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (d *DDecimal) ReturnType() Datum {
+	return DummyDecimal
+}
+
 // Type implements the Datum interface.
-func (d *DDecimal) Type() string {
+func (*DDecimal) Type() string {
 	return "decimal"
 }
 
@@ -395,7 +431,7 @@ func (d *DDecimal) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DDecimal) HasPrev() bool {
+func (*DDecimal) HasPrev() bool {
 	return false
 }
 
@@ -405,7 +441,7 @@ func (d *DDecimal) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DDecimal) HasNext() bool {
+func (*DDecimal) HasNext() bool {
 	return false
 }
 
@@ -415,12 +451,12 @@ func (d *DDecimal) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DDecimal) IsMax() bool {
+func (*DDecimal) IsMax() bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DDecimal) IsMin() bool {
+func (*DDecimal) IsMin() bool {
 	return false
 }
 
@@ -438,8 +474,17 @@ func NewDString(d string) *DString {
 	return &r
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DString) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DString) ReturnType() Datum {
+	return DummyString
+}
+
 // Type implements the Datum interface.
-func (d *DString) Type() string {
+func (*DString) Type() string {
 	return "string"
 }
 
@@ -469,7 +514,7 @@ func (d *DString) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DString) HasPrev() bool {
+func (*DString) HasPrev() bool {
 	return false
 }
 
@@ -479,7 +524,7 @@ func (d *DString) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DString) HasNext() bool {
+func (*DString) HasNext() bool {
 	return true
 }
 
@@ -489,7 +534,7 @@ func (d *DString) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DString) IsMax() bool {
+func (*DString) IsMax() bool {
 	return false
 }
 
@@ -512,8 +557,17 @@ func NewDBytes(d DBytes) *DBytes {
 	return &d
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DBytes) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (d *DBytes) ReturnType() Datum {
+	return DummyBytes
+}
+
 // Type implements the Datum interface.
-func (d *DBytes) Type() string {
+func (*DBytes) Type() string {
 	return "bytes"
 }
 
@@ -543,7 +597,7 @@ func (d *DBytes) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DBytes) HasPrev() bool {
+func (*DBytes) HasPrev() bool {
 	return false
 }
 
@@ -553,7 +607,7 @@ func (d *DBytes) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DBytes) HasNext() bool {
+func (*DBytes) HasNext() bool {
 	return true
 }
 
@@ -563,7 +617,7 @@ func (d *DBytes) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DBytes) IsMax() bool {
+func (*DBytes) IsMax() bool {
 	return false
 }
 
@@ -586,8 +640,17 @@ func NewDDate(d DDate) *DDate {
 	return &d
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DDate) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DDate) ReturnType() Datum {
+	return DummyDate
+}
+
 // Type implements the Datum interface.
-func (d *DDate) Type() string {
+func (*DDate) Type() string {
 	return "date"
 }
 
@@ -617,7 +680,7 @@ func (d *DDate) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DDate) HasPrev() bool {
+func (*DDate) HasPrev() bool {
 	return true
 }
 
@@ -627,7 +690,7 @@ func (d *DDate) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DDate) HasNext() bool {
+func (*DDate) HasNext() bool {
 	return true
 }
 
@@ -655,8 +718,17 @@ type DTimestamp struct {
 	time.Time
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DTimestamp) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DTimestamp) ReturnType() Datum {
+	return DummyTimestamp
+}
+
 // Type implements the Datum interface.
-func (d *DTimestamp) Type() string {
+func (*DTimestamp) Type() string {
 	return "timestamp"
 }
 
@@ -686,7 +758,7 @@ func (d *DTimestamp) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DTimestamp) HasPrev() bool {
+func (*DTimestamp) HasPrev() bool {
 	return true
 }
 
@@ -696,7 +768,7 @@ func (d *DTimestamp) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DTimestamp) HasNext() bool {
+func (*DTimestamp) HasNext() bool {
 	return true
 }
 
@@ -724,6 +796,15 @@ func (d *DTimestamp) String() string {
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
 type DTimestampTZ struct {
 	time.Time
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DTimestampTZ) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (*DTimestampTZ) ReturnType() Datum {
+	return DummyTimestampTZ
 }
 
 // Type implements the Datum interface.
@@ -797,8 +878,17 @@ type DInterval struct {
 	duration.Duration
 }
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DInterval) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (d *DInterval) ReturnType() Datum {
+	return DummyInterval
+}
+
 // Type implements the Datum interface.
-func (d *DInterval) Type() string {
+func (*DInterval) Type() string {
 	return "interval"
 }
 
@@ -822,7 +912,7 @@ func (d *DInterval) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DInterval) HasPrev() bool {
+func (*DInterval) HasPrev() bool {
 	return false
 }
 
@@ -832,7 +922,7 @@ func (d *DInterval) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DInterval) HasNext() bool {
+func (*DInterval) HasNext() bool {
 	return false
 }
 
@@ -862,8 +952,17 @@ func (d *DInterval) String() string {
 // DTuple is the tuple Datum.
 type DTuple []Datum
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DTuple) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (d *DTuple) ReturnType() Datum {
+	return d
+}
+
 // Type implements the Datum interface.
-func (d *DTuple) Type() string {
+func (*DTuple) Type() string {
 	return "tuple"
 }
 
@@ -960,7 +1059,7 @@ func (d *DTuple) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DTuple) IsMax() bool {
+func (*DTuple) IsMax() bool {
 	// Unimplemented for DTuple. Seems possible to provide an implementation
 	// which called IsMax for each of the elements, but currently this isn't
 	// needed.
@@ -968,7 +1067,7 @@ func (d *DTuple) IsMax() bool {
 }
 
 // IsMin implements the Datum interface.
-func (d *DTuple) IsMin() bool {
+func (*DTuple) IsMin() bool {
 	// Unimplemented for DTuple. Seems possible to provide an implementation
 	// which called IsMin for each of the elements, but currently this isn't
 	// needed.
@@ -1022,6 +1121,15 @@ func (d *DTuple) makeUnique() {
 
 type dNull struct{}
 
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d dNull) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (dNull) ReturnType() Datum {
+	return DNull
+}
+
 // Type implements the Datum interface.
 func (d dNull) Type() string {
 	return "NULL"
@@ -1042,7 +1150,7 @@ func (d dNull) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d dNull) HasPrev() bool {
+func (dNull) HasPrev() bool {
 	return false
 }
 
@@ -1052,7 +1160,7 @@ func (d dNull) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d dNull) HasNext() bool {
+func (dNull) HasNext() bool {
 	return false
 }
 
@@ -1062,16 +1170,16 @@ func (d dNull) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d dNull) IsMax() bool {
+func (dNull) IsMax() bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (d dNull) IsMin() bool {
+func (dNull) IsMin() bool {
 	return true
 }
 
-func (d dNull) String() string {
+func (dNull) String() string {
 	return "NULL"
 }
 
@@ -1080,6 +1188,19 @@ var _ VariableExpr = &DValArg{}
 // DValArg is the named bind var argument Datum.
 type DValArg struct {
 	name string
+	typeAnnotation
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function.
+func (d *DValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// ReturnType implements the TypedExpr interface.
+func (d *DValArg) ReturnType() Datum {
+	if d.typeAnnotation.typ != nil {
+		return d.typeAnnotation.typ
+	}
+	return d
 }
 
 // Variable implements the VariableExpr interface.
@@ -1102,7 +1223,7 @@ func (d *DValArg) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DValArg) HasPrev() bool {
+func (*DValArg) HasPrev() bool {
 	return false
 }
 
@@ -1112,7 +1233,7 @@ func (d *DValArg) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DValArg) HasNext() bool {
+func (*DValArg) HasNext() bool {
 	return false
 }
 

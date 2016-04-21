@@ -179,6 +179,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`a=lower('FOO')`, `a = 'foo'`},
 		{`lower(a)='foo'`, `lower(a) = 'foo'`},
 		{`random()`, `random()`},
+		{`version(a)`, `version(a)`},
 		{`notARealMethod()`, `notARealMethod()`},
 		{`9223372036854775808`, `9223372036854775808`},
 		{`-9223372036854775808`, `-9223372036854775808`},
@@ -192,8 +193,11 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
+		if expr, err = TypeNumericConstants(expr); err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
 		rOrig := expr.String()
-		r, err := defaultContext.NormalizeExpr(expr)
+		r, err := defaultContext.NormalizeExpr(expr.(TypedExpr))
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

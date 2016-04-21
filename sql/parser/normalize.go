@@ -20,16 +20,17 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"strings"
 )
 
 type normalizableExpr interface {
 	Expr
-	normalize(*normalizeVisitor) Expr
+	normalize(*normalizeVisitor) TypedExpr
 }
 
-func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
-	left := expr.Left
-	right := expr.Right
+func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
+	left := expr.Left.(TypedExpr)
+	right := expr.Right.(TypedExpr)
 
 	// Use short-circuit evaluation to simplify AND expressions.
 	if v.isConst(left) {
@@ -46,7 +47,10 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
 			}
 			return DNull
 		}
-		return &AndExpr{left, right}
+		return &AndExpr{
+			Left:  left,
+			Right: expr.Right,
+		}
 	}
 	if v.isConst(right) {
 		right, v.err = right.Eval(v.ctx)
@@ -62,12 +66,15 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) Expr {
 			}
 			return DNull
 		}
-		return &AndExpr{expr.Left, right}
+		return &AndExpr{
+			Left:  expr.Left,
+			Right: right,
+		}
 	}
 	return expr
 }
 
-func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
+func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
@@ -96,7 +103,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 		for {
 			if v.isConst(expr.Left) {
 				switch expr.Right.(type) {
-				case *BinaryExpr, VariableExpr, *QualifiedName, ValArg:
+				case *BinaryExpr, VariableExpr, ValArg:
 					break
 				default:
 					return expr
@@ -228,10 +235,9 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) Expr {
 	return expr
 }
 
-func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
-	left := expr.Left
-	right := expr.Right
-	changed := false
+func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
+	left := expr.Left.(TypedExpr)
+	right := expr.Right.(TypedExpr)
 
 	// Use short-circuit evaluation to simplify OR expressions.
 	if v.isConst(left) {
@@ -248,9 +254,11 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
 			}
 			return DNull
 		}
-		changed = true
+		return &OrExpr{
+			Left:  left,
+			Right: right,
+		}
 	}
-
 	if v.isConst(right) {
 		right, v.err = right.Eval(v.ctx)
 		if v.err != nil {
@@ -265,20 +273,19 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) Expr {
 			}
 			return DNull
 		}
-
-		changed = true
-	}
-	if changed {
-		return &OrExpr{left, right}
+		return &OrExpr{
+			Left:  left,
+			Right: right,
+		}
 	}
 	return expr
 }
 
-func (expr *ParenExpr) normalize(v *normalizeVisitor) Expr {
-	return expr.Expr
+func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
+	return expr.Expr.(TypedExpr)
 }
 
-func (expr *RangeCond) normalize(v *normalizeVisitor) Expr {
+func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	if expr.Not {
 		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
 		return &OrExpr{
@@ -310,7 +317,7 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) Expr {
 	}
 }
 
-func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
+func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 	// Ugliness: when we see a UnaryMinus, check to see if the expression
 	// being negated is math.MinInt64. This IntVal is only possible if we
 	// parsed "9223372036854775808" as a signed int and is the only negative
@@ -324,16 +331,19 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) Expr {
 	// traversal. Or do it during the downward traversal for const
 	// UnaryExprs.
 	if expr.Operator == UnaryMinus {
-		if d, ok := expr.Expr.(*ConstVal); ok {
-			return &ConstVal{Value: constant.UnaryOp(token.SUB, d.Value, 0)}
-		}
+		// if d, ok := expr.Expr.(*ConstVal); ok {
+		// 	return &ConstVal{Value: constant.UnaryOp(token.SUB, d.Value, 0)}
+		// }
 	}
 
 	return expr
 }
 
-func (expr *Row) normalize(v *normalizeVisitor) Expr {
-	return &Tuple{expr.Exprs}
+func (expr *Row) normalize(v *normalizeVisitor) TypedExpr {
+	return &Tuple{
+		Exprs: expr.Exprs,
+		types: expr.types,
+	}
 }
 
 // NormalizeExpr normalizes an expression, simplifying where possible, but
@@ -346,10 +356,13 @@ func (expr *Row) normalize(v *normalizeVisitor) Expr {
 //   a + 1 = 2             -> a = 1
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
-func (ctx EvalContext) NormalizeExpr(expr Expr) (Expr, error) {
+func (ctx EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
 	v := normalizeVisitor{ctx: ctx}
-	expr, _ = WalkExpr(&v, expr)
-	return expr, v.err
+	expr, _ := WalkExpr(&v, typedExpr)
+	if v.err != nil {
+		return nil, v.err
+	}
+	return expr.(TypedExpr), nil
 }
 
 type normalizeVisitor struct {
@@ -380,11 +393,17 @@ func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		// traversal in order to avoid evaluating sub-expressions which should
 		// not be evaluated due to the case/conditional.
 		if v.isConst(expr) {
-			expr, v.err = expr.Eval(v.ctx)
+			expr, v.err = expr.(TypedExpr).Eval(v.ctx)
 			if v.err != nil {
 				return false, expr
 			}
 		}
+	case *Subquery:
+		// Avoid normalizing subqueries. We need the subquery to be expanded in
+		// order to do so properly.
+		// TODO(knz) This should happen when the prepare and execute phases are
+		//     separated for SelectClause.
+		return false, expr
 	}
 
 	return true, expr
@@ -405,7 +424,7 @@ func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
 
 	// Evaluate all constant expressions.
 	if v.isConst(expr) {
-		expr, v.err = expr.Eval(v.ctx)
+		expr, v.err = expr.(TypedExpr).Eval(v.ctx)
 	}
 	return expr
 }
@@ -449,8 +468,21 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			v.isConst = false
 			return false, expr
 		case *FuncExpr:
-			// typeCheckFuncExpr populates t.fn.impure.
-			if _, err := t.TypeCheck(nil, nil); err != nil || t.fn.impure {
+			if t.fn.fn == nil {
+				name := string(t.Name.Base)
+				candidates, _ := Builtins[strings.ToLower(name)]
+				args := make(DTuple, 0, len(t.Exprs))
+				for _, e := range t.Exprs {
+					args = append(args, e.(TypedExpr).ReturnType())
+				}
+				for _, fn := range candidates {
+					if fn.Types.match(ArgTypes(args)) {
+						t.fn = fn
+						break
+					}
+				}
+			}
+			if t.fn.fn == nil || t.fn.impure {
 				v.isConst = false
 				return false, expr
 			}
@@ -499,9 +531,9 @@ func ContainsVars(expr Expr) bool {
 
 type constantFolderVisitor struct{}
 
-var _ Visitor = constantFolderVisitor{}
+var _ Visitor = &constantFolderVisitor{}
 
-func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+func (*constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	return expr != nil, expr
 }
 
@@ -537,7 +569,7 @@ var comparisonOpToToken = map[ComparisonOp]token.Token{
 	GE: token.GEQ,
 }
 
-func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
+func (*constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	defer func() {
 		// constant operations can panic for a number of reasons. It's
 		// safest to just recover here.
@@ -591,6 +623,34 @@ func foldNumericConstants(expr Expr) (Expr, error) {
 	// TODO(nvanbenschoten) Investigate normalizing associative operations to group
 	// constants together and permit further numeric constant folding.
 	v := constantFolderVisitor{}
-	expr, _ = WalkExpr(v, expr)
+	expr, _ = WalkExpr(&v, expr)
+	return expr, nil
+}
+
+type constantTypeVisitor struct {
+	cfv constantFolderVisitor
+}
+
+var _ Visitor = &constantTypeVisitor{}
+
+func (*constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	case *ConstVal:
+		typedConst, err := t.TypeCheck(nil, nil)
+		if err != nil {
+			panic(err)
+		}
+		return false, typedConst
+	}
+	return expr != nil, expr
+}
+
+func (*constantTypeVisitor) VisitPost(expr Expr) (retExpr Expr) { return expr }
+
+// TypeNumericConstants TODO(nvanbenschoten) MORTY
+func TypeNumericConstants(expr Expr) (Expr, error) {
+	v := constantTypeVisitor{}
+	expr, _ = WalkExpr(&v.cfv, expr)
+	expr, _ = WalkExpr(&v, expr)
 	return expr, nil
 }

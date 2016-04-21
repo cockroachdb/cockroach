@@ -34,9 +34,17 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
 	name := strings.ToUpper(n.Name.String())
+	typedValues := make([]parser.TypedExpr, len(n.Values))
+	for i, expr := range n.Values {
+		typedValue, err := parser.TypeCheck(expr, nil, parser.DummyString)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		typedValues[i] = typedValue
+	}
 	switch name {
 	case `DATABASE`:
-		dbName, err := p.getStringVal(name, n.Values)
+		dbName, err := p.getStringVal(name, typedValues)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -53,7 +61,7 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		p.session.Database = dbName
 
 	case `SYNTAX`:
-		s, err := p.getStringVal(name, n.Values)
+		s, err := p.getStringVal(name, typedValues)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -75,7 +83,7 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	return &emptyNode{}, nil
 }
 
-func (p *planner) getStringVal(name string, values parser.Exprs) (string, error) {
+func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", fmt.Errorf("%s: requires a single string value", name)
 	}
@@ -104,7 +112,11 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 }
 
 func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
-	d, err := n.Value.Eval(p.evalCtx)
+	typedValue, err := parser.TypeCheck(n.Value, nil, parser.DummyInt)
+	if err != nil {
+		return nil, err
+	}
+	d, err := typedValue.Eval(p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
