@@ -245,6 +245,7 @@ seems opportune:
   step in this case (i.e. construct the batch, borrow out the contained
   representation to Raft until the command commits, and apply the batch).
   Followers can create a `WriteBatch` directly from this representation.
+  Serialization is a key point in performance[1].
 * Again for RocksDB, we might also be able to piggy-back on existing
   implementation to operate on the superposition of multiple `WriteBatch`es
   (which would be needed to remove write-write blocking).
@@ -394,3 +395,24 @@ migration story, none.
 # Unresolved questions
 
 None currently.
+
+# Footnotes
+
+[1]: via @petermattis:
+  > There is another nice effect from using the WriteBatch: instead of
+  marshaling and unmarshaling individual keys and values, we'll be passing around
+  a blob. While investigating batch insert performance I added some
+  instrumentation around RaftCommand marshaling and noticed:
+
+  ```
+  raft command marshal:   20002: 6.2ms
+  raft command unmarshal: 20002: 29.1ms
+  raft command marshal:   20002: 6.0ms
+  raft command unmarshal: 20002: 12.4ms
+  raft command marshal:   20002: 6.0ms
+  raft command unmarshal: 20002: 42.6ms
+  ```
+
+  The first number (20002) is the number of requests in the BatchRequest and
+  the second is the time it took to marshal/unmarshal. The marshaled data size
+  is almost exactly 1MB.
