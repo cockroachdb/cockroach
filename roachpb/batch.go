@@ -153,17 +153,15 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse) error {
 // Add adds a request to the batch request.
 func (ba *BatchRequest) Add(requests ...Request) {
 	for _, args := range requests {
-		union := RequestUnion{}
-		union.MustSetInner(args)
-		ba.Requests = append(ba.Requests, union)
+		ba.Requests = append(ba.Requests, RequestUnion{})
+		ba.Requests[len(ba.Requests)-1].MustSetInner(args)
 	}
 }
 
 // Add adds a response to the batch response.
 func (br *BatchResponse) Add(reply Response) {
-	n := len(br.Responses)
 	br.Responses = append(br.Responses, ResponseUnion{})
-	br.Responses[n].MustSetInner(reply)
+	br.Responses[len(br.Responses)-1].MustSetInner(reply)
 }
 
 // Methods returns a slice of the contained methods.
