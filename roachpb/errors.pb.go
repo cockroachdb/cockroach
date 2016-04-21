@@ -2178,7 +2178,7 @@ func (m *RangeKeyMismatchError) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RequestStartKey = append(m.RequestStartKey[:0], data[iNdEx:postIndex]...)
+			m.RequestStartKey = data[iNdEx:postIndex]
 			if m.RequestStartKey == nil {
 				m.RequestStartKey = []byte{}
 			}
@@ -2209,7 +2209,7 @@ func (m *RangeKeyMismatchError) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RequestEndKey = append(m.RequestEndKey[:0], data[iNdEx:postIndex]...)
+			m.RequestEndKey = data[iNdEx:postIndex]
 			if m.RequestEndKey == nil {
 				m.RequestEndKey = []byte{}
 			}

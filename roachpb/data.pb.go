@@ -1736,7 +1736,7 @@ func (m *Span) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = data[iNdEx:postIndex]
 			if m.Key == nil {
 				m.Key = []byte{}
 			}
@@ -1767,7 +1767,7 @@ func (m *Span) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.EndKey = append(m.EndKey[:0], data[iNdEx:postIndex]...)
+			m.EndKey = data[iNdEx:postIndex]
 			if m.EndKey == nil {
 				m.EndKey = []byte{}
 			}
@@ -1936,7 +1936,7 @@ func (m *Value) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RawBytes = append(m.RawBytes[:0], data[iNdEx:postIndex]...)
+			m.RawBytes = data[iNdEx:postIndex]
 			if m.RawBytes == nil {
 				m.RawBytes = []byte{}
 			}
@@ -2047,7 +2047,7 @@ func (m *KeyValue) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = data[iNdEx:postIndex]
 			if m.Key == nil {
 				m.Key = []byte{}
 			}
@@ -2967,7 +2967,7 @@ func (m *TxnMeta) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = data[iNdEx:postIndex]
 			if m.Key == nil {
 				m.Key = []byte{}
 			}
@@ -3851,7 +3851,7 @@ func (m *AbortCacheEntry) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = append(m.Key[:0], data[iNdEx:postIndex]...)
+			m.Key = data[iNdEx:postIndex]
 			if m.Key == nil {
 				m.Key = []byte{}
 			}

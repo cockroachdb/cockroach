@@ -687,7 +687,7 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RawBytes = append(m.RawBytes[:0], data[iNdEx:postIndex]...)
+			m.RawBytes = data[iNdEx:postIndex]
 			if m.RawBytes == nil {
 				m.RawBytes = []byte{}
 			}
