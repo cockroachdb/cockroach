@@ -189,6 +189,9 @@ func runStart(_ *cobra.Command, _ []string) error {
 	}
 
 	info := build.GetInfo()
+	// We log build information to stdout (for the short summary), but also
+	// to stderr to coincide with the full logs.
+	log.Infof("[build] %s @ %s (%s)", info.Tag, info.Time, info.GoVersion)
 	tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
 	fmt.Fprintf(tw, "build:\t%s @ %s (%s)\n", info.Tag, info.Time, info.GoVersion)
 	fmt.Fprintf(tw, "admin:\t%s\n", cliContext.AdminURL())
