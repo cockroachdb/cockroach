@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -90,6 +91,11 @@ const (
 	// statusMetricsPattern exposes transient stats for a node.
 	statusMetricsPattern = statusPrefix + "metrics/:node_id"
 
+	// statusRangesPrefix exposes range information.
+	statusRangesPrefix = statusPrefix + "ranges/"
+	// statusRangesPattern exposes range information for a node.
+	statusRangesPattern = statusPrefix + "ranges/:node_id"
+
 	// healthEndpoint is a shortcut for local details, intended for use by
 	// monitoring processes to verify that the server is up.
 	healthEndpoint = "/health"
@@ -106,10 +112,17 @@ type statusServer struct {
 	router       *httprouter.Router
 	ctx          *Context
 	proxyClient  *http.Client
+	stores       *storage.Stores
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db *client.DB, gossip *gossip.Gossip, metricSource json.Marshaler, ctx *Context) *statusServer {
+func newStatusServer(
+	db *client.DB,
+	gossip *gossip.Gossip,
+	metricSource json.Marshaler,
+	ctx *Context,
+	stores *storage.Stores,
+) *statusServer {
 	// Create an http client with a timeout
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
@@ -128,6 +141,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, metricSource json.Mar
 		router:       httprouter.New(),
 		ctx:          ctx,
 		proxyClient:  httpClient,
+		stores:       stores,
 	}
 
 	server.router.GET(statusGossipPattern, server.handleGossip)
@@ -141,6 +155,7 @@ func newStatusServer(db *client.DB, gossip *gossip.Gossip, metricSource json.Mar
 	server.router.GET(statusNodesPrefix, server.handleNodesStatus)
 	server.router.GET(statusNodePattern, server.handleNodeStatus)
 	server.router.GET(statusMetricsPattern, server.handleMetrics)
+	server.router.GET(statusRangesPattern, server.handleRanges)
 
 	server.router.GET(healthEndpoint, server.handleDetailsLocal)
 	return server
@@ -561,6 +576,57 @@ func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps 
 		return
 	}
 	respondAsJSON(w, r, s.metricSource)
+}
+
+type rangeInfo struct {
+	Desc      roachpb.RangeDescriptor `json:"desc"`
+	RaftState string                  `json:"raft_state,omitempty"`
+}
+
+func (s *statusServer) handleRanges(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	nodeID, local, err := s.extractNodeID(ps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !local {
+		s.proxyRequest(nodeID, w, r)
+		return
+	}
+
+	var output struct {
+		Ranges []rangeInfo `json:"ranges"`
+	}
+	err = s.stores.VisitStores(func(store *storage.Store) error {
+		// Use IterateRangeDescriptors to read from the engine only
+		// because it's already exported.
+		err := storage.IterateRangeDescriptors(store.Engine(),
+			func(desc roachpb.RangeDescriptor) (bool, error) {
+				status := store.RaftStatus(desc.RangeID)
+				var raftState string
+				if status != nil {
+					// We can't put the whole raft.Status object in the json output
+					// because it contains a map with integer keys. Just extract
+					// the most interesting bit for now.
+					raftState = status.RaftState.String()
+				}
+				output.Ranges = append(output.Ranges, rangeInfo{
+					Desc:      desc,
+					RaftState: raftState,
+				})
+				return false, nil
+			})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respondAsJSON(w, r, output)
 }
 
 func respondAsJSON(w http.ResponseWriter, r *http.Request, response interface{}) {

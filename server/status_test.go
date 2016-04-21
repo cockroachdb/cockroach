@@ -531,3 +531,35 @@ func TestMetricsEndpoint(t *testing.T) {
 	url := fmt.Sprintf("%s/%s", statusMetricsPrefix, nodeID)
 	getRequest(t, s, url)
 }
+
+func TestRangesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stop()
+
+	var response struct {
+		Ranges []rangeInfo
+	}
+	body := getRequest(t, ts, statusRangesPrefix+"local")
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Ranges) == 0 {
+		t.Errorf("didn't get any ranges")
+	}
+	for _, ri := range response.Ranges {
+		// Do some simple validation based on the fact that this is a
+		// single-node cluster.
+		if ri.RaftState != "StateLeader" {
+			t.Errorf("expected to be raft leader but was %s", ri.RaftState)
+		}
+		expReplica := roachpb.ReplicaDescriptor{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		}
+		if len(ri.Desc.Replicas) != 1 || ri.Desc.Replicas[0] != expReplica {
+			t.Errorf("unexpected replica list %+v", ri.Desc.Replicas)
+		}
+	}
+}
