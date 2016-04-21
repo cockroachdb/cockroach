@@ -94,7 +94,7 @@ message RaftCmd {
   optional SomeMetadata # tbd (proposing replica, MVCCStats diff, ...)
   repeated oneof effect {
     # Applied in field and slice order.
-    repeated Write writes = ...; # see MVCC section
+    optional Writes writes = ...; # see MVCC section for Writes type
     # Carries out the following:
     # * sanity checks
     # * compute stats for new left hand side (LHS)      [move pre-raft]
@@ -140,7 +140,7 @@ strive for the minimum amount of interaction between the various effects
 (though the data required for the triggers may benefit from more interaction
 between them in some cases)
 
-### Computing the write set
+### Computing the (ordered) write set
 
 Before a leader proposes a command, it has the job of translating a
 `BatchRequest` into a `RaftCmd`. Note that we assume that writes wait for
@@ -174,7 +174,7 @@ With the new code, we want mostly the same, but with two important changes:
 
 * we do not actually intent to commit the batch (though we could do this on the
   proposing node to avoid overhead)
-* we need to construct the repeated `Write` field, which (in some way or
+* we need to construct the `Writes` field, which (in some way or
   another) tracks the key-value pairs written (i.e. created, changed or
   deleted) over the lifetime of the batch.
 
@@ -190,7 +190,7 @@ type Engine interface {
 
 var ErrNotTracking = errors.New("batch is not tracking writes")
 
-type Writes []MVCCKeyValue // to be discussed; could also be raw KV ([][2]byte)
+type Writes []MVCCKeyValue // actual type see below
 
 type Batch interface {
   Engine
@@ -208,17 +208,56 @@ type Batch interface {
 }
 ```
 
-Naively, this can be achieved by wrapping a "regular" batch with an appropriate
-in-memory map which is populated on writes. A better implementation may be
-hard to get but even knowing the underlying `Engine` implementation
-(i.e. currently almost exclusively RocksDB). Some refactoring should assure
-that buffers used for writing MVCC values are assumed "owned" by the engine (so
-that populating the internal map can freely hold on to the memory). It can be
-fed back into the pool at a higher level (i.e. after having applied/discarded
-the batch).
-
 With this strategy, the MVCC changes are fairly locally scoped and not too
 invasive.
+
+Naively, this can be achieved by wrapping a "regular" batch with an appropriate
+in-memory map which is populated on writes.
+
+However, using [RocksDB's `WriteBatch`
+format](https://github.com/facebook/rocksdb/blob/f38540b12ada4fe06598c42d4c084f9d920289ff/db/write_batch.cc#L10)
+seems opportune:
+
+```
+// WriteBatch::rep_ :=
+//    sequence: fixed64
+//    count: fixed32
+//    data: record[count]
+// record :=
+//    kTypeValue varstring varstring
+//    kTypeDeletion varstring
+//    kTypeSingleDeletion varstring
+//    kTypeMerge varstring varstring
+//    kTypeColumnFamilyValue varint32 varstring varstring
+//    kTypeColumnFamilyDeletion varint32 varstring varstring
+//    kTypeColumnFamilySingleDeletion varint32 varstring varstring
+//    kTypeColumnFamilyMerge varint32 varstring varstring
+// varstring :=
+//    len: varint32
+//    data: uint8[len]
+```
+
+* The format is straightforward to implement; the writes need to be serialized
+  anyway for the Raft proposal, and this appears to be an efficient format to
+  use, even when the underlying storage engine isn't based on RocksDB.
+* We currently use RocksDB and this is already the internal format used by a
+  RocksDB batch. We can completely avoid an additional copy and serialization
+  step in this case (i.e. construct the batch, borrow out the contained
+  representation to Raft until the command commits, and apply the batch).
+  Followers can create a `WriteBatch` directly from this representation.
+* Again for RocksDB, we might also be able to piggy-back on existing
+  implementation to operate on the superposition of multiple `WriteBatch`es
+  (which would be needed to remove write-write blocking).
+
+The format should be relatively stable (likely only additions), but there might
+be future migrations coming up as RocksDB changes their underlying assumptions.
+We should consider checking in with them about this idea.
+
+Using `WriteBatch` also means that the writes are completely opaque to the
+stack (at least unless unserialized early, and loaded, and then accessed
+through MVCC operations), so the followers essentially can't act based on
+them. That should not be a problem (but could if we want the side effects
+to use information from the write set in a performant way).
 
 ## Raft command application
 
@@ -256,28 +295,10 @@ These should be limited to those tests that exercise triggers and/or use
 lower-level Raft internals inside of the `storage` package (plus some surprises
 which are certain to occur with a change of this magnitude).
 
-## Implementation strategy
-
-Some lower-hanging fruit exist:
-
-* the MVCC/Engine changes don't affect upgrades or existing functionality, so
-they can be carried out freely.
-* the change in replay protection mentioned above can also be developed/tested
-separately. This seems wise since it's an absolute necessity.
-* separating the side effects of Raft applications should also be doable; most
-  of these should come up naturally when trying to remove the `(*Replica)`
-  receiver on most of the `ReplicaCommands` (`LeaderLease`, `Put`, ...) and
-  manually going through the rest of the call stack up to `processRaftCommand`.
-
-The goal here should be to identify all the necessary refactors to keep them
-out of the remaining "forklift" portion of the change.
-
-This also includes the next section:
-
 ## Migration strategy
 
 We implement the `Freeze`/`Unfreeze` Raft commands suggested by @bdarnell in
-\#5985: everything proposed between `Freeze` and `Unfreeze` applies as a a
+\#5985: everything proposed between `Freeze` and `Unfreeze` applies as a
 non-retryable error (and in particular, does not change state). Assuming a
 working implementation of this (which will need to be hashed out separately and
 may require its own migration considerations), a migration entails the
@@ -310,8 +331,40 @@ DeleteRange could be problematic.
 It seems worthwhile to get a sense of expectations by means of a prototype.
 * While the amount of code downstream of raft is drastically reduced, it is not
   zero, so we will still need online Raft migrations (#5985) eventually.
-* The change may complicate getting rid of write/write blocking (which means a
-  write having to wait for an overlapping prior write to be applied)
+
+There were concerns that this change would make it harder/impossible to get
+rid of write-write blocking in the future. However, that concern was based on
+the possibility of Raft reordering, which we can eliminate at this point (see
+[Replay protection](#replay-protection)), and the problem boils down to having
+all intermediate states which would result from applying the prefixes of the
+existing overlapping writes (including side effects) available to execute on
+top of, which happens at a layer above the changes in this RFC.
+
+# Implementation strategy
+
+Tackle the following in parallel (and roughly in that order):
+
+* flesh out and implement `{F,Unf}reeze`; these are immediately useful for
+  all upcoming migrations.
+* prototype and evaluate expected inflation of Raft proposal sizes
+* separate the side effects of Raft applications from `*Replica` and clearly
+  separate the parts which can be moved pre-proposal as well as the parameters
+  required for the post-proposal part. This informs the actual design of the
+  Raft "effects" in this proposal.
+  Most of these should come up naturally when trying to remove the `(*Replica)`
+  receiver on most of the `ReplicaCommands` (`LeaderLease`, `Put`, ...) and
+  manually going through the rest of the call stack up to `processRaftCommand`.
+* implement protection against Raft replays/reordering, ideally such that
+  the leader knows at proposal time the log index at which commands commit
+  (unless they have to be reproposed).
+* flesh out the WriteBatch encoding.
+* introduce and implement the `Batch` interface. This could be done after the
+  `WriteBatch` encoding is done or, if required to unblock the implementation
+  of this RFC, start with a less performant version based on an auxiliary map
+  and protobuf serialization.
+
+The goal here should be to identify all the necessary refactors to keep them
+out of the remaining "forklift" portion of the change.
 
 ## Is this a feasible change?
 
@@ -337,25 +390,4 @@ migration story, none.
 
 # Unresolved questions
 
-## Best batch implementation
-
-This proposal currently suggests using an augmented RocksDB write batch as the
-basis implementation of the new `Batch` interface.
-
-@bdarnell suggested just computing the effects in-memory:
-
-> We had a pure go batch implementation prior to 7d4e2fc. Would it be better to revive that than to wrap a batch with something that saves a second copy of all writes?
-
-It's hard to say which one is better. The RocksDB write batch (at least in that
-commit) was measurably faster (at least on the MVCC level) and does most of the
-work in C++ (where it can manage memory efficiently). The Go option does more
-work in Go, is slower and it's not clear whether memory-related performance
-would overall increase (due to keeping a more complicated state in Go).
-
-The proposed `Batch` interface would allow us to experiment with both, and to
-switch to the better one (maybe even opportunistically depending on the cmd).
-
-A third alternative is an implementation in which the `RocksDB` batch exposes
-a read-only view of the mutations it contains, which would obviate any
-additional state-keeping in Go. This is likely upstream work, but does seem
-like an interesting venue (again, can be explored separately).
+None currently.
