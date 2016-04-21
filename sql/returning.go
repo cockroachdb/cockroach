@@ -33,8 +33,9 @@ type returningHelper struct {
 	rowCount int
 }
 
-func (p *planner) makeReturningHelper(r parser.ReturningExprs,
-	alias string, tablecols []ColumnDescriptor) (returningHelper, error) {
+func (p *planner) makeReturningHelper(
+	r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor,
+) (returningHelper, error) {
 	rh := returningHelper{p: p}
 	if len(r) == 0 {
 		return rh, nil

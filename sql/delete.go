@@ -243,7 +243,7 @@ func (d *deleteNode) fastDelete() *roachpb.Error {
 				continue
 			}
 
-			after, err := scan.readIndexKey(i)
+			after, err := scan.fetcher.readIndexKey(i)
 			if err != nil {
 				return roachpb.NewError(err)
 			}
