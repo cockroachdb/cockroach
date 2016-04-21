@@ -331,8 +331,8 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 	// traversal. Or do it during the downward traversal for const
 	// UnaryExprs.
 	if expr.Operator == UnaryMinus {
-		// if d, ok := expr.Expr.(*ConstVal); ok {
-		// 	return &ConstVal{Value: constant.UnaryOp(token.SUB, d.Value, 0)}
+		// if d, ok := expr.Expr.(*NumVal); ok {
+		// 	return &NumVal{Value: constant.UnaryOp(token.SUB, d.Value, 0)}
 		// }
 	}
 
@@ -579,37 +579,37 @@ func (*constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	}()
 	switch t := expr.(type) {
 	case *UnaryExpr:
-		if cv, ok := t.Expr.(*ConstVal); ok {
+		if cv, ok := t.Expr.(*NumVal); ok {
 			if token, ok := unaryOpToToken[t.Operator]; ok {
-				return &ConstVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
 			}
 			if cv.Kind() == constant.Int {
 				if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
-					return &ConstVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+					return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
 				}
 			}
 		}
 	case *BinaryExpr:
-		l, okL := t.Left.(*ConstVal)
-		r, okR := t.Right.(*ConstVal)
+		l, okL := t.Left.(*NumVal)
+		r, okR := t.Right.(*NumVal)
 		if okL && okR {
 			if token, ok := binaryOpToToken[t.Operator]; ok {
-				return &ConstVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+				return &NumVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
 			}
 			if l.Kind() == constant.Int && r.Kind() == constant.Int {
 				if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
-					return &ConstVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+					return &NumVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
 				}
 				if rInt, err := r.asInt(); err == nil && rInt >= 0 {
 					if token, ok := binaryShiftOpToToken[t.Operator]; ok {
-						return &ConstVal{Value: constant.Shift(l.Value, token, uint(rInt))}
+						return &NumVal{Value: constant.Shift(l.Value, token, uint(rInt))}
 					}
 				}
 			}
 		}
 	case *ComparisonExpr:
-		l, okL := t.Left.(*ConstVal)
-		r, okR := t.Right.(*ConstVal)
+		l, okL := t.Left.(*NumVal)
+		r, okR := t.Right.(*NumVal)
 		if okL && okR {
 			if token, ok := comparisonOpToToken[t.Operator]; ok {
 				return MakeDBool(DBool(constant.Compare(l.Value, token, r.Value)))
@@ -635,7 +635,7 @@ var _ Visitor = &constantTypeVisitor{}
 
 func (*constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
-	case *ConstVal:
+	case Constant:
 		typedConst, err := t.TypeCheck(nil, nil)
 		if err != nil {
 			panic(err)
@@ -647,8 +647,8 @@ func (*constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 func (*constantTypeVisitor) VisitPost(expr Expr) (retExpr Expr) { return expr }
 
-// TypeNumericConstants TODO(nvanbenschoten) MORTY
-func TypeNumericConstants(expr Expr) (Expr, error) {
+// TypeConstants TODO(nvanbenschoten) MORTY
+func TypeConstants(expr Expr) (Expr, error) {
 	v := constantTypeVisitor{}
 	expr, _ = WalkExpr(&v.cfv, expr)
 	expr, _ = WalkExpr(&v, expr)

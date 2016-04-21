@@ -64,6 +64,7 @@ func TestEval(t *testing.T) {
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
 		{`'a' || (1 + 2)::char`, `'a3'`},
+		{`'hello' || b'world'`, `'helloworld'`},
 		// Bit shift operators.
 		{`1 << 2`, `4`},
 		{`4 >> 2`, `1`},
@@ -438,7 +439,6 @@ func TestEvalError(t *testing.T) {
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
 			`could not parse '2010-09-28 12:00.1 MST' in any supported timestamp format`},
 		{`'11h2m'::interval / 0`, `division by zero`},
-		{`'hello' || b'world'`, `unsupported binary operator: <string> || <bytes>`},
 		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},
 		{`'' LIKE ` + string([]byte{0x27, 0xc2, 0x30, 0x7a, 0xd5, 0x25, 0x30, 0x27}),
 			`LIKE regexp compilation failed: error parsing regexp: invalid UTF-8: .*`},
