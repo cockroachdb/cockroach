@@ -60,10 +60,19 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 
 		// Normalize the expression which has the side-effect of evaluating
 		// constant expressions and unwrapping expressions like "((a))" to "a".
-		expr, err := p.parser.NormalizeExpr(p.evalCtx, o.Expr)
-		if err != nil {
-			return nil, roachpb.NewError(err)
+		expr := o.Expr
+		for {
+			if paren, ok := expr.(*parser.ParenExpr); ok {
+				expr = paren.Expr
+			} else {
+				break
+			}
 		}
+
+		// expr, err := p.parser.NormalizeExpr(p.evalCtx, o.Expr.(parser.TypedExpr))
+		// if err != nil {
+		// 	return nil, roachpb.NewError(err)
+		// }
 
 		if qname, ok := expr.(*parser.QualifiedName); ok {
 			if len(qname.Indirect) == 0 {
@@ -142,6 +151,11 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
 func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
+	expr, err := parser.TypeNumericConstants(expr)
+	if err != nil {
+		return 0, err
+	}
+
 	switch i := expr.(type) {
 	case *parser.DInt:
 		index := int(*i)

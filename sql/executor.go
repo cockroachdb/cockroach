@@ -578,7 +578,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
-		if e.ctx.TestingKnobs.CheckStmtStringChange {
+		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
+		// so we need to reconsider how this works.
+		if e.ctx.TestingKnobs.CheckStmtStringChange && false {
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -595,7 +597,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		default:
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
-		if e.ctx.TestingKnobs.CheckStmtStringChange {
+		if e.ctx.TestingKnobs.CheckStmtStringChange && false {
 			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
