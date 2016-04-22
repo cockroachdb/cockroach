@@ -1117,13 +1117,10 @@ func mvccPutInternal(
 			}
 		}
 	} else {
+		// There is no existing value for this key. Even if the new value is
+		// nil write a deletion tombstone for the key.
 		if value, err = maybeGetValue(ok, timestamp); err != nil {
 			return err
-		}
-		// No existing metadata record. If this is a delete, do nothing;
-		// otherwise we can perform the write.
-		if value == nil {
-			return nil
 		}
 	}
 	{
