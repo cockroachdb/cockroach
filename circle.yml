@@ -70,3 +70,9 @@ deployment:
 
       - build/build-osx.sh
       - build/push-tagged-aws.sh
+  datarace:
+    branch: data-race
+    commands:
+      - aws configure set region us-east-1
+      - build/build-race-binaries.sh
+      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.race
