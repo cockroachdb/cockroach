@@ -731,28 +731,41 @@ var CmpOps = map[CmpArgs]CmpOp{
 			return DBool(re.MatchString(string(*left.(*DString)))), nil
 		},
 	},
+
+	CmpArgs{EQ, tupleType, tupleType}: {
+		fn: func(_ EvalContext, ldatum, rdatum Datum) (DBool, error) {
+			c := cmpTuple(ldatum, rdatum)
+			return DBool(c == 0), nil
+		},
+	},
+	CmpArgs{LE, tupleType, tupleType}: {
+		fn: func(_ EvalContext, ldatum, rdatum Datum) (DBool, error) {
+			c := cmpTuple(ldatum, rdatum)
+			return DBool(c <= 0), nil
+		},
+	},
+	CmpArgs{LT, tupleType, tupleType}: {
+		fn: func(_ EvalContext, ldatum, rdatum Datum) (DBool, error) {
+			c := cmpTuple(ldatum, rdatum)
+			return DBool(c < 0), nil
+		},
+	},
+
+	CmpArgs{In, boolType, tupleType}:        evalTupleIN,
+	CmpArgs{In, intType, tupleType}:         evalTupleIN,
+	CmpArgs{In, floatType, tupleType}:       evalTupleIN,
+	CmpArgs{In, stringType, tupleType}:      evalTupleIN,
+	CmpArgs{In, bytesType, tupleType}:       evalTupleIN,
+	CmpArgs{In, dateType, tupleType}:        evalTupleIN,
+	CmpArgs{In, timestampType, tupleType}:   evalTupleIN,
+	CmpArgs{In, timestampTZType, tupleType}: evalTupleIN,
+	CmpArgs{In, intervalType, tupleType}:    evalTupleIN,
+	CmpArgs{In, tupleType, tupleType}:       evalTupleIN,
 }
 
-var evalTupleEQ = CmpOp{
-	fn: func(ctx EvalContext, ldatum, rdatum Datum) (DBool, error) {
-		left := *ldatum.(*DTuple)
-		right := *rdatum.(*DTuple)
-		if len(left) != len(right) {
-			return DBool(false), nil
-		}
-		for i := range left {
-			d, err := evalComparison(ctx, EQ, left[i], right[i])
-			if err != nil {
-				return DBool(false), err
-			}
-			if v, err := GetBool(d); err != nil {
-				return DBool(false), err
-			} else if !v {
-				return v, nil
-			}
-		}
-		return DBool(true), nil
-	},
+func cmpTuple(ldatum, rdatum Datum) int {
+	left := *ldatum.(*DTuple)
+	return left.Compare(rdatum)
 }
 
 var evalTupleIN = CmpOp{
@@ -766,24 +779,6 @@ var evalTupleIN = CmpOp{
 		found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
 		return DBool(found), nil
 	},
-}
-
-func init() {
-	// This avoids an init-loop if we try to initialize this operation when
-	// cmpOps is declared. The loop is caused by evalTupleEQ using cmpOps
-	// internally.
-	CmpOps[CmpArgs{EQ, tupleType, tupleType}] = evalTupleEQ
-
-	CmpOps[CmpArgs{In, boolType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, intType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, floatType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, stringType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, bytesType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, dateType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, timestampType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, timestampTZType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, intervalType, tupleType}] = evalTupleIN
-	CmpOps[CmpArgs{In, tupleType, tupleType}] = evalTupleIN
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
