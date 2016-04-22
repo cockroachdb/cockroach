@@ -300,15 +300,10 @@ func (s LeaseStore) Publish(
 			// loop around to retry
 			continue
 		}
-		switch err.(type) {
-		case *roachpb.DidntUpdateDescriptorError:
+		if err == nil || err == errDidntUpdateDescriptor {
 			return desc, nil
-		default:
-			if err == nil {
-				return desc, nil
-			}
-			return nil, err
 		}
+		return nil, err
 	}
 
 	panic("not reached")
