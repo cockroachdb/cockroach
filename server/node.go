@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -114,7 +115,8 @@ type Node struct {
 	ClusterID   uuid.UUID              // UUID for Cockroach cluster
 	Descriptor  roachpb.NodeDescriptor // Node ID, network/physical topology
 	ctx         storage.StoreContext   // Context to use and pass to stores
-	stores      *storage.Stores        // Access to node-local stores
+	eventLogger sql.EventLogger
+	stores      *storage.Stores // Access to node-local stores
 	metrics     nodeMetrics
 	recorder    *status.MetricsRecorder
 	startedAt   int64
@@ -147,9 +149,16 @@ func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.
 // server.
 func GetBootstrapSchema() sql.MetadataSchema {
 	schema := sql.MakeMetadataSchema()
-	storage.AddEventLogToMetadataSchema(&schema)
+	AddEventLogToMetadataSchema(&schema)
 	sql.AddEventLogToMetadataSchema(&schema)
 	return schema
+}
+
+// AddEventLogToMetadataSchema adds the range event log table to the supplied
+// MetadataSchema.
+func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
+	schema.AddTable(keys.RangeEventTableID, storage.RangeEventTableSchema,
+		privilege.List{privilege.ALL})
 }
 
 // bootstrapCluster bootstraps a multiple stores using the provided
@@ -222,14 +231,21 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(ctx storage.StoreContext, recorder *status.MetricsRecorder, stopper *stop.Stopper, txnMetrics *kv.TxnMetrics) *Node {
+func NewNode(
+	ctx storage.StoreContext,
+	recorder *status.MetricsRecorder,
+	stopper *stop.Stopper,
+	txnMetrics *kv.TxnMetrics,
+	eventLogger sql.EventLogger,
+) *Node {
 	n := &Node{
-		ctx:        ctx,
-		stopper:    stopper,
-		recorder:   recorder,
-		metrics:    makeNodeMetrics(),
-		stores:     storage.NewStores(ctx.Clock),
-		txnMetrics: txnMetrics,
+		ctx:         ctx,
+		stopper:     stopper,
+		recorder:    recorder,
+		metrics:     makeNodeMetrics(),
+		stores:      storage.NewStores(ctx.Clock),
+		txnMetrics:  txnMetrics,
+		eventLogger: eventLogger,
 	}
 	n.recorder.AddNodeRegistry("exec.%s", n.metrics.registry)
 	return n
@@ -652,7 +668,7 @@ func (n *Node) recordJoinEvent() {
 	n.stopper.RunWorker(func() {
 		for r := retry.Start(retry.Options{Closer: n.stopper.ShouldStop()}); r.Next(); {
 			if err := n.ctx.DB.Txn(func(txn *client.Txn) *roachpb.Error {
-				return sql.MakeEventLogger(n.ctx.SQLExecutor.LeaseManager).InsertEventRecord(txn,
+				return n.eventLogger.InsertEventRecord(txn,
 					logEventType,
 					int32(n.Descriptor.NodeID),
 					int32(n.Descriptor.NodeID),
