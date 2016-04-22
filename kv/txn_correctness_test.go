@@ -161,6 +161,11 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	return nil
 }
 
+// deleteCmd deletes the value at the given key from the db.
+func deleteCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
+	return txn.Del(c.getKey())
+}
+
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
 func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	return txn.DelRange(c.getKey(), c.getEndKey())
@@ -233,6 +238,11 @@ var cmdSpecs = []*cmdSpec{
 		incCmd,
 		regexp.MustCompile(`(I)\(([A-Z]+)\)`),
 	},
+	{
+		deleteCmd,
+		regexp.MustCompile(`(D)\(([A-Z]+)\)`),
+	},
+
 	{
 		deleteRngCmd,
 		regexp.MustCompile(`(DR)\(([A-Z]+)-([A-Z]+)\)`),
@@ -458,6 +468,9 @@ func TestEnumerateHistories(t *testing.T) {
 type verifier struct {
 	history string
 	checkFn func(env map[string]int64) error
+	// limit execution (and checks) to orderings of history whose string
+	// representation matches.
+	pruneTo *regexp.Regexp
 }
 
 // historyVerifier parses a planned transaction execution history into
@@ -533,6 +546,12 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	plannedStr := historyString(cmds)
+	if p := hv.verify.pruneTo; p != nil && !p.MatchString(plannedStr) {
+		if log.V(1) {
+			log.Infof("skipping iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+		}
+		return nil
+	}
 	if log.V(1) {
 		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
 	}
@@ -668,12 +687,16 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 //   R(x) - read from key "x"
 //   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   SC(x-y) - scan values from keys "x"-"y"
+//   D(x) - delete key "x"
+//   DR(x-y) - delete range of keys "x"-"y"
 //   W(x,y[+z+...]) - writes sum of values y+z+... to x
 //   C - commit
 //
 // Notation for actual histories:
 //   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
 //   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
+//   Dn.m(x) - delete key from txn ("m"th retry) of key "x"
+//   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
 //   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
 //   Wn.m(x,y[+z+...]) - write sum of values y+z+... to x from txn "n" ("m"th retry)
 //   Cn.m - commit of txn "n" ("m"th retry)
@@ -734,6 +757,62 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 		},
 	}
 	checkConcurrency("lost update", bothIsolations, []string{txn, txn}, verify, true, t)
+}
+
+func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Currently fails with (variants of the histories)
+	// I1(A) C1 D3(A) R2(A) D3(B) C3 W2(B-A) C2
+	// I1(A) C1 R2(A) D3(A) D3(B) C3 W2(B-A) C2
+	// I1(A) C1 R2(A) D3(A) D3(B) W2(B-A) C3 C2
+	t.Skip("TODO(tschottdorf): see #6124")
+
+	// When serializable, B can't exceed A.
+	txn1 := "I(A) C"
+	txn2 := "R(A) W(B,A) C"
+	txn3 := "D(A) D(B) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["B"] != 0 && env["A"] == 0 {
+				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
+			}
+			return nil
+		},
+		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
+	}
+	// TODO(vivekmenezes): when fixed, should pass with bothIsolations as well.
+	// SNAPSHOT currently shows more anomalies (likely similar to #6240).
+	checkConcurrency("lost update (delete)", onlySerializable,
+		[]string{txn1, txn2, txn3}, verify, true, t)
+}
+
+func TestTxnDBLostUpdateAnomaly_DeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Currently fails with variations of
+	//   iso=[SNAPSHOT SNAPSHOT SNAPSHOT], pri=[3 2 1]
+	//   I1.1(A)[1] C1.1 DR3.1(A-C) R2.1(A)[1] C3.1 W2.1(B-A)[1] C2.1
+	// and
+	//   iso=[SNAPSHOT SNAPSHOT SNAPSHOT], pri=[2 3 1]
+	//   I1.1(A)[1] C1.1 R2.1(A)[1] DR3.1(A-C) W2.1(B-A)[1] C3.1 C2.1
+	t.Skip("TODO(tschottdorf): see #6240")
+
+	// When serializable, B can't exceed A.
+	txn1 := "I(A) C"
+	txn2 := "R(A) W(B,A) C"
+	txn3 := "DR(A-C) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["B"] != 0 && env["A"] == 0 {
+				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
+			}
+			return nil
+		},
+		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
+	}
+	checkConcurrency("lost update (range delete)", onlySnapshot,
+		[]string{txn1, txn2, txn3}, verify, true, t)
 }
 
 // TestTxnDBPhantomReadAnomaly verifies that neither SI nor SSI isolation
