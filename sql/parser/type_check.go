@@ -640,12 +640,12 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 	rType := reflect.TypeOf(dummyRight)
 
 	if cmp, ok := CmpOps[CmpArgs{op, lType, rType}]; ok {
-		if op == EQ && lType == tupleType && rType == tupleType {
-			if err := typeCheckTupleEQ(args, dummyLeft, dummyRight); err != nil {
+		if op == In && rType == tupleType {
+			if err := typeCheckTupleIN(args, dummyLeft, dummyRight); err != nil {
 				return nil, CmpOp{}, err
 			}
-		} else if op == In && rType == tupleType {
-			if err := typeCheckTupleIN(args, dummyLeft, dummyRight); err != nil {
+		} else if lType == tupleType && rType == tupleType {
+			if err := typeCheckTupleCmp(args, dummyLeft, dummyRight); err != nil {
 				return nil, CmpOp{}, err
 			}
 		}
@@ -657,7 +657,7 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOp, dummyLeft, dummyRight 
 		dummyLeft.Type(), op, dummyRight.Type())
 }
 
-func typeCheckTupleEQ(args MapArgs, lDummy, rDummy Datum) error {
+func typeCheckTupleCmp(args MapArgs, lDummy, rDummy Datum) error {
 	lTuple := *lDummy.(*DTuple)
 	rTuple := *rDummy.(*DTuple)
 	if len(lTuple) != len(rTuple) {
