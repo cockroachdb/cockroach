@@ -16,9 +16,7 @@
 
 package client
 
-import (
-	"github.com/cockroachdb/cockroach/roachpb"
-)
+import "github.com/cockroachdb/cockroach/roachpb"
 
 // Batch provides for the parallel execution of a number of database
 // operations. Operations are added to the Batch and then the Batch is executed
@@ -54,9 +52,10 @@ type Batch struct {
 	ReadConsistency roachpb.ReadConsistencyType
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
-	resultsBuf [8]Result
-	rowsBuf    [8]KeyValue
-	rowsIdx    int
+	resultsBuf    [8]Result
+	rowsBuf       []KeyValue
+	rowsStaticBuf [8]KeyValue
+	rowsStaticIdx int
 }
 
 func (b *Batch) prepare() *roachpb.Error {
@@ -72,11 +71,32 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	// TODO(tschottdorf): assert that calls is 0 or 1?
 	r := Result{calls: calls, PErr: roachpb.NewError(err)}
 	if numRows > 0 {
-		if b.rowsIdx+numRows <= len(b.rowsBuf) {
-			r.Rows = b.rowsBuf[b.rowsIdx : b.rowsIdx+numRows]
-			b.rowsIdx += numRows
+		if b.rowsStaticIdx+numRows <= len(b.rowsStaticBuf) {
+			r.Rows = b.rowsStaticBuf[b.rowsStaticIdx : b.rowsStaticIdx+numRows]
+			b.rowsStaticIdx += numRows
 		} else {
-			r.Rows = make([]KeyValue, numRows)
+			// Most requests produce 0 (unknown) or 1 result rows, so optimize for
+			// that case.
+			switch numRows {
+			case 1:
+				// Use a buffer to batch allocate the result rows.
+				if cap(b.rowsBuf)-len(b.rowsBuf) == 0 {
+					const minSize = 16
+					const maxSize = 128
+					size := cap(b.rowsBuf) * 2
+					if size < minSize {
+						size = minSize
+					} else if size > maxSize {
+						size = maxSize
+					}
+					b.rowsBuf = make([]KeyValue, 0, size)
+				}
+				pos := len(b.rowsBuf)
+				r.Rows = b.rowsBuf[pos : pos+1 : pos+1]
+				b.rowsBuf = b.rowsBuf[:pos+1]
+			default:
+				r.Rows = make([]KeyValue, numRows)
+			}
 		}
 	}
 	if b.Results == nil {
