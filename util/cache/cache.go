@@ -129,10 +129,17 @@ func (l *entryList) remove(e *Entry) *Entry {
 	if e == &l.root {
 		panic("cannot remove root list node")
 	}
-	e.prev.next = e.next
-	e.next.prev = e.prev
-	e.next = nil // avoid memory leaks
-	e.prev = nil // avoid memory leaks
+	// TODO(peter): Revert this protection against removing a non-existent entry
+	// from the list when the cause of
+	// https://github.com/cockroachdb/cockroach/issues/6190 is determined. Should
+	// be replaced with an explicit panic instead of the implicit one of a
+	// nil-pointer dereference.
+	if e.next != nil {
+		e.prev.next = e.next
+		e.next.prev = e.prev
+		e.next = nil // avoid memory leaks
+		e.prev = nil // avoid memory leaks
+	}
 	return e
 }
 
