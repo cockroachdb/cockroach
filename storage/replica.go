@@ -356,6 +356,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 		// TODO(bdarnell): make these configurable; evaluate defaults.
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
+		CheckQuorum:     true,
 		Logger:          &raftLogger{group: uint64(r.RangeID)},
 	}
 	raftGroup, err := raft.NewRawNode(raftCfg, nil)
