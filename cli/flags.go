@@ -474,15 +474,15 @@ func initFlags(ctx *Context) {
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		f.StringVar(&cliContext.debug.startKey, cliflags.FromName, "", usageEnv(cliflags.FromName))
-		f.StringVar(&cliContext.debug.endKey, cliflags.ToName, "", usageEnv(cliflags.ToName))
-		f.BoolVar(&cliContext.debug.raw, cliflags.RawName, false, usageEnv(cliflags.RawName))
-		f.BoolVar(&cliContext.debug.values, cliflags.ValuesName, false, usageEnv(cliflags.ValuesName))
+		f.StringVar(&cliContext.debug.startKey, cliflags.FromName, "", usageNoEnv(cliflags.FromName))
+		f.StringVar(&cliContext.debug.endKey, cliflags.ToName, "", usageNoEnv(cliflags.ToName))
+		f.BoolVar(&cliContext.debug.raw, cliflags.RawName, false, usageNoEnv(cliflags.RawName))
+		f.BoolVar(&cliContext.debug.values, cliflags.ValuesName, false, usageNoEnv(cliflags.ValuesName))
 	}
 
 	{
 		f := versionCmd.Flags()
-		f.BoolVar(&versionIncludesDeps, cliflags.DepsName, false, usageEnv(cliflags.DepsName))
+		f.BoolVar(&versionIncludesDeps, cliflags.DepsName, false, usageNoEnv(cliflags.DepsName))
 	}
 }
 
