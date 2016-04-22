@@ -24,6 +24,31 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
+// WrappedPErr wraps a *Error, exposing an error interface.
+// If a WrappedPErr is passed to NewError(), the original pErr is returned.
+// This is used in functions that want to return error, but have to deal with
+// some pErrs coming from using DB.Txn(). This allows them to wrap the pErr in
+// such a way that it's going to be retrieved if we have to go back to pErr
+// somewhere up the stack (for example because the function in question is
+// running inside a DB.Txn() closure which needs to return pErr).
+type WrappedPErr struct {
+	PErr *Error
+}
+
+func (e WrappedPErr) Error() string {
+	return e.PErr.String()
+}
+
+var _ error = WrappedPErr{}
+
+// WrapPErr wraps a *Error into a WrappedPErr.
+func WrapPErr(e *Error) WrappedPErr {
+	if e == nil {
+		panic("can't wrap nil Error")
+	}
+	return WrappedPErr{PErr: e}
+}
+
 // ResponseWithError is a tuple of a BatchResponse and an error. It is used to
 // pass around a BatchResponse with its associated error where that
 // entanglement is necessary (e.g. channels, methods that need to return
@@ -68,9 +93,12 @@ func NewError(err error) *Error {
 		return nil
 	}
 	e := &Error{}
-	if intErr, ok := err.(*internalError); ok {
-		*e = *(*Error)(intErr)
-	} else {
+	switch t := err.(type) {
+	case *internalError:
+		*e = *(*Error)(t)
+	case WrappedPErr:
+		e = t.PErr
+	default:
 		e.setGoError(err)
 	}
 	return e
