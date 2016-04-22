@@ -713,6 +713,56 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	}
 }
 
+// TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey tests a write
+// that comes after a delete on a nonexistent key, with the write holding a
+// timestamp earlier than the delete timestamp. The delete must write a
+// tombstone with its timestamp in order to push the writes timestamp.
+func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	if err := MVCCDelete(
+		context.Background(), engine, nil, testKey1, makeTS(3, 0), nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MVCCPut(
+		context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil,
+	); testutils.IsError(
+		err, "write at timestamp 0.000000001,0 too old; wrote at 0.000000003,1",
+	) {
+	}
+
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Although a value was written at TS(1, 0), the delete pushed it to a
+	// future timestamp.
+	if value != nil {
+		t.Fatal("value present at TS = $s", value.Timestamp)
+	}
+
+	// Read the latest version which will be the value written with the timestamp pushed.
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(4, 0), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value == nil {
+		t.Fatal("value doesn't exist")
+	}
+	valBytes, _ := value.GetBytes()
+	if !bytes.Equal(valBytes, []byte("testValue1")) {
+		t.Errorf("expected %q; got %q", []byte("testValue1"), valBytes)
+	}
+	if !value.Timestamp.Equal(makeTS(3, 1)) {
+		t.Fatalf("timestamp was not pushed: %s", value.Timestamp)
+	}
+}
+
 func TestMVCCInlineWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
