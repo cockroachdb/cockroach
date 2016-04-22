@@ -759,6 +759,34 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	checkConcurrency("lost update", bothIsolations, []string{txn, txn}, verify, true, t)
 }
 
+func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Currently fails with (variants of the histories)
+	// I1(A) C1 D3(A) R2(A) D3(B) C3 W2(B-A) C2
+	// I1(A) C1 R2(A) D3(A) D3(B) C3 W2(B-A) C2
+	// I1(A) C1 R2(A) D3(A) D3(B) W2(B-A) C3 C2
+	t.Skip("TODO(tschottdorf): see #6124")
+
+	// When serializable, B can't exceed A.
+	txn1 := "I(A) C"
+	txn2 := "R(A) W(B,A) C"
+	txn3 := "D(A) D(B) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["B"] != 0 && env["A"] == 0 {
+				return util.Errorf("expected B = %d <= %d = A", env["B"], env["A"])
+			}
+			return nil
+		},
+		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
+	}
+	// TODO(vivekmenezes): when fixed, should pass with bothIsolations as well.
+	// SNAPSHOT currently shows more anomalies (likely similar to #6240).
+	checkConcurrency("lost update (delete)", onlySerializable,
+		[]string{txn1, txn2, txn3}, verify, true, t)
+}
+
 func TestTxnDBLostUpdateAnomaly_DeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Currently fails with variations of
