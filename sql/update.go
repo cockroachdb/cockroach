@@ -41,19 +41,19 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, autoCommit bool, priv privilege.Kind) (editNodeBase, *roachpb.Error) {
-	tableDesc, pErr := p.getAliasedTableLease(t)
-	if pErr != nil {
-		return editNodeBase{}, pErr
+func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
+	tableDesc, err := p.getAliasedTableLease(t)
+	if err != nil {
+		return editNodeBase{}, err
 	}
 
 	if err := p.checkPrivilege(tableDesc, priv); err != nil {
-		return editNodeBase{}, roachpb.NewError(err)
+		return editNodeBase{}, err
 	}
 
 	rh, err := p.makeReturningHelper(r, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
-		return editNodeBase{}, roachpb.NewError(err)
+		return editNodeBase{}, err
 	}
 
 	return editNodeBase{
@@ -177,12 +177,13 @@ type updateNode struct {
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
+// TODO(andrei): return error instead of pErr from Update.
 func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.Error) {
 	tracing.AnnotateTrace()
 
-	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.UPDATE)
-	if pErr != nil {
-		return nil, pErr
+	en, err := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.UPDATE)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	exprs := make([]parser.UpdateExpr, len(n.Exprs))

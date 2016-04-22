@@ -42,10 +42,11 @@ type deleteNode struct {
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
+// TODO(andrei): make Delete return error, no pErr
 func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.Error) {
-	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.DELETE)
-	if pErr != nil {
-		return nil, pErr
+	en, err := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.DELETE)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// TODO(knz): Until we split the creation of the node from Start()
@@ -53,7 +54,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 	// this node's initSelect() method both does type checking and also
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
-	_, pErr = p.SelectClause(&parser.SelectClause{
+	_, pErr := p.SelectClause(&parser.SelectClause{
 		Exprs: en.tableDesc.allColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,

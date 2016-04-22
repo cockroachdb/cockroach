@@ -90,9 +90,9 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	pErr := t.server.DB().Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		lease, pErr = t.node(nodeID).Acquire(txn, descID, version)
-		return pErr
+		var err error
+		lease, err = t.node(nodeID).Acquire(txn, descID, version)
+		return roachpb.NewError(err)
 	})
 	return lease, pErr.GoError()
 }

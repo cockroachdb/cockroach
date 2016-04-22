@@ -129,11 +129,13 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 // If `plainKey` doesn't exist, returns false and nil error.
 // In most cases you'll want to use wrappers: `getDatabaseDesc` or
 // `getTableDesc`.
+// TODO(andrei): make getDescriptor return error instead of pErr, and keep
+// chaning all the dependant functions similarly.
 func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto,
 ) (bool, *roachpb.Error) {
-	gr, err := p.txn.Get(plainKey.Key())
-	if err != nil {
-		return false, err
+	gr, pErr := p.txn.Get(plainKey.Key())
+	if pErr != nil {
+		return false, pErr
 	}
 	if !gr.Exists() {
 		return false, nil
