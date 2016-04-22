@@ -161,6 +161,11 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	return nil
 }
 
+// deleteCmd deletes the value at the given key from the db.
+func deleteCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
+	return txn.Del(c.getKey())
+}
+
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
 func deleteRngCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	return txn.DelRange(c.getKey(), c.getEndKey())
@@ -233,6 +238,11 @@ var cmdSpecs = []*cmdSpec{
 		incCmd,
 		regexp.MustCompile(`(I)\(([A-Z]+)\)`),
 	},
+	{
+		deleteCmd,
+		regexp.MustCompile(`(D)\(([A-Z]+)\)`),
+	},
+
 	{
 		deleteRngCmd,
 		regexp.MustCompile(`(DR)\(([A-Z]+)-([A-Z]+)\)`),
@@ -675,6 +685,7 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 //   R(x) - read from key "x"
 //   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   SC(x-y) - scan values from keys "x"-"y"
+//   D(x) - delete key "x"
 //   DR(x-y) - delete range of keys "x"-"y"
 //   W(x,y[+z+...]) - writes sum of values y+z+... to x
 //   C - commit
@@ -682,6 +693,7 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 // Notation for actual histories:
 //   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
 //   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
+//   Dn.m(x) - delete range from txn ("m"th retry) of key "x"
 //   DRn.m(x-y) - delete range from txn "n" ("m"th retry) of keys "x"-"y"
 //   SCn.m(x-y) - scan from txn "n" ("m"th retry) of keys "x"-"y"
 //   Wn.m(x,y[+z+...]) - write sum of values y+z+... to x from txn "n" ("m"th retry)
