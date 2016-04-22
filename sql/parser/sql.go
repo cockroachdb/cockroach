@@ -6551,28 +6551,28 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2626
 		{
-			prec, err := sqlDollar[2].union.numVal().asInt()
+			prec, err := sqlDollar[2].union.numVal().asInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = &DecimalType{Prec: prec}
+			sqlVAL.union.val = &DecimalType{Prec: int(prec)}
 		}
 	case 418:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2635
 		{
-			prec, err := sqlDollar[2].union.numVal().asInt()
+			prec, err := sqlDollar[2].union.numVal().asInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
-			scale, err := sqlDollar[4].union.numVal().asInt()
+			scale, err := sqlDollar[4].union.numVal().asInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = &DecimalType{Prec: prec, Scale: scale}
+			sqlVAL.union.val = &DecimalType{Prec: int(prec), Scale: int(scale)}
 		}
 	case 419:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
@@ -6620,12 +6620,12 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2680
 		{
-			prec, err := sqlDollar[2].union.numVal().asInt()
+			prec, err := sqlDollar[2].union.numVal().asInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = newFloatType(prec)
+			sqlVAL.union.val = newFloatType(int(prec))
 		}
 	case 427:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -6694,12 +6694,12 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
 		//line sql.y:2752
 		{
-			n, err := sqlDollar[4].union.numVal().asInt()
+			n, err := sqlDollar[4].union.numVal().asInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
-			sqlVAL.union.val = newIntBitType(n)
+			sqlVAL.union.val = newIntBitType(int(n))
 		}
 	case 440:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -6711,14 +6711,14 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:2779
 		{
-			n, err := sqlDollar[3].union.numVal().asInt()
+			n, err := sqlDollar[3].union.numVal().asInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
 				return 1
 			}
 			sqlVAL.union.val = sqlDollar[1].union.colType()
 			if n != 0 {
-				strType := &StringType{N: n}
+				strType := &StringType{N: int(n)}
 				strType.Name = sqlVAL.union.val.(*StringType).Name
 				sqlVAL.union.val = strType
 			}

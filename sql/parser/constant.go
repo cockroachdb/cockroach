@@ -19,6 +19,7 @@ package parser
 import (
 	"fmt"
 	"go/constant"
+	"go/token"
 	"strings"
 	"unicode/utf8"
 
@@ -101,7 +102,7 @@ func (expr *NumVal) String() string {
 //  1.1 = no
 //  123...overflow...456 = no
 func (expr *NumVal) canBeInt64() bool {
-	_, err := expr.asInt()
+	_, err := expr.asInt64()
 	return err == nil
 }
 
@@ -117,18 +118,28 @@ func (expr *NumVal) canBeInt64() bool {
 // 	return expr.Kind() == constant.Int && expr.canBeInt64()
 // }
 
-// asInt returns the value as an integer if possible, or returns an
+// asInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible.
-func (expr *NumVal) asInt() (int, error) {
-	intVal := constant.ToInt(expr.Value)
-	if intVal.Kind() == constant.Unknown {
+func (expr *NumVal) asInt64() (int64, error) {
+	intVal, ok := expr.asConstantInt()
+	if !ok {
 		return 0, fmt.Errorf("cannot represent %v as an int", expr.Value)
 	}
 	i, exact := constant.Int64Val(intVal)
 	if !exact {
 		return 0, fmt.Errorf("representing %v as an int would overflow", intVal)
 	}
-	return int(i), nil
+	return i, nil
+}
+
+// asConstantInt returns the value as an constant.Int if possible, along
+// with if the conversion was possible.
+func (expr *NumVal) asConstantInt() (constant.Value, bool) {
+	intVal := constant.ToInt(expr.Value)
+	if intVal.Kind() == constant.Int {
+		return intVal, true
+	}
+	return nil, false
 }
 
 var numValAvailIntFloatDec = []Datum{DummyInt, DummyFloat, DummyDecimal}
@@ -264,4 +275,150 @@ func (expr *StrVal) ResolveAsType(typ Datum) (TypedExpr, error) {
 	default:
 		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
+}
+
+type constantFolderVisitor struct{}
+
+var _ Visitor = constantFolderVisitor{}
+
+func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	return true, expr
+}
+
+var unaryOpToToken = map[UnaryOperator]token.Token{
+	UnaryPlus:  token.ADD,
+	UnaryMinus: token.SUB,
+}
+var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{
+	UnaryComplement: token.XOR,
+}
+var binaryOpToToken = map[BinaryOperator]token.Token{
+	Plus:  token.ADD,
+	Minus: token.SUB,
+	Mult:  token.MUL,
+	Div:   token.QUO, // token.QUO_ASSIGN to force integer division.
+}
+var binaryOpToTokenIntOnly = map[BinaryOperator]token.Token{
+	Mod:    token.REM,
+	Bitand: token.AND,
+	Bitor:  token.OR,
+	Bitxor: token.XOR,
+}
+var binaryShiftOpToToken = map[BinaryOperator]token.Token{
+	LShift: token.SHL,
+	RShift: token.SHR,
+}
+var comparisonOpToToken = map[ComparisonOp]token.Token{
+	EQ: token.EQL,
+	NE: token.NEQ,
+	LT: token.LSS,
+	LE: token.LEQ,
+	GT: token.GTR,
+	GE: token.GEQ,
+}
+
+func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
+	defer func() {
+		// go/constant operations can panic for a number of reasons, but it's difficult
+		// to preemptively detect when they will. It's safest to just recover here.
+		if r := recover(); r != nil {
+			retExpr = expr
+		}
+	}()
+	switch t := expr.(type) {
+	case *ParenExpr:
+		if cv, ok := t.Expr.(*NumVal); ok {
+			return cv
+		}
+	case *UnaryExpr:
+		if cv, ok := t.Expr.(*NumVal); ok {
+			if token, ok := unaryOpToToken[t.Operator]; ok {
+				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+			}
+			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
+				if intVal, ok := cv.asConstantInt(); ok {
+					return &NumVal{Value: constant.UnaryOp(token, intVal, 0)}
+				}
+			}
+		}
+	case *BinaryExpr:
+		l, okL := t.Left.(*NumVal)
+		r, okR := t.Right.(*NumVal)
+		if okL && okR {
+			if token, ok := binaryOpToToken[t.Operator]; ok {
+				return &NumVal{Value: constant.BinaryOp(l.Value, token, r.Value)}
+			}
+			if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
+				if lInt, ok := l.asConstantInt(); ok {
+					if rInt, ok := r.asConstantInt(); ok {
+						return &NumVal{Value: constant.BinaryOp(lInt, token, rInt)}
+					}
+				}
+			}
+			if token, ok := binaryShiftOpToToken[t.Operator]; ok {
+				if lInt, ok := l.asConstantInt(); ok {
+					if rInt64, err := r.asInt64(); err == nil && rInt64 >= 0 {
+						return &NumVal{Value: constant.Shift(lInt, token, uint(rInt64))}
+					}
+				}
+			}
+		}
+	case *ComparisonExpr:
+		l, okL := t.Left.(*NumVal)
+		r, okR := t.Right.(*NumVal)
+		if okL && okR {
+			if token, ok := comparisonOpToToken[t.Operator]; ok {
+				return MakeDBool(DBool(constant.Compare(l.Value, token, r.Value)))
+			}
+		}
+	}
+	return expr
+}
+
+// foldNumericConstants folds all numeric constants using exact arithmetic.
+//
+// TODO(nvanbenschoten) Can this visitor be preallocated (like normalizeVisitor)?
+// TODO(nvanbenschoten) Investigate normalizing associative operations to group
+//     constants together and permit further numeric constant folding.
+func foldNumericConstants(expr Expr) (Expr, error) {
+	v := constantFolderVisitor{}
+	expr, _ = WalkExpr(v, expr)
+	return expr, nil
+}
+
+type constantTypeVisitor struct {
+	cfv constantFolderVisitor
+}
+
+var _ Visitor = constantTypeVisitor{}
+
+func (constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	case Constant:
+		typedConst, err := t.TypeCheck(nil, nil)
+		if err != nil {
+			panic(err)
+		}
+		return false, typedConst
+	}
+	return true, expr
+}
+
+func (constantTypeVisitor) VisitPost(expr Expr) (retExpr Expr) { return expr }
+
+// TypeConstants type checks all Constant literal expressions, causing
+// them to become Datum representations of their values. While doing so,
+// it first folds all numeric constants.
+//
+// This means that Constants will become TypedExprs so that they can be
+// used in contexts which expect a TypedExpr tree (such as Normalization).
+// As such, the function is primarily intended for use while testing
+// expressions where full type checking is not desired.
+//
+// TODO(nvanbenschoten) Can this visitor be preallocated (like normalizeVisitor)?
+func TypeConstants(expr Expr) (Expr, error) {
+	v := constantTypeVisitor{}
+	expr, _ = WalkExpr(v.cfv, expr)
+	expr, _ = WalkExpr(v, expr)
+	return expr, nil
 }
