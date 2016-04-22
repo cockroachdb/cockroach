@@ -211,6 +211,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // received. If it's a retriable error and we're going to retry the txn,
 // then the state moves to RestartWait. Otherwise, the state moves to Aborted
 // and the KV txn is cleaned up.
+// TODO(andrei): make this method take error, not pErr.
 func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor) {
 	if pErr == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
@@ -218,7 +219,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor)
 	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE || !ts.willBeRetried() {
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.txnAbortCount.Inc(1)
-		ts.txn.CleanupOnError(pErr)
+		ts.txn.CleanupOnError(roachpb.WrapPErr(pErr))
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.

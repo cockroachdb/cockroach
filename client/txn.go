@@ -383,12 +383,12 @@ func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
 }
 
 // CleanupOnError cleans up the transaction as a result of an error.
-func (txn *Txn) CleanupOnError(pErr *roachpb.Error) {
-	if pErr == nil {
+func (txn *Txn) CleanupOnError(err error) {
+	if err == nil {
 		panic("no error")
 	}
 	if replyErr := txn.Rollback(); replyErr != nil {
-		log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, pErr)
+		log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 	}
 }
 
@@ -433,7 +433,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 func (txn *Txn) CommitOrCleanup() *roachpb.Error {
 	pErr := txn.commit(nil)
 	if pErr != nil {
-		txn.CleanupOnError(pErr)
+		txn.CleanupOnError(roachpb.WrapPErr(pErr))
 	}
 	if !txn.IsFinalized() {
 		panic("Commit() failed to move txn to a final state")
@@ -446,7 +446,7 @@ func (txn *Txn) CommitOrCleanup() *roachpb.Error {
 func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
 	pErr := txn.commit(&deadline)
 	if pErr != nil {
-		txn.CleanupOnError(pErr)
+		txn.CleanupOnError(roachpb.WrapPErr(pErr))
 	}
 	return pErr
 }
@@ -497,7 +497,7 @@ type TxnExecOptions struct {
 	MinInitialTimestamp roachpb.Timestamp
 }
 
-// Exec executes fn in the context of a distributed transaction.
+// ExecEx executes fn in the context of a distributed transaction.
 // Execution is controlled by opt (see comments in TxnExecOptions).
 //
 // opt is passed to fn, and it's valid for fn to modify opt as it sees
@@ -514,14 +514,18 @@ type TxnExecOptions struct {
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
 //
-// TODO(andrei): Make Exec() return error; make fn return an error + a retriable
-// bit. There's no reason to propagate roachpb.Error (protos) above this point.
-func (txn *Txn) Exec(
+// Depending on opt.AutoRetry, ExecEx or the caller isresponsible for retrying
+// transaction execution if fn encouters an internal retryable error. ExecEx
+// recognizes such errors by looking inside the error returned by ExecEx (i.e.
+// the error returned by fn) and checking for the WrappedPErr type. In other
+// words, the closure must usually convert lower-level roachpb.Error errors to
+// WrappedPErr using roachpb.WrapPErr().
+func (txn *Txn) ExecEx(
 	opt TxnExecOptions,
-	fn func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
+	fn func(txn *Txn, opt *TxnExecOptions) error) error {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	var pErr *roachpb.Error
+	var err error
 	var retryOptions retry.Options
 	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
 		panic("asked to retry or commit a txn that is already aborted")
@@ -541,51 +545,79 @@ RetryLoop:
 			}
 		}
 
-		pErr = fn(txn, &opt)
+		err = fn(txn, &opt)
 		if txn != nil {
 			txn.retrying = true
 			defer func() {
 				txn.retrying = false
 			}()
 		}
-		if (pErr == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
+		if (err == nil) && opt.AutoCommit && (txn.Proto.Status == roachpb.PENDING) {
 			// fn succeeded, but didn't commit.
-			pErr = txn.Commit()
+			if pErr := txn.Commit(); pErr != nil {
+				err = roachpb.WrapPErr(pErr)
+			}
 		}
 
-		if pErr == nil {
+		if err == nil {
 			break
 		}
 
 		// Make sure the txn record that pErr carries is for this txn.
 		// We check only when txn.Proto.ID has been initialized after an initial successful send.
-		if pErr.GetTxn() != nil && txn.Proto.ID != nil {
-			if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
-				return roachpb.NewErrorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
-					errTxn, txn.Proto)
+		if wrappedPErr, ok := err.(roachpb.WrappedPErr); ok {
+			pErr := wrappedPErr.PErr
+			if pErr.GetTxn() != nil && txn.Proto.ID != nil {
+				if errTxn := pErr.GetTxn(); !errTxn.Equal(&txn.Proto) {
+					return util.Errorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
+						errTxn, txn.Proto)
+				}
 			}
 		}
 
 		if !opt.AutoRetry {
 			break RetryLoop
 		}
-		switch pErr.TransactionRestart {
-		case roachpb.TransactionRestart_IMMEDIATE:
-			r.Reset()
-		case roachpb.TransactionRestart_BACKOFF:
-		default:
+		if wrappedPErr, ok := err.(roachpb.WrappedPErr); ok {
+			switch wrappedPErr.PErr.TransactionRestart {
+			case roachpb.TransactionRestart_IMMEDIATE:
+				r.Reset()
+			case roachpb.TransactionRestart_BACKOFF:
+			default:
+				break RetryLoop
+			}
+		} else {
+			// Only pErrs are potentially retryable.
 			break RetryLoop
 		}
 		if log.V(2) {
 			log.Infof("automatically retrying transaction: %s because of error: %s",
-				txn.DebugName(), pErr)
+				txn.DebugName(), err)
 		}
 	}
 
-	if pErr != nil {
-		pErr.StripErrorTransaction()
+	if wrappedPErr, ok := err.(roachpb.WrappedPErr); ok {
+		pErr := wrappedPErr.PErr
+		if pErr != nil {
+			pErr.StripErrorTransaction()
+		}
 	}
-	return pErr
+	return err
+}
+
+// Exec is DEPRECATED. Use ExecTx().
+// Exec takes a closure returning *roachpb.Error; we've since moved to returning
+// just error.
+func (txn *Txn) Exec(
+	opt TxnExecOptions,
+	fn func(txn *Txn, opt *TxnExecOptions) *roachpb.Error) *roachpb.Error {
+	err := txn.ExecEx(opt, func(txn *Txn, opt *TxnExecOptions) error {
+		if pErr := fn(txn, opt); pErr != nil {
+			return roachpb.WrapPErr(pErr)
+		}
+		return nil
+	})
+	return roachpb.NewError(err)
 }
 
 // send runs the specified calls synchronously in a single batch and
