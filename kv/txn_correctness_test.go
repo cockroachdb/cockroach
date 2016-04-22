@@ -781,9 +781,7 @@ func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
 		},
 		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
 	}
-	// TODO(vivekmenezes): when fixed, should pass with bothIsolations as well.
-	// SNAPSHOT currently shows more anomalies (likely similar to #6240).
-	checkConcurrency("lost update (delete)", onlySerializable,
+	checkConcurrency("lost update (delete)", bothIsolations,
 		[]string{txn1, txn2, txn3}, verify, true, t)
 }
 
