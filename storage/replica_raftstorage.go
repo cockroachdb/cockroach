@@ -362,13 +362,57 @@ func setLastIndex(eng engine.Engine, rangeID roachpb.RangeID, lastIndex uint64) 
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
-	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
-	// Delegate to a static function to make sure that we do not depend
-	// on any indirect calls to r.store.Engine() (or other in-memory
-	// state of the Replica). Everything must come from the snapshot.
-	return snapshot(snap, r.RangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
+	// If a snapshot is in progress, see if it's ready.
+	if r.mu.snapshotChan != nil {
+		select {
+		case snapData, ok := <-r.mu.snapshotChan:
+			if ok {
+				return snapData, nil
+			}
+			// If the old channel was closed, fall through to start a new task.
+
+		default:
+			// If the result is not ready, return immediately.
+			return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		}
+	}
+
+	// Use an unbuffered channel so the worker stays alive until someone
+	// reads from the channel, and can abandon the snapshot if it gets
+	// stale.
+	ch := make(chan (raftpb.Snapshot))
+	if r.store.Stopper().RunAsyncTask(func() {
+		defer close(ch)
+		snap := r.store.NewSnapshot()
+		defer snap.Close()
+		// Delegate to a static function to make sure that we do not depend
+		// on any indirect calls to r.store.Engine() (or other in-memory
+		// state of the Replica). Everything must come from the snapshot.
+		snapData, err := snapshot(snap, r.RangeID, r.isInitializedLocked(), r.mu.desc.StartKey)
+		if err != nil {
+			log.Errorf("range %s: error generating snapshot: %s", r.RangeID, err)
+		} else {
+			select {
+			case ch <- snapData:
+			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
+				// If raft decides it doesn't need this snapshot any more (or
+				// just takes too long to use it), abandon it to save memory.
+			}
+		}
+	}) {
+		r.mu.snapshotChan = ch
+	}
+
+	if r.store.ctx.BlockingSnapshotDuration > 0 {
+		select {
+		case snap, ok := <-r.mu.snapshotChan:
+			if ok {
+				return snap, nil
+			}
+		case <-time.After(r.store.ctx.BlockingSnapshotDuration):
+		}
+	}
+	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 }
 
 func snapshot(
@@ -456,14 +500,6 @@ func snapshot(
 			ConfState: cs,
 		},
 	}, nil
-}
-
-// GetSnapshot is the same function as Snapshot but it does not require the
-// replica lock to be held.
-func (r *Replica) GetSnapshot() (raftpb.Snapshot, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.Snapshot()
 }
 
 // append the given entries to the raft log. Takes the previous value
