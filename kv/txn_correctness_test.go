@@ -765,7 +765,6 @@ func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
 	// I1(A) C1 D3(A) R2(A) D3(B) C3 W2(B-A) C2
 	// I1(A) C1 R2(A) D3(A) D3(B) C3 W2(B-A) C2
 	// I1(A) C1 R2(A) D3(A) D3(B) W2(B-A) C3 C2
-	t.Skip("TODO(tschottdorf): see #6124")
 
 	// When serializable, B can't exceed A.
 	txn1 := "I(A) C"
@@ -781,10 +780,11 @@ func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
 		},
 		pruneTo: regexp.MustCompile(`^I1\(A\) C1`),
 	}
-	// TODO(vivekmenezes): when fixed, should pass with bothIsolations as well.
-	// SNAPSHOT currently shows more anomalies (likely similar to #6240).
 	checkConcurrency("lost update (delete)", onlySerializable,
 		[]string{txn1, txn2, txn3}, verify, true, t)
+	// TODO(vivek): Enable this once these tests can run faster.
+	//checkConcurrency("lost update (delete)", onlySnapshot,
+	//	[]string{txn1, txn2, txn3}, verify, true, t)
 }
 
 func TestTxnDBLostUpdateAnomaly_DeleteRange(t *testing.T) {
