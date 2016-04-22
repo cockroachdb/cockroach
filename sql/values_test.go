@@ -111,12 +111,16 @@ func TestValues(t *testing.T) {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, pErr)
 		}
 		if plan != nil {
-			var rows []parser.DTuple
-			for plan.Next() {
-				rows = append(rows, plan.Values())
-			}
-			if !reflect.DeepEqual(rows, tc.rows) {
-				t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
+			if pErr := plan.Start(); pErr != nil {
+				t.Errorf("%d: unexpected error in start: %v", i, pErr)
+			} else {
+				var rows []parser.DTuple
+				for plan.Next() {
+					rows = append(rows, plan.Values())
+				}
+				if !reflect.DeepEqual(rows, tc.rows) {
+					t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
+				}
 			}
 		}
 	}
