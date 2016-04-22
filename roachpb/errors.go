@@ -554,13 +554,3 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
-
-func (e *ExistingSchemaChangeLeaseError) Error() string {
-	return e.message(nil)
-}
-
-func (*ExistingSchemaChangeLeaseError) message(_ *Error) string {
-	return "an outstanding schema change lease exists"
-}
-
-var _ ErrorDetailInterface = &ExistingSchemaChangeLeaseError{}

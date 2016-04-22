@@ -82,6 +82,7 @@ type StatementResults struct {
 
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
+	// TODO(andrei): turn PErr into an error.
 	PErr *roachpb.Error
 	// The type of statement that the result is for.
 	Type parser.StatementType

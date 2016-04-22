@@ -304,8 +304,8 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			} else if done {
 				break
 			}
-			if pErr := sc.exec(); pErr != nil {
-				if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); ok {
+			if err := sc.exec(); err != nil {
+				if err == errExistingSchemaChangeLease {
 					// Try again.
 					continue
 				}
@@ -318,7 +318,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				// statements in the current batch; we can't modify the results of older
 				// statements.
 				if scEntry.epoch == scc.curGroupNum {
-					results[scEntry.idx] = Result{PErr: pErr}
+					results[scEntry.idx] = Result{PErr: roachpb.NewError(err)}
 				}
 			}
 			break
