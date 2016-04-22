@@ -30,7 +30,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -538,14 +537,17 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	defer mtc.Stop()
 
 	// Initialize the gossip network.
-	var wg sync.WaitGroup
-	wg.Add(len(mtc.stores))
-	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ roachpb.Value) { wg.Done() })
+	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
 	for _, s := range mtc.stores {
-		s.GossipStore()
+		desc, err := s.Descriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		storeDescs = append(storeDescs, desc)
 	}
-	wg.Wait()
+	for _, g := range mtc.gossips {
+		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
+	}
 
 	// Once we know our peers, trigger a scan.
 	mtc.stores[0].ForceReplicationScanAndProcess()
@@ -642,14 +644,17 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	mtc.replicateRange(desc.RangeID, 3, 4)
 
 	// Initialize the gossip network.
-	var wg sync.WaitGroup
-	wg.Add(len(mtc.stores))
-	key := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	mtc.stores[0].Gossip().RegisterCallback(key, func(_ string, _ roachpb.Value) { wg.Done() })
+	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
 	for _, s := range mtc.stores {
-		s.GossipStore()
+		desc, err := s.Descriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		storeDescs = append(storeDescs, desc)
 	}
-	wg.Wait()
+	for _, g := range mtc.gossips {
+		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
+	}
 
 	maxTimeout := time.After(10 * time.Second)
 	succeeded := false
@@ -1234,11 +1239,8 @@ func TestStoreRangeRebalance(t *testing.T) {
 		}
 		storeDescs = append(storeDescs, desc)
 	}
-	var sgs []*gossiputil.StoreGossiper
 	for _, g := range mtc.gossips {
-		sg := gossiputil.NewStoreGossiper(g)
-		sgs = append(sgs, sg)
-		sg.GossipStores(storeDescs, t)
+		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
 	}
 
 	// This can't use SucceedsSoon as using the exponential backoff mechanic
@@ -1329,9 +1331,9 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 	// Try to issue a command on node 2. It should not be able to commit
 	// (so we add it asynchronously).
-	startWG := sync.WaitGroup{}
+	var startWG sync.WaitGroup
 	startWG.Add(1)
-	finishWG := sync.WaitGroup{}
+	var finishWG sync.WaitGroup
 	finishWG.Add(1)
 	go func() {
 		rng, err := mtc.stores[2].GetReplica(raftID)
