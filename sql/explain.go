@@ -76,20 +76,14 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 			return nil, roachpb.NewError(err)
 		}
 		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
-
 	}
 
 	plan, err := p.makePlan(n.Statement, autoCommit)
 	if err != nil {
 		return nil, err
 	}
-	if err := plan.Start(); err != nil {
-		return nil, err
-	}
 	switch mode {
 	case explainDebug:
-		plan.MarkDebug(mode)
-
 		// Wrap the plan in an explainDebugNode.
 		return &explainDebugNode{plan}, nil
 
@@ -104,7 +98,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 		return v, nil
 
 	case explainTrace:
-		plan.MarkDebug(explainDebug)
 		return (&sortNode{
 			ordering: []columnOrderInfo{{len(traceColumns), encoding.Ascending}, {2, encoding.Ascending}},
 			columns:  traceColumns,
@@ -217,8 +210,14 @@ var debugColumns = []ResultColumn{
 func (*explainDebugNode) Columns() []ResultColumn { return debugColumns }
 func (*explainDebugNode) Ordering() orderingInfo  { return orderingInfo{} }
 
-func (n *explainDebugNode) PErr() *roachpb.Error  { return n.plan.PErr() }
-func (n *explainDebugNode) Start() *roachpb.Error { return n.plan.Start() }
+func (n *explainDebugNode) PErr() *roachpb.Error { return n.plan.PErr() }
+func (n *explainDebugNode) Start() *roachpb.Error {
+	if pErr := n.plan.Start(); pErr != nil {
+		return pErr
+	}
+	n.plan.MarkDebug(explainDebug)
+	return nil
+}
 
 func (n *explainDebugNode) Next() bool { return n.plan.Next() }
 
