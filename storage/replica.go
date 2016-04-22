@@ -230,6 +230,11 @@ type Replica struct {
 		proposeRaftCommandFn func(*pendingCmd) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
+
+		// Set to non-nil while a snapshot is being generated. It is
+		// closed when the worker goroutine exits, whether the snapshot
+		// was successfully generated or not.
+		snapshotChan chan raftpb.Snapshot
 	}
 }
 
