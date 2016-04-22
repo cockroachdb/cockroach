@@ -80,7 +80,11 @@ func (d Duration) Compare(x Duration) int {
 
 // String returns a string representation of a Duration.
 func (d Duration) String() string {
-	return fmt.Sprintf("%dm%dd%s", d.Months, d.Days, time.Duration(d.Nanos)*time.Nanosecond)
+	nanos := "0ns"
+	if d.Nanos != 0 {
+		nanos = (time.Duration(d.Nanos) * time.Nanosecond).String()
+	}
+	return fmt.Sprintf("%dm%dd%s", d.Months, d.Days, nanos)
 }
 
 // Encode returns three integers such that the original Duration is recoverable
