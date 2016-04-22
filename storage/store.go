@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
+	sql_util "github.com/cockroachdb/cockroach/sql/util"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -328,7 +328,7 @@ type StoreContext struct {
 
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.
-	SQLExecutor sql.InternalExecutor
+	SQLExecutor sql_util.InternalSQLExecutor
 
 	// RangeRetryOptions are the retry options when retryable errors are
 	// encountered sending commands to ranges.
