@@ -99,3 +99,122 @@ func TestStringConstantAvailableTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestFoldNumericConstants(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		// Unary ops.
+		{`+1`, `1`},
+		{`+1.2`, `1.2`},
+		{`-1`, `-1`},
+		{`-1.2`, `-1.2`},
+		// Unary ops (int only).
+		{`~1`, `-2`},
+		{`~1.2`, `~ 1.2`},
+		// Binary ops.
+		{`1 + 1`, `2`},
+		{`1.2 + 2.3`, `3.5`},
+		{`1 + 2.3`, `3.3`},
+		{`2 - 1`, `1`},
+		{`1.2 - 2.3`, `-1.1`},
+		{`1 - 2.3`, `-1.3`},
+		{`2 * 1`, `2`},
+		{`1.2 * 2.3`, `2.76`},
+		{`1 * 2.3`, `2.3`},
+		{`123456789.987654321 * 987654321`, `1.21933e+17`},
+		{`9 / 4`, `2.25`},
+		{`9.7 / 4`, `2.425`},
+		{`4.72 / 2.36`, `2`},
+		{`0 / 0`, `0 / 0`}, // Will be caught during evaluation.
+		{`1 / 0`, `1 / 0`}, // Will be caught during evaluation.
+		// Binary ops (int only).
+		{`9 % 2`, `1`},
+		{`100 % 17`, `15`},
+		{`100.43 % 17.82`, `100.43 % 17.82`}, // Constant folding won't fold float modulo.
+		{`1 & 3`, `1`},
+		{`1.3 & 3.2`, `1.3 & 3.2`}, // Will be caught during type checking.
+		{`1 | 2`, `3`},
+		{`1.3 | 2.8`, `1.3 | 2.8`}, // Will be caught during type checking.
+		{`1 ^ 3`, `2`},
+		{`1.3 ^ 3.9`, `1.3 ^ 3.9`}, // Will be caught during type checking.
+		// Shift ops (int only).
+		{`1 << 2`, `4`},
+		{`1 << -2`, `1 << -2`},                                                     // Should be caught during evaluation.
+		{`1 << 9999999999999999999999999999`, `1 << 9999999999999999999999999999`}, // Will be caught during type checking.
+		{`1.2 << 2.4`, `1.2 << 2.4`},                                               // Will be caught during type checking.
+		{`4 >> 2`, `1`},
+		{`4.1 >> 2.9`, `4.1 >> 2.9`}, // Will be caught during type checking.
+		// Comparison ops.
+		{`4 = 2`, `false`},
+		{`4 = 4.0`, `true`},
+		{`4.0 = 4`, `true`},
+		{`4.9 = 4`, `false`},
+		{`4.9 = 4.9`, `true`},
+		{`4 != 2`, `true`},
+		{`4 != 4.0`, `false`},
+		{`4.0 != 4`, `false`},
+		{`4.9 != 4`, `true`},
+		{`4.9 != 4.9`, `false`},
+		{`4 < 2`, `false`},
+		{`4 < 4.0`, `false`},
+		{`4.0 < 4`, `false`},
+		{`4.9 < 4`, `false`},
+		{`4.9 < 4.9`, `false`},
+		{`4 <= 2`, `false`},
+		{`4 <= 4.0`, `true`},
+		{`4.0 <= 4`, `true`},
+		{`4.9 <= 4`, `false`},
+		{`4.9 <= 4.9`, `true`},
+		{`4 > 2`, `true`},
+		{`4 > 4.0`, `false`},
+		{`4.0 > 4`, `false`},
+		{`4.9 > 4`, `true`},
+		{`4.9 > 4.9`, `false`},
+		{`4 >= 2`, `true`},
+		{`4 >= 4.0`, `true`},
+		{`4.0 >= 4`, `true`},
+		{`4.9 >= 4`, `true`},
+		{`4.9 >= 4.9`, `true`},
+		// With parentheses.
+		{`(4)`, `4`},
+		{`(((4)))`, `4`},
+		{`(((9 / 3) * (1 / 3)))`, `1`},
+		{`(((9 / 3) % (1 / 3)))`, `((3 % 0.333333))`},
+		{`(1.0) << ((2) + 3 / (1/9))`, `536870912`},
+		// With non-constants.
+		{`a + 5 * b`, `a + (5 * b)`},
+		{`a + 5 + b + 7`, `((a + 5) + b) + 7`},
+		{`a + 5 * 2`, `a + 10`},
+		{`a * b + 5 / 2`, `(a * b) + 2.5`},
+		{`a - b * 5 - 3`, `(a - (b * 5)) - 3`},
+		{`a - b + 5 * 3`, `(a - b) + 15`},
+	}
+	for _, d := range testData {
+		expr, err := ParseExprTraditional(d.expr)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		rOrig := expr.String()
+		r, err := foldNumericConstants(expr)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		if s := r.String(); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		// Folding again should be a no-op.
+		r2, err := foldNumericConstants(r)
+		if err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		if s := r2.String(); d.expected != s {
+			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+		}
+		// The original expression should be unchanged.
+		if rStr := expr.String(); rOrig != rStr {
+			t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
+		}
+	}
+}
