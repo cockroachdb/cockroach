@@ -629,8 +629,8 @@ func mvccGetUsingIter(
 		return nil, nil, err
 	}
 
-	value, intents, err := mvccGetInternal(ctx, iter, metaKey,
-		timestamp, consistent, txn, buf)
+	value, intents, _, err := mvccGetInternal(ctx, iter, metaKey,
+		timestamp, consistent, safeValue, txn, buf)
 	if value == &buf.value {
 		value = &roachpb.Value{}
 		*value = buf.value
@@ -703,6 +703,13 @@ func mvccGetMetadata(iter Iterator, metaKey MVCCKey,
 	return err == nil, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, err
 }
 
+type valueSafety int
+
+const (
+	unsafeValue valueSafety = iota
+	safeValue
+)
+
 // mvccGetInternal parses the MVCCMetadata from the specified raw key
 // value, and reads the versioned value indicated by timestamp, taking
 // the transaction txn into account. getValue is a helper function to
@@ -719,11 +726,13 @@ func mvccGetInternal(
 	metaKey MVCCKey,
 	timestamp roachpb.Timestamp,
 	consistent bool,
+	allowedSafety valueSafety,
 	txn *roachpb.Transaction,
 	buf *getBuffer,
-) (*roachpb.Value, []roachpb.Intent, error) {
+) (*roachpb.Value, []roachpb.Intent, valueSafety, error) {
 	if !consistent && txn != nil {
-		return nil, nil, util.Errorf("cannot allow inconsistent reads within a transaction")
+		return nil, nil, safeValue, util.Errorf(
+			"cannot allow inconsistent reads within a transaction")
 	}
 
 	meta := &buf.meta
@@ -733,10 +742,9 @@ func mvccGetInternal(
 		value := &buf.value
 		*value = roachpb.Value{RawBytes: meta.RawBytes}
 		if err := value.Verify(metaKey.Key); err != nil {
-			return nil, nil, err
+			return nil, nil, safeValue, err
 		}
-		buf.isUnsafeValue = false
-		return value, nil, nil
+		return value, nil, safeValue, nil
 	}
 	var ignoredIntents []roachpb.Intent
 	if !consistent && meta.Txn != nil && !timestamp.Less(meta.Timestamp) {
@@ -753,7 +761,7 @@ func mvccGetInternal(
 	if !timestamp.Less(meta.Timestamp) && meta.Txn != nil && !ownIntent {
 		// Trying to read the last value, but it's another transaction's intent;
 		// the reader will have to act on this.
-		return nil, nil, &roachpb.WriteIntentError{
+		return nil, nil, safeValue, &roachpb.WriteIntentError{
 			Intents: []roachpb.Intent{{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn}},
 		}
 	}
@@ -775,7 +783,8 @@ func mvccGetInternal(
 		// we're now reading. In this case, we skip the intent.
 		if ownIntent && txn.Epoch != meta.Txn.Epoch {
 			if txn.Epoch < meta.Txn.Epoch {
-				return nil, nil, util.Errorf("failed to read with epoch %d due to a write intent with epoch %d",
+				return nil, nil, safeValue, util.Errorf(
+					"failed to read with epoch %d due to a write intent with epoch %d",
 					txn.Epoch, meta.Txn.Epoch)
 			}
 			seekKey = seekKey.Next()
@@ -791,7 +800,7 @@ func mvccGetInternal(
 			// absolute time if the writer had a fast clock.
 			// The reader should try again with a later timestamp than the
 			// one given below.
-			return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
+			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
 				timestamp, meta.Timestamp)
 		}
 
@@ -805,7 +814,7 @@ func mvccGetInternal(
 		// would apply to.
 		seekKey.Timestamp = timestamp
 		if seekKey.Timestamp == roachpb.ZeroTimestamp {
-			return nil, ignoredIntents, nil
+			return nil, ignoredIntents, safeValue, nil
 		}
 	}
 
@@ -814,17 +823,18 @@ func mvccGetInternal(
 	}
 	if !iter.Valid() {
 		if err := iter.Error(); err != nil {
-			return nil, nil, err
+			return nil, nil, safeValue, err
 		}
-		return nil, ignoredIntents, nil
+		return nil, ignoredIntents, safeValue, nil
 	}
 
 	unsafeKey := iter.unsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return nil, ignoredIntents, nil
+		return nil, ignoredIntents, safeValue, nil
 	}
 	if !unsafeKey.IsValue() {
-		return nil, nil, util.Errorf("expected scan to versioned value reading key %s; got %s %s",
+		return nil, nil, safeValue, util.Errorf(
+			"expected scan to versioned value reading key %s; got %s %s",
 			metaKey.Key, unsafeKey, unsafeKey.Timestamp)
 	}
 
@@ -834,7 +844,7 @@ func mvccGetInternal(
 			// value, but there is another previous write with the same issues as in
 			// the second case, so the reader will have to come again with a higher
 			// read timestamp.
-			return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
+			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
 				timestamp, unsafeKey.Timestamp)
 		}
 		// Fifth case: There's no value in our future up to MaxTimestamp, and those
@@ -844,21 +854,20 @@ func mvccGetInternal(
 
 	if len(iter.unsafeValue()) == 0 {
 		// Value is deleted.
-		return nil, ignoredIntents, nil
+		return nil, ignoredIntents, safeValue, nil
 	}
 
 	value := &buf.value
-	buf.isUnsafeValue = buf.allowUnsafeValue
-	if buf.allowUnsafeValue {
+	if allowedSafety == unsafeValue {
 		value.RawBytes = iter.unsafeValue()
 	} else {
 		value.RawBytes = iter.Value()
 	}
 	value.Timestamp = unsafeKey.Timestamp
 	if err := value.Verify(metaKey.Key); err != nil {
-		return nil, nil, err
+		return nil, nil, safeValue, err
 	}
-	return value, ignoredIntents, nil
+	return value, ignoredIntents, allowedSafety, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1005,7 +1014,8 @@ func mvccPutInternal(
 			getBuf := newGetBuffer()
 			defer getBuf.release()
 			getBuf.meta = buf.meta // initialize get metadata from what we've already read
-			if exVal, _, err = mvccGetInternal(ctx, iter, metaKey, readTS, true /* consistent */, txn, getBuf); err != nil {
+			if exVal, _, _, err = mvccGetInternal(
+				ctx, iter, metaKey, readTS, true /* consistent */, safeValue, txn, getBuf); err != nil {
 				return nil, err
 			}
 		}
@@ -1579,15 +1589,13 @@ func MVCCIterate(ctx context.Context,
 		alloc, metaKey.Key = alloc.newChunk(metaKey.Key, 1)
 
 		// Indicate that we're fine with an unsafe Value.RawBytes being returned.
-		buf.allowUnsafeValue = true
-		buf.isUnsafeValue = false
-		value, newIntents, err := mvccGetInternal(ctx, iter, metaKey, timestamp, consistent, txn, buf)
+		value, newIntents, valueSafety, err := mvccGetInternal(
+			ctx, iter, metaKey, timestamp, consistent, unsafeValue, txn, buf)
 		intents = append(intents, newIntents...)
 		if value != nil {
-			if buf.isUnsafeValue {
+			if valueSafety == unsafeValue {
 				// Copy the unsafe value into our allocation buffer.
 				alloc, value.RawBytes = alloc.newChunk(value.RawBytes, 0)
-				buf.isUnsafeValue = false
 			}
 			done, err := f(roachpb.KeyValue{Key: metaKey.Key, Value: *value})
 			if err != nil {
