@@ -1338,6 +1338,8 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 						}
 						return
 					}
+					tc.rng.mu.Lock()
+					defer tc.rng.mu.Unlock()
 					if err := defaultProposeRaftCommandLocked(tc.rng, cmd); err != nil {
 						panic(err) // unlikely, so punt on proper handling
 					}
