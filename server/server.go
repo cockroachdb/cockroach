@@ -202,7 +202,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.recorder.AddNodeRegistry("sys.%s", s.runtime.Registry())
 
-	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics)
+	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
 	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor, ds, s.node)

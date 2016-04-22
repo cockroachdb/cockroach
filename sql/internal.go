@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlutil"
 )
 
 // InternalExecutor can be used internally by cockroach to execute SQL
@@ -31,6 +32,8 @@ import (
 type InternalExecutor struct {
 	LeaseManager *LeaseManager
 }
+
+var _ sqlutil.InternalExecutor = InternalExecutor{}
 
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
