@@ -158,9 +158,9 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 	expectedVersion := desc.GetTable().Version
 
-	desc, pErr = changer.MaybeIncrementVersion()
-	if pErr != nil {
-		t.Fatal(pErr)
+	desc, err := changer.MaybeIncrementVersion()
+	if err != nil {
+		t.Fatal(err)
 	}
 	newVersion := desc.GetTable().Version
 	if newVersion != expectedVersion {
@@ -188,9 +188,9 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if isDone {
 		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
 	}
-	desc, pErr = changer.MaybeIncrementVersion()
-	if pErr != nil {
-		t.Fatal(pErr)
+	desc, err = changer.MaybeIncrementVersion()
+	if err != nil {
+		t.Fatal(err)
 	}
 	savedDesc := &csql.Descriptor{}
 	if pErr := kvDB.GetProto(descKey, savedDesc); pErr != nil {

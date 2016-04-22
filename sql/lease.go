@@ -215,6 +215,8 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 	return tableDesc.Version, nil
 }
 
+var errLeaseVersionChanged = fmt.Errorf("lease version changed")
+
 // Publish updates a table descriptor. It also maintains the invariant that
 // there are at most two versions of the descriptor out in the wild at any time
 // by first waiting for all nodes to be on the current (pre-update) version of
@@ -227,36 +229,36 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 // Returns the updated version of the descriptor.
 func (s LeaseStore) Publish(
 	tableID ID, update func(*TableDescriptor) error,
-) (*Descriptor, *roachpb.Error) {
+) (*Descriptor, error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     2,
 	}
 
-	// Retry while getting LeaseVersionChangedError.
+	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
 		expectedVersion, err := s.waitForOneVersion(tableID, retryOpts)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		desc := &Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		err = s.db.TxnEx(func(txn *client.Txn) error {
 			descKey := MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
-			if err := txn.GetProto(descKey, desc); err != nil {
-				return err
+			if pErr := txn.GetProto(descKey, desc); pErr != nil {
+				return roachpb.WrapPErr(pErr)
 			}
 			tableDesc := desc.GetTable()
 			if tableDesc == nil {
-				return roachpb.NewErrorf("ID %d is not a table", tableID)
+				return util.Errorf("ID %d is not a table", tableID)
 			}
 			if expectedVersion != tableDesc.Version {
 				// The version changed out from under us. Someone else must be
@@ -264,12 +266,12 @@ func (s LeaseStore) Publish(
 				if log.V(3) {
 					log.Infof("publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
 				}
-				return roachpb.NewError(&roachpb.LeaseVersionChangedError{})
+				return errLeaseVersionChanged
 			}
 
 			// Run the update closure.
 			if err := update(tableDesc); err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
 			// Bump the version and modification time.
@@ -281,26 +283,31 @@ func (s LeaseStore) Publish(
 					tableDesc.ID, tableDesc.Version, now.GoTime())
 			}
 			if err := tableDesc.Validate(); err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
 			// Write the updated descriptor.
 			b := txn.NewBatch()
 			b.Put(descKey, desc)
 			txn.SetSystemConfigTrigger()
-			return txn.CommitInBatch(b)
+			if pErr := txn.CommitInBatch(b); pErr != nil {
+				return roachpb.WrapPErr(pErr)
+			}
+			return nil
 		})
 
-		switch pErr.GetDetail().(type) {
-		case *roachpb.LeaseVersionChangedError:
-			// will loop around to retry
+		if err == errLeaseVersionChanged {
+			// loop around to retry
+			continue
+		}
+		switch err.(type) {
 		case *roachpb.DidntUpdateDescriptorError:
 			return desc, nil
 		default:
-			if pErr == nil {
+			if err == nil {
 				return desc, nil
 			}
-			return nil, pErr
+			return nil, err
 		}
 	}
 

@@ -106,7 +106,6 @@
 		SendError
 		RaftGroupDeletedError
 		ReplicaCorruptionError
-		LeaseVersionChangedError
 		DidntUpdateDescriptorError
 		ExistingSchemaChangeLeaseError
 		ErrorWithPGCode
