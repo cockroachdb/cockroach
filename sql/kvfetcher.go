@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 type span struct {
@@ -59,14 +58,6 @@ func prettyKey(key roachpb.Key, skip int) string {
 		p = p[n+1:]
 	}
 	return p
-}
-
-func prettyDatums(vals []parser.Datum) string {
-	var buf bytes.Buffer
-	for _, v := range vals {
-		fmt.Fprintf(&buf, "/%v", v)
-	}
-	return buf.String()
 }
 
 func prettySpan(span span, skip int) string {
