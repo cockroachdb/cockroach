@@ -1798,7 +1798,7 @@ func (r *Replica) executeBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey,
 	batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (
 	*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
-	br := &roachpb.BatchResponse{}
+	br := ba.CreateReply()
 	var intents []intentsWithArg
 
 	remScanResults := int64(math.MaxInt64)
@@ -1814,7 +1814,8 @@ func (r *Replica) executeBatch(
 		if ba.Txn != nil {
 			ba.Txn.BatchIndex = int32(index)
 		}
-		reply, curIntents, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, remScanResults, args)
+		reply := br.Responses[index].GetInner()
+		curIntents, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, remScanResults, args, reply)
 
 		// Collect intents skipped over the course of execution.
 		if len(curIntents) > 0 {
@@ -1887,9 +1888,6 @@ func (r *Replica) executeBatch(
 			}
 		}
 
-		// Add the response to the batch, updating the txn if applicable
-		// (e.g. on EndTransaction).
-		br.Add(reply)
 		// If transactional, we use ba.Txn for each individual command and
 		// accumulate updates to it.
 		// TODO(spencer,tschottdorf): need copy-on-write behavior for the
