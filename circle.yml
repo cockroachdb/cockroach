@@ -76,3 +76,9 @@ deployment:
       - aws configure set region us-east-1
       - build/build-race-binaries.sh
       - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.race
+  jemalloc:
+    branch: jemalloc
+    commands:
+      - aws configure set region us-east-1
+      - build/build-jemalloc-binaries.sh
+      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.jemalloc
