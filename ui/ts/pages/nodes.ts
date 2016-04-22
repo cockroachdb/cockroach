@@ -26,6 +26,7 @@ module AdminViews {
   import Metrics = Models.Metrics;
   import Table = Components.Table;
   import NodeStatus = Models.Proto.NodeStatus;
+  import Selector = Models.Metrics.Select.Selector;
   import MetricNames = Models.Proto.MetricConstants;
   import Moment = moment.Moment;
   import MithrilVirtualElement = _mithril.MithrilVirtualElement;
@@ -210,6 +211,13 @@ module AdminViews {
         private _interval: number;
         private _query: Metrics.Query;
 
+        private _quantiles: string[] = [
+          "-max",
+          "-p99",
+          "-p90",
+          "-p50",
+        ];
+
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
           return _.startsWith(m.route(), "/nodes" + (t.route ? "/" + t.route : "" ));
         };
@@ -252,6 +260,23 @@ module AdminViews {
               Metrics.Select.Avg(_storeMetric("livebytes"))
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes));
+
+          let latencySelectors: Selector[] = _.map(
+            this._quantiles,
+            (q: string): Selector => {
+              return Metrics.Select.Max(_nodeMetric("exec.latency-1m" + q)).maxAggregator()
+                .title("Latency" + q);
+            });
+          this._addChart(
+            this.activityAxes,
+            Metrics.NewAxis.apply(this, latencySelectors)
+            .format((v: number): string => d3.format(".1f")(Utils.Convert.NanoToMilli(v)))
+            .title([m("", "Query Time"), m("small", "(Max Per Percentile)")])
+            .label("Milliseconds")
+            .tooltip(`The latency between query requests and responses over a 1 minute period.
+                      Percentiles are first calculated on each node.
+                      For each percentile, the maximum latency across all nodes is then shown.`)
+          );
 
           // SQL charts
           this._addChart(
@@ -617,6 +642,13 @@ module AdminViews {
         private _nodeId: string;
         private _storeIds: string[] = [];
 
+        private _quantiles: string[] = [
+          "-max",
+          "-p99",
+          "-p90",
+          "-p50",
+        ];
+
         private static isActive: (targ: NavigationBar.Target) => boolean = (t: NavigationBar.Target) => {
           return ((m.route.param("detail") || "") === t.route);
         };
@@ -788,6 +820,21 @@ module AdminViews {
                 .sources([this._nodeId])
                 .title("Live Bytes")
               ).format(Utils.Format.Bytes));
+
+          let latencySelectors: Selector[] = _.map(
+            this._quantiles,
+            (q: string): Selector => {
+              return Metrics.Select.Max(_nodeMetric("exec.latency-1m" + q)).maxAggregator()
+                .sources([this._nodeId])
+                .title("Latency" + q);
+            });
+          this._addChart(
+            this.activityAxes,
+            Metrics.NewAxis.apply(this, latencySelectors)
+            .format((v: number): string => d3.format(".1f")(Utils.Convert.NanoToMilli(v)))
+            .title("Query Time")
+            .label("Milliseconds")
+          );
 
           // SQL charts
           this._addChart(
