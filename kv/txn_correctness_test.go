@@ -458,6 +458,9 @@ func TestEnumerateHistories(t *testing.T) {
 type verifier struct {
 	history string
 	checkFn func(env map[string]int64) error
+	// limit execution (and checks) to orderings of history whose string
+	// representation matches.
+	pruneTo *regexp.Regexp
 }
 
 // historyVerifier parses a planned transaction execution history into
@@ -533,6 +536,12 @@ func (hv *historyVerifier) run(isolations []roachpb.IsolationType, db *client.DB
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	plannedStr := historyString(cmds)
+	if p := hv.verify.pruneTo; p != nil && !p.MatchString(plannedStr) {
+		if log.V(1) {
+			log.Infof("skipping iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+		}
+		return nil
+	}
 	if log.V(1) {
 		log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
 	}
