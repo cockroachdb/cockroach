@@ -2624,26 +2624,26 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    prec, err := $2.numVal().asInt()
+    prec, err := $2.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalType{Prec: prec}
+    $$.val = &DecimalType{Prec: int(prec)}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    prec, err := $2.numVal().asInt()
+    prec, err := $2.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    scale, err := $4.numVal().asInt()
+    scale, err := $4.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalType{Prec: prec, Scale: scale}
+    $$.val = &DecimalType{Prec: int(prec), Scale: int(scale)}
   }
 | /* EMPTY */
   {
@@ -2678,12 +2678,12 @@ numeric:
   }
 | FLOAT opt_float
   {
-    prec, err := $2.numVal().asInt()
+    prec, err := $2.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newFloatType(prec)
+    $$.val = newFloatType(int(prec))
   }
 | DOUBLE PRECISION
   {
@@ -2750,12 +2750,12 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    n, err := $4.numVal().asInt()
+    n, err := $4.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newIntBitType(n)
+    $$.val = newIntBitType(int(n))
   }
 
 bit_without_length:
@@ -2777,14 +2777,14 @@ const_character:
 character_with_length:
   character_base '(' ICONST ')'
   {
-    n, err := $3.numVal().asInt()
+    n, err := $3.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
     $$.val = $1.colType()
     if n != 0 {
-      strType := &StringType{N: n}
+      strType := &StringType{N: int(n)}
       strType.Name = $$.val.(*StringType).Name
       $$.val = strType
     }
