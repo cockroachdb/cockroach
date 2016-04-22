@@ -115,6 +115,7 @@
 		Error
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
+		RaftEntry
 		RaftTruncatedState
 		RaftTombstone
 		RaftSnapshotData
