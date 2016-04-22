@@ -100,7 +100,9 @@ func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	return entries(snap, r.RangeID, r.isInitializedLocked(), lo, hi, maxBytes)
 }
 
-func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+func entries(
+	e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, hi, maxBytes uint64,
+) ([]raftpb.Entry, error) {
 	if lo > hi {
 		return nil, util.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
@@ -108,7 +110,7 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 	// stopping once we have enough.
 	ents := make([]raftpb.Entry, 0, hi-lo)
 	size := uint64(0)
-	var ent raftpb.Entry
+	var ent roachpb.RaftEntry
 	expectedIndex := lo
 	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
@@ -121,7 +123,7 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 		}
 		expectedIndex++
 		size += uint64(ent.Size())
-		ents = append(ents, ent)
+		ents = append(ents, ent.RaftpbEntry())
 		exceededMaxBytes = maxBytes > 0 && size > maxBytes
 		return exceededMaxBytes, nil
 	}
