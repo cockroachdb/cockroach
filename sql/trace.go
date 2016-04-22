@@ -52,7 +52,11 @@ func (*explainTraceNode) Ordering() orderingInfo  { return orderingInfo{} }
 
 func (n *explainTraceNode) PErr() *roachpb.Error { return nil }
 func (n *explainTraceNode) Start() *roachpb.Error {
-	return n.plan.Start()
+	if pErr := n.plan.Start(); pErr != nil {
+		return pErr
+	}
+	n.plan.MarkDebug(explainDebug)
+	return nil
 }
 func (n *explainTraceNode) Next() bool {
 	first := n.rows == nil
