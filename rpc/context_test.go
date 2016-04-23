@@ -19,6 +19,7 @@ package rpc
 import (
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientClock := hlc.NewClock(clientAdvancing.UnixNano)
 	clientClock.SetMaxOffset(time.Millisecond)
 	clientCtx := newNodeTestContext(clientClock, stopper)
-	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.advancementInterval
+	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.getAdvancementInterval()
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
 		t.Fatal(err)
 	}
@@ -125,9 +126,8 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	// Change the client such that it receives a heartbeat right after the
 	// maximum clock reading delay.
-	clientAdvancing.Lock()
-	clientAdvancing.advancementInterval = maximumPingDurationMult*clientClock.MaxOffset() + 1*time.Nanosecond
-	clientAdvancing.Unlock()
+	clientAdvancing.setAdvancementInterval(
+		maximumPingDurationMult*clientClock.MaxOffset() + 1*time.Nanosecond)
 
 	util.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
@@ -195,13 +195,25 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 type AdvancingClock struct {
 	sync.Mutex
 	time                time.Time
-	advancementInterval time.Duration
+	advancementInterval atomic.Value // time.Duration
+}
+
+func (ac *AdvancingClock) setAdvancementInterval(d time.Duration) {
+	ac.advancementInterval.Store(d)
+}
+
+func (ac *AdvancingClock) getAdvancementInterval() time.Duration {
+	v := ac.advancementInterval.Load()
+	if v == nil {
+		return 0
+	}
+	return v.(time.Duration)
 }
 
 func (ac *AdvancingClock) UnixNano() int64 {
 	ac.Lock()
 	time := ac.time
-	ac.time = time.Add(ac.advancementInterval)
+	ac.time = time.Add(ac.getAdvancementInterval())
 	ac.Unlock()
 	return time.UnixNano()
 }
