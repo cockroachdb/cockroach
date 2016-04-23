@@ -85,12 +85,6 @@ var (
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
-//
-// TODO(nvanbenschoten) It might be worth it in the future to make all
-// Datum implementations receive on pointer types to provide more control
-// over memory allocations when packaging and unpackaging concrete types
-// to and from their Datum interface. This would allow us to make
-// optimizations in terms of shared buffer preallocations.
 type Datum interface {
 	Expr
 	// Type returns the (user-friendly) name of the type.
