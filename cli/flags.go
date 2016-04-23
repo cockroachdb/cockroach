@@ -39,6 +39,7 @@ var maxResults int64
 
 var connURL string
 var connUser, connHost, connPort, httpPort, connDBName string
+var startBackground bool
 
 // cliContext is the CLI Context used for the command-line client.
 var cliContext = NewContext()
@@ -59,6 +60,12 @@ nodes. For example:`) + `
 
   --attrs=us-west-1b:gpu
 `,
+
+	cliflags.BackgroundName: wrapText(`
+Start the server in the background. This is similar to appending "&"
+to the command line, but when the server is started with --background,
+control is not returned to the shell until the server is ready to
+accept requests.`),
 
 	cliflags.CacheName: wrapText(`
 Total size in bytes for caches, shared evenly if there are multiple
@@ -356,6 +363,7 @@ func initFlags(ctx *Context) {
 		f.StringVar(&httpPort, cliflags.HTTPPortName, base.DefaultHTTPPort, usageNoEnv(forServer(cliflags.HTTPPortName)))
 		f.StringVar(&ctx.Attrs, cliflags.AttrsName, ctx.Attrs, usageNoEnv(cliflags.AttrsName))
 		f.VarP(&ctx.Stores, cliflags.StoreName, "s", usageNoEnv(cliflags.StoreName))
+		f.BoolVar(&startBackground, cliflags.BackgroundName, false, usageNoEnv(cliflags.BackgroundName))
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename

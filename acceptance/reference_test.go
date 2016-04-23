@@ -31,6 +31,7 @@ export PGHOST=localhost
 export PGPORT=""
 
 bin=/reference-version/cockroach
+# TODO(bdarnell): when --background is in reference-version, use it here and below.
 $bin start &
 sleep 1
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
@@ -42,8 +43,7 @@ $bin sql -d old -e "SELECT * FROM testing" > old.everything
 $bin quit && wait # wait will block until all background jobs finish.
 
 bin=/cockroach
-$bin start &
-sleep 1
+$bin start --background
 echo "Read data written by reference version using new binary"
 $bin sql -d old -e "SELECT * FROM testing" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -52,7 +52,9 @@ diff new.everything old.everything
 echo "Add a row with the new binary and render the updated data before shutting down."
 $bin sql -d old -e "INSERT INTO testing values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
 $bin sql -d old -e "SELECT * FROM testing" > new.everything
-$bin quit && wait
+$bin quit
+# Let it close its listening sockets.
+sleep 1
 
 echo "Read the modified data using the reference binary again."
 bin=/reference-version/cockroach
