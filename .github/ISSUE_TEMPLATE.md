@@ -1,6 +1,6 @@
 Please follow the steps below to help us help you.
 
-1. Please supply the the header (i.e. the first few lines) of your most recent
+1. Please supply the header (i.e. the first few lines) of your most recent
    log file **for each node in your cluster**. On most unix-based systems
    running with defaults, this boils down to the output of
 
