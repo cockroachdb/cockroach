@@ -131,11 +131,6 @@ func initInsecure() error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
-	info := build.GetInfo()
-	// We log build information to stdout (for the short summary), but also
-	// to stderr to coincide with the full logs.
-	log.Infof(info.Short())
-
 	if err := initInsecure(); err != nil {
 		return err
 	}
@@ -143,6 +138,9 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// Default the log directory to the the "logs" subdirectory of the first
 	// non-memory store. We only do this for the "start" command which is why
 	// this work occurs here and not in an OnInitialize function.
+	//
+	// It is important that no logging occur before this point or the log files
+	// will be created in $TMPDIR instead of their expected location.
 	f := flag.Lookup("log-dir")
 	if !log.DirSet() {
 		for _, spec := range cliContext.Stores.Specs {
@@ -156,10 +154,15 @@ func runStart(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Make sure the path exists
+	// Make sure the path exists.
 	if err := os.MkdirAll(f.Value.String(), 0755); err != nil {
 		return err
 	}
+
+	// We log build information to stdout (for the short summary), but also
+	// to stderr to coincide with the full logs.
+	info := build.GetInfo()
+	log.Infof(info.Short())
 
 	// Default user for servers.
 	cliContext.User = security.NodeUser
