@@ -74,6 +74,19 @@ http://www.cockroachlabs.com/docs/
 `)
 }
 
+// addHistory persists a line of input to the readline history
+// file.
+func addHistory(line string) {
+	// readline.AddHistory will push command into memory and try to
+	// persist to disk (if readline.SetHistoryPath was called).  err can
+	// be not nil only if it got a IO error while trying to persist.
+	if err := readline.AddHistory(line); err != nil {
+		log.Warningf("cannot save command-line history: %s", err)
+		log.Info("command-line history will not be saved in this session")
+		readline.SetHistoryPath("")
+	}
+}
+
 // handleInputLine looks at a single line of text entered
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
@@ -94,6 +107,8 @@ func handleInputLine(stmt *[]string, line string) int {
 	if len(line) > 0 && line[0] == '\\' {
 		// Client-side commands: process locally.
 
+		addHistory(line)
+
 		cmd := strings.Fields(line)
 		switch cmd[0] {
 		case `\q`:
@@ -105,12 +120,12 @@ func handleInputLine(stmt *[]string, line string) int {
 		case `\`, `\?`:
 			printCliHelp()
 		default:
-			fmt.Printf("Invalid command: %s. Try \\? for help.\n", line)
+			fmt.Fprintf(osStderr, "Invalid command: %s. Try \\? for help.\n", line)
 		}
 
 		if strings.HasPrefix(line, `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
-			fmt.Print("Suggestion: use the SQL SHOW statement to inspect your schema.\n")
+			fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 		}
 
 		return cliNextLine
@@ -148,13 +163,13 @@ func execSyscmd(command string) (string, error) {
 func runSyscmd(line string) int {
 	command := line[2:]
 	if command == "" {
-		fmt.Printf("Usage:\n  \\! [command]\n")
+		fmt.Fprintf(osStderr, "Usage:\n  \\! [command]\n")
 		return cliNextLine
 	}
 
 	cmdOut, err := execSyscmd(command)
 	if err != nil {
-		log.Errorf("command failed: %s", err)
+		fmt.Fprintf(osStderr, "command failed: %s\n", err)
 		return cliNextLine
 	}
 
@@ -166,13 +181,13 @@ func runSyscmd(line string) int {
 func pipeSyscmd(stmt *[]string, line string) int {
 	command := line[2:]
 	if command == "" {
-		fmt.Printf("Usage:\n  \\| [command]\n")
+		fmt.Fprintf(osStderr, "Usage:\n  \\| [command]\n")
 		return cliNextLine
 	}
 
 	cmdOut, err := execSyscmd(command)
 	if err != nil {
-		log.Errorf("command failed: %s", err)
+		fmt.Fprintf(osStderr, "command failed: %s\n", err)
 		return cliNextLine
 	}
 
@@ -281,16 +296,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			// We save the history between each statement, This enables
 			// reusing history in another SQL shell without closing the
 			// current shell.
-			//
-			// AddHistory will push command into memory and try to persist
-			// to disk (if readline.SetHistoryPath was called).
-			// err can be not nil only if it got a IO error while
-			// trying to persist.
-			if err := readline.AddHistory(strings.Join(stmt, " ")); err != nil {
-				log.Warningf("cannot save command-line history: %s", err)
-				log.Info("command-line history will not be saved in this session")
-				readline.SetHistoryPath("")
-			}
+			addHistory(strings.Join(stmt, " "))
 		}
 
 		if exitErr = runPrettyQuery(conn, os.Stdout, makeQuery(fullStmt)); exitErr != nil {
