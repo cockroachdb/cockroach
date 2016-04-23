@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 
 	"github.com/spf13/cobra"
@@ -131,6 +133,9 @@ func initInsecure() error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(_ *cobra.Command, _ []string) error {
+	if startBackground {
+		return rerunBackground()
+	}
 	info := build.GetInfo()
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
@@ -253,6 +258,19 @@ func runStart(_ *cobra.Command, _ []string) error {
 	}
 	log.Flush()
 	return nil
+}
+
+// rerunBackground restarts the current process in the background.
+func rerunBackground() error {
+	args := append([]string(nil), os.Args...)
+	// TODO(bdarnell): this looks silly in ps. Try to remove the
+	// `--background` flag instead of adding a second flag to reverse
+	// it.
+	args = append(args, "--background=false")
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return sdnotify.Exec(cmd)
 }
 
 // exterminateCmd command shuts down the node server and

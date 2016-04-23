@@ -190,7 +190,7 @@ check:
 	@echo "checking for time.Now and time.Since calls (use timeutil instead)"
 	@! git grep -nE 'time\.(Now|Since)' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go\b'
 	@echo "checking for os.Getenv calls (use envutil.EnvOrDefault*() instead)"
-	@! git grep -nF 'os.Getenv' -- '*.go' | grep -vE '^((util/(log|envutil))|acceptance(/.*)?)/\w+\.go\b'
+	@! git grep -nF 'os.Getenv' -- '*.go' | grep -vE '^((util/(log|envutil|sdnotify))|acceptance(/.*)?)/\w+\.go\b'
 	@echo "checking for proto.Clone calls (use protoutil.Clone instead)"
 	@! git grep -nE '\.Clone\([^)]+\)' -- '*.go' | grep -vF 'protoutil.Clone' | grep -vE '^util/protoutil/clone(_test)?\.go\b'
 	@echo "checking for proto.Marshal calls (use protoutil.Marshal instead)"

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -372,6 +373,10 @@ func (s *Server) Start() error {
 	s.stopper.RunWorker(func() {
 		util.FatalIfUnexpected(m.Serve())
 	})
+
+	if err := sdnotify.Ready(); err != nil {
+		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
+	}
 
 	// Register GRPCGateway. Must happen after serving starts.
 	return s.admin.RegisterGRPCGateway(s.ctx)
