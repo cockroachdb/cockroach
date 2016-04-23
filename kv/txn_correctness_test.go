@@ -100,7 +100,7 @@ func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, *roachpb.Error) {
 	if c.prev != nil {
 		<-c.prev
 	}
-	if log.V(1) {
+	if log.V(2) {
 		log.Infof("executing %s", c)
 	}
 	pErr := c.fn(c, txn, t)
@@ -547,7 +547,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []roachpb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	plannedStr := historyString(cmds)
 	if p := hv.verify.pruneTo; p != nil && !p.MatchString(plannedStr) {
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("skipping iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
 		}
 		return nil
@@ -640,7 +640,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 				c.done()
 			}
 		}
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("%s, retry=%d", txnName, retry)
 		}
 		for i := range cmds {

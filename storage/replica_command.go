@@ -588,7 +588,7 @@ func (r *Replica) resolveLocalIntents(ctx context.Context, batch engine.Engine, 
 func updateTxnWithExternalIntents(ctx context.Context, batch engine.Engine, ms *engine.MVCCStats, args roachpb.EndTransactionRequest, txn *roachpb.Transaction, externalIntents []roachpb.Intent) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
 	if txnAutoGC && len(externalIntents) == 0 {
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("auto-gc'ed %s (%d intents)", txn.ID.Short(), len(args.IntentSpans))
 		}
 		return engine.MVCCDelete(ctx, batch, ms, key, roachpb.ZeroTimestamp, nil /* txn */)

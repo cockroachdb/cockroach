@@ -59,25 +59,25 @@ func (r *raftLogger) logPrefix() string {
 }
 
 func (r *raftLogger) Debug(v ...interface{}) {
-	if log.V(2) {
+	if log.V(3) {
 		log.InfofDepth(1, r.logPrefix(), v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
-	if log.V(2) {
+	if log.V(3) {
 		log.InfofDepth(1, r.logPrefix()+format, v...)
 	}
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
-	if log.V(1) {
+	if log.V(2) {
 		log.InfofDepth(1, r.logPrefix(), v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
-	if log.V(1) {
+	if log.V(2) {
 		log.InfofDepth(1, r.logPrefix()+format, v...)
 	}
 }
