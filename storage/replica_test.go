@@ -699,6 +699,57 @@ func TestReplicaNotLeaderError(t *testing.T) {
 	}
 }
 
+// TestReplicaLeaseCounters verifies leaseRequest metrics counters are updated
+// correctly after a lease request.
+func TestReplicaLeaseCounters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	assert := func(actual, expected int64) {
+		if actual != expected {
+			t.Fatalf("metrics counters actual=%d, expected=%d", actual, expected)
+		}
+	}
+	metrics := tc.rng.store.metrics
+	assert(metrics.leaseRequestSuccessCount.Count(), 1)
+	assert(metrics.leaseRequestErrorCount.Count(), 0)
+
+	now := tc.clock.Now()
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       now,
+		StartStasis: now.Add(10, 0),
+		Expiration:  now.Add(10, 0),
+		Replica: roachpb.ReplicaDescriptor{
+			ReplicaID: 1,
+			NodeID:    1,
+			StoreID:   1,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assert(metrics.leaseRequestSuccessCount.Count(), 2)
+	assert(metrics.leaseRequestErrorCount.Count(), 0)
+
+	// Make setLeaderLease fail by providing an invalid ReplicaDescriptor.
+	if err := setLeaderLease(tc.rng, &roachpb.Lease{
+		Start:       now,
+		StartStasis: now.Add(10, 0),
+		Expiration:  now.Add(10, 0),
+		Replica: roachpb.ReplicaDescriptor{
+			ReplicaID: 2,
+			NodeID:    99,
+			StoreID:   99,
+		},
+	}); err == nil {
+		t.Fatal("Expected setLeaderLease to fail on invalid ReplicaDescriptor. It didn't.")
+	}
+
+	assert(metrics.leaseRequestSuccessCount.Count(), 2)
+	assert(metrics.leaseRequestErrorCount.Count(), 1)
+}
+
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
 // upon acquisition of the leader lease.
 func TestReplicaGossipConfigsOnLease(t *testing.T) {
