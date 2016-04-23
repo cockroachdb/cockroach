@@ -429,7 +429,7 @@ func (v *normalizeVisitor) isConst(expr Expr) bool {
 	return v.isConstVisitor.run(expr)
 }
 
-func invertComparisonOp(op ComparisonOp) ComparisonOp {
+func invertComparisonOp(op ComparisonOperator) ComparisonOperator {
 	switch op {
 	case EQ:
 		return EQ

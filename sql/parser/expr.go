@@ -168,12 +168,12 @@ func (node *ParenExpr) String() string {
 	return fmt.Sprintf("(%s)", node.Expr)
 }
 
-// ComparisonOp represents a binary operator.
-type ComparisonOp int
+// ComparisonOperator represents a binary operator.
+type ComparisonOperator int
 
 // ComparisonExpr.Operator
 const (
-	EQ ComparisonOp = iota
+	EQ ComparisonOperator = iota
 	LT
 	GT
 	LE
@@ -210,8 +210,8 @@ var comparisonOpName = [...]string{
 	IsNot:             "IS NOT",
 }
 
-func (i ComparisonOp) String() string {
-	if i < 0 || i > ComparisonOp(len(comparisonOpName)-1) {
+func (i ComparisonOperator) String() string {
+	if i < 0 || i > ComparisonOperator(len(comparisonOpName)-1) {
 		return fmt.Sprintf("ComparisonOp(%d)", i)
 	}
 	return comparisonOpName[i]
@@ -219,7 +219,7 @@ func (i ComparisonOp) String() string {
 
 // ComparisonExpr represents a two-value comparison expression.
 type ComparisonExpr struct {
-	Operator    ComparisonOp
+	Operator    ComparisonOperator
 	Left, Right Expr
 
 	boolTypeAnnotation

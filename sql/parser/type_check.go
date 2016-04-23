@@ -542,7 +542,7 @@ func typeCheckBooleanExpr(args MapArgs, op string, expr Expr) (TypedExpr, error)
 	return typedExpr, nil
 }
 
-func typeCheckComparisonOp(args MapArgs, op ComparisonOp, left, right Expr) (TypedExpr, TypedExpr, CmpOp, error) {
+func typeCheckComparisonOp(args MapArgs, op ComparisonOperator, left, right Expr) (TypedExpr, TypedExpr, CmpOp, error) {
 	foldedOp, foldedLeft, foldedRight, switched, _ := foldComparisonExpr(op, left, right)
 
 	ops := CmpOps[foldedOp]
