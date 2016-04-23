@@ -63,9 +63,10 @@ const (
 // printCliHelp prints a short inline help about the CLI.
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
-Type: \q to exit (Ctrl+C/Ctrl+D also supported)
-      \! to run an external command and print its results on standard output.
-      \| to run an external command and run its output as SQL statements.
+Type: \q   to exit (Ctrl+C/Ctrl+D also supported)
+      \!   to run an external command and print its results on standard output.
+      \|   to run an external command and run its output as SQL statements.
+      \set {confirm,noconfirm} configure whether to ask confirmation for DROP.
       \? or "help" to print this help.
 
 More documentation about our SQL dialect is available online:
@@ -74,11 +75,47 @@ http://www.cockroachlabs.com/docs/
 `)
 }
 
+// handleSet handles the \set command and changes client-side flags.
+func handleSet(cmd []string, confirm *bool) int {
+	if len(cmd) != 2 {
+		fmt.Fprintf(os.Stderr, "Usage:\n \\set <option>\n")
+		return cliNextLine
+	}
+
+	switch cmd[1] {
+	case `confirm`:
+		*confirm = true
+	case `noconfirm`:
+		*confirm = false
+	default:
+		fmt.Fprintf(os.Stderr, "unrecognized \\set option: %s\n", cmd[1])
+	}
+	return cliNextLine
+}
+
+// confirmStatement checks whether the statement string contains
+// "dangerous" statements and asks a confirmation to the user if
+// necessary.
+func confirmStatement(confirm bool, stmt string) bool {
+	stmt = strings.ToUpper(stmt)
+	if confirm && (strings.Contains(stmt, "DROP ")) {
+		a, err := readline.Line("DROP in statement. Are you sure? (N/y) ")
+		if err == io.EOF || err == readline.ErrInterrupt {
+			return false
+		} else if err != nil {
+			fmt.Fprintf(osStderr, "input error: %s\n", err)
+			return false
+		}
+		return strings.ToUpper(a) == "Y"
+	}
+	return true
+}
+
 // handleInputLine looks at a single line of text entered
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
 // a regular query.
-func handleInputLine(stmt *[]string, line string) int {
+func handleInputLine(stmt *[]string, line string, confirm *bool) int {
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.
@@ -102,6 +139,8 @@ func handleInputLine(stmt *[]string, line string) int {
 			return runSyscmd(line)
 		case `\|`:
 			return pipeSyscmd(stmt, line)
+		case `\set`:
+			return handleSet(cmd, confirm)
 		case `\`, `\?`:
 			printCliHelp()
 		default:
@@ -232,6 +271,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		fmt.Print(infoMessage)
 	}
 
+	confirm := isInteractive
 	var stmt []string
 
 	for isFinished := false; !isFinished; {
@@ -259,7 +299,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 
 		// Check if this is a request for help or a client-side command.
 		// If so, process it directly and skip query processing below.
-		status := handleInputLine(&stmt, tl)
+		status := handleInputLine(&stmt, tl, &confirm)
 		if status == cliExit {
 			break
 		} else if status == cliNextLine && !isFinished {
@@ -293,8 +333,10 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			}
 		}
 
-		if exitErr = runPrettyQuery(conn, os.Stdout, makeQuery(fullStmt)); exitErr != nil {
-			fmt.Fprintln(osStderr, exitErr)
+		if confirmStatement(confirm, fullStmt) {
+			if exitErr = runPrettyQuery(conn, os.Stdout, makeQuery(fullStmt)); exitErr != nil {
+				fmt.Fprintln(osStderr, exitErr)
+			}
 		}
 
 		// Clear the saved statement.
