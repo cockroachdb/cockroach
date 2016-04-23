@@ -892,7 +892,7 @@ func TestParsePrecedence(t *testing.T) {
 	binary := func(op BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	cmp := func(op ComparisonOp, left, right Expr) Expr {
+	cmp := func(op ComparisonOperator, left, right Expr) Expr {
 		return &ComparisonExpr{Operator: op, Left: left, Right: right}
 	}
 	not := func(expr Expr) Expr {

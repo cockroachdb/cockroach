@@ -308,7 +308,7 @@ var binaryShiftOpToToken = map[BinaryOperator]token.Token{
 	LShift: token.SHL,
 	RShift: token.SHR,
 }
-var comparisonOpToToken = map[ComparisonOp]token.Token{
+var comparisonOpToToken = map[ComparisonOperator]token.Token{
 	EQ: token.EQL,
 	NE: token.NEQ,
 	LT: token.LSS,

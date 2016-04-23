@@ -65,20 +65,20 @@ func (op UnaryOp) returnType() Datum {
 	return op.ReturnType
 }
 
-// TODO(nvanbenschoten) TODO Replace with method.
-func lookupUnaryOp(op UnaryOperator, typ Datum) (UnaryOp, bool) {
-	if fns, ok := UnaryOps[op]; ok {
-		for _, fn := range fns {
-			if fn.matchParams(typ) {
-				return fn, true
-			}
+// unaryOpOverload is an overloaded set of unary operator implementations.
+type unaryOpOverload []UnaryOp
+
+func (o unaryOpOverload) lookupImpl(typ Datum) (UnaryOp, bool) {
+	for _, fn := range o {
+		if fn.matchParams(typ) {
+			return fn, true
 		}
 	}
 	return UnaryOp{}, false
 }
 
 // UnaryOps contains the unary operations indexed by operation type.
-var UnaryOps = map[UnaryOperator][]UnaryOp{
+var UnaryOps = map[UnaryOperator]unaryOpOverload{
 	UnaryPlus: {
 		UnaryOp{
 			Typ:        DummyInt,
@@ -162,21 +162,20 @@ func (op BinOp) returnType() Datum {
 	return op.ReturnType
 }
 
-// TODO(nvanbenschoten) TODO Replace with method.
-func lookupBinOp(op BinaryOperator, left, right Datum) (BinOp, bool) {
-	if fns, ok := BinOps[op]; ok {
-		for _, fn := range fns {
-			if fn.matchParams(left, right) {
-				return fn, true
-			}
+// binOpOverload is an overloaded set of binary operator implementations.
+type binOpOverload []BinOp
+
+func (o binOpOverload) lookupImpl(left, right Datum) (BinOp, bool) {
+	for _, fn := range o {
+		if fn.matchParams(left, right) {
+			return fn, true
 		}
 	}
-	fmt.Println(op)
 	return BinOp{}, false
 }
 
 // BinOps contains the binary operations indexed by operation type.
-var BinOps = map[BinaryOperator][]BinOp{
+var BinOps = map[BinaryOperator]binOpOverload{
 	Bitand: {
 		BinOp{
 			LeftType:   DummyInt,
@@ -596,12 +595,7 @@ func init() {
 		}
 	}
 
-	for _, op := range BinOps[Minus] {
-		if op.params().matchAt(DummyTimestamp, 0) && op.params().matchAt(DummyTimestamp, 1) {
-			timestampMinusBinOp = op
-			break
-		}
-	}
+	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(DummyTimestamp, DummyTimestamp)
 }
 
 // CmpOp is a comparison operator.
@@ -624,20 +618,20 @@ func (op CmpOp) returnType() Datum {
 	return DummyBool
 }
 
-// TODO(nvanbenschoten) TODO Replace with method.
-func lookupCmpOp(op ComparisonOp, left, right Datum) (CmpOp, bool) {
-	if fns, ok := CmpOps[op]; ok {
-		for _, fn := range fns {
-			if fn.matchParams(left, right) {
-				return fn, true
-			}
+// cmpOpOverload is an overloaded set of comparison operator implementations.
+type cmpOpOverload []CmpOp
+
+func (o cmpOpOverload) lookupImpl(left, right Datum) (CmpOp, bool) {
+	for _, fn := range o {
+		if fn.matchParams(left, right) {
+			return fn, true
 		}
 	}
 	return CmpOp{}, false
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
-var CmpOps = map[ComparisonOp][]CmpOp{
+var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	EQ: {
 		CmpOp{
 			LeftType:  DummyString,
@@ -1286,7 +1280,7 @@ func (expr *BinaryExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 	if expr.fn.fn == nil {
 		var ok bool
-		if expr.fn, ok = lookupBinOp(expr.Operator, left, right); !ok {
+		if expr.fn, ok = BinOps[expr.Operator].lookupImpl(left, right); !ok {
 			panic(fmt.Sprintf("lookup for TypedBinaryExpr %v's BinOp failed", expr))
 		}
 	}
@@ -1581,7 +1575,7 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 	// type checking has taken place.
 	if expr.fn.fn == nil {
 		op, leftExpr, rightExpr, _, _ := foldComparisonExpr(expr.Operator, expr.Left, expr.Right)
-		expr.fn, _ = lookupCmpOp(op, leftExpr.(TypedExpr).ReturnType(), rightExpr.(TypedExpr).ReturnType())
+		expr.fn, _ = CmpOps[op].lookupImpl(leftExpr.(TypedExpr).ReturnType(), rightExpr.(TypedExpr).ReturnType())
 	}
 
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
@@ -1873,7 +1867,7 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 	}
 	if expr.fn.fn == nil {
 		var ok bool
-		if expr.fn, ok = lookupUnaryOp(expr.Operator, expr.Expr.(TypedExpr).ReturnType()); !ok {
+		if expr.fn, ok = UnaryOps[expr.Operator].lookupImpl(expr.Expr.(TypedExpr).ReturnType()); !ok {
 			panic(fmt.Sprintf("lookup for TypedUnaryExpr %v's UnaryOp failed", expr))
 		}
 	}
@@ -1984,12 +1978,12 @@ func (t *DValArg) Eval(_ EvalContext) (Datum, error) {
 	return t, nil
 }
 
-func evalComparison(ctx EvalContext, op ComparisonOp, left, right Datum) (Datum, error) {
+func evalComparison(ctx EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil
 	}
 
-	if fn, ok := lookupCmpOp(op, left, right); ok {
+	if fn, ok := CmpOps[op].lookupImpl(left, right); ok {
 		v, err := fn.fn(ctx, left, right)
 		return MakeDBool(v), err
 	}
@@ -2002,7 +1996,7 @@ func evalComparison(ctx EvalContext, op ComparisonOp, left, right Datum) (Datum,
 // into an equivalent operation that will hit in the cmpOps map, returning
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
-func foldComparisonExpr(op ComparisonOp, left, right Expr) (ComparisonOp, Expr, Expr, bool, bool) {
+func foldComparisonExpr(op ComparisonOperator, left, right Expr) (ComparisonOperator, Expr, Expr, bool, bool) {
 	switch op {
 	case NE:
 		// NE(left, right) is implemented as !EQ(left, right).
