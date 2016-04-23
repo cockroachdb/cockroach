@@ -462,7 +462,7 @@ func TestEvalError(t *testing.T) {
 
 func TestEvalComparisonExprCaching(t *testing.T) {
 	testExprs := []struct {
-		op          ComparisonOp
+		op          ComparisonOperator
 		left, right string
 		cacheCount  int
 	}{
@@ -562,10 +562,10 @@ var benchmarkLikePatterns = []string{
 }
 
 func benchmarkLike(b *testing.B, ctx EvalContext) {
-	likeFn := CmpOps[Like][0].fn
+	likeFn, _ := CmpOps[Like].lookupImpl(DummyString, DummyString)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
-			if _, err := likeFn(ctx, NewDString("test"), NewDString(p)); err != nil {
+			if _, err := likeFn.fn(ctx, NewDString("test"), NewDString(p)); err != nil {
 				b.Fatalf("LIKE evaluation failed with error: %v", err)
 			}
 		}
