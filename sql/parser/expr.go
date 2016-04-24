@@ -1048,6 +1048,44 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 }
 
+var (
+	boolCastTypes      = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	intCastTypes       = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	floatCastTypes     = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	decimalCastTypes   = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	stringCastTypes    = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes}
+	bytesCastTypes     = []Datum{DNull, TypeString, TypeBytes}
+	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp}
+	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
+	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
+)
+
+func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
+	switch node.Type.(type) {
+	case *BoolColType:
+		return TypeBool, boolCastTypes
+	case *IntColType:
+		return TypeInt, intCastTypes
+	case *FloatColType:
+		return TypeFloat, floatCastTypes
+	case *DecimalColType:
+		return TypeDecimal, decimalCastTypes
+	case *StringColType:
+		return TypeString, stringCastTypes
+	case *BytesColType:
+		return TypeBytes, bytesCastTypes
+	case *DateColType:
+		return TypeDate, dateCastTypes
+	case *TimestampColType:
+		return TypeTimestamp, timestampCastTypes
+	case *TimestampTZColType:
+		return TypeTimestampTZ, timestampCastTypes
+	case *IntervalColType:
+		return TypeInterval, intervalCastTypes
+	}
+	return nil, nil
+}
+
 func (node *AliasedTableExpr) String() string { return AsString(node) }
 func (node *ParenTableExpr) String() string   { return AsString(node) }
 func (node *JoinTableExpr) String() string    { return AsString(node) }

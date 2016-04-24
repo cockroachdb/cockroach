@@ -172,68 +172,13 @@ func (expr *CaseExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	return expr, nil
 }
 
-var (
-	boolCastTypes      = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	intCastTypes       = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	floatCastTypes     = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	decimalCastTypes   = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	stringCastTypes    = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes}
-	bytesCastTypes     = []Datum{DNull, TypeBytes, TypeString}
-	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp}
-	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
-	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
-)
-
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	var returnDatum Datum
-	var validTypes []Datum
-	switch expr.Type.(type) {
-	case *BoolColType:
-		returnDatum = TypeBool
-		validTypes = boolCastTypes
+	returnDatum, validTypes := expr.castTypeAndValidArgTypes()
 
-	case *IntColType:
-		returnDatum = TypeInt
-		validTypes = intCastTypes
-
-	case *FloatColType:
-		returnDatum = TypeFloat
-		validTypes = floatCastTypes
-
-	case *DecimalColType:
-		returnDatum = TypeDecimal
-		validTypes = decimalCastTypes
-
-	case *StringColType:
-		returnDatum = TypeString
-		validTypes = stringCastTypes
-
-	case *BytesColType:
-		returnDatum = TypeBytes
-		validTypes = bytesCastTypes
-
-	case *DateColType:
-		returnDatum = TypeDate
-		validTypes = dateCastTypes
-
-	case *TimestampColType:
-		returnDatum = TypeTimestamp
-		validTypes = timestampCastTypes
-
-	case *TimestampTZColType:
-		returnDatum = TypeTimestampTZ
-		validTypes = timestampCastTypes
-
-	case *IntervalColType:
-		returnDatum = TypeInterval
-		validTypes = intervalCastTypes
-	}
-
+	desired = nil
 	if args.IsUnresolvedArgument(expr.Expr) {
 		desired = TypeString
-	} else if desired != nil && desired.TypeEqual(returnDatum) {
-		desired = nil
 	}
 	typedSubExpr, err := expr.Expr.TypeCheck(args, desired)
 	if err != nil {
@@ -936,6 +881,68 @@ func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 		t := expr.(*Tuple)
 		if len(t.Exprs) != expectedLen {
 			return fmt.Errorf("expected tuple %v to have a length of %d", t, expectedLen)
+		}
+	}
+	return nil
+}
+
+type placeholderAnnotationVisitor struct {
+	placeholders map[string]annotationState
+}
+
+type annotationState struct {
+	every bool
+	typ   Datum
+}
+
+func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	// TODO(nvanbenschoten) Add support for explicit type annotations.
+	// case *TypeAnnotationExpr:
+	case *CastExpr:
+		if arg, ok := t.Expr.(ValArg); ok {
+			castType, _ := t.castTypeAndValidArgTypes()
+			if state, ok := v.placeholders[arg.Name]; ok {
+				if state.every && !castType.TypeEqual(state.typ) {
+					state.every = false
+					v.placeholders[arg.Name] = state
+				}
+			} else {
+				v.placeholders[arg.Name] = annotationState{
+					every: true,
+					typ:   castType,
+				}
+			}
+			return false, expr
+		}
+	case ValArg:
+		v.placeholders[t.Name] = annotationState{every: false}
+	}
+	return true, expr
+}
+
+func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// ProcessPlaceholderAnnotations performs an order-independent global traversal of the
+// provided Statement, annotating all placeholders with a type in either of the following
+// situations.
+// - the placeholder is the subject of an explicit type annotation in at least one
+//   of its occurrences. If it is subject to multiple explicit type annotations where
+//   the types are not all in agreement, and error will be thrown.
+// - the placeholder is the subject to an implicit type annotation, meaning that it
+//   is not subject to an explicit type annotation, and that in all occurrences of the
+//   placeholder, it is subject to a cast to the same type. If it is subject to casts
+//   of multiple types, no error will be thrown, but the placeholder will not be
+//   annotated.
+//
+// TODO(nvanbenschoten) Add support for explicit placeholder annotations.
+// TODO(nvanbenschoten) Can this visitor and map be preallocated (like normalizeVisitor)?
+func ProcessPlaceholderAnnotations(stmt Statement, args MapArgs) error {
+	v := placeholderAnnotationVisitor{make(map[string]annotationState)}
+	WalkStmt(&v, stmt)
+	for placeholder, state := range v.placeholders {
+		if _, ok := args[placeholder]; !ok && state.every {
+			args[placeholder] = state.typ
 		}
 	}
 	return nil
