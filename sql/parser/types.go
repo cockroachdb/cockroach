@@ -38,6 +38,12 @@ func (*IntervalType) columnType()    {}
 func (*StringType) columnType()      {}
 func (*BytesType) columnType()       {}
 
+// Pre-allocated immutable boolean column types.
+var (
+	boolTypeBool    = &BoolType{Name: "BOOL"}
+	boolTypeBoolean = &BoolType{Name: "BOOLEAN"}
+)
+
 // BoolType represents a BOOLEAN type.
 type BoolType struct {
 	Name string
@@ -46,6 +52,16 @@ type BoolType struct {
 func (node *BoolType) String() string {
 	return node.Name
 }
+
+// Pre-allocated immutable integer column types.
+var (
+	intTypeBit      = &IntType{Name: "BIT"}
+	intTypeInt      = &IntType{Name: "INT"}
+	intTypeInt64    = &IntType{Name: "INT64"}
+	intTypeInteger  = &IntType{Name: "INTEGER"}
+	intTypeSmallInt = &IntType{Name: "SMALLINT"}
+	intTypeBigInt   = &IntType{Name: "BIGINT"}
+)
 
 // IntType represents an INT, INTEGER, SMALLINT or BIGINT type.
 type IntType struct {
@@ -62,6 +78,13 @@ func (node *IntType) String() string {
 	return buf.String()
 }
 
+// Pre-allocated immutable float column types.
+var (
+	floatTypeReal   = &FloatType{Name: "REAL"}
+	floatTypeFloat  = &FloatType{Name: "FLOAT"}
+	floatTypeDouble = &FloatType{Name: "DOUBLE PRECISION"}
+)
+
 // FloatType represents a REAL, DOUBLE or FLOAT type.
 type FloatType struct {
 	Name string
@@ -76,6 +99,13 @@ func (node *FloatType) String() string {
 	}
 	return buf.String()
 }
+
+// Pre-allocated immutable decimal column types.
+var (
+	decimalTypeDec     = &DecimalType{Name: "DEC"}
+	decimalTypeDecimal = &DecimalType{Name: "DECIMAL"}
+	decimalTypeNumeric = &DecimalType{Name: "NUMERIC"}
+)
 
 // DecimalType represents a DECIMAL or NUMERIC type.
 type DecimalType struct {
@@ -97,6 +127,9 @@ func (node *DecimalType) String() string {
 	return buf.String()
 }
 
+// Pre-allocated immutable date column type.
+var dateTypeDate = &DateType{}
+
 // DateType represents a DATE type.
 type DateType struct {
 }
@@ -104,6 +137,9 @@ type DateType struct {
 func (node *DateType) String() string {
 	return "DATE"
 }
+
+// Pre-allocated immutable timestamp column type.
+var timestampTypeTimestamp = &TimestampType{}
 
 // TimestampType represents a TIMESTAMP type.
 type TimestampType struct {
@@ -113,6 +149,9 @@ func (node *TimestampType) String() string {
 	return "TIMESTAMP"
 }
 
+// Pre-allocated immutable timestamp with time zone column type.
+var timestampTzTypeTimestampWithTZ = &TimestampTZType{}
+
 // TimestampTZType represents a TIMESTAMP type.
 type TimestampTZType struct {
 }
@@ -121,6 +160,9 @@ func (node *TimestampTZType) String() string {
 	return "TIMESTAMP WITH TIME ZONE"
 }
 
+// Pre-allocated immutable interval column type.
+var intervalTypeInterval = &IntervalType{}
+
 // IntervalType represents an INTERVAL type
 type IntervalType struct {
 }
@@ -128,6 +170,14 @@ type IntervalType struct {
 func (node *IntervalType) String() string {
 	return "INTERVAL"
 }
+
+// Pre-allocated immutable string column types.
+var (
+	stringTypeChar    = &StringType{Name: "CHAR"}
+	stringTypeVarChar = &StringType{Name: "VARCHAR"}
+	stringTypeString  = &StringType{Name: "STRING"}
+	stringTypeText    = &StringType{Name: "TEXT"}
+)
 
 // StringType represents a STRING, CHAR or VARCHAR type.
 type StringType struct {
@@ -143,6 +193,13 @@ func (node *StringType) String() string {
 	}
 	return buf.String()
 }
+
+// Pre-allocated immutable bytes column types.
+var (
+	bytesTypeBlob  = &BytesType{Name: "BLOB"}
+	bytesTypeBytes = &BytesType{Name: "BYTES"}
+	bytesTypeBytea = &BytesType{Name: "BYTEA"}
+)
 
 // BytesType represents a BYTES or BLOB type.
 type BytesType struct {
