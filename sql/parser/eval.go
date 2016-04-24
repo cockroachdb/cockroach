@@ -1136,6 +1136,8 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		switch d := d.(type) {
 		case *DString:
 			return ParseDate(*d)
+		case *DDate:
+			return d, nil
 		case *DTimestamp:
 			return ctx.makeDDate(d.Time)
 		}
@@ -1201,6 +1203,8 @@ func (expr *CastExpr) Eval(ctx EvalContext) (Datum, error) {
 		case *DInt:
 			// An integer duration represents a duration in nanoseconds.
 			return &DInterval{Duration: duration.Duration{Nanos: int64(*v)}}, nil
+		case *DInterval:
+			return d, nil
 		}
 	}
 

@@ -164,9 +164,9 @@ var (
 	decimalCastTypes   = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
 	stringCastTypes    = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes}
 	bytesCastTypes     = []Datum{DNull, DummyBytes, DummyString}
-	dateCastTypes      = []Datum{DNull, DummyString, DummyTimestamp}
+	dateCastTypes      = []Datum{DNull, DummyString, DummyDate, DummyTimestamp}
 	timestampCastTypes = []Datum{DNull, DummyString, DummyDate, DummyTimestamp, DummyTimestampTZ}
-	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt}
+	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt, DummyInterval}
 )
 
 // TypeCheck implements the Expr interface.
