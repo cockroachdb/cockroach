@@ -943,17 +943,5 @@ func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
 	}
 	it := newRocksDBIterator(rdb, nil, engine)
 	defer it.Close()
-
-	it.Seek(start)
-	for ; it.Valid(); it.Next() {
-		k := it.Key()
-		if !k.Less(end) {
-			break
-		}
-		if done, err := f(MVCCKeyValue{Key: k, Value: it.Value()}); done || err != nil {
-			return err
-		}
-	}
-	// Check for any errors during iteration.
-	return it.Error()
+	return iterFromTo(it, start, end, f)
 }
