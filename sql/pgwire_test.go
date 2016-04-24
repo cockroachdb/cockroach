@@ -337,16 +337,17 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params("true").Results(true),
 			base.Params("false").Results(false),
 			base.Params("1").Results(true),
-			base.Params(2).Error(`pq: strconv.ParseBool: parsing "2": invalid syntax`),
-			base.Params(3.1).Error(`pq: strconv.ParseBool: parsing "3.1": invalid syntax`),
-			base.Params("").Error(`pq: strconv.ParseBool: parsing "": invalid syntax`),
+			base.Params(2).Error(`pq: param $1: strconv.ParseBool: parsing "2": invalid syntax`),
+			base.Params(3.1).Error(`pq: param $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
+			base.Params("").Error(`pq: param $1: strconv.ParseBool: parsing "": invalid syntax`),
 		},
 		"SELECT $1::int > $2::float": {
+			base.Params(2, 1).Results(true),
 			base.Params("2", 1).Results(true),
 			base.Params(1, "2").Results(false),
 			base.Params("2", "1.0").Results(true),
-			base.Params("2.0", "1").Error(`pq: strconv.ParseInt: parsing "2.0": invalid syntax`),
-			base.Params(2.1, 1).Error(`pq: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			base.Params("2.0", "1").Error(`pq: param $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
+			base.Params(2.1, 1).Error(`pq: param $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		},
 		"SELECT GREATEST($1, 0, $2), $2": {
 			base.Params(1, -1).Results(1, -1),
@@ -355,6 +356,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(1, 2.1).Error(`pq: param $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		},
 		"SELECT $1::int, $1::float": {
+			base.Params(1).Results(1, 1.0),
 			base.Params("1").Results(1, 1.0),
 		},
 		"SELECT 3 + $1, $1 + $2": {
@@ -489,6 +491,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SELECT TO_HEX(~(~$1))": {
 			base.Params(12).Results("c"),
+		},
+		"SELECT $1::INT": {
+			base.Params(12).Results(12),
 		},
 		"INSERT INTO d.T VALUES ($1 + 1) RETURNING a": {
 			base.Params(1).Results(2),
