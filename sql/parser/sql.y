@@ -2584,19 +2584,19 @@ simple_typename:
 | const_interval '(' ICONST ')' { unimplemented() }
 | BLOB
   {
-    $$.val = &BytesType{Name: "BLOB"}
+    $$.val = bytesTypeBlob
   }
 | BYTES
   {
-    $$.val = &BytesType{Name: "BYTES"}
+    $$.val = bytesTypeBytes
   }
 | BYTEA
   {
-    $$.val = &BytesType{Name: "BYTEA"}
+    $$.val = bytesTypeBytea
   }
 | TEXT
   {
-    $$.val = &StringType{Name: "TEXT"}
+    $$.val = stringTypeText
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types
@@ -2625,65 +2625,78 @@ opt_numeric_modifiers:
   }
 | /* EMPTY */
   {
-    $$.val = &DecimalType{}
+    $$.val = nil
   }
 
 // SQL numeric data types
 numeric:
   INT
   {
-    $$.val = &IntType{Name: "INT"}
+    $$.val = intTypeInt
   }
 | INT64
   {
-    $$.val = &IntType{Name: "INT64"}
+    $$.val = intTypeInt64
   }
 | INTEGER
   {
-    $$.val = &IntType{Name: "INTEGER"}
+    $$.val = intTypeInteger
   }
 | SMALLINT
   {
-    $$.val = &IntType{Name: "SMALLINT"}
+    $$.val = intTypeSmallInt
   }
 | BIGINT
   {
-    $$.val = &IntType{Name: "BIGINT"}
+    $$.val = intTypeBigInt
   }
 | REAL
   {
-    $$.val = &FloatType{Name: "REAL"}
+    $$.val = floatTypeReal
   }
 | FLOAT opt_float
-  {
-    $$.val = &FloatType{Name: "FLOAT", Prec: int($2.ival().Val)}
+  {    
+    prec := int($2.ival().Val)
+    $$.val = newFloatType(prec)
   }
 | DOUBLE PRECISION
   {
-    $$.val = &FloatType{Name: "DOUBLE PRECISION"}
+    $$.val = floatTypeDouble
   }
 | DECIMAL opt_numeric_modifiers
   {
     $$.val = $2.colType()
-    $$.val.(*DecimalType).Name = "DECIMAL"
+    if $$.val == nil {
+      $$.val = decimalTypeDecimal
+    } else {
+      $$.val.(*DecimalType).Name = "DECIMAL"
+    }
   }
 | DEC opt_numeric_modifiers
   {
     $$.val = $2.colType()
-    $$.val.(*DecimalType).Name = "DEC"
+    if $$.val == nil {
+      $$.val = decimalTypeDec
+    } else {
+      $$.val.(*DecimalType).Name = "DEC"
+    }
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$.val = $2.colType()
-    $$.val.(*DecimalType).Name = "NUMERIC"
+    if $$.val == nil {
+      $$.val = decimalTypeNumeric
+    } else {
+      $$.val.(*DecimalType).Name = "NUMERIC"
+    }
   }
 | BOOLEAN
   {
-    $$.val = &BoolType{Name: "BOOLEAN"}
+    $$.val = boolTypeBoolean
   }
 | BOOL
   {
-    $$.val = &BoolType{Name: "BOOL"}
+    $$.val = boolTypeBool
   }
 
 opt_float:
@@ -2711,13 +2724,17 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$.val = &IntType{Name: "BIT", N: int($4.ival().Val)}
+    if bits := int($4.ival().Val); bits == 0 {
+      $$.val = intTypeBit
+    } else {
+      $$.val = &IntType{Name: "BIT", N: int($4.ival().Val)}
+    }
   }
 
 bit_without_length:
   BIT opt_varying
   {
-    $$.val = &IntType{Name: "BIT"}
+    $$.val = intTypeBit
   }
 
 // SQL character data types
@@ -2734,7 +2751,11 @@ character_with_length:
   character_base '(' ICONST ')'
   {
     $$.val = $1.colType()
-    $$.val.(*StringType).N = int($3.ival().Val)
+    if n := int($3.ival().Val); n != 0 {
+      strType := &StringType{N: n}
+      strType.Name = $$.val.(*StringType).Name
+      $$.val = strType
+    }
   }
 
 character_without_length:
@@ -2746,19 +2767,19 @@ character_without_length:
 character_base:
   CHARACTER opt_varying
   {
-    $$.val = &StringType{Name: "CHAR"}
+    $$.val = stringTypeChar
   }
 | CHAR opt_varying
   {
-    $$.val = &StringType{Name: "CHAR"}
+    $$.val = stringTypeChar
   }
 | VARCHAR
   {
-    $$.val = &StringType{Name: "VARCHAR"}
+    $$.val = stringTypeVarChar
   }
 | STRING
   {
-    $$.val = &StringType{Name: "STRING"}
+    $$.val = stringTypeString
   }
 
 opt_varying:
@@ -2769,24 +2790,24 @@ opt_varying:
 const_datetime:
   DATE
   {
-    $$.val = &DateType{}
+    $$.val = dateTypeDate
   }
 | TIMESTAMP
   {
-    $$.val = &TimestampType{}
+    $$.val = timestampTypeTimestamp
   }
 | TIMESTAMPTZ
   {
-    $$.val = &TimestampTZType{}
+    $$.val = timestampTzTypeTimestampWithTZ
   }
 | TIMESTAMP WITH_LA TIME ZONE
   {
-    $$.val = &TimestampTZType{}
+    $$.val = timestampTzTypeTimestampWithTZ
   }
 
 const_interval:
   INTERVAL {
-    $$.val = &IntervalType{}
+    $$.val = intervalTypeInterval
   }
 
 opt_interval:
