@@ -291,6 +291,9 @@ func (e *Executor) Prepare(ctx context.Context, query string, session *Session, 
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	if err = parser.ProcessPlaceholderAnnotations(stmt, args); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	session.planner.resetForBatch(e)
 	session.planner.evalCtx.Args = args

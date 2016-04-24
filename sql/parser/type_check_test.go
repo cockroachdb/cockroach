@@ -19,6 +19,7 @@ package parser
 import (
 	"go/constant"
 	"go/token"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -242,5 +243,60 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 			}
 		})
+	}
+}
+
+func TestProcessPlaceholderAnnotations(t *testing.T) {
+	intType := &IntType{Name: "INT"}
+	boolType := &BoolType{Name: "BOOLEAN"}
+
+	testData := []struct {
+		stmtExprs []Expr
+		desired   MapArgs
+	}{
+		{[]Expr{ValArg{"a"}}, MapArgs{}},
+		{[]Expr{ValArg{"a"}, ValArg{"b"}}, MapArgs{}},
+		{[]Expr{
+			&CastExpr{Expr: ValArg{"a"}, Type: intType},
+			&CastExpr{Expr: ValArg{"a"}, Type: boolType},
+		}, MapArgs{}},
+		{[]Expr{
+			&CastExpr{Expr: ValArg{"a"}, Type: intType},
+			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
+		}, MapArgs{
+			"a": DummyInt,
+			"b": DummyBool,
+		}},
+		{[]Expr{
+			&CastExpr{Expr: ValArg{"a"}, Type: intType},
+			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
+			&CastExpr{Expr: ValArg{"a"}, Type: intType},
+			&CastExpr{Expr: ValArg{"b"}, Type: intType},
+		}, MapArgs{
+			"a": DummyInt,
+		}},
+		{[]Expr{
+			&CastExpr{Expr: ValArg{"a"}, Type: intType},
+			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
+			ValArg{"a"},
+		}, MapArgs{
+			"b": DummyBool,
+		}},
+		{[]Expr{
+			ValArg{"a"},
+			&CastExpr{Expr: ValArg{"a"}, Type: intType},
+			&CastExpr{Expr: ValArg{"b"}, Type: boolType},
+		}, MapArgs{
+			"b": DummyBool,
+		}},
+	}
+	for i, d := range testData {
+		args := make(MapArgs)
+		stmt := &ValuesClause{Tuples: []*Tuple{{Exprs: d.stmtExprs}}}
+		if err := ProcessPlaceholderAnnotations(stmt, args); err != nil {
+			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
+		} else if !reflect.DeepEqual(args, d.desired) {
+			t.Errorf("%d: expected args %v after processing placeholder annotations for %v, found %v", i, d.desired, stmt, args)
+		}
 	}
 }
