@@ -957,6 +957,44 @@ type CastExpr struct {
 	typeAnnotation
 }
 
-func (n *CastExpr) String() string {
-	return fmt.Sprintf("CAST(%s AS %s)", n.Expr, n.Type)
+var (
+	boolCastTypes      = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	intCastTypes       = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	floatCastTypes     = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	decimalCastTypes   = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString}
+	stringCastTypes    = []Datum{DNull, DummyBool, DummyInt, DummyFloat, DummyDecimal, DummyString, DummyBytes}
+	bytesCastTypes     = []Datum{DNull, DummyString, DummyBytes}
+	dateCastTypes      = []Datum{DNull, DummyString, DummyDate, DummyTimestamp}
+	timestampCastTypes = []Datum{DNull, DummyString, DummyDate, DummyTimestamp, DummyTimestampTZ}
+	intervalCastTypes  = []Datum{DNull, DummyString, DummyInt, DummyInterval}
+)
+
+func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
+	switch node.Type.(type) {
+	case *BoolType:
+		return DummyBool, boolCastTypes
+	case *IntType:
+		return DummyInt, intCastTypes
+	case *FloatType:
+		return DummyFloat, floatCastTypes
+	case *DecimalType:
+		return DummyDecimal, decimalCastTypes
+	case *StringType:
+		return DummyString, stringCastTypes
+	case *BytesType:
+		return DummyBytes, bytesCastTypes
+	case *DateType:
+		return DummyDate, dateCastTypes
+	case *TimestampType:
+		return DummyTimestamp, timestampCastTypes
+	case *TimestampTZType:
+		return DummyTimestampTZ, timestampCastTypes
+	case *IntervalType:
+		return DummyInterval, intervalCastTypes
+	}
+	return nil, nil
+}
+
+func (node *CastExpr) String() string {
+	return fmt.Sprintf("CAST(%s AS %s)", node.Expr, node.Type)
 }
