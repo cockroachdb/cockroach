@@ -172,6 +172,17 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1, 2) RETURNING 1, 2`},
 		{`INSERT INTO a VALUES (1, 2) RETURNING a + b, c`},
 
+		{`UPSERT INTO a VALUES (1)`},
+		{`UPSERT INTO a.b VALUES (1)`},
+		{`UPSERT INTO a VALUES (1, 2)`},
+		{`UPSERT INTO a VALUES (1, DEFAULT)`},
+		{`UPSERT INTO a VALUES (1, 2), (3, 4)`},
+		{`UPSERT INTO a VALUES (a + 1, 2 * 3)`},
+		{`UPSERT INTO a(a, b) VALUES (1, 2)`},
+		{`UPSERT INTO a(a, a.b) VALUES (1, 2)`},
+		{`UPSERT INTO a SELECT b, c FROM d`},
+		{`UPSERT INTO a DEFAULT VALUES`},
+
 		{`SELECT 1 + 1`},
 		{`SELECT - 1`},
 		{`SELECT + 1`},

@@ -565,7 +565,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
-%token <str>   UPDATE USER USING
+%token <str>   UPDATE UPSERT USER USING
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VARYING
 
@@ -1818,6 +1818,13 @@ insert_stmt:
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).Returning = $7.retExprs()
+  }
+| opt_with_clause UPSERT INTO insert_target insert_rest opt_on_conflict returning_clause
+  {
+    $$.val = $5.stmt()
+    $$.val.(*Insert).Table = $4.tblExpr()
+    $$.val.(*Insert).Returning = $7.retExprs()
+    $$.val.(*Insert).OnConflict = &OnConflict{}
   }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -4156,6 +4163,7 @@ unreserved_keyword:
 | UNCOMMITTED
 | UNKNOWN
 | UPDATE
+| UPSERT
 | VALID
 | VALIDATE
 | VALUE

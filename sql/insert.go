@@ -49,13 +49,22 @@ type insertNode struct {
 }
 
 // Insert inserts rows into the database.
-// Privileges: INSERT on table
+// Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.Error) {
 	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.INSERT)
 	if pErr != nil {
 		return nil, pErr
+	}
+	if n.OnConflict != nil {
+		if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// TODO(dan): Support RETURNING in UPSERTs.
+		if n.Returning != nil {
+			return nil, roachpb.NewErrorf("RETURNING is not supported with UPSERT")
+		}
 	}
 
 	var cols []ColumnDescriptor
@@ -172,7 +181,41 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	tw := &tableInserter{ri: ri, autoCommit: autoCommit}
+
+	var tw tableWriter
+	if n.OnConflict == nil {
+		tw = &tableInserter{ri: ri, autoCommit: autoCommit}
+	} else {
+		// TODO(dan): These are both implied by the short form of UPSERT. When the
+		// INSERT INTO ON CONFLICT form is implemented, get these values from
+		// n.OnConfict.
+		upsertConflictIndex := en.tableDesc.PrimaryIndex
+		insertCols := ri.insertCols
+
+		indexColSet := make(map[ColumnID]struct{}, len(upsertConflictIndex.ColumnIDs))
+		for _, colID := range upsertConflictIndex.ColumnIDs {
+			indexColSet[colID] = struct{}{}
+		}
+
+		// updateCols contains the columns that will be updated when a conflict is
+		// found. For the UPSERT short form, it is the set of columns in insertCols
+		// minus any columns in the conflict index. Example:
+		// `UPSERT INTO abc VALUES (1, 2, 3)` is syntactic sugar for
+		// `INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT a DO UPDATE SET b = 2, c = 3`.
+		updateCols := make([]ColumnDescriptor, 0, len(insertCols))
+		for _, c := range insertCols {
+			if _, ok := indexColSet[c.ID]; !ok {
+				updateCols = append(updateCols, c)
+			}
+		}
+		ru, err := makeRowUpdater(en.tableDesc, updateCols)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
+
+		tw = &tableUpserter{ri: ri, ru: ru, autoCommit: autoCommit}
+	}
 
 	in := &insertNode{
 		n:                     n,

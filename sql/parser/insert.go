@@ -29,15 +29,21 @@ import (
 
 // Insert represents an INSERT statement.
 type Insert struct {
-	Table     TableExpr
-	Columns   QualifiedNames
-	Rows      *Select
-	Returning ReturningExprs
+	Table      TableExpr
+	Columns    QualifiedNames
+	Rows       *Select
+	Returning  ReturningExprs
+	OnConflict *OnConflict
 }
 
 func (node *Insert) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "INSERT INTO %s", node.Table)
+	if node.OnConflict != nil {
+		buf.WriteString("UPSERT")
+	} else {
+		buf.WriteString("INSERT")
+	}
+	fmt.Fprintf(&buf, " INTO %s", node.Table)
 	if node.Columns != nil {
 		fmt.Fprintf(&buf, "(%s)", node.Columns)
 	}
@@ -53,4 +59,13 @@ func (node *Insert) String() string {
 // DefaultValues returns true iff only default values are being inserted.
 func (node *Insert) DefaultValues() bool {
 	return node.Rows.Select == nil
+}
+
+// OnConflict represents an `ON CONFLICT index DO UPDATE SET` statement.
+//
+// The zero value for OnConflict is used to signal the UPSERT short form, which
+// uses the primary key for Index and the values being inserted for Exprs.
+type OnConflict struct {
+	Index Name
+	Exprs UpdateExprs
 }
