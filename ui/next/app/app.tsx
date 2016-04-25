@@ -9,6 +9,7 @@ import { syncHistoryWithStore, routerReducer } from "react-router-redux";
 import thunk from "redux-thunk";
 
 import nodesReducer from "./redux/nodes";
+import uiReducer from "./redux/ui";
 
 import Layout from "./containers/layout";
 import { ClusterMain, ClusterTitle } from "./containers/cluster";
@@ -16,10 +17,16 @@ import { DatabasesMain, DatabasesTitle } from "./containers/databases";
 import { HelpUsMain, HelpUsTitle } from "./containers/helpus";
 import { NodesMain, NodesTitle } from "./containers/nodes";
 
+// TODO(mrtracy): Redux now provides official typings, and their Store
+// definition is generic. That would let us enforce that the store actually has
+// the shape of the AdminUIStore interface (defined in /interfaces/store.d.ts).
+// However, that typings file is currently incompatible with any available
+// typings for react-redux.
 const store = createStore(
   combineReducers({
     routing: routerReducer,
     nodes: nodesReducer,
+    ui: uiReducer,
   }),
   applyMiddleware(thunk)
 );

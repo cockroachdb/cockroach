@@ -19,7 +19,7 @@
 SHELL         := /bin/bash
 
 # Update the path to prefer binstubs over globals
-PATH          := ../node_modules/.bin:$(PATH)
+PATH          := ./node_modules/.bin:$(PATH)
 
 NODE_MODULES  := node_modules
 JSPM_PACKAGES := jspm_packages
@@ -49,3 +49,9 @@ jspm.installed: npm.installed
 	rm -rf $(JSPM_PACKAGES)/
 	jspm install
 	touch $@
+
+.PHONY: test
+test: PATH := ../node_modules/.bin:$(PATH)
+test:
+# Execute in /app directory, so that ts-node can pick up tsconfig.json.
+	cd app && mocha **/*.spec.ts --require ts-node/register
