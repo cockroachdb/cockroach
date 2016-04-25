@@ -48,8 +48,10 @@ System.config({
   },
 
   map: {
+    "d3": "npm:d3@3.5.16",
     "es6-promise": "npm:es6-promise@3.1.2",
     "lodash": "npm:lodash@4.11.1",
+    "moment": "npm:moment@2.13.0",
     "object-assign": "npm:object-assign@4.0.1",
     "react": "npm:react@15.0.1",
     "react-dom": "npm:react-dom@15.0.1",
@@ -58,6 +60,7 @@ System.config({
     "react-router-redux": "npm:react-router-redux@4.0.2",
     "redux": "npm:redux@3.4.0",
     "redux-thunk": "npm:redux-thunk@2.0.1",
+    "reselect": "npm:reselect@2.5.1",
     "ts": "github:frankwallis/plugin-typescript@4.0.5",
     "ts-runtime": "npm:babel-runtime@5.8.38",
     "typescript": "npm:typescript@1.8.9",

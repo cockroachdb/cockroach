@@ -11,6 +11,7 @@ import { Dispatch } from "redux";
 import assign = require("object-assign");
 import { Action, PayloadAction } from "../interfaces/action";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
+import "whatwg-fetch";
 
 const REQUEST = "cockroachui/nodes/REQUEST";
 const RECEIVE = "cockroachui/nodes/RECEIVE";
