@@ -742,3 +742,79 @@ func BenchmarkSort100000Limit10Distinct_Cockroach(b *testing.B) {
 func BenchmarkSort100000Limit10Distinct_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkOrderBy(b, db, 100000, 10, true) })
 }
+
+func runBenchmarkTrackChoices(b *testing.B, db *sql.DB, batchSize int) {
+	const numOptions = 10000
+
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.track_choices`); err != nil {
+		b.Fatal(err)
+	}
+	// The CREATE INDEX statements are separate in order to be compatible with
+	// Postgres.
+	const createStmt = `
+CREATE TABLE IF NOT EXISTS bench.track_choices (
+  user_id bigint NOT NULL DEFAULT 0,
+  track_id bigint NOT NULL DEFAULT 0,
+  created_at timestamp NOT NULL,
+  PRIMARY KEY (user_id, track_id)
+);
+CREATE INDEX user_created_at ON bench.track_choices (user_id, created_at);
+CREATE INDEX track_created_at ON bench.track_choices (track_id, created_at);
+`
+	if _, err := db.Exec(createStmt); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	var buf bytes.Buffer
+	for i := 0; i < b.N; i += batchSize {
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.track_choices VALUES `)
+		count := b.N - i
+		if count > batchSize {
+			count = batchSize
+		}
+		for j := 0; j < count; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d, %d, NOW())", rand.Int63(), rand.Int63n(numOptions))
+		}
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkTrackChoices1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 1) })
+}
+
+func BenchmarkTrackChoices10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 10) })
+}
+
+func BenchmarkTrackChoices100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 100) })
+}
+
+func BenchmarkTrackChoices1000_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
+}
+
+func BenchmarkTrackChoices1_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 1) })
+}
+
+func BenchmarkTrackChoices10_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 10) })
+}
+
+func BenchmarkTrackChoices100_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 100) })
+}
+
+func BenchmarkTrackChoices1000_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
+}
