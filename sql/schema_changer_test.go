@@ -551,6 +551,7 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(vivekmenezes): see #6293")
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
