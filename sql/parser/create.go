@@ -156,10 +156,15 @@ type ColumnTableDef struct {
 	Unique      bool
 	DefaultExpr Expr
 	CheckExpr   Expr
+	References  struct {
+		Table *QualifiedName
+		Col   Name
+	}
 }
 
-func newColumnTableDef(name Name, typ ColumnType,
-	qualifications []ColumnQualification) *ColumnTableDef {
+func newColumnTableDef(
+	name Name, typ ColumnType, qualifications []ColumnQualification,
+) *ColumnTableDef {
 	d := &ColumnTableDef{
 		Name:     name,
 		Type:     typ,
@@ -179,6 +184,9 @@ func newColumnTableDef(name Name, typ ColumnType,
 			d.Unique = true
 		case *ColumnCheckConstraint:
 			d.CheckExpr = t.Expr
+		case *ColumnFKConstraint:
+			d.References.Table = t.Table
+			d.References.Col = t.Col
 		default:
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
@@ -214,6 +222,16 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.CheckExpr)
 		buf.WriteByte(')')
 	}
+	if node.References.Table != nil {
+		buf.WriteString(" REFERENCES ")
+		FormatNode(buf, f, node.References.Table)
+		if node.References.Col != "" {
+			buf.WriteString(" (")
+			FormatNode(buf, f, node.References.Col)
+			buf.WriteByte(')')
+		}
+	}
+
 }
 
 // ColumnQualification represents a constraint on a column.
@@ -227,6 +245,7 @@ func (NullConstraint) columnQualification()         {}
 func (PrimaryKeyConstraint) columnQualification()   {}
 func (UniqueConstraint) columnQualification()       {}
 func (*ColumnCheckConstraint) columnQualification() {}
+func (*ColumnFKConstraint) columnQualification()    {}
 
 // ColumnDefault represents a DEFAULT clause for a column.
 type ColumnDefault struct {
@@ -248,6 +267,12 @@ type UniqueConstraint struct{}
 // ColumnCheckConstraint represents either a check on a column.
 type ColumnCheckConstraint struct {
 	Expr Expr
+}
+
+// ColumnFKConstraint represents a FK-constaint on a column.
+type ColumnFKConstraint struct {
+	Table *QualifiedName
+	Col   Name // empty-string means use PK
 }
 
 // NameListToIndexElems converts a NameList to an IndexElemList with all
