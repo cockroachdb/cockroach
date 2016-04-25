@@ -134,7 +134,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		})
 	}
 
-	const numClients = 50
+	numClients := len(peers) * 2
 	disconnectedCh := make(chan *client)
 	numFailedConns := 0
 
