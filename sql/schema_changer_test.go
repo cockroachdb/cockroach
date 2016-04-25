@@ -563,8 +563,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	// Bulk insert.
-	// TODO(vivek): increase maxValue once #3274 is fixed.
-	maxValue := 400
+	maxValue := 4000
 	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
 	for i := 1; i <= maxValue; i++ {
 		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
