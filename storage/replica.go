@@ -230,6 +230,12 @@ type Replica struct {
 		proposeRaftCommandFn func(*pendingCmd) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
+
+		// Set to an open channel while a snapshot is being generated.
+		// When no snapshot is in progress, this field may either be nil
+		// or a closed channel. If an error occurs during generation,
+		// this channel may be closed without producing a result.
+		snapshotChan chan raftpb.Snapshot
 	}
 }
 
