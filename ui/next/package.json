@@ -1,7 +1,11 @@
 {
   "devDependencies": {
+    "chai": "^3.5.0",
     "jspm": "^0.16.33",
+    "mocha": "^2.4.5",
     "shonkwrap": "^1.3.0",
+    "ts-node": "^0.7.2",
+    "typescript": "^1.8.10",
     "typings": "^0.7.12"
   },
   "jspm": {
