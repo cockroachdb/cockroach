@@ -19,6 +19,7 @@ package sql
 import (
 	"bytes"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -177,9 +178,6 @@ func (sc *SchemaChanger) runBackfillAtLatestVersion(
 		return pErr
 	}
 
-	// TODO(vivek): Break these backfill operations into chunks. All of them
-	// will fail on big tables (see #3274).
-
 	// Add and drop columns.
 	if pErr := sc.truncateAndBackfillColumns(
 		lease, addedColumnDescs, droppedColumnDescs, version,
@@ -199,6 +197,32 @@ func (sc *SchemaChanger) runBackfillAtLatestVersion(
 
 	return nil
 }
+
+// getTableSpan returns a span containing the start and end key for a table.
+// It also checks that the version hasn't changed.
+func (sc *SchemaChanger) getTableSpan(version DescriptorVersion) (span, *roachpb.Error) {
+	var tableDesc *TableDescriptor
+	if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		var pErr *roachpb.Error
+		tableDesc, pErr = getTableDescAtVersion(txn, sc.tableID, version)
+		return pErr
+	}); pErr != nil {
+		return span{}, pErr
+	}
+	prefix := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
+	return span{
+		start: prefix,
+		end:   prefix.PrefixEnd(),
+	}, nil
+}
+
+// ColumnTruncateAndBackfillChunkSize is the maximum number of rows of keys
+// processed per chunk during the column truncate or backfill.
+//
+// TODO(vivek): Run some experiments to set this value to something sensible
+// or adjust it dynamically. Also add in a sleep after every chunk is
+// processed to slow down the backfill and reduce its CPU usage.
+const ColumnTruncateAndBackfillChunkSize = 600
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	lease *TableDescriptor_SchemaChangeLease,
@@ -233,94 +257,120 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		}
 		*lease = l
 
-		pErr = sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+		// Initialize start and end to represent a span of keys.
+		sp, err := sc.getTableSpan(version)
+		if err != nil {
+			return err
+		}
+
+		// Run through the entire table key space adding and deleting columns.
+		// Sleep after each iteration to slow down the backfill so as to not
+		// compete with OLTP requests.
+		for done := false; !done; time.Sleep(10 * time.Millisecond) {
+			// First extend the schema change lease.
+			l, pErr := sc.ExtendLease(*lease)
 			if pErr != nil {
 				return pErr
 			}
+			*lease = l
 
-			// Run a scan across the table using the primary key.
-			start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
-			b := &client.Batch{}
-			b.Scan(start, start.PrefixEnd(), 0)
-			if pErr := txn.Run(b); pErr != nil {
+			var currSentinel roachpb.Key
+			if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+				tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+				if pErr != nil {
+					return pErr
+				}
+
+				// Run a scan across the table using the primary key.
+				b := &client.Batch{}
+				b.Scan(sp.start, sp.end, ColumnTruncateAndBackfillChunkSize)
+				if pErr := txn.Run(b); pErr != nil {
+					return pErr
+				}
+
+				// Use a different batch to truncate/backfill columns.
+				writeBatch := &client.Batch{}
+				done = true
+				for _, result := range b.Results {
+					var sentinelKey roachpb.Key
+					for _, kv := range result.Rows {
+						// Still processing table.
+						done = false
+						if nonNullableColumn != "" {
+							return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
+						}
+
+						if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
+							// Sentinel keys have a 0 suffix indicating 0
+							// bytes of column ID. Strip off that suffix to
+							// determine the prefix shared with the other keys
+							// for the row.
+							sentinelKey = stripColumnIDLength(kv.Key)
+							// Store away key for the next table row as the
+							// point from which to start from.
+							currSentinel = sentinelKey
+
+							// Delete the entire dropped columns. This used to
+							// use SQL UPDATE in the past to update the
+							// dropped column to NULL; but a column in the
+							// process of being dropped is placed in the table
+							// descriptor mutations, and a SQL UPDATE of a
+							// column in mutations will fail.
+							for _, columnDesc := range dropped {
+								// Delete the dropped column.
+								colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
+								if log.V(2) {
+									log.Infof("Del %s", colKey)
+								}
+								writeBatch.Del(colKey)
+							}
+
+							// Add the new columns and backfill the values.
+							for i, expr := range defaultExprs {
+								if expr == nil {
+									continue
+								}
+								col := added[i]
+								colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
+								d, err := expr.Eval(evalCtx)
+								if err != nil {
+									return roachpb.NewError(err)
+								}
+								val, err := marshalColumnValue(col, d)
+								if err != nil {
+									return roachpb.NewError(err)
+								}
+
+								if log.V(2) {
+									log.Infof("Put %s -> %v", colKey, val)
+								}
+								// Insert default value into the column. If
+								// this row was recently added the default
+								// value might have already been populated,
+								// because the ColumnDescriptor is in the
+								// WRITE_ONLY state. Reinserting the default
+								// value is not a big deal.
+								//
+								// Note: a column in the WRITE_ONLY state
+								// cannot be populated directly through SQL. A
+								// SQL INSERT cannot directly reference the
+								// column, and the INSERT populates the column
+								// with the default value.
+								writeBatch.Put(colKey, val)
+							}
+						}
+					}
+				}
+				if pErr := txn.Run(writeBatch); pErr != nil {
+					return convertBackfillError(tableDesc, writeBatch, pErr)
+				}
+				return nil
+			}); pErr != nil {
 				return pErr
 			}
-
-			if nonNullableColumn != "" {
-				for _, result := range b.Results {
-					if len(result.Rows) > 0 {
-						return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
-					}
-				}
-			}
-
-			// Use a different batch to truncate/backfill columns.
-			writeBatch := &client.Batch{}
-			for _, result := range b.Results {
-				var sentinelKey roachpb.Key
-				for _, kv := range result.Rows {
-					if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
-						// Sentinel keys have a 0 suffix indicating 0 bytes of column
-						// ID. Strip off that suffix to determine the prefix shared with the
-						// other keys for the row.
-						sentinelKey = stripColumnIDLength(kv.Key)
-
-						// Delete the entire dropped columns.
-						// This used to use SQL UPDATE in the past to update the dropped
-						// column to NULL; but a column in the process of being
-						// dropped is placed in the table descriptor mutations, and
-						// a SQL UPDATE of a column in mutations will fail.
-						for _, columnDesc := range dropped {
-							// Delete the dropped column.
-							colKey := keys.MakeColumnKey(sentinelKey, uint32(columnDesc.ID))
-							if log.V(2) {
-								log.Infof("Del %s", colKey)
-							}
-							writeBatch.Del(colKey)
-						}
-
-						// Add the new columns and backfill the values.
-						for i, expr := range defaultExprs {
-							if expr == nil {
-								continue
-							}
-							col := added[i]
-							colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
-							d, err := expr.Eval(evalCtx)
-							if err != nil {
-								return roachpb.NewError(err)
-							}
-
-							val, err := marshalColumnValue(col, d)
-							if err != nil {
-								return roachpb.NewError(err)
-							}
-
-							if log.V(2) {
-								log.Infof("Put %s -> %v", colKey, val)
-							}
-							// Insert default value into the column. If this row
-							// was recently added the default value might have
-							// already been populated, because the
-							// ColumnDescriptor is in the WRITE_ONLY state.
-							// Reinserting the default value is not a big deal.
-							//
-							// Note: a column in the WRITE_ONLY state cannot be
-							// populated directly through SQL. A SQL INSERT cannot
-							// directly reference the column, and the INSERT
-							// populates the column with the default value.
-							writeBatch.Put(colKey, val)
-						}
-					}
-				}
-			}
-			if pErr := txn.Run(writeBatch); pErr != nil {
-				return convertBackfillError(tableDesc, writeBatch, pErr)
-			}
-			return nil
-		})
-		return pErr
+			// Store away next starting point.
+			sp.start = currSentinel.PrefixEnd()
+		}
 	}
 	return nil
 }
@@ -365,6 +415,14 @@ func (sc *SchemaChanger) truncateIndexes(
 	return nil
 }
 
+// IndexBackfillChunkSize is the maximum number of rows processed per chunk
+// during the index backfill.
+//
+// TODO(vivek) Run some experiments to set this value to something sensible or
+// adjust it dynamically. Also add in a sleep after every chunk is processed,
+// to slow down the backfill and not have it interfere with OLTP commands.
+const IndexBackfillChunkSize = 100
+
 func (sc *SchemaChanger) backfillIndexes(
 	lease *TableDescriptor_SchemaChangeLease,
 	added []IndexDescriptor,
@@ -379,62 +437,93 @@ func (sc *SchemaChanger) backfillIndexes(
 		return pErr
 	}
 	*lease = l
-	pErr = sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+
+	// Initialize start and end to represent a span of keys.
+	sp, err := sc.getTableSpan(version)
+	if err != nil {
+		return err
+	}
+
+	// Backfill the index entries for all the rows. Sleep to slow down the
+	// backfill so as to not compete with OLTP requests.
+	for done := false; !done; time.Sleep(10 * time.Millisecond) {
+		// First extend the schema change lease.
+		l, pErr := sc.ExtendLease(*lease)
 		if pErr != nil {
 			return pErr
 		}
+		*lease = l
+		var nextKey roachpb.Key
+		pErr = sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
+			if pErr != nil {
+				return pErr
+			}
 
-		// Get all the rows affected.
-		// TODO(tamird): Support partial indexes?
-		// Use a scanNode with SELECT to pass in a TableDescriptor
-		// to the SELECT without needing to use a parser.QualifiedName,
-		// because we want to run schema changes from a gossip feed of
-		// table IDs.
-		scan := &scanNode{
-			planner: makePlanner(),
-			txn:     txn,
-			desc:    *tableDesc,
-		}
-		scan.initDescDefaults()
-		rows, err := selectIndex(scan, nil, false)
-		if err != nil {
-			return roachpb.NewError(err)
-		}
+			// Get the next set of rows.
+			// TODO(tamird): Support partial indexes?
+			//
+			// Use a scanNode with SELECT to pass in a TableDescriptor to the
+			// SELECT without needing to use a parser.QualifiedName, because
+			// we want to run schema changes from a gossip feed of table IDs.
+			scan := &scanNode{
+				planner: makePlanner(),
+				txn:     txn,
+				desc:    *tableDesc,
+				spans:   []span{sp},
+			}
+			scan.initDescDefaults()
+			rows, err := selectIndex(scan, nil, false)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+			// Construct a map from column ID to the index the value appears at within a
+			// row.
+			colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+			b := &client.Batch{}
+			numRows := 0
+			for ; numRows < IndexBackfillChunkSize && rows.Next(); numRows++ {
+				rowVals := rows.Values()
 
-		// Construct a map from column ID to the index the value appears at within a
-		// row.
-		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
-		if err != nil {
-			return roachpb.NewError(err)
-		}
-		b := &client.Batch{}
-		for rows.Next() {
-			rowVals := rows.Values()
-
-			for _, desc := range added {
-				secondaryIndexEntries, err := encodeSecondaryIndexes(
-					tableDesc.ID, []IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
-				if err != nil {
-					return roachpb.NewError(err)
-				}
-
-				for _, secondaryIndexEntry := range secondaryIndexEntries {
-					if log.V(2) {
-						log.Infof("InitPut %s -> %v", secondaryIndexEntry.key,
-							secondaryIndexEntry.value)
+				for _, desc := range added {
+					secondaryIndexEntries, err := encodeSecondaryIndexes(
+						tableDesc.ID, []IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
+					if err != nil {
+						return roachpb.NewError(err)
 					}
-					b.InitPut(secondaryIndexEntry.key, secondaryIndexEntry.value)
+					for _, secondaryIndexEntry := range secondaryIndexEntries {
+						if log.V(2) {
+							log.Infof("InitPut %s -> %v", secondaryIndexEntry.key,
+								secondaryIndexEntry.value)
+						}
+						b.InitPut(secondaryIndexEntry.key, secondaryIndexEntry.value)
+					}
 				}
 			}
+			if rows.PErr() != nil {
+				return rows.PErr()
+			}
+			// Write the new index values.
+			if pErr := txn.Run(b); pErr != nil {
+				return convertBackfillError(tableDesc, b, pErr)
+			}
+			// Have we processed all the table rows?
+			if numRows < IndexBackfillChunkSize {
+				done = true
+				return nil
+			}
+			// Update sp.start to the next possible key; sp.end remains the
+			// same.
+			nextKey = scan.fetcher.kv.Key
+			return nil
+		})
+		if pErr != nil {
+			return pErr
 		}
-		if rows.PErr() != nil {
-			return rows.PErr()
-		}
-		if pErr := txn.Run(b); pErr != nil {
-			return convertBackfillError(tableDesc, b, pErr)
-		}
-		return nil
-	})
-	return pErr
+		sp.start = nextKey
+	}
+	return nil
 }
