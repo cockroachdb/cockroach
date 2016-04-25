@@ -15,5 +15,12 @@
     "redux-thunk": "registry:dt/redux-thunk#2.0.1+20160317120654",
     "whatwg-fetch": "registry:dt/whatwg-fetch#0.0.0+20160412133644"
   },
-  "dependencies": {}
+  "dependencies": {
+    "d3": "registry:npm/d3#3.0.0+20160211003958",
+    "enzyme": "registry:npm/enzyme#2.2.0+20160322031343",
+    "lodash": "registry:npm/lodash#4.0.0+20160416211519",
+    "moment": "registry:npm/moment#2.10.5+20160211003958",
+    "reselect": "github:reactjs/reselect/src/reselect.d.ts#v2.5.1",
+    "sinon": "registry:npm/sinon#1.16.0+20160309002336"
+  }
 }
