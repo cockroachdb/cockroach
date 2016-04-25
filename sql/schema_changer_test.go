@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sync"
 	"testing"
 	"time"
 
@@ -441,18 +440,11 @@ func runSchemaChangeWithOperations(
 	tableDesc := desc.GetTable()
 	version := tableDesc.Version
 
-	// Run the schema change in a separate goroutine.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		start := timeutil.Now()
-		// Start schema change that eventually runs a backfill.
-		if _, err := sqlDB.Exec(schemaChange); err != nil {
-			t.Error(err)
-		}
-		t.Logf("schema change %s took %v", schemaChange, timeutil.Since(start))
-		wg.Done()
-	}()
+	start := timeutil.Now()
+	// Start schema change that eventually runs a backfill.
+	if _, err := sqlDB.Exec(schemaChange); err != nil {
+		t.Error(err)
+	}
 
 	// Wait until the backfills for the schema change starts.
 	util.SucceedsSoon(t, func() error {
@@ -527,7 +519,19 @@ func runSchemaChangeWithOperations(
 		}
 	}
 
-	wg.Wait() // for schema change to complete.
+	// Wait() for schema change to complete.
+	util.SucceedsSoon(t, func() error {
+		desc := &csql.Descriptor{}
+		if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
+			t.Fatal(pErr)
+		}
+		table := desc.GetTable()
+		if table.Version == version+3 {
+			return nil
+		}
+		return errors.New("version not updated")
+	})
+	t.Logf("schema change %s took %v", schemaChange, timeutil.Since(start))
 
 	// Verify the number of keys left behind in the table to validate schema
 	// change operations.
@@ -551,13 +555,21 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	server, sqlDB, kvDB := setup(t)
+	// Disable synchronous schema change execution because the synchronous
+	// schema change execution is occasionally slow enough to trigger the pg-
+	// wire-protocol deadline. Run the schema changes asynchronously.
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+		func(tscc csql.TestingSchemaChangerCollection) {
+			tscc.ClearSchemaChangers()
+		}
+	defer csql.TestSpeedupAsyncSchemaChanges()()
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
-CREATE UNIQUE INDEX vidx ON t.test (v);
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'), UNIQUE INDEX vidx (v));
 `); err != nil {
 		t.Fatal(err)
 	}
