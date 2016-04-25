@@ -624,7 +624,7 @@ func (n *Node) writeSummaries() error {
 				err = pErr.GoError()
 				return
 			}
-			if log.V(1) {
+			if log.V(2) {
 				statusJSON, err := json.Marshal(nodeStatus)
 				if err != nil {
 					log.Errorf("error marshaling nodeStatus to json: %s", err)

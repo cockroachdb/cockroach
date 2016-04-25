@@ -290,9 +290,9 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 		return desc, returnToken, nil
 	}
 
-	if log.V(2) {
+	if log.V(3) {
 		log.Infof("lookup range descriptor: key=%s\n%s", key, rdc.stringLocked())
-	} else if log.V(1) {
+	} else if log.V(2) {
 		log.Infof("lookup range descriptor: key=%s", key)
 	}
 
@@ -456,9 +456,9 @@ func (rdc *rangeDescriptorCache) evictCachedRangeDescriptorLocked(descKey roachp
 	}
 
 	for {
-		if log.V(2) {
+		if log.V(3) {
 			log.Infof("evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rdc.stringLocked())
-		} else if log.V(1) {
+		} else if log.V(2) {
 			log.Infof("evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 		}
 		rdc.rangeCache.cache.Del(rngKey)
@@ -567,7 +567,7 @@ func (rdc *rangeDescriptorCache) insertRangeDescriptorsLocked(rs ...roachpb.Rang
 		if err != nil {
 			return err
 		}
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
 		rdc.rangeCache.cache.Add(rangeCacheKey(rangeKey), &rs[i])
@@ -591,7 +591,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 	if ok {
 		descriptor := v.(*roachpb.RangeDescriptor)
 		if descriptor.StartKey.Less(key) && !descriptor.EndKey.Less(key) {
-			if log.V(1) {
+			if log.V(2) {
 				log.Infof("clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
 			rdc.rangeCache.cache.Del(k.(rangeCacheKey))
@@ -612,7 +612,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 	// when there's a lot of concurrency). Iterate from the range meta key
 	// after RangeMetaKey(desc.StartKey) to the range meta key for desc.EndKey.
 	rdc.rangeCache.cache.DoRange(func(k, v interface{}) {
-		if log.V(1) {
+		if log.V(2) {
 			log.Infof("clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
 		}
 		rdc.rangeCache.cache.Del(k.(rangeCacheKey))

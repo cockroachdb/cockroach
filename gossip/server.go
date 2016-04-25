@@ -257,7 +257,7 @@ func (s *server) InfosReceived() int {
 // to start a new client connection.
 func (s *server) maybeTighten() {
 	distantNodeID, distantHops := s.is.mostDistant()
-	if log.V(1) {
+	if log.V(2) {
 		log.Infof("@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
 	}
 	if distantHops > MaxHops {

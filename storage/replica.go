@@ -2030,7 +2030,7 @@ func (r *Replica) maybeGossipSystemConfig() {
 		return
 	}
 
-	if log.V(1) {
+	if log.V(2) {
 		log.Infoc(ctx, "gossiping system config from store %d, range %d, hash %x",
 			r.store.StoreID(), r.RangeID, hash)
 	}
