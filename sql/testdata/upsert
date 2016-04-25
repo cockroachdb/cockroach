@@ -1,0 +1,59 @@
+statement ok
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b),
+  INDEX y (c),
+  UNIQUE INDEX z (d)
+)
+
+statement error missing "b" primary key column
+UPSERT INTO abcd (a, c) VALUES (1, 1)
+
+statement error missing "a" primary key column
+UPSERT INTO abcd (b, c) VALUES (1, 1)
+
+statement ok
+UPSERT INTO abcd VALUES (1, 1, 1, 1)
+
+query IIII
+UPSERT INTO abcd VALUES (2, 2, 2, 2) RETURNING *
+----
+2 2 2 2
+
+statement ok
+UPSERT INTO abcd VALUES (1, 2, 3, 3)
+
+query IIII
+SELECT * FROM abcd ORDER BY (a, b)
+----
+1 1 1 1
+1 2 3 3
+2 2 2 2
+
+query IIII
+UPSERT INTO abcd VALUES (1, 1, 3, 1) RETURNING *
+----
+1 1 3 1
+
+# TODO(dan): This should actually return 2 2 2 4, but hooking returningHelper
+# into the batched upsert stuff is a bigger yak shave than I want to add to this
+# commit. Do it in a followup.
+query IIII
+UPSERT INTO abcd (a, b, d) VALUES (2, 2, 4) RETURNING *
+----
+2 2 NULL 4
+
+query IIII
+SELECT * FROM abcd ORDER BY (a, b)
+----
+1 1 3 1
+1 2 3 3
+2 2 2 4
+
+query IIII
+SELECT * FROM abcd@z WHERE d=4
+----
+2 2 2 4

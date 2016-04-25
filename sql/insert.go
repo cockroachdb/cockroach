@@ -49,13 +49,18 @@ type insertNode struct {
 }
 
 // Insert inserts rows into the database.
-// Privileges: INSERT on table
+// Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.Error) {
 	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.INSERT)
 	if pErr != nil {
 		return nil, pErr
+	}
+	if n.OnConflict != nil {
+		if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
+			return nil, roachpb.NewError(err)
+		}
 	}
 
 	var cols []ColumnDescriptor
@@ -184,7 +189,37 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	in.insertCols = ri.insertCols
 	in.insertColIDtoRowIndex = ri.insertColIDtoRowIndex
 
-	in.tw = &tableInserter{ri: ri, autoCommit: autoCommit}
+	if n.OnConflict == nil {
+		in.tw = &tableInserter{ri: ri, autoCommit: autoCommit}
+	} else {
+		// TODO(dan): These are both implied by the short form of UPSERT. When the
+		// INSERT INTO ON CONFLICT form is implemented, get these values from
+		// n.OnConfict.
+		upsertConflictIndex := en.tableDesc.PrimaryIndex
+		insertCols := ri.insertCols
+
+		indexColSet := make(map[ColumnID]struct{}, len(upsertConflictIndex.ColumnIDs))
+		for _, colID := range upsertConflictIndex.ColumnIDs {
+			indexColSet[colID] = struct{}{}
+		}
+
+		updateCols := make([]ColumnDescriptor, 0, len(insertCols))
+		for _, c := range insertCols {
+			// The index columns can't be changing, otherwise it wouldn't have been a
+			// conflict.
+			if _, ok := indexColSet[c.ID]; ok {
+				continue
+			}
+			updateCols = append(updateCols, c)
+		}
+		ru, err := makeRowUpdater(en.tableDesc, updateCols)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
+
+		in.tw = &tableUpserter{ri: ri, ru: ru, autoCommit: autoCommit}
+	}
 
 	return in, nil
 }

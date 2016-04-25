@@ -49,6 +49,7 @@ type tableWriter interface {
 
 var _ tableWriter = (*tableInserter)(nil)
 var _ tableWriter = (*tableUpdater)(nil)
+var _ tableWriter = (*tableUpserter)(nil)
 var _ tableWriter = (*tableDeleter)(nil)
 
 // tableInserter handles writing kvs and forming table rows for inserts.
@@ -125,6 +126,132 @@ func (tu *tableUpdater) finalize() *roachpb.Error {
 		pErr = convertBatchError(tu.ru.helper.tableDesc, *tu.b, pErr)
 	}
 	return pErr
+}
+
+// tableUpserter handles writing kvs and forming table rows for upserts.
+type tableUpserter struct {
+	ri         rowInserter
+	ru         rowUpdater
+	autoCommit bool
+
+	// Set by init.
+	txn                   *client.Txn
+	tableDesc             *TableDescriptor
+	updateColIDtoRowIndex map[ColumnID]int
+	fetcher               rowFetcher
+
+	// Batched up in run/flush.
+	upsertRows   []parser.DTuple
+	upsertRowPKs []roachpb.Key
+
+	// For allocation avoidance.
+	indexKeyPrefix []byte
+	updateRow      parser.DTuple
+}
+
+func (tu *tableUpserter) init(txn *client.Txn) *roachpb.Error {
+	tu.txn = txn
+
+	tu.tableDesc = tu.ri.helper.tableDesc
+	tu.indexKeyPrefix = MakeIndexKeyPrefix(tu.tableDesc.ID, tu.tableDesc.PrimaryIndex.ID)
+
+	tu.updateColIDtoRowIndex = make(map[ColumnID]int)
+	for i, updateCol := range tu.ru.updateCols {
+		tu.updateColIDtoRowIndex[updateCol.ID] = i
+	}
+	tu.updateRow = make(parser.DTuple, len(tu.updateColIDtoRowIndex))
+
+	valNeededForCol := make([]bool, len(tu.ru.fetchCols))
+	for i := range valNeededForCol {
+		valNeededForCol[i] = true
+	}
+	if err := tu.fetcher.init(
+		tu.tableDesc, tu.ru.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
+		false, false, valNeededForCol,
+	); err != nil {
+		return roachpb.NewError(err)
+	}
+	return nil
+}
+
+func (tu *tableUpserter) run(row parser.DTuple) (parser.DTuple, *roachpb.Error) {
+	tu.upsertRows = append(tu.upsertRows, row)
+
+	// TODO(dan): The presence of OnConflict currently implies the short form
+	// (primary index and update the values being inserted). Implement the long
+	// form.
+	upsertRowPK, _, err := encodeIndexKey(
+		&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	tu.upsertRowPKs = append(tu.upsertRowPKs, upsertRowPK)
+
+	// TODO(dan): If len(tu.upsertRows) > some threshold, call flush().
+	return nil, nil
+}
+
+func (tu *tableUpserter) flush() *roachpb.Error {
+	pkSpans := make(spans, 0, len(tu.upsertRowPKs))
+	for _, upsertRowPK := range tu.upsertRowPKs {
+		if upsertRowPK != nil {
+			pkSpans = append(pkSpans, span{start: upsertRowPK, end: upsertRowPK.PrefixEnd()})
+		}
+	}
+
+	pErr := tu.fetcher.startScan(tu.txn, pkSpans, int64(len(pkSpans)))
+	if pErr != nil {
+		return pErr
+	}
+
+	existingRows := make([]parser.DTuple, len(tu.upsertRowPKs))
+	spanIdx := 0
+	for i, upsertRowPK := range tu.upsertRowPKs {
+		if spanIdx >= len(pkSpans) {
+			continue
+		}
+		pkSpan := pkSpans[spanIdx]
+		spanIdx++
+		if !bytes.Equal(pkSpan.start, upsertRowPK) {
+			continue
+		}
+		row, pErr := tu.fetcher.nextRow()
+		if pErr != nil {
+			return pErr
+		}
+		existingRows[i] = row
+	}
+
+	b := tu.txn.NewBatch()
+	for i, upsertRow := range tu.upsertRows {
+		existingRow := existingRows[i]
+		if existingRow == nil {
+			pErr = tu.ri.insertRow(b, upsertRow)
+			if pErr != nil {
+				return pErr
+			}
+		} else {
+			for uCol, uIdx := range tu.updateColIDtoRowIndex {
+				tu.updateRow[uIdx] = upsertRow[tu.ri.insertColIDtoRowIndex[uCol]]
+			}
+			_, pErr := tu.ru.updateRow(b, existingRow, tu.updateRow)
+			if pErr != nil {
+				return pErr
+			}
+		}
+	}
+	tu.upsertRows = nil
+	tu.upsertRowPKs = nil
+
+	pErr = tu.txn.Run(b)
+	if pErr != nil {
+		pErr = convertBatchError(tu.tableDesc, *b, pErr)
+	}
+	return pErr
+}
+
+func (tu *tableUpserter) finalize() *roachpb.Error {
+	return tu.flush()
 }
 
 // tableDeleter handles writing kvs and forming table rows for deletes.
