@@ -5,8 +5,8 @@ import * as _ from "lodash";
 import { connect } from "react-redux";
 
 import { refreshNodes, NodeStatusState } from "../redux/nodes";
-import { NodeStatus } from "../interfaces/proto.d.ts";
-import { MetricConstants } from "../util/proto.ts";
+import { NodeStatus } from "../interfaces/proto";
+import { MetricConstants } from "../util/proto";
 
 /**
  * NodesMainProps are the properties which can be passed to the NodesMain

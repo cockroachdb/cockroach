@@ -1,13 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES5",
-    "module": "system",
+    "module": "commonjs",
     "jsx": "react",
     "noImplicitAny": true,
-    "allowSyntheticDefaultImports": true,
     "noEmit": true
-  },
-  "files": [
-    "./app.tsx"
-  ]
+  }
 }

@@ -6,10 +6,11 @@
  * '/_status/nodes/' endpoint.
  */
 
+import * as _ from "lodash";
+import { Dispatch } from "redux";
+import assign = require("object-assign");
 import { Action, PayloadAction } from "../interfaces/action";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
-import { Dispatch } from "redux";
-import assign from "object-assign";
 
 const REQUEST = "cockroachui/nodes/REQUEST";
 const RECEIVE = "cockroachui/nodes/RECEIVE";
