@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"go/constant"
 	"reflect"
 	"testing"
 
@@ -904,9 +905,9 @@ func TestParsePrecedence(t *testing.T) {
 		return &OrExpr{Left: left, Right: right}
 	}
 
-	one := &IntVal{Val: 1, Str: "1"}
-	two := &IntVal{Val: 2, Str: "2"}
-	three := &IntVal{Val: 3, Str: "3"}
+	one := &ConstVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &ConstVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &ConstVal{Value: constant.MakeInt64(3), OrigString: "3"}
 
 	testData := []struct {
 		sql      string

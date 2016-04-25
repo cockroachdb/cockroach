@@ -238,7 +238,7 @@ func TestScanNumber(t *testing.T) {
 		{`1e-3-`, `1e-3`, FCONST},
 		{`1e+3`, `1e+3`, FCONST},
 		{`1e+3+`, `1e+3`, FCONST},
-		{`9223372036854775809`, `9223372036854775809`, FCONST},
+		{`9223372036854775809`, `9223372036854775809`, ICONST},
 	}
 	for _, d := range testData {
 		s := makeScanner(d.sql, Traditional)
@@ -256,7 +256,7 @@ func TestScanNumber(t *testing.T) {
 func TestScanParam(t *testing.T) {
 	testData := []struct {
 		sql      string
-		expected DInt
+		expected int
 	}{
 		{`$1`, 1},
 		{`$1a`, 1},
@@ -269,8 +269,12 @@ func TestScanParam(t *testing.T) {
 		if id != PARAM {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PARAM, id)
 		}
-		if d.expected != lval.union.ival().Val {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, lval.union.ival().Val)
+		i, err := lval.union.constVal().asInt()
+		if err != nil {
+			t.Errorf("%s: expected success, but found %v", d.sql, err)
+		}
+		if d.expected != i {
+			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, i)
 		}
 	}
 }

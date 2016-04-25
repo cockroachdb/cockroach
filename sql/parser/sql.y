@@ -21,6 +21,8 @@ package parser
 
 import (
 	"errors"
+    "go/constant"
+    "go/token"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -64,8 +66,8 @@ type sqlSymUnion struct {
 // becomes a nil instance of the empty interface and therefore will fail a
 // direct type assertion. Instead, a guarded type assertion must be used,
 // which returns nil if the type assertion fails.
-func (u *sqlSymUnion) ival() IntVal {
-    return u.val.(IntVal)
+func (u *sqlSymUnion) constVal() *ConstVal {
+    return u.val.(*ConstVal)
 }
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
@@ -425,7 +427,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %type <ColumnType> typename simple_typename const_typename
 %type <ColumnType> numeric opt_numeric_modifiers
-%type <IntVal> opt_float
+%type <*ConstVal> opt_float
 %type <ColumnType> character const_character
 %type <ColumnType> character_with_length character_without_length
 %type <ColumnType> const_datetime const_interval
@@ -434,7 +436,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <str> extract_arg
 %type <empty> opt_varying
 
-%type <IntVal>  signed_iconst
+%type <*ConstVal>  signed_iconst
 %type <Expr>  opt_boolean_or_string
 %type <Exprs> var_list
 %type <*QualifiedName> opt_from_var_name_clause var_name
@@ -479,8 +481,8 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 //
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
-%token <str>   IDENT FCONST SCONST BCONST
-%token <IntVal>  ICONST
+%token <str>   IDENT SCONST BCONST
+%token <*ConstVal> ICONST FCONST
 %token <str>   PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
@@ -1557,15 +1559,15 @@ key_action:
 numeric_only:
   FCONST
   {
-    $$.val = NumVal($1)
+    $$.val = $1.constVal()
   }
 | '-' FCONST
   {
-    $$.val = NumVal("-" + $2)
+    $$.val = &ConstVal{Value: constant.UnaryOp(token.SUB, $2.constVal().Value, 0)}
   }
 | signed_iconst
   {
-    $$.val = NewDInt(DInt($1.ival().Val))
+    $$.val = $1.constVal()
   }
 
 // TRUNCATE table relname1, relname2, ...
@@ -2617,11 +2619,26 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    $$.val = &DecimalType{Prec: int($2.ival().Val)}
+    prec, err := $2.constVal().asInt()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &DecimalType{Prec: prec}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    $$.val = &DecimalType{Prec: int($2.ival().Val), Scale: int($4.ival().Val)}
+    prec, err := $2.constVal().asInt()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    scale, err := $4.constVal().asInt()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &DecimalType{Prec: prec, Scale: scale}
   }
 | /* EMPTY */
   {
@@ -2656,7 +2673,12 @@ numeric:
   }
 | FLOAT opt_float
   {
-    $$.val = &FloatType{Name: "FLOAT", Prec: int($2.ival().Val)}
+    prec, err := $2.constVal().asInt()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &FloatType{Name: "FLOAT", Prec: prec}
   }
 | DOUBLE PRECISION
   {
@@ -2689,11 +2711,11 @@ numeric:
 opt_float:
   '(' ICONST ')'
   {
-    $$.val = $2.ival()
+    $$.val = $2.constVal()
   }
 | /* EMPTY */
   {
-    $$.val = IntVal{}
+    $$.val = &ConstVal{Value: constant.MakeInt64(0)}
   }
 
 // SQL bit-field data types
@@ -2711,7 +2733,12 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    $$.val = &IntType{Name: "BIT", N: int($4.ival().Val)}
+    n, err := $4.constVal().asInt()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &IntType{Name: "BIT", N: n}
   }
 
 bit_without_length:
@@ -2733,8 +2760,13 @@ const_character:
 character_with_length:
   character_base '(' ICONST ')'
   {
+    n, err := $3.constVal().asInt()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = $1.colType()
-    $$.val.(*StringType).N = int($3.ival().Val)
+    $$.val.(*StringType).N = n
   }
 
 character_without_length:
@@ -3908,11 +3940,11 @@ func_name:
 a_expr_const:
   ICONST
   {
-    $$.val = &IntVal{Val: $1.ival().Val, Str: $1.ival().Str}
+    $$.val = $1.constVal()
   }
 | FCONST
   {
-    $$.val = NumVal($1)
+    $$.val = $1.constVal()
   }
 | SCONST
   {
@@ -3952,11 +3984,11 @@ signed_iconst:
   ICONST
 | '+' ICONST
   {
-    $$.val = $2.ival()
+    $$.val = $2.constVal()
   }
 | '-' ICONST
   {
-    $$.val = IntVal{Val: -$2.ival().Val, Str: "-" + $2.ival().Str}
+    $$.val = &ConstVal{Value: constant.UnaryOp(token.SUB, $2.constVal().Value, 0)}
   }
 
 // Name classification hierarchy.

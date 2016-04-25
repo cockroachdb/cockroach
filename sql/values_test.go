@@ -17,7 +17,7 @@
 package sql
 
 import (
-	"fmt"
+	"go/constant"
 	"reflect"
 	"testing"
 	"time"
@@ -42,8 +42,11 @@ func TestValues(t *testing.T) {
 
 	unsupp := &parser.RangeCond{}
 
-	intVal := func(v int64) *parser.IntVal {
-		return &parser.IntVal{Val: parser.DInt(v)}
+	intVal := func(v int64) *parser.ConstVal {
+		return &parser.ConstVal{Value: constant.MakeInt64(v)}
+	}
+	floatVal := func(f float64) *parser.ConstVal {
+		return &parser.ConstVal{Value: constant.MakeFloat64(f)}
 	}
 	asRow := func(datums ...parser.Datum) []parser.DTuple {
 		return []parser.DTuple{datums}
@@ -72,7 +75,7 @@ func TestValues(t *testing.T) {
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.NumVal(fmt.Sprintf("%0.5f", vNum)))),
+			makeValues(makeTuple(floatVal(vNum))),
 			asRow(parser.NewDFloat(parser.DFloat(vNum))),
 			true,
 		},
