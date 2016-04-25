@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -70,6 +71,10 @@ type storeInfo struct {
 // SetupReportingURLs parses the phone-home for version updates URL and should be
 // called before server starts except in tests.
 func (s *Server) SetupReportingURLs() error {
+	if envutil.EnvOrDefaultBool("skip_update_check", false) {
+		log.Infof("Checking for updates is disabled.")
+		return nil
+	}
 	var err error
 	s.parsedUpdatesURL, err = url.Parse(baseUpdatesURL)
 	if err != nil {
