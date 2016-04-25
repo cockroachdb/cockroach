@@ -19,6 +19,7 @@ package cliflags
 // AttrsName and others are flag names.
 const (
 	AttrsName      = "attrs"
+	BackgroundName = "background"
 	CacheName      = "cache"
 	DatabaseName   = "database"
 	DepsName       = "deps"
