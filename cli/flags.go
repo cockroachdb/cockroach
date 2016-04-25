@@ -381,18 +381,11 @@ func initFlags(ctx *Context) {
 		setDefaultCacheSize(&ctx.Context)
 		cacheSize = newBytesValue(&ctx.CacheSize)
 		f.Var(cacheSize, cliflags.CacheName, usageNoEnv(cliflags.CacheName))
-
-		if err := startCmd.MarkFlagRequired(cliflags.StoreName); err != nil {
-			panic(err)
-		}
 	}
 
 	{
 		f := exterminateCmd.Flags()
 		f.Var(&ctx.Stores, cliflags.StoreName, usageNoEnv(cliflags.StoreName))
-		if err := exterminateCmd.MarkFlagRequired(cliflags.StoreName); err != nil {
-			panic(err)
-		}
 	}
 
 	for _, cmd := range certCmds {
@@ -403,9 +396,6 @@ func initFlags(ctx *Context) {
 		f.StringVar(&ctx.SSLCert, cliflags.CertName, ctx.SSLCert, usageNoEnv(cliflags.CertName))
 		f.StringVar(&ctx.SSLCertKey, cliflags.KeyName, ctx.SSLCertKey, usageNoEnv(cliflags.KeyName))
 		f.IntVar(&keySize, cliflags.KeySizeName, defaultKeySize, usageNoEnv(cliflags.KeySizeName))
-		if err := cmd.MarkFlagRequired(cliflags.KeySizeName); err != nil {
-			panic(err)
-		}
 	}
 
 	setUserCmd.Flags().StringVar(&password, cliflags.PasswordName, envutil.EnvOrDefaultString(cliflags.PasswordName, ""), usageEnv(cliflags.PasswordName))
