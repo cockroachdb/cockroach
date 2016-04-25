@@ -160,18 +160,31 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
-// createTestAllocator creates a stopper, gossip, store pool and allocator for
-// use in tests. Stopper must be stopped by the caller.
-func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
+// createTestAllocatorWithStorePoolStopper creates a test allocator, taking in
+// an optional Stopper that will stop the returned StorePool's goroutine. If a
+// Stopper is provided, the caller is responsible for calling Stop on that as
+// well as the returned Stopper.
+func createTestAllocatorWithStorePoolStopper(storePoolStopper *stop.Stopper) (
+	*stop.Stopper, *gossip.Gossip, *StorePool, Allocator,
+) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, stopper)
+	if storePoolStopper == nil {
+		storePoolStopper = stopper
+	}
+	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, storePoolStopper)
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a
+}
+
+// createTestAllocator creates a stopper, gossip, store pool and allocator for
+// use in tests. Stopper must be stopped by the caller.
+func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
+	return createTestAllocatorWithStorePoolStopper(nil)
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the
@@ -1171,8 +1184,12 @@ func TestRebalanceInterval(t *testing.T) {
 			defaultMinRebalanceInterval, defaultMaxRebalanceInterval)
 	}
 
-	stopper, g, _, a := createTestAllocator()
+	storePoolStopper := stop.NewStopper()
+	stopper, g, _, a := createTestAllocatorWithStorePoolStopper(storePoolStopper)
 	defer stopper.Stop()
+	// Stop the StorePool's goroutine, to prevent a race between its use of
+	// timeutil and ours.
+	storePoolStopper.Stop()
 
 	stores := []*roachpb.StoreDescriptor{
 		{
