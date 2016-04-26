@@ -165,8 +165,9 @@ type Context struct {
 // TestingKnobs contains facilities for controlling various parts of the
 // system for testing.
 type TestingKnobs struct {
-	StoreTestingKnobs    storage.StoreTestingKnobs
-	ExecutorTestingKnobs sql.ExecutorTestingKnobs
+	StoreTestingKnobs        storage.StoreTestingKnobs
+	ExecutorTestingKnobs     sql.ExecutorTestingKnobs
+	LeaseManagerTestingKnobs sql.LeaseManagerTestingKnobs
 }
 
 // GetTotalMemory returns either the total system memory or if possible the

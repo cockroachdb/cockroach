@@ -184,7 +184,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, roachpb.NewError(tableDoesNotExistError(n.Names[i].Table()))
+			return nil, roachpb.NewError(tableDoesNotExistError(n.Names[i].String()))
 		}
 		// Log a Drop Table event for this table.
 		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
