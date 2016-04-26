@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,18 +30,22 @@ import (
 // Constant is an constant literal expression which may be resolved to more than one type.
 type Constant interface {
 	Expr
+	// AvailableTypes returns the ordered set of types that the Constant is able to
+	// be resolved into. The order of the type slice provides a notion of precedence,
+	// with the first element in the ordering being the Constant's "natural type".
 	AvailableTypes() []Datum
-	ResolveAsType(Datum) (TypedExpr, error)
+	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
+	// error if the Constant could not be resolved as that type. The method should only
+	// be passed a type returned from AvailableTypes.
+	ResolveAsType(Datum) (Datum, error)
 }
 
 var _ Constant = &NumVal{}
 var _ Constant = &StrVal{}
 
 func isNumericConstant(expr Expr) bool {
-	if _, ok := expr.(*NumVal); ok {
-		return true
-	}
-	return false
+	_, ok := expr.(*NumVal)
+	return ok
 }
 
 func typeCheckConstant(c Constant, desired Datum) (TypedExpr, error) {
@@ -62,6 +66,8 @@ func naturalConstantType(c Constant) Datum {
 	return c.AvailableTypes()[0]
 }
 
+// canConstantBecome returns whether the provided Constant can become resolved
+// as the provided type.
 func canConstantBecome(c Constant, typ Datum) bool {
 	avail := c.AvailableTypes()
 	for _, availTyp := range avail {
@@ -72,6 +78,13 @@ func canConstantBecome(c Constant, typ Datum) bool {
 	return false
 }
 
+// shouldConstantBecome returns whether the provided Constant should or
+// should not become the provided type. The function is meant to be differentiated
+// from canConstantBecome in that it will exclude certain (Constant, Type) resolution
+// pairs that are possible, but not desirable.
+//
+// An example of this is resolving a floating point numeric constant without a value
+// past the decimal point as an DInt. This is possible, but it is not desirable.
 func shouldConstantBecome(c Constant, typ Datum) bool {
 	if num, ok := c.(*NumVal); ok {
 		if typ.TypeEqual(DummyInt) && num.Kind() == constant.Float {
@@ -85,7 +98,7 @@ func shouldConstantBecome(c Constant, typ Datum) bool {
 type NumVal struct {
 	constant.Value
 
-	// We preserve the "original" string representation (before folding and normalization).
+	// We preserve the "original" string representation (before folding).
 	OrigString string
 }
 
@@ -133,7 +146,7 @@ func (expr *NumVal) asInt64() (int64, error) {
 }
 
 // asConstantInt returns the value as an constant.Int if possible, along
-// with if the conversion was possible.
+// with a flag indicating whether the conversion was possible.
 func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 	intVal := constant.ToInt(expr.Value)
 	if intVal.Kind() == constant.Int {
@@ -144,11 +157,14 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 
 var numValAvailIntFloatDec = []Datum{DummyInt, DummyFloat, DummyDecimal}
 var numValAvailFloatIntDec = []Datum{DummyFloat, DummyInt, DummyDecimal}
-var numValAvailFloatDec = numValAvailIntFloatDec[1:]
+var numValAvailFloatDec = []Datum{DummyFloat, DummyDecimal}
 
-// var numValAvailDec = numValAvailIntFloatDec[2:]
+// var numValAvailDec = []Datum{DummyDecimal}
 
 // AvailableTypes implements the Constant interface.
+//
+// TODO(nvanbenschoten) is there a limit past which we should only allow (or prefer)
+// Decimal and not Float? See issue #6369.
 func (expr *NumVal) AvailableTypes() []Datum {
 	switch {
 	case expr.canBeInt64():
@@ -162,7 +178,7 @@ func (expr *NumVal) AvailableTypes() []Datum {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *NumVal) ResolveAsType(typ Datum) (TypedExpr, error) {
+func (expr *NumVal) ResolveAsType(typ Datum) (Datum, error) {
 	switch typ {
 	case DummyInt:
 		i, exact := constant.Int64Val(constant.ToInt(expr.Value))
@@ -181,11 +197,13 @@ func (expr *NumVal) ResolveAsType(typ Datum) (TypedExpr, error) {
 			// like 6/7. If only we could call big.Rat.FloatString() on it...
 			num, den := s[:idx], s[idx+1:]
 			if _, ok := dd.SetString(num); !ok {
-				return nil, fmt.Errorf("could not evaluate numerator of %v as Datum type DDecimal from string %q", expr, num)
+				return nil, fmt.Errorf("could not evaluate numerator of %v as Datum type DDecimal "+
+					"from string %q", expr, num)
 			}
 			denDec := new(inf.Dec)
 			if _, ok := denDec.SetString(den); !ok {
-				return nil, fmt.Errorf("could not evaluate denominator %v as Datum type DDecimal from string %q", expr, den)
+				return nil, fmt.Errorf("could not evaluate denominator %v as Datum type DDecimal "+
+					"from string %q", expr, den)
 			}
 			dd.QuoRound(&dd.Dec, denDec, decimal.Precision, inf.RoundHalfUp)
 
@@ -202,12 +220,14 @@ func (expr *NumVal) ResolveAsType(typ Datum) (TypedExpr, error) {
 					break
 				}
 				if _, ok := dd.SetString(s); !ok {
-					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from string %q", expr, s)
+					return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
+						"string %q", expr, s)
 				}
 			}
 		} else {
 			if _, ok := dd.SetString(s); !ok {
-				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from string %q", expr, s)
+				return nil, fmt.Errorf("could not evaluate %v as Datum type DDecimal from "+
+					"string %q", expr, s)
 			}
 		}
 		return dd, nil
@@ -218,7 +238,9 @@ func (expr *NumVal) ResolveAsType(typ Datum) (TypedExpr, error) {
 
 var numValTypePriority = []Datum{DummyInt, DummyFloat, DummyDecimal}
 
-// commonNumericConstantType returns the best constant type...
+// commonNumericConstantType returns the best constant type which is shared
+// between a set of provided numeric constants. Here, "best" is defined as
+// the smallest numeric data type which will not lose information.
 func commonNumericConstantType(vals ...*NumVal) Datum {
 	bestType := 0
 	for _, c := range vals {
@@ -252,7 +274,7 @@ func (expr *StrVal) String() string {
 
 var strValAvailStringBytes = []Datum{DummyString, DummyBytes}
 var strValAvailBytesString = []Datum{DummyBytes, DummyString}
-var strValAvailBytes = strValAvailBytesString[:1]
+var strValAvailBytes = []Datum{DummyBytes}
 
 // AvailableTypes implements the Constant interface.
 func (expr *StrVal) AvailableTypes() []Datum {
@@ -266,7 +288,7 @@ func (expr *StrVal) AvailableTypes() []Datum {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *StrVal) ResolveAsType(typ Datum) (TypedExpr, error) {
+func (expr *StrVal) ResolveAsType(typ Datum) (Datum, error) {
 	switch typ {
 	case DummyString:
 		return NewDString(expr.s), nil
@@ -319,8 +341,10 @@ var comparisonOpToToken = map[ComparisonOperator]token.Token{
 
 func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	defer func() {
-		// go/constant operations can panic for a number of reasons, but it's difficult
-		// to preemptively detect when they will. It's safest to just recover here.
+		// go/constant operations can panic for a number of reasons (like division
+		// by zero), but it's difficult to preemptively detect when they will. It's
+		// safest to just recover here without folding the expression and let
+		// normalization or evaluation deal with error handling.
 		if r := recover(); r != nil {
 			retExpr = expr
 		}
@@ -378,6 +402,7 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 // foldNumericConstants folds all numeric constants using exact arithmetic.
 //
 // TODO(nvanbenschoten) Can this visitor be preallocated (like normalizeVisitor)?
+// TODO(nvanbenschoten) Do we also want to fold string-like constants?
 // TODO(nvanbenschoten) Investigate normalizing associative operations to group
 //     constants together and permit further numeric constant folding.
 func foldNumericConstants(expr Expr) (Expr, error) {
@@ -406,8 +431,8 @@ func (constantTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 func (constantTypeVisitor) VisitPost(expr Expr) (retExpr Expr) { return expr }
 
-// TypeConstants type checks all Constant literal expressions, causing
-// them to become Datum representations of their values. While doing so,
+// TypeConstants type checks all Constant literal expressions, resolving
+// them as the Datum representations of their values. Before doing so,
 // it first folds all numeric constants.
 //
 // This means that Constants will become TypedExprs so that they can be
@@ -416,9 +441,9 @@ func (constantTypeVisitor) VisitPost(expr Expr) (retExpr Expr) { return expr }
 // expressions where full type checking is not desired.
 //
 // TODO(nvanbenschoten) Can this visitor be preallocated (like normalizeVisitor)?
-func TypeConstants(expr Expr) (Expr, error) {
+func TypeConstants(expr Expr) (TypedExpr, error) {
 	v := constantTypeVisitor{}
 	expr, _ = WalkExpr(v.cfv, expr)
 	expr, _ = WalkExpr(v, expr)
-	return expr, nil
+	return expr.(TypedExpr), nil
 }

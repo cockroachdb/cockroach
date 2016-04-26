@@ -4914,13 +4914,13 @@ sqldefault:
 			expr := &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType()}
 			typedExpr, err := TypeCheck(expr, nil, nil)
 			if err != nil {
-				sqllex.Error("cannot type check interval type")
+				sqllex.Error("cannot type check interval type: " + err.Error())
 				return 1
 			}
 			var ctx EvalContext
 			d, err := typedExpr.Eval(ctx)
 			if err != nil {
-				sqllex.Error("cannot evaluate to an interval type")
+				sqllex.Error("cannot evaluate to an interval type: " + err.Error())
 				return 1
 			}
 			if _, ok := d.(*DInterval); !ok {

@@ -101,7 +101,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 		for {
 			if v.isConst(expr.Left) {
 				switch expr.Right.(type) {
-				case *BinaryExpr, VariableExpr, ValArg:
+				case *BinaryExpr, VariableExpr:
 					break
 				default:
 					return expr
@@ -315,28 +315,6 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	}
 }
 
-func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
-	// Ugliness: when we see a UnaryMinus, check to see if the expression
-	// being negated is math.MinInt64. This IntVal is only possible if we
-	// parsed "9223372036854775808" as a signed int and is the only negative
-	// IntVal that can be output from the scanner.
-	//
-	// TODO(pmattis): Seems like this should happen in Eval, yet if we
-	// put it there we blow up during normalization when we try to
-	// Eval("9223372036854775808") a few lines down from here before
-	// doing Eval("- 9223372036854775808"). Perhaps we can move
-	// expression evaluation during normalization to the downward
-	// traversal. Or do it during the downward traversal for const
-	// UnaryExprs.
-	if expr.Operator == UnaryMinus {
-		// if d, ok := expr.Expr.(*NumVal); ok {
-		// 	return &NumVal{Value: constant.UnaryOp(token.SUB, d.Value, 0)}
-		// }
-	}
-
-	return expr
-}
-
 func (expr *Row) normalize(v *normalizeVisitor) TypedExpr {
 	return &Tuple{
 		Exprs: expr.Exprs,
@@ -344,9 +322,10 @@ func (expr *Row) normalize(v *normalizeVisitor) TypedExpr {
 	}
 }
 
-// NormalizeExpr normalizes an expression, simplifying where possible, but
-// guaranteeing that the result of evaluating the expression is
-// unchanged. Example normalizations:
+// NormalizeExpr normalizes a typed expression, simplifying where possible,
+// but guaranteeing that the result of evaluating the expression is
+// unchanged and that resulting expression tree is still well-typed.
+// Example normalizations:
 //
 //   (a)                   -> a
 //   ROW(a, b, c)          -> (a, b, c)
@@ -466,6 +445,7 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			v.isConst = false
 			return false, expr
 		case *FuncExpr:
+			// TODO(nvanbenschoten) This could be cleaned up a bit.
 			if t.fn.fn == nil {
 				name := string(t.Name.Base)
 				candidates, _ := Builtins[strings.ToLower(name)]
