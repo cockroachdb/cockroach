@@ -34,7 +34,7 @@ type Expr interface {
 	// sub-expressions will be guaranteed to be well-typed, meaning that the method effectively
 	// maps the Expr tree into a TypedExpr tree.
 	//
-	// The args parameter map bind var argument names to types inferred while type-checking.
+	// The args parameter maps ValArg names to types inferred while type-checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr.
 	TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
@@ -108,6 +108,7 @@ func (ta typeAnnotation) ReturnType() Datum {
 // boolTypeAnnotation is an embeddable struct to provide a TypedExpr with a static
 // boolean type annotation.
 type boolTypeAnnotation struct {
+	// TODO(nvanbenschoten) This will come into play when we migrate to typed null handling.
 	null bool
 }
 
@@ -635,7 +636,7 @@ func (n TableNameWithIndexList) String() string {
 type Tuple struct {
 	Exprs Exprs
 
-	types *DTuple
+	types DTuple
 }
 
 func (node *Tuple) String() string {
@@ -644,7 +645,7 @@ func (node *Tuple) String() string {
 
 // ReturnType implements the TypedExpr interface.
 func (node *Tuple) ReturnType() Datum {
-	return node.types
+	return &node.types
 }
 
 // Row represents a parenthesized list of expressions. Similar to Tuple except
@@ -652,7 +653,7 @@ func (node *Tuple) ReturnType() Datum {
 type Row struct {
 	Exprs Exprs
 
-	types *DTuple
+	types DTuple
 }
 
 func (node *Row) String() string {
@@ -661,7 +662,7 @@ func (node *Row) String() string {
 
 // ReturnType implements the TypedExpr interface.
 func (node *Row) ReturnType() Datum {
-	return node.types
+	return &node.types
 }
 
 // Array represents an array constructor.

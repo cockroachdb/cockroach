@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,19 +18,33 @@ package parser
 
 import "fmt"
 
-type overload interface {
+// overloadImpl is an implementation of an overloaded function. It provides
+// access to the parameter type list  and the return type of the implementation.
+type overloadImpl interface {
 	params() typeList
 	returnType() Datum
 }
 
+// typeList is a list of types representing a function parameter list.
 type typeList interface {
+	// match checks if all types in the typeList match the corresponding elements in types.
 	match(types ArgTypes) bool
+	// matchAt checks if the parameter type at index i of the typeList matches type typ.
 	matchAt(typ Datum, i int) bool
+	// matchLen checks that the typeList can support l parameters.
 	matchLen(l int) bool
+	// getAt returns the type at the given index in the typeList, or nil if the typeList
+	// cannot have a parameter at index i.
 	getAt(i int) Datum
 }
 
-// ArgTypes accepts a specific number of argument types.
+var _ typeList = ArgTypes{}
+var _ typeList = AnyType{}
+var _ typeList = VariadicType{}
+var _ typeList = SingleType{}
+
+// ArgTypes is a typeList implementation that accepts a specific number of
+// argument types.
 type ArgTypes []Datum
 
 func (a ArgTypes) match(types ArgTypes) bool {
@@ -63,7 +77,7 @@ func (a ArgTypes) getAt(i int) Datum {
 	return a[i]
 }
 
-// AnyType accepts any arguments.
+// AnyType is a typeList implementation that accepts any arguments.
 type AnyType struct{}
 
 func (AnyType) match(types ArgTypes) bool {
@@ -82,8 +96,9 @@ func (AnyType) getAt(i int) Datum {
 	panic("getAt called on AnyType")
 }
 
-// VariadicType is an implementation of typeList which matches when
-// each argument is either NULL or of the type typ.
+// VariadicType is a typeList implementation which accepts any number of
+// arguments and matches when each argument is either NULL or of the type
+// typ.
 type VariadicType struct {
 	Typ Datum
 }
@@ -109,25 +124,25 @@ func (v VariadicType) getAt(i int) Datum {
 	return v.Typ
 }
 
-// SingleType ...
+// SingleType is a typeList implementation which accepts a single
+// argument of type typ. It is logically identical to an ArgTypes
+// implementation with length 1, but avoids the slice allocation.
 type SingleType struct {
 	Typ Datum
 }
 
 func (s SingleType) match(types ArgTypes) bool {
-	for i := range types {
-		if !s.matchAt(types[i], i) {
-			return false
-		}
+	if len(types) != 1 {
+		return false
 	}
-	return true
+	return s.matchAt(types[0], 0)
 }
 
 func (s SingleType) matchAt(typ Datum, i int) bool {
 	if i != 0 {
 		return false
 	}
-	return typ == DNull || typ.TypeEqual(s.Typ)
+	return typ.TypeEqual(s.Typ)
 }
 
 func (s SingleType) matchLen(l int) bool {
@@ -142,23 +157,13 @@ func (s SingleType) getAt(i int) Datum {
 }
 
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
-// expression parameters, along with an optional desired return type. The order of presidence
-// in chosing the correct overload is as follows:
-// 1. overloads are filtered based on argument length
-// 2. overloads are filtered based on the types of resolved types
-// 3. overloads are filtered based on the possible types of constants
-// - if only one overload is left here, select it
-// 4. if all resolved parameters are homogeneous and all constants can become this type, filter
-// - if only one overload is left here, select it
-// 5. overloads are filtered based on the desired return type, if one is provided
-// - if only one overload is left here, select it
-// 6. overloads are filtered based on the "best" homogeneous constant type
-// - if only one overload is left here, select it
-// 7. if all other parameters are homogeneous, overloads are filtered based on the type for ValArgs
-// - if only one overload is left here, select it
-// - else we can not determine the desired overload
-func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload, exprs ...Expr) ([]TypedExpr, overload, error) {
-	// Special-case the AnyType overload. We determine it's return type be checking that
+// expression parameters, along with an optional desired return type. It returns the expression
+// parameters after being type checked, along with the chosen overloadImpl. If an overloaded
+// function implementation could not be determined, the overloadImpl return value will be nil.
+func typeCheckOverloadedExprs(
+	args MapArgs, desired Datum, overloads []overloadImpl, exprs ...Expr,
+) ([]TypedExpr, overloadImpl, error) {
+	// Special-case the AnyType overload. We determine its return type by checking that
 	// all parameters have the same type.
 	for _, overload := range overloads {
 		// Only one overload can be provided if it has parameters with AnyType.
@@ -177,7 +182,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 	// Hold the resolved type expressions of the provided exprs, in order.
 	typedExprs := make([]TypedExpr, len(exprs))
 
-	var resolvedExprs, constExprs, valExprs []indexedExpr
+	var resolvableExprs, constExprs, valExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
@@ -186,13 +191,13 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		case isUnresolvedVariable(args, expr):
 			valExprs = append(valExprs, idxExpr)
 		default:
-			resolvedExprs = append(resolvedExprs, idxExpr)
+			resolvableExprs = append(resolvableExprs, idxExpr)
 		}
 	}
 
 	// defaultTypeCheck type checks the constant and valArg expressions without a preference
 	// and adds them to the type checked slice.
-	defaultTypeCheck := func() error {
+	defaultTypeCheck := func(errorOnArgs bool) error {
 		for _, expr := range constExprs {
 			typ, err := expr.e.TypeCheck(args, nil)
 			if err != nil {
@@ -201,11 +206,11 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 			typedExprs[expr.i] = typ
 		}
 		for _, expr := range valExprs {
-			// What should we return as an error here?
-			// _, err := expr.e.(ValArg).TypeCheck(args, nil)
-			// return err
-
-			// TODO(nvanbenschoten) MORTY
+			if errorOnArgs {
+				_, err := expr.e.(ValArg).TypeCheck(args, nil)
+				return err
+			}
+			// If we dont want to error on args, avoid type checking them without a desired type.
 			typedExprs[expr.i] = &DValArg{name: expr.e.(ValArg).name}
 		}
 		return nil
@@ -213,21 +218,21 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 
 	// If no overloads are provided, just type check parameters and return.
 	if len(overloads) == 0 {
-		for _, expr := range resolvedExprs {
+		for _, expr := range resolvableExprs {
 			typ, err := expr.e.TypeCheck(args, nil)
 			if err != nil {
 				return nil, nil, fmt.Errorf("error type checking resolved expression: %v", err)
 			}
 			typedExprs[expr.i] = typ
 		}
-		if err := defaultTypeCheck(); err != nil {
+		if err := defaultTypeCheck(false); err != nil {
 			return nil, nil, err
 		}
 		return typedExprs, nil, nil
 	}
 
 	// Function to filter overloads which return false from the provided closure.
-	filterOverloads := func(fn func(overload) bool) {
+	filterOverloads := func(fn func(overloadImpl) bool) {
 		for i := 0; i < len(overloads); {
 			if fn(overloads[i]) {
 				i++
@@ -239,14 +244,28 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 	}
 
 	// Filter out incorrect parameter length overloads.
-	filterOverloads(func(o overload) bool {
+	filterOverloads(func(o overloadImpl) bool {
 		return o.params().matchLen(len(exprs))
 	})
 
+	// Filter out overloads which constants cannot become.
+	for _, expr := range constExprs {
+		constExpr := expr.e.(*NumVal)
+		filterOverloads(func(o overloadImpl) bool {
+			return canConstantBecome(constExpr, o.params().getAt(expr.i))
+		})
+	}
+
+	// TODO(nvanbenschoten) We should add a filtering step here to filter
+	// out impossible candidates based on identical parameters. For instance,
+	// f(int, float) is not a possible candidate for the expression f($1, $1).
+
 	// Filter out overloads on resolved types.
-	for _, expr := range resolvedExprs {
+	for _, expr := range resolvableExprs {
 		var paramDesired Datum
 		if len(overloads) == 1 {
+			// Once we get down to a single overload candidate, begin desiring its
+			// parameter types for the corresponding argument expressions.
 			paramDesired = overloads[0].params().getAt(expr.i)
 		}
 		typ, err := expr.e.TypeCheck(args, paramDesired)
@@ -254,23 +273,18 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 			return nil, nil, err
 		}
 		typedExprs[expr.i] = typ
-		filterOverloads(func(o overload) bool {
+		filterOverloads(func(o overloadImpl) bool {
 			return o.params().matchAt(typ.ReturnType(), expr.i)
 		})
 	}
 
-	// Filter out overloads which constants cannot become.
-	for _, expr := range constExprs {
-		constExpr := expr.e.(*NumVal)
-		filterOverloads(func(o overload) bool {
-			return canConstantBecome(constExpr, o.params().getAt(expr.i))
-		})
-	}
-
-	checkReturn := func() (bool, overload, error) {
+	// checkReturn checks the number of remaining overloaded function implementations, returning
+	// if we should stop overload resolution, along with a nullable overloadImpl to return if
+	// we should stop overload resolution.
+	checkReturn := func() (bool, overloadImpl, error) {
 		switch len(overloads) {
 		case 0:
-			if err := defaultTypeCheck(); err != nil {
+			if err := defaultTypeCheck(false); err != nil {
 				return true, nil, err
 			}
 			return true, nil, nil
@@ -283,7 +297,8 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 				if err != nil {
 					return true, nil, fmt.Errorf("error type checking constant value: %v", err)
 				} else if des != nil && !typ.ReturnType().TypeEqual(des) {
-					panic(fmt.Errorf("desired constant value type %s but set type %s", des.Type(), typ.ReturnType().Type()))
+					panic(fmt.Errorf("desired constant value type %s but set type %s",
+						des.Type(), typ.ReturnType().Type()))
 				}
 				typedExprs[expr.i] = typ
 			}
@@ -301,13 +316,17 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 			return false, nil, nil
 		}
 	}
+	// At this point, all remaining overload candidates accept the argument list,
+	// so we begin checking for a single remaining candidate implementation to choose.
+	// In case there is more than one candidate remaining, the following code uses
+	// heuristics to find a most preferable candidate.
 	if ok, fn, err := checkReturn(); ok {
 		return typedExprs, fn, err
 	}
 
-	// Filter out overloads which return the desired type.
+	// The first heuristic is to prefer candidates that return the desired type.
 	if desired != nil {
-		filterOverloads(func(o overload) bool {
+		filterOverloads(func(o overloadImpl) bool {
 			return o.returnType().TypeEqual(desired)
 		})
 		if ok, fn, err := checkReturn(); ok {
@@ -316,9 +335,9 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 	}
 
 	var homogeneousTyp Datum
-	if len(resolvedExprs) > 0 {
-		homogeneousTyp = typedExprs[resolvedExprs[0].i].ReturnType()
-		for _, resExprs := range resolvedExprs[1:] {
+	if len(resolvableExprs) > 0 {
+		homogeneousTyp = typedExprs[resolvableExprs[0].i].ReturnType()
+		for _, resExprs := range resolvableExprs[1:] {
 			if !homogeneousTyp.TypeEqual(typedExprs[resExprs.i].ReturnType()) {
 				homogeneousTyp = nil
 				break
@@ -334,7 +353,9 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		}
 		before := overloads
 
-		// Check if all constants can become the homogeneous type.
+		// The second heuristic is to prefer candidates where all numeric constants can become
+		// a homogeneous type, if all resolvable expressions became one. This is only possible
+		// resolvable expressions were resolved homogeneously up to this point.
 		if homogeneousTyp != nil {
 			all := true
 			for _, constExpr := range numVals {
@@ -345,7 +366,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 			}
 			if all {
 				for _, expr := range constExprs {
-					filterOverloads(func(o overload) bool {
+					filterOverloads(func(o overloadImpl) bool {
 						return o.params().getAt(expr.i).TypeEqual(homogeneousTyp)
 					})
 				}
@@ -359,11 +380,12 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		// Restore the expressions if this did not work.
 		overloads = before
 
-		// Check if an overload fits with the natural constant types.
+		// The third heuristic is to prefer candidates where all numeric constants can become
+		// their "natural"" types.
 		for i, expr := range constExprs {
 			natural := naturalConstantType(numVals[i])
 			if natural != nil {
-				filterOverloads(func(o overload) bool {
+				filterOverloads(func(o overloadImpl) bool {
 					return o.params().getAt(expr.i).TypeEqual(natural)
 				})
 			}
@@ -376,10 +398,11 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		// Restore the expressions if this did not work.
 		overloads = before
 
-		// Check if an overload fits with the "best" mutual constant types.
+		// The fourth heuristic is to prefer candidates that accepts the "best" mutual
+		// type in the resolvable type set of all numeric constants.
 		bestConstType = commonNumericConstantType(numVals...)
 		for _, expr := range constExprs {
-			filterOverloads(func(o overload) bool {
+			filterOverloads(func(o overloadImpl) bool {
 				return o.params().getAt(expr.i).TypeEqual(bestConstType)
 			})
 		}
@@ -395,10 +418,12 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		}
 	}
 
-	// If all other parameters are homogeneous, we favor this type for ValArgs.
+	// The fifth heuristic is to prefer candidates where all placeholders can be given the same type
+	// as all numeric constants and resolvable expressions. This is only possible if all numeric
+	//  constants and resolvable expressions were resolved homogeneously up to this point.
 	if homogeneousTyp != nil && len(valExprs) > 0 {
 		for _, expr := range valExprs {
-			filterOverloads(func(o overload) bool {
+			filterOverloads(func(o overloadImpl) bool {
 				return o.params().getAt(expr.i).TypeEqual(homogeneousTyp)
 			})
 		}
@@ -407,7 +432,7 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 		}
 	}
 
-	if err := defaultTypeCheck(); err != nil {
+	if err := defaultTypeCheck(len(overloads) > 0); err != nil {
 		return nil, nil, err
 	}
 	return typedExprs, nil, nil

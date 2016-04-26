@@ -474,7 +474,7 @@ var Builtins = map[string][]Builtin{
 	"greatest": {
 		Builtin{
 			Types:      AnyType{},
-			ReturnType: nil, // No return type because AnyType parameters.
+			ReturnType: nil, // No explicit return type because AnyType parameters.
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
 			},
@@ -484,7 +484,7 @@ var Builtins = map[string][]Builtin{
 	"least": {
 		Builtin{
 			Types:      AnyType{},
-			ReturnType: nil, // No return type because AnyType parameters.
+			ReturnType: nil, // No explicit return type because AnyType parameters.
 			fn: func(ctx EvalContext, args DTuple) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
 			},

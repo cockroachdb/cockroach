@@ -51,10 +51,11 @@ type UnaryOp struct {
 	Typ        Datum
 	ReturnType Datum
 	fn         func(EvalContext, Datum) (Datum, error)
+	types      typeList
 }
 
 func (op UnaryOp) params() typeList {
-	return SingleType{op.Typ}
+	return op.types
 }
 
 func (op UnaryOp) matchParams(t Datum) bool {
@@ -63,6 +64,15 @@ func (op UnaryOp) matchParams(t Datum) bool {
 
 func (op UnaryOp) returnType() Datum {
 	return op.ReturnType
+}
+
+func init() {
+	for op, overload := range UnaryOps {
+		for i, impl := range overload {
+			impl.types = SingleType{impl.Typ}
+			UnaryOps[op][i] = impl
+		}
+	}
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
@@ -147,11 +157,11 @@ type BinOp struct {
 	RightType  Datum
 	ReturnType Datum
 	fn         func(EvalContext, Datum, Datum) (Datum, error)
-	types      [2]Datum
+	types      typeList
 }
 
 func (op BinOp) params() typeList {
-	return ArgTypes(op.types[:])
+	return op.types
 }
 
 func (op BinOp) matchParams(l, r Datum) bool {
@@ -160,6 +170,15 @@ func (op BinOp) matchParams(l, r Datum) bool {
 
 func (op BinOp) returnType() Datum {
 	return op.ReturnType
+}
+
+func init() {
+	for op, overload := range BinOps {
+		for i, impl := range overload {
+			impl.types = ArgTypes{impl.LeftType, impl.RightType}
+			BinOps[op][i] = impl
+		}
+	}
 }
 
 // binOpOverload is an overloaded set of binary operator implementations.
@@ -588,13 +607,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 var timestampMinusBinOp BinOp
 
 func init() {
-	for i, ops := range BinOps {
-		for j, op := range ops {
-			BinOps[i][j].types[0] = op.LeftType
-			BinOps[i][j].types[1] = op.RightType
-		}
-	}
-
 	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(DummyTimestamp, DummyTimestamp)
 }
 
@@ -603,11 +615,11 @@ type CmpOp struct {
 	LeftType  Datum
 	RightType Datum
 	fn        func(EvalContext, Datum, Datum) (DBool, error)
-	types     [2]Datum
+	types     typeList
 }
 
 func (op CmpOp) params() typeList {
-	return ArgTypes(op.types[:])
+	return op.types
 }
 
 func (op CmpOp) matchParams(l, r Datum) bool {
@@ -616,6 +628,15 @@ func (op CmpOp) matchParams(l, r Datum) bool {
 
 func (op CmpOp) returnType() Datum {
 	return DummyBool
+}
+
+func init() {
+	for op, overload := range CmpOps {
+		for i, impl := range overload {
+			impl.types = ArgTypes{impl.LeftType, impl.RightType}
+			CmpOps[op][i] = impl
+		}
+	}
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
@@ -1116,15 +1137,6 @@ func makeEvalTupleIn(d Datum) CmpOp {
 	}
 }
 
-func init() {
-	for i, ops := range CmpOps {
-		for j, op := range ops {
-			CmpOps[i][j].types[0] = op.LeftType
-			CmpOps[i][j].types[1] = op.RightType
-		}
-	}
-}
-
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 type EvalContext struct {
@@ -1575,7 +1587,10 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 	// type checking has taken place.
 	if expr.fn.fn == nil {
 		op, leftExpr, rightExpr, _, _ := foldComparisonExpr(expr.Operator, expr.Left, expr.Right)
-		expr.fn, _ = CmpOps[op].lookupImpl(leftExpr.(TypedExpr).ReturnType(), rightExpr.(TypedExpr).ReturnType())
+		expr.fn, _ = CmpOps[op].lookupImpl(
+			leftExpr.(TypedExpr).ReturnType(),
+			rightExpr.(TypedExpr).ReturnType(),
+		)
 	}
 
 	left, err := expr.Left.(TypedExpr).Eval(ctx)
@@ -1871,13 +1886,6 @@ func (expr *UnaryExpr) Eval(ctx EvalContext) (Datum, error) {
 			panic(fmt.Sprintf("lookup for TypedUnaryExpr %v's UnaryOp failed", expr))
 		}
 	}
-	// if expr.dtype != reflect.TypeOf(d) {
-	// 	// The argument type no longer match the memoized function. This happens
-	// 	// when a non-NULL argument becomes NULL. For example, "SELECT -col FROM
-	// 	// table" where col is nullable. The SELECT does not error, but returns a
-	// 	// NULL value for that select expression.
-	// 	return DNull, nil
-	// }
 	return expr.fn.fn(ctx, d)
 }
 
@@ -1888,7 +1896,7 @@ func (t DefaultVal) Eval(_ EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (expr *QualifiedName) Eval(_ EvalContext) (Datum, error) {
-	panic(fmt.Sprintf("unhandled type %T", expr))
+	return nil, util.Errorf("unhandled type %T", expr)
 }
 
 func evalExprs(ctx EvalContext, exprs []Expr) (Datum, error) {
@@ -1996,7 +2004,9 @@ func evalComparison(ctx EvalContext, op ComparisonOperator, left, right Datum) (
 // into an equivalent operation that will hit in the cmpOps map, returning
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
-func foldComparisonExpr(op ComparisonOperator, left, right Expr) (ComparisonOperator, Expr, Expr, bool, bool) {
+func foldComparisonExpr(
+	op ComparisonOperator, left, right Expr,
+) (newOp ComparisonOperator, newLeft Expr, newRight Expr, flipped bool, not bool) {
 	switch op {
 	case NE:
 		// NE(left, right) is implemented as !EQ(left, right).

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+// TODO(nvanbenschoten) These can be removed and DummyT can be replaced by TypeT.
 var (
 	// TypeBytes returns a bytes datum.
 	TypeBytes = DummyBytes
@@ -56,7 +57,8 @@ type unexpectedTypeError struct {
 }
 
 func (err unexpectedTypeError) Error() string {
-	return fmt.Sprintf("expected %s to be of type %s, found type %s", err.expr, err.want.Type(), err.got.Type())
+	return fmt.Sprintf("expected %s to be of type %s, found type %s",
+		err.expr, err.want.Type(), err.got.Type())
 }
 
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
@@ -68,11 +70,11 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 
 // TypeCheck implements the Expr interface.
 func (expr *AndExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	leftTyped, err := typeCheckBooleanExpr(args, "AND argument", expr.Left)
+	leftTyped, err := typeCheckAndRequireBoolean(args, expr.Left, "AND argument")
 	if err != nil {
 		return nil, err
 	}
-	rightTyped, err := typeCheckBooleanExpr(args, "AND argument", expr.Right)
+	rightTyped, err := typeCheckAndRequireBoolean(args, expr.Right, "AND argument")
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +85,7 @@ func (expr *AndExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 // TypeCheck implements the Expr interface.
 func (expr *BinaryExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	ops := BinOps[expr.Operator]
-	overloads := make([]overload, len(ops))
+	overloads := make([]overloadImpl, len(ops))
 	for i := range ops {
 		overloads[i] = ops[i]
 	}
@@ -103,7 +105,7 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 	if fn == nil {
 		var desStr string
 		if desired != nil {
-			desStr = fmt.Sprintf(" = <%s>", desired.Type())
+			desStr = fmt.Sprintf(" (desired <%s>)", desired.Type())
 		}
 		return nil, fmt.Errorf("unsupported binary operator: <%s> %s <%s>%s",
 			leftReturn.Type(), expr.Operator, rightReturn.Type(), desStr)
@@ -136,7 +138,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	} else {
 		// If expr.Expr is nil, the WHEN clauses contain boolean expressions.
 		for i, when := range expr.Whens {
-			if expr.Whens[i].Cond, err = typeCheckBooleanExpr(args, "condition", when.Cond); err != nil {
+			if expr.Whens[i].Cond, err = typeCheckAndRequireBoolean(args, when.Cond, "condition"); err != nil {
 				return nil, err
 			}
 		}
@@ -270,7 +272,7 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, e
 
 // TypeCheck implements the Expr interface.
 func (expr *ExistsExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	subqueryTyped, err := expr.Subquery.TypeCheck(args, desired)
+	subqueryTyped, err := expr.Subquery.TypeCheck(args, nil /* no preference */)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +293,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 		return nil, fmt.Errorf("unknown function: %s", name)
 	}
 
-	overloads := make([]overload, len(candidates))
+	overloads := make([]overloadImpl, len(candidates))
 	for i := range candidates {
 		overloads[i] = candidates[i]
 	}
@@ -305,7 +307,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 		}
 		var desStr string
 		if desired != nil {
-			desStr = fmt.Sprintf(" = <%s>", desired.Type())
+			desStr = fmt.Sprintf(" (desired <%s>)", desired.Type())
 		}
 		return nil, fmt.Errorf("unknown signature for %s: %s(%s)%s",
 			expr.Name, expr.Name, strings.Join(typeNames, ", "), desStr)
@@ -330,7 +332,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 // TypeCheck implements the Expr interface.
 func (expr *IfExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	var err error
-	if expr.Cond, err = typeCheckBooleanExpr(args, "IF condition", expr.Cond); err != nil {
+	if expr.Cond, err = typeCheckAndRequireBoolean(args, expr.Cond, "IF condition"); err != nil {
 		return nil, err
 	}
 
@@ -346,7 +348,7 @@ func (expr *IfExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *IsOfTypeExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	exprTyped, err := expr.Expr.TypeCheck(args, nil)
+	exprTyped, err := expr.Expr.TypeCheck(args, nil /* no preference */)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +358,7 @@ func (expr *IsOfTypeExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, err
 
 // TypeCheck implements the Expr interface.
 func (expr *NotExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	exprTyped, err := typeCheckBooleanExpr(args, "NOT argument", expr.Expr)
+	exprTyped, err := typeCheckAndRequireBoolean(args, expr.Expr, "NOT argument")
 	if err != nil {
 		return nil, err
 	}
@@ -378,11 +380,11 @@ func (expr *NullIfExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 
 // TypeCheck implements the Expr interface.
 func (expr *OrExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	leftTyped, err := typeCheckBooleanExpr(args, "OR argument", expr.Left)
+	leftTyped, err := typeCheckAndRequireBoolean(args, expr.Left, "OR argument")
 	if err != nil {
 		return nil, err
 	}
-	rightTyped, err := typeCheckBooleanExpr(args, "OR argument", expr.Right)
+	rightTyped, err := typeCheckAndRequireBoolean(args, expr.Right, "OR argument")
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +429,7 @@ func (expr *Subquery) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 // TypeCheck implements the Expr interface.
 func (expr *UnaryExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	ops := UnaryOps[expr.Operator]
-	overloads := make([]overload, len(ops))
+	overloads := make([]overloadImpl, len(ops))
 	for i := range ops {
 		overloads[i] = ops[i]
 	}
@@ -446,7 +448,7 @@ func (expr *UnaryExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 	if fn == nil {
 		var desStr string
 		if desired != nil {
-			desStr = fmt.Sprintf(" = <%s>", desired.Type())
+			desStr = fmt.Sprintf(" (desired <%s>)", desired.Type())
 		}
 		return nil, fmt.Errorf("unsupported unary operator: %s <%s>%s",
 			expr.Operator, exprReturn.Type(), desStr)
@@ -477,7 +479,7 @@ func (expr *StrVal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	return typeCheckConstant(expr, desired)
 }
 
-func typeCheckExprs(args MapArgs, exprs []Expr, desired Datum) ([]Expr, *DTuple, error) {
+func typeCheckExprs(args MapArgs, exprs []Expr, desired Datum) ([]Expr, DTuple, error) {
 	types := make(DTuple, 0, len(exprs))
 	for i, expr := range exprs {
 		var desiredElem Datum
@@ -491,7 +493,7 @@ func typeCheckExprs(args MapArgs, exprs []Expr, desired Datum) ([]Expr, *DTuple,
 		}
 		types = append(types, exprs[i].(TypedExpr).ReturnType())
 	}
-	return exprs, &types, nil
+	return exprs, types, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -531,22 +533,80 @@ func (expr ValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	return dVal, nil
 }
 
-func typeCheckBooleanExpr(args MapArgs, op string, expr Expr) (TypedExpr, error) {
-	typedExpr, err := expr.TypeCheck(args, DummyBool)
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DBool) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DInt) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DFloat) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DDecimal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DString) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DBytes) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DDate) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DTimestamp) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DTimestampTZ) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DInterval) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DTuple) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d dNull) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
+
+func typeCheckAndRequireBoolean(args MapArgs, expr Expr, op string) (TypedExpr, error) {
+	return typeCheckAndRequire(args, expr, DummyBool, op)
+}
+
+func typeCheckAndRequire(args MapArgs, expr Expr, required Datum, op string) (TypedExpr, error) {
+	typedExpr, err := expr.TypeCheck(args, required)
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ReturnType(); !(typ == DNull || typ.TypeEqual(DummyBool)) {
+	if typ := typedExpr.ReturnType(); !(typ == DNull || typ.TypeEqual(required)) {
 		return nil, fmt.Errorf("incompatible %s type: %s", op, typ.Type())
 	}
 	return typedExpr, nil
 }
 
-func typeCheckComparisonOp(args MapArgs, op ComparisonOperator, left, right Expr) (TypedExpr, TypedExpr, CmpOp, error) {
+func typeCheckComparisonOp(
+	args MapArgs, op ComparisonOperator, left, right Expr,
+) (TypedExpr, TypedExpr, CmpOp, error) {
 	foldedOp, foldedLeft, foldedRight, switched, _ := foldComparisonExpr(op, left, right)
 
 	ops := CmpOps[foldedOp]
-	overloads := make([]overload, len(ops))
+	overloads := make([]overloadImpl, len(ops))
 	for i := range ops {
 		overloads[i] = ops[i]
 	}
@@ -570,7 +630,6 @@ func typeCheckComparisonOp(args MapArgs, op ComparisonOperator, left, right Expr
 			// UNKNOWN. Is it important to do so?
 			return leftExpr, rightExpr, CmpOp{}, nil
 		default:
-			// TODO NULL?
 			return leftExpr, rightExpr, CmpOp{}, nil
 		}
 	}
@@ -651,7 +710,9 @@ type indexedExpr struct {
 	i int
 }
 
-// typeCheckSameTypedExprs ... TODO
+// typeCheckSameTypedExprs type checks a list of expressions, asserting that all
+// resolved TypeExprs have the same type. An optional desired type can be provided,
+// which will hint that type which the expressions should resolve to, if possible.
 func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]TypedExpr, Datum, error) {
 	switch len(exprs) {
 	case 0:
@@ -665,10 +726,11 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 	}
 
 	// Hold the resolved type expressions of the provided exprs, in order.
+	// TODO(nvanbenschoten) Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
 	// Split the expressions into three groups of indexed expressions.
-	var resolvedExprs, constExprs, valExprs []indexedExpr
+	var resolvableExprs, constExprs, valExprs []indexedExpr
 	for i, expr := range exprs {
 		idxExpr := indexedExpr{e: expr, i: i}
 		switch {
@@ -677,15 +739,15 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		case isUnresolvedVariable(args, expr):
 			valExprs = append(valExprs, idxExpr)
 		default:
-			resolvedExprs = append(resolvedExprs, idxExpr)
+			resolvableExprs = append(resolvableExprs, idxExpr)
 		}
 	}
 
 	// Used to set ValArgs to the desired typ. If the typ is not provided or is
-	// null, an error will be thrown.
+	// nil, an error will be thrown.
 	typeCheckSameTypedArgs := func(typ Datum) error {
 		for _, valExpr := range valExprs {
-			typedExpr, err := valExpr.e.TypeCheck(args, typ)
+			typedExpr, err := typeCheckAndRequire(args, valExpr.e, typ, "parameter")
 			if err != nil {
 				return err
 			}
@@ -698,15 +760,14 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 	// provided to signify the desired shared type, which can be set to the
 	// required shared type using the second parameter.
 	typeCheckSameTypedConsts := func(typ Datum, required bool) (Datum, error) {
-		setTypeForConsts := func(typ Datum) error {
+		setTypeForConsts := func(typ Datum) {
 			for _, numVal := range constExprs {
-				typedExpr, err := numVal.e.TypeCheck(args, typ)
+				typedExpr, err := typeCheckAndRequire(args, numVal.e, typ, "numeric constant")
 				if err != nil {
-					return err
+					panic(err)
 				}
 				typedExprs[numVal.i] = typedExpr
 			}
-			return nil
 		}
 
 		// If typ is not nil, all consts try to become typ.
@@ -714,7 +775,6 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 			all := true
 			for _, numVal := range constExprs {
 				if !canConstantBecome(numVal.e.(*NumVal), typ) {
-					// uncomment if we want to change the error for line 27 of testdata/summer
 					if required {
 						typedExpr, err := numVal.e.TypeCheck(args, nil)
 						if err != nil {
@@ -727,7 +787,8 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 				}
 			}
 			if all {
-				return typ, setTypeForConsts(typ)
+				setTypeForConsts(typ)
+				return typ, nil
 			}
 		}
 
@@ -737,7 +798,8 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 			numValExprs[i] = numVal.e.(*NumVal)
 		}
 		bestType := commonNumericConstantType(numValExprs...)
-		return bestType, setTypeForConsts(bestType)
+		setTypeForConsts(bestType)
+		return bestType, nil
 	}
 
 	// Used to type check all constants with the optional desired type. The
@@ -756,28 +818,23 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 	}
 
 	switch {
-	case len(resolvedExprs) == 0 && len(constExprs) == 0:
+	case len(resolvableExprs) == 0 && len(constExprs) == 0:
 		if err := typeCheckSameTypedArgs(desired); err != nil {
 			return nil, nil, err
 		}
 		return typedExprs, desired, nil
-	case len(resolvedExprs) == 0:
+	case len(resolvableExprs) == 0:
 		return typeCheckConstsAndArgsWithDesired()
 	default:
 		firstValidIdx := -1
 		firstValidType := DNull
-		for i, resExpr := range resolvedExprs {
+		for i, resExpr := range resolvableExprs {
 			typedExpr, err := resExpr.e.TypeCheck(args, desired)
 			if err != nil {
 				return nil, nil, err
 			}
 			typedExprs[resExpr.i] = typedExpr
-			returnType := typedExpr.ReturnType()
-			// remove if we want to change the error for line 27 of testdata/summer
-			// if desired != nil && !returnType.TypeEqual(desired) {
-			// 	return nil, nil, unexpectedTypeError{resExpr.e, desired, returnType}
-			// }
-			if returnType != DNull {
+			if returnType := typedExpr.ReturnType(); returnType != DNull {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
@@ -790,21 +847,24 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 				return typeCheckConstsAndArgsWithDesired()
 			case len(valExprs) > 0:
 				err := typeCheckSameTypedArgs(nil)
+				if err == nil {
+					panic("type checking parameters without a type should throw an error")
+				}
 				return nil, nil, err
 			default:
 				return typedExprs, DNull, nil
 			}
 		}
 
-		for _, resExpr := range resolvedExprs[firstValidIdx+1:] {
+		for _, resExpr := range resolvableExprs[firstValidIdx+1:] {
 			typedExpr, err := resExpr.e.TypeCheck(args, firstValidType)
 			if err != nil {
 				return nil, nil, err
 			}
-			typedExprs[resExpr.i] = typedExpr
-			if returnType := typedExpr.ReturnType(); !(returnType == DNull || returnType.TypeEqual(firstValidType)) {
-				return nil, nil, fmt.Errorf("expected %s to be of type %s, found type %s", resExpr.e, firstValidType.Type(), returnType.Type())
+			if typ := typedExpr.ReturnType(); !(typ.TypeEqual(firstValidType) || typ == DNull) {
+				return nil, nil, unexpectedTypeError{resExpr.e, firstValidType, typ}
 			}
+			typedExprs[resExpr.i] = typedExpr
 		}
 		if len(constExprs) > 0 {
 			if _, err := typeCheckSameTypedConsts(firstValidType, true); err != nil {
