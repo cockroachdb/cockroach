@@ -20,6 +20,7 @@ package server
 import (
 	"compress/gzip"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -58,6 +59,10 @@ var (
 	gzipWriterPool sync.Pool
 	// Allocation pool for snappy writers.
 	snappyWriterPool sync.Pool
+
+	// GracefulDrainModes is the standard succession of drain modes entered
+	// for a graceful shutdown.
+	GracefulDrainModes = []DrainMode{DrainMode_CLIENT, DrainMode_LEADERSHIP}
 )
 
 // Server is the cockroach server node.
@@ -73,7 +78,7 @@ type Server struct {
 	distSender          *kv.DistSender
 	db                  *client.DB
 	kvDB                *kv.DBServer
-	pgServer            pgwire.Server
+	pgServer            *pgwire.Server
 	node                *Node
 	recorder            *status.MetricsRecorder
 	runtime             status.RuntimeStatSampler
@@ -387,6 +392,53 @@ func (s *Server) Start() error {
 	}
 
 	return nil
+}
+
+func (s *Server) doDrain(modes []DrainMode, setTo bool) ([]DrainMode, error) {
+	for _, mode := range modes {
+		var err error
+		switch {
+		case mode == DrainMode_CLIENT:
+			err = s.pgServer.SetDraining(setTo)
+		case mode == DrainMode_LEADERSHIP:
+			err = s.node.SetDraining(setTo)
+		default:
+			err = util.Errorf("unknown drain mode: %v (%d)", mode, mode)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var nowOn []DrainMode
+	if s.pgServer.IsDraining() {
+		nowOn = append(nowOn, DrainMode_CLIENT)
+	}
+	if s.node.IsDraining() {
+		nowOn = append(nowOn, DrainMode_LEADERSHIP)
+	}
+	return nowOn, nil
+}
+
+// Drain idempotently activates the given DrainModes on the Server in the order
+// in which they are supplied.
+// For example, Drain is typically called with [CLIENT,LEADERSHIP] before
+// terminating the process for graceful shutdown.
+// On success, returns all active drain modes after carrying out the request.
+// On failure, the system may be in a partially drained state and should be
+// recovered by calling Undrain() with the same (or a larger) slice of modes.
+func (s *Server) Drain(on []DrainMode) ([]DrainMode, error) {
+	return s.doDrain(on, true)
+}
+
+// Undrain idempotently deactivates the given DrainModes on the Server in the
+// order in which they are supplied.
+// On success, returns any remaining active drain modes.
+func (s *Server) Undrain(off []DrainMode) []DrainMode {
+	nowActive, err := s.doDrain(off, false)
+	if err != nil {
+		panic(fmt.Sprintf("error returned to Undrain: %s", err))
+	}
+	return nowActive
 }
 
 // startSampleEnvironment begins a worker that periodically instructs the
