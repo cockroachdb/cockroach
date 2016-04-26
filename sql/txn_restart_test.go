@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -314,6 +315,8 @@ BEGIN;
 
 // exec takes a closure and executes it repeatedly as long as it says it needs
 // to be retried.
+// This function needs to be called from tests that set
+// server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 // TODO(andrei): change this to return an error and make runTestTxn inspect the
 // error to see if it's retriable once we get a retriable error code.
 func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
@@ -321,7 +324,6 @@ func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO(andrei): make the priority deterministic here once Radu introduces that syntax.
 	if _, err := tx.Exec(
 		"SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY LOW;"); err != nil {
 		t.Fatal(err)
@@ -379,16 +381,22 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 // that had an intent on that key.
 // This cannot be done as an injected error, since we want the pusher to clean
 // up the intents of the pushee.
+// This function needs to be called from tests that set
+// server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 func abortTxn(t *testing.T, sqlDB *sql.DB, key int) {
-	// Execute all statements in one batch so that the server retries it
-	// automatically in case our txn (the pusher) fails to push the victim. Even
-	// though it starts with a HIGH priority, that's no guarantee it'll always
-	// succeed from the first try.
-	// TODO(andrei): make the priority deterministic here once Radu introduces
-	// that syntax and then we won't need all the statements in one batch.
-	deleteCmd := fmt.Sprintf("DELETE FROM t.test WHERE k = %d", key)
-	if _, err := sqlDB.Exec(
-		fmt.Sprintf("BEGIN; SET TRANSACTION PRIORITY HIGH; %s; COMMIT;", deleteCmd)); err != nil {
+	var err error
+	var tx *sql.Tx
+	tx, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("SET TRANSACTION PRIORITY HIGH"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("DELETE FROM t.test WHERE k = $1", key); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -400,6 +408,7 @@ func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cmdFilters := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
@@ -515,7 +524,9 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	server, sqlDB, _ := setup(t)
+	ctx := server.NewTestContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
+	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
@@ -527,7 +538,6 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO(andrei): make the priority deterministic here once Radu introduces that syntax.
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY LOW;"); err != nil {
 		t.Fatal(err)
 	}
