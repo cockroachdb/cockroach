@@ -428,8 +428,6 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	log.Infof("live_bytes: %d", stats.LiveBytes)
 }
 func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
-	const cacheSize = 1 << 30 // 1 GB
-
 	rocksdb, stopper := setupMVCCInMemRocksDB(b, "put_delete")
 	defer stopper.Stop()
 
