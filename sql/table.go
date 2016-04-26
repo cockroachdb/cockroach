@@ -520,6 +520,15 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeDurationAscending(b, t.Duration)
 		}
 		return encoding.EncodeDurationDescending(b, t.Duration)
+	case *parser.DTuple:
+		var err error
+		for _, datum := range *t {
+			b, err = encodeTableKey(b, datum, dir)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return b, nil
 	}
 	return nil, util.Errorf("unable to encode table key: %T", val)
 }
