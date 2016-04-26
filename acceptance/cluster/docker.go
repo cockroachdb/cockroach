@@ -353,7 +353,9 @@ func (cli resilientDockerClient) ContainerCreate(
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 			}
 		}
-		return types.ContainerCreateResponse{}, err
+		return response, fmt.Errorf("error indicated existing container %s, "+
+			"but none found:\nerror: %s\ncontainers: %+v",
+			containerName, err, containers)
 	}
 	return response, err
 }
