@@ -422,8 +422,8 @@ func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 	case *qvalue:
 		return true, q.colRef.colIdx
 
-	case *scanQValue:
-		return true, q.colIdx
+	case *parser.IndexedVar:
+		return true, q.Idx
 	}
 	return false, -1
 }

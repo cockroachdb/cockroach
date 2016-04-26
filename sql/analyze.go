@@ -143,7 +143,7 @@ func simplifyExpr(e parser.Expr) (simplified parser.Expr, equivalent bool) {
 		return simplifyOrExpr(t)
 	case *parser.ComparisonExpr:
 		return simplifyComparisonExpr(t)
-	case *qvalue, *scanQValue, *parser.DBool:
+	case *qvalue, *parser.IndexedVar, *parser.DBool:
 		return e, true
 	}
 	// We don't know how to simplify expressions that fall through to here, so
@@ -1317,7 +1317,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 			switch n.Operator {
 			case parser.IsNotDistinctFrom:
 				switch n.Left.(type) {
-				case *qvalue, *scanQValue:
+				case *qvalue, *parser.IndexedVar:
 					// Transform "a IS NOT DISTINCT FROM NULL" into "a IS NULL".
 					return &parser.ComparisonExpr{
 						Operator: parser.Is,
@@ -1327,7 +1327,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 				}
 			case parser.IsDistinctFrom:
 				switch n.Left.(type) {
-				case *qvalue, *scanQValue:
+				case *qvalue, *parser.IndexedVar:
 					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
 					return &parser.ComparisonExpr{
 						Operator: parser.IsNot,
@@ -1337,7 +1337,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 				}
 			case parser.Is, parser.IsNot:
 				switch n.Left.(type) {
-				case *qvalue, *scanQValue:
+				case *qvalue, *parser.IndexedVar:
 					// "a IS {,NOT} NULL" can be used during index selection to restrict
 					// the range of scanned keys.
 					return n, true
@@ -1501,7 +1501,7 @@ func isDatum(e parser.Expr) bool {
 // qvalues.
 func isVar(e parser.Expr) bool {
 	switch t := e.(type) {
-	case *qvalue, *scanQValue:
+	case *qvalue, *parser.IndexedVar:
 		return true
 
 	case *parser.Tuple:
@@ -1527,10 +1527,10 @@ func varEqual(a, b parser.Expr) bool {
 			return ta.colRef == tb.colRef
 		}
 
-	case *scanQValue:
+	case *parser.IndexedVar:
 		switch tb := b.(type) {
-		case *scanQValue:
-			return ta.colIdx == tb.colIdx
+		case *parser.IndexedVar:
+			return ta.Idx == tb.Idx
 		}
 
 	case *parser.Tuple:
