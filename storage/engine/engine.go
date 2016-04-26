@@ -62,6 +62,9 @@ type Iterator interface {
 	// unsafeKey returns the same value as Value, but the memory is invalidated
 	// on the next call to {Next,Prev,Seek,SeekReverse,Close}.
 	unsafeValue() []byte
+	// Less returns true if the key the iterator is currently positioned at is
+	// less than the specified key.
+	Less(key MVCCKey) bool
 	// Error returns the error, if any, which the iterator encountered.
 	Error() error
 	// ComputeStats scans the underlying engine from start to end keys and
