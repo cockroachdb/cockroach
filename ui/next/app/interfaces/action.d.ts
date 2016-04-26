@@ -1,5 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-
 /**
  * Action is the interface that should be implemented by all redux actions in
  * this application.

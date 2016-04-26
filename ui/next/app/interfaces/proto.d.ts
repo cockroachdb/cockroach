@@ -1,7 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-// Author: Matt Tracy (matt@cockroachlabs.com)
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
-
 /* tslint:disable:jsdoc-format */
 
 /**

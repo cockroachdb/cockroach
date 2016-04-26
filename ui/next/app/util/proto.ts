@@ -1,5 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-
 import * as _ from "lodash";
 import { NodeStatus, StatusMetrics } from "../interfaces/proto";
 

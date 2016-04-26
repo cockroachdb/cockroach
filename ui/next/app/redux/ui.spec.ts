@@ -1,5 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-
 import reducer, { UISetting, setUISetting, UISettingsDict } from "./ui";
 import { assert } from "chai";
 
