@@ -53,5 +53,7 @@ message RaftSnapshotData {
   optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
   repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "KV"];
-  repeated raftpb.Entry log_entries = 3 [(gogoproto.nullable) = false];
+  // These are really raftpb.Entry, but we model them as raw bytes to avoid
+  // roundtripping through memory.
+  repeated bytes log_entries = 3;
 }
