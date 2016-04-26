@@ -120,7 +120,7 @@ func (kv *KeyValue) ValueProto(msg proto.Message) error {
 type Result struct {
 	calls int
 	// Err contains any error encountered when performing the operation.
-	PErr *roachpb.Error
+	Err *roachpb.Error
 	// Rows contains the key/value pairs for the operation. The number of rows
 	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
 	// of rows returned is the number of keys operated on. For Scan the number of
@@ -133,8 +133,8 @@ type Result struct {
 }
 
 func (r Result) String() string {
-	if r.PErr != nil {
-		return r.PErr.String()
+	if r.Err != nil {
+		return r.Err.String()
 	}
 	var buf bytes.Buffer
 	for i, row := range r.Rows {
@@ -501,10 +501,10 @@ type Runner interface {
 
 func runOneResult(r Runner, b *Batch) (Result, *roachpb.Error) {
 	if pErr := r.Run(b); pErr != nil {
-		return Result{PErr: pErr}, pErr
+		return Result{Err: pErr}, pErr
 	}
 	res := b.Results[0]
-	return res, res.PErr
+	return res, res.Err
 }
 
 func runOneRow(r Runner, b *Batch) (KeyValue, *roachpb.Error) {
@@ -512,5 +512,5 @@ func runOneRow(r Runner, b *Batch) (KeyValue, *roachpb.Error) {
 		return KeyValue{}, pErr
 	}
 	res := b.Results[0]
-	return res.Rows[0], res.PErr
+	return res.Rows[0], res.Err
 }

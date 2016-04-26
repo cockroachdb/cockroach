@@ -542,7 +542,7 @@ func TestClientBatch(t *testing.T) {
 		} else {
 			var foundError bool
 			for _, result := range b.Results {
-				if result.PErr != nil {
+				if result.Err != nil {
 					foundError = true
 					break
 				}
@@ -569,7 +569,7 @@ func TestClientBatch(t *testing.T) {
 		} else {
 			var foundError bool
 			for _, result := range b.Results {
-				if result.PErr != nil {
+				if result.Err != nil {
 					foundError = true
 					break
 				}
