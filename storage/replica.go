@@ -76,6 +76,8 @@ const (
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
+
+	errDrainLeadership = "store is draining"
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -468,8 +470,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		r.mu.llChans = append(r.mu.llChans, llChan)
 		return llChan
 	}
-
-	if !r.store.Stopper().RunAsyncTask(func() {
+	if r.store.IsDrainingLeadership() || !r.store.Stopper().RunAsyncTask(func() {
 		pErr := func() *roachpb.Error {
 			// TODO(tschottdorf): get duration from configuration, either as a
 			// config flag or, later, dynamically adjusted.
@@ -534,7 +535,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		r.mu.llChans = r.mu.llChans[:0]
 	}) {
 		// We failed to start the asynchronous task.
-		llChan <- roachpb.NewErrorf("shutting down")
+		llChan <- roachpb.NewErrorf(errDrainLeadership)
 		return llChan
 	}
 

@@ -18,8 +18,11 @@ package pgwire
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
@@ -28,14 +31,22 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 )
 
-// ErrSSLRequired is returned when a client attempts to connect to a
-// secure server in cleartext.
-const ErrSSLRequired = "cleartext connections are not permitted"
+const (
+	// ErrSSLRequired is returned when a client attempts to connect to a
+	// secure server in cleartext.
+	ErrSSLRequired = "cleartext connections are not permitted"
+
+	// ErrDraining is returned when a client attempts to connect to a server
+	// which is not accepting client connections.
+	ErrDraining = "server is not accepting clients"
+)
 
 const (
 	version30  = 196608
 	versionSSL = 80877103
 )
+
+const drainMaxWait = 10 * time.Second
 
 var (
 	sslSupported   = []byte{'S'}
@@ -49,6 +60,11 @@ type Server struct {
 
 	registry *metric.Registry
 	metrics  *serverMetrics
+
+	mu struct {
+		sync.Mutex
+		draining bool
+	}
 }
 
 type serverMetrics struct {
@@ -58,8 +74,8 @@ type serverMetrics struct {
 }
 
 // MakeServer creates a Server, adding network stats to the given Registry.
-func MakeServer(context *base.Context, executor *sql.Executor, reg *metric.Registry) Server {
-	return Server{
+func MakeServer(context *base.Context, executor *sql.Executor, reg *metric.Registry) *Server {
+	return &Server{
 		context:  context,
 		executor: executor,
 		registry: reg,
@@ -85,11 +101,48 @@ func Match(rd io.Reader) bool {
 	return version == version30 || version == versionSSL
 }
 
+// DrainClient (when called with 'true') prevents new connections from being
+// served and waits a reasonable amount of time for open connections to
+// terminate. If an error is returned, the server remains in draining state,
+// though open connections may continue to exist.
+// When called with 'false', switches back to the normal mode of operation in
+// which connections are accepted.
+func (s *Server) DrainClient(drain bool) error {
+	s.mu.Lock()
+	s.mu.draining = drain
+	s.mu.Unlock()
+	if !drain {
+		return nil
+	}
+	return util.RetryForDuration(drainMaxWait, func() error {
+		if c := s.metrics.conns.Count(); c != 0 {
+			// TODO(tschottdorf): Do more plumbing to actively disrupt
+			// connections; see #6283. There isn't much of a point until
+			// we know what load-balanced clients like to see (#6295).
+			return fmt.Errorf("timed out waiting for %d open connections to drain", c)
+		}
+		return nil
+	})
+}
+
 // ServeConn serves a single connection, driving the handshake process
 // and delegating to the appropriate connection type.
 func (s *Server) ServeConn(conn net.Conn) error {
-	s.metrics.conns.Inc(1)
-	defer s.metrics.conns.Dec(1)
+	var draining bool
+	{
+		s.mu.Lock()
+		draining = s.mu.draining
+		s.mu.Unlock()
+	}
+
+	// If the Server is draining, we will use the connection only to send an
+	// error, so we don't count it in the stats. This makes sense since
+	// DrainClient() waits for that number to drop to zero,
+	// so we don't want it to oscillate unnecessarily.
+	if !draining {
+		s.metrics.conns.Inc(1)
+		defer s.metrics.conns.Dec(1)
+	}
 
 	var buf readBuffer
 	n, err := buf.readUntypedMsg(conn)
@@ -148,6 +201,12 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		if errSSLRequired {
 			return v3conn.sendInternalError(ErrSSLRequired)
 		}
+		if draining {
+			// TODO(tschottdorf): Likely not handled gracefully by clients.
+			// See #6295.
+			return v3conn.sendInternalError(ErrDraining)
+		}
+
 		if tlsConn, ok := conn.(*tls.Conn); ok {
 			tlsState := tlsConn.ConnectionState()
 			authenticationHook, err := security.UserAuthHook(s.context.Insecure, &tlsState)

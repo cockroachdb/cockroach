@@ -338,6 +338,17 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 	return nil
 }
 
+// DrainLeadership called with 'true' waits until all Replicas' leader leases
+// have expired or a reasonable amount of time has passed (in which case an
+// error is returned but draining mode is still active).
+// When called with 'false', returns to the normal mode of allowing leader
+// lease acquisition and extensions.
+func (n *Node) DrainLeadership(drain bool) error {
+	return n.stores.VisitStores(func(s *storage.Store) error {
+		return s.DrainLeadership(drain)
+	})
+}
+
 // initStores initializes the Stores map from ID to Store. Stores are
 // added to the local sender if already bootstrapped. A bootstrapped
 // Store has a valid ident with cluster, node and Store IDs set. If
