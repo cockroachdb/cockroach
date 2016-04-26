@@ -137,7 +137,7 @@ func (sc *SchemaChanger) ExtendLease(
 }
 
 // Execute the entire schema change in steps.
-func (sc SchemaChanger) exec() *roachpb.Error {
+func (sc SchemaChanger) exec(startBackfillNotification func()) *roachpb.Error {
 	// Acquire lease.
 	lease, pErr := sc.AcquireLease()
 	if pErr != nil {
@@ -175,6 +175,10 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
 		return roachpb.NewError(err)
+	}
+
+	if startBackfillNotification != nil {
+		startBackfillNotification()
 	}
 
 	// Run backfill.
@@ -538,7 +542,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 			case <-timer.C:
 				for _, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						pErr := sc.exec()
+						pErr := sc.exec(nil)
 						if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); !ok && pErr != nil {
 							log.Info(pErr)
 						}
