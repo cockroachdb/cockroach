@@ -106,7 +106,7 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 	}
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
-	var ents []raftpb.Entry
+	ents := make([]raftpb.Entry, 0, hi-lo)
 	size := uint64(0)
 	var ent raftpb.Entry
 	expectedIndex := lo
@@ -126,18 +126,12 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 		return exceededMaxBytes, nil
 	}
 
-	_, err := engine.MVCCIterate(context.Background(), e,
-		keys.RaftLogKey(rangeID, lo),
-		keys.RaftLogKey(rangeID, hi),
-		roachpb.ZeroTimestamp,
-		true /* consistent */, nil /* txn */, false /* !reverse */, scanFunc)
-
-	if err != nil {
+	if err := iterateEntries(e, rangeID, lo, hi, scanFunc); err != nil {
 		return nil, err
 	}
 
 	// Did the correct number of results come back? If so, we're all good.
-	if len(ents) == int(hi)-int(lo) {
+	if uint64(len(ents)) == hi-lo {
 		return ents, nil
 	}
 
@@ -177,6 +171,22 @@ func entries(e engine.Engine, rangeID roachpb.RangeID, isInitialized bool, lo, h
 	}
 	// The requested lo index does not yet exist.
 	return nil, raft.ErrUnavailable
+}
+
+func iterateEntries(
+	e engine.Engine, rangeID roachpb.RangeID, lo, hi uint64, scanFunc func(roachpb.KeyValue) (bool, error),
+) error {
+	_, err := engine.MVCCIterate(
+		context.Background(), e,
+		keys.RaftLogKey(rangeID, lo),
+		keys.RaftLogKey(rangeID, hi),
+		roachpb.ZeroTimestamp,
+		true,  /* consistent */
+		nil,   /* txn */
+		false, /* !reverse */
+		scanFunc,
+	)
+	return err
 }
 
 // Term implements the raft.Storage interface.
@@ -467,11 +477,20 @@ func snapshot(
 			})
 	}
 
-	entries, err := entries(snap, rangeID, isInitialized, firstIndex, appliedIndex+1, 0)
-	if err != nil {
+	endIndex := appliedIndex + 1
+	snapData.LogEntries = make([][]byte, 0, endIndex-firstIndex)
+
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		bytes, err := kv.Value.GetBytes()
+		if err == nil {
+			snapData.LogEntries = append(snapData.LogEntries, bytes)
+		}
+		return false, err
+	}
+
+	if err := iterateEntries(snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return raftpb.Snapshot{}, err
 	}
-	snapData.LogEntries = entries
 
 	data, err := protoutil.Marshal(&snapData)
 	if err != nil {
@@ -628,8 +647,15 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 		}
 	}
 
+	logEntries := make([]raftpb.Entry, len(snapData.LogEntries))
+	for i, bytes := range snapData.LogEntries {
+		if err := logEntries[i].Unmarshal(bytes); err != nil {
+			return 0, err
+		}
+	}
+
 	// Write the snapshot's Raft log into the range.
-	if _, err := r.append(batch, 0, snapData.LogEntries); err != nil {
+	if _, err := r.append(batch, 0, logEntries); err != nil {
 		return 0, err
 	}
 
