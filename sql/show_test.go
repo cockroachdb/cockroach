@@ -42,13 +42,13 @@ func TestShowCreateTable(t *testing.T) {
 		expect string // empty means identical to stmt
 	}{
 		{
-			stmt: `CREATE TABLE t (
+			stmt: `CREATE TABLE %s (
 	i INT CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
 	t TIMESTAMP DEFAULT NOW()
 )`,
-			expect: `CREATE TABLE T (
+			expect: `CREATE TABLE %s (
 	i INT NULL CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
@@ -56,42 +56,45 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 		},
 		{
-			stmt: `CREATE TABLE T (
+			stmt: `CREATE TABLE %s (
 	i INT PRIMARY KEY
 )`,
-			expect: `CREATE TABLE T (
+			expect: `CREATE TABLE %s (
 	i INT NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i)
 )`,
 		},
 		{
 			stmt: `
-				CREATE TABLE T (i INT, f FLOAT, s STRING, d DATE);
-				CREATE INDEX idx_if on T (f, i) STORING (s, d);
-				CREATE UNIQUE INDEX on T (d);
+				CREATE TABLE %s (i INT, f FLOAT, s STRING, d DATE);
+				CREATE INDEX idx_if on %[1]s (f, i) STORING (s, d);
+				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
-			expect: `CREATE TABLE T (
+			expect: `CREATE TABLE %s (
 	i INT NULL,
 	f FLOAT NULL,
 	s STRING NULL,
 	d DATE NULL,
 	INDEX idx_if (f, i) STORING (s, d),
-	UNIQUE INDEX T_d_key (d)
+	UNIQUE INDEX %[1]s_d_key (d)
 )`,
 		},
 		{
-			stmt: `CREATE TABLE T (
+			stmt: `CREATE TABLE %s (
 	"te""st" INT NOT NULL,
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st")
 )`,
 		},
 	}
-	const name = "T"
-	for _, test := range tests {
+	for i, test := range tests {
+		name := fmt.Sprintf("T%d", i)
+		fmt.Println("NAME", name)
 		if test.expect == "" {
 			test.expect = test.stmt
 		}
-		if _, err := sqlDB.Exec(test.stmt); err != nil {
+		stmt := fmt.Sprintf(test.stmt, name)
+		expect := fmt.Sprintf(test.expect, name)
+		if _, err := sqlDB.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 		row := sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", name))
@@ -102,23 +105,25 @@ func TestShowCreateTable(t *testing.T) {
 		if scanName != name {
 			t.Fatalf("expected table name %s, got %s", name, scanName)
 		}
-		if create != test.expect {
-			t.Fatalf("statement: %s\ngot: %s\nexpected: %s", test.stmt, create, test.expect)
+		if create != expect {
+			t.Fatalf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
 			continue
 		}
 		if _, err := sqlDB.Exec(fmt.Sprintf("DROP TABLE %s", name)); err != nil {
 			t.Fatal(err)
 		}
 		// Re-insert to make sure it's round-trippable.
-		if _, err := sqlDB.Exec(test.expect); err != nil {
-			t.Fatalf("reinsert failure: %s: %s", test.expect, err)
+		name += "_2"
+		expect = fmt.Sprintf(test.expect, name)
+		if _, err := sqlDB.Exec(expect); err != nil {
+			t.Fatalf("reinsert failure: %s: %s", expect, err)
 		}
 		row = sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", name))
 		if err := row.Scan(&scanName, &create); err != nil {
 			t.Fatal(err)
 		}
-		if create != test.expect {
-			t.Errorf("round trip statement: %s\ngot: %s", test.expect, create)
+		if create != expect {
+			t.Errorf("round trip statement: %s\ngot: %s", expect, create)
 			continue
 		}
 		if _, err := sqlDB.Exec(fmt.Sprintf("DROP TABLE %s", name)); err != nil {
