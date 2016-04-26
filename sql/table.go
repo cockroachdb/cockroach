@@ -226,15 +226,6 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	return col, idx, nil
 }
 
-func getKeysForTableDescriptor(
-	tableDesc *TableDescriptor,
-) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = MakeZoneKey(tableDesc.ID)
-	nameKey = MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
-	descKey = MakeDescMetadataKey(tableDesc.ID)
-	return
-}
-
 // getTableDesc returns a table descriptor, or nil if the descriptor is not
 // found.
 // If you want to transform the not found condition into an error, use
