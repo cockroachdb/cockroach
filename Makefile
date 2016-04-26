@@ -250,10 +250,8 @@ check:
 	@! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
 	@echo "goimports"
 	@! goimports -l . | grep -vF 'No Exceptions'
-
-.PHONY: unused
-unused:
-	-unused -exported ./... | grep -v -E '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex)'
+	@echo "unused"
+	@! unused -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex)'
 
 .PHONY: clean
 clean:
