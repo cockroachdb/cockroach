@@ -128,10 +128,6 @@ func GetBool(d Datum) (DBool, error) {
 	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
 }
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DBool) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (*DBool) ReturnType() Datum {
 	return DummyBool
@@ -208,10 +204,6 @@ type DInt int64
 func NewDInt(d DInt) *DInt {
 	return &d
 }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DInt) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 // ReturnType implements the TypedExpr interface.
 func (*DInt) ReturnType() Datum {
@@ -294,10 +286,6 @@ type DFloat float64
 func NewDFloat(d DFloat) *DFloat {
 	return &d
 }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DFloat) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 // ReturnType implements the TypedExpr interface.
 func (*DFloat) ReturnType() Datum {
@@ -393,10 +381,6 @@ type DDecimal struct {
 	inf.Dec
 }
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DDecimal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (d *DDecimal) ReturnType() Datum {
 	return DummyDecimal
@@ -473,10 +457,6 @@ func NewDString(d string) *DString {
 	r := DString(d)
 	return &r
 }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DString) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 // ReturnType implements the TypedExpr interface.
 func (*DString) ReturnType() Datum {
@@ -557,10 +537,6 @@ func NewDBytes(d DBytes) *DBytes {
 	return &d
 }
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DBytes) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (d *DBytes) ReturnType() Datum {
 	return DummyBytes
@@ -640,10 +616,6 @@ func NewDDate(d DDate) *DDate {
 	return &d
 }
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DDate) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (*DDate) ReturnType() Datum {
 	return DummyDate
@@ -717,10 +689,6 @@ func (d *DDate) String() string {
 type DTimestamp struct {
 	time.Time
 }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DTimestamp) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 // ReturnType implements the TypedExpr interface.
 func (*DTimestamp) ReturnType() Datum {
@@ -798,10 +766,6 @@ type DTimestampTZ struct {
 	time.Time
 }
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DTimestampTZ) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (*DTimestampTZ) ReturnType() Datum {
 	return DummyTimestampTZ
@@ -878,10 +842,6 @@ type DInterval struct {
 	duration.Duration
 }
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DInterval) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (d *DInterval) ReturnType() Datum {
 	return DummyInterval
@@ -951,10 +911,6 @@ func (d *DInterval) String() string {
 
 // DTuple is the tuple Datum.
 type DTuple []Datum
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DTuple) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 // ReturnType implements the TypedExpr interface.
 func (d *DTuple) ReturnType() Datum {
@@ -1121,10 +1077,6 @@ func (d *DTuple) makeUnique() {
 
 type dNull struct{}
 
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d dNull) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
-
 // ReturnType implements the TypedExpr interface.
 func (dNull) ReturnType() Datum {
 	return DNull
@@ -1190,10 +1142,6 @@ type DValArg struct {
 	name string
 	typeAnnotation
 }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function.
-func (d *DValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) { return d, nil }
 
 // ReturnType implements the TypedExpr interface.
 func (d *DValArg) ReturnType() Datum {
@@ -1261,15 +1209,8 @@ func (d *DValArg) String() string {
 // TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?
 func mixedTypeCompare(l, r Datum) (int, bool) {
 	// Check equality.
-	var eqOp *CmpOp
-	eqOps := CmpOps[EQ]
-	for i := range eqOps {
-		if eqOps[i].matchParams(l, r) {
-			eqOp = &eqOps[i]
-			break
-		}
-	}
-	if eqOp == nil {
+	eqOp, ok := CmpOps[EQ].lookupImpl(l, r)
+	if !ok {
 		return 0, false
 	}
 	eq, err := eqOp.fn(EvalContext{}, l, r)
@@ -1281,15 +1222,8 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	}
 
 	// Check less than.
-	var ltOp *CmpOp
-	ltOps := CmpOps[LT]
-	for i := range ltOps {
-		if ltOps[i].matchParams(l, r) {
-			ltOp = &ltOps[i]
-			break
-		}
-	}
-	if ltOp == nil {
+	ltOp, ok := CmpOps[LT].lookupImpl(l, r)
+	if !ok {
 		return 0, false
 	}
 	lt, err := ltOp.fn(EvalContext{}, l, r)

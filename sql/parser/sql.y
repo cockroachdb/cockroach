@@ -21,8 +21,8 @@ package parser
 
 import (
 	"errors"
-    "go/constant"
-    "go/token"
+	"go/constant"
+	"go/token"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
