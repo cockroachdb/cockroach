@@ -324,12 +324,6 @@ func setAppliedIndex(eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.Ra
 		nil /* txn */)
 }
 
-func (r *Replica) loadLastIndexLocked() (uint64, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
-	return loadLastIndex(snap, r.RangeID, r.isInitializedLocked())
-}
-
 // loadLastIndex retrieves the last index from storage.
 func loadLastIndex(eng engine.Engine, rangeID roachpb.RangeID, isInitialized bool) (uint64, error) {
 	lastIndex := uint64(0)

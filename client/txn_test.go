@@ -114,6 +114,22 @@ func testPut() roachpb.BatchRequest {
 	return ba
 }
 
+func TestInitPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// This test is mostly an excuse to exercise otherwise unused code.
+	// TODO(vivekmenezes): update test or remove when InitPut is being
+	// considered sufficiently tested and this path exercised.
+	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		return br, nil
+	}, nil))
+
+	txn := NewTxn(context.Background(), *db)
+	if pErr := txn.InitPut("a", "b"); pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {

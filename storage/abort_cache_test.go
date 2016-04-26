@@ -135,7 +135,6 @@ func TestAbortCacheCopyInto(t *testing.T) {
 	defer stopper.Stop()
 	rc1, e := createTestAbortCache(t, 1, stopper)
 	rc2, _ := createTestAbortCache(t, 2, stopper)
-	const seq = 123
 
 	entry := roachpb.AbortCacheEntry{
 		Key:       testTxnKey,

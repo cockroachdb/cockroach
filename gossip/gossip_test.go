@@ -57,7 +57,6 @@ func TestGossipInfoStore(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer resolver.SetLookupTimeout(time.Minute)()
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
