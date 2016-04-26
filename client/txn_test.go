@@ -35,6 +35,10 @@ var (
 	testPutResp = roachpb.PutResponse{}
 )
 
+func init() {
+	_ = (&Txn{}).InitPut // silence unused warning
+}
+
 func newDB(sender Sender) *DB {
 	return &DB{
 		sender:          sender,
