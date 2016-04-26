@@ -39,9 +39,6 @@ var envVarRegistry map[string]envVarInfo
 
 func init() {
 	ClearEnvCache()
-	// Silence unused warnings.
-	var _ = EnvOrDefaultBytes("", 0)
-	var _ = EnvOrDefaultInt("", 0)
 }
 
 // VarName returns the name of the environment variable
