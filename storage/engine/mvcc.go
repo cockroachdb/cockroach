@@ -1634,9 +1634,15 @@ func MVCCIterate(ctx context.Context,
 				}
 				break
 			}
-
 		} else {
-			iter.Seek(MakeMVCCMetadataKey(metaKey.Key.Next()))
+			if buf.meta.IsInline() {
+				// The current entry is an inline value. We can reach the next entry
+				// using Next().
+				iter.Next()
+			} else {
+				// The current entry is a versioned. Seek to the next metadata key.
+				iter.Seek(MakeMVCCMetadataKey(metaKey.Key.Next()))
+			}
 			if !iter.Valid() {
 				if err := iter.Error(); err != nil {
 					return nil, err
