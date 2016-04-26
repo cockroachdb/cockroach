@@ -10,6 +10,7 @@
     "shonkwrap": "^1.3.0",
     "sinon": "^1.17.3",
     "ts-node": "^0.7.2",
+    "tslint": "^3.8.1",
     "typescript": "^1.8.10",
     "typings": "^0.7.12"
   },
