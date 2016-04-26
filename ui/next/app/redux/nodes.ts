@@ -1,5 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-
 /**
  * This module maintains the state of a read-only, periodically refreshed query
  * for the status of all nodes in the cluster. Data is fetched from the

@@ -1,5 +1,3 @@
-/// <reference path="../../typings/main.d.ts" />
-
 /**
  * This module maintains various ephemeral UI settings. These settings should be
  * maintained within a session, but not saved between sessions.
