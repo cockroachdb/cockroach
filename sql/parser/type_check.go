@@ -50,6 +50,15 @@ func (err parameterTypeAmbiguityError) Error() string {
 	return fmt.Sprintf("could not determine data type of parameter %s", err.v)
 }
 
+type unexpectedTypeError struct {
+	expr      Expr
+	want, got Datum
+}
+
+func (err unexpectedTypeError) Error() string {
+	return fmt.Sprintf("expected %s to be of type %s, found type %s", err.expr, err.want.Type(), err.got.Type())
+}
+
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 	if _, ok := err.(parameterTypeAmbiguityError); ok {
 		return err
@@ -705,12 +714,13 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 			all := true
 			for _, numVal := range constExprs {
 				if !canConstantBecome(numVal.e.(*NumVal), typ) {
+					// uncomment if we want to change the error for line 27 of testdata/summer
 					if required {
 						typedExpr, err := numVal.e.TypeCheck(args, nil)
 						if err != nil {
 							return nil, err
 						}
-						return nil, fmt.Errorf("expected %s to be of type %s, found type %s", numVal.e, typ.Type(), typedExpr.ReturnType().Type())
+						return nil, unexpectedTypeError{numVal.e, typ, typedExpr.ReturnType()}
 					}
 					all = false
 					break
@@ -762,7 +772,12 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 				return nil, nil, err
 			}
 			typedExprs[resExpr.i] = typedExpr
-			if returnType := typedExpr.ReturnType(); returnType != DNull {
+			returnType := typedExpr.ReturnType()
+			// remove if we want to change the error for line 27 of testdata/summer
+			// if desired != nil && !returnType.TypeEqual(desired) {
+			// 	return nil, nil, unexpectedTypeError{resExpr.e, desired, returnType}
+			// }
+			if returnType != DNull {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
