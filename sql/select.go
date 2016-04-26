@@ -462,7 +462,7 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		return s.pErr
 	}
 
-	whereType, err := s.filter.TypeCheck(s.planner.evalCtx.Args)
+	whereType, err := parser.PerformTypeChecking(s.filter, s.planner.evalCtx.Args)
 	if err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
@@ -578,12 +578,12 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 		return s.pErr
 	}
 
-	var typ parser.Datum
-	typ, err = resolved.TypeCheck(s.planner.evalCtx.Args)
-	s.pErr = roachpb.NewError(err)
-	if s.pErr != nil {
+	typ, err := parser.PerformTypeChecking(resolved, s.planner.evalCtx.Args)
+	if err != nil {
+		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
+
 	var normalized parser.Expr
 	normalized, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, resolved)
 	s.pErr = roachpb.NewError(err)

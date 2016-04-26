@@ -99,7 +99,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 // ought to be split into two phases.
 func (rh *returningHelper) TypeCheck() *roachpb.Error {
 	for i, expr := range rh.exprs {
-		typ, err := expr.TypeCheck(rh.p.evalCtx.Args)
+		typ, err := parser.PerformTypeChecking(expr, rh.p.evalCtx.Args)
 		if err != nil {
 			return roachpb.NewError(err)
 		}
