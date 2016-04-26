@@ -309,7 +309,7 @@ func (p *planner) initSelect(
 					// will be a valid case.
 					panic("scan qvalue refers to unknown table")
 				}
-				return true, scan.getQValue(qval.colRef.colIdx)
+				return true, scan.filterVars.IndexedVar(qval.colRef.colIdx)
 			}
 
 			scan.filter, s.filter = splitFilter(s.filter, convFunc)

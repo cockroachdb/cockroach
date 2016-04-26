@@ -61,10 +61,10 @@ type scanNode struct {
 	rowIndex  int // the index of the current row
 	debugVals debugValues
 
-	// filter that can be evaluated using only this table/index; it contains scanQValues.
-	filter parser.Expr
-	// qvalues (one per column) which can be part of the filter expression.
-	qvals []scanQValue
+	// filter that can be evaluated using only this table/index; it contains
+	// parser.IndexedVar leaves generated using filterVars.
+	filter     parser.Expr
+	filterVars parser.IndexedVarHelper
 
 	scanInitialized bool
 	fetcher         rowFetcher
@@ -287,10 +287,7 @@ func (n *scanNode) initDescDefaults() {
 		n.valNeededForCol[i] = true
 	}
 	n.row = make([]parser.Datum, len(cols))
-	n.qvals = make([]scanQValue, len(cols))
-	for i := range n.qvals {
-		n.qvals[i] = n.makeQValue(i)
-	}
+	n.filterVars = parser.MakeIndexedVarHelper(n, len(cols))
 }
 
 // initOrdering initializes the ordering info using the selected index. This
@@ -333,42 +330,17 @@ func (n *scanNode) computeOrdering(
 	return ordering
 }
 
-// scanQValue implements the parser.VariableExpr interface and is used as a replacement node for
-// QualifiedNames in expressions that can change their values for each row.
-//
-// It is analogous to qvalue but allows expressions to be evaluated in the context of a scanNode.
-type scanQValue struct {
-	scan   *scanNode
-	colIdx int
+// scanNode implements parser.IndexedVarContainer.
+var _ parser.IndexedVarContainer = &scanNode{}
+
+func (n *scanNode) IndexedVarTypeCheck(idx int, args parser.MapArgs) (parser.Datum, error) {
+	return n.resultColumns[idx].Typ.TypeCheck(args)
 }
 
-var _ parser.VariableExpr = &scanQValue{}
-
-func (*scanQValue) Variable() {}
-
-func (q *scanQValue) String() string {
-	return string(q.scan.resultColumns[q.colIdx].Name)
+func (n *scanNode) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
+	return n.row[idx].Eval(ctx)
 }
 
-func (q *scanQValue) Walk(_ parser.Visitor) parser.Expr {
-	panic("not implemented")
-}
-
-func (q *scanQValue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return q.scan.resultColumns[q.colIdx].Typ.TypeCheck(args)
-}
-
-func (q *scanQValue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
-	return q.scan.row[q.colIdx].Eval(ctx)
-}
-
-func (n *scanNode) makeQValue(colIdx int) scanQValue {
-	if colIdx < 0 || colIdx >= len(n.row) {
-		panic(fmt.Sprintf("invalid colIdx %d (columns: %d)", colIdx, len(n.row)))
-	}
-	return scanQValue{n, colIdx}
-}
-
-func (n *scanNode) getQValue(colIdx int) *scanQValue {
-	return &n.qvals[colIdx]
+func (n *scanNode) IndexedVarString(idx int) string {
+	return string(n.resultColumns[idx].Name)
 }
