@@ -35,10 +35,6 @@ var (
 	testPutResp = roachpb.PutResponse{}
 )
 
-func init() {
-	_ = (&Txn{}).InitPut // silence unused warning
-}
-
 func newDB(sender Sender) *DB {
 	return &DB{
 		sender:          sender,
@@ -116,6 +112,20 @@ func testPut() roachpb.BatchRequest {
 	put.Key = testKey
 	ba.Add(put)
 	return ba
+}
+
+func TestInitPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// This test is mostly an excuse to exercise otherwise unused code.
+	db := newDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		return br, nil
+	}, nil))
+
+	txn := NewTxn(context.Background(), *db)
+	if pErr := txn.InitPut("a", "b"); pErr != nil {
+		t.Fatal(pErr)
+	}
 }
 
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
