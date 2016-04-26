@@ -16,9 +16,7 @@
 
 package parser
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
@@ -47,7 +45,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(args MapArgs) (Datum, error) {
+func (v *IndexedVar) TypeCheck(args MapArgs, desired Datum) (Datum, error) {
 	return v.container.IndexedVarTypeCheck(v.Idx, args)
 }
 

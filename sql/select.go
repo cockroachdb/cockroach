@@ -171,7 +171,7 @@ func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
-func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
@@ -197,14 +197,14 @@ func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
 		node := &selectNode{planner: p}
-		return p.initSelect(node, s, orderBy, limit)
+		return p.initSelect(node, s, orderBy, limit, desiredTypes)
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
 	// through. Instead of continuing this special casing, it may be worth
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
 	default:
-		plan, pErr := p.makePlan(s, autoCommit)
+		plan, pErr := p.makePlan(s, desiredTypes, autoCommit)
 		if pErr != nil {
 			return nil, pErr
 		}
@@ -233,13 +233,13 @@ func (p *planner) Select(n *parser.Select, autoCommit bool) (planNode, *roachpb.
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) SelectClause(parsed *parser.SelectClause) (planNode, *roachpb.Error) {
+func (p *planner) SelectClause(parsed *parser.SelectClause, desiredTypes []parser.Datum) (planNode, *roachpb.Error) {
 	node := &selectNode{planner: p}
-	return p.initSelect(node, parsed, nil, nil)
+	return p.initSelect(node, parsed, nil, nil, desiredTypes)
 }
 
 func (p *planner) initSelect(
-	s *selectNode, parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit,
+	s *selectNode, parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit, desiredTypes []parser.Datum,
 ) (planNode, *roachpb.Error) {
 
 	s.qvals = make(qvalMap)
@@ -248,7 +248,7 @@ func (p *planner) initSelect(
 		return nil, pErr
 	}
 
-	if pErr := s.initTargets(parsed.Exprs); pErr != nil {
+	if pErr := s.initTargets(parsed.Exprs, desiredTypes); pErr != nil {
 		return nil, pErr
 	}
 
@@ -391,7 +391,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 				return roachpb.NewErrorf("subquery in FROM must have an alias")
 			}
 
-			s.table.node, s.pErr = p.makePlan(expr.Select, false)
+			s.table.node, s.pErr = p.makePlan(expr.Select, nil, false)
 			if s.pErr != nil {
 				return s.pErr
 			}
@@ -432,12 +432,16 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 	return nil
 }
 
-func (s *selectNode) initTargets(targets parser.SelectExprs) *roachpb.Error {
+func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Datum) *roachpb.Error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
-	for _, target := range targets {
-		if s.pErr = s.addRender(target); s.pErr != nil {
+	for i, target := range targets {
+		var desiredType parser.Datum
+		if len(desiredTypes) > i {
+			desiredType = desiredTypes[i]
+		}
+		if s.pErr = s.addRender(target, desiredType); s.pErr != nil {
 			return s.pErr
 		}
 	}
@@ -462,8 +466,8 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		return s.pErr
 	}
 
-	whereType, err := parser.PerformTypeChecking(s.filter, s.planner.evalCtx.Args)
-	if err != nil {
+	var whereType parser.Datum
+	if s.filter, whereType, err = parser.TypeCheck(s.filter, s.planner.evalCtx.Args, parser.DummyBool); err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr
 	}
@@ -548,7 +552,7 @@ func getRenderColName(target parser.SelectExpr) string {
 	return target.Expr.String()
 }
 
-func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
+func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datum) *roachpb.Error {
 	// outputName will be empty if the target is not aliased.
 	outputName := string(target.As)
 
@@ -578,7 +582,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 		return s.pErr
 	}
 
-	typ, err := parser.PerformTypeChecking(resolved, s.planner.evalCtx.Args)
+	resolved, typ, err := parser.TypeCheck(resolved, s.planner.evalCtx.Args, desiredType)
 	if err != nil {
 		s.pErr = roachpb.NewError(err)
 		return s.pErr

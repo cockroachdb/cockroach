@@ -16,11 +16,7 @@
 
 package parser
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/testutils"
-)
+import "testing"
 
 func TestFoldNumericConstants(t *testing.T) {
 	testData := []struct {
@@ -184,6 +180,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`lower(a)='foo'`, `lower(a) = 'foo'`},
 		{`random()`, `random()`},
 		{`notARealMethod()`, `notARealMethod()`},
+		{`9223372036854775808`, `9223372036854775808`},
 		{`-9223372036854775808`, `-9223372036854775808`},
 		{`(SELECT 1)`, `(SELECT 1)`},
 		{`(1, 2, 3) = (SELECT 1, 2, 3)`, `(1, 2, 3) = (SELECT 1, 2, 3)`},
@@ -214,24 +211,6 @@ func TestNormalizeExpr(t *testing.T) {
 		// The original expression should be unchanged.
 		if rStr := expr.String(); rOrig != rStr {
 			t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
-		}
-	}
-}
-
-func TestNormalizeExprError(t *testing.T) {
-	testData := []struct {
-		expr     string
-		expected string
-	}{
-		{`9223372036854775808`, `integer value out of range`},
-	}
-	for _, d := range testData {
-		expr, err := ParseExprTraditional(d.expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if _, err := defaultContext.NormalizeExpr(expr); !testutils.IsError(err, d.expected) {
-			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
 }

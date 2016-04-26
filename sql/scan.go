@@ -334,7 +334,7 @@ func (n *scanNode) computeOrdering(
 var _ parser.IndexedVarContainer = &scanNode{}
 
 func (n *scanNode) IndexedVarTypeCheck(idx int, args parser.MapArgs) (parser.Datum, error) {
-	return n.resultColumns[idx].Typ.TypeCheck(args)
+	return n.resultColumns[idx].Typ.TypeCheck(args, nil /* no preference */)
 }
 
 func (n *scanNode) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {

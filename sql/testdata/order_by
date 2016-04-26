@@ -191,7 +191,7 @@ query I
 query error multiple ORDER BY clauses not allowed
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
 
-query error incompatible value types bool, int
+query error expected c to be of type int, found type bool
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 
 query error invalid column index: 0 not in range \[1, 3\]

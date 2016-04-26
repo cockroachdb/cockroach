@@ -253,20 +253,18 @@ func TestPGPrepareFail(t *testing.T) {
 	defer db.Close()
 
 	testFailures := map[string]string{
-		"SELECT $1 = $1":                                "pq: unsupported comparison operator: <parameter> = <parameter>",
-		"SELECT $1 > 0 AND NOT $1":                      "pq: incompatible NOT argument type: int",
-		"SELECT $1":                                     "pq: could not determine data type of parameter $1",
-		"SELECT $1 + $1":                                "pq: unsupported binary operator: <parameter> + <parameter>",
-		"SELECT now() + $1":                             "pq: unsupported binary operator: <timestamp> + <parameter>",
-		"SELECT CASE $1 WHEN 1 THEN 1 END":              "pq: could not determine data type of parameter $1",
-		"SELECT CASE WHEN TRUE THEN $1 END":             "pq: could not determine data type of parameter $1",
-		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END":     "pq: could not determine data type of parameter $2",
-		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END":      "pq: could not determine data type of parameter $1",
-		"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END": "pq: could not determine data type of parameter $1",
-		"CREATE TABLE $1 (id INT)":                      "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
-		"UPDATE d.t SET s = i + $1":                     "pq: value type int doesn't match type STRING of column \"s\"",
-		"SELECT $0 > 0":                                 "pq: there is no parameter $0",
-		"SELECT $2 > 0":                                 "pq: could not determine data type of parameter $1",
+		"SELECT $1 = $1":           "pq: unsupported comparison operator: <parameter> = <parameter>",
+		"SELECT $1 > 0 AND NOT $1": "pq: incompatible NOT argument type: int",
+		"SELECT $1":                "pq: could not determine data type of parameter $1",
+		"SELECT $1 + $1":           "pq: unsupported binary operator: <parameter> + <parameter>",
+		// TODO(nvanbenschoten)
+		// "SELECT now() + $1":                         "pq: unsupported binary operator: <timestamp> + <parameter>",
+		"SELECT CASE WHEN TRUE THEN $1 END":         "pq: could not determine data type of parameter $1",
+		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: incompatible value type: could not determine data type of parameter $1",
+		"CREATE TABLE $1 (id INT)":                  "pq: syntax error at or near \"1\"\nCREATE TABLE $1 (id INT)\n             ^\n",
+		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <parameter> = <string>",
+		"SELECT $0 > 0":                             "pq: there is no parameter $0",
+		"SELECT $2 > 0":                             "pq: could not determine data type of parameter $1",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
@@ -408,6 +406,13 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT CASE WHEN $1 THEN $2 ELSE 3 END": {
 			base.Params(true, 2).Results(2),
 			base.Params(false, 2).Results(3),
+		},
+		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END": {
+			base.Params(2).Results(1),
+		},
+		"SELECT CASE $1 WHEN 1 THEN 1 END": {
+			base.Params(1).Results(1),
+			base.Params(2).Results(sql.NullInt64{}),
 		},
 		"SELECT $1::timestamp, $2::date": {
 			base.Params("2001-01-02 03:04:05", "2006-07-08").Results(
@@ -663,6 +668,12 @@ func TestPGPreparedExec(t *testing.T) {
 			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				base.Params(1, 2, 3).RowsAffected(5),
+			},
+		},
+		{
+			"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END",
+			[]preparedExecTest{
+				base.Params(2).RowsAffected(5),
 			},
 		},
 		{

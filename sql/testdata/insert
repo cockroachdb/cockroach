@@ -257,7 +257,7 @@ statement ok
 INSERT INTO kv4 (int, char) VALUES (4, 'a')
 
 statement error value type int doesn't match type FLOAT of column "float"
-INSERT INTO kv4 (int, float) VALUES (5, 1)
+INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 
 statement ok
 INSERT INTO kv4 (int, float) VALUES (5, 2.3)
@@ -413,3 +413,11 @@ INSERT INTO abc VALUES (1, 2, 10)
 # for the index key will also fail.
 statement error pgcode 23505 duplicate key value \(a,b\)=\(1,2\) violates unique constraint "primary"
 INSERT INTO abc VALUES (1, 2, 20)
+
+statement ok
+CREATE TABLE decimal (
+  a DECIMAL PRIMARY KEY
+)
+
+statement ok
+INSERT INTO decimal VALUES (4)

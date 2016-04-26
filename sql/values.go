@@ -40,7 +40,7 @@ type valuesNode struct {
 }
 
 // ValuesClause constructs a valuesNode from a VALUES expression.
-func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error) {
+func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, *roachpb.Error) {
 	v := &valuesNode{
 		p: p,
 		n: n,
@@ -68,7 +68,11 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 				return nil, pErr
 			}
 			var err error
-			typ, err := parser.PerformTypeChecking(expr, p.evalCtx.Args)
+			var desired parser.Datum
+			if len(desiredTypes) > i {
+				desired = desiredTypes[i]
+			}
+			_, typ, err := parser.TypeCheck(expr, p.evalCtx.Args, desired)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
