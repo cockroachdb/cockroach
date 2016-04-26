@@ -246,15 +246,6 @@ func (et *evictionToken) EvictAndReplace(newDescs ...roachpb.RangeDescriptor) er
 	return err
 }
 
-func (et *evictionToken) evictedDesc() bool {
-	if et.evictedLocker == nil {
-		return false
-	}
-	et.evictedLocker.Lock()
-	defer et.evictedLocker.Unlock()
-	return et.evicted
-}
-
 // LookupRangeDescriptor attempts to locate a descriptor for the range
 // containing the given Key. This is done by querying the two-level
 // lookup table of range descriptors which cockroach maintains. The
@@ -537,15 +528,6 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 		return nil, nil, nil
 	}
 	return metaEndKey, rd, nil
-}
-
-// InsertRangeDescriptors is a helper function to insert the provided
-// range descriptors into the rangeDescriptorCache. It acquires a write
-// lock on rdc.rangeCache before delegating to insertRangeDescriptorsLocked.
-func (rdc *rangeDescriptorCache) InsertRangeDescriptors(rs ...roachpb.RangeDescriptor) error {
-	rdc.rangeCache.Lock()
-	defer rdc.rangeCache.Unlock()
-	return rdc.insertRangeDescriptorsLocked(rs...)
 }
 
 // insertRangeDescriptorsLocked is a helper function to insert the provided
