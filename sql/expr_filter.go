@@ -240,7 +240,9 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 //  - the implementation is best-effort (it tries to get as much of the expression into RES as
 //    possible, and make REM as small as possible).
 //  - the original expression is modified in-place and should not be used again.
-func splitFilter(expr parser.TypedExpr, conv varConvertFunc) (restricted, remainder parser.TypedExpr) {
+func splitFilter(
+	expr parser.TypedExpr, conv varConvertFunc,
+) (restricted, remainder parser.TypedExpr) {
 	if expr == nil {
 		return nil, nil
 	}

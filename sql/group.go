@@ -101,8 +101,9 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if retType := typedHaving.ReturnType(); !(retType.TypeEqual(parser.DummyBool) || retType == parser.DNull) {
-			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s", parser.DummyBool.Type(), retType.Type())
+		if typ := typedHaving.ReturnType(); !(typ.TypeEqual(parser.DummyBool) || typ == parser.DNull) {
+			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s",
+				parser.DummyBool.Type(), typ.Type())
 		}
 
 		typedHaving, err = p.parser.NormalizeExpr(p.evalCtx, typedHaving)

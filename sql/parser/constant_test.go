@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,11 +17,17 @@
 package parser
 
 import (
+	"fmt"
 	"go/constant"
 	"go/token"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/decimal"
+
+	"gopkg.in/inf.v0"
 )
 
 func TestNumericConstantAvailableTypes(t *testing.T) {
@@ -39,14 +45,18 @@ func TestNumericConstantAvailableTypes(t *testing.T) {
 		{"9223372036854775807", wantInt},
 		{"1.0", wantFloatButCanBeInt},
 		{"-1234.0000", wantFloatButCanBeInt},
+		{"1e10", wantFloatButCanBeInt},
+		{"1E10", wantFloatButCanBeInt},
 		{"1.1", wantFloat},
+		{"1e-10", wantFloat},
+		{"1E-10", wantFloat},
 		{"-1231.131", wantFloat},
 		{"876543234567898765436787654321", wantFloat},
 	}
 
 	for i, test := range testCases {
 		tok := token.INT
-		if strings.Contains(test.str, ".") {
+		if strings.ContainsAny(test.str, ".eE") {
 			tok = token.FLOAT
 		}
 		val := constant.MakeFromLiteral(test.str, tok, 0)
@@ -58,13 +68,63 @@ func TestNumericConstantAvailableTypes(t *testing.T) {
 		c := &NumVal{Value: val}
 		avail := c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
-			t.Errorf("%d: expected the available type set %v for %v, found %v", i, test.avail, c.Value.ExactString(), avail)
+			t.Errorf("%d: expected the available type set %v for %v, found %v",
+				i, test.avail, c.Value.ExactString(), avail)
 		}
 
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
-			if _, err := c.ResolveAsType(availType); err != nil {
-				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v", i, c.Value.ExactString(), availType.Type(), err)
+			if res, err := c.ResolveAsType(availType); err != nil {
+				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
+					i, c.Value.ExactString(), availType.Type(), err)
+			} else {
+				resErr := func(parsed, resolved interface{}) {
+					t.Errorf("%d: expected resolving %v as available type %s would produce a Datum with the value %v, found %v",
+						i, c, availType.Type(), parsed, resolved)
+				}
+				switch typ := res.(type) {
+				case *DInt:
+					var i int64
+					var err error
+					if tok == token.INT {
+						if i, err = strconv.ParseInt(test.str, 10, 64); err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						var f float64
+						if f, err = strconv.ParseFloat(test.str, 64); err != nil {
+							t.Fatal(err)
+						}
+						i = int64(f)
+					}
+					if resI := int64(*typ); i != resI {
+						resErr(i, resI)
+					}
+				case *DFloat:
+					f, err := strconv.ParseFloat(test.str, 64)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if resF := float64(*typ); f != resF {
+						resErr(f, resF)
+					}
+				case *DDecimal:
+					d := new(inf.Dec)
+					if !strings.ContainsAny(test.str, "eE") {
+						if _, ok := d.SetString(test.str); !ok {
+							t.Fatal(fmt.Sprintf("could not set %q on decimal", test.str))
+						}
+					} else {
+						f, err := strconv.ParseFloat(test.str, 64)
+						if err != nil {
+							t.Fatal(err)
+						}
+						decimal.SetFromFloat(d, f)
+					}
+					if resD := &typ.Dec; d.Cmp(resD) != 0 {
+						resErr(d, resD)
+					}
+				}
 			}
 		}
 	}
@@ -88,13 +148,29 @@ func TestStringConstantAvailableTypes(t *testing.T) {
 		// Check available types.
 		avail := test.c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
-			t.Errorf("%d: expected the available type set %v for %+v, found %v", i, test.avail, test.c, avail)
+			t.Errorf("%d: expected the available type set %v for %+v, found %v",
+				i, test.avail, test.c, avail)
 		}
 
 		// Make sure it can be resolved as each of those types.
 		for _, availType := range avail {
-			if _, err := test.c.ResolveAsType(availType); err != nil {
-				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v", i, test.c, availType.Type(), err)
+			if res, err := test.c.ResolveAsType(availType); err != nil {
+				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
+					i, test.c, availType.Type(), err)
+			} else {
+				var resString string
+				switch typ := res.(type) {
+				case *DString:
+					resString = string(*typ)
+				case *DBytes:
+					resString = string(*typ)
+				default:
+					panic("unreachable")
+				}
+				if resString != test.c.s {
+					t.Errorf("%d: expected resolving %v as available type %s would produce a Datum with the same value, found %s",
+						i, test.c, availType.Type(), resString)
+				}
 			}
 		}
 	}

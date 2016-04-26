@@ -91,9 +91,8 @@ func TestEval(t *testing.T) {
 		{`NOT true`, `false`},
 		{`NOT NULL`, `NULL`},
 		// Boolean expressions short-circuit the evaluation.
-		// TODO these dont seem correct.
-		//{`false AND (a = 1)`, `false`},
-		//{`true OR (a = 1)`, `true`},
+		{`false AND (2 = 1)`, `false`},
+		{`true OR (3 = 1)`, `true`},
 		// Comparisons.
 		{`0 = 1`, `false`},
 		{`0 != 1`, `true`},
