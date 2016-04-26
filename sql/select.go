@@ -577,6 +577,7 @@ func (s *selectNode) addRender(target parser.SelectExpr) *roachpb.Error {
 	if resolved, s.pErr = s.planner.expandSubqueries(resolved, 1); s.pErr != nil {
 		return s.pErr
 	}
+
 	var typ parser.Datum
 	typ, err = resolved.TypeCheck(s.planner.evalCtx.Args)
 	s.pErr = roachpb.NewError(err)
