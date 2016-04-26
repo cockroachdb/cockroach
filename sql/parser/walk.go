@@ -58,7 +58,10 @@ func (expr *AndExpr) Walk(v Visitor) Expr {
 	left, changedL := WalkExpr(v, expr.Left)
 	right, changedR := WalkExpr(v, expr.Right)
 	if changedL || changedR {
-		return &AndExpr{Left: left, Right: right}
+		exprCopy := *expr
+		exprCopy.Left = left
+		exprCopy.Right = right
+		return &exprCopy
 	}
 	return expr
 }
@@ -172,7 +175,9 @@ func (expr *ComparisonExpr) Walk(v Visitor) Expr {
 func (expr *ExistsExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Subquery)
 	if changed {
-		return &ExistsExpr{Subquery: e}
+		exprCopy := *expr
+		exprCopy.Subquery = e
+		return &exprCopy
 	}
 	return expr
 }
@@ -229,7 +234,9 @@ func (expr *IsOfTypeExpr) Walk(v Visitor) Expr {
 func (expr *NotExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Expr)
 	if changed {
-		return &NotExpr{Expr: e}
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
 	}
 	return expr
 }
@@ -252,7 +259,10 @@ func (expr *OrExpr) Walk(v Visitor) Expr {
 	left, changedL := WalkExpr(v, expr.Left)
 	right, changedR := WalkExpr(v, expr.Right)
 	if changedL || changedR {
-		return &OrExpr{Left: left, Right: right}
+		exprCopy := *expr
+		exprCopy.Left = left
+		exprCopy.Right = right
+		return &exprCopy
 	}
 	return expr
 }

@@ -426,7 +426,9 @@ func (u *updateNode) Next() bool {
 	return true
 }
 
-func fillDefault(expr parser.Expr, desired parser.Datum, index int, defaultExprs []parser.TypedExpr) parser.Expr {
+func fillDefault(
+	expr parser.Expr, desired parser.Datum, index int, defaultExprs []parser.TypedExpr,
+) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:
 		return defaultExprs[index]

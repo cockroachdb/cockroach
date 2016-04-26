@@ -21,8 +21,8 @@ package parser
 
 import (
 	"errors"
-    "go/constant"
-    "go/token"
+	"go/constant"
+	"go/token"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -1203,13 +1203,13 @@ zone_value:
     expr := &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
     typedExpr, err := TypeCheck(expr, nil, nil)
     if err != nil {
-      sqllex.Error("cannot type check interval type")
+      sqllex.Error("cannot type check interval type: " + err.Error())
       return 1
     }
     var ctx EvalContext
     d, err := typedExpr.Eval(ctx)
     if err != nil {
-      sqllex.Error("cannot evaluate to an interval type")
+      sqllex.Error("cannot evaluate to an interval type: " + err.Error())
       return 1
     }
     if _, ok := d.(*DInterval); !ok {
