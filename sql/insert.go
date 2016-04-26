@@ -48,10 +48,11 @@ type insertNode struct {
 // Privileges: INSERT on table
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
+// TODO(andrei): make Insert return error, not pErr.
 func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.Error) {
-	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.INSERT)
-	if pErr != nil {
-		return nil, pErr
+	en, err := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.INSERT)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	var cols []ColumnDescriptor

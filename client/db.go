@@ -434,26 +434,44 @@ func (db *DB) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Error)
 	return sendAndFill(db.send, b)
 }
 
-// Txn executes retryable in the context of a distributed transaction. The
+// TxnEx executes retryable in the context of a distributed transaction. The
 // transaction is automatically aborted if retryable returns any error aside
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
 //
+// Retryable errors raised by `retryable` are recognized by looking inside the
+// returned error (if any) and checking for the WrappedPErr type. In other
+// words, the closure must convert lower-level roachpb.Error errors to
+// WrappedPErr using roachpb.WrapPErr().
+//
 // If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
+func (db *DB) TxnEx(retryable func(txn *Txn) error) error {
 	// TODO(dan): This context should, at longest, live for the lifetime of this
 	// method. Add a defered cancel.
 	txn := NewTxn(context.TODO(), *db)
-	txn.SetDebugName("", 1)
-	pErr := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
-		func(txn *Txn, _ *TxnExecOptions) *roachpb.Error {
+	txn.SetDebugName("", 2)
+	err := txn.ExecEx(TxnExecOptions{AutoRetry: true, AutoCommit: true},
+		func(txn *Txn, _ *TxnExecOptions) error {
 			return retryable(txn)
 		})
-	if pErr != nil {
-		txn.CleanupOnError(pErr)
+	if err != nil {
+		txn.CleanupOnError(err)
 	}
-	return pErr
+	return err
+}
+
+// Txn is DEPRECATED. Use TxnEx().
+// Txn takes a closure returning pErr, but we've moved to just returning error.
+func (db *DB) Txn(retryable func(txn *Txn) *roachpb.Error) *roachpb.Error {
+	err := db.TxnEx(func(txn *Txn) error {
+		pErr := retryable(txn)
+		if pErr != nil {
+			return roachpb.WrapPErr(pErr)
+		}
+		return nil
+	})
+	return roachpb.NewError(err)
 }
 
 // send runs the specified calls synchronously in a single batch and returns

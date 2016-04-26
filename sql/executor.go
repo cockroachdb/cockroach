@@ -82,6 +82,7 @@ type StatementResults struct {
 
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
+	// TODO(andrei): turn PErr into an error.
 	PErr *roachpb.Error
 	// The type of statement that the result is for.
 	Type parser.StatementType
@@ -417,6 +418,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		var results []Result
 		origState := txnState.State
 
+		// TODO(andrei): make this closure return error and use txn.ExecEx() below.
 		txnClosure := func(txn *client.Txn, opt *client.TxnExecOptions) *roachpb.Error {
 			if txnState.State == Open && txnState.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
@@ -438,7 +440,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			// return a result for COMMIT (with the COMMIT pgwire tag), the user can't
 			// send any more commands.
 			e.txnAbortCount.Inc(1)
-			txn.CleanupOnError(pErr)
+			txn.CleanupOnError(roachpb.WrapPErr(pErr))
 			txnState.resetStateAndTxn(NoTxn)
 		}
 

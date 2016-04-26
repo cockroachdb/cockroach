@@ -266,7 +266,8 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Truncate:
-		return p.Truncate(n)
+		truncateNode, err := p.Truncate(n)
+		return truncateNode, roachpb.NewError(err)
 	case *parser.UnionClause:
 		return p.UnionClause(n, autoCommit)
 	case *parser.Update:
@@ -361,18 +362,18 @@ func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 
 // getAliasedTableLease looks up the table descriptor for an alias table
 // expression.
-func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *roachpb.Error) {
+func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
-		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, fmt.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	table, ok := ate.Expr.(*parser.QualifiedName)
 	if !ok {
-		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, fmt.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	desc, pErr := p.getTableLease(table)
-	if pErr != nil {
-		return nil, pErr
+	desc, err := p.getTableLease(table)
+	if err != nil {
+		return nil, err
 	}
 	return &desc, nil
 }

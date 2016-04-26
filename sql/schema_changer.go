@@ -18,6 +18,7 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -56,15 +58,17 @@ func (sc *SchemaChanger) createSchemaChangeLease() TableDescriptor_SchemaChangeL
 	return TableDescriptor_SchemaChangeLease{NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(jitteredLeaseDuration()).UnixNano()}
 }
 
+var errExistingSchemaChangeLease = fmt.Errorf("someone already has the schema change lease")
+
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
-func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, error) {
 	var lease TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := sc.db.TxnEx(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
-		tableDesc, err := getTableDescFromID(txn, sc.tableID)
-		if err != nil {
-			return err
+		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
+		if pErr != nil {
+			return roachpb.WrapPErr(pErr)
 		}
 
 		// A second to deal with the time uncertainty across nodes.
@@ -76,13 +80,17 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 
 		if tableDesc.Lease != nil {
 			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
-				return roachpb.NewError(&roachpb.ExistingSchemaChangeLeaseError{})
+				return errExistingSchemaChangeLease
 			}
 			log.Infof("Overriding existing expired lease %v", tableDesc.Lease)
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
-		return txn.Put(MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc))
+		if pErr := txn.Put(
+			MakeDescMetadataKey(tableDesc.ID), wrapDescriptor(tableDesc)); pErr != nil {
+			return roachpb.WrapPErr(pErr)
+		}
+		return nil
 	})
 	return lease, err
 }
@@ -137,11 +145,11 @@ func (sc *SchemaChanger) ExtendLease(
 }
 
 // Execute the entire schema change in steps.
-func (sc SchemaChanger) exec() *roachpb.Error {
+func (sc SchemaChanger) exec() error {
 	// Acquire lease.
-	lease, pErr := sc.AcquireLease()
-	if pErr != nil {
-		return pErr
+	lease, err := sc.AcquireLease()
+	if err != nil {
+		return err
 	}
 	// Always try to release lease.
 	defer func(l *TableDescriptor_SchemaChangeLease) {
@@ -151,8 +159,8 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 	}(&lease)
 
 	// Increment the version and unset tableDescriptor.UpVersion.
-	if _, pErr := sc.MaybeIncrementVersion(); pErr != nil {
-		return pErr
+	if _, err := sc.MaybeIncrementVersion(); err != nil {
+		return err
 	}
 
 	// Wait for the schema change to propagate to all nodes after this function
@@ -174,32 +182,36 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Run backfill.
 	if pErr := sc.runBackfill(&lease); pErr != nil {
 		// Purge the mutations if the application of the mutations fail.
 		if errPurge := sc.purgeMutations(&lease); errPurge != nil {
-			return roachpb.NewErrorf("error purging mutation: %s, after error: %s", errPurge, pErr)
+			return util.Errorf("error purging mutation: %s, after error: %s", errPurge, pErr)
 		}
-		return pErr
+		return roachpb.WrapPErr(pErr)
 	}
 
 	// Mark the mutations as completed.
-	_, pErr = sc.done()
-	return pErr
+	if _, err := sc.done(); err != nil {
+		return err
+	}
+	return nil
 }
+
+var errDidntUpdateDescriptor = fmt.Errorf("didn't update descriptor")
 
 // MaybeIncrementVersion increments the version if needed.
 // If the version is to be incremented, it also assures that all nodes are on
 // the current (pre-increment) version of the descriptor.
 // Returns the (potentially updated) descriptor.
-func (sc *SchemaChanger) MaybeIncrementVersion() (*Descriptor, *roachpb.Error) {
+func (sc *SchemaChanger) MaybeIncrementVersion() (*Descriptor, error) {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		if !desc.UpVersion {
 			// Return error so that Publish() doesn't increment the version.
-			return &roachpb.DidntUpdateDescriptorError{}
+			return errDidntUpdateDescriptor
 		}
 		desc.UpVersion = false
 		// Publish() will increment the version.
@@ -211,7 +223,7 @@ func (sc *SchemaChanger) MaybeIncrementVersion() (*Descriptor, *roachpb.Error) {
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
 func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
-	if _, pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
+	if _, err := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		var modified bool
 		// Apply mutations belonging to the same version.
 		for i, mutation := range desc.Mutations {
@@ -250,11 +262,11 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 		}
 		if !modified {
 			// Return error so that Publish() doesn't increment the version.
-			return &roachpb.DidntUpdateDescriptorError{}
+			return errDidntUpdateDescriptor
 		}
 		return nil
-	}); pErr != nil {
-		return pErr.GoError()
+	}); err != nil {
+		return err
 	}
 	// wait for the state change to propagate to all leases.
 	return sc.waitToUpdateLeases()
@@ -278,7 +290,7 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 // It ensures that all nodes are on the current (pre-update) version of the
 // schema.
 // Returns the updated of the descriptor.
-func (sc *SchemaChanger) done() (*Descriptor, *roachpb.Error) {
+func (sc *SchemaChanger) done() (*Descriptor, error) {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		i := 0
 		for _, mutation := range desc.Mutations {
@@ -293,7 +305,7 @@ func (sc *SchemaChanger) done() (*Descriptor, *roachpb.Error) {
 		if i == 0 {
 			// The table descriptor is unchanged. Don't let Publish() increment
 			// the version.
-			return &roachpb.DidntUpdateDescriptorError{}
+			return errDidntUpdateDescriptor
 		}
 		// Trim the executed mutations from the descriptor.
 		desc.Mutations = desc.Mutations[i:]
@@ -306,7 +318,7 @@ func (sc *SchemaChanger) done() (*Descriptor, *roachpb.Error) {
 // and run through the state machine until the mutations are deleted.
 func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease) error {
 	// Reverse the flow of the state machine.
-	if _, pErr := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
+	if _, err := sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
@@ -324,8 +336,8 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 		}
 		// Publish() will increment the version.
 		return nil
-	}); pErr != nil {
-		return pErr.GoError()
+	}); err != nil {
+		return err
 	}
 
 	// Run through mutation state machine before backfill.
@@ -343,8 +355,10 @@ func (sc *SchemaChanger) purgeMutations(lease *TableDescriptor_SchemaChangeLease
 	}
 
 	// Mark the mutations as completed.
-	_, pErr := sc.done()
-	return pErr.GoError()
+	if _, err := sc.done(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // IsDone returns true if the work scheduled for the schema changer
@@ -538,9 +552,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 			case <-timer.C:
 				for _, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						pErr := sc.exec()
-						if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); !ok && pErr != nil {
-							log.Info(pErr)
+						err := sc.exec()
+						if err != nil && err != errExistingSchemaChangeLease {
+							log.Info(err)
 						}
 						// Advance the execAfter time so that this schema changer
 						// doesn't get called again for a while.

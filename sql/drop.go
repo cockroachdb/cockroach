@@ -206,6 +206,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 // dropTableImpl is used to drop a single table by name, which can result from
 // either a DROP TABLE or DROP DATABASE statement. This method returns the
 // dropped table descriptor, to be used for the purpose of logging the event.
+// TODO(andrei): make this function return error, not pErr.
 func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableDescriptor, *roachpb.Error) {
 	// TODO(XisiHuang): should do truncate and delete descriptor in
 	// the same txn
@@ -252,8 +253,8 @@ func (p *planner) dropTableImpl(names parser.QualifiedNames, index int) (*TableD
 		return nil, roachpb.NewError(err)
 	}
 
-	if _, pErr := p.Truncate(&parser.Truncate{Tables: names[index : index+1]}); pErr != nil {
-		return nil, pErr
+	if _, err := p.Truncate(&parser.Truncate{Tables: names[index : index+1]}); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	zoneKey := MakeZoneKey(tableDesc.ID)

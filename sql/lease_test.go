@@ -90,9 +90,9 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	pErr := t.server.DB().Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		lease, pErr = t.node(nodeID).Acquire(txn, descID, version)
-		return pErr
+		var err error
+		lease, err = t.node(nodeID).Acquire(txn, descID, version)
+		return roachpb.NewError(err)
 	})
 	return lease, pErr.GoError()
 }
@@ -115,12 +115,12 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 	}
 }
 
-func (t *leaseTest) publish(nodeID uint32, descID csql.ID) *roachpb.Error {
-	_, pErr := t.node(nodeID).Publish(descID,
+func (t *leaseTest) publish(nodeID uint32, descID csql.ID) error {
+	_, err := t.node(nodeID).Publish(descID,
 		func(*csql.TableDescriptor) error {
 			return nil
 		})
-	return pErr
+	return err
 }
 
 func (t *leaseTest) mustPublish(nodeID uint32, descID csql.ID) {
@@ -303,7 +303,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, pErr := n1.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n1.Publish(descID, func(*csql.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -314,8 +314,8 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 			<-n1update
 			return nil
 		})
-		if pErr != nil {
-			panic(pErr)
+		if err != nil {
+			panic(err)
 		}
 		wg.Done()
 	}(n1update, n2start)
@@ -324,11 +324,11 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, pErr := n2.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n2.Publish(descID, func(*csql.TableDescriptor) error {
 			return nil
 		})
-		if pErr != nil {
-			panic(pErr)
+		if err != nil {
+			panic(err)
 		}
 		close(n1update)
 		wg.Done()

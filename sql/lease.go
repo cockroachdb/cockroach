@@ -87,7 +87,9 @@ func jitteredLeaseDuration() time.Duration {
 }
 
 // Acquire a lease on the most recent version of a table descriptor.
-func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, *roachpb.Error) {
+func (s LeaseStore) Acquire(
+	txn *client.Txn, tableID ID, minVersion DescriptorVersion) (*LeaseState, error) {
+
 	lease := &LeaseState{}
 	lease.expiration = parser.DTimestamp{
 		Time: time.Unix(0, s.clock.Now().WallTime).Add(jitteredLeaseDuration()),
@@ -102,27 +104,27 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
 	values, pErr := p.queryRow(getDescriptor, int(tableID))
 	if pErr != nil {
-		return nil, pErr
+		return nil, roachpb.WrapPErr(pErr)
 	}
 	if values == nil {
-		return nil, roachpb.NewErrorf("table ID %d not found", tableID)
+		return nil, util.Errorf("table ID %d not found", tableID)
 	}
 	desc := &Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
-		return nil, roachpb.NewErrorf("ID %d is not a table", tableID)
+		return nil, util.Errorf("ID %d is not a table", tableID)
 	}
 	lease.TableDescriptor = *tableDesc
 
 	if err := lease.Validate(); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	if lease.Version < minVersion {
-		return nil, roachpb.NewErrorf("version %d of table %d does not exist yet", minVersion, tableID)
+		return nil, util.Errorf("version %d of table %d does not exist yet", minVersion, tableID)
 	}
 
 	// Insert the entry in the lease table in a separate transaction. This is
@@ -152,7 +154,7 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 		}
 		return nil
 	})
-	return lease, pErr
+	return lease, pErr.GoError()
 }
 
 // Release a previously acquired table descriptor lease.
@@ -213,6 +215,8 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 	return tableDesc.Version, nil
 }
 
+var errLeaseVersionChanged = fmt.Errorf("lease version changed")
+
 // Publish updates a table descriptor. It also maintains the invariant that
 // there are at most two versions of the descriptor out in the wild at any time
 // by first waiting for all nodes to be on the current (pre-update) version of
@@ -225,36 +229,36 @@ func (s LeaseStore) waitForOneVersion(tableID ID, retryOpts retry.Options) (Desc
 // Returns the updated version of the descriptor.
 func (s LeaseStore) Publish(
 	tableID ID, update func(*TableDescriptor) error,
-) (*Descriptor, *roachpb.Error) {
+) (*Descriptor, error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     2,
 	}
 
-	// Retry while getting LeaseVersionChangedError.
+	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
 		// of the table.
 		expectedVersion, err := s.waitForOneVersion(tableID, retryOpts)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		desc := &Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+		err = s.db.TxnEx(func(txn *client.Txn) error {
 			descKey := MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
 			// transactionally.
-			if err := txn.GetProto(descKey, desc); err != nil {
-				return err
+			if pErr := txn.GetProto(descKey, desc); pErr != nil {
+				return roachpb.WrapPErr(pErr)
 			}
 			tableDesc := desc.GetTable()
 			if tableDesc == nil {
-				return roachpb.NewErrorf("ID %d is not a table", tableID)
+				return util.Errorf("ID %d is not a table", tableID)
 			}
 			if expectedVersion != tableDesc.Version {
 				// The version changed out from under us. Someone else must be
@@ -262,12 +266,12 @@ func (s LeaseStore) Publish(
 				if log.V(3) {
 					log.Infof("publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
 				}
-				return roachpb.NewError(&roachpb.LeaseVersionChangedError{})
+				return errLeaseVersionChanged
 			}
 
 			// Run the update closure.
 			if err := update(tableDesc); err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
 			// Bump the version and modification time.
@@ -279,27 +283,27 @@ func (s LeaseStore) Publish(
 					tableDesc.ID, tableDesc.Version, now.GoTime())
 			}
 			if err := tableDesc.Validate(); err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
 			// Write the updated descriptor.
 			b := txn.NewBatch()
 			b.Put(descKey, desc)
 			txn.SetSystemConfigTrigger()
-			return txn.CommitInBatch(b)
+			if pErr := txn.CommitInBatch(b); pErr != nil {
+				return roachpb.WrapPErr(pErr)
+			}
+			return nil
 		})
 
-		switch pErr.GetDetail().(type) {
-		case *roachpb.LeaseVersionChangedError:
-			// will loop around to retry
-		case *roachpb.DidntUpdateDescriptorError:
-			return desc, nil
-		default:
-			if pErr == nil {
-				return desc, nil
-			}
-			return nil, pErr
+		if err == errLeaseVersionChanged {
+			// loop around to retry
+			continue
 		}
+		if err == nil || err == errDidntUpdateDescriptor {
+			return desc, nil
+		}
+		return nil, err
 	}
 
 	panic("not reached")
@@ -434,7 +438,7 @@ type tableState struct {
 	acquiring chan struct{}
 }
 
-func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store LeaseStore) (*LeaseState, *roachpb.Error) {
+func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store LeaseStore) (*LeaseState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -465,7 +469,7 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 		} else if version != 0 {
 			n := t.active.findNewest(0)
 			if n != nil && version < n.Version {
-				return nil, roachpb.NewErrorf("table %d unable to acquire lease on old version: %d < %d",
+				return nil, util.Errorf("table %d unable to acquire lease on old version: %d < %d",
 					t.id, version, n.Version)
 			}
 		}
@@ -477,11 +481,11 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 			// There is no active lease acquisition so we'll go ahead and perform
 			// one.
 			t.acquiring = make(chan struct{})
-			s, pErr := t.acquireNodeLease(txn, version, store)
+			s, err := t.acquireNodeLease(txn, version, store)
 			close(t.acquiring)
 			t.acquiring = nil
-			if pErr != nil {
-				return nil, pErr
+			if err != nil {
+				return nil, err
 			}
 			t.active.insert(s)
 			if err := t.releaseNonLatest(store); err != nil {
@@ -520,8 +524,7 @@ func (t *tableState) acquireWait() {
 }
 
 func (t *tableState) acquireNodeLease(
-	txn *client.Txn, minVersion DescriptorVersion, store LeaseStore,
-) (*LeaseState, *roachpb.Error) {
+	txn *client.Txn, minVersion DescriptorVersion, store LeaseStore) (*LeaseState, error) {
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()
@@ -590,7 +593,8 @@ func NewLeaseManager(nodeID uint32, db client.DB, clock *hlc.Clock) *LeaseManage
 // non-zero the lease is grabbed for the specified version. Otherwise it is
 // grabbed for the most recent version of the descriptor that the lease manager
 // knows about.
-func (m *LeaseManager) Acquire(txn *client.Txn, tableID ID, version DescriptorVersion) (*LeaseState, *roachpb.Error) {
+func (m *LeaseManager) Acquire(
+	txn *client.Txn, tableID ID, version DescriptorVersion) (*LeaseState, error) {
 	t := m.findTableState(tableID, true)
 	return t.acquire(txn, version, m.LeaseStore)
 }
@@ -680,15 +684,15 @@ func (m *LeaseManager) refreshLease(db *client.DB, id ID, minVersion DescriptorV
 	// Acquire and release a lease on the table at a version >= minVersion.
 	var lease *LeaseState
 	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
 		// Acquire() can only acquire a lease at a version if it has
 		// already been acquired at that version, or that version
 		// is the latest version. If the latest version is > minVersion
 		// then the node acquires a lease at the latest version but
 		// Acquire() itself returns an error. This is okay, because
 		// we want to update the node lease.
-		lease, pErr = m.Acquire(txn, id, minVersion)
-		return pErr
+		var err error
+		lease, err = m.Acquire(txn, id, minVersion)
+		return roachpb.NewError(err)
 	}); pErr != nil {
 		return pErr.GoError()
 	}
