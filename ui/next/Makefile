@@ -54,4 +54,4 @@ jspm.installed: npm.installed
 test: PATH := ../node_modules/.bin:$(PATH)
 test:
 # Execute in /app directory, so that ts-node can pick up tsconfig.json.
-	cd app && mocha **/*.spec.ts --require ts-node/register
+	cd app && mocha '**/*.spec.ts*' --require ts-node/register
