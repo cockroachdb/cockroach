@@ -201,6 +201,10 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 			typedExprs[expr.i] = typ
 		}
 		for _, expr := range valExprs {
+			// What should we return as an error here?
+			// _, err := expr.e.(ValArg).TypeCheck(args, nil)
+			// return err
+
 			// TODO(nvanbenschoten) MORTY
 			typedExprs[expr.i] = &DValArg{name: expr.e.(ValArg).name}
 		}
@@ -285,8 +289,9 @@ func typeCheckOverloadedExprs(args MapArgs, desired Datum, overloads []overload,
 			}
 
 			for _, expr := range valExprs {
-				typ := p.getAt(expr.i)
-				if _, err := expr.e.TypeCheck(args, typ); err != nil {
+				des := p.getAt(expr.i)
+				typ, err := expr.e.TypeCheck(args, des)
+				if err != nil {
 					return true, nil, err
 				}
 				typedExprs[expr.i] = typ
