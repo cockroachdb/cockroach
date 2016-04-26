@@ -551,6 +551,7 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(vivekmenezes): see #6293")
 	server, sqlDB, kvDB := setup(t)
 	defer cleanup(server, sqlDB)
 
@@ -564,7 +565,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Bulk insert.
 	// TODO(vivek): increase maxValue once #3274 is fixed.
-	maxValue := 100
+	maxValue := 400
 	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
 	for i := 1; i <= maxValue; i++ {
 		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
