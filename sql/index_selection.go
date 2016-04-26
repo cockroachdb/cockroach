@@ -796,11 +796,11 @@ func isMixedTypeComparison(c *parser.ComparisonExpr) (bool, error) {
 }
 
 func sameTypeExprs(left, right parser.Expr) (bool, error) {
-	dummyLeft, err := left.TypeCheck(nil)
+	dummyLeft, err := left.TypeCheck(nil, nil)
 	if err != nil || dummyLeft == parser.DNull {
 		return false, err
 	}
-	dummyRight, err := right.TypeCheck(nil)
+	dummyRight, err := right.TypeCheck(nil, nil)
 	if err != nil || dummyRight == parser.DNull {
 		return false, err
 	}

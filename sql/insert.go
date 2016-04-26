@@ -34,6 +34,8 @@ type insertNode struct {
 	insertRows parser.SelectStatement
 	checkExprs []parser.Expr
 
+	desiredTypes []parser.Datum // This will go away when we only type check once.
+
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
@@ -48,8 +50,10 @@ type insertNode struct {
 // Privileges: INSERT on table
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
-func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.Error) {
-	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.INSERT)
+func (p *planner) Insert(
+	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
+) (planNode, *roachpb.Error) {
+	en, pErr := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.INSERT)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -144,7 +148,11 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 	}
 
 	// Analyze the expressions for column information and typing.
-	rows, pErr := p.makePlan(insertRows, false)
+	desiredTypesFromSelect := make([]parser.Datum, len(cols))
+	for i, col := range cols {
+		desiredTypesFromSelect[i] = getTypeForColumn(col)
+	}
+	rows, pErr := p.makePlan(insertRows, desiredTypesFromSelect, false)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -160,7 +168,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 				if _, ok := val.(parser.DefaultVal); ok {
 					continue
 				}
-				typ, err := val.TypeCheck(p.evalCtx.Args)
+				_, typ, err := parser.TypeCheck(val, p.evalCtx.Args, desiredTypesFromSelect[eIdx])
 				if err != nil {
 					return nil, roachpb.NewError(err)
 				}
@@ -181,6 +189,7 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		checkExprs:         checkExprs,
 		qvals:              qvals,
 		insertRows:         insertRows,
+		desiredTypes:       desiredTypesFromSelect,
 	}, nil
 }
 
@@ -192,7 +201,7 @@ func (n *insertNode) Start() *roachpb.Error {
 
 	// Transform the values into a rows object. This expands SELECT statements or
 	// generates rows from the values contained within the query.
-	rows, pErr := n.p.makePlan(n.insertRows, false)
+	rows, pErr := n.p.makePlan(n.insertRows, n.desiredTypes, false)
 	if pErr != nil {
 		return pErr
 	}

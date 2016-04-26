@@ -195,7 +195,7 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 
 	if d.DefaultExpr != nil {
 		// Verify the default expression type is compatible with the column type.
-		defaultType, err := parser.PerformTypeChecking(d.DefaultExpr, nil)
+		_, defaultType, err := parser.TypeCheck(d.DefaultExpr, nil, colDatumType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -233,7 +233,7 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		if err != nil {
 			return nil, nil, fmt.Errorf("argument of CHECK cannot refer to other columns: %s", err)
 		}
-		if typ, err := expr.TypeCheck(nil); err != nil {
+		if typ, err := expr.TypeCheck(nil, parser.DummyBool); err != nil {
 			return nil, nil, err
 		} else if !typ.TypeEqual(parser.DummyBool) {
 			return nil, nil, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
