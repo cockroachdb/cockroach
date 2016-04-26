@@ -31,13 +31,13 @@ query ITT colnames
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
 Level  Type    Description
-0      values  3 columns, 2 rows
+0      values  3 columns
 
 query ITT colnames
 EXPLAIN VALUES (1)
 ----
 Level  Type    Description
-0      values  1 column, 1 row
+0      values  1 column
 
 query ITT colnames
 EXPLAIN SELECT * FROM t LIMIT 1 OFFSET 1

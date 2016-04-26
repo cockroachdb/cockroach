@@ -27,17 +27,29 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
+type valuesNode struct {
+	n        *parser.ValuesClause
+	p        *planner
+	columns  []ResultColumn
+	ordering columnOrdering
+	rows     []parser.DTuple
+
+	nextRow       int           // The index of the next row.
+	invertSorting bool          // Inverts the sorting predicate.
+	tmpValues     parser.DTuple // Used to store temporary values.
+}
+
 // ValuesClause constructs a valuesNode from a VALUES expression.
 func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error) {
 	v := &valuesNode{
-		rows: make([]parser.DTuple, 0, len(n.Tuples)),
+		p: p,
+		n: n,
 	}
 	if len(n.Tuples) == 0 {
 		return v, nil
 	}
 
 	numCols := len(n.Tuples[0].Exprs)
-	rowBuf := make(parser.DTuple, len(n.Tuples)*numCols)
 	v.columns = make([]ResultColumn, 0, numCols)
 
 	for num, tuple := range n.Tuples {
@@ -45,21 +57,18 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
-		// Chop off prefix of rowBuf and limit its capacity.
-		row := rowBuf[:numCols:numCols]
-		rowBuf = rowBuf[numCols:]
-
 		for i := range tuple.Exprs {
+			// TODO(knz): We need to expand subqueries two times, once here
+			// and once in Start() below, until the logic for select is split
+			// between makePlan and Start(). This is because a first call is
+			// needed for typechecking, and a separate call is needed to
+			// select indexes.
 			expr, pErr := p.expandSubqueries(tuple.Exprs[i], 1)
 			if pErr != nil {
 				return nil, pErr
 			}
 			var err error
 			typ, err := expr.TypeCheck(p.evalCtx.Args)
-			if err != nil {
-				return nil, roachpb.NewError(err)
-			}
-			expr, err = p.parser.NormalizeExpr(p.evalCtx, expr)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
@@ -70,25 +79,50 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 			} else if typ != parser.DNull && !typ.TypeEqual(v.columns[i].Typ) {
 				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
-			row[i], err = expr.Eval(p.evalCtx)
-			if err != nil {
-				return nil, roachpb.NewError(err)
-			}
 		}
-		v.rows = append(v.rows, row)
 	}
 
 	return v, nil
 }
 
-type valuesNode struct {
-	columns  []ResultColumn
-	ordering columnOrdering
-	rows     []parser.DTuple
+func (n *valuesNode) Start() *roachpb.Error {
+	if n.n == nil {
+		return nil
+	}
 
-	nextRow       int           // The index of the next row.
-	invertSorting bool          // Inverts the sorting predicate.
-	tmpValues     parser.DTuple // Used to store temporary values.
+	n.rows = make([]parser.DTuple, 0, len(n.n.Tuples))
+
+	// This node is coming from a SQL query (as opposed to sortNode and
+	// others that create a valuesNode internally for storing results
+	// from other planNodes), so it needs to evaluate expressions.
+
+	numCols := len(n.columns)
+	rowBuf := make(parser.DTuple, len(n.n.Tuples)*numCols)
+
+	for _, tuple := range n.n.Tuples {
+		// Chop off prefix of rowBuf and limit its capacity.
+		row := rowBuf[:numCols:numCols]
+		rowBuf = rowBuf[numCols:]
+
+		for i := range tuple.Exprs {
+			// TODO(knz): see comment above about expandSubqueries in ValuesClause().
+			expr, pErr := n.p.expandSubqueries(tuple.Exprs[i], 1)
+			if pErr != nil {
+				return pErr
+			}
+			var err error
+			expr, err = n.p.parser.NormalizeExpr(n.p.evalCtx, expr)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+			row[i], err = expr.Eval(n.p.evalCtx)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+		}
+		n.rows = append(n.rows, row)
+	}
+	return nil
 }
 
 func (n *valuesNode) Columns() []ResultColumn {
@@ -112,10 +146,6 @@ func (n *valuesNode) DebugValues() debugValues {
 		value:  n.rows[n.nextRow-1].String(),
 		output: debugValueRow,
 	}
-}
-
-func (n *valuesNode) Start() *roachpb.Error {
-	return nil
 }
 
 func (n *valuesNode) Next() bool {
@@ -228,9 +258,8 @@ func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []p
 		}
 		return "s"
 	}
-	description = fmt.Sprintf("%d column%s, %d row%s",
-		len(n.columns), pluralize(len(n.columns)),
-		len(n.rows), pluralize(len(n.rows)))
+	description = fmt.Sprintf("%d column%s",
+		len(n.columns), pluralize(len(n.columns)))
 	return name, description, nil
 }
 

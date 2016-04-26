@@ -456,7 +456,9 @@ type planNode interface {
 	SetLimitHint(numRows int64, soft bool)
 
 	// MarkDebug puts the node in a special debugging mode, which allows
-	// DebugValues to be used.
+	// DebugValues to be used. This should be called after Start() and
+	// before the first call to Next() since it may need to recurse into
+	// sub-nodes created by Start().
 	MarkDebug(mode explainMode)
 }
 

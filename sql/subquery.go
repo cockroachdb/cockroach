@@ -69,6 +69,10 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		return false, expr
 	}
 
+	if v.pErr = plan.Start(); v.pErr != nil {
+		return false, expr
+	}
+
 	if exists != nil {
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
