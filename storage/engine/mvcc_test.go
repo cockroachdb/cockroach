@@ -3116,7 +3116,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Every 10th step, verify the stats via manual engine scan.
 		if i%10 == 0 {
 			// Compute the stats manually.
-			iter := engine.NewIterator(nil)
+			iter := engine.NewIterator(false)
 			expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
 				mvccKey(roachpb.KeyMax), ts.WallTime)
 			iter.Close()
@@ -3227,7 +3227,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	// Verify aggregated stats match computed stats after GC.
-	iter := engine.NewIterator(nil)
+	iter := engine.NewIterator(false)
 	expMS, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
 		mvccKey(roachpb.KeyMax), ts3.WallTime)
 	iter.Close()
@@ -3249,7 +3249,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := engine.NewIterator(nil)
+	iter := engine.NewIterator(false)
 	_, err := iter.ComputeStats(mvccKey(roachpb.KeyMin),
 		mvccKey(roachpb.KeyMax), 100)
 	iter.Close()

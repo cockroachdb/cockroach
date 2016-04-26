@@ -134,7 +134,7 @@ func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 // iterating over all key ranges for the given range that should
 // be accounted for in its stats.
 func ComputeStatsForRange(d *roachpb.RangeDescriptor, e engine.Engine, nowNanos int64) (engine.MVCCStats, error) {
-	iter := e.NewIterator(nil)
+	iter := e.NewIterator(false)
 	defer iter.Close()
 
 	ms := engine.MVCCStats{}

@@ -83,7 +83,7 @@ func newReplicaDataIterator(d *roachpb.RangeDescriptor, e engine.Engine, replica
 	}
 	ri := &replicaDataIterator{
 		ranges:   rangeFunc(d),
-		Iterator: e.NewIterator(nil),
+		Iterator: e.NewIterator(false),
 	}
 	ri.Seek(ri.ranges[ri.curIndex].start)
 	return ri

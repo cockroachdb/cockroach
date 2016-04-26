@@ -54,7 +54,7 @@ struct DBEngine {
   virtual DBStatus Delete(DBKey key) = 0;
   virtual DBStatus WriteBatch() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
-  virtual DBIterator* NewIter(DBSlice prefix) = 0;
+  virtual DBIterator* NewIter(bool prefix) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
 };
 
@@ -89,7 +89,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(DBSlice prefix);
+  virtual DBIterator* NewIter(bool prefix);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
@@ -107,7 +107,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(DBSlice prefix);
+  virtual DBIterator* NewIter(bool prefix);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
@@ -129,23 +129,12 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus Delete(DBKey key);
   virtual DBStatus WriteBatch();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(DBSlice prefix);
+  virtual DBIterator* NewIter(bool prefix);
   virtual DBStatus GetStats(DBStatsResult* stats);
 };
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
-  std::string upper_bound_str;
-  rocksdb::Slice upper_bound_slice;
-
-  DBIterator(DBSlice prefix);
-
-  rocksdb::Slice* upper_bound() {
-    if (upper_bound_slice.size() > 0) {
-      return &upper_bound_slice;
-    }
-    return NULL;
-  }
 };
 
 }  // extern "C"
@@ -253,6 +242,23 @@ bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int3
     }
   }
   return timestamp.empty();
+}
+
+rocksdb::Slice KeyPrefix(const rocksdb::Slice& src) {
+  rocksdb::Slice key;
+  rocksdb::Slice ts;
+  if (!SplitKey(src, &key, &ts)) {
+    return src;
+  }
+  // RocksDB requires that keys generated via Transform be comparable with
+  // normal encoded MVCC keys. Encoded MVCC keys have a suffix indicating the
+  // number of bytes of timestamp data. MVCC keys without a timestamp have a
+  // suffix of 0. We're careful in EncodeKey to make sure that the user-key
+  // always has a trailing 0. If there is no timestamp this falls out
+  // naturally. If there is a timestamp we prepend a 0 to the encoded
+  // timestamp data.
+  assert(src.size() > key.size() && src[key.size()] == 0);
+  return rocksdb::Slice(key.data(), key.size() + 1);
 }
 
 DBSlice ToDBSlice(const rocksdb::Slice& s) {
@@ -416,20 +422,7 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   // added to the per table bloom filters and will be used to skip tables
   // which do not contain the <user-key>.
   virtual rocksdb::Slice Transform(const rocksdb::Slice& src) const {
-    rocksdb::Slice key;
-    rocksdb::Slice ts;
-    if (!SplitKey(src, &key, &ts)) {
-      return src;
-    }
-    // RocksDB requires that keys generated via Transform be comparable with
-    // normal encoded MVCC keys. Encoded MVCC keys have a suffix indicating the
-    // number of bytes of timestamp data. MVCC keys without a timestamp have a
-    // suffix of 0. We're careful in EncodeKey to make sure that the user-key
-    // always has a trailing 0. If there is no timestamp this falls out
-    // naturally. If there is a timestamp we prepend a 0 to the encoded
-    // timestamp data.
-    assert(src.size() > key.size() && src[key.size()] == 0);
-    return rocksdb::Slice(key.data(), key.size() + 1);
+    return KeyPrefix(src);
   }
 
   virtual bool InDomain(const rocksdb::Slice& src) const {
@@ -985,14 +978,14 @@ class BaseDeltaIterator : public rocksdb::Iterator {
  public:
   BaseDeltaIterator(rocksdb::Iterator* base_iterator,
                     rocksdb::WBWIIterator* delta_iterator,
-                    const rocksdb::Slice* upper_bound)
+                    bool prefix)
       : current_at_base_(true),
         equal_keys_(false),
         done_(false),
         status_(rocksdb::Status::OK()),
         base_iterator_(base_iterator),
         delta_iterator_(delta_iterator),
-        upper_bound_(upper_bound) {
+        prefix_same_as_start_(prefix) {
     merged_.data = NULL;
   }
 
@@ -1008,21 +1001,38 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     done_ = false;
     base_iterator_->SeekToFirst();
     delta_iterator_->SeekToFirst();
-    UpdateCurrent();
+    UpdateCurrent(false /* no prefix check */);
+    MaybeSavePrefixStart();
   }
 
   void SeekToLast() override {
     done_ = false;
+    prefix_start_key_.clear();
     base_iterator_->SeekToLast();
     delta_iterator_->SeekToLast();
-    UpdateCurrent();
+    UpdateCurrent(false /* no prefix check */);
+    MaybeSavePrefixStart();
   }
 
   void Seek(const rocksdb::Slice& k) override {
     done_ = false;
+    if (prefix_same_as_start_) {
+      prefix_start_key_ = KeyPrefix(k);
+    }
     base_iterator_->Seek(k);
     delta_iterator_->Seek(k);
-    UpdateCurrent();
+    UpdateCurrent(prefix_same_as_start_);
+
+    // Similar to MaybeSavePrefixStart, but we can avoid computing the
+    // prefix again.
+    if (prefix_same_as_start_) {
+      if (Valid()) {
+        prefix_start_buf_ = prefix_start_key_.ToString();
+        prefix_start_key_ = prefix_start_buf_;
+      } else {
+        prefix_start_key_.clear();
+      }
+    }
   }
 
   void Next() override {
@@ -1066,6 +1076,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     return kComparator.Compare(delta_iterator_->Entry().key,
                                base_iterator_->key());
   }
+
   void AssertInvariants() {
 #ifndef NDEBUG
     if (!Valid()) {
@@ -1106,13 +1117,14 @@ class BaseDeltaIterator : public rocksdb::Iterator {
         AdvanceDelta();
       }
     }
-    UpdateCurrent();
+    UpdateCurrent(prefix_same_as_start_);
   }
 
   void AdvanceDelta() {
     delta_iterator_->Next();
     ClearMerged();
   }
+
   bool ProcessDelta() {
     IteratorGetter base(equal_keys_ ? base_iterator_.get() : NULL);
     // The contents of WBWIIterator.Entry() are only valid until the
@@ -1143,16 +1155,22 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     base_iterator_->Next();
   }
 
-  // CheckUpperBound checks the specified key against the iteration
-  // upper-bound (if present), returning true if the key exceeds the
-  // upper-bound and false otherwise.
-  bool CheckUpperBound(const rocksdb::Slice key) {
-    if (upper_bound_ != NULL &&
-        kComparator.Compare(key, *upper_bound_) >= 0) {
-      done_ = true;
-      return true;
+  void MaybeSavePrefixStart() {
+    if (prefix_same_as_start_) {
+      if (Valid()) {
+        prefix_start_buf_ = KeyPrefix(key()).ToString();
+        prefix_start_key_ = prefix_start_buf_;
+      } else {
+        prefix_start_key_.clear();
+      }
     }
-    return false;
+  }
+
+  // CheckPrefix checks the specified key against the prefix being
+  // iterated over (if restricted), returning true if the key exceeds
+  // the iteration boundaries.
+  bool CheckPrefix(const rocksdb::Slice key) {
+    return KeyPrefix(key) != prefix_start_key_;
   }
 
   bool BaseValid() const {
@@ -1163,7 +1181,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     return delta_iterator_->Valid();
   }
 
-  void UpdateCurrent() {
+  void UpdateCurrent(bool check_prefix) {
     ClearMerged();
 
     for (;;) {
@@ -1174,7 +1192,7 @@ class BaseDeltaIterator : public rocksdb::Iterator {
           // Both base and delta have finished.
           return;
         }
-        if (CheckUpperBound(delta_iterator_->Entry().key)) {
+        if (check_prefix && CheckPrefix(delta_iterator_->Entry().key)) {
           return;
         }
         if (!ProcessDelta()) {
@@ -1194,14 +1212,14 @@ class BaseDeltaIterator : public rocksdb::Iterator {
       int compare = Compare();
       if (compare > 0) {
         // Delta is greater than base.
-        if (CheckUpperBound(base_iterator_->key())) {
+        if (check_prefix && CheckPrefix(base_iterator_->key())) {
           return;
         }
         current_at_base_ = true;
         return;
       }
       // Delta is less than or equal to base.
-      if (CheckUpperBound(delta_iterator_->Entry().key)) {
+      if (check_prefix && CheckPrefix(delta_iterator_->Entry().key)) {
         return;
       }
       if (compare == 0) {
@@ -1240,7 +1258,9 @@ class BaseDeltaIterator : public rocksdb::Iterator {
   std::unique_ptr<rocksdb::Iterator> base_iterator_;
   std::unique_ptr<rocksdb::WBWIIterator> delta_iterator_;
   std::string delta_key_;
-  const rocksdb::Slice* upper_bound_;
+  const bool prefix_same_as_start_;
+  std::string prefix_start_buf_;
+  rocksdb::Slice prefix_start_key_;
 };
 
 }  // namespace
@@ -1459,31 +1479,31 @@ DBEngine* DBNewBatch(DBEngine *db) {
   return new DBBatch(db);
 }
 
-DBIterator* DBImpl::NewIter(DBSlice prefix) {
-  DBIterator* iter = new DBIterator(prefix);
+DBIterator* DBImpl::NewIter(bool prefix) {
+  DBIterator* iter = new DBIterator;
   rocksdb::ReadOptions opts = read_opts;
-  opts.iterate_upper_bound = iter->upper_bound();
-  opts.total_order_seek = iter->upper_bound() == NULL;
+  opts.prefix_same_as_start = prefix;
+  opts.total_order_seek = !prefix;
   iter->rep.reset(rep->NewIterator(opts));
   return iter;
 }
 
-DBIterator* DBBatch::NewIter(DBSlice prefix) {
-  DBIterator* iter = new DBIterator(prefix);
+DBIterator* DBBatch::NewIter(bool prefix) {
+  DBIterator* iter = new DBIterator;
   rocksdb::ReadOptions opts = read_opts;
-  opts.iterate_upper_bound = iter->upper_bound();
-  opts.total_order_seek = iter->upper_bound() == NULL;
+  opts.prefix_same_as_start = prefix;
+  opts.total_order_seek = !prefix;
   rocksdb::Iterator* base = rep->NewIterator(opts);
   rocksdb::WBWIIterator* delta = batch.NewIterator();
-  iter->rep.reset(new BaseDeltaIterator(base, delta, opts.iterate_upper_bound));
+  iter->rep.reset(new BaseDeltaIterator(base, delta, prefix));
   return iter;
 }
 
-DBIterator* DBSnapshot::NewIter(DBSlice prefix) {
-  DBIterator* iter = new DBIterator(prefix);
+DBIterator* DBSnapshot::NewIter(bool prefix) {
+  DBIterator* iter = new DBIterator;
   rocksdb::ReadOptions opts = read_opts;
-  opts.iterate_upper_bound = iter->upper_bound();
-  opts.total_order_seek = iter->upper_bound() == NULL;
+  opts.prefix_same_as_start = prefix;
+  opts.total_order_seek = !prefix;
   iter->rep.reset(rep->NewIterator(opts));
   return iter;
 }
@@ -1525,12 +1545,7 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) {
   return FmtStatus("unsupported");
 }
 
-DBIterator::DBIterator(DBSlice prefix)
-    : upper_bound_str(EncodePrefixNextKey(prefix)),
-      upper_bound_slice(upper_bound_str) {
-}
-
-DBIterator* DBNewIter(DBEngine* db, DBSlice prefix) {
+DBIterator* DBNewIter(DBEngine* db, bool prefix) {
   return db->NewIter(prefix);
 }
 
