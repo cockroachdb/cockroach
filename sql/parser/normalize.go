@@ -578,6 +578,10 @@ func (*constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		}
 	}()
 	switch t := expr.(type) {
+	case *ParenExpr:
+		if cv, ok := t.Expr.(*NumVal); ok {
+			return cv
+		}
 	case *UnaryExpr:
 		if cv, ok := t.Expr.(*NumVal); ok {
 			if token, ok := unaryOpToToken[t.Operator]; ok {
