@@ -35,6 +35,11 @@ prepare_artifacts() {
       ${builder} go2xunit --fail-on-race < "${outdir}/testrace.log" \
         > "${CIRCLE_TEST_REPORTS}/race/testrace.xml"
     fi
+    if [ -f "${outdir}/check.log" ]; then
+      mkdir -p "${CIRCLE_TEST_REPORTS}/check"
+      ${builder} go2xunit --fail-on-race < "${outdir}/check.log" \
+        > "${CIRCLE_TEST_REPORTS}/check/check.xml"
+    fi
     if [ -f "${outdir}/acceptance.log" ]; then
       mkdir -p "${CIRCLE_TEST_REPORTS}/acceptance"
 
