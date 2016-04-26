@@ -22,10 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
 // TODO(mrtracy): All of this logic should probably be moved into the SQL
@@ -48,10 +45,10 @@ const (
 	RangeEventLogRemove RangeEventLogType = "remove"
 )
 
-// rangeEventTableSchema defines the schema of the event log table. It is
+// RangeEventTableSchema defines the schema of the event log table. It is
 // currently envisioned as a wide table; many different event types can be
 // recorded to the table.
-const rangeEventTableSchema = `
+const RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
   timestamp     TIMESTAMP  NOT NULL,
   rangeID       INT        NOT NULL,
@@ -116,12 +113,6 @@ VALUES(
 		return roachpb.NewErrorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
-}
-
-// AddEventLogToMetadataSchema adds the range event log table to the supplied
-// MetadataSchema.
-func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
-	schema.AddTable(keys.RangeEventTableID, rangeEventTableSchema, privilege.List{privilege.ALL})
 }
 
 // logSplit logs a range split event into the event table. The affected range is
