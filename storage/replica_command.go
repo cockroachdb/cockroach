@@ -351,7 +351,7 @@ func (r *Replica) BeginTransaction(
 			// command's txn and rewrite the record.
 			reply.Txn.Update(&txn)
 		} else {
-			return reply, roachpb.NewTransactionStatusError("non-aborted transaction exists already")
+			return reply, roachpb.NewTransactionStatusError(fmt.Sprintf("BeginTransaction can't overwrite %s", txn))
 		}
 	}
 
