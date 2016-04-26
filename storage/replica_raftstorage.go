@@ -461,12 +461,15 @@ func snapshot(
 	// the sequence cache.
 	iter := newReplicaDataIterator(&desc, snap, true /* !replicatedOnly */)
 	defer iter.Close()
+	var alloc engine.ChunkAllocator
 	for ; iter.Valid(); iter.Next() {
-		key := iter.Key()
+		var key engine.MVCCKey
+		var value []byte
+		alloc, key, value = alloc.IterKeyValue(iter.Iterator)
 		snapData.KV = append(snapData.KV,
 			roachpb.RaftSnapshotData_KeyValue{
 				Key:       key.Key,
-				Value:     iter.Value(),
+				Value:     value,
 				Timestamp: key.Timestamp,
 			})
 	}

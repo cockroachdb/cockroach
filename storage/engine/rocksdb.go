@@ -720,6 +720,10 @@ func (r *rocksDBIterator) Error() error {
 	return statusToError(C.DBIterError(r.iter))
 }
 
+func (r *rocksDBIterator) Less(key MVCCKey) bool {
+	return r.unsafeKey().Less(key)
+}
+
 func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.valid = bool(state.valid)
 	r.key = state.key

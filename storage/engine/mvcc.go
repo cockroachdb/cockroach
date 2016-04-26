@@ -1571,7 +1571,7 @@ func MVCCIterate(ctx context.Context,
 	// Gathers up all the intents from WriteIntentErrors. We only get those if
 	// the scan is consistent.
 	var wiErr error
-	var alloc chunkAllocator
+	var alloc ChunkAllocator
 
 	for {
 		metaKey, err := getMeta(iter, encEndKey, &buf.meta)
