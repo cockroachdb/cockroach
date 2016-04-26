@@ -45,7 +45,7 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 
 	for _, datum := range data {
 		if datum.src != nil {
-			valType, err := datum.src.TypeCheck(p.evalCtx.Args)
+			valType, err := datum.src.TypeCheck(p.evalCtx.Args, parser.DummyInt)
 			if err != nil {
 				return 0, 0, err
 			}

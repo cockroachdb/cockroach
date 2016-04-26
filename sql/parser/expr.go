@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"go/constant"
-	"reflect"
 )
 
 // Expr represents an expression.
@@ -32,8 +31,9 @@ type Expr interface {
 	Walk(Visitor) Expr
 	// TypeCheck returns the zero value of the expression's type, or an
 	// error if the expression doesn't type-check. args maps bind var argument
-	// names to types.
-	TypeCheck(args MapArgs) (Datum, error)
+	// names to types. desired signifies the desired type that the expressions
+	// parent wants as a hint.
+	TypeCheck(args MapArgs, desired Datum) (Datum, error)
 	// Eval evaluates an SQL expression. Expression evaluation is a mostly
 	// straightforward walk over the parse tree. The only significant complexity is
 	// the handling of types and implicit conversions. See binOps and cmpOps for
@@ -281,20 +281,42 @@ type ConstVal struct {
 	ResolvedType Datum
 }
 
-func (node ConstVal) String() string {
+func (node *ConstVal) String() string {
 	if node.OrigString != "" {
 		return node.OrigString
 	}
 	return node.Value.String()
 }
 
-func (node ConstVal) asInt() (int, error) {
-	if node.Value.Kind() != constant.Int {
+// canBeInt64 checks if it's possible for the value to become an int64:
+//  1   = yes
+//  1.0 = yes
+//  1.1 = no
+//  123...overflow...456 = no
+func (node *ConstVal) canBeInt64() bool {
+	_, err := node.asInt()
+	return err == nil
+}
+
+// shouldBeInt64 checks if the value naturally is an int64:
+//  1   = yes
+//  1.0 = no
+//  1.1 = no
+//  123...overflow...456 = no
+func (node *ConstVal) shouldBeInt64() bool {
+	return node.Kind() == constant.Int && node.canBeInt64()
+}
+
+// asInt returns the value as an integer if possible, or returns an
+// error if not possible.
+func (node *ConstVal) asInt() (int, error) {
+	intVal := constant.ToInt(node.Value)
+	if intVal.Kind() == constant.Unknown {
 		return 0, fmt.Errorf("cannot represent %v as an int", node.Value)
 	}
-	i, exact := constant.Int64Val(node.Value)
+	i, exact := constant.Int64Val(intVal)
 	if !exact {
-		return 0, fmt.Errorf("representing %v as an int would overflow", node.Value)
+		return 0, fmt.Errorf("representing %v as an int would overflow", intVal)
 	}
 	return int(i), nil
 }
@@ -645,12 +667,12 @@ func (node *Subquery) String() string {
 	return node.Select.String()
 }
 
-// BinaryOp represents a binary operator.
-type BinaryOp int
+// BinaryOperator represents a binary operator.
+type BinaryOperator int
 
 // BinaryExpr.Operator
 const (
-	Bitand BinaryOp = iota
+	Bitand BinaryOperator = iota
 	Bitor
 	Bitxor
 	Plus
@@ -677,8 +699,8 @@ var binaryOpName = [...]string{
 	RShift: ">>",
 }
 
-func (i BinaryOp) String() string {
-	if i < 0 || i > BinaryOp(len(binaryOpName)-1) {
+func (i BinaryOperator) String() string {
+	if i < 0 || i > BinaryOperator(len(binaryOpName)-1) {
 		return fmt.Sprintf("BinaryOp(%d)", i)
 	}
 	return binaryOpName[i]
@@ -686,11 +708,9 @@ func (i BinaryOp) String() string {
 
 // BinaryExpr represents a binary value expression.
 type BinaryExpr struct {
-	Operator    BinaryOp
+	Operator    BinaryOperator
 	Left, Right Expr
 	fn          BinOp
-	ltype       reflect.Type
-	rtype       reflect.Type
 }
 
 func (*BinaryExpr) operatorExpr() {}
@@ -728,7 +748,6 @@ type UnaryExpr struct {
 	Operator UnaryOperator
 	Expr     Expr
 	fn       UnaryOp
-	dtype    reflect.Type
 }
 
 func (*UnaryExpr) operatorExpr() {}
@@ -744,8 +763,7 @@ type FuncExpr struct {
 	Exprs Exprs
 
 	// These fields are not part of the Expr AST.
-	fn      Builtin
-	fnFound bool
+	fn Builtin
 }
 
 type funcType int

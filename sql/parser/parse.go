@@ -81,15 +81,19 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 	return p.scanner.stmts, nil
 }
 
-// PerformTypeChecking performs type checking on the provided expression. While doing
-// so, it will fold numeric constants and bind var argument names to their inferred
-// types in the args parameter.
-func PerformTypeChecking(expr Expr, args MapArgs) (Datum, error) {
+// TypeCheck performs type checking on the provided expression. While doing
+// so, it will fold numeric constants and bind var argument names to their
+// inferred types in the args parameter.
+func TypeCheck(expr Expr, args MapArgs, desired Datum) (Expr, Datum, error) {
 	expr, err := foldNumericConstants(expr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return expr.TypeCheck(args)
+	typ, err := expr.TypeCheck(args, desired)
+	if err != nil {
+		return nil, nil, err
+	}
+	return expr, typ, nil
 }
 
 // NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of

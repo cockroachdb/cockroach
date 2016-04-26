@@ -64,14 +64,13 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	// expressions containing qvalues.
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(desc)
-	if err := desc.AllocateIDs(); err != nil {
+	if err = desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	expr, nErr := sel.resolveQNames(expr)
-	if nErr != nil {
-		t.Fatalf("%s: %v", sql, nErr)
+	if expr, err = sel.resolveQNames(expr); err != nil {
+		t.Fatalf("%s: %v", sql, err)
 	}
-	if _, err := parser.PerformTypeChecking(expr, nil); err != nil {
+	if expr, _, err = parser.TypeCheck(expr, nil, nil /* no preference */); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
 	return expr, sel.qvals

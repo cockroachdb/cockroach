@@ -450,7 +450,7 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			return false, expr
 		case *FuncExpr:
 			// typeCheckFuncExpr populates t.fn.impure.
-			if _, err := t.TypeCheck(nil); err != nil || t.fn.impure {
+			if _, err := t.TypeCheck(nil, nil); err != nil || t.fn.impure {
 				v.isConst = false
 				return false, expr
 			}
@@ -512,19 +512,19 @@ var unaryOpToToken = map[UnaryOperator]token.Token{
 var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{
 	UnaryComplement: token.XOR,
 }
-var binaryOpToToken = map[BinaryOp]token.Token{
+var binaryOpToToken = map[BinaryOperator]token.Token{
 	Plus:  token.ADD,
 	Minus: token.SUB,
 	Mult:  token.MUL,
 	Div:   token.QUO, // token.QUO_ASSIGN to force integer division.
 }
-var binaryOpToTokenIntOnly = map[BinaryOp]token.Token{
+var binaryOpToTokenIntOnly = map[BinaryOperator]token.Token{
 	Mod:    token.REM,
 	Bitand: token.AND,
 	Bitor:  token.OR,
 	Bitxor: token.XOR,
 }
-var binaryShiftOpToToken = map[BinaryOp]token.Token{
+var binaryShiftOpToToken = map[BinaryOperator]token.Token{
 	LShift: token.SHL,
 	RShift: token.SHR,
 }
@@ -537,7 +537,14 @@ var comparisonOpToToken = map[ComparisonOp]token.Token{
 	GE: token.GEQ,
 }
 
-func (constantFolderVisitor) VisitPost(expr Expr) Expr {
+func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
+	defer func() {
+		// constant operations can panic for a number of reasons. It's
+		// safest to just recover here.
+		if r := recover(); r != nil {
+			retExpr = expr
+		}
+	}()
 	switch t := expr.(type) {
 	case *UnaryExpr:
 		if cv, ok := t.Expr.(*ConstVal); ok {

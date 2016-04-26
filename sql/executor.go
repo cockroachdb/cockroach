@@ -908,7 +908,7 @@ func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner, autoCommit bool,
 ) (Result, *roachpb.Error) {
 	var result Result
-	plan, pErr := planMaker.makePlan(stmt, autoCommit)
+	plan, pErr := planMaker.makePlan(stmt, nil, autoCommit)
 	if pErr != nil {
 		return result, pErr
 	}

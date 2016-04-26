@@ -107,8 +107,8 @@ func (q *qvalue) Walk(v parser.Visitor) parser.Expr {
 	return q
 }
 
-func (q *qvalue) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return q.datum.TypeCheck(args)
+func (q *qvalue) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.Datum, error) {
+	return q.datum.TypeCheck(args, nil)
 }
 
 func (q *qvalue) Eval(ctx parser.EvalContext) (parser.Datum, error) {
@@ -264,8 +264,8 @@ func (*starDatum) String() string {
 
 func (e *starDatum) Walk(v parser.Visitor) parser.Expr { return e }
 
-func (*starDatum) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return parser.DummyInt.TypeCheck(args)
+func (*starDatum) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.Datum, error) {
+	return parser.DummyInt.TypeCheck(args, nil)
 }
 
 func (*starDatum) Eval(ctx parser.EvalContext) (parser.Datum, error) {

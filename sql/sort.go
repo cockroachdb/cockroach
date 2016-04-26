@@ -119,7 +119,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
-				if err := s.addRender(parser.SelectExpr{Expr: expr}); err != nil {
+				if err := s.addRender(parser.SelectExpr{Expr: expr}, parser.DummyInt); err != nil {
 					return nil, err
 				}
 				index = len(s.columns) - 1

@@ -66,7 +66,8 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 
 		// We could potentially skip this, since it will be checked in addRender,
 		// but checking now allows early err return.
-		if _, err := parser.PerformTypeChecking(resolved, p.evalCtx.Args); err != nil {
+		resolved, _, err = parser.TypeCheck(resolved, p.evalCtx.Args, nil /* no preference */)
+		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
@@ -95,7 +96,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 			return nil, roachpb.NewError(err)
 		}
 
-		havingType, err := parser.PerformTypeChecking(having, p.evalCtx.Args)
+		having, havingType, err := parser.TypeCheck(having, p.evalCtx.Args, parser.DummyBool)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -174,7 +175,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 
 	// Add the group-by expressions so they are available for bucketing.
 	for _, g := range groupBy {
-		if err := s.addRender(parser.SelectExpr{Expr: g}); err != nil {
+		if err := s.addRender(parser.SelectExpr{Expr: g}, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -629,8 +630,8 @@ func (a *aggregateFunc) String() string {
 
 func (a *aggregateFunc) Walk(v parser.Visitor) parser.Expr { return a }
 
-func (a *aggregateFunc) TypeCheck(args parser.MapArgs) (parser.Datum, error) {
-	return a.expr.TypeCheck(args)
+func (a *aggregateFunc) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.Datum, error) {
+	return a.expr.TypeCheck(args, nil)
 }
 
 func (a *aggregateFunc) Eval(ctx parser.EvalContext) (parser.Datum, error) {
