@@ -91,6 +91,11 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`4.0 >= 4`, `true`},
 		{`4.9 >= 4`, `true`},
 		{`4.9 >= 4.9`, `true`},
+		// With parentheses.
+		{`(4)`, `4`},
+		{`(((4)))`, `4`},
+		{`(((9 / 3) * (1 / 3)))`, `1`},
+		{`(((9 / 3) % (1 / 3)))`, `((3 % 0.333333))`},
 		// Folding with non-constants.
 		{`a + 5 * b`, `a + (5 * b)`},
 		{`a + 5 + b + 7`, `((a + 5) + b) + 7`},
