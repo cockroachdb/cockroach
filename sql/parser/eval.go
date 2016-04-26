@@ -151,6 +151,8 @@ type BinOp struct {
 }
 
 func (op BinOp) params() typeList {
+	op.types[0] = op.LeftType
+	op.types[1] = op.RightType
 	return ArgTypes(op.types[:])
 }
 
@@ -588,13 +590,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 var timestampMinusBinOp BinOp
 
 func init() {
-	for i, ops := range BinOps {
-		for j, op := range ops {
-			BinOps[i][j].types[0] = op.LeftType
-			BinOps[i][j].types[1] = op.RightType
-		}
-	}
-
 	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(DummyTimestamp, DummyTimestamp)
 }
 
@@ -607,6 +602,8 @@ type CmpOp struct {
 }
 
 func (op CmpOp) params() typeList {
+	op.types[0] = op.LeftType
+	op.types[1] = op.RightType
 	return ArgTypes(op.types[:])
 }
 
@@ -1113,15 +1110,6 @@ func makeEvalTupleIn(d Datum) CmpOp {
 			found := i < len(vtuple) && vtuple[i].Compare(arg) == 0
 			return DBool(found), nil
 		},
-	}
-}
-
-func init() {
-	for i, ops := range CmpOps {
-		for j, op := range ops {
-			CmpOps[i][j].types[0] = op.LeftType
-			CmpOps[i][j].types[1] = op.RightType
-		}
 	}
 }
 
@@ -1996,7 +1984,9 @@ func evalComparison(ctx EvalContext, op ComparisonOperator, left, right Datum) (
 // into an equivalent operation that will hit in the cmpOps map, returning
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
-func foldComparisonExpr(op ComparisonOperator, left, right Expr) (ComparisonOperator, Expr, Expr, bool, bool) {
+func foldComparisonExpr(
+	op ComparisonOperator, left, right Expr,
+) (newOp ComparisonOperator, newLeft Expr, newRight Expr, flipped bool, not bool) {
 	switch op {
 	case NE:
 		// NE(left, right) is implemented as !EQ(left, right).

@@ -151,12 +151,12 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
 func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
-	expr, err := parser.TypeConstants(expr)
+	typedExpr, err := parser.TypeConstants(expr)
 	if err != nil {
 		return 0, err
 	}
 
-	switch i := expr.(type) {
+	switch i := typedExpr.(type) {
 	case *parser.DInt:
 		index := int(*i)
 		if numCols := numOriginalCols; index < 1 || index > numCols {
@@ -165,7 +165,7 @@ func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
 		return index - 1, nil
 
 	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+		return -1, fmt.Errorf("non-integer constant column index: %s", typedExpr)
 
 	default:
 		// expr doesn't look like a col index (i.e. not a constant).
