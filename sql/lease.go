@@ -582,9 +582,13 @@ func (t *tableState) releaseNodeLease(lease *LeaseState, store LeaseStore) error
 
 // purgeOldLeases refreshes the leases on a table. Unused leases older than
 // minVersion will be released.
+// If deleted is set, minVersion is ignored; no lease is acquired and all
+// existing unused leases are released. The table is further marked for
+// deletion, which will cause existing in-use leases to be eagerly released once
+// they're not in use any more.
 // If t has no active leases, nothing is done.
 func (t *tableState) purgeOldLeases(
-	db *client.DB, minVersion DescriptorVersion, store LeaseStore,
+	db *client.DB, deleted bool, minVersion DescriptorVersion, store LeaseStore,
 ) error {
 	t.mu.Lock()
 	empty := len(t.active.data) == 0
@@ -599,11 +603,13 @@ func (t *tableState) purgeOldLeases(
 	var lease *LeaseState
 	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
 		var pErr *roachpb.Error
-		lease, pErr = t.acquire(txn, minVersion, store)
-		if _, deleted := pErr.GetDetail().(*roachpb.DescriptorDeletedError); pErr == nil || deleted {
+		if !deleted {
+			lease, pErr = t.acquire(txn, minVersion, store)
+			_, deleted = pErr.GetDetail().(*roachpb.DescriptorDeletedError)
+		}
+		if pErr == nil || deleted {
 			t.mu.Lock()
 			defer t.mu.Unlock()
-			// Skip the last lease.
 			var toRelease []*LeaseState
 			if deleted {
 				t.deleted = true
@@ -740,7 +746,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
-								db, table.Version, m.LeaseStore); err != nil {
+								db, table.Deleted, table.Version, m.LeaseStore); err != nil {
 								log.Warningf("error purging leases for table %d(%s): %s",
 									table.ID, table.Name, err)
 							}

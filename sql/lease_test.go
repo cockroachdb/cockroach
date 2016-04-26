@@ -533,7 +533,6 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal("descriptor missing")
 	}
 	tableDesc.Deleted = true
-	tableDesc.Version++
 	_, _, descKey := getKeysForTableDescriptor(tableDesc)
 	desc := csql.Descriptor{
 		Union: &csql.Descriptor_Table{
