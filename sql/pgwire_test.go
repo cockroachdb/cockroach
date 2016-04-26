@@ -163,6 +163,35 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
+// TestPGWireDrainClient makes sure the server refuses new connections when
+// it's in draining mode.
+func TestPGWireDrainClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, _ := createTestServerContext()
+	ctx.Insecure = true
+
+	s := setupTestServerWithContext(t, ctx)
+	defer cleanupTestServer(s)
+
+	host, port, err := net.SplitHostPort(s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	basePgUrl := url.URL{
+		Scheme:   "postgres",
+		Host:     net.JoinHostPort(host, port),
+		RawQuery: "sslmode=disable",
+	}
+
+	if err := s.Drain([]server.DrainMode{server.DrainMode_CLIENT}); err != nil {
+		t.Fatal(err)
+	}
+	if err := trivialQuery(basePgUrl); !testutils.IsError(err, pgwire.ErrDraining) {
+		t.Fatal(err)
+	}
+}
+
 func TestPGWireDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

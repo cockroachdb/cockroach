@@ -58,6 +58,10 @@ var (
 	gzipWriterPool sync.Pool
 	// Allocation pool for snappy writers.
 	snappyWriterPool sync.Pool
+
+	// GracefulDrainModes is the standard succession of drain modes entered
+	// for a graceful shutdown.
+	GracefulDrainModes = []DrainMode{DrainMode_CLIENT, DrainMode_LEADERSHIP}
 )
 
 // Server is the cockroach server node.
@@ -73,7 +77,7 @@ type Server struct {
 	distSender          *kv.DistSender
 	db                  *client.DB
 	kvDB                *kv.DBServer
-	pgServer            pgwire.Server
+	pgServer            *pgwire.Server
 	node                *Node
 	recorder            *status.MetricsRecorder
 	runtime             status.RuntimeStatSampler
@@ -383,6 +387,46 @@ func (s *Server) Start() error {
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf("failed to signal readiness using systemd protocol: %s", err)
+	}
+
+	return nil
+}
+
+// Drain activates the given DrainModes on the Server in the order in which
+// they are supplied. DrainModes which are not contained in the set are
+// deactivated.
+// For example, Drain is typically called with [CLIENT,LEADERSHIP] before
+// terminating the process for graceful shutdown.
+func (s *Server) Drain(modes []DrainMode) error {
+	if len(modes) == 0 {
+		log.Infof("node resuming normal operations")
+	} else {
+		log.Infof("node draining to %v", modes)
+	}
+
+	do := make([]func() error, 0, len(modes))
+
+	for _, mode := range modes {
+		switch {
+		case mode == DrainMode_CLIENT:
+			do = append(do, func() error { return s.pgServer.DrainClient(true) })
+		case mode == DrainMode_LEADERSHIP:
+			do = append(do, func() error { return s.node.DrainLeadership(true) })
+		default:
+			return util.Errorf("unknown drain mode: %v (%d)", mode, mode)
+		}
+	}
+	if len(do) == 0 {
+		do = []func() error{
+			func() error { return s.pgServer.DrainClient(false) },
+			func() error { return s.node.DrainLeadership(false) },
+		}
+	}
+
+	for _, fun := range do {
+		if err := fun(); err != nil {
+			return err
+		}
 	}
 
 	return nil
