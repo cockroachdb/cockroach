@@ -186,14 +186,14 @@ type adminServer struct {
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db *client.DB, stopper *stop.Stopper, sqlExecutor *sql.Executor, ds *kv.DistSender, node *Node) *adminServer {
+func newAdminServer(s *Server) *adminServer {
 	server := &adminServer{
-		db:          db,
-		stopper:     stopper,
-		sqlExecutor: sqlExecutor,
 		ServeMux:    http.NewServeMux(),
-		distSender:  ds,
-		node:        node,
+		db:          s.db,
+		stopper:     s.stopper,
+		sqlExecutor: s.sqlExecutor,
+		distSender:  s.distSender,
+		node:        s.node,
 	}
 
 	// Register HTTP handlers.
