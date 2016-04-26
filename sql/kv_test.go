@@ -34,11 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-type keyValue struct {
-	key   []byte
-	value []byte
-}
-
 type kvInterface interface {
 	insert(rows, run int) error
 	update(rows, run int) error
