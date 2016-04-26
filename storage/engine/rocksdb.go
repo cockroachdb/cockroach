@@ -329,7 +329,7 @@ func (r *RocksDB) Flush() error {
 }
 
 // NewIterator returns an iterator over this rocksdb engine.
-func (r *RocksDB) NewIterator(prefix roachpb.Key) Iterator {
+func (r *RocksDB) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.rdb, prefix, r)
 }
 
@@ -460,7 +460,7 @@ func (r *rocksDBSnapshot) Flush() error {
 
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
-func (r *rocksDBSnapshot) NewIterator(prefix roachpb.Key) Iterator {
+func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.handle, prefix, r)
 }
 
@@ -559,7 +559,7 @@ func (r *rocksDBBatch) Flush() error {
 	return util.Errorf("cannot flush a batch")
 }
 
-func (r *rocksDBBatch) NewIterator(prefix roachpb.Key) Iterator {
+func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.batch, prefix, r)
 }
 
@@ -617,13 +617,13 @@ var iterPool = sync.Pool{
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine, prefix roachpb.Key, engine Engine) Iterator {
+func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Engine) Iterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
 	r := iterPool.Get().(*rocksDBIterator)
-	r.iter = C.DBNewIter(rdb, goToCSlice(prefix))
+	r.iter = C.DBNewIter(rdb, C.bool(prefix))
 	r.engine = engine
 	return r
 }
@@ -955,7 +955,7 @@ func dbIterate(rdb *C.DBEngine, engine Engine, start, end MVCCKey,
 	if !start.Less(end) {
 		return nil
 	}
-	it := newRocksDBIterator(rdb, nil, engine)
+	it := newRocksDBIterator(rdb, false, engine)
 	defer it.Close()
 
 	it.Seek(start)
