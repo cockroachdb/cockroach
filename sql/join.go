@@ -75,22 +75,22 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 	}
 
 	if indexScan.filter != nil {
-		// Transfer the filter to the table node. We must first convert the scanQValues associated
-		// with indexNode.
+		// Transfer the filter to the table node. We must first convert the
+		// IndexedVars associated with indexNode.
 		convFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
-			qval := expr.(*scanQValue)
-			return true, table.getQValue(qval.colIdx)
+			iv := expr.(*parser.IndexedVar)
+			return true, table.filterVars.IndexedVar(iv.Idx)
 		}
 		table.filter = exprConvertVars(indexScan.filter, convFunc)
 
 		// Now we split the filter by extracting the part that can be evaluated using just the index
 		// columns.
 		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.VariableExpr) {
-			colIdx := expr.(*scanQValue).colIdx
+			colIdx := expr.(*parser.IndexedVar).Idx
 			if !indexScan.valNeededForCol[colIdx] {
 				return false, nil
 			}
-			return true, indexScan.getQValue(colIdx)
+			return true, indexScan.filterVars.IndexedVar(colIdx)
 		}
 		indexScan.filter, table.filter = splitFilter(table.filter, splitFunc)
 	}
