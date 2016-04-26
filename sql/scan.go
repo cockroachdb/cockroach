@@ -253,32 +253,11 @@ func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
-		var typ parser.Datum
-
-		switch colDesc.Type.Kind {
-		case ColumnType_INT:
-			typ = parser.DummyInt
-		case ColumnType_BOOL:
-			typ = parser.DummyBool
-		case ColumnType_FLOAT:
-			typ = parser.DummyFloat
-		case ColumnType_DECIMAL:
-			typ = parser.DummyDecimal
-		case ColumnType_STRING:
-			typ = parser.DummyString
-		case ColumnType_BYTES:
-			typ = parser.DummyBytes
-		case ColumnType_DATE:
-			typ = parser.DummyDate
-		case ColumnType_TIMESTAMP:
-			typ = parser.DummyTimestamp
-		case ColumnType_TIMESTAMPTZ:
-			typ = parser.DummyTimestampTZ
-		case ColumnType_INTERVAL:
-			typ = parser.DummyInterval
-		default:
+		typ := getTypeForColumn(colDesc)
+		if typ == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}
+
 		hidden := colDesc.Hidden
 		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, hidden: hidden})
 	}
