@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/cli"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	_ "github.com/golang/protobuf/proto"
 )
 
 func main() {
