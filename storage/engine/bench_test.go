@@ -461,7 +461,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	var stats MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		iter := eng.NewIterator(nil)
+		iter := eng.NewIterator(false)
 		stats, err = iter.ComputeStats(mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
 		iter.Close()
 		if err != nil {
@@ -472,6 +472,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	b.StopTimer()
 	log.Infof("live_bytes: %d", stats.LiveBytes)
 }
+
 func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 	rocksdb, stopper := setupMVCCInMemRocksDB(b, "put_delete")
 	defer stopper.Stop()
