@@ -24,7 +24,7 @@ import (
 type testVarContainer []Datum
 
 func (d testVarContainer) IndexedVarTypeCheck(idx int, args MapArgs) (Datum, error) {
-	return d[idx].TypeCheck(args)
+	return d[idx].TypeCheck(args, nil)
 }
 
 func (d testVarContainer) IndexedVarEval(idx int, ctx EvalContext) (Datum, error) {
@@ -49,7 +49,7 @@ func TestIndexedVars(t *testing.T) {
 			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
 	}
 
-	binary := func(op BinaryOp, left, right Expr) Expr {
+	binary := func(op BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
 	expr := binary(Plus, v0, binary(Mult, v1, v2))
@@ -65,7 +65,7 @@ func TestIndexedVars(t *testing.T) {
 	c[0] = NewDInt(3)
 	c[1] = NewDInt(5)
 	c[2] = NewDInt(6)
-	d, err := expr.TypeCheck(nil)
+	d, err := expr.TypeCheck(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

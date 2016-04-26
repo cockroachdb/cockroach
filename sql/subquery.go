@@ -59,9 +59,10 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 
 	// Calling makePlan() might recursively invoke expandSubqueries, so we need a
 	// copy of the planner in order for there to have a separate subqueryVisitor.
+	// TODO(nvanbenschoten) We should propagate a desired type here.
 	planMaker := *v.planner
 	var plan planNode
-	if plan, v.pErr = planMaker.makePlan(subquery.Select, false); v.pErr != nil {
+	if plan, v.pErr = planMaker.makePlan(subquery.Select, nil, false); v.pErr != nil {
 		return false, expr
 	}
 

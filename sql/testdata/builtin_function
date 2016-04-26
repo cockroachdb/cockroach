@@ -949,10 +949,10 @@ SELECT LEAST(NULL, NULL, NULL)
 ----
 NULL
 
-query error GREATEST: incompatible argument types int, string
+query error GREATEST: expected 2 to be of type string, found type int
 SELECT GREATEST(2, '4')
 
-query error LEAST: incompatible argument types int, string
+query error LEAST: expected 2 to be of type string, found type int
 SELECT LEAST(2, '4')
 
 query T
@@ -965,8 +965,10 @@ SELECT LEAST('foo', 'bar', 'foobar')
 ----
 bar
 
-query error GREATEST: incompatible argument types int, float
+query R
 SELECT GREATEST(1, 1.2)
+----
+1.2
 
 # Test float and int comparison.
 

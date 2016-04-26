@@ -185,7 +185,7 @@ func (p *planner) resetTxn() {
 //
 // Note: The autoCommit parameter enables operations to enable the 1PC
 // optimization. This is a bit hackish/preliminary at present.
-func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) makePlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing
@@ -210,7 +210,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.CreateTable:
 		return p.CreateTable(n)
 	case *parser.Delete:
-		return p.Delete(n, autoCommit)
+		return p.Delete(n, desiredTypes, autoCommit)
 	case *parser.DropDatabase:
 		return p.DropDatabase(n)
 	case *parser.DropIndex:
@@ -222,9 +222,9 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.Grant:
 		return p.Grant(n)
 	case *parser.Insert:
-		return p.Insert(n, autoCommit)
+		return p.Insert(n, desiredTypes, autoCommit)
 	case *parser.ParenSelect:
-		return p.makePlan(n.Select, autoCommit)
+		return p.makePlan(n.Select, desiredTypes, autoCommit)
 	case *parser.RenameColumn:
 		return p.RenameColumn(n)
 	case *parser.RenameDatabase:
@@ -236,9 +236,9 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.Revoke:
 		return p.Revoke(n)
 	case *parser.Select:
-		return p.Select(n, autoCommit)
+		return p.Select(n, desiredTypes, autoCommit)
 	case *parser.SelectClause:
-		return p.SelectClause(n)
+		return p.SelectClause(n, desiredTypes)
 	case *parser.Set:
 		return p.Set(n)
 	case *parser.SetTimeZone:
@@ -268,11 +268,11 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 	case *parser.Truncate:
 		return p.Truncate(n)
 	case *parser.UnionClause:
-		return p.UnionClause(n, autoCommit)
+		return p.UnionClause(n, desiredTypes, autoCommit)
 	case *parser.Update:
-		return p.Update(n, autoCommit)
+		return p.Update(n, desiredTypes, autoCommit)
 	case *parser.ValuesClause:
-		return p.ValuesClause(n)
+		return p.ValuesClause(n, desiredTypes)
 	default:
 		return nil, roachpb.NewErrorf("unknown statement type: %T", stmt)
 	}
@@ -281,13 +281,13 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, *r
 func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	switch n := stmt.(type) {
 	case *parser.Delete:
-		return p.Delete(n, false)
+		return p.Delete(n, nil, false)
 	case *parser.Insert:
-		return p.Insert(n, false)
+		return p.Insert(n, nil, false)
 	case *parser.Select:
-		return p.Select(n, false)
+		return p.Select(n, nil, false)
 	case *parser.SelectClause:
-		return p.SelectClause(n)
+		return p.SelectClause(n, nil)
 	case *parser.Show:
 		pNode, err := p.Show(n)
 		return pNode, roachpb.NewError(err)
@@ -304,7 +304,7 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, *roachpb.Error) {
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Update:
-		return p.Update(n, false)
+		return p.Update(n, nil, false)
 	default:
 		// Other statement types do not support placeholders so there is no need
 		// for any special handling here.
@@ -321,7 +321,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, *roachpb.Err
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	return p.makePlan(stmt, false)
+	return p.makePlan(stmt, nil, false)
 }
 
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roachpb.Error) {

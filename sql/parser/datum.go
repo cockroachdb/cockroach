@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -64,24 +63,22 @@ var (
 	DummyInterval Datum = &DInterval{}
 	// dummyTuple is a placeholder DTuple value.
 	dummyTuple Datum = &DTuple{}
-	// dummyTuple is a placeholder DValArg value.
-	dummyValArg Datum = &DValArg{}
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
 
-	boolType        = reflect.TypeOf(DummyBool)
-	intType         = reflect.TypeOf(DummyInt)
-	floatType       = reflect.TypeOf(DummyFloat)
-	decimalType     = reflect.TypeOf(DummyDecimal)
-	stringType      = reflect.TypeOf(DummyString)
-	bytesType       = reflect.TypeOf(DummyBytes)
-	dateType        = reflect.TypeOf(DummyDate)
-	timestampType   = reflect.TypeOf(DummyTimestamp)
-	timestampTZType = reflect.TypeOf(DummyTimestampTZ)
-	intervalType    = reflect.TypeOf(DummyInterval)
-	tupleType       = reflect.TypeOf(dummyTuple)
-	nullType        = reflect.TypeOf(DNull)
-	valargType      = reflect.TypeOf(dummyValArg)
+	// boolType      = reflect.TypeOf(DummyBool)
+	// intType       = reflect.TypeOf(DummyInt)
+	// floatType     = reflect.TypeOf(DummyFloat)
+	// decimalType   = reflect.TypeOf(DummyDecimal)
+	// stringType    = reflect.TypeOf(DummyString)
+	// bytesType     = reflect.TypeOf(DummyBytes)
+	// dateType      = reflect.TypeOf(DummyDate)
+	// timestampType = reflect.TypeOf(DummyTimestamp)
+	// timestampTZType = reflect.TypeOf(DummyTimestampTZ)
+	// intervalType  = reflect.TypeOf(DummyInterval)
+	// tupleType     = reflect.TypeOf(dummyTuple)
+	// nullType      = reflect.TypeOf(DNull)
+	// valargType    = reflect.TypeOf(DValArg{})
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
@@ -1156,12 +1153,16 @@ func (d *DValArg) String() string {
 // heterogeneous types.
 // TODO(andreimatei) Remove when type inference improves.
 func mixedTypeCompare(l, r Datum) (int, bool) {
-	lType := reflect.TypeOf(l)
-	rType := reflect.TypeOf(r)
-
 	// Check equality.
-	eqOp, ok := CmpOps[CmpArgs{EQ, lType, rType}]
-	if !ok {
+	var eqOp *CmpOp
+	eqOps := CmpOps[EQ]
+	for i := range eqOps {
+		if eqOps[i].matchParams(l, r) {
+			eqOp = &eqOps[i]
+			break
+		}
+	}
+	if eqOp == nil {
 		return 0, false
 	}
 	eq, err := eqOp.fn(EvalContext{}, l, r)
@@ -1173,8 +1174,15 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	}
 
 	// Check less than.
-	ltOp, ok := CmpOps[CmpArgs{LT, lType, rType}]
-	if !ok {
+	var ltOp *CmpOp
+	ltOps := CmpOps[LT]
+	for i := range ltOps {
+		if ltOps[i].matchParams(l, r) {
+			ltOp = &ltOps[i]
+			break
+		}
+	}
+	if ltOp == nil {
 		return 0, false
 	}
 	lt, err := ltOp.fn(EvalContext{}, l, r)

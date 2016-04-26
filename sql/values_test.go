@@ -108,7 +108,7 @@ func TestValues(t *testing.T) {
 					pErr = roachpb.NewErrorf("%v", r)
 				}
 			}()
-			return p.ValuesClause(tc.stmt)
+			return p.ValuesClause(tc.stmt, nil)
 		}()
 		if pErr == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, pErr)
