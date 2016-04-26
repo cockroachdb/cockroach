@@ -602,7 +602,7 @@ func MVCCGet(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := engine.NewIterator(key)
+	iter := engine.NewIterator(true)
 	defer iter.Close()
 
 	return mvccGetUsingIter(ctx, iter, key, timestamp, consistent, txn)
@@ -921,7 +921,7 @@ func MVCCPut(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(key)
+	iter := engine.NewIterator(true)
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
@@ -953,7 +953,7 @@ func MVCCDelete(
 	timestamp roachpb.Timestamp,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(key)
+	iter := engine.NewIterator(true)
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
@@ -1204,7 +1204,7 @@ func MVCCIncrement(
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
-	iter := engine.NewIterator(key)
+	iter := engine.NewIterator(true)
 	defer iter.Close()
 
 	var int64Val int64
@@ -1247,7 +1247,7 @@ func MVCCConditionalPut(
 	expVal *roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(key)
+	iter := engine.NewIterator(true)
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, txn)
@@ -1313,7 +1313,7 @@ func MVCCInitPut(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(key)
+	iter := engine.NewIterator(true)
 	defer iter.Close()
 
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
@@ -1393,7 +1393,7 @@ func MVCCDeleteRange(
 	var keys []roachpb.Key
 	num := int64(0)
 	buf := newPutBuffer()
-	iter := engine.NewIterator(endKey)
+	iter := engine.NewIterator(false)
 	f := func(kv roachpb.KeyValue) (bool, error) {
 		if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
 			return true, err
@@ -1594,7 +1594,7 @@ func MVCCIterate(ctx context.Context,
 	}
 
 	// Get a new iterator.
-	iter := engine.NewIterator(nil)
+	iter := engine.NewIterator(false)
 	defer iter.Close()
 
 	// Seeking for the first defined position.
@@ -1748,7 +1748,7 @@ func MVCCResolveWriteIntent(ctx context.Context,
 	intent roachpb.Intent,
 ) error {
 	buf := newPutBuffer()
-	iter := engine.NewIterator(intent.Key)
+	iter := engine.NewIterator(true)
 	err := mvccResolveWriteIntent(ctx, engine, iter, ms, intent, buf)
 	// Using defer would be more convenient, but it is measurably slower.
 	buf.release()
@@ -1969,7 +1969,7 @@ type IterAndBuf struct {
 func GetIterAndBuf(engine Engine) IterAndBuf {
 	return IterAndBuf{
 		buf:  newPutBuffer(),
-		iter: engine.NewIterator(nil),
+		iter: engine.NewIterator(false),
 	}
 }
 
@@ -2058,7 +2058,7 @@ func MVCCGarbageCollect(
 	keys []roachpb.GCRequest_GCKey,
 	timestamp roachpb.Timestamp,
 ) error {
-	iter := engine.NewIterator(nil)
+	iter := engine.NewIterator(false)
 	defer iter.Close()
 	// Iterate through specified GC keys.
 	meta := &MVCCMetadata{}

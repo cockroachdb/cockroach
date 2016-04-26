@@ -2261,7 +2261,7 @@ func (r *Replica) mergeTrigger(
 	}
 
 	// Add in the stats for the subsumed range's range keys.
-	iter := batch.NewIterator(nil)
+	iter := batch.NewIterator(false)
 	defer iter.Close()
 	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.StartKey))
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.SubsumedDesc.EndKey))

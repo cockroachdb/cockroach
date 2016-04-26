@@ -52,17 +52,17 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 
 	k := MakeMVCCMetadataKey(testKey1)
 
-	before := b.NewIterator(nil)
+	before := b.NewIterator(false)
 	defer before.Close()
 
-	nonBatchBefore := db.NewIterator(nil)
+	nonBatchBefore := db.NewIterator(false)
 	defer nonBatchBefore.Close()
 
 	if err := b.Put(k, []byte("abc")); err != nil {
 		t.Fatal(err)
 	}
 
-	after := b.NewIterator(nil)
+	after := b.NewIterator(false)
 	defer after.Close()
 
 	if after.Seek(k); !after.Valid() {
@@ -79,7 +79,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nonBatchAfter := db.NewIterator(nil)
+	nonBatchAfter := db.NewIterator(false)
 	defer nonBatchAfter.Close()
 
 	if nonBatchBefore.Seek(k); nonBatchBefore.Valid() {
@@ -136,7 +136,7 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
-		iter := batch.NewIterator(key.Key)
+		iter := batch.NewIterator(true)
 		iter.Seek(key)
 		iter.Close()
 	}
