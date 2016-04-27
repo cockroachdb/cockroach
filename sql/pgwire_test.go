@@ -263,6 +263,11 @@ func TestPGPrepareFail(t *testing.T) {
 		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <parameter> (desired <string>)",
 		"SELECT $0 > 0":                             "pq: there is no parameter $0",
 		"SELECT $2 > 0":                             "pq: could not determine data type of parameter $1",
+		// Unable to be typed by Summer.
+		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END": "pq: could not determine data type of parameter $1",
+		"SELECT ($1 + $1) + CURRENT_DATE()":      "pq: could not determine data type of parameter $1",
+		"SELECT $1 + $2, $2::FLOAT":              "pq: could not determine data type of parameter $1",
+		"SELECT ($1 + 2) + ($1 + 2.5)":           "pq: unsupported binary operator: <int> + <float>",
 	}
 
 	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
@@ -427,6 +432,9 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2001, 1, 2, 3, 4, 5, 6, time.FixedZone("", 0)),
 			),
 		},
+		"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
+			base.Params("hello").Results("one").Results("hello"),
+		},
 		"INSERT INTO d.ts VALUES($1, $2) RETURNING *": {
 			base.Params("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
@@ -472,6 +480,38 @@ func TestPGPreparedQuery(t *testing.T) {
 			base.Params(1, 0).Results(1),
 			base.Params(1, 1).Results(2),
 			base.Params(1, 2).Results(3),
+		},
+		"SELECT 3 + CASE (4) WHEN 4 THEN $1 ELSE 42 END": {
+			base.Params(12).Results(15),
+			base.Params(-12).Results(-9),
+		},
+		"SELECT DATE '2001-01-02' + ($1 + $1)": {
+			base.Params(12).Results("2001-01-26T00:00:00Z"),
+		},
+		"SELECT TO_HEX(~(~$1))": {
+			base.Params(12).Results("c"),
+		},
+		"INSERT INTO d.T VALUES ($1 + 1) RETURNING a": {
+			base.Params(1).Results(2),
+			base.Params(11).Results(12),
+		},
+		"INSERT INTO d.T VALUES (-$1) RETURNING a": {
+			base.Params(1).Results(-1),
+			base.Params(-999).Results(999),
+		},
+		"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b": {
+			base.Params(5, 6).Results(-6, 11),
+		},
+		"INSERT INTO d.str (s) VALUES (LEFT($1, 3)) RETURNING s": {
+			base.Params("abcdef").Results("abc"),
+			base.Params("123456").Results("123"),
+		},
+		"INSERT INTO d.str (b) VALUES (COALESCE($1, 'strLit')) RETURNING b": {
+			base.Params(nil).Results("strLit"),
+			base.Params("123456").Results("123456"),
+		},
+		"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *": {
+			base.Params(123).Results(123, "hello 123"),
 		},
 	}
 
@@ -560,7 +600,14 @@ func TestPGPreparedQuery(t *testing.T) {
 		}
 	}
 
-	initStmt := `CREATE DATABASE d; CREATE TABLE d.t (a INT); INSERT INTO d.t VALUES (10),(11); CREATE TABLE d.ts (a TIMESTAMP, b DATE);`
+	initStmt := `
+CREATE DATABASE d;
+CREATE TABLE d.t (a INT);
+INSERT INTO d.t VALUES (10),(11);
+CREATE TABLE d.ts (a TIMESTAMP, b DATE);
+CREATE TABLE d.two (a INT, b INT);
+CREATE TABLE d.intStr (a INT, s STRING);
+CREATE TABLE d.str (s STRING, b BYTES);`
 	if _, err := db.Exec(initStmt); err != nil {
 		t.Fatal(err)
 	}
