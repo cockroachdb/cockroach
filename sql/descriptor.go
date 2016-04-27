@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var (
@@ -73,7 +74,7 @@ func (p *planner) checkPrivilege(descriptor descriptorProto, privilege privilege
 // createDescriptor takes a Table or Database descriptor and creates it if
 // needed, incrementing the descriptor counter. Returns true if the descriptor
 // is actually created, false if it already existed.
-func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) (bool, *roachpb.Error) {
+func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptorProto, ifNotExists bool) (bool, error) {
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
 	gr, err := p.txn.Get(idKey)
@@ -87,7 +88,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 			return false, nil
 		}
 		// Key exists, but we don't want it to: error out.
-		return false, roachpb.NewUErrorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
+		return false, fmt.Errorf("%s %q already exists", descriptor.TypeName(), plainKey.Name())
 	}
 
 	// Increment unique descriptor counter.
@@ -130,7 +131,7 @@ func (p *planner) createDescriptor(plainKey descriptorKey, descriptor descriptor
 // In most cases you'll want to use wrappers: `getDatabaseDesc` or
 // `getTableDesc`.
 func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorProto,
-) (bool, *roachpb.Error) {
+) (bool, error) {
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
 		return false, err
@@ -141,27 +142,27 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if pErr := p.txn.GetProto(descKey, desc); pErr != nil {
-		return false, pErr
+	if err := p.txn.GetProto(descKey, desc); err != nil {
+		return false, err
 	}
 
 	switch t := descriptor.(type) {
 	case *TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return false, roachpb.NewErrorf("%q is not a table", plainKey.Name())
+			return false, util.Errorf("%q is not a table", plainKey.Name())
 		}
 		*t = *table
 	case *DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return false, roachpb.NewErrorf("%q is not a database", plainKey.Name())
+			return false, util.Errorf("%q is not a database", plainKey.Name())
 		}
 		*t = *database
 	}
 
 	if err := descriptor.Validate(); err != nil {
-		return false, roachpb.NewError(err)
+		return false, err
 	}
 	return true, nil
 }
@@ -169,19 +170,19 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 // getDescriptorsFromTargetList examines a TargetList and fetches the
 // appropriate descriptors.
 func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
-	[]descriptorProto, *roachpb.Error) {
+	[]descriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
-			return nil, roachpb.NewError(errNoDatabase)
+			return nil, errNoDatabase
 		}
 		descs := make([]descriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, pErr := p.getDatabaseDesc(database)
-			if pErr != nil {
-				return nil, pErr
+			descriptor, err := p.getDatabaseDesc(database)
+			if err != nil {
+				return nil, err
 			}
 			if descriptor == nil {
-				return nil, roachpb.NewError(databaseDoesNotExistError(database))
+				return nil, databaseDoesNotExistError(database)
 			}
 			descs = append(descs, descriptor)
 		}
@@ -189,13 +190,13 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 	}
 
 	if len(targets.Tables) == 0 {
-		return nil, roachpb.NewError(errNoTable)
+		return nil, errNoTable
 	}
 	descs := make([]descriptorProto, 0, len(targets.Tables))
 	for _, tableGlob := range targets.Tables {
-		tables, pErr := p.expandTableGlob(tableGlob)
-		if pErr != nil {
-			return nil, pErr
+		tables, err := p.expandTableGlob(tableGlob)
+		if err != nil {
+			return nil, err
 		}
 		for _, table := range tables {
 			descriptor, err := p.getTableDesc(table)
@@ -203,7 +204,7 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 				return nil, err
 			}
 			if descriptor == nil {
-				return nil, roachpb.NewError(tableDoesNotExistError(table.String()))
+				return nil, tableDoesNotExistError(table.String())
 			}
 			descs = append(descs, descriptor)
 		}
@@ -219,37 +220,37 @@ func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
 // 		table
 // 		*
 func (p *planner) expandTableGlob(expr *parser.QualifiedName) (
-	parser.QualifiedNames, *roachpb.Error) {
+	parser.QualifiedNames, error) {
 	if len(expr.Indirect) == 0 {
 		return parser.QualifiedNames{expr}, nil
 	}
 
 	if err := expr.QualifyWithDatabase(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	// We must have a single indirect: either .table or .*
 	if len(expr.Indirect) != 1 {
-		return nil, roachpb.NewErrorf("invalid table glob: %s", expr)
+		return nil, fmt.Errorf("invalid table glob: %s", expr)
 	}
 
 	switch expr.Indirect[0].(type) {
 	case parser.NameIndirection:
 		return parser.QualifiedNames{expr}, nil
 	case parser.StarIndirection:
-		dbDesc, pErr := p.getDatabaseDesc(string(expr.Base))
-		if pErr != nil {
-			return nil, pErr
+		dbDesc, err := p.getDatabaseDesc(string(expr.Base))
+		if err != nil {
+			return nil, err
 		}
 		if dbDesc == nil {
-			return nil, roachpb.NewError(databaseDoesNotExistError(string(expr.Base)))
+			return nil, databaseDoesNotExistError(string(expr.Base))
 		}
-		tableNames, pErr := p.getTableNames(dbDesc)
-		if pErr != nil {
-			return nil, pErr
+		tableNames, err := p.getTableNames(dbDesc)
+		if err != nil {
+			return nil, err
 		}
 		return tableNames, nil
 	default:
-		return nil, roachpb.NewErrorf("invalid table glob: %s", expr)
+		return nil, fmt.Errorf("invalid table glob: %s", expr)
 	}
 }
 

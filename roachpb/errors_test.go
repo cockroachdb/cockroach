@@ -70,25 +70,3 @@ func TestErrorTxn(t *testing.T) {
 		t.Fatalf("wanted name %s, unexpected: %+v", name, txn)
 	}
 }
-
-// TestStripErrorTransaction verifies that StripErrorTransaction
-// strips the transaction information on an error, but it does not
-// update the error message.
-func TestStripErrorTransaction(t *testing.T) {
-	txn := NewTransaction("test", Key("a"), 1, SERIALIZABLE, Timestamp{}, 0)
-	pErr := NewErrorWithTxn(NewTransactionAbortedError(), txn)
-	if pErr.GetTxn() == nil {
-		t.Errorf("no txn on error: %s", pErr)
-	}
-	if !strings.HasPrefix(pErr.Message, "txn aborted \"test\"") {
-		t.Errorf("unexpected message: %s", pErr.Message)
-	}
-
-	pErr.StripErrorTransaction()
-	if pErr.GetTxn() != nil {
-		t.Errorf("txn must be stripped: %s", pErr)
-	}
-	if !strings.HasPrefix(pErr.Message, "txn aborted \"test\"") {
-		t.Errorf("unexpected message: %s", pErr.Message)
-	}
-}

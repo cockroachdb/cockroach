@@ -39,9 +39,9 @@ func getFastScanContext() *server.Context {
 
 // getRangeKeys returns the end keys of all ranges.
 func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
-	rows, pErr := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-	if pErr != nil {
-		return nil, pErr.GoError()
+	rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+	if err != nil {
+		return nil, err
 	}
 	ret := make([]roachpb.Key, len(rows), len(rows))
 	for i := 0; i < len(rows); i++ {

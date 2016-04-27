@@ -193,11 +193,11 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 		b := &client.Batch{}
 		b.InternalAddRequest(args)
-		pErr := db.Run(b)
-		if pErr == nil {
+		err := db.Run(b)
+		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsPError(pErr, "contains an internal request|contains commit trigger") {
-			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), pErr)
+		} else if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
+			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), err)
 		}
 	}
 }
@@ -213,38 +213,38 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := db.Txn(func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 
-		if pErr := txn.Put(key, value); pErr != nil {
-			t.Fatal(pErr)
+		if err := txn.Put(key, value); err != nil {
+			t.Fatal(err)
 		}
 
 		// Attempt to read outside of txn.
-		if gr, pErr := db.Get(key); pErr != nil {
-			t.Fatal(pErr)
+		if gr, err := db.Get(key); err != nil {
+			t.Fatal(err)
 		} else if gr.Exists() {
 			t.Errorf("expected nil value; got %+v", gr.Value)
 		}
 
 		// Read within the transaction.
-		if gr, pErr := txn.Get(key); pErr != nil {
-			t.Fatal(pErr)
+		if gr, err := txn.Get(key); err != nil {
+			t.Fatal(err)
 		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 			t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 		}
 		return nil
 	})
-	if pErr != nil {
-		t.Errorf("expected success on commit; got %s", pErr)
+	if err != nil {
+		t.Errorf("expected success on commit; got %s", err)
 	}
 
 	// Verify the value is now visible after commit.
-	if gr, pErr := db.Get(key); pErr != nil {
-		t.Errorf("expected success reading value; got %s", pErr)
+	if gr, err := db.Get(key); err != nil {
+		t.Errorf("expected success reading value; got %s", err)
 	} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 		t.Errorf("expected value %q; got %q", value, gr.ValueBytes())
 	}
@@ -262,8 +262,8 @@ func TestAuthentication(t *testing.T) {
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	if pErr := db1.Run(&b1); pErr != nil {
-		t.Fatal(pErr)
+	if err := db1.Run(&b1); err != nil {
+		t.Fatal(err)
 	}
 
 	var b2 client.Batch
@@ -272,7 +272,7 @@ func TestAuthentication(t *testing.T) {
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if pErr := db2.Run(&b2); !testutils.IsPError(pErr, "is not allowed") {
-		t.Fatal(pErr)
+	if err := db2.Run(&b2); !testutils.IsError(err, "is not allowed") {
+		t.Fatal(err)
 	}
 }

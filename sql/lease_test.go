@@ -97,12 +97,12 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	pErr := t.server.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	err := t.server.DB().Txn(func(txn *client.Txn) error {
 		var pErr *roachpb.Error
 		lease, pErr = t.node(nodeID).Acquire(txn, descID, version)
-		return pErr
+		return pErr.GoError()
 	})
-	return lease, pErr.GoError()
+	return lease, err
 }
 
 func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) *csql.LeaseState {
@@ -123,12 +123,12 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 	}
 }
 
-func (t *leaseTest) publish(nodeID uint32, descID csql.ID) *roachpb.Error {
-	_, pErr := t.node(nodeID).Publish(descID,
+func (t *leaseTest) publish(nodeID uint32, descID csql.ID) error {
+	_, err := t.node(nodeID).Publish(descID,
 		func(*csql.TableDescriptor) error {
 			return nil
 		})
-	return pErr
+	return err
 }
 
 func (t *leaseTest) mustPublish(nodeID uint32, descID csql.ID) {
@@ -445,12 +445,12 @@ func isDeleted(tableID csql.ID, cfg config.SystemConfig) bool {
 
 func acquire(s server.TestServer, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	pErr := s.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	err := s.DB().Txn(func(txn *client.Txn) error {
 		var pErr *roachpb.Error
 		lease, pErr = s.LeaseManager().Acquire(txn, descID, version)
-		return pErr
+		return pErr.GoError()
 	})
-	return lease, pErr.GoError()
+	return lease, err
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0

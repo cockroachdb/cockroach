@@ -106,9 +106,9 @@ func (q *replicaGCQueue) process(now roachpb.Timestamp, rng *Replica, _ config.S
 		},
 		MaxRanges: 1,
 	})
-	br, pErr := q.db.RunWithResponse(b)
-	if pErr != nil {
-		return pErr.GoError()
+	br, err := q.db.RunWithResponse(b)
+	if err != nil {
+		return err
 	}
 	reply := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 

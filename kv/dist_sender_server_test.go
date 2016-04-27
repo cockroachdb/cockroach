@@ -182,13 +182,13 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 
 	// Delete the keys within a transaction. The range [c,d) doesn't have
 	// any active requests.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b", false)
 		b.DelRange("e", "f", false)
 		return txn.CommitInBatch(b)
-	}); pErr != nil {
-		t.Fatalf("unexpected error on transactional DeleteRange: %s", pErr)
+	}); err != nil {
+		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
 	}
 }
 
@@ -202,44 +202,44 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c"} {
-		if pErr := db.Put(key, "value"); pErr != nil {
-			t.Fatal(pErr)
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
 		}
 	}
 	// Scan to retrieve the keys just written.
-	if rows, pErr := db.Scan("a", "q", 0); pErr != nil {
-		t.Fatalf("unexpected pError on Scan: %s", pErr)
+	if rows, err := db.Scan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
 
 	// Scan in reverse order to retrieve the keys just written.
-	if rows, pErr := db.ReverseScan("a", "q", 0); pErr != nil {
-		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
+	if rows, err := db.ReverseScan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
 
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "d", false)
 		return txn.CommitInBatch(b)
-	}); pErr != nil {
-		t.Fatalf("unexpected error on transactional DeleteRange: %s", pErr)
+	}); err != nil {
+		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
 	}
 
 	// Scan consistently to make sure the intents are gone.
-	if rows, pErr := db.Scan("a", "q", 0); pErr != nil {
-		t.Fatalf("unexpected error on Scan: %s", pErr)
+	if rows, err := db.Scan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
 	}
 
 	// ReverseScan consistently to make sure the intents are gone.
-	if rows, pErr := db.ReverseScan("a", "q", 0); pErr != nil {
-		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
+	if rows, err := db.ReverseScan("a", "q", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
 	}
@@ -262,8 +262,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	for i, key := range keys {
 		b := &client.Batch{}
 		b.Put(key, "value")
-		if pErr := db.Run(b); pErr != nil {
-			t.Fatal(pErr)
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
 		}
 		ts[i] = s.Clock().Now()
 		log.Infof("%d: %d", i, ts[i])
@@ -293,11 +293,11 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		clock := hlc.NewClock(manual.UnixNano)
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock, RPCContext: s.RPCContext()}, s.Gossip())
 
-		reply, pErr := client.SendWrappedWith(ds, nil, roachpb.Header{
+		reply, err := client.SendWrappedWith(ds, nil, roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, request)
-		if pErr != nil {
-			t.Fatal(pErr)
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		var rows []roachpb.KeyValue
@@ -326,14 +326,14 @@ func initReverseScanTestEnv(s *server.TestServer, t *testing.T) *client.DB {
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
 	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
-		if pErr := db.AdminSplit(key); pErr != nil {
-			t.Fatal(pErr)
+		if err := db.AdminSplit(key); err != nil {
+			t.Fatal(err)
 		}
 	}
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
-		if pErr := db.Put(key, "value"); pErr != nil {
-			t.Fatal(pErr)
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
 		}
 	}
 	return db
@@ -348,8 +348,8 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	db := initReverseScanTestEnv(s, t)
 
 	// Case 1: Request.EndKey is in the middle of the range.
-	if rows, pErr := db.ReverseScan("b", "d", 0); pErr != nil {
-		t.Fatalf("unexpected pError on ReverseScan: %s", pErr)
+	if rows, err := db.ReverseScan("b", "d", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
@@ -409,24 +409,24 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if pErr := db.AdminSplit("c"); pErr != nil {
-		t.Fatal(pErr)
+	if err := db.AdminSplit("c"); err != nil {
+		t.Fatal(err)
 	}
 
 	// The ReverseScan will run into a stale descriptor.
-	if rows, pErr := db.ReverseScan("a", "d", 0); pErr != nil {
-		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
+	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
 
 	// Case 2: encounter with range merge .
 	// Merge the range ["e", "g") and ["g", "\xff\xff") .
-	if pErr := db.AdminMerge("e"); pErr != nil {
-		t.Fatal(pErr)
+	if err := db.AdminMerge("e"); err != nil {
+		t.Fatal(err)
 	}
-	if rows, pErr := db.ReverseScan("d", "g", 0); pErr != nil {
-		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
+	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
+		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
@@ -439,24 +439,24 @@ func TestBadRequest(t *testing.T) {
 	defer s.Stop()
 
 	// Write key "a".
-	if pErr := db.Put("a", "value"); pErr != nil {
-		t.Fatal(pErr)
+	if err := db.Put("a", "value"); err != nil {
+		t.Fatal(err)
 	}
 
-	if _, pErr := db.Scan("a", "a", 0); !testutils.IsPError(pErr, "truncation resulted in empty batch") {
-		t.Fatalf("unexpected error on scan with startkey == endkey: %v", pErr)
+	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
 	}
 
-	if _, pErr := db.ReverseScan("a", "a", 0); !testutils.IsPError(pErr, "truncation resulted in empty batch") {
-		t.Fatalf("unexpected pError on reverse scan with startkey == endkey: %v", pErr)
+	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if pErr := db.DelRange("x", "a"); !testutils.IsPError(pErr, "truncation resulted in empty batch") {
-		t.Fatalf("unexpected error on deletion on [x, a): %v", pErr)
+	if err := db.DelRange("x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
+		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
-	if pErr := db.DelRange("", "z"); !testutils.IsPError(pErr, "must be greater than LocalMax") {
-		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", pErr)
+	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
+		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
 	}
 }
 
@@ -482,15 +482,15 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	//    same replica.
 	// 5) The command succeeds since the sequence cache has not yet been updated.
 	epoch := 0
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		epoch++
 		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.Put("b", "val")
 		b.Put("c", "val")
 		return txn.CommitInBatch(b)
-	}); pErr != nil {
-		t.Errorf("unexpected error on transactional Puts: %s", pErr)
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
 	}
 
 	if epoch != 1 {
@@ -529,8 +529,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	// Set the initial value on the target key "b".
 	origVal := "val"
-	if pErr := db.Put(targetKey, origVal); pErr != nil {
-		t.Fatal(pErr)
+	if err := db.Put(targetKey, origVal); err != nil {
+		t.Fatal(err)
 	}
 
 	// The following txn creates a batch request that is split
@@ -538,7 +538,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError and the txn will be
 	// retried.
 	epoch := 0
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
@@ -555,24 +555,45 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b := txn.NewBatch()
 		b.Put("a", "val")
 		b.CPut(targetKey, "new_val", origVal)
-		pErr := txn.CommitInBatch(b)
+		err := txn.CommitInBatch(b)
 		if epoch == 1 {
-			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-				if !pErr.GetTxn().Writing {
-					t.Errorf("unexpected non-writing txn on error")
+			if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
+				if _, ok := retErr.Cause.(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+					if !retErr.Transaction.Writing {
+						t.Errorf("unexpected non-writing txn on error")
+					}
+				} else {
+					t.Errorf("expected ReadWithinUncertaintyIntervalError, but got: %s", retErr.Cause)
 				}
 			} else {
-				t.Errorf("expected ReadWithinUncertaintyIntervalError, but got: %s", pErr)
+				t.Errorf("expected a retryable error, but got: %s", err)
 			}
 		}
-		return pErr
-	}); pErr != nil {
-		t.Errorf("unexpected error on transactional Puts: %s", pErr)
+		return err
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
 	}
 
 	if epoch != 2 {
 		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
 	}
+}
+
+func assertTransactionPushErrorWithTxnIDSet(t *testing.T, e error) *uuid.UUID {
+	if retErr, ok := e.(*roachpb.RetryableTxnError); ok {
+		if _, ok := retErr.Cause.(*roachpb.TransactionPushError); ok {
+			if retErr.TxnID == nil {
+				t.Fatalf("txn ID is not set unexpectedly: %s", retErr)
+			}
+			return retErr.TxnID
+		} else {
+			t.Fatalf("expected a TransactionPushError, but got %s (%T)",
+				retErr.Cause, retErr.Cause)
+		}
+	} else {
+		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
+	}
+	panic("not reached")
 }
 
 // TestPropagateTxnOnPushError is similar to TestPropagateTxnOnError,
@@ -593,12 +614,12 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// Create a goroutine that creates a write intent and waits until
 	// another txn created in this test is restarted.
 	go func() {
-		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if err := db.Txn(func(txn *client.Txn) error {
 			// Set high priority so that the intent will not be pushed.
 			txn.InternalSetPriority(highPriority)
 			log.Infof("Creating a write intent with high priority")
-			if pErr := txn.Put(key, "val"); pErr != nil {
-				return pErr
+			if err := txn.Put(key, "val"); err != nil {
+				return err
 			}
 			close(waitForWriteIntent)
 			// Wait until another txn in this test is
@@ -606,8 +627,8 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 			log.Infof("Waiting for the txn restart")
 			<-waitForTxnRestart
 			return txn.CommitInBatch(txn.NewBatch())
-		}); pErr != nil {
-			t.Errorf("unexpected error on transactional Puts: %s", pErr)
+		}); err != nil {
+			t.Errorf("unexpected error on transactional Puts: %s", err)
 		}
 		close(waitForTxnCommit)
 	}()
@@ -622,7 +643,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// iteration.
 	epoch := 0
 	var txnID *uuid.UUID
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		// Set low priority so that a write from this txn will not push others.
 		txn.InternalSetPriority(lowPriority)
 
@@ -640,20 +661,13 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 
 		// The commit returns an error, and it will pass
 		// the txn data to the next iteration.
-		pErr := txn.Put(key, "val")
+		err := txn.Put(key, "val")
 		if epoch == 1 {
-			if tErr, ok := pErr.GetDetail().(*roachpb.TransactionPushError); ok {
-				if pErr.GetTxn().ID == nil {
-					t.Errorf("txn ID is not set unexpectedly: %s", tErr)
-				}
-				txnID = pErr.GetTxn().ID
-			} else {
-				t.Errorf("expected TransactionRetryError, but got: %s", pErr)
-			}
+			txnID = assertTransactionPushErrorWithTxnIDSet(t, err)
 		}
-		return pErr
-	}); pErr != nil {
-		t.Errorf("unexpected error on transactional Puts: %s", pErr)
+		return err
+	}); err != nil {
+		t.Errorf("unexpected error on transactional Puts: %s", err)
 	}
 
 	if e := 2; epoch != e {

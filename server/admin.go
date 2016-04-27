@@ -529,12 +529,12 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 	{
 		var iexecutor sql.InternalExecutor
 		var tableSpan roachpb.Span
-		if pErr := s.server.db.Txn(func(txn *client.Txn) *roachpb.Error {
-			var pErr *roachpb.Error
-			tableSpan, pErr = iexecutor.GetTableSpan(s.getUser(req), txn, escDbName, escTableName)
-			return pErr
-		}); pErr != nil {
-			return nil, s.serverError(pErr.GoError())
+		if err := s.server.db.Txn(func(txn *client.Txn) error {
+			var err error
+			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDbName, escTableName)
+			return err
+		}); err != nil {
+			return nil, s.serverError(err)
 		}
 		tableRSpan := roachpb.RSpan{}
 		var err error

@@ -1906,7 +1906,7 @@ func (r *Replica) AdminSplit(
 
 	log.Infof("initiating a split of %s at key %s", r, splitKey)
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
 		defer log.Trace(ctx, "split closure ends")
 		// Create range descriptor for second half of split.
@@ -1915,16 +1915,16 @@ func (r *Replica) AdminSplit(
 		b := &client.Batch{}
 		desc1Key := keys.RangeDescriptorKey(newDesc.StartKey)
 		if err := updateRangeDescriptor(b, desc1Key, nil, newDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		// Update existing range descriptor for first half of split.
 		desc2Key := keys.RangeDescriptorKey(updatedDesc.StartKey)
 		if err := updateRangeDescriptor(b, desc2Key, desc, &updatedDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		// Update range descriptor addressing record(s).
 		if err := splitRangeAddressing(b, newDesc, &updatedDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		if err := txn.Run(b); err != nil {
 			return err
@@ -1935,8 +1935,8 @@ func (r *Replica) AdminSplit(
 		}
 		// Update the RangeTree.
 		b = &client.Batch{}
-		if pErr := InsertRange(txn, b, newDesc.StartKey); pErr != nil {
-			return pErr
+		if err := InsertRange(txn, b, newDesc.StartKey); err != nil {
+			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
@@ -2145,14 +2145,14 @@ func (r *Replica) AdminMerge(
 		log.Infof("initiating a merge of %s into %s", rightRng, r)
 	}
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := r.store.DB().Txn(func(txn *client.Txn) error {
 		log.Trace(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
 			b := &client.Batch{}
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
@@ -2172,15 +2172,15 @@ func (r *Replica) AdminMerge(
 		// Verify that the two ranges are mergeable.
 		if !bytes.Equal(origLeftDesc.EndKey, rightDesc.StartKey) {
 			// Should never happen, but just in case.
-			return roachpb.NewErrorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
+			return util.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
 		if !bytes.Equal(rightDesc.EndKey, updatedLeftDesc.EndKey) {
 			// This merge raced with a split of the right-hand range.
 			// TODO(bdarnell): needs a test.
-			return roachpb.NewErrorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
+			return util.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
 		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
-			return roachpb.NewErrorf("ranges not collocated")
+			return util.Errorf("ranges not collocated")
 		}
 
 		b := &client.Batch{}
@@ -2189,12 +2189,12 @@ func (r *Replica) AdminMerge(
 		b.Del(rightDescKey)
 
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 
 		// Update the RangeTree.
-		if pErr := DeleteRange(txn, b, rightDesc.StartKey); pErr != nil {
-			return pErr
+		if err := DeleteRange(txn, b, rightDesc.StartKey); err != nil {
+			return err
 		}
 
 		// End the transaction manually instead of letting RunTransaction
@@ -2376,19 +2376,19 @@ func (r *Replica) ChangeReplicas(
 		return err
 	}
 
-	pErr := r.store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	pErr := r.store.DB().Txn(func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		b := &client.Batch{}
 		descKey := keys.RangeDescriptorKey(updatedDesc.StartKey)
 
 		if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 
 		// Update range descriptor addressing record(s).
 		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 
 		// Run transaction up to this point.

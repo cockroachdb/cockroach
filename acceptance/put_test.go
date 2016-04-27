@@ -50,8 +50,8 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 			for timeutil.Now().Before(deadline) {
 				k := atomic.AddInt64(&count, 1)
 				v := value[:r.Intn(len(value))]
-				if pErr := db.Put(fmt.Sprintf("%08d", k), v); pErr != nil {
-					errs <- pErr.GoError()
+				if err := db.Put(fmt.Sprintf("%08d", k), v); err != nil {
+					errs <- err
 					return
 				}
 			}

@@ -401,10 +401,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Now do it as part of a transaction, but without the trigger set.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		return txn.Put(key, valAt(1))
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Gossip channel should be dormant.
@@ -422,11 +422,11 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// This time mark the transaction as having a Gossip trigger.
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	// New system config received.

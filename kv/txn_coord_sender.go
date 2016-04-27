@@ -951,7 +951,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	}
 	tmpDB := client.NewDBWithPriority(tc, ba.UserPriority)
 	var br *roachpb.BatchResponse
-	pErr := tmpDB.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := tmpDB.Txn(func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
 		b.MaxScanResults = ba.MaxScanResults
@@ -959,12 +959,12 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 			req := arg.GetInner()
 			b.InternalAddRequest(req)
 		}
-		var pErr *roachpb.Error
-		br, pErr = txn.CommitInBatchWithResponse(b)
-		return pErr
+		var err error
+		br, err = txn.CommitInBatchWithResponse(b)
+		return err
 	})
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil
