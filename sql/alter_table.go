@@ -213,10 +213,14 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	}
 
 	mutationID := invalidMutationID
+	var err error
 	if addedMutations {
-		mutationID = tableDesc.finalizeMutation()
+		mutationID, err = tableDesc.finalizeMutation()
 	} else {
-		tableDesc.UpVersion = true
+		err = tableDesc.setUpVersion()
+	}
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	if err := tableDesc.AllocateIDs(); err != nil {
