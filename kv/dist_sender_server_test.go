@@ -764,9 +764,9 @@ func TestRequestToUninitializedRange(t *testing.T) {
 			) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 				if key.Equal(roachpb.RKeyMin) {
 					// Pass through requests for the first range to the real sender.
-					desc, pErr := sender.FirstRange()
-					if pErr != nil {
-						return nil, nil, pErr
+					desc, err := sender.FirstRange()
+					if err != nil {
+						return nil, nil, roachpb.NewError(err)
 					}
 					return []roachpb.RangeDescriptor{*desc}, nil, nil
 				}

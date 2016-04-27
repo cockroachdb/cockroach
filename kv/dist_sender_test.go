@@ -364,10 +364,10 @@ type MockRangeDescriptorDB func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescri
 func (mdb MockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	return mdb(stripMeta(key), considerIntents, useReverseScan)
 }
-func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 	rs, _, err := mdb.RangeLookup(nil, nil, false /* considerIntents */, false /* useReverseScan */)
 	if err != nil || len(rs) == 0 {
-		return nil, err
+		return nil, err.GoError()
 	}
 	return &rs[0], nil
 }

@@ -82,7 +82,7 @@ func (db *testDescriptorDB) getDescriptors(key roachpb.RKey, considerIntents boo
 	return rs, preRs, nil
 }
 
-func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, nil
 }
 
