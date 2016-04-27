@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"go/constant"
 	"go/token"
@@ -102,11 +103,13 @@ type NumVal struct {
 	OrigString string
 }
 
-func (expr *NumVal) String() string {
-	if expr.OrigString != "" {
-		return expr.OrigString
+// Format implements the NodeFormatter interface.
+func (expr *NumVal) Format(buf *bytes.Buffer, f FmtFlags) {
+	s := expr.OrigString
+	if s == "" {
+		s = expr.Value.String()
 	}
-	return expr.Value.String()
+	buf.WriteString(s)
 }
 
 // canBeInt64 checks if it's possible for the value to become an int64:
@@ -265,11 +268,13 @@ type StrVal struct {
 	bytesEsc bool
 }
 
-func (expr *StrVal) String() string {
+// Format implements the NodeFormatter interface.
+func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if expr.bytesEsc {
-		return encodeSQLBytes(expr.s)
+		encodeSQLBytes(buf, expr.s)
+	} else {
+		encodeSQLString(buf, expr.s)
 	}
-	return encodeSQLString(expr.s)
 }
 
 var strValAvailStringBytes = []Datum{DummyString, DummyBytes}

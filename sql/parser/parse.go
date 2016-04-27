@@ -34,15 +34,14 @@ import (
 // StatementList is a list of statements.
 type StatementList []Statement
 
-func (l StatementList) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
 	for i, s := range l {
 		if i > 0 {
 			buf.WriteString("; ")
 		}
-		buf.WriteString(s.String())
+		FormatNode(buf, f, s)
 	}
-	return buf.String()
 }
 
 // Syntax is an enum of the various syntax types.

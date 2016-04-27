@@ -23,7 +23,7 @@
 package parser
 
 import (
-	"fmt"
+	"bytes"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -36,9 +36,12 @@ type Revoke struct {
 	Grantees   NameList
 }
 
-func (node *Revoke) String() string {
-	return fmt.Sprintf("REVOKE %s ON %s FROM %v",
-		node.Privileges,
-		node.Targets,
-		node.Grantees)
+// Format implements the NodeFormatter interface.
+func (node *Revoke) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("REVOKE ")
+	node.Privileges.Format(buf)
+	buf.WriteString(" ON ")
+	FormatNode(buf, f, node.Targets)
+	buf.WriteString(" FROM ")
+	FormatNode(buf, f, node.Grantees)
 }

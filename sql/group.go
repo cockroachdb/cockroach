@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -632,9 +633,10 @@ func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
 
 func (*aggregateFunc) Variable() {}
 
-func (a *aggregateFunc) String() string {
-	return a.expr.String()
+func (a *aggregateFunc) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	a.expr.Format(buf, f)
 }
+func (a *aggregateFunc) String() string { return parser.AsString(a) }
 
 func (a *aggregateFunc) Walk(v parser.Visitor) parser.Expr { return a }
 

@@ -16,10 +16,7 @@
 
 package parser
 
-import (
-	"fmt"
-	"strings"
-)
+import "bytes"
 
 // Explain represents an EXPLAIN statement.
 type Explain struct {
@@ -27,10 +24,18 @@ type Explain struct {
 	Statement Statement
 }
 
-func (node *Explain) String() string {
+// Format implements the NodeFormatter interface.
+func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("EXPLAIN ")
 	if len(node.Options) > 0 {
-		return fmt.Sprintf("EXPLAIN (%s) %s",
-			strings.Join(node.Options, ", "), node.Statement)
+		buf.WriteByte('(')
+		for i, opt := range node.Options {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(opt)
+		}
+		buf.WriteString(") ")
 	}
-	return fmt.Sprintf("EXPLAIN %s", node.Statement)
+	FormatNode(buf, f, node.Statement)
 }

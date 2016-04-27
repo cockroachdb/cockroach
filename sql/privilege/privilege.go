@@ -17,6 +17,7 @@
 package privilege
 
 import (
+	"bytes"
 	"sort"
 	"strings"
 )
@@ -81,6 +82,17 @@ func (pl List) names() []string {
 		ret[i] = p.String()
 	}
 	return ret
+}
+
+// Format prints out the list in a buffer.
+// This keeps the existing order and uses ", " as separator.
+func (pl List) Format(buf *bytes.Buffer) {
+	for i, p := range pl {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(p.String())
+	}
 }
 
 // String implements the Stringer interface.
