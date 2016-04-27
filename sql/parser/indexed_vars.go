@@ -16,7 +16,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
@@ -60,8 +63,9 @@ func (v *IndexedVar) ReturnType() Datum {
 	return v.container.IndexedVarReturnType(v.Idx)
 }
 
-func (v *IndexedVar) String() string {
-	return v.container.IndexedVarString(v.Idx)
+// Format implements the NodeFormatter interface.
+func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(v.container.IndexedVarString(v.Idx))
 }
 
 // IndexedVarHelper is a structure that helps with initialization of IndexVars.
