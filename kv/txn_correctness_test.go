@@ -154,10 +154,12 @@ func readCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 	if pErr != nil {
 		return pErr
 	}
+	var value int64
 	if r.Value != nil {
-		c.env[c.key] = r.ValueInt()
-		c.debug = fmt.Sprintf("[%d]", r.ValueInt())
+		value = r.ValueInt()
 	}
+	c.env[c.key] = value
+	c.debug = fmt.Sprintf("[%d]", value)
 	return nil
 }
 
@@ -187,7 +189,11 @@ func scanCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
 // a previous read or write, or else assumed to be zero) and writes it
 // to the db.
 func incCmd(c *cmd, txn *client.Txn, t *testing.T) *roachpb.Error {
-	r := c.env[c.key] + 1
+	val, ok := c.env[c.key]
+	if !ok {
+		panic(fmt.Sprintf("can't increment key %q; not yet read", c.key))
+	}
+	r := val + 1
 	if pErr := txn.Put(c.getKey(), r); pErr != nil {
 		return pErr
 	}
@@ -692,7 +698,7 @@ func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []st
 func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	txn1 := "R(A) R(B) W(C,A+B) C"
-	txn2 := "I(A) I(B) C"
+	txn2 := "R(A) R(B) I(A) I(B) C"
 	verify := &verifier{
 		history: "R(C)",
 		checkFn: func(env map[string]int64) error {
