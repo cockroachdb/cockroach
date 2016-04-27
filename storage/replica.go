@@ -468,8 +468,7 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		r.mu.llChans = append(r.mu.llChans, llChan)
 		return llChan
 	}
-
-	if !r.store.Stopper().RunAsyncTask(func() {
+	if r.store.IsDrainingLeadership() || !r.store.Stopper().RunAsyncTask(func() {
 		pErr := func() *roachpb.Error {
 			// TODO(tschottdorf): get duration from configuration, either as a
 			// config flag or, later, dynamically adjusted.
@@ -533,8 +532,10 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		}
 		r.mu.llChans = r.mu.llChans[:0]
 	}) {
-		// We failed to start the asynchronous task.
-		llChan <- roachpb.NewErrorf("shutting down")
+		// We failed to start the asynchronous task. Send a blank NotLeaderError
+		// back to indicate that we have no idea who the leader might be; we've
+		// withdrawn from active duty.
+		llChan <- roachpb.NewError(r.newNotLeaderError(nil, r.store.StoreID()))
 		return llChan
 	}
 

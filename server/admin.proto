@@ -234,6 +234,32 @@ message ClusterResponse {
   string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
 }
 
+enum DrainMode {
+    // CLIENT instructs the server to refuse new SQL clients.
+    // TODO(tschottdorf): also terminate existing clients in a graceful manner.
+    CLIENT = 0;
+    // LEADERSHIP instructs the server to gracefully let all its Replicas'
+    // leader leases expire.
+    LEADERSHIP = 1;
+}
+
+// DrainRequest requests the server to enter the specified draining mode. The
+// server first deactivates all the modes specified in 'off' and then activates
+// all those in 'on'.
+message DrainRequest {
+  // These are actually of type DrainMode, but grpc-gateway does not support
+  // proxying enum fields (yet: https://github.com/gengo/grpc-gateway/issues/5)
+  // and it fails in pretty dramatic ways (panics the server).
+  repeated int32 on = 1;
+  repeated int32 off = 2;
+}
+
+// DrainResponse is the response to a successful DrainRequest and lists the
+// modes which are activated after having processing the request.
+message DrainResponse {
+  repeated int32 on = 1;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -315,6 +341,14 @@ service Admin {
   rpc Cluster(ClusterRequest) returns (ClusterResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/cluster"
+    };
+  }
+
+  // Drain puts the node into the specified drain mode(s).
+  rpc Drain(DrainRequest) returns (DrainResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/drain"
+      body: "*"
     };
   }
 }
