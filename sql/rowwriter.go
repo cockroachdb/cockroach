@@ -123,7 +123,7 @@ type rowInserter struct {
 	cols      []ColumnDescriptor
 
 	// For allocation avoidance.
-	marshalled []interface{}
+	marshalled []roachpb.Value
 }
 
 // makeRowInserter creates a rowInserter for the given table.
@@ -157,7 +157,7 @@ func makeRowInserter(
 	return rowInserter{
 		rowHelper:  rh,
 		cols:       cols,
-		marshalled: make([]interface{}, len(cols)),
+		marshalled: make([]roachpb.Value, len(cols)),
 	}, nil
 }
 
@@ -214,7 +214,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 			continue
 		}
 
-		if ri.marshalled[i] != nil {
+		if ri.marshalled[i].RawBytes != nil {
 			// We only output non-NULL values. Non-existent column keys are
 			// considered NULL during scanning and the row sentinel ensures we know
 			// the row exists.
@@ -224,7 +224,7 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 				log.Infof("CPut %s -> %v", roachpb.Key(key), val)
 			}
 
-			b.CPut(key, ri.marshalled[i], nil)
+			b.CPut(key, &ri.marshalled[i], nil)
 		}
 	}
 
@@ -241,7 +241,7 @@ type rowUpdater struct {
 	primaryKeyColChange bool
 
 	// For allocation avoidance.
-	marshalled []interface{}
+	marshalled []roachpb.Value
 	newValues  []parser.Datum
 }
 
@@ -328,7 +328,7 @@ func makeRowUpdater(
 		updateCols:          updateCols,
 		deleteOnlyIndex:     deleteOnlyIndex,
 		primaryKeyColChange: primaryKeyColChange,
-		marshalled:          make([]interface{}, len(updateCols)),
+		marshalled:          make([]roachpb.Value, len(updateCols)),
 		newValues:           make([]parser.Datum, len(tableDesc.Columns)),
 	}
 
@@ -446,7 +446,7 @@ func (ru *rowUpdater) updateRow(
 		}
 
 		key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
-		if ru.marshalled[i] != nil {
+		if ru.marshalled[i].RawBytes != nil {
 			// We only output non-NULL values. Non-existent column keys are
 			// considered NULL during scanning and the row sentinel ensures we know
 			// the row exists.
@@ -454,7 +454,7 @@ func (ru *rowUpdater) updateRow(
 				log.Infof("Put %s -> %v", roachpb.Key(key), val)
 			}
 
-			b.Put(key, ru.marshalled[i])
+			b.Put(key, &ru.marshalled[i])
 		} else {
 			// The column might have already existed but is being set to NULL, so
 			// delete it.
