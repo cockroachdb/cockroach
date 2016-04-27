@@ -22,10 +22,7 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // Insert represents an INSERT statement.
 type Insert struct {
@@ -36,24 +33,27 @@ type Insert struct {
 	OnConflict *OnConflict
 }
 
-func (node *Insert) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.OnConflict != nil {
 		buf.WriteString("UPSERT")
 	} else {
 		buf.WriteString("INSERT")
 	}
-	fmt.Fprintf(&buf, " INTO %s", node.Table)
+	buf.WriteString(" INTO ")
+	FormatNode(buf, f, node.Table)
 	if node.Columns != nil {
-		fmt.Fprintf(&buf, "(%s)", node.Columns)
+		buf.WriteByte('(')
+		FormatNode(buf, f, node.Columns)
+		buf.WriteByte(')')
 	}
 	if node.DefaultValues() {
 		buf.WriteString(" DEFAULT VALUES")
 	} else {
-		fmt.Fprintf(&buf, " %s", node.Rows)
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.Rows)
 	}
-	buf.WriteString(node.Returning.String())
-	return buf.String()
+	FormatNode(buf, f, node.Returning)
 }
 
 // DefaultValues returns true iff only default values are being inserted.

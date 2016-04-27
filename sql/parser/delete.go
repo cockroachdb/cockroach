@@ -22,7 +22,7 @@
 
 package parser
 
-import "fmt"
+import "bytes"
 
 // Delete represents a DELETE statement.
 type Delete struct {
@@ -31,7 +31,10 @@ type Delete struct {
 	Returning ReturningExprs
 }
 
-func (node *Delete) String() string {
-	return fmt.Sprintf("DELETE FROM %s%s%s",
-		node.Table, node.Where, node.Returning)
+// Format implements the NodeFormatter interface.
+func (node *Delete) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DELETE FROM ")
+	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, node.Where)
+	FormatNode(buf, f, node.Returning)
 }
