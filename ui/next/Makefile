@@ -50,6 +50,20 @@ jspm.installed: npm.installed
 	jspm install
 	touch $@
 
+PBJS_ARGS = --path ../../../ ../../server/status/status.proto
+
+protos/protos.js: npm.installed
+	pbjs -t commonjs $(PBJS_ARGS) > $@
+
+protos/protos.json: npm.installed
+	pbjs $(PBJS_ARGS) > $@
+
+protos/protos.d.ts: protos/protos.json
+	rm -f $@
+	echo 'declare module "protos" {' >> $@
+	proto2ts --file protos/protos.json | sed s/declare/export/ >> $@
+	echo '}' >> $@
+
 .PHONY: test
 test: npm.installed
 # Execute in /app directory, so that ts-node can pick up tsconfig.json.
