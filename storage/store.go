@@ -286,6 +286,8 @@ type Store struct {
 	initComplete            sync.WaitGroup // Signaled by async init tasks
 	raftRequestChan         chan *RaftMessageRequest
 
+	drainLeadership atomic.Value // bool; see DrainLeadership()
+
 	// Locking notes: To avoid deadlocks, the following lock order
 	// must be obeyed: processRaftMu < Store.mu.Mutex <
 	// Replica.mu.Mutex < Store.pendingRaftGroups.Mutex.
@@ -622,6 +624,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		metrics:         newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
+	s.drainLeadership.Store(false)
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
@@ -658,6 +661,32 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 // String formats a store for debug output.
 func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
+}
+
+// DrainLeadership (when called with 'true') prevents all of the Store's
+// Replicas from acquiring or extending leader leases and waits until all of
+// them have expired. If an error is returned, the draining state is still
+// active, but there may be active leases held by some of the Store's Replicas.
+// When called with 'false', returns to the normal mode of operation.
+func (s *Store) DrainLeadership(drain bool) error {
+	s.drainLeadership.Store(drain)
+	if !drain {
+		return nil
+	}
+
+	return util.RetryForDuration(10*LeaderLeaseActiveDuration, func() error {
+		var err error
+		now := s.Clock().Now()
+		newStoreRangeSet(s).Visit(func(r *Replica) bool {
+			if lease, inflight := r.getLeaderLease(); inflight ||
+				(lease.OwnedBy(s.StoreID()) && lease.Covers(now)) {
+
+				err = fmt.Errorf("replica %s still has an active lease", r)
+			}
+			return err == nil // break on error
+		})
+		return err
+	})
 }
 
 // context returns a base context to pass along with commands being executed,
@@ -1197,6 +1226,11 @@ func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
 
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.ctx.TestingKnobs }
+
+// IsDrainingLeadership accessor.
+func (s *Store) IsDrainingLeadership() bool {
+	return s.drainLeadership.Load().(bool)
+}
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates new

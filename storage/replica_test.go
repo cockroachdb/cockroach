@@ -926,6 +926,57 @@ func TestReplicaLeaderLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	}
 }
 
+// TestReplicaDrainLeaderLease makes sure that no new leases are granted when
+// the Store is in DrainLeadership mode.
+func TestReplicaDrainLeaderLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Acquire initial lease.
+	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
+	var slept atomic.Value
+	slept.Store(false)
+	tc.stopper.RunAsyncTask(func() {
+		// Wait just a bit so that the main thread can check that
+		// DrainLeadership blocks (false negatives are possible, but 10ms is
+		// plenty to make this fail 99.999% of the time in practice).
+		time.Sleep(10 * time.Millisecond)
+		slept.Store(true)
+		// Expire the lease (and any others that may race in before we drain).
+		for {
+			tc.manualClock.Increment(leaseExpiry(tc.rng))
+			select {
+			case <-time.After(10 * time.Millisecond): // real code would use Ticker
+			case <-tc.stopper.ShouldDrain():
+				return
+			}
+		}
+	})
+
+	if err := tc.store.DrainLeadership(true); err != nil {
+		t.Fatal(err)
+	}
+	if !slept.Load().(bool) {
+		t.Fatal("DrainLeadership returned with active lease")
+	}
+	pErr := <-tc.rng.requestLeaderLease(tc.clock.Now())
+	_, ok := pErr.GetDetail().(*roachpb.NotLeaderError)
+	if !ok {
+		t.Fatalf("expected NotLeaderError, not %v", pErr)
+	}
+	if err := tc.store.DrainLeadership(false); err != nil {
+		t.Fatal(err)
+	}
+	// Newly unfrozen, leases work again.
+	if pErr := tc.rng.redirectOnOrAcquireLeaderLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
 // TestReplicaGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestReplicaGossipFirstRange(t *testing.T) {

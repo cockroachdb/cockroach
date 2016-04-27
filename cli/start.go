@@ -227,7 +227,12 @@ func runStart(_ *cobra.Command, _ []string) error {
 	select {
 	case <-stopper.ShouldStop():
 	case <-signalCh:
-		go s.Stop()
+		go func() {
+			if _, err := s.Drain(server.GracefulDrainModes); err != nil {
+				log.Warning(err)
+			}
+			s.Stop()
+		}()
 	}
 
 	const msgDrain = "initiating graceful shutdown of server"
