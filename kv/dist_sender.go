@@ -194,12 +194,15 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if ctx.RPCSend != nil {
 		ds.rpcSend = ctx.RPCSend
 	}
-	if ctx.RPCContext != nil {
-		ds.rpcContext = ctx.RPCContext
-	}
 	ds.rpcRetryOptions = defaultRPCRetryOptions
 	if ctx.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *ctx.RPCRetryOptions
+	}
+	if ctx.RPCContext != nil {
+		ds.rpcContext = ctx.RPCContext
+		if ds.rpcRetryOptions.Closer == nil {
+			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldDrain()
+		}
 	}
 	if ctx.Tracer != nil {
 		ds.Tracer = ctx.Tracer

@@ -66,6 +66,12 @@ func Start(opts Options) Retry {
 // they had followed the very first attempt (i.e. their backoffs will be
 // short).
 func (r *Retry) Reset() {
+	select {
+	case <-r.opts.Closer:
+		// When the closer has fired, you can't keep going.
+		return
+	default:
+	}
 	r.currentAttempt = 0
 	r.isReset = true
 }

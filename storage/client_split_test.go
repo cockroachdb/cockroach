@@ -71,9 +71,9 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
 		args := adminSplitArgs(roachpb.KeyMin, key)
-		_, err := client.SendWrapped(rg1(store), nil, &args)
-		if err == nil {
-			t.Fatalf("%q: split succeeded unexpectedly", key)
+		_, pErr := client.SendWrapped(rg1(store), nil, &args)
+		if !testutils.IsPError(pErr, "cannot split") {
+			t.Errorf("%q: unexpected split error %s", key, pErr)
 		}
 	}
 }

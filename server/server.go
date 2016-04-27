@@ -70,6 +70,7 @@ type Server struct {
 	grpc                *grpc.Server
 	gossip              *gossip.Gossip
 	storePool           *storage.StorePool
+	distSender          *kv.DistSender
 	db                  *client.DB
 	kvDB                *kv.DBServer
 	pgServer            pgwire.Server
@@ -142,14 +143,15 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := kv.GetDefaultDistSenderRetryOptions()
 	retryOpts.Closer = stopper.ShouldDrain()
-	ds := kv.NewDistSender(&kv.DistSenderContext{
+	s.distSender = kv.NewDistSender(&kv.DistSenderContext{
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}, s.gossip)
 	txnRegistry := metric.NewRegistry()
 	txnMetrics := kv.NewTxnMetrics(txnRegistry)
-	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.Tracer, s.stopper, txnMetrics)
+	sender := kv.NewTxnCoordSender(s.distSender, s.clock, ctx.Linearizable, s.Tracer,
+		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
 	s.grpc = rpc.NewServer(s.rpcContext)
@@ -207,7 +209,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 
-	s.admin = newAdminServer(s.db, s.stopper, s.sqlExecutor, ds, s.node)
+	s.admin = newAdminServer(s)
 	s.stopper.AddCloser(s.admin)
 	RegisterAdminServer(s.grpc, s.admin)
 
