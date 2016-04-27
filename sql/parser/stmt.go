@@ -54,6 +54,7 @@ const (
 // Statement represents a statement.
 type Statement interface {
 	fmt.Stringer
+	NodeFormatter
 	StatementType() StatementType
 	// StatementTag is a short string identifying the type of statement
 	// (usually a single verb). This is different than the Stringer output,
@@ -302,3 +303,52 @@ func (ValuesClause) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (ValuesClause) StatementTag() string { return "VALUES" }
+
+func (n *AlterTable) String() string               { return AsString(n) }
+func (n AlterTableCmds) String() string            { return AsString(n) }
+func (n *AlterTableAddColumn) String() string      { return AsString(n) }
+func (n *AlterTableAddConstraint) String() string  { return AsString(n) }
+func (n *AlterTableDropColumn) String() string     { return AsString(n) }
+func (n *AlterTableDropConstraint) String() string { return AsString(n) }
+func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
+func (n *AlterTableSetDefault) String() string     { return AsString(n) }
+func (n *BeginTransaction) String() string         { return AsString(n) }
+func (n *CommitTransaction) String() string        { return AsString(n) }
+func (n *CreateDatabase) String() string           { return AsString(n) }
+func (n *CreateIndex) String() string              { return AsString(n) }
+func (n *CreateTable) String() string              { return AsString(n) }
+func (n *Delete) String() string                   { return AsString(n) }
+func (n *DropDatabase) String() string             { return AsString(n) }
+func (n *DropIndex) String() string                { return AsString(n) }
+func (n *DropTable) String() string                { return AsString(n) }
+func (n *Explain) String() string                  { return AsString(n) }
+func (n *Grant) String() string                    { return AsString(n) }
+func (n *Insert) String() string                   { return AsString(n) }
+func (n *ParenSelect) String() string              { return AsString(n) }
+func (n *ReleaseSavepoint) String() string         { return AsString(n) }
+func (n *RenameColumn) String() string             { return AsString(n) }
+func (n *RenameDatabase) String() string           { return AsString(n) }
+func (n *RenameIndex) String() string              { return AsString(n) }
+func (n *RenameTable) String() string              { return AsString(n) }
+func (n *Revoke) String() string                   { return AsString(n) }
+func (n *RollbackToSavepoint) String() string      { return AsString(n) }
+func (n *RollbackTransaction) String() string      { return AsString(n) }
+func (n *Savepoint) String() string                { return AsString(n) }
+func (n *Select) String() string                   { return AsString(n) }
+func (n *SelectClause) String() string             { return AsString(n) }
+func (n *Set) String() string                      { return AsString(n) }
+func (n *SetDefaultIsolation) String() string      { return AsString(n) }
+func (n *SetTimeZone) String() string              { return AsString(n) }
+func (n *SetTransaction) String() string           { return AsString(n) }
+func (n *Show) String() string                     { return AsString(n) }
+func (n *ShowColumns) String() string              { return AsString(n) }
+func (n *ShowCreateTable) String() string          { return AsString(n) }
+func (n *ShowDatabases) String() string            { return AsString(n) }
+func (n *ShowGrants) String() string               { return AsString(n) }
+func (n *ShowIndex) String() string                { return AsString(n) }
+func (n *ShowTables) String() string               { return AsString(n) }
+func (l StatementList) String() string             { return AsString(l) }
+func (n *Truncate) String() string                 { return AsString(n) }
+func (n *UnionClause) String() string              { return AsString(n) }
+func (n *Update) String() string                   { return AsString(n) }
+func (n *ValuesClause) String() string             { return AsString(n) }
