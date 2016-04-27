@@ -1,0 +1,90 @@
+statement ok
+CREATE TABLE f (x FLOAT);
+
+statement ok
+INSERT INTO f(x) VALUES (1e10000 * 1e-9999), (3/2), (1);
+
+query R
+SELECT * FROM f;
+----
+10
+1.5
+1
+
+statement ok
+CREATE TABLE i (x INT);
+
+statement error value type float doesn't match type INT of column "x"
+INSERT INTO i(x) VALUES (4.5);
+
+statement ok
+INSERT INTO i(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6);
+
+query I
+SELECT * FROM i;
+----
+1
+2
+7
+
+statement ok
+CREATE TABLE d (x DECIMAL);
+
+statement ok
+INSERT INTO d(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6);
+
+query R
+SELECT * FROM d;
+----
+1
+2
+7
+
+statement ok
+UPDATE d SET x = x + 1 WHERE x + SQRT(x) >= 2 + .1;
+
+query R
+SELECT * FROM d;
+----
+1
+3
+8
+
+statement ok
+CREATE TABLE s (x STRING);
+
+statement ok
+INSERT INTO s(x) VALUES (b'qwe'), ('start' || b'end');
+
+statement error value type bytes doesn't match type STRING of column "x"
+INSERT INTO s(x) VALUES (b'\xfffefd');
+
+query T
+SELECT * from s;
+----
+qwe
+startend
+
+statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
+INSERT INTO s VALUES (COALESCE(1, 'foo'));
+
+statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
+INSERT INTO i VALUES (COALESCE(1, 'foo'));
+
+query error incompatible COALESCE expressions: expected 1 to be of type string, found type int
+SELECT COALESCE(1, 'foo');
+
+query R
+SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4));
+----
+1.23456789e+08
+
+# This is a current limitation which could be addressed by either improving the scope of constant
+# folding or improving function overload resolution.
+query error GREATEST: expected 2.3 to be of type int, found type float
+SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9));
+
+query R
+SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9.0));
+----
+1.23456789e+08
