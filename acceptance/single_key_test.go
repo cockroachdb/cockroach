@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -65,26 +65,26 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+				err := db.Txn(func(txn *client.Txn) error {
 					minExp := atomic.LoadInt64(&expected)
-					r, pErr := txn.Get(key)
-					if pErr != nil {
-						return pErr
+					r, err := txn.Get(key)
+					if err != nil {
+						return err
 					}
 					b := txn.NewBatch()
 					v := r.ValueInt()
 					b.Put(key, v+1)
-					pErr = txn.CommitInBatch(b)
+					err = txn.CommitInBatch(b)
 					// Atomic updates after the fact mean that we should read
 					// exp or larger (since concurrent writers might have
 					// committed but not yet performed their atomic update).
-					if pErr == nil && v < minExp {
-						return roachpb.NewErrorf("unexpected read: %d, expected >= %d", v, minExp)
+					if err == nil && v < minExp {
+						return util.Errorf("unexpected read: %d, expected >= %d", v, minExp)
 					}
-					return pErr
+					return err
 				})
-				if pErr != nil {
-					resultCh <- result{err: pErr.GoError()}
+				if err != nil {
+					resultCh <- result{err: err}
 					return
 				}
 				atomic.AddInt64(&expected, 1)

@@ -502,7 +502,7 @@ func TestMetricsRecording(t *testing.T) {
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
 		data := roachpb.InternalTimeSeriesData{}
-		return tsrv.db.GetProto(key, &data).GoError()
+		return tsrv.db.GetProto(key, &data)
 	}
 
 	// Verify that metrics for the current timestamp are recorded. This should

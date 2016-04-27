@@ -73,9 +73,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Extend the lease.
-	newLease, pErr = changer.ExtendLease(lease)
-	if pErr != nil {
-		t.Fatal(pErr)
+	newLease, err := changer.ExtendLease(lease)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if !validExpirationTime(newLease.ExpirationTime) {
@@ -83,13 +83,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Extending an old lease fails.
-	_, pErr = changer.ExtendLease(lease)
-	if pErr == nil {
+	_, err = changer.ExtendLease(lease)
+	if err == nil {
 		t.Fatal("extending an old lease succeeded")
 	}
 
 	// Releasing an old lease fails.
-	err := changer.ReleaseLease(lease)
+	err = changer.ReleaseLease(lease)
 	if err == nil {
 		t.Fatal("releasing a old lease succeeded")
 	}
@@ -101,8 +101,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Extending the lease fails.
-	_, pErr = changer.ExtendLease(newLease)
-	if pErr == nil {
+	_, err = changer.ExtendLease(newLease)
+	if err == nil {
 		t.Fatalf("was able to extend an already released lease: %d, %v", id, lease)
 	}
 
@@ -143,9 +143,9 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 	// Read table descriptor for version.
 	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, pErr := kvDB.Get(nameKey)
-	if pErr != nil {
-		t.Fatal(pErr)
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if !gr.Exists() {
 		t.Fatalf("Name entry %q does not exist", nameKey)
@@ -155,14 +155,14 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 	// Check that MaybeIncrementVersion doesn't increment the version
 	// when the up_version bit is not set.
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	expectedVersion := desc.GetTable().Version
 
-	desc, pErr = changer.MaybeIncrementVersion()
-	if pErr != nil {
-		t.Fatal(pErr)
+	desc, err = changer.MaybeIncrementVersion()
+	if err != nil {
+		t.Fatal(err)
 	}
 	newVersion := desc.GetTable().Version
 	if newVersion != expectedVersion {
@@ -180,8 +180,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	// correctly.
 	expectedVersion++
 	desc.GetTable().UpVersion = true
-	if pErr := kvDB.Put(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.Put(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	isDone, err = changer.IsDone()
 	if err != nil {
@@ -190,13 +190,13 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if isDone {
 		t.Fatalf("table expected to have an outstanding schema change: %v", desc.GetTable())
 	}
-	desc, pErr = changer.MaybeIncrementVersion()
-	if pErr != nil {
-		t.Fatal(pErr)
+	desc, err = changer.MaybeIncrementVersion()
+	if err != nil {
+		t.Fatal(err)
 	}
 	savedDesc := &csql.Descriptor{}
-	if pErr := kvDB.GetProto(descKey, savedDesc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, savedDesc); err != nil {
+		t.Fatal(err)
 	}
 	newVersion = desc.GetTable().Version
 	if newVersion != expectedVersion {
@@ -219,8 +219,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	if err := changer.RunStateMachineBeforeBackfill(); err != nil {
 		t.Fatal(err)
 	}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	newVersion = desc.GetTable().Version
 	if newVersion != expectedVersion {
@@ -228,8 +228,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	// Check that RunStateMachineBeforeBackfill functions properly.
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	table := desc.GetTable()
 	expectedVersion = table.Version
@@ -251,8 +251,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	for _, direction := range []csql.DescriptorMutation_Direction{csql.DescriptorMutation_ADD, csql.DescriptorMutation_DROP} {
 		table.Mutations[0].Direction = direction
 		expectedVersion++
-		if pErr := kvDB.Put(descKey, desc); pErr != nil {
-			t.Fatal(pErr)
+		if err := kvDB.Put(descKey, desc); err != nil {
+			t.Fatal(err)
 		}
 		// The expected end state.
 		expectedState := csql.DescriptorMutation_WRITE_ONLY
@@ -264,8 +264,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			if err := changer.RunStateMachineBeforeBackfill(); err != nil {
 				t.Fatal(err)
 			}
-			if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-				t.Fatal(pErr)
+			if err := kvDB.GetProto(descKey, desc); err != nil {
+				t.Fatal(err)
 			}
 			table = desc.GetTable()
 			newVersion = table.Version
@@ -435,8 +435,8 @@ func runSchemaChangeWithOperations(
 	descKey roachpb.Key,
 ) {
 	desc := &csql.Descriptor{}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	tableDesc := desc.GetTable()
 	version := tableDesc.Version
@@ -457,8 +457,8 @@ func runSchemaChangeWithOperations(
 	// Wait until the backfills for the schema change starts.
 	util.SucceedsSoon(t, func() error {
 		desc := &csql.Descriptor{}
-		if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-			t.Fatal(pErr)
+		if err := kvDB.GetProto(descKey, desc); err != nil {
+			t.Fatal(err)
 		}
 		table := desc.GetTable()
 		if table.Version == version+2 {
@@ -576,17 +576,17 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Read table descriptor for version.
 	nameKey := csql.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
-	gr, pErr := kvDB.Get(nameKey)
-	if pErr != nil {
-		t.Fatal(pErr)
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if !gr.Exists() {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
 	desc := &csql.Descriptor{}
-	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
 	}
 	tableDesc := desc.GetTable()
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))

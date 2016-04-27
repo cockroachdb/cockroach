@@ -95,12 +95,12 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	pErr := t.server.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	err := t.server.DB().Txn(func(txn *client.Txn) error {
 		var pErr *roachpb.Error
 		lease, pErr = t.node(nodeID).Acquire(txn, descID, version)
-		return pErr
+		return pErr.GoError()
 	})
-	return lease, pErr.GoError()
+	return lease, err
 }
 
 func (t *leaseTest) mustAcquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) *csql.LeaseState {
@@ -121,12 +121,12 @@ func (t *leaseTest) mustRelease(nodeID uint32, lease *csql.LeaseState) {
 	}
 }
 
-func (t *leaseTest) publish(nodeID uint32, descID csql.ID) *roachpb.Error {
-	_, pErr := t.node(nodeID).Publish(descID,
+func (t *leaseTest) publish(nodeID uint32, descID csql.ID) error {
+	_, err := t.node(nodeID).Publish(descID,
 		func(*csql.TableDescriptor) error {
 			return nil
 		})
-	return pErr
+	return err
 }
 
 func (t *leaseTest) mustPublish(nodeID uint32, descID csql.ID) {
@@ -382,12 +382,12 @@ func getKeysForTableDescriptor(
 
 // get the table descriptor for the ID passed in using an existing txn.
 // returns nil if the descriptor doesn't exist.
-func getTableDescFromID(txn *client.Txn, id csql.ID) (*csql.TableDescriptor, *roachpb.Error) {
+func getTableDescFromID(txn *client.Txn, id csql.ID) (*csql.TableDescriptor, error) {
 	desc := &csql.Descriptor{}
 	descKey := csql.MakeDescMetadataKey(id)
 
-	if pErr := txn.GetProto(descKey, desc); pErr != nil {
-		return nil, pErr
+	if err := txn.GetProto(descKey, desc); err != nil {
+		return nil, err
 	}
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
@@ -420,13 +420,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// TODO(andrei): just do a DROP table here once DROP starts setting that bit.
 	tableID := getDescriptorID(t.kvDB, "test", "t")
 	var tableDesc *csql.TableDescriptor
-	pErr := t.kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		tableDesc, pErr = getTableDescFromID(txn, tableID)
-		return pErr
+	err = t.kvDB.Txn(func(txn *client.Txn) error {
+		var err error
+		tableDesc, err = getTableDescFromID(txn, tableID)
+		return err
 	})
-	if pErr != nil {
-		t.Fatal(pErr)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if tableDesc == nil {
 		t.Fatalf("descriptor missing")
@@ -466,12 +466,12 @@ func isDeleted(tableID csql.ID, cfg config.SystemConfig) bool {
 
 func acquire(s server.TestServer, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	pErr := s.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	err := s.DB().Txn(func(txn *client.Txn) error {
 		var pErr *roachpb.Error
 		lease, pErr = s.LeaseManager().Acquire(txn, descID, version)
-		return pErr
+		return pErr.GoError()
 	})
-	return lease, pErr.GoError()
+	return lease, err
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0
@@ -521,13 +521,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Write the deleted bit.
 	// TODO(andrei): just do a DROP table here once DROP starts setting that bit.
 	var tableDesc *csql.TableDescriptor
-	pErr := kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		tableDesc, pErr = getTableDescFromID(txn, tableID)
-		return pErr
+	err = kvDB.Txn(func(txn *client.Txn) error {
+		var err error
+		tableDesc, err = getTableDescFromID(txn, tableID)
+		return err
 	})
-	if pErr != nil {
-		t.Fatal(pErr)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if tableDesc == nil {
 		t.Fatal("descriptor missing")
@@ -546,14 +546,14 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	waitTableID = tableID
 	mu.Unlock()
 
-	if pErr := kvDB.Txn(func(txn *client.Txn) *roachpb.Error {
-		if pErr := txn.Put(descKey, &desc); pErr != nil {
-			return pErr
+	if err := kvDB.Txn(func(txn *client.Txn) error {
+		if err := txn.Put(descKey, &desc); err != nil {
+			return err
 		}
 		txn.SetSystemConfigTrigger()
 		return nil
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 	// Block until the LeaseManager has processed the gossip update.
 	<-deleted

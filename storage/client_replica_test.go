@@ -237,7 +237,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+		if err := store.DB().Txn(func(txn *client.Txn) error {
 			epoch++
 
 			if epoch == 1 {
@@ -247,14 +247,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			updatedVal := []byte("updatedVal")
-			if pErr := txn.Put(key, updatedVal); pErr != nil {
-				return pErr
+			if err := txn.Put(key, updatedVal); err != nil {
+				return err
 			}
 
 			// Make sure a get will return the value that was just written.
-			actual, pErr := txn.Get(key)
-			if pErr != nil {
-				return pErr
+			actual, err := txn.Get(key)
+			if err != nil {
+				return err
 			}
 			if !bytes.Equal(actual.ValueBytes(), updatedVal) {
 				t.Fatalf("unexpected get result: %s", actual)
@@ -268,8 +268,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			b := txn.NewBatch()
 			return txn.CommitInBatch(b)
-		}); pErr != nil {
-			t.Fatal(pErr)
+		}); err != nil {
+			t.Fatal(err)
 		}
 
 		if epoch != 2 {
@@ -292,11 +292,11 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Key: roachpb.Key(key),
 	}
 	ts := clock.Now()
-	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: priority,
-	}, &roachpb.GetRequest{Span: requestHeader}); pErr != nil {
-		t.Fatalf("failed to get: %s", pErr)
+	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
+		t.Fatalf("failed to get: %s", err)
 	}
 
 	// Wait until the writer restarts the txn.
@@ -310,10 +310,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	manualClock.Increment(100)
 
 	ts = clock.Now()
-	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
+	if _, err := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
 		Timestamp:    ts,
 		UserPriority: priority,
-	}, &roachpb.GetRequest{Span: requestHeader}); pErr == nil {
+	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
 		t.Fatal("unexpected success of get")
 	}
 

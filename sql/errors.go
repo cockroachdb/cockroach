@@ -131,47 +131,43 @@ func (e *errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roachpb.Error) *roachpb.Error {
-	if origPErr.Index == nil {
-		return origPErr
-	}
-	index := origPErr.Index.Index
-	if index >= int32(len(b.Results)) {
-		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
-	}
-	result := b.Results[index]
+func convertBatchError(err error, tableDesc *TableDescriptor, results []client.Result) error {
 	var alloc datumAlloc
-	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok {
+	if cfe, ok := err.(*roachpb.ConditionFailedError); ok {
+		result := results[cfe.Index]
 		for _, row := range result.Rows {
 			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			index, err := tableDesc.FindIndexByID(indexID)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			valTypes, err := makeKeyVals(tableDesc, index.ColumnIDs)
 			if err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 			dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 			for _, dir := range index.ColumnDirections {
 				convertedDir, err := dir.toEncodingDirection()
 				if err != nil {
-					return roachpb.NewError(err)
+					return err
 				}
 				dirs = append(dirs, convertedDir)
 			}
 			vals := make([]parser.Datum, len(valTypes))
 			if _, err := decodeKeyVals(&alloc, valTypes, vals, dirs, key); err != nil {
-				return roachpb.NewError(err)
+				return err
 			}
 
-			return sqlErrToPErr(&errUniquenessConstraintViolation{index: index, vals: vals})
+			errConstraintViolation := &errUniquenessConstraintViolation{index: index, vals: vals}
+			return &roachpb.ErrorWithPGCode{
+				ErrorCode: errConstraintViolation.Code(),
+				Message:   errConstraintViolation.Error()}
 		}
 	}
-	return origPErr
+	return err
 }
 
 // convertToErrWithPGCode recognizes pErrs that should have SQL error codes to be
@@ -192,6 +188,7 @@ func convertToErrWithPGCode(pErr *roachpb.Error) *roachpb.Error {
 	return pErr
 }
 
+// !!! delete this function
 // sqlErrToPErr takes a sqlError and produces a pErr with a suitable detail.
 func sqlErrToPErr(e errorWithPGCode) *roachpb.Error {
 	var detail roachpb.ErrorWithPGCode

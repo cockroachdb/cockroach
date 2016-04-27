@@ -99,13 +99,13 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	// Update SystemConfig to trigger gossip.
-	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
 		return txn.Put(k, &desc)
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	successChan := make(chan struct{}, 1)
@@ -147,18 +147,18 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	col2Key := keys.MakeColumnKey(append([]byte(nil), rowKey...), 2)
 
 	// We don't care about the value, so just store any old thing.
-	if pErr := store.DB().Put(col1Key, "column 1"); pErr != nil {
-		t.Fatal(pErr)
+	if err := store.DB().Put(col1Key, "column 1"); err != nil {
+		t.Fatal(err)
 	}
-	if pErr := store.DB().Put(col2Key, "column 2"); pErr != nil {
-		t.Fatal(pErr)
+	if err := store.DB().Put(col2Key, "column 2"); err != nil {
+		t.Fatal(err)
 	}
 
 	// Split between col1Key and col2Key by splitting before col2Key.
 	args := adminSplitArgs(col2Key, col2Key)
-	_, pErr := client.SendWrapped(rg1(store), nil, &args)
-	if pErr != nil {
-		t.Fatalf("%s: split unexpected error: %s", col1Key, pErr)
+	_, err := client.SendWrapped(rg1(store), nil, &args)
+	if err != nil {
+		t.Fatalf("%s: split unexpected error: %s", col1Key, err)
 	}
 
 	rng1 := store.LookupReplica(col1Key, nil)
@@ -193,16 +193,16 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer stopper.Stop()
 
 	args := adminSplitArgs(roachpb.KeyMin, []byte("a"))
-	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
-		t.Fatal(pErr)
+	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
+		t.Fatal(err)
 	}
 	// This second split will try to split at end of first split range.
-	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr == nil {
+	if _, err := client.SendWrapped(rg1(store), nil, &args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
 	args = adminSplitArgs(roachpb.KeyMin, []byte("a"))
-	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr == nil {
+	if _, err := client.SendWrapped(rg1(store), nil, &args); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 }
@@ -631,7 +631,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - descriptor IDs are used to determine split keys
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
-	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := store.DB().Txn(func(txn *client.Txn) error {
 		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
 		txn.SetSystemConfigTrigger()
 		for i, kv := range initialSystemValues {
@@ -643,8 +643,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 				log.Info(err)
 				continue
 			}
-			if pErr := txn.Put(kv.Key, bytes); pErr != nil {
-				return pErr
+			if err := txn.Put(kv.Key, bytes); err != nil {
+				return err
 			}
 
 			descID := keys.MaxReservedDescID + i + 1
@@ -652,13 +652,13 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 			// We don't care about the values, just the keys.
 			k := sql.MakeDescMetadataKey(sql.ID(descID))
-			if pErr := txn.Put(k, bytes); pErr != nil {
-				return pErr
+			if err := txn.Put(k, bytes); err != nil {
+				return err
 			}
 		}
 		return nil
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
@@ -684,9 +684,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
 		util.SucceedsSoonDepth(1, t, func() error {
-			rows, pErr := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-			if pErr != nil {
-				return pErr.GoError()
+			rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+			if err != nil {
+				return err
 			}
 			keys := make([]roachpb.Key, 0, len(expKeys))
 			for _, r := range rows {
@@ -704,15 +704,15 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	numTotalValues := keys.MaxSystemConfigDescID + 5
 
 	// Write another, disjoint descriptor for a user table.
-	if pErr := store.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.
 		// We don't care about the values, just the keys.
 		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + numTotalValues))
 		return txn.Put(k, &sql.TableDescriptor{})
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	verifySplitsAtTablePrefixes(numTotalValues)

@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
@@ -83,25 +82,25 @@ func newKVNative(b *testing.B) kvInterface {
 func (kv *kvNative) insert(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
-	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := kv.db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
 			b.Put(fmt.Sprintf("%s%06d", kv.prefix, i), i)
 		}
 		return txn.CommitInBatch(b)
 	})
-	return pErr.GoError()
+	return err
 }
 
 func (kv *kvNative) update(rows, run int) error {
-	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := kv.db.Txn(func(txn *client.Txn) error {
 		// Read all values in a batch.
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Get(fmt.Sprintf("%s%06d", kv.prefix, i))
 		}
-		if pErr := txn.Run(b); pErr != nil {
-			return pErr
+		if err := txn.Run(b); err != nil {
+			return err
 		}
 		// Now add one to each value and add as puts to write batch.
 		wb := txn.NewBatch()
@@ -109,36 +108,36 @@ func (kv *kvNative) update(rows, run int) error {
 			v := result.Rows[0].ValueInt()
 			wb.Put(fmt.Sprintf("%s%06d", kv.prefix, i), v+1)
 		}
-		if pErr := txn.CommitInBatch(wb); pErr != nil {
-			return pErr
+		if err := txn.CommitInBatch(wb); err != nil {
+			return err
 		}
 		return nil
 	})
-	return pErr.GoError()
+	return err
 }
 
 func (kv *kvNative) del(rows, run int) error {
-	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := kv.db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Del(fmt.Sprintf("%s%06d", kv.prefix, i))
 		}
 		return txn.CommitInBatch(b)
 	})
-	return pErr.GoError()
+	return err
 }
 
 func (kv *kvNative) scan(rows, run int) error {
 	var kvs []client.KeyValue
-	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		kvs, pErr = txn.Scan(fmt.Sprintf("%s%06d", kv.prefix, 0), fmt.Sprintf("%s%06d", kv.prefix, rows), int64(rows))
-		return pErr
+	err := kv.db.Txn(func(txn *client.Txn) error {
+		var err error
+		kvs, err = txn.Scan(fmt.Sprintf("%s%06d", kv.prefix, 0), fmt.Sprintf("%s%06d", kv.prefix, rows), int64(rows))
+		return err
 	})
 	if len(kvs) != rows {
 		return util.Errorf("expected %d rows; got %d", rows, len(kvs))
 	}
-	return pErr.GoError()
+	return err
 }
 
 func (kv *kvNative) prep(rows int, initData bool) error {
@@ -147,14 +146,14 @@ func (kv *kvNative) prep(rows int, initData bool) error {
 	if !initData {
 		return nil
 	}
-	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := kv.db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
 			b.Put(fmt.Sprintf("%s%06d", kv.prefix, i), i)
 		}
 		return txn.CommitInBatch(b)
 	})
-	return pErr.GoError()
+	return err
 }
 
 func (kv *kvNative) done() {

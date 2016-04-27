@@ -179,29 +179,20 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // received. If it's a retriable error and we're going to retry the txn,
 // then the state moves to RestartWait. Otherwise, the state moves to Aborted
 // and the KV txn is cleaned up.
-func (ts *txnState) updateStateAndCleanupOnErr(pErr *roachpb.Error, e *Executor) {
-	if pErr == nil {
+func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
+	if err == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
 	}
-	if pErr.TransactionRestart == roachpb.TransactionRestart_NONE || !ts.willBeRetried() {
+	if _, ok := err.(roachpb.RetryableTxnError); !ok || !ts.willBeRetried() {
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.txnAbortCount.Inc(1)
-		ts.txn.CleanupOnError(pErr)
+		ts.txn.CleanupOnError(err)
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.
 		// Note that TransactionAborted is also a retriable error, handled here;
 		// in this case cleanup for the txn has been done for us under the hood.
-		switch pErr.TransactionRestart {
-		case roachpb.TransactionRestart_BACKOFF:
-			// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
-			// the backoff hint to the client anyway. See #5249
-			fallthrough
-		case roachpb.TransactionRestart_IMMEDIATE:
-			ts.State = RestartWait
-		default:
-			panic(fmt.Sprintf("unexpected restart value: %s", pErr.TransactionRestart))
-		}
+		ts.State = RestartWait
 	}
 }
 

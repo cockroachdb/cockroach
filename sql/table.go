@@ -230,22 +230,22 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 // found.
 // If you want to transform the not found condition into an error, use
 // tableDoesNotExistError().
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *roachpb.Error) {
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
-	dbDesc, pErr := p.getDatabaseDesc(qname.Database())
-	if pErr != nil {
-		return nil, pErr
+	dbDesc, err := p.getDatabaseDesc(qname.Database())
+	if err != nil {
+		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, roachpb.NewError(databaseDoesNotExistError(qname.Database()))
+		return nil, databaseDoesNotExistError(qname.Database())
 	}
 
 	desc := TableDescriptor{}
-	found, pErr := p.getDescriptor(tableKey{parentID: dbDesc.ID, name: qname.Table()}, &desc)
-	if pErr != nil {
-		return nil, pErr
+	found, err := p.getDescriptor(tableKey{parentID: dbDesc.ID, name: qname.Table()}, &desc)
+	if err != nil {
+		return nil, err
 	}
 	if !found {
 		return nil, nil
@@ -255,12 +255,12 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *
 
 // get the table descriptor for the ID passed in using an existing txn.
 // returns nil if the descriptor doesn't exist.
-func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Error) {
+func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
-	if pErr := txn.GetProto(descKey, desc); pErr != nil {
-		return nil, pErr
+	if err := txn.GetProto(descKey, desc); err != nil {
+		return nil, err
 	}
 	tableDesc := desc.GetTable()
 	if tableDesc == nil {
@@ -275,6 +275,7 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 // released when the planner closes. Note that a shallow copy of the table
 // descriptor is returned. It is safe to mutate fields of the returned
 // descriptor, but the values those fields point to should not be modified.
+// !!! change return to error
 func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *roachpb.Error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return TableDescriptor{}, roachpb.NewError(err)
@@ -285,9 +286,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		// system.lease and system.descriptor table, in particular, are problematic
 		// because they are used for acquiring leases itself, creating a
 		// chicken&egg problem.
-		desc, pErr := p.getTableDesc(qname)
-		if pErr != nil {
-			return TableDescriptor{}, pErr
+		desc, err := p.getTableDesc(qname)
+		if err != nil {
+			return TableDescriptor{}, roachpb.NewError(err)
 		}
 		if desc == nil {
 			return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
@@ -295,9 +296,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		return *desc, nil
 	}
 
-	tableID, pErr := p.getTableID(qname)
-	if pErr != nil {
-		return TableDescriptor{}, pErr
+	tableID, err := p.getTableID(qname)
+	if err != nil {
+		return TableDescriptor{}, roachpb.NewError(err)
 	}
 
 	var lease *LeaseState
@@ -328,14 +329,14 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 // getTableID retrieves the table ID for the specified table. It uses the
 // descriptor cache to perform lookups, falling back to the KV store when
 // necessary.
-func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
+func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return 0, roachpb.NewError(err)
+		return 0, err
 	}
 
-	dbID, pErr := p.getDatabaseID(qname.Database())
-	if pErr != nil {
-		return 0, pErr
+	dbID, err := p.getDatabaseID(qname.Database())
+	if err != nil {
+		return 0, err
 	}
 
 	// Lookup the ID of the table in the cache. The use of the cache might cause
@@ -349,24 +350,24 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, *roachpb.Error) {
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
 		id, err := nameVal.GetInt()
-		return ID(id), roachpb.NewError(err)
+		return ID(id), err
 	}
 
-	gr, pErr := p.txn.Get(key)
-	if pErr != nil {
-		return 0, pErr
+	gr, err := p.txn.Get(key)
+	if err != nil {
+		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, roachpb.NewError(tableDoesNotExistError(qname.String()))
+		return 0, tableDoesNotExistError(qname.String())
 	}
 	return ID(gr.ValueInt()), nil
 }
 
-func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, *roachpb.Error) {
+func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, error) {
 	prefix := MakeNameMetadataKey(dbDesc.ID, "")
-	sr, pErr := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
-	if pErr != nil {
-		return nil, pErr
+	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
 	}
 
 	var qualifiedNames parser.QualifiedNames
@@ -374,14 +375,14 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 		_, tableName, err := encoding.DecodeUnsafeStringAscending(
 			bytes.TrimPrefix(row.Key, prefix), nil)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		qname := &parser.QualifiedName{
 			Base:     parser.Name(dbDesc.Name),
 			Indirect: parser.Indirection{parser.NameIndirection(tableName)},
 		}
 		if err := qname.NormalizeTableName(""); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		qualifiedNames = append(qualifiedNames, qname)
 	}

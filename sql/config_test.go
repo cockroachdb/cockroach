@@ -49,11 +49,11 @@ func forceNewConfig(t *testing.T, s *testServer) config.SystemConfig {
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if pErr := s.DB().Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := s.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(configDescKey, configDesc)
-	}); pErr != nil {
-		t.Fatal(pErr)
+	}); err != nil {
+		t.Fatal(err)
 	}
 	return waitForConfigChange(t, s)
 }
