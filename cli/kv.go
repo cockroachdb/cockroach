@@ -155,15 +155,15 @@ func runCPut(cmd *cobra.Command, args []string) {
 
 	key := unquoteArg(args[0], true /* disallow system keys */)
 	value := unquoteArg(args[1], false)
-	var pErr *roachpb.Error
+	var err error
 	if len(args) == 3 {
-		pErr = kvDB.CPut(key, value, unquoteArg(args[2], false))
+		err = kvDB.CPut(key, value, unquoteArg(args[2], false))
 	} else {
-		pErr = kvDB.CPut(key, value, nil)
+		err = kvDB.CPut(key, value, nil)
 	}
 
-	if pErr != nil {
-		panicf("conditional put failed: %s", pErr)
+	if err != nil {
+		panicf("conditional put failed: %s", err)
 	}
 }
 

@@ -636,8 +636,7 @@ func (n *Node) writeSummaries() error {
 			// node status, writing one of these every 10s will generate
 			// more versions than will easily fit into a range over the
 			// course of a day.
-			if pErr := n.ctx.DB.PutInline(key, nodeStatus); pErr != nil {
-				err = pErr.GoError()
+			if err = n.ctx.DB.PutInline(key, nodeStatus); err != nil {
 				return
 			}
 			if log.V(2) {
@@ -667,7 +666,7 @@ func (n *Node) recordJoinEvent() {
 
 	n.stopper.RunWorker(func() {
 		for r := retry.Start(retry.Options{Closer: n.stopper.ShouldStop()}); r.Next(); {
-			if err := n.ctx.DB.Txn(func(txn *client.Txn) *roachpb.Error {
+			if err := n.ctx.DB.Txn(func(txn *client.Txn) error {
 				return n.eventLogger.InsertEventRecord(txn,
 					logEventType,
 					int32(n.Descriptor.NodeID),

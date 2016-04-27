@@ -29,23 +29,23 @@ import (
 // Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
-func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
+func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	b := client.Batch{}
 	for _, tableQualifiedName := range n.Tables {
 		tableDesc, pErr := p.getTableLease(tableQualifiedName)
 		if pErr != nil {
-			return nil, pErr
+			return nil, pErr.GoError()
 		}
 
 		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		p.TruncateImpl(&tableDesc, &b)
 	}
 
-	if pErr := p.txn.Run(&b); pErr != nil {
-		return nil, pErr
+	if err := p.txn.Run(&b); err != nil {
+		return nil, err
 	}
 
 	return &emptyNode{}, nil

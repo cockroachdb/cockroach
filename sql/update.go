@@ -65,7 +65,8 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, auto
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows      planNode
+	rows planNode
+	// !!! change to error
 	pErr      *roachpb.Error
 	b         *client.Batch
 	resultRow parser.DTuple
@@ -87,13 +88,13 @@ func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		r.pErr = en.p.txn.CommitInBatch(r.b)
+		r.pErr = roachpb.NewError(en.p.txn.CommitInBatch(r.b))
 	} else {
-		r.pErr = en.p.txn.Run(r.b)
+		r.pErr = roachpb.NewError(en.p.txn.Run(r.b))
 	}
 	if r.pErr != nil && convertError {
 		// TODO(dan): Move this logic into rowInsert/rowUpdate.
-		r.pErr = convertBatchError(en.tableDesc, *r.b, r.pErr)
+		r.pErr = roachpb.NewError(convertBatchError(en.tableDesc, findFirstResultWithError(r.b)))
 	}
 
 	r.done = true

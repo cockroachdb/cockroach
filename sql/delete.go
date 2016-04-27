@@ -111,7 +111,7 @@ func (d *deleteNode) Start() *roachpb.Error {
 	sel := rows.(*selectNode)
 	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.run.rd) {
 		d.run.fastPath = true
-		d.run.pErr = d.fastDelete()
+		d.run.pErr = roachpb.NewError(d.fastDelete())
 		d.run.done = true
 		return d.run.pErr
 	}
@@ -179,31 +179,31 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, rd *rowDeleter) bool
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
-func (d *deleteNode) fastDelete() *roachpb.Error {
+func (d *deleteNode) fastDelete() error {
 	scan := d.run.rows.(*selectNode).table.node.(*scanNode)
 	if !scan.initScan() {
-		return scan.pErr
+		return scan.pErr.GoError()
 	}
 
-	rowCount, pErr := d.run.rd.fastDelete(d.run.b, scan, d.fastDeleteCommitFunc)
-	if pErr != nil {
-		return pErr
+	rowCount, err := d.run.rd.fastDelete(d.run.b, scan, d.fastDeleteCommitFunc)
+	if err != nil {
+		return err
 	}
 	d.rh.rowCount += rowCount
 	return nil
 }
 
-func (d *deleteNode) fastDeleteCommitFunc(b *client.Batch) *roachpb.Error {
+func (d *deleteNode) fastDeleteCommitFunc(b *client.Batch) error {
 	if d.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		if pErr := d.p.txn.CommitInBatch(b); pErr != nil {
-			return pErr
+		if err := d.p.txn.CommitInBatch(b); err != nil {
+			return err
 		}
 	} else {
-		if pErr := d.p.txn.Run(b); pErr != nil {
-			return pErr
+		if err := d.p.txn.Run(b); err != nil {
+			return err
 		}
 	}
 	return nil

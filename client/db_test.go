@@ -23,10 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -41,9 +38,9 @@ func ExampleDB_Get() {
 	s, db := setup()
 	defer s.Stop()
 
-	result, pErr := db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
@@ -55,12 +52,12 @@ func ExampleDB_Put() {
 	s, db := setup()
 	defer s.Stop()
 
-	if pErr := db.Put("aa", "1"); pErr != nil {
-		panic(pErr)
+	if err := db.Put("aa", "1"); err != nil {
+		panic(err)
 	}
-	result, pErr := db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
@@ -72,41 +69,41 @@ func ExampleDB_CPut() {
 	s, db := setup()
 	defer s.Stop()
 
-	if pErr := db.Put("aa", "1"); pErr != nil {
-		panic(pErr)
+	if err := db.Put("aa", "1"); err != nil {
+		panic(err)
 	}
-	if pErr := db.CPut("aa", "2", "1"); pErr != nil {
-		panic(pErr)
+	if err := db.CPut("aa", "2", "1"); err != nil {
+		panic(err)
 	}
-	result, pErr := db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
-	}
-	fmt.Printf("aa=%s\n", result.ValueBytes())
-
-	if pErr = db.CPut("aa", "3", "1"); pErr == nil {
-		panic("expected pError from conditional put")
-	}
-	result, pErr = db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
-	if pErr = db.CPut("bb", "4", "1"); pErr == nil {
+	if err = db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
-	result, pErr = db.Get("bb")
-	if pErr != nil {
-		panic(pErr)
+	result, err = db.Get("aa")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("aa=%s\n", result.ValueBytes())
+
+	if err = db.CPut("bb", "4", "1"); err == nil {
+		panic("expected error from conditional put")
+	}
+	result, err = db.Get("bb")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("bb=%s\n", result.ValueBytes())
-	if pErr = db.CPut("bb", "4", nil); pErr != nil {
-		panic(pErr)
+	if err = db.CPut("bb", "4", nil); err != nil {
+		panic(err)
 	}
-	result, pErr = db.Get("bb")
-	if pErr != nil {
-		panic(pErr)
+	result, err = db.Get("bb")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("bb=%s\n", result.ValueBytes())
 
@@ -121,18 +118,18 @@ func ExampleDB_InitPut() {
 	s, db := setup()
 	defer s.Stop()
 
-	if pErr := db.InitPut("aa", "1"); pErr != nil {
-		panic(pErr)
+	if err := db.InitPut("aa", "1"); err != nil {
+		panic(err)
 	}
-	if pErr := db.InitPut("aa", "1"); pErr != nil {
-		panic(pErr)
+	if err := db.InitPut("aa", "1"); err != nil {
+		panic(err)
 	}
-	if pErr := db.InitPut("aa", "2"); pErr == nil {
+	if err := db.InitPut("aa", "2"); err == nil {
 		panic("expected error from init put")
 	}
-	result, pErr := db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
@@ -144,12 +141,12 @@ func ExampleDB_Inc() {
 	s, db := setup()
 	defer s.Stop()
 
-	if _, pErr := db.Inc("aa", 100); pErr != nil {
-		panic(pErr)
+	if _, err := db.Inc("aa", 100); err != nil {
+		panic(err)
 	}
-	result, pErr := db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%d\n", result.ValueInt())
 
@@ -164,8 +161,8 @@ func ExampleBatch() {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Put("bb", "2")
-	if pErr := db.Run(b); pErr != nil {
-		panic(pErr)
+	if err := db.Run(b); err != nil {
+		panic(err)
 	}
 	for _, result := range b.Results {
 		for _, row := range result.Rows {
@@ -186,12 +183,12 @@ func ExampleDB_Scan() {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if pErr := db.Run(b); pErr != nil {
-		panic(pErr)
+	if err := db.Run(b); err != nil {
+		panic(err)
 	}
-	rows, pErr := db.Scan("a", "b", 100)
-	if pErr != nil {
-		panic(pErr)
+	rows, err := db.Scan("a", "b", 100)
+	if err != nil {
+		panic(err)
 	}
 	for i, row := range rows {
 		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
@@ -210,12 +207,12 @@ func ExampleDB_ReverseScan() {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if pErr := db.Run(b); pErr != nil {
-		panic(pErr)
+	if err := db.Run(b); err != nil {
+		panic(err)
 	}
-	rows, pErr := db.ReverseScan("ab", "c", 100)
-	if pErr != nil {
-		panic(pErr)
+	rows, err := db.ReverseScan("ab", "c", 100)
+	if err != nil {
+		panic(err)
 	}
 	for i, row := range rows {
 		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
@@ -234,15 +231,15 @@ func ExampleDB_Del() {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("ac", "3")
-	if pErr := db.Run(b); pErr != nil {
-		panic(pErr)
+	if err := db.Run(b); err != nil {
+		panic(err)
 	}
-	if pErr := db.Del("ab"); pErr != nil {
-		panic(pErr)
+	if err := db.Del("ab"); err != nil {
+		panic(err)
 	}
-	rows, pErr := db.Scan("a", "b", 100)
-	if pErr != nil {
-		panic(pErr)
+	rows, err := db.Scan("a", "b", 100)
+	if err != nil {
+		panic(err)
 	}
 	for i, row := range rows {
 		fmt.Printf("%d: %s=%s\n", i, row.Key, row.ValueBytes())
@@ -257,21 +254,21 @@ func ExampleTxn_Commit() {
 	s, db := setup()
 	defer s.Stop()
 
-	pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := db.Txn(func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
 		return txn.CommitInBatch(b)
 	})
-	if pErr != nil {
-		panic(pErr)
+	if err != nil {
+		panic(err)
 	}
 
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Get("ab")
-	if pErr := db.Run(b); pErr != nil {
-		panic(pErr)
+	if err := db.Run(b); err != nil {
+		panic(err)
 	}
 	for i, result := range b.Results {
 		for j, row := range result.Rows {
@@ -288,18 +285,18 @@ func ExampleDB_Put_insecure() {
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
 	s.Ctx.Insecure = true
-	if pErr := s.Start(); pErr != nil {
-		log.Fatalf("Could not start server: %v", pErr)
+	if err := s.Start(); err != nil {
+		log.Fatalf("Could not start server: %v", err)
 	}
 	defer s.Stop()
 
 	db := s.DB()
-	if pErr := db.Put("aa", "1"); pErr != nil {
-		panic(pErr)
+	if err := db.Put("aa", "1"); err != nil {
+		panic(err)
 	}
-	result, pErr := db.Get("aa")
-	if pErr != nil {
-		panic(pErr)
+	result, err := db.Get("aa")
+	if err != nil {
+		panic(err)
 	}
 	fmt.Printf("aa=%s\n", result.ValueBytes())
 
@@ -313,13 +310,13 @@ func TestDebugName(t *testing.T) {
 	defer s.Stop()
 
 	file, _, _ := caller.Lookup(0)
-	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+	if err := db.Txn(func(txn *client.Txn) error {
 		if !strings.HasPrefix(txn.DebugName(), file+":") {
 			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
 		}
 		return nil
-	}); pErr != nil {
-		t.Errorf("txn failed: %s", pErr)
+	}); err != nil {
+		t.Errorf("txn failed: %s", err)
 	}
 }
 
@@ -403,35 +400,5 @@ func TestCommonMethods(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-// Verifies that an inner transaction in a nested transaction strips the transaction
-// information in its error when propagating it to an other transaction.
-func TestNestedTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, db := setup()
-	defer s.Stop()
-
-	pErr := db.Txn(func(txn1 *client.Txn) *roachpb.Error {
-		if pErr := txn1.Put("a", "1"); pErr != nil {
-			t.Fatalf("unexpected put error: %s", pErr)
-		}
-		iPErr := db.Txn(func(txn2 *client.Txn) *roachpb.Error {
-			txnProto := roachpb.NewTransaction("test", roachpb.Key("a"), 1, roachpb.SERIALIZABLE, roachpb.Timestamp{}, 0)
-			return roachpb.NewErrorWithTxn(util.Errorf("inner txn error"), txnProto)
-		})
-
-		if iPErr.GetTxn() != nil {
-			t.Errorf("error txn must be stripped: %s", iPErr)
-		}
-		return iPErr
-
-	})
-	if pErr == nil {
-		t.Fatal("unexpected success of txn")
-	}
-	if !testutils.IsPError(pErr, "inner txn error") {
-		t.Errorf("unexpected failure: %s", pErr)
 	}
 }
