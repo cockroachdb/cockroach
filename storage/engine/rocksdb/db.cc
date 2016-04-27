@@ -1553,13 +1553,84 @@ DBIterState DBIterSeekToLast(DBIterator* iter) {
   return DBIterGetState(iter);
 }
 
-DBIterState DBIterNext(DBIterator* iter) {
+DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
+  // If we're skipping the current key versions, remember the key the
+  // iterator was pointing out.
+  std::string old_key;
+  if (skip_current_key_versions && iter->rep->Valid()) {
+    rocksdb::Slice key;
+    rocksdb::Slice ts;
+    if (!SplitKey(iter->rep->key(), &key, &ts)) {
+      // TODO(peter): Need to set an error on DBIterator. Currently
+      // DBIterError() returns iter->rep->status().
+      DBIterState state = { 0 };
+      state.valid = false;
+      return state;
+    }
+    old_key = key.ToString();
+  }
+
   iter->rep->Next();
+
+  if (skip_current_key_versions && iter->rep->Valid()) {
+    rocksdb::Slice key;
+    rocksdb::Slice ts;
+    if (!SplitKey(iter->rep->key(), &key, &ts)) {
+      // TODO(peter): Need to set an error on DBIterator. Currently
+      // DBIterError() returns iter->rep->status().
+      DBIterState state = { 0 };
+      state.valid = false;
+      return state;
+    }
+    if (old_key == key) {
+      // We're pointed at a different version of the same key. Fall
+      // back to seeking to the next key.
+      old_key.append("\0", 1);
+      DBKey db_key;
+      db_key.key = ToDBSlice(old_key);
+      db_key.wall_time = 0;
+      db_key.logical = 0;
+      iter->rep->Seek(EncodeKey(db_key));
+    }
+  }
+
   return DBIterGetState(iter);
 }
 
-DBIterState DBIterPrev(DBIterator* iter){
+DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions){
+  // If we're skipping the current key versions, remember the key the
+  // iterator was pointed out.
+  std::string old_key;
+  if (skip_current_key_versions && iter->rep->Valid()) {
+    rocksdb::Slice key;
+    rocksdb::Slice ts;
+    if (SplitKey(iter->rep->key(), &key, &ts)) {
+      old_key = key.ToString();
+    }
+  }
+
   iter->rep->Prev();
+
+  if (skip_current_key_versions && iter->rep->Valid()) {
+    rocksdb::Slice key;
+    rocksdb::Slice ts;
+    if (SplitKey(iter->rep->key(), &key, &ts)) {
+      if (old_key == key) {
+        // We're pointed at a different version of the same key. Fall
+        // back to seeking to the prev key. In this case, we seek to
+        // the "metadata" key and that back up the iterator.
+        DBKey db_key;
+        db_key.key = ToDBSlice(old_key);
+        db_key.wall_time = 0;
+        db_key.logical = 0;
+        iter->rep->Seek(EncodeKey(db_key));
+        if (iter->rep->Valid()) {
+          iter->rep->Prev();
+        }
+      }
+    }
+  }
+
   return DBIterGetState(iter);
 }
 

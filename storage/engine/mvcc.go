@@ -818,9 +818,7 @@ func mvccGetInternal(
 		}
 	}
 
-	if !iter.unsafeKey().Equal(seekKey) {
-		iter.Seek(seekKey)
-	}
+	iter.Seek(seekKey)
 	if !iter.Valid() {
 		if err := iter.Error(); err != nil {
 			return nil, nil, safeValue, err
@@ -1616,42 +1614,50 @@ func MVCCIterate(ctx context.Context,
 				return nil, err
 			}
 		}
+
 		if reverse {
-			// Seeking for the position of the given meta key.
-			iter.Seek(metaKey)
-			if !iter.Valid() {
-				if err := iter.Error(); err != nil {
-					return nil, err
+			if iter.Valid() {
+				if buf.meta.IsInline() {
+					// The current entry is an inline value. We can reach the previous
+					// entry using Prev() which is slightly faster than PrevKey().
+					iter.Prev()
+				} else {
+					// This is subtle: mvccGetInternal might already have advanced us to the
+					// next key in which case we have to reset our position.
+					if !iter.unsafeKey().Key.Equal(metaKey.Key) {
+						iter.Seek(metaKey)
+						if iter.Valid() {
+							iter.Prev()
+						}
+					} else {
+						iter.PrevKey()
+					}
 				}
-				break
-			}
-			// Move the iterator back, which gets us into the previous row (getMeta
-			// moves us further back to the meta key).
-			iter.Prev()
-			if !iter.Valid() {
-				if err := iter.Error(); err != nil {
-					return nil, err
-				}
-				break
 			}
 		} else {
-			if buf.meta.IsInline() {
-				// The current entry is an inline value. We can reach the next entry
-				// using Next().
-				iter.Next()
-			} else {
-				// The current entry is a versioned value. Seek to the next metadata
-				// key.
-				iter.Seek(MakeMVCCMetadataKey(metaKey.Key.Next()))
-			}
-			if !iter.Valid() {
-				if err := iter.Error(); err != nil {
-					return nil, err
+			if iter.Valid() {
+				if buf.meta.IsInline() {
+					// The current entry is an inline value. We can reach the next entry
+					// using Next() which is slightly faster than NextKey().
+					iter.Next()
+				} else {
+					// This is subtle: mvccGetInternal might already have advanced us to
+					// the next key in which case we don't have to do anything. Only call
+					// NextKey() if the current key pointed to by the iterator is the same
+					// as the one at the top of the loop.
+					if iter.unsafeKey().Key.Equal(metaKey.Key) {
+						iter.NextKey()
+					}
 				}
-				break
 			}
 		}
 
+		if !iter.Valid() {
+			if err := iter.Error(); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	return intents, wiErr
 }
