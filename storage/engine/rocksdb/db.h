@@ -134,15 +134,17 @@ DBIterState DBIterSeekToFirst(DBIterator* iter);
 // Positions the iterator at the last key in the database.
 DBIterState DBIterSeekToLast(DBIterator* iter);
 
-// Advances the iterator to the next key. After this call,
-// DBIterValid() returns 1 iff the iterator was not positioned at the
-// last key.
-DBIterState DBIterNext(DBIterator* iter);
+// Advances the iterator to the next key. If skip_current_key_versions
+// is true, any remaining versions for the current key are
+// skipped. After this call, DBIterValid() returns 1 iff the iterator
+// was not positioned at the last key.
+DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 
-// Moves the iterator back to the previous key. After this call,
-// DBIterValid() returns 1 iff the iterator was not positioned at the
-// first key.
-DBIterState DBIterPrev(DBIterator* iter);
+// Moves the iterator back to the previous key. If
+// skip_current_key_versions is true, any remaining versions for the
+// current key are skipped. After this call, DBIterValid() returns 1
+// iff the iterator was not positioned at the first key.
+DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
 
 // Returns any error associated with the iterator.
 DBStatus DBIterError(DBIterator* iter);

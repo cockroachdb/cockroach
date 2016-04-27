@@ -49,7 +49,17 @@ type Iterator interface {
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
-	// Key returns the current key as a byte slice.
+	// NextKey advances the iterator to the next MVCC key. This operation is
+	// distinct from Next which advances to the next version of the current key
+	// or the next key if the iterator is currently located at the last version
+	// for a key.
+	NextKey()
+	// PrevKey moves the iterator backward to the previous MVCC key. This
+	// operation is distinct from Prev which moves the iterator backward to the
+	// prev version of the current key or the prev key if the iterator is
+	// currently located at the first version for a key.
+	PrevKey()
+	// Key returns the current key.
 	Key() MVCCKey
 	// Value returns the current value as a byte slice.
 	Value() []byte

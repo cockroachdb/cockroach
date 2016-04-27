@@ -656,15 +656,6 @@ func (r *rocksDBIterator) Seek(key MVCCKey) {
 	}
 }
 
-func (r *rocksDBIterator) Valid() bool {
-	return r.valid
-}
-
-func (r *rocksDBIterator) Next() {
-	r.checkEngineOpen()
-	r.setState(C.DBIterNext(r.iter))
-}
-
 func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 	r.checkEngineOpen()
 	if len(key.Key) == 0 {
@@ -685,9 +676,28 @@ func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
 	}
 }
 
+func (r *rocksDBIterator) Valid() bool {
+	return r.valid
+}
+
+func (r *rocksDBIterator) Next() {
+	r.checkEngineOpen()
+	r.setState(C.DBIterNext(r.iter, false /* !skip_current_key_versions */))
+}
+
 func (r *rocksDBIterator) Prev() {
 	r.checkEngineOpen()
-	r.setState(C.DBIterPrev(r.iter))
+	r.setState(C.DBIterPrev(r.iter, false /* !skip_current_key_versions */))
+}
+
+func (r *rocksDBIterator) NextKey() {
+	r.checkEngineOpen()
+	r.setState(C.DBIterNext(r.iter, true /* skip_current_key_versions */))
+}
+
+func (r *rocksDBIterator) PrevKey() {
+	r.checkEngineOpen()
+	r.setState(C.DBIterPrev(r.iter, true /* skip_current_key_versions */))
 }
 
 func (r *rocksDBIterator) Key() MVCCKey {
