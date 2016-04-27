@@ -22,10 +22,7 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // DropBehavior represents options for dropping schema elements.
 type DropBehavior int
@@ -53,14 +50,13 @@ type DropDatabase struct {
 	IfExists bool
 }
 
-func (node *DropDatabase) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *DropDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DROP DATABASE ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	buf.WriteString(node.Name.String())
-	return buf.String()
+	FormatNode(buf, f, node.Name)
 }
 
 // DropIndex represents a DROP INDEX statement.
@@ -70,17 +66,17 @@ type DropIndex struct {
 	DropBehavior DropBehavior
 }
 
-func (node *DropIndex) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *DropIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DROP INDEX ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	buf.WriteString(node.IndexList.String())
+	FormatNode(buf, f, node.IndexList)
 	if node.DropBehavior != DropDefault {
-		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+		buf.WriteByte(' ')
+		buf.WriteString(node.DropBehavior.String())
 	}
-	return buf.String()
 }
 
 // DropTable represents a DROP TABLE statement.
@@ -89,12 +85,11 @@ type DropTable struct {
 	IfExists bool
 }
 
-func (node *DropTable) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *DropTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DROP TABLE ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	buf.WriteString(node.Names.String())
-	return buf.String()
+	FormatNode(buf, f, node.Names)
 }
