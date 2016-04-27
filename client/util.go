@@ -52,6 +52,9 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 
 	// Handle a few common types via a type switch.
 	switch t := v.(type) {
+	case *roachpb.Value:
+		return *t, nil
+
 	case nil:
 		return r, nil
 
