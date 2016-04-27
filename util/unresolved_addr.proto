@@ -24,6 +24,6 @@ import weak "gogoproto/gogo.proto";
 message UnresolvedAddr {
   option (gogoproto.goproto_stringer) = false;
 
-  optional string network_field = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "network"];
-  optional string address_field = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "address"];
+  optional string network_field = 1 [(gogoproto.nullable) = false];
+  optional string address_field = 2 [(gogoproto.nullable) = false];
 }

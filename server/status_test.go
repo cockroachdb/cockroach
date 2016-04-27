@@ -87,15 +87,15 @@ func TestStatusJson(t *testing.T) {
 	expectedResult := fmt.Sprintf(`{
   "nodeID": 1,
   "address": {
-    "network": "%s",
-    "address": "%s"
+    "network_field": "%s",
+    "address_field": "%s"
   },
   "buildInfo": {
-    "goVersion": "%s",
+    "go_version": "%s",
     "tag": "",
     "time": "",
     "dependencies": "",
-    "cgoCompiler": ".*",
+    "cgo_compiler": ".*",
     "platform": ".*"
   }
 }`, addr.Network(), addr.String(), regexp.QuoteMeta(runtime.Version()))

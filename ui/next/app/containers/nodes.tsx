@@ -77,7 +77,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.NodeID,
     title: "Node",
-    cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address}</Link>,
+    cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>,
     sort: (ns) => ns.desc.node_id,
     rollup: (rows) => {
       interface StatusTotals {

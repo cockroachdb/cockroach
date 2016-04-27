@@ -35,11 +35,11 @@ import "C"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	tag         string // Tag of this build (git describe)
-	time        string // Build time in UTC (year/month/day hour:min:sec)
-	deps        string // Git SHAs of dependencies
-	cgoCompiler = C.GoString(C.compilerVersion())
-	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
+	tag          string // Tag of this build (git describe)
+	time         string // Build time in UTC (year/month/day hour:min:sec)
+	dependencies string // Git SHAs of dependencies
+	cgoCompiler  = C.GoString(C.compilerVersion())
+	platform     = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 )
 
 // Short returns a pretty printed build and version summary.
@@ -50,11 +50,11 @@ func (b Info) Short() string {
 // GetInfo ...
 func GetInfo() Info {
 	return Info{
-		GoVersion:   runtime.Version(),
-		Tag:         tag,
-		Time:        time,
-		Deps:        deps,
-		CgoCompiler: cgoCompiler,
-		Platform:    platform,
+		GoVersion:    runtime.Version(),
+		Tag:          tag,
+		Time:         time,
+		Dependencies: dependencies,
+		CgoCompiler:  cgoCompiler,
+		Platform:     platform,
 	}
 }
