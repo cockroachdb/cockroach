@@ -667,4 +667,45 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+
+	// Verify that a table delete in the middle of a backfill works properly.
+	// The backfill will terminate in the middle, and the delete will
+	// successfully delete all the table data.
+	//
+	// This test could be made its own test but is placed here to speed up the
+	// testing.
+
+	backfillNotification = make(chan bool)
+	// Run the schema change in a separate goroutine.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		// Start schema change that eventually runs a backfill.
+		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// Wait until the schema change backfill starts.
+	<-backfillNotification
+
+	// Wait for a short bit to ensure that the backfill has likely progressed
+	// and written some data, but not long enough that the backfill has
+	// completed.
+	time.Sleep(10 * time.Millisecond)
+
+	if _, err := sqlDB.Exec("DROP TABLE t.test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until the schema change is done.
+	wg.Wait()
+
+	// Ensure that the table data has been deleted.
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if len(kvs) != 0 {
+		t.Fatalf("expected %d key value pairs, but got %d", 0, len(kvs))
+	}
 }
