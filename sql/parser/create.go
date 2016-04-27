@@ -25,7 +25,6 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
@@ -34,14 +33,13 @@ type CreateDatabase struct {
 	Name        Name
 }
 
-func (node *CreateDatabase) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *CreateDatabase) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("CREATE DATABASE ")
 	if node.IfNotExists {
 		buf.WriteString("IF NOT EXISTS ")
 	}
-	buf.WriteString(node.Name.String())
-	return buf.String()
+	FormatNode(buf, f, node.Name)
 }
 
 // IndexElem represents a column with a direction in a CREATE INDEX statement.
@@ -50,23 +48,26 @@ type IndexElem struct {
 	Direction Direction
 }
 
-func (node IndexElem) String() string {
-	if node.Direction == DefaultDirection {
-		return node.Column.String()
+// Format implements the NodeFormatter interface.
+func (node IndexElem) Format(buf *bytes.Buffer, f int) {
+	FormatNode(buf, f, node.Column)
+	if node.Direction != DefaultDirection {
+		fmt.Fprintf(buf, " %s", node.Direction)
 	}
-	return fmt.Sprintf("%s %s", node.Column, node.Direction)
 }
 
 // IndexElemList is list of IndexElem.
 type IndexElemList []IndexElem
 
-// String formats the contained names as a comma-separated, escaped string.
-func (l IndexElemList) String() string {
-	colStrs := make([]string, 0, len(l))
-	for _, indexElem := range l {
-		colStrs = append(colStrs, indexElem.String())
+// Format pretty-prints the contained names separated by commas.
+// Format implements the NodeFormatter interface.
+func (l IndexElemList) Format(buf *bytes.Buffer, f int) {
+	for i, indexElem := range l {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, indexElem)
 	}
-	return strings.Join(colStrs, ", ")
 }
 
 // CreateIndex represents a CREATE INDEX statement.
@@ -81,8 +82,8 @@ type CreateIndex struct {
 	Storing NameList
 }
 
-func (node *CreateIndex) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *CreateIndex) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("CREATE ")
 	if node.Unique {
 		buf.WriteString("UNIQUE ")
@@ -92,18 +93,20 @@ func (node *CreateIndex) String() string {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	if node.Name != "" {
-		fmt.Fprintf(&buf, "%s ", node.Name)
+		fmt.Fprintf(buf, "%s ", node.Name)
 	}
-	fmt.Fprintf(&buf, "ON %s (%s)", node.Table, node.Columns)
+	fmt.Fprintf(buf, "ON %s (", node.Table)
+	FormatNode(buf, f, node.Columns)
+	buf.WriteByte(')')
 	if node.Storing != nil {
-		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
+		fmt.Fprintf(buf, " STORING (%s)", node.Storing)
 	}
-	return buf.String()
 }
 
 // TableDef represents a column or index definition within a CREATE TABLE
 // statement.
 type TableDef interface {
+	NodeFormatter
 	// Placeholder function to ensure that only desired types (*TableDef) conform
 	// to the TableDef interface.
 	tableDef()
@@ -116,14 +119,14 @@ func (*IndexTableDef) tableDef()  {}
 // TableDefs represents a list of table definitions.
 type TableDefs []TableDef
 
-func (node TableDefs) String() string {
-	var prefix string
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+// Format implements the NodeFormatter interface.
+func (node TableDefs) Format(buf *bytes.Buffer, f int) {
+	for i, n := range node {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, n)
 	}
-	return buf.String()
 }
 
 // Nullability represents either NULL, NOT NULL or an unspecified value (silent
@@ -181,9 +184,10 @@ func (node *ColumnTableDef) setName(name Name) {
 	node.Name = name
 }
 
-func (node *ColumnTableDef) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", node.Name, node.Type)
+// Format implements the NodeFormatter interface.
+func (node *ColumnTableDef) Format(buf *bytes.Buffer, f int) {
+	fmt.Fprintf(buf, "%s ", node.Name)
+	FormatNode(buf, f, node.Type)
 	switch node.Nullable {
 	case Null:
 		buf.WriteString(" NULL")
@@ -196,12 +200,14 @@ func (node *ColumnTableDef) String() string {
 		buf.WriteString(" UNIQUE")
 	}
 	if node.DefaultExpr != nil {
-		fmt.Fprintf(&buf, " DEFAULT %s", node.DefaultExpr)
+		buf.WriteString(" DEFAULT ")
+		FormatNode(buf, f, node.DefaultExpr)
 	}
 	if node.CheckExpr != nil {
-		fmt.Fprintf(&buf, " CHECK (%s)", node.CheckExpr)
+		buf.WriteString(" CHECK (")
+		FormatNode(buf, f, node.CheckExpr)
+		buf.WriteByte(')')
 	}
-	return buf.String()
 }
 
 // ColumnQualification represents a constraint on a column.
@@ -260,17 +266,21 @@ func (node *IndexTableDef) setName(name Name) {
 	node.Name = name
 }
 
-func (node *IndexTableDef) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *IndexTableDef) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("INDEX ")
 	if node.Name != "" {
-		fmt.Fprintf(&buf, "%s ", node.Name)
+		FormatNode(buf, f, node.Name)
+		buf.WriteByte(' ')
 	}
-	fmt.Fprintf(&buf, "(%s)", node.Columns)
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.Columns)
+	buf.WriteByte(')')
 	if node.Storing != nil {
-		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
+		buf.WriteString(" STORING (")
+		FormatNode(buf, f, node.Storing)
+		buf.WriteByte(')')
 	}
-	return buf.String()
 }
 
 // ConstraintTableDef represents a constraint definition within a CREATE TABLE
@@ -291,21 +301,24 @@ type UniqueConstraintTableDef struct {
 	PrimaryKey bool
 }
 
-func (node *UniqueConstraintTableDef) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f int) {
 	if node.Name != "" {
-		fmt.Fprintf(&buf, "CONSTRAINT %s ", node.Name)
+		fmt.Fprintf(buf, "CONSTRAINT %s ", node.Name)
 	}
 	if node.PrimaryKey {
 		buf.WriteString("PRIMARY KEY ")
 	} else {
 		buf.WriteString("UNIQUE ")
 	}
-	fmt.Fprintf(&buf, "(%s)", node.Columns)
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.Columns)
+	buf.WriteByte(')')
 	if node.Storing != nil {
-		fmt.Fprintf(&buf, " STORING (%s)", node.Storing)
+		buf.WriteString(" STORING (")
+		FormatNode(buf, f, node.Storing)
+		buf.WriteByte(')')
 	}
-	return buf.String()
 }
 
 // CreateTable represents a CREATE TABLE statement.
@@ -315,12 +328,14 @@ type CreateTable struct {
 	Defs        TableDefs
 }
 
-func (node *CreateTable) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE TABLE")
+// Format implements the NodeFormatter interface.
+func (node *CreateTable) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("CREATE TABLE ")
 	if node.IfNotExists {
-		buf.WriteString(" IF NOT EXISTS")
+		buf.WriteString("IF NOT EXISTS ")
 	}
-	fmt.Fprintf(&buf, " %s (%s)", node.Table, node.Defs)
-	return buf.String()
+	FormatNode(buf, f, node.Table)
+	buf.WriteString(" (")
+	FormatNode(buf, f, node.Defs)
+	buf.WriteByte(')')
 }

@@ -22,17 +22,20 @@
 
 package parser
 
-import "strings"
+import "bytes"
 
 // ValuesClause represents a VALUES clause.
 type ValuesClause struct {
 	Tuples []*Tuple
 }
 
-func (node *ValuesClause) String() string {
-	strs := make([]string, 0, len(node.Tuples))
-	for _, n := range node.Tuples {
-		strs = append(strs, n.String())
+// Format implements the NodeFormatter interface.
+func (node *ValuesClause) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("VALUES ")
+	for i, n := range node.Tuples {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, n)
 	}
-	return "VALUES " + strings.Join(strs, ", ")
 }

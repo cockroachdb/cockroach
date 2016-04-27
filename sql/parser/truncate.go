@@ -22,10 +22,7 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
@@ -33,17 +30,17 @@ type Truncate struct {
 	DropBehavior DropBehavior
 }
 
-func (node *Truncate) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *Truncate) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("TRUNCATE TABLE ")
 	for i, n := range node.Tables {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(n.String())
+		FormatNode(buf, f, n)
 	}
 	if node.DropBehavior != DropDefault {
-		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+		buf.WriteByte(' ')
+		buf.WriteString(node.DropBehavior.String())
 	}
-	return buf.String()
 }

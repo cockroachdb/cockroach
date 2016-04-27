@@ -23,6 +23,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 )
@@ -34,77 +35,75 @@ var (
 	hexMap    [256][]byte
 )
 
-func encodeSQLString(in string) string {
+func encodeSQLString(buf *bytes.Buffer, in string) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
-	buf := make([]byte, 0, len(in)+3)
 	for i := range in {
 		ch := in[i]
 		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
 			if start == 0 {
-				buf = append(buf, 'e', '\'') // begin e'xxx' string
+				buf.WriteString("e'") // begin e'xxx' string
 			}
-			buf = append(buf, in[start:i]...)
-			buf = append(buf, '\\', encodedChar)
+			buf.WriteString(in[start:i])
+			buf.Write([]byte{'\\', encodedChar})
 			start = i + 1
 		}
 	}
 	if start == 0 {
-		buf = append(buf, '\'') // begin 'xxx' string if nothing was escaped
+		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
-	buf = append(buf, in[start:]...)
-	buf = append(buf, '\'')
-	return string(buf)
+	buf.WriteString(in[start:])
+	buf.WriteByte('\'')
 }
 
-func encodeSQLIdent(s string) string {
+func encodeSQLIdent(buf *bytes.Buffer, s string) {
 	if _, ok := reservedKeywords[strings.ToUpper(s)]; ok {
-		return fmt.Sprintf("\"%s\"", s)
+		buf.WriteString(`"`)
+		buf.WriteString(s)
+		buf.WriteString(`"`)
+		return
 	}
 	// The string needs quoting if it does not match the ident format.
 	if isIdent(s) {
-		return s
+		buf.WriteString(s)
+		return
 	}
 
 	// The only character that requires escaping is a double quote.
-	buf := make([]byte, 0, len(s)+2)
-	buf = append(buf, '"')
+	buf.WriteString(`"`)
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
 		ch := s[i]
 		if ch == '"' {
 			if start != i {
-				buf = append(buf, s[start:i]...)
+				buf.WriteString(s[start:i])
 			}
 			start = i + 1
-			buf = append(buf, ch, ch) // add extra copy of ch
+			buf.Write([]byte{ch, ch}) // add extra copy of ch
 		}
 	}
 	if start < len(s) {
-		buf = append(buf, s[start:]...)
+		buf.WriteString(s[start:])
 	}
-	buf = append(buf, '"')
-	return string(buf)
+	buf.WriteString(`"`)
 }
 
-func encodeSQLBytes(in string) string {
+func encodeSQLBytes(buf *bytes.Buffer, in string) {
 	start := 0
-	buf := make([]byte, 0, len(in)+3)
-	buf = append(buf, "b'"...)
+	buf.WriteString("b'")
 	for i := range in {
 		ch := in[i]
 		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
-			buf = append(buf, in[start:i]...)
-			buf = append(buf, '\\', encodedChar)
+			buf.WriteString(in[start:i])
+			buf.Write([]byte{'\\', encodedChar})
 			start = i + 1
 		} else if ch >= 0x80 {
-			buf = append(buf, hexMap[ch]...)
+			buf.Write(hexMap[ch])
 			start = i + 1
 		}
 	}
-	buf = append(buf, in[start:]...)
-	buf = append(buf, '\'')
-	return string(buf)
+	buf.WriteString(in[start:])
+	buf.WriteByte('\'')
 }
 
 func init() {

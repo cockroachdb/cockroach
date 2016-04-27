@@ -22,10 +22,7 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // Update represents an UPDATE statement.
 type Update struct {
@@ -35,22 +32,27 @@ type Update struct {
 	Returning ReturningExprs
 }
 
-func (node *Update) String() string {
-	return fmt.Sprintf("UPDATE %s SET %s%s%s",
-		node.Table, node.Exprs, node.Where, node.Returning)
+// Format implements the NodeFormatter interface.
+func (node *Update) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("UPDATE ")
+	FormatNode(buf, f, node.Table)
+	buf.WriteString(" SET ")
+	FormatNode(buf, f, node.Exprs)
+	FormatNode(buf, f, node.Where)
+	FormatNode(buf, f, node.Returning)
 }
 
 // UpdateExprs represents a list of update expressions.
 type UpdateExprs []*UpdateExpr
 
-func (node UpdateExprs) String() string {
-	var prefix string
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+// Format implements the NodeFormatter interface.
+func (node UpdateExprs) Format(buf *bytes.Buffer, f int) {
+	for i, n := range node {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, n)
 	}
-	return buf.String()
 }
 
 // UpdateExpr represents an update expression.
@@ -60,10 +62,15 @@ type UpdateExpr struct {
 	Expr  Expr
 }
 
-func (node *UpdateExpr) String() string {
+// Format implements the NodeFormatter interface.
+func (node *UpdateExpr) Format(buf *bytes.Buffer, f int) {
 	open, close := "", ""
 	if node.Tuple {
 		open, close = "(", ")"
 	}
-	return fmt.Sprintf("%s%s%s = %s", open, node.Names, close, node.Expr)
+	buf.WriteString(open)
+	FormatNode(buf, f, node.Names)
+	buf.WriteString(close)
+	buf.WriteString(" = ")
+	FormatNode(buf, f, node.Expr)
 }

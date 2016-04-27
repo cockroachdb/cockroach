@@ -22,18 +22,17 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // Show represents a SHOW statement.
 type Show struct {
 	Name string
 }
 
-func (node *Show) String() string {
-	return fmt.Sprintf("SHOW %s", node.Name)
+// Format implements the NodeFormatter interface.
+func (node *Show) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("SHOW ")
+	buf.WriteString(node.Name)
 }
 
 // ShowColumns represents a SHOW COLUMNS statement.
@@ -41,19 +40,19 @@ type ShowColumns struct {
 	Table *QualifiedName
 }
 
-func (node *ShowColumns) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("SHOW ")
-	fmt.Fprintf(&buf, "COLUMNS FROM %s", node.Table)
-	return buf.String()
+// Format implements the NodeFormatter interface.
+func (node *ShowColumns) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("SHOW COLUMNS FROM ")
+	FormatNode(buf, f, node.Table)
 }
 
 // ShowDatabases represents a SHOW DATABASES statement.
 type ShowDatabases struct {
 }
 
-func (node *ShowDatabases) String() string {
-	return "SHOW DATABASES"
+// Format implements the NodeFormatter interface.
+func (node *ShowDatabases) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("SHOW DATABASES")
 }
 
 // ShowIndex represents a SHOW INDEX statement.
@@ -61,8 +60,10 @@ type ShowIndex struct {
 	Table *QualifiedName
 }
 
-func (node *ShowIndex) String() string {
-	return fmt.Sprintf("SHOW INDEXES FROM %s", node.Table)
+// Format implements the NodeFormatter interface.
+func (node *ShowIndex) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("SHOW INDEXES FROM ")
+	FormatNode(buf, f, node.Table)
 }
 
 // ShowTables represents a SHOW TABLES statement.
@@ -70,13 +71,13 @@ type ShowTables struct {
 	Name *QualifiedName
 }
 
-func (node *ShowTables) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *ShowTables) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("SHOW TABLES")
 	if node.Name != nil {
-		fmt.Fprintf(&buf, " FROM %s", node.Name)
+		buf.WriteString(" FROM ")
+		FormatNode(buf, f, node.Name)
 	}
-	return buf.String()
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
@@ -86,16 +87,17 @@ type ShowGrants struct {
 	Grantees NameList
 }
 
-func (node *ShowGrants) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *ShowGrants) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("SHOW GRANTS")
 	if node.Targets != nil {
-		fmt.Fprintf(&buf, " ON %s", *node.Targets)
+		buf.WriteString(" ON ")
+		FormatNode(buf, f, node.Targets)
 	}
 	if node.Grantees != nil {
-		fmt.Fprintf(&buf, " FOR %s", node.Grantees)
+		buf.WriteString(" FOR ")
+		FormatNode(buf, f, node.Grantees)
 	}
-	return buf.String()
 }
 
 // ShowCreateTable represents a SHOW CREATE TABLE statement.
@@ -103,6 +105,8 @@ type ShowCreateTable struct {
 	Table *QualifiedName
 }
 
-func (node *ShowCreateTable) String() string {
-	return fmt.Sprintf("SHOW CREATE TABLE %s", node.Table)
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateTable) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("SHOW CREATE TABLE ")
+	FormatNode(buf, f, node.Table)
 }

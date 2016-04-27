@@ -16,15 +16,12 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // IndirectionElem is a single element in an indirection expression.
 type IndirectionElem interface {
+	NodeFormatter
 	indirectionElem()
-	String() string
 }
 
 func (NameIndirection) indirectionElem()   {}
@@ -35,19 +32,20 @@ func (*ArrayIndirection) indirectionElem() {}
 // indirection elements.
 type Indirection []IndirectionElem
 
-func (i Indirection) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (i Indirection) Format(buf *bytes.Buffer, f int) {
 	for _, e := range i {
-		buf.WriteString(e.String())
+		FormatNode(buf, f, e)
 	}
-	return buf.String()
 }
 
 // NameIndirection represents ".<name>" in an indirection expression.
 type NameIndirection Name
 
-func (n NameIndirection) String() string {
-	return fmt.Sprintf(".%s", Name(n))
+// Format implements the NodeFormatter interface.
+func (n NameIndirection) Format(buf *bytes.Buffer, f int) {
+	buf.WriteByte('.')
+	FormatNode(buf, f, Name(n))
 }
 
 // StarIndirection represents ".*" in an indirection expression.
@@ -58,8 +56,9 @@ const (
 	unqualifiedStar StarIndirection = "*"
 )
 
-func (s StarIndirection) String() string {
-	return string(s)
+// Format implements the NodeFormatter interface.
+func (s StarIndirection) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString(string(s))
 }
 
 // ArrayIndirection represents "[<begin>:<end>]" in an indirection expression.
@@ -68,14 +67,13 @@ type ArrayIndirection struct {
 	End   Expr
 }
 
-func (a *ArrayIndirection) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("[")
-	buf.WriteString(a.Begin.String())
+// Format implements the NodeFormatter interface.
+func (a *ArrayIndirection) Format(buf *bytes.Buffer, f int) {
+	buf.WriteByte('[')
+	FormatNode(buf, f, a.Begin)
 	if a.End != nil {
-		buf.WriteString(":")
-		buf.WriteString(a.End.String())
+		buf.WriteByte(':')
+		FormatNode(buf, f, a.End)
 	}
-	buf.WriteString("]")
-	return buf.String()
+	buf.WriteByte(']')
 }

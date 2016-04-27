@@ -24,6 +24,7 @@ import (
 // ColumnType represents a type in a column definition.
 type ColumnType interface {
 	fmt.Stringer
+	NodeFormatter
 	columnType()
 }
 
@@ -49,8 +50,9 @@ type BoolType struct {
 	Name string
 }
 
-func (node *BoolType) String() string {
-	return node.Name
+// Format implements the NodeFormatter interface.
+func (node *BoolType) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString(node.Name)
 }
 
 // Pre-allocated immutable integer column types.
@@ -76,13 +78,12 @@ type IntType struct {
 	N    int
 }
 
-func (node *IntType) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *IntType) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
-		fmt.Fprintf(&buf, "(%d)", node.N)
+		fmt.Fprintf(buf, "(%d)", node.N)
 	}
-	return buf.String()
 }
 
 // Pre-allocated immutable float column types.
@@ -105,13 +106,12 @@ func newFloatType(prec int) *FloatType {
 	return &FloatType{Name: "FLOAT", Prec: prec}
 }
 
-func (node *FloatType) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *FloatType) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
-		fmt.Fprintf(&buf, "(%d)", node.Prec)
+		fmt.Fprintf(buf, "(%d)", node.Prec)
 	}
-	return buf.String()
 }
 
 // Pre-allocated immutable decimal column types.
@@ -128,17 +128,16 @@ type DecimalType struct {
 	Scale int
 }
 
-func (node *DecimalType) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *DecimalType) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
-		fmt.Fprintf(&buf, "(%d", node.Prec)
+		fmt.Fprintf(buf, "(%d", node.Prec)
 		if node.Scale > 0 {
-			fmt.Fprintf(&buf, ",%d", node.Scale)
+			fmt.Fprintf(buf, ",%d", node.Scale)
 		}
-		buf.WriteString(")")
+		buf.WriteByte(')')
 	}
-	return buf.String()
 }
 
 // Pre-allocated immutable date column type.
@@ -148,8 +147,9 @@ var dateTypeDate = &DateType{}
 type DateType struct {
 }
 
-func (node *DateType) String() string {
-	return "DATE"
+// Format implements the NodeFormatter interface.
+func (node *DateType) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("DATE")
 }
 
 // Pre-allocated immutable timestamp column type.
@@ -159,8 +159,9 @@ var timestampTypeTimestamp = &TimestampType{}
 type TimestampType struct {
 }
 
-func (node *TimestampType) String() string {
-	return "TIMESTAMP"
+// Format implements the NodeFormatter interface.
+func (node *TimestampType) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("TIMESTAMP")
 }
 
 // Pre-allocated immutable timestamp with time zone column type.
@@ -170,8 +171,9 @@ var timestampTzTypeTimestampWithTZ = &TimestampTZType{}
 type TimestampTZType struct {
 }
 
-func (node *TimestampTZType) String() string {
-	return "TIMESTAMP WITH TIME ZONE"
+// Format implements the NodeFormatter interface.
+func (node *TimestampTZType) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("TIMESTAMP WITH TIME ZONE")
 }
 
 // Pre-allocated immutable interval column type.
@@ -181,8 +183,9 @@ var intervalTypeInterval = &IntervalType{}
 type IntervalType struct {
 }
 
-func (node *IntervalType) String() string {
-	return "INTERVAL"
+// Format implements the NodeFormatter interface.
+func (node *IntervalType) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("INTERVAL")
 }
 
 // Pre-allocated immutable string column types.
@@ -199,13 +202,12 @@ type StringType struct {
 	N    int
 }
 
-func (node *StringType) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *StringType) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
-		fmt.Fprintf(&buf, "(%d)", node.N)
+		fmt.Fprintf(buf, "(%d)", node.N)
 	}
-	return buf.String()
 }
 
 // Pre-allocated immutable bytes column types.
@@ -220,6 +222,18 @@ type BytesType struct {
 	Name string
 }
 
-func (node *BytesType) String() string {
-	return node.Name
+// Format implements the NodeFormatter interface.
+func (node *BytesType) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString(node.Name)
 }
+
+func (node *BoolType) String() string        { return AsString(node) }
+func (node *IntType) String() string         { return AsString(node) }
+func (node *FloatType) String() string       { return AsString(node) }
+func (node *DecimalType) String() string     { return AsString(node) }
+func (node *DateType) String() string        { return AsString(node) }
+func (node *TimestampType) String() string   { return AsString(node) }
+func (node *TimestampTZType) String() string { return AsString(node) }
+func (node *IntervalType) String() string    { return AsString(node) }
+func (node *StringType) String() string      { return AsString(node) }
+func (node *BytesType) String() string       { return AsString(node) }

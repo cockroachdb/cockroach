@@ -80,32 +80,33 @@ type BeginTransaction struct {
 	UserPriority UserPriority
 }
 
-func (node *BeginTransaction) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *BeginTransaction) Format(buf *bytes.Buffer, _ int) {
 	var sep string
 	buf.WriteString("BEGIN TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
-		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
+		fmt.Fprintf(buf, " ISOLATION LEVEL %s", node.Isolation)
 		sep = ","
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
-		fmt.Fprintf(&buf, "%s PRIORITY %s", sep, node.UserPriority)
+		fmt.Fprintf(buf, "%s PRIORITY %s", sep, node.UserPriority)
 	}
-	return buf.String()
 }
 
 // CommitTransaction represents a COMMIT statement.
 type CommitTransaction struct{}
 
-func (node *CommitTransaction) String() string {
-	return "COMMIT TRANSACTION"
+// Format implements the NodeFormatter interface.
+func (node *CommitTransaction) Format(buf *bytes.Buffer, _ int) {
+	buf.WriteString("COMMIT TRANSACTION")
 }
 
 // RollbackTransaction represents a ROLLBACK statement.
 type RollbackTransaction struct{}
 
-func (node *RollbackTransaction) String() string {
-	return "ROLLBACK TRANSACTION"
+// Format implements the NodeFormatter interface.
+func (node *RollbackTransaction) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("ROLLBACK TRANSACTION")
 }
 
 // RestartSavepointName is the only savepoint name that we accept, modulo
@@ -129,8 +130,10 @@ type Savepoint struct {
 	Name string
 }
 
-func (node *Savepoint) String() string {
-	return "SAVEPOINT " + node.Name
+// Format implements the NodeFormatter interface.
+func (node *Savepoint) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("SAVEPOINT ")
+	buf.WriteString(node.Name)
 }
 
 // ReleaseSavepoint represents a RELEASE SAVEPOINT <name> statement.
@@ -138,8 +141,10 @@ type ReleaseSavepoint struct {
 	Savepoint string
 }
 
-func (node *ReleaseSavepoint) String() string {
-	return "RELEASE SAVEPOINT " + node.Savepoint
+// Format implements the NodeFormatter interface.
+func (node *ReleaseSavepoint) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("RELEASE SAVEPOINT ")
+	buf.WriteString(node.Savepoint)
 }
 
 // RollbackToSavepoint represents a ROLLBACK TO SAVEPOINT <name> statement.
@@ -147,6 +152,8 @@ type RollbackToSavepoint struct {
 	Savepoint string
 }
 
-func (node *RollbackToSavepoint) String() string {
-	return "ROLLBACK TRANSACTION TO SAVEPOINT " + node.Savepoint
+// Format implements the NodeFormatter interface.
+func (node *RollbackToSavepoint) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("ROLLBACK TRANSACTION TO SAVEPOINT ")
+	buf.WriteString(node.Savepoint)
 }

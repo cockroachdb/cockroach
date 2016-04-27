@@ -22,10 +22,7 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // RenameDatabase represents a RENAME DATABASE statement.
 type RenameDatabase struct {
@@ -33,8 +30,12 @@ type RenameDatabase struct {
 	NewName Name
 }
 
-func (node *RenameDatabase) String() string {
-	return fmt.Sprintf("ALTER DATABASE %s RENAME TO %s", node.Name, node.NewName)
+// Format implements the NodeFormatter interface.
+func (node *RenameDatabase) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString("ALTER DATABASE ")
+	FormatNode(buf, f, node.Name)
+	buf.WriteString(" RENAME TO ")
+	FormatNode(buf, f, node.NewName)
 }
 
 // RenameTable represents a RENAME TABLE statement.
@@ -44,14 +45,15 @@ type RenameTable struct {
 	IfExists bool
 }
 
-func (node *RenameTable) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *RenameTable) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("ALTER TABLE ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	fmt.Fprintf(&buf, "%s RENAME TO %s", node.Name, node.NewName)
-	return buf.String()
+	FormatNode(buf, f, node.Name)
+	buf.WriteString(" RENAME TO ")
+	FormatNode(buf, f, node.NewName)
 }
 
 // RenameIndex represents a RENAME INDEX statement.
@@ -61,14 +63,15 @@ type RenameIndex struct {
 	IfExists bool
 }
 
-func (node *RenameIndex) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *RenameIndex) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("ALTER INDEX ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	fmt.Fprintf(&buf, "%s RENAME TO %s", node.Index, node.NewName)
-	return buf.String()
+	FormatNode(buf, f, node.Index)
+	buf.WriteString(" RENAME TO ")
+	FormatNode(buf, f, node.NewName)
 }
 
 // RenameColumn represents a RENAME COLUMN statement.
@@ -80,12 +83,16 @@ type RenameColumn struct {
 	IfExists bool
 }
 
-func (node *RenameColumn) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *RenameColumn) Format(buf *bytes.Buffer, f int) {
 	buf.WriteString("ALTER TABLE ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
+
 	}
-	fmt.Fprintf(&buf, "%s RENAME COLUMN %s TO %s", node.Table, node.Name, node.NewName)
-	return buf.String()
+	FormatNode(buf, f, node.Table)
+	buf.WriteString(" RENAME COLUMN ")
+	FormatNode(buf, f, node.Name)
+	buf.WriteString(" TO ")
+	FormatNode(buf, f, node.NewName)
 }

@@ -20,6 +20,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -96,9 +97,10 @@ var _ parser.VariableExpr = &qvalue{}
 // Variable implements the VariableExpr interface.
 func (*qvalue) Variable() {}
 
-func (q *qvalue) String() string {
-	return q.colRef.get().Name
+func (q *qvalue) Format(buf *bytes.Buffer, f int) {
+	buf.WriteString(q.colRef.get().Name)
 }
+func (q *qvalue) String() string { return parser.AsString(q) }
 
 // Walk implements the Expr interface.
 func (q *qvalue) Walk(v parser.Visitor) parser.Expr {
@@ -270,16 +272,17 @@ var _ parser.VariableExpr = starDatumInstance
 // Variable implements the VariableExpr interface.
 func (*starDatum) Variable() {}
 
-func (*starDatum) String() string {
-	return "*"
+func (*starDatum) Format(buf *bytes.Buffer, f int) {
+	buf.WriteByte('*')
 }
+func (s *starDatum) String() string { return parser.AsString(s) }
 
 // Walk implements the Expr interface.
-func (e *starDatum) Walk(v parser.Visitor) parser.Expr { return e }
+func (s *starDatum) Walk(v parser.Visitor) parser.Expr { return s }
 
 // TypeCheck implements the Expr interface.
-func (e *starDatum) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
-	return e, nil
+func (s *starDatum) TypeCheck(args parser.MapArgs, desired parser.Datum) (parser.TypedExpr, error) {
+	return s, nil
 }
 
 // Eval implements the TypedExpr interface.
