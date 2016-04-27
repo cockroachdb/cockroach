@@ -17,17 +17,21 @@
 package timeutil
 
 import (
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/envutil"
 )
 
 var (
-	nowFunc = time.Now
+	nowFunc   = time.Now
+	nowFuncMu sync.RWMutex
 )
 
 // SetTimeOffset configures a fixed offset to reported time samples.
 func SetTimeOffset(offset time.Duration) {
+	nowFuncMu.Lock()
+	defer nowFuncMu.Unlock()
 	if offset == 0 {
 		nowFunc = time.Now
 	} else {
@@ -48,6 +52,8 @@ func initFakeTime() {
 // "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
 // which supports quasi-human values like "1h" or "1m".
 func Now() time.Time {
+	nowFuncMu.RLock()
+	defer nowFuncMu.RUnlock()
 	return nowFunc()
 }
 
