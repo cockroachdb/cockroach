@@ -12,6 +12,9 @@ System.config({
   },
 
   packages: {
+    "protos": {
+      "main": "protos"
+    },
     "app": {
       "main": "app",
       "defaultExtension": "tsx"
