@@ -22,7 +22,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // UnionClause represents a UNION statement.
 type UnionClause struct {
@@ -54,10 +57,14 @@ func (i UnionType) String() string {
 	return unionTypeName[i]
 }
 
-func (node *UnionClause) String() string {
-	all := ""
+// Format implements the NodeFormatter interface.
+func (node *UnionClause) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Left)
+	buf.WriteByte(' ')
+	buf.WriteString(node.Type.String())
 	if node.All {
-		all = " ALL"
+		buf.WriteString(" ALL")
 	}
-	return fmt.Sprintf("%s %s%s %s", node.Left, node.Type, all, node.Right)
+	buf.WriteByte(' ')
+	FormatNode(buf, f, node.Right)
 }

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"time"
 
 	"gopkg.in/inf.v0"
@@ -193,8 +192,9 @@ func (d *DBool) IsMin() bool {
 	return *d == false
 }
 
-func (d *DBool) String() string {
-	return strconv.FormatBool(bool(*d))
+// Format implements the NodeFormatter interface.
+func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, "%t", bool(*d))
 }
 
 // DInt is the int Datum.
@@ -274,8 +274,9 @@ func (d *DInt) IsMin() bool {
 	return *d == math.MinInt64
 }
 
-func (d *DInt) String() string {
-	return strconv.FormatInt(int64(*d), 10)
+// Format implements the NodeFormatter interface.
+func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, "%d", int64(*d))
 }
 
 // DFloat is the float Datum.
@@ -358,22 +359,15 @@ func (d *DFloat) IsMin() bool {
 	return *d <= -math.MaxFloat64
 }
 
-func (d *DFloat) String() string {
-	fmt := byte('g')
-	prec := -1
-	if _, frac := math.Modf(float64(*d)); frac == 0 {
-		// d is a whole number.
-		if -1000000 < *d && *d < 1000000 {
-			// Small whole numbers are printed without exponents, and with one
-			// digit of decimal precision to ensure they will parse as floats.
-			fmt = 'f'
-			prec = 1
-		} else {
-			// Large whole numbers are printed with exponents.
-			fmt = 'e'
-		}
+// Format implements the NodeFormatter interface.
+func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
+	fl := float64(*d)
+	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
+		// d is a small whole number. Ensure it is printed using a decimal point.
+		fmt.Fprintf(buf, "%.1f", fl)
+	} else {
+		fmt.Fprintf(buf, "%g", fl)
 	}
-	return strconv.FormatFloat(float64(*d), fmt, prec, 64)
 }
 
 // DDecimal is the decimal Datum.
@@ -444,8 +438,9 @@ func (*DDecimal) IsMin() bool {
 	return false
 }
 
-func (d *DDecimal) String() string {
-	return d.Dec.String()
+// Format implements the NodeFormatter interface.
+func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(d.Dec.String())
 }
 
 // DString is the string Datum.
@@ -523,8 +518,9 @@ func (d *DString) IsMin() bool {
 	return len(*d) == 0
 }
 
-func (d *DString) String() string {
-	return encodeSQLString(string(*d))
+// Format implements the NodeFormatter interface.
+func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLString(buf, string(*d))
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
@@ -602,8 +598,9 @@ func (d *DBytes) IsMin() bool {
 	return len(*d) == 0
 }
 
-func (d *DBytes) String() string {
-	return encodeSQLBytes(string(*d))
+// Format implements the NodeFormatter interface.
+func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLBytes(buf, string(*d))
 }
 
 // DDate is the date Datum represented as the number of days after
@@ -681,8 +678,9 @@ func (d *DDate) IsMin() bool {
 	return *d == math.MinInt64
 }
 
-func (d *DDate) String() string {
-	return time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat)
+// Format implements the NodeFormatter interface.
+func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
 }
 
 // DTimestamp is the timestamp Datum.
@@ -757,8 +755,9 @@ func (d *DTimestamp) IsMin() bool {
 	return d.Before(d.Add(-1))
 }
 
-func (d *DTimestamp) String() string {
-	return d.UTC().Format(timestampWithOffsetZoneFormat)
+// Format implements the NodeFormatter interface.
+func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
@@ -833,8 +832,9 @@ func (d *DTimestampTZ) IsMin() bool {
 	return d.Before(d.Add(-1))
 }
 
-func (d *DTimestampTZ) String() string {
-	return d.UTC().Format(timestampWithOffsetZoneFormat)
+// Format implements the NodeFormatter interface.
+func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
 }
 
 // DInterval is the interval Datum.
@@ -901,12 +901,14 @@ func (d *DInterval) IsMin() bool {
 	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
 }
 
-// String implements the Datum interface.
-func (d *DInterval) String() string {
+// Format implements the NodeFormatter interface.
+// Format implements the NodeFormatter interface.
+func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.Months != 0 || d.Days != 0 {
-		return d.Duration.String()
+		buf.WriteString(d.Duration.String())
+	} else {
+		buf.WriteString((time.Duration(d.Duration.Nanos) * time.Nanosecond).String())
 	}
-	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
 
 // DTuple is the tuple Datum.
@@ -1030,17 +1032,16 @@ func (*DTuple) IsMin() bool {
 	return false
 }
 
-func (d *DTuple) String() string {
-	var buf bytes.Buffer
-	_ = buf.WriteByte('(')
+// Format implements the NodeFormatter interface.
+func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
 	for i, v := range *d {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(v.String())
+		FormatNode(buf, f, v)
 	}
-	_ = buf.WriteByte(')')
-	return buf.String()
+	buf.WriteByte(')')
 }
 
 func (d *DTuple) Len() int {
@@ -1131,8 +1132,9 @@ func (dNull) IsMin() bool {
 	return true
 }
 
-func (dNull) String() string {
-	return "NULL"
+// Format implements the NodeFormatter interface.
+func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("NULL")
 }
 
 var _ VariableExpr = &DValArg{}
@@ -1200,8 +1202,10 @@ func (*DValArg) IsMin() bool {
 	return true
 }
 
-func (d *DValArg) String() string {
-	return "$" + d.name
+// Format implements the NodeFormatter interface.
+func (d *DValArg) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('$')
+	buf.WriteString(d.name)
 }
 
 // Temporary workaround for #3633, allowing comparisons between
