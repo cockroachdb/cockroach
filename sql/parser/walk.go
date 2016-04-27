@@ -800,6 +800,18 @@ func (m MapArgs) SetInferredType(d, typ Datum) (set Datum, err error) {
 	return typ, nil
 }
 
+// IsUnresolvedArgument returns whether expr is an unresolved var argument. In
+// other words, it returns whether the provided expression is an argument, and
+// if so, whether the variable's type remains unset or not.
+func (m MapArgs) IsUnresolvedArgument(expr Expr) bool {
+	if t, ok := expr.(ValArg); ok {
+		if _, ok := m[t.name]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
 type argVisitor struct {
 	args Args
 	err  error

@@ -188,7 +188,7 @@ func typeCheckOverloadedExprs(
 		switch {
 		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
-		case isUnresolvedVariable(args, expr):
+		case args.IsUnresolvedArgument(expr):
 			valExprs = append(valExprs, idxExpr)
 		default:
 			resolvableExprs = append(resolvableExprs, idxExpr)
