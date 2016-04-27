@@ -476,6 +476,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			if waitTableID != 0 {
 				if isDeleted(waitTableID, cfg) {
 					close(deleted)
+					waitTableID = 0
 				}
 			}
 		}
