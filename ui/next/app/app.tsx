@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { createStore, combineReducers, applyMiddleware } from "redux";
+import { createStore, combineReducers, applyMiddleware, compose } from "redux";
 import { Provider } from "react-redux";
 import { Router, Route, IndexRedirect, hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer } from "react-router-redux";
@@ -28,7 +28,12 @@ const store = createStore(
     nodes: nodesReducer,
     ui: uiReducer,
   }),
-  applyMiddleware(thunk)
+  compose(
+    applyMiddleware(thunk),
+    // Support for redux dev tools
+    // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
+    (window as any).devToolsExtension ? (window as any).devToolsExtension() : (f: any): any => f
+  )
 );
 
 // Connect react-router history with redux.
