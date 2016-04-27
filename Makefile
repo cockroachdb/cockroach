@@ -181,7 +181,13 @@ acceptance:
 
 .PHONY: dupl
 dupl:
-	find . -name '*.go' -not -name '*.pb.go' -not -name 'embedded.go' -not -name '*_string.go' -not -name 'sql.go' | dupl -files $(DUPLFLAGS)
+	find . -name '*.go'             \
+	       -not -name '*.pb.go'     \
+	       -not -name '*.pb.gw.go'  \
+	       -not -name 'embedded.go' \
+	       -not -name '*_string.go' \
+	       -not -name 'sql.go'      \
+	| dupl -files $(DUPLFLAGS)
 
 .PHONY: check
 check:
