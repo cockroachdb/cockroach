@@ -224,7 +224,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 		validTypes = intervalCastTypes
 	}
 
-	if isUnresolvedArgument(args, expr.Expr) {
+	if args.IsUnresolvedArgument(expr.Expr) {
 		desired = DummyString
 	} else if desired != nil && desired.TypeEqual(returnDatum) {
 		desired = nil
@@ -684,27 +684,6 @@ func verifyTupleIN(args MapArgs, arg, values Datum) error {
 	return nil
 }
 
-func isUnresolvedArgument(args MapArgs, expr Expr) bool {
-	if t, ok := expr.(ValArg); ok {
-		if _, ok := args[t.Name]; !ok {
-			return true
-		}
-	}
-	return false
-}
-
-func isUnresolvedVariable(args MapArgs, expr Expr) bool {
-	// TODO(nvanbenschoten) move to expr.go
-	if t, ok := expr.(ValArg); ok {
-		_, ok := args[t.Name]
-		return !ok
-	}
-	if _, ok := expr.(*QualifiedName); ok {
-		return true
-	}
-	return false
-}
-
 type indexedExpr struct {
 	e Expr
 	i int
@@ -736,7 +715,7 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		switch {
 		case isNumericConstant(expr):
 			constExprs = append(constExprs, idxExpr)
-		case isUnresolvedVariable(args, expr):
+		case args.IsUnresolvedArgument(expr):
 			valExprs = append(valExprs, idxExpr)
 		default:
 			resolvableExprs = append(resolvableExprs, idxExpr)
