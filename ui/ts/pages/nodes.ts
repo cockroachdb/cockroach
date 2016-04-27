@@ -110,9 +110,9 @@ module AdminViews {
           {
             title: "Node",
             view: (status: NodeStatus): MithrilElement =>
-              m("a", {href: "/nodes/" + nodeId(status), config: m.route}, status.desc.address.address),
+              m("a", {href: "/nodes/" + nodeId(status), config: m.route}, status.desc.address.address_field),
             sortable: true,
-            sortValue: (status: NodeStatus): string => status.desc.address.address,
+            sortValue: (status: NodeStatus): string => status.desc.address.address_field,
             rollup: function(rows: NodeStatus[]): MithrilVirtualElement {
               interface StatusTotals {
                 missing?: number;
