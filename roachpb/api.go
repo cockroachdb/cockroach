@@ -667,7 +667,9 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 	value.InitChecksum(key)
 	var expValuePtr *Value
 	if expValue.RawBytes != nil {
-		expValuePtr = &expValue
+		// Make a copy to avoid forcing expValue itself on to the heap.
+		expValueTmp := expValue
+		expValuePtr = &expValueTmp
 		expValue.InitChecksum(key)
 	}
 	return &ConditionalPutRequest{
