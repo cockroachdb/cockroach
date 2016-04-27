@@ -44,7 +44,7 @@ func testBuildInfoInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 		if err := getJSON(c.URL(0), "/_status/details/local", &r); err != nil {
 			return err
 		}
-		for _, key := range []string{"goVersion", "tag", "time", "dependencies"} {
+		for _, key := range []string{"go_version", "tag", "time", "dependencies"} {
 			if val, ok := r.BuildInfo[key]; !ok {
 				t.Errorf("build info missing for \"%s\"", key)
 			} else if val == "" {

@@ -22,10 +22,10 @@ import weak "gogoproto/gogo.proto";
 
 // Info describes build information for this CockroachDB binary.
 message Info {
-  optional string go_version = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "goVersion"];
+  optional string go_version = 1 [(gogoproto.nullable) = false];
   optional string tag = 2 [(gogoproto.nullable) = false];
   optional string time = 3 [(gogoproto.nullable) = false];
-  optional string deps = 4 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "dependencies"];
-  optional string cgo_compiler = 5 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "cgoCompiler"];
+  optional string dependencies = 4 [(gogoproto.nullable) = false];
+  optional string cgo_compiler = 5 [(gogoproto.nullable) = false];
   optional string platform = 6 [(gogoproto.nullable) = false];
 }
