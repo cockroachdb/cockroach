@@ -78,9 +78,6 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 		if err != nil {
 			return err
 		}
-		if tableDesc == nil {
-			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
-		}
 
 		// A second to deal with the time uncertainty across nodes.
 		// It is perfectly valid for two or more goroutines to hold a valid
@@ -108,9 +105,6 @@ func (sc *SchemaChanger) findTableWithLease(
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
-	}
-	if tableDesc == nil {
-		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
 	if tableDesc.Lease == nil {
 		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
@@ -406,11 +400,6 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		if pErr != nil {
 			return pErr
 		}
-		if tableDesc == nil {
-			// The table has been deleted => no more schema changes to be done for this table.
-			done = true
-			return nil
-		}
 		if sc.mutationID == invalidMutationID {
 			if tableDesc.UpVersion {
 				done = false
@@ -425,7 +414,7 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		}
 		return nil
 	})
-	return done && pErr == nil, pErr.GoError()
+	return done, pErr.GoError()
 }
 
 // SchemaChangeManager processes pending schema changes seen in gossip
