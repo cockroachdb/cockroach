@@ -67,7 +67,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
     key: NodesTableColumn.Health,
     title: "",
     cell: (ns) => {
-      let lastUpdate = moment(NanoToMilli(ns.updated_at));
+      let lastUpdate = moment(NanoToMilli(ns.updated_at.toNumber()));
       let s = staleStatus(lastUpdate);
       return <div className={"status icon-circle-filled " + s}/>;
     },
@@ -85,7 +85,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
         stale?: number;
         healthy?: number;
       }
-      let statuses: StatusTotals = _.countBy(rows, (row) => staleStatus(moment(NanoToMilli(row.updated_at))));
+      let statuses: StatusTotals = _.countBy(rows, (row) => staleStatus(moment(NanoToMilli(row.updated_at.toNumber()))));
 
       return <div className="node-counts">
         <span className="healthy">{statuses.healthy || 0}</span>
@@ -101,7 +101,7 @@ let columnDescriptors: NodeColumnDescriptor[] = [
     key: NodesTableColumn.StartedAt,
     title: "Started",
     cell: (ns) => {
-      return moment(NanoToMilli(ns.started_at)).fromNow();
+      return moment(NanoToMilli(ns.started_at.toNumber())).fromNow();
     },
     sort: (ns) => ns.started_at,
   },
@@ -117,17 +117,17 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.Replicas,
     title: "Replicas",
-    cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
-    sort: (ns) => ns.metrics[MetricConstants.replicas],
-    rollup: (rows) => _.sumBy(rows, (row) => row.metrics[MetricConstants.replicas]).toString(),
+    cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
+    sort: (ns) => ns.metrics.get(MetricConstants.replicas),
+    rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.replicas)).toString(),
   },
   // Connections - the total number of open connections on the node.
   {
     key: NodesTableColumn.Connections,
     title: "Connections",
-    cell: (ns) => ns.metrics[MetricConstants.sqlConns].toString(),
-    sort: (ns) => ns.metrics[MetricConstants.sqlConns],
-    rollup: (rows) => _.sumBy(rows, (row) => row.metrics[MetricConstants.sqlConns]).toString(),
+    cell: (ns) => ns.metrics.get(MetricConstants.sqlConns).toString(),
+    sort: (ns) => ns.metrics.get(MetricConstants.sqlConns),
+    rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.sqlConns)).toString(),
   },
   // CPU - total CPU being used on this node.
   {
@@ -141,9 +141,9 @@ let columnDescriptors: NodeColumnDescriptor[] = [
   {
     key: NodesTableColumn.MemUsage,
     title: "Mem Usage",
-    cell: (ns) => formatBytes(ns.metrics[MetricConstants.rss]),
-    sort: (ns) => ns.metrics[MetricConstants.rss],
-    rollup: (rows) => formatBytes(_.sumBy(rows, (row) => row.metrics[MetricConstants.rss])),
+    cell: (ns) => formatBytes(ns.metrics.get(MetricConstants.rss)),
+    sort: (ns) => ns.metrics.get(MetricConstants.rss),
+    rollup: (rows) => formatBytes(_.sumBy(rows, (row) => row.metrics.get(MetricConstants.rss))),
   },
   // Logs - a link to the logs data for this node.
   {
@@ -381,7 +381,7 @@ function formatBytes(bytes: number): React.ReactNode {
  */
 function totalCpu(status: NodeStatus): number {
   let metrics = status.metrics;
-  return metrics[MetricConstants.sysCPUPercent] + metrics[MetricConstants.userCPUPercent];
+  return metrics.get(MetricConstants.sysCPUPercent) + metrics.get(MetricConstants.userCPUPercent);
 }
 
 /**
@@ -395,6 +395,6 @@ let aggregateByteKeys = [
 
 function byteSum(s: NodeStatus): number {
   return _.sumBy(aggregateByteKeys, (key: string) => {
-    return s.metrics[key];
+    return s.metrics.get(key);
   });
 };
