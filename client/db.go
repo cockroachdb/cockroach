@@ -332,6 +332,17 @@ func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, *r
 	return db.scan(begin, end, maxRows, true, roachpb.CONSISTENT)
 }
 
+// AdminSetFrozen .
+func (db *DB) AdminSetFrozen(begin, end interface{}, frozen bool) (int64, *roachpb.Error) {
+	b := db.NewBatch()
+	b.AdminSetFrozen(begin, end, frozen)
+	r, pErr := runOneResult(db, b)
+	if pErr != nil {
+		return 0, pErr
+	}
+	return r.Rows[0].ValueInt(), nil
+}
+
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.

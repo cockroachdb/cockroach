@@ -115,4 +115,6 @@ const (
 	// an error if the key exists and the existing value is different from the
 	// supplied one.
 	InitPut
+	// AdminSetFrozen .
+	AdminSetFrozen
 )

@@ -210,6 +210,26 @@ message CheckConsistencyResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// AdminSetFrozenRequest .
+message AdminSetFrozenRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional bool frozen = 2 [(gogoproto.nullable) = false];
+  // The request affects exactly those Ranges which have a start_key larger than
+  // the (range-global) key specified below; it is a no-op on all others that may
+  // receive it.
+  // In practice, always set to the original start key of the request (prior to
+  // distributing it).
+  optional bytes min_start_key = 3 [(gogoproto.casttype) = "Key"];
+}
+
+// AdminSetFrozenResponse .
+message AdminSetFrozenResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int32 affected = 2 [(gogoproto.nullable) = false];
+}
+
+
+
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 message BeginTransactionRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -602,7 +622,6 @@ message RequestUnion {
   optional GetRequest get = 1;
   optional PutRequest put = 2;
   optional ConditionalPutRequest conditional_put = 3;
-  optional InitPutRequest init_put = 26;
   optional IncrementRequest increment = 4;
   optional DeleteRequest delete = 5;
   optional DeleteRangeRequest delete_range = 6;
@@ -625,6 +644,8 @@ message RequestUnion {
   optional VerifyChecksumRequest verify_checksum = 23;
   optional CheckConsistencyRequest check_consistency = 24;
   optional NoopRequest noop = 25;
+  optional InitPutRequest init_put = 26;
+  optional AdminSetFrozenRequest admin_freeze = 27;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -635,7 +656,6 @@ message ResponseUnion {
   optional GetResponse get = 1;
   optional PutResponse put = 2;
   optional ConditionalPutResponse conditional_put = 3;
-  optional InitPutResponse init_put = 26;
   optional IncrementResponse increment = 4;
   optional DeleteResponse delete = 5;
   optional DeleteRangeResponse delete_range = 6;
@@ -658,6 +678,8 @@ message ResponseUnion {
   optional VerifyChecksumResponse verify_checksum = 23;
   optional CheckConsistencyResponse check_consistency = 24;
   optional NoopResponse noop = 25;
+  optional InitPutResponse init_put = 26;
+  optional AdminSetFrozenResponse admin_freeze = 27;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

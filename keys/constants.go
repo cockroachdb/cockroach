@@ -47,7 +47,8 @@ var (
 	// transactions, such as range metadata, range-spanning binary tree
 	// node pointers, and message queues.
 	localPrefix = []byte("\x01")
-	// LocalMax is the end of the local key range.
+	// LocalMax is the end of the local key range. It is itself a global
+	// key.
 	LocalMax = roachpb.Key("\x02")
 
 	// localSuffixLength specifies the length in bytes of all local
@@ -93,6 +94,8 @@ var (
 	LocalRaftAppliedIndexSuffix = []byte("rfta")
 	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
+	// localRangeFrozenStatusSuffix is the suffix for a frozen status.
+	localRangeFrozenStatusSuffix = []byte("fzn-")
 	// localRangeLeaderLeaseSuffix is the suffix for a range leader lease.
 	localRangeLeaderLeaseSuffix = []byte("rll-")
 	// localRangeStatsSuffix is the suffix for range statistics.

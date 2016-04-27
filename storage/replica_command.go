@@ -153,6 +153,9 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	case *roachpb.VerifyChecksumRequest:
 		resp := reply.(*roachpb.VerifyChecksumResponse)
 		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
+	case *roachpb.AdminSetFrozenRequest:
+		resp := reply.(*roachpb.AdminSetFrozenResponse)
+		*resp, err = r.AdminSetFrozen(ctx, batch, ms, h, *tArgs)
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
 	}
@@ -1740,6 +1743,57 @@ func (r *Replica) VerifyChecksum(
 		logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
+}
+
+// AdminSetFrozen freezes or unfreezes the Replica idempotently.
+func (r *Replica) AdminSetFrozen(
+	ctx context.Context,
+	batch engine.Engine,
+	ms *engine.MVCCStats,
+	h roachpb.Header,
+	args roachpb.AdminSetFrozenRequest,
+) (roachpb.AdminSetFrozenResponse, error) {
+	var resp roachpb.AdminSetFrozenResponse
+	minStart, err := keys.Addr(args.MinStartKey)
+	if err != nil {
+		return resp, err
+	}
+	if !bytes.Equal(minStart, args.MinStartKey) {
+		return resp, util.Errorf("unsupported range-local key")
+	}
+
+	desc := r.Desc()
+	if frozen, err := loadFrozenStatus(batch, desc.RangeID); err != nil || frozen == args.Frozen {
+		// Something went wrong or we're already in the right frozen state. In
+		// the latter case, we avoid writing the "same thing" because "we"
+		// might actually not be the same version of the code (picture a couple
+		// of freeze requests lined up, but not all of them applied between
+		// version changes).
+		return resp, err
+	}
+
+	// We want to act only if minStart <= Start. The one case in which that
+	// behaves unexpectedly is if we're the first range, which has StartKey
+	// equal to KeyMin, but the lowest MinStartKey which is feasible is
+	// LocaLMax.
+	if !desc.StartKey.Less(minStart) {
+		resp.Affected++
+	} else if locMax, err := keys.Addr(keys.LocalMax); err != nil {
+		return resp, err
+	} else if !locMax.Less(minStart) {
+		resp.Affected++
+	}
+
+	if resp.Affected == 0 {
+		return resp, nil
+	}
+
+	batch.Defer(func() {
+		r.mu.Lock()
+		r.mu.frozen = args.Frozen
+		r.mu.Unlock()
+	})
+	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between

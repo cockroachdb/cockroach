@@ -173,6 +173,22 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
+			case *roachpb.AdminSetFrozenRequest:
+				row := &result.Rows[k]
+				row.Key = []byte(req.Key)
+				if result.PErr == nil {
+					t := reply.(*roachpb.AdminSetFrozenResponse)
+					row.Value = &roachpb.Value{}
+					row.Value.SetInt(int64(t.Affected))
+				}
+
+			default:
+				if result.PErr == nil {
+					result.PErr = roachpb.NewErrorf("unsupported reply: %T", reply)
+				}
+
+				// Nothing to do for all methods below as they do not generate
+				// any rows.
 			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
@@ -187,13 +203,6 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 			case *roachpb.TruncateLogRequest:
 			case *roachpb.LeaderLeaseRequest:
 			case *roachpb.CheckConsistencyRequest:
-				// Nothing to do for these methods as they do not generate any
-				// rows.
-
-			default:
-				if result.PErr == nil {
-					result.PErr = roachpb.NewErrorf("unsupported reply: %T", reply)
-				}
 			}
 		}
 		offset += result.calls
@@ -415,6 +424,23 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 	}
 	b.reqs = append(b.reqs, roachpb.NewCheckConsistency(roachpb.Key(begin), roachpb.Key(end), withDiff))
 	b.initResult(1, 0, nil)
+}
+
+// AdminSetFrozen .
+func (b *Batch) AdminSetFrozen(s, e interface{}, frozen bool) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, err)
+		return
+	}
+	b.reqs = append(b.reqs,
+		roachpb.NewAdminSetFrozen(roachpb.Key(begin), roachpb.Key(end), frozen))
+	b.initResult(1, 1, nil)
 }
 
 // Del deletes one or more keys.

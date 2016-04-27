@@ -764,6 +764,54 @@ func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterR
 	return &ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
+func (s *adminServer) ClusterFreeze(
+	ctx context.Context, req *ClusterFreezeRequest,
+) (*ClusterFreezeResponse, error) {
+	ranges := []roachpb.Key{
+		keys.LocalMax,    // always contained in first range
+		keys.Meta1KeyMax, // always contained in first range
+		keys.Meta2KeyMax,
+		roachpb.KeyMax,
+	}
+	var resp ClusterFreezeResponse
+	process := func(from, to roachpb.Key) error {
+		affected, pErr := s.server.db.AdminSetFrozen(
+			from, to, req.Freeze)
+		resp.Affected += affected
+		return pErr.GoError()
+	}
+
+	if req.Freeze {
+		// When freezing, we'll walk backwards through pairs of adjacent key
+		// ranges, freezing the Ranges belonging to them. Note that a Range is
+		// only frozen when the start key we specify is larger than the
+		// descriptor's StartKey. In particular, a Range which contains some
+		// meta keys will not be frozen by the request that begins at
+		// Meta2KeyMax - this is important since we must freeze user-key ranges
+		// first, followed by meta2-containing ranges, and only then the first
+		// range.
+		for i := len(ranges) - 1; i > 0; i-- {
+			if err := process(ranges[i-1], ranges[i]); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		// When unfreezing, we walk in opposite order and try the first range
+		// first. We should be able to get there if the first range manages to
+		// gossip. From that, we can talk to the second level replicas, and
+		// then to everyone else.
+		// TODO(tschottdorf): make the first range replicas gossip their
+		// descriptor unconditionally or we won't be able to unfreeze (except
+		// for restarting a node which holds the first range).
+		for i := 1; i < len(ranges); i++ {
+			if err := process(ranges[i-1], ranges[i]); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return &resp, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.

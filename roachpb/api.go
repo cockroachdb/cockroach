@@ -211,6 +211,18 @@ func (cc *CheckConsistencyResponse) combine(c combinable) error {
 	return nil
 }
 
+// Combine implements the combinable interface.
+func (af *AdminSetFrozenResponse) combine(c combinable) error {
+	if af != nil {
+		otherAF := c.(*AdminSetFrozenResponse)
+		if err := af.ResponseHeader.combine(otherAF.Header()); err != nil {
+			return err
+		}
+		af.Affected += otherAF.Affected
+	}
+	return nil
+}
+
 // Header implements the Request interface.
 func (rh Span) Header() Span {
 	return rh
@@ -387,6 +399,9 @@ func (*ReverseScanRequest) Method() Method { return ReverseScan }
 func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
 
 // Method implements the Request interface.
+func (*AdminSetFrozenRequest) Method() Method { return AdminSetFrozen }
+
+// Method implements the Request interface.
 func (*BeginTransactionRequest) Method() Method { return BeginTransaction }
 
 // Method implements the Request interface.
@@ -491,6 +506,12 @@ func (rsr *ReverseScanRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ccr *CheckConsistencyRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (afr *AdminSetFrozenRequest) ShallowCopy() Request {
+	shallowCopy := *afr
 	return &shallowCopy
 }
 
@@ -600,6 +621,7 @@ func (*DeleteRangeRequest) createReply() Response        { return &DeleteRangeRe
 func (*ScanRequest) createReply() Response               { return &ScanResponse{} }
 func (*ReverseScanRequest) createReply() Response        { return &ReverseScanResponse{} }
 func (*CheckConsistencyRequest) createReply() Response   { return &CheckConsistencyResponse{} }
+func (*AdminSetFrozenRequest) createReply() Response     { return &AdminSetFrozenResponse{} }
 func (*BeginTransactionRequest) createReply() Response   { return &BeginTransactionResponse{} }
 func (*EndTransactionRequest) createReply() Response     { return &EndTransactionResponse{} }
 func (*AdminSplitRequest) createReply() Response         { return &AdminSplitResponse{} }
@@ -725,6 +747,18 @@ func NewScan(key, endKey Key, maxResults int64) Request {
 	}
 }
 
+// NewAdminSetFrozen returns a Request initialized to scan from start to end keys.
+func NewAdminSetFrozen(key, endKey Key, frozen bool) Request {
+	return &AdminSetFrozenRequest{
+		Span: Span{
+			Key:    key,
+			EndKey: endKey,
+		},
+		Frozen:      frozen,
+		MinStartKey: key,
+	}
+}
+
 // NewCheckConsistency returns a Request initialized to scan from start to end keys.
 func NewCheckConsistency(key, endKey Key, withDiff bool) Request {
 	return &CheckConsistencyRequest{
@@ -774,3 +808,4 @@ func (*LeaderLeaseRequest) flags() int        { return isWrite }
 func (*ComputeChecksumRequest) flags() int    { return isWrite }
 func (*VerifyChecksumRequest) flags() int     { return isWrite }
 func (*CheckConsistencyRequest) flags() int   { return isAdmin | isRange }
+func (*AdminSetFrozenRequest) flags() int     { return isWrite | isRange }

@@ -74,6 +74,12 @@ message RangeKeyMismatchError {
   optional RangeDescriptor suggested_range = 4;
 }
 
+// A RangeFrozenError indicates that a Range refused to process a Raft command
+// due to being in frozen state.
+message RangeFrozenError {
+  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+}
+
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a write within the uncertainty interval of the reader.
 // The read should be retried at a higher timestamp; the timestamps contained
@@ -235,6 +241,7 @@ message ErrorDetail {
   optional LeaseRejectedError lease_rejected = 13;
   optional NodeUnavailableError node_unavailable = 14;
   optional SendError send = 15;
+  optional RangeFrozenError range_frozen = 25;
 
   // TODO(kaneda): Following are added to preserve the type when
   // converting Go errors from/to proto Errors. Revisit this design.
@@ -243,9 +250,9 @@ message ErrorDetail {
   optional LeaseVersionChangedError lease_version_changed = 18;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
   optional ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
+  optional ErrorWithPGCode error_with_pg_code = 21;
   optional DescriptorDeletedError descriptor_deleted = 23;
   optional DescriptorNotFoundError descriptor_not_found = 24;
-  optional ErrorWithPGCode error_with_pg_code = 21;
 }
 
 // TransactionRestart indicates how an error should be handled in a
