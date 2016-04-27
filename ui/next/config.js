@@ -13,37 +13,17 @@ System.config({
 
   packages: {
     "app": {
-      "main": "app.tsx",
-      "defaultExtension": "tsx",
-      "meta": {
-        "*.tsx": {
-          "loader": "ts"
-        }
-      }
+      "main": "app",
+      "defaultExtension": "tsx"
     },
     "app/interfaces": {
-      "defaultExtension": "d.ts",
-      "meta": {
-        "*.d.ts": {
-          "loader": "ts"
-        }
-      }
+      "defaultExtension": "d.ts"
     },
     "app/util": {
-      "defaultExtension": "ts",
-      "meta": {
-        "*.ts": {
-          "loader": "ts"
-        }
-      }
+      "defaultExtension": "ts"
     },
     "app/redux": {
-      "defaultExtension": "ts",
-      "meta": {
-        "*.ts": {
-          "loader": "ts"
-        }
-      }
+      "defaultExtension": "ts"
     }
   },
 
