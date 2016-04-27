@@ -18,7 +18,6 @@ package sql_test
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -433,13 +431,13 @@ func runSchemaChangeWithOperations(
 	maxValue int,
 	keyMultiple int,
 	descKey roachpb.Key,
+	backfillNotification chan bool,
 ) {
 	desc := &csql.Descriptor{}
 	if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
 		t.Fatal(pErr)
 	}
 	tableDesc := desc.GetTable()
-	version := tableDesc.Version
 
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
@@ -454,28 +452,8 @@ func runSchemaChangeWithOperations(
 		wg.Done()
 	}()
 
-	// Wait until the backfills for the schema change starts.
-	util.SucceedsSoon(t, func() error {
-		desc := &csql.Descriptor{}
-		if pErr := kvDB.GetProto(descKey, desc); pErr != nil {
-			t.Fatal(pErr)
-		}
-		table := desc.GetTable()
-		if table.Version == version+2 {
-			// Version upgrade has happened, backfills can proceed.
-			// Check that the descriptor is the right state.
-			for _, m := range table.Mutations {
-				if (m.Direction == csql.DescriptorMutation_ADD &&
-					m.State != csql.DescriptorMutation_WRITE_ONLY) ||
-					(m.Direction == csql.DescriptorMutation_DROP &&
-						m.State != csql.DescriptorMutation_DELETE_ONLY) {
-					t.Fatalf("mutation %v in a bad state", m)
-				}
-			}
-			return nil
-		}
-		return errors.New("version not updated")
-	})
+	// Wait until the schema change backfill starts.
+	<-backfillNotification
 
 	// Run a variety of operations during the backfill.
 
@@ -551,8 +529,20 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(vivekmenezes): see #6293")
-	server, sqlDB, kvDB := setup(t)
+
+	// Disable asynchronous schema change execution to allow synchronous path
+	// to trigger start of backfill notification.
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+	ctx, _ := createTestServerContext()
+	var backfillNotification chan bool
+	ctx.TestingKnobs.ExecutorTestingKnobs.SchemaChangersStartBackfillNotification =
+		func() {
+			if backfillNotification != nil {
+				// Close channel to notify that the backfill has started.
+				close(backfillNotification)
+			}
+		}
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
 	if _, err := sqlDB.Exec(`
@@ -565,7 +555,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Bulk insert.
 	// TODO(vivek): increase maxValue once #3274 is fixed.
-	maxValue := 400
+	maxValue := 100
 	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
 	for i := 1; i <= maxValue; i++ {
 		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
@@ -602,6 +592,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// Run some schema changes with operations.
 
 	// Add column.
+	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -609,9 +600,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
 		5,
-		descKey)
+		descKey,
+		backfillNotification)
 
 	// Drop column.
+	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -619,9 +612,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
 		4,
-		descKey)
+		descKey,
+		backfillNotification)
 
 	// Add index.
+	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -629,9 +624,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		5,
-		descKey)
+		descKey,
+		backfillNotification)
 
 	// Drop index.
+	backfillNotification = make(chan bool)
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -639,7 +636,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"DROP INDEX t.test@vidx",
 		maxValue,
 		4,
-		descKey)
+		descKey,
+		backfillNotification)
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.

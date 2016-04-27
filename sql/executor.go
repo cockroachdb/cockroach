@@ -204,6 +204,10 @@ type ExecutorTestingKnobs struct {
 	// Note that this has nothing to do with the async path for running schema
 	// changers. To block that, see TestDisableAsyncSchemaChangeExec().
 	SyncSchemaChangersFilter SyncSchemaChangersFilter
+
+	// SchemaChangersStartBackfillNotification is called before applying the
+	// backfill for a schema change operation.
+	SchemaChangersStartBackfillNotification func()
 }
 
 // NewExecutor creates an Executor and registers a callback on the

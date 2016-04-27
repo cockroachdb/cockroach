@@ -269,7 +269,9 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			} else if done {
 				break
 			}
-			if pErr := sc.exec(); pErr != nil {
+			if pErr := sc.exec(
+				e.ctx.TestingKnobs.SchemaChangersStartBackfillNotification,
+			); pErr != nil {
 				if _, ok := pErr.GetDetail().(*roachpb.ExistingSchemaChangeLeaseError); ok {
 					// Try again.
 					continue
