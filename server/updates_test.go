@@ -138,22 +138,22 @@ func TestReportUsage(t *testing.T) {
 	if expected, actual := s.node.Descriptor.NodeID, reported.Node.NodeID; expected != actual {
 		t.Errorf("expected node id %v got %v", expected, actual)
 	}
-	if expected, actual := totalKeys, reported.Node.KeyCount; expected != actual {
-		t.Errorf("expected node keys %v got %v", expected, actual)
+	if minExpected, actual := totalKeys, reported.Node.KeyCount; minExpected > actual {
+		t.Errorf("expected node keys at least %v got %v", minExpected, actual)
 	}
-	if expected, actual := totalRanges, reported.Node.RangeCount; expected != actual {
-		t.Errorf("expected node ranges %v got %v", expected, actual)
+	if minExpected, actual := totalRanges, reported.Node.RangeCount; minExpected > actual {
+		t.Errorf("expected node ranges at least %v got %v", minExpected, actual)
 	}
-	if expected, actual := s.StoresPerNode, len(reported.Stores); expected != actual {
-		t.Errorf("expected %v stores got %v", expected, actual)
+	if minExpected, actual := s.StoresPerNode, len(reported.Stores); minExpected > actual {
+		t.Errorf("expected at least %v stores got %v", minExpected, actual)
 	}
 
 	for _, store := range reported.Stores {
-		if expected, actual := keyCounts[store.StoreID], store.KeyCount; expected != actual {
-			t.Errorf("expected %v keys in store %v got %v", expected, store.StoreID, actual)
+		if minExpected, actual := keyCounts[store.StoreID], store.KeyCount; minExpected > actual {
+			t.Errorf("expected at least %v keys in store %v got %v", minExpected, store.StoreID, actual)
 		}
-		if expected, actual := rangeCounts[store.StoreID], store.RangeCount; expected != actual {
-			t.Errorf("expected %v ranges in store %v got %v", expected, store.StoreID, actual)
+		if minExpected, actual := rangeCounts[store.StoreID], store.RangeCount; minExpected > actual {
+			t.Errorf("expected at least %v ranges in store %v got %v", minExpected, store.StoreID, actual)
 		}
 	}
 
