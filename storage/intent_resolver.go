@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -74,7 +75,7 @@ func newIntentResolver(store *Store) *intentResolver {
 // to cause the client to back off).
 func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 	wiErr roachpb.WriteIntentError, r *Replica, args roachpb.Request, h roachpb.Header,
-	pushType roachpb.PushTxnType) *roachpb.Error {
+	pushType roachpb.PushTxnType) error {
 
 	if log.V(6) {
 		log.Infoc(ctx, "resolving write intent %s", wiErr)
@@ -111,13 +112,13 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 		// conflicts, return the write intent error which engages
 		// backoff/retry (with !Resolved). We don't need to restart the
 		// txn, only resend the read with a backoff.
-		return roachpb.NewError(&wiErr)
+		return &wiErr
 	}
 
 	// We pushed all transactions, so tell the client everything's
 	// resolved and it can retry immediately.
 	wiErr.Resolved = true
-	return roachpb.NewError(&wiErr)
+	return &wiErr
 }
 
 // maybePushTransactions tries to push the conflicting transaction(s)
@@ -146,7 +147,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 //    in non-pending state and doesn't require a push.
 func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []roachpb.Intent,
 	h roachpb.Header, pushType roachpb.PushTxnType, skipIfInFlight bool) (
-	[]roachpb.Intent, *roachpb.Error) {
+	[]roachpb.Intent, error) {
 
 	now := ir.store.Clock().Now()
 
@@ -168,7 +169,6 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	ir.mu.Lock()
 	// TODO(tschottdorf): can optimize this and use same underlying slice.
 	var pushIntents, nonPendingIntents []roachpb.Intent
-	var pErr *roachpb.Error
 	for _, intent := range intents {
 		if intent.Status != roachpb.PENDING {
 			// The current intent does not need conflict resolution
@@ -190,7 +190,7 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	}
 	ir.mu.Unlock()
 	if len(nonPendingIntents) > 0 {
-		return nil, roachpb.NewErrorf("unexpected aborted/resolved intents: %s", nonPendingIntents)
+		return nil, util.Errorf("unexpected aborted/resolved intents: %s", nonPendingIntents)
 	}
 
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
@@ -216,7 +216,10 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	// txn is correctly propagated in an error response.
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)
-	br, pErr := ir.store.db.RunWithResponse(b)
+	// !!! is it correct that here we're getting an err instead of a pErr? Will we
+	// get the correct pErr when we transform err to pErr for sending to the
+	// client? Should we do anything about the TODO above?
+	br, err := ir.store.db.RunWithResponse(b)
 	ir.mu.Lock()
 	for _, intent := range pushIntents {
 		ir.mu.inFlight[*intent.Txn.ID]--
@@ -225,8 +228,8 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 		}
 	}
 	ir.mu.Unlock()
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, err
 	}
 
 	var resolveIntents []roachpb.Intent
@@ -424,7 +427,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		b.InternalAddRequest(reqsRemote...)
 		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
-			return r.store.DB().Run(b).GoError()
+			return r.store.DB().Run(b)
 		}
 		if wait || !r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {

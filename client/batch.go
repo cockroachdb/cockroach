@@ -18,6 +18,7 @@ package client
 
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // Batch provides for the parallel execution of a number of database
@@ -59,10 +60,10 @@ type Batch struct {
 	rowsIdx    int
 }
 
-func (b *Batch) prepare() *roachpb.Error {
+func (b *Batch) prepare() error {
 	for _, r := range b.Results {
-		if pErr := r.Err; pErr != nil {
-			return pErr
+		if r.Err != nil {
+			return r.Err
 		}
 	}
 	return nil
@@ -70,7 +71,7 @@ func (b *Batch) prepare() *roachpb.Error {
 
 func (b *Batch) initResult(calls, numRows int, err error) {
 	// TODO(tschottdorf): assert that calls is 0 or 1?
-	r := Result{calls: calls, Err: roachpb.NewError(err)}
+	r := Result{calls: calls, Err: err}
 	if numRows > 0 {
 		if b.rowsIdx+numRows <= len(b.rowsBuf) {
 			r.Rows = b.rowsBuf[b.rowsIdx : b.rowsIdx+numRows]
@@ -85,7 +86,8 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+// Returns the first error.
+func (b *Batch) fillResults(br *roachpb.BatchResponse, err error) error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -95,7 +97,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 
 			var reply roachpb.Response
 			if result.Err == nil {
-				result.Err = pErr
+				result.Err = err
 				if result.Err == nil {
 					if br != nil && offset+k < len(br.Responses) {
 						reply = br.Responses[offset+k].GetInner()
@@ -192,7 +194,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 
 			default:
 				if result.Err == nil {
-					result.Err = roachpb.NewErrorf("unsupported reply: %T", reply)
+					result.Err = util.Errorf("unsupported reply: %T", reply)
 				}
 			}
 		}

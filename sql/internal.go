@@ -39,16 +39,17 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 // the supplied transaction. Statements are currently executed as the root user.
 func (ie InternalExecutor) ExecuteStatementInTransaction(
 	txn *client.Txn, statement string, params ...interface{},
-) (int, *roachpb.Error) {
+) (int, error) {
 	p := makePlanner()
 	p.setTxn(txn)
 	p.session.User = security.RootUser
 	p.leaseMgr = ie.LeaseManager
-	return p.exec(statement, params...)
+	rowsAffected, pErr := p.exec(statement, params...)
+	return rowsAffected, pErr.GoError()
 }
 
 // GetTableSpan gets the key span for a SQL table, including any indices.
-func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, tableName string) (roachpb.Span, *roachpb.Error) {
+func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, tableName string) (roachpb.Span, error) {
 	// Lookup the table ID.
 	p := makePlanner()
 	p.setTxn(txn)
@@ -56,11 +57,11 @@ func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, ta
 	p.leaseMgr = ie.LeaseManager
 	qname := &parser.QualifiedName{Base: parser.Name(tableName)}
 	if err := qname.NormalizeTableName(dbName); err != nil {
-		return roachpb.Span{}, roachpb.NewError(err)
+		return roachpb.Span{}, err
 	}
-	tableID, pErr := p.getTableID(qname)
-	if pErr != nil {
-		return roachpb.Span{}, pErr
+	tableID, err := p.getTableID(qname)
+	if err != nil {
+		return roachpb.Span{}, err
 	}
 
 	// Determine table data span.

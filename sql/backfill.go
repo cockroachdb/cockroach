@@ -18,12 +18,14 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -69,8 +71,8 @@ func (ids indexesByID) Swap(i, j int) {
 }
 
 func convertBackfillError(
-	tableDesc *TableDescriptor, b *client.Batch, pErr *roachpb.Error,
-) *roachpb.Error {
+	tableDesc *TableDescriptor, b *client.Batch, err error,
+) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// convertBatchError() will only work correctly if the schema elements are
@@ -86,20 +88,20 @@ func convertBackfillError(
 		}
 		tableDesc.makeMutationComplete(mutation)
 	}
-	return convertBatchError(tableDesc, *b, pErr)
+	return convertBatchError(tableDesc, findFirstResultWithError(b))
 }
 
-var descriptorChangedVersionError = roachpb.NewErrorf("table descriptor has changed version")
+var descriptorChangedVersionError = fmt.Errorf("table descriptor has changed version")
 
 // getTableDescAtVersion attempts to read a descriptor from the database at a
 // specific version. It returns descriptorChangedVersionError if the current
 // version is not the passed in version.
 func getTableDescAtVersion(
 	txn *client.Txn, id ID, version DescriptorVersion,
-) (*TableDescriptor, *roachpb.Error) {
-	tableDesc, pErr := getTableDescFromID(txn, id)
-	if pErr != nil {
-		return nil, pErr
+) (*TableDescriptor, error) {
+	tableDesc, err := getTableDescFromID(txn, id)
+	if err != nil {
+		return nil, err
 	}
 	if version != tableDesc.Version {
 		return nil, descriptorChangedVersionError
@@ -110,13 +112,13 @@ func getTableDescAtVersion(
 // runBackfill runs the backfill for the schema changer. It runs the entire
 // backfill at a specific version of the table descriptor, and re-attempts to
 // run the schema change when the version changes.
-func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
+func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) error {
 	for {
-		pErr := sc.runBackfillAtLatestVersion(lease)
-		if pErr == descriptorChangedVersionError {
+		err := sc.runBackfillAtLatestVersion(lease)
+		if err == descriptorChangedVersionError {
 			continue
 		}
-		return pErr
+		return err
 	}
 }
 
@@ -125,10 +127,10 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *
 // while it is running the backfill.
 func (sc *SchemaChanger) runBackfillAtLatestVersion(
 	lease *TableDescriptor_SchemaChangeLease,
-) *roachpb.Error {
-	l, pErr := sc.ExtendLease(*lease)
-	if pErr != nil {
-		return pErr
+) error {
+	l, err := sc.ExtendLease(*lease)
+	if err != nil {
+		return err
 	}
 	*lease = l
 
@@ -142,10 +144,10 @@ func (sc *SchemaChanger) runBackfillAtLatestVersion(
 	// later that the table descriptor hasn't changed during the backfill
 	// process.
 	var version DescriptorVersion
-	if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
-		if pErr != nil {
-			return pErr
+	if err := sc.db.Txn(func(txn *client.Txn) error {
+		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		if err != nil {
+			return err
 		}
 		version = tableDesc.Version
 		for _, m := range tableDesc.Mutations {
@@ -173,28 +175,28 @@ func (sc *SchemaChanger) runBackfillAtLatestVersion(
 			}
 		}
 		return nil
-	}); pErr != nil {
-		return pErr
+	}); err != nil {
+		return err
 	}
 
 	// TODO(vivek): Break these backfill operations into chunks. All of them
 	// will fail on big tables (see #3274).
 
 	// Add and drop columns.
-	if pErr := sc.truncateAndBackfillColumns(
+	if err := sc.truncateAndBackfillColumns(
 		lease, addedColumnDescs, droppedColumnDescs, version,
-	); pErr != nil {
-		return pErr
+	); err != nil {
+		return err
 	}
 
 	// Drop indexes.
-	if pErr := sc.truncateIndexes(lease, droppedIndexDescs, version); pErr != nil {
-		return pErr
+	if err := sc.truncateIndexes(lease, droppedIndexDescs, version); err != nil {
+		return err
 	}
 
 	// Add new indexes.
-	if pErr := sc.backfillIndexes(lease, addedIndexDescs, version); pErr != nil {
-		return pErr
+	if err := sc.backfillIndexes(lease, addedIndexDescs, version); err != nil {
+		return err
 	}
 
 	return nil
@@ -205,7 +207,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	added []ColumnDescriptor,
 	dropped []ColumnDescriptor,
 	version DescriptorVersion,
-) *roachpb.Error {
+) error {
 	evalCtx := parser.EvalContext{}
 	// Set the eval context timestamps.
 	pTime := timeutil.Now()
@@ -213,7 +215,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	evalCtx.SetStmtTimestamp(pTime)
 	defaultExprs, err := makeDefaultExprs(added, &parser.Parser{}, evalCtx)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Remember any new non nullable column with no default value.
@@ -227,30 +229,30 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	// Add or Drop a column.
 	if len(dropped) > 0 || nonNullableColumn != "" || len(defaultExprs) > 0 {
 		// First extend the schema change lease.
-		l, pErr := sc.ExtendLease(*lease)
-		if pErr != nil {
-			return pErr
+		l, err := sc.ExtendLease(*lease)
+		if err != nil {
+			return err
 		}
 		*lease = l
 
-		pErr = sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
-			if pErr != nil {
-				return pErr
+		err = sc.db.Txn(func(txn *client.Txn) error {
+			tableDesc, err := getTableDescAtVersion(txn, sc.tableID, version)
+			if err != nil {
+				return err
 			}
 
 			// Run a scan across the table using the primary key.
 			start := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
 			b := &client.Batch{}
 			b.Scan(start, start.PrefixEnd(), 0)
-			if pErr := txn.Run(b); pErr != nil {
-				return pErr
+			if err := txn.Run(b); err != nil {
+				return err
 			}
 
 			if nonNullableColumn != "" {
 				for _, result := range b.Results {
 					if len(result.Rows) > 0 {
-						return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
+						return util.Errorf("column %s contains null values", nonNullableColumn)
 					}
 				}
 			}
@@ -289,12 +291,12 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 							colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
 							d, err := expr.Eval(evalCtx)
 							if err != nil {
-								return roachpb.NewError(err)
+								return err
 							}
 
 							val, err := marshalColumnValue(col, d)
 							if err != nil {
-								return roachpb.NewError(err)
+								return err
 							}
 
 							if log.V(2) {
@@ -315,12 +317,12 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 					}
 				}
 			}
-			if pErr := txn.Run(writeBatch); pErr != nil {
-				return convertBackfillError(tableDesc, writeBatch, pErr)
+			if err := txn.Run(writeBatch); err != nil {
+				return convertBackfillError(tableDesc, writeBatch, err)
 			}
 			return nil
 		})
-		return pErr
+		return err
 	}
 	return nil
 }
@@ -329,18 +331,18 @@ func (sc *SchemaChanger) truncateIndexes(
 	lease *TableDescriptor_SchemaChangeLease,
 	dropped []IndexDescriptor,
 	version DescriptorVersion,
-) *roachpb.Error {
+) error {
 	for _, desc := range dropped {
 		// First extend the schema change lease.
-		l, pErr := sc.ExtendLease(*lease)
-		if pErr != nil {
-			return pErr
+		l, err := sc.ExtendLease(*lease)
+		if err != nil {
+			return err
 		}
 		*lease = l
-		if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-			tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
-			if pErr != nil {
-				return pErr
+		if err := sc.db.Txn(func(txn *client.Txn) error {
+			tableDesc, err := getTableDescAtVersion(txn, sc.tableID, version)
+			if err != nil {
+				return err
 			}
 
 			indexPrefix := MakeIndexKeyPrefix(tableDesc.ID, desc.ID)
@@ -354,12 +356,12 @@ func (sc *SchemaChanger) truncateIndexes(
 			b := &client.Batch{}
 			b.DelRange(indexStartKey, indexEndKey, false)
 
-			if pErr := txn.Run(b); pErr != nil {
-				return pErr
+			if err := txn.Run(b); err != nil {
+				return err
 			}
 			return nil
-		}); pErr != nil {
-			return pErr
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -369,20 +371,20 @@ func (sc *SchemaChanger) backfillIndexes(
 	lease *TableDescriptor_SchemaChangeLease,
 	added []IndexDescriptor,
 	version DescriptorVersion,
-) *roachpb.Error {
+) error {
 	if len(added) == 0 {
 		return nil
 	}
 	// First extend the schema change lease.
-	l, pErr := sc.ExtendLease(*lease)
-	if pErr != nil {
-		return pErr
+	l, err := sc.ExtendLease(*lease)
+	if err != nil {
+		return err
 	}
 	*lease = l
-	pErr = sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, pErr := getTableDescAtVersion(txn, sc.tableID, version)
-		if pErr != nil {
-			return pErr
+	err = sc.db.Txn(func(txn *client.Txn) error {
+		tableDesc, err := getTableDescAtVersion(txn, sc.tableID, version)
+		if err != nil {
+			return err
 		}
 
 		// Get all the rows affected.
@@ -399,14 +401,14 @@ func (sc *SchemaChanger) backfillIndexes(
 		scan.initDescDefaults()
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 
 		// Construct a map from column ID to the index the value appears at within a
 		// row.
 		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		b := &client.Batch{}
 		for rows.Next() {
@@ -416,7 +418,7 @@ func (sc *SchemaChanger) backfillIndexes(
 				secondaryIndexEntries, err := encodeSecondaryIndexes(
 					tableDesc.ID, []IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
 				if err != nil {
-					return roachpb.NewError(err)
+					return err
 				}
 
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
@@ -429,12 +431,12 @@ func (sc *SchemaChanger) backfillIndexes(
 			}
 		}
 		if rows.PErr() != nil {
-			return rows.PErr()
+			return rows.PErr().GoError()
 		}
-		if pErr := txn.Run(b); pErr != nil {
-			return convertBackfillError(tableDesc, b, pErr)
+		if err := txn.Run(b); err != nil {
+			return convertBackfillError(tableDesc, b, err)
 		}
 		return nil
 	})
-	return pErr
+	return err
 }

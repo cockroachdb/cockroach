@@ -431,10 +431,10 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 		// query.
 		startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
 		endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-		var pErr *roachpb.Error
-		rows, pErr = db.db.ScanInconsistent(startKey, endKey, 0)
-		if pErr != nil {
-			return nil, nil, pErr.GoError()
+		var err error
+		rows, err = db.db.ScanInconsistent(startKey, endKey, 0)
+		if err != nil {
+			return nil, nil, err
 		}
 	} else {
 		b := db.db.NewBatch()
@@ -450,9 +450,9 @@ func (db *DB) Query(query Query, r Resolution, startNanos, endNanos int64) ([]Ti
 				b.Get(key)
 			}
 		}
-		pErr := db.db.Run(b)
-		if pErr != nil {
-			return nil, nil, pErr.GoError()
+		err := db.db.Run(b)
+		if err != nil {
+			return nil, nil, err
 		}
 		for _, result := range b.Results {
 			row := result.Rows[0]

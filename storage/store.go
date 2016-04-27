@@ -1694,7 +1694,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
-			pErr = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
+			err = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
+			// !!! is this correct?
+			pErr = roachpb.NewErrorWithTxn(err, ba.Txn)
 			// Preserve the error index.
 			pErr.Index = index
 		}
@@ -1759,9 +1761,10 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	br, pErr := s.db.RunWithResponse(&b)
-	if pErr != nil {
-		return nil, pErr
+	br, err := s.db.RunWithResponse(&b)
+	if err != nil {
+		// !!! is NewError*WithTxn* correct?
+		return nil, roachpb.NewErrorWithTxn(err, txn)
 	}
 	// ID can be nil if no BeginTransaction has been sent yet.
 	if updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn; updatedTxn.ID != nil {

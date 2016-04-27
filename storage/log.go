@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // TODO(mrtracy): All of this logic should probably be moved into the SQL
@@ -69,7 +70,7 @@ type rangeLogEvent struct {
 	info         *string
 }
 
-func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) *roachpb.Error {
+func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) error {
 	const insertEventTableStmt = `
 INSERT INTO system.rangelog (
   timestamp, rangeID, storeID, eventType, otherRangeID, info
@@ -110,7 +111,7 @@ VALUES(
 		return err
 	}
 	if rows != 1 {
-		return roachpb.NewErrorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
+		return util.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
 }
@@ -120,7 +121,7 @@ VALUES(
 // range is the new range which is being created.
 // TODO(mrtracy): There are several different reasons that a replica split
 // could occur, and that information should be logged.
-func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor) *roachpb.Error {
+func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor) error {
 	if !s.ctx.LogRangeEvents {
 		return nil
 	}
@@ -130,7 +131,7 @@ func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDesc
 	}{updatedDesc, newDesc}
 	infoBytes, err := json.Marshal(info)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	infoStr := string(infoBytes)
 	return s.insertRangeLogEvent(txn, rangeLogEvent{
@@ -148,7 +149,7 @@ func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDesc
 // TODO(mrtracy): There are several different reasons that a replica change
 // could occur, and that information should be logged.
 func (s *Store) logChange(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor,
-	desc roachpb.RangeDescriptor) *roachpb.Error {
+	desc roachpb.RangeDescriptor) error {
 	if !s.ctx.LogRangeEvents {
 		return nil
 	}
@@ -169,12 +170,12 @@ func (s *Store) logChange(txn *client.Txn, changeType roachpb.ReplicaChangeType,
 			UpdatedDesc    roachpb.RangeDescriptor
 		}{replica, desc}
 	default:
-		return roachpb.NewErrorf("unknown replica change type %s", changeType)
+		return util.Errorf("unknown replica change type %s", changeType)
 	}
 
 	infoBytes, err := json.Marshal(infoStruct)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	infoStr := string(infoBytes)
 	return s.insertRangeLogEvent(txn, rangeLogEvent{

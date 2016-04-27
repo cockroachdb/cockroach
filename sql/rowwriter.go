@@ -539,8 +539,8 @@ func (rd *rowDeleter) fastPathAvailable() bool {
 func (rd *rowDeleter) fastDelete(
 	b *client.Batch,
 	scan *scanNode,
-	commitFunc func(b *client.Batch) *roachpb.Error,
-) (rowCount int, pErr *roachpb.Error) {
+	commitFunc func(b *client.Batch) error,
+) (rowCount int, err error) {
 	for _, span := range scan.spans {
 		if log.V(2) {
 			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
@@ -548,9 +548,9 @@ func (rd *rowDeleter) fastDelete(
 		b.DelRange(span.start, span.end, true)
 	}
 
-	pErr = commitFunc(b)
-	if pErr != nil {
-		return 0, pErr
+	err = commitFunc(b)
+	if err != nil {
+		return 0, err
 	}
 
 	for _, r := range b.Results {
@@ -563,7 +563,7 @@ func (rd *rowDeleter) fastDelete(
 
 			after, err := scan.fetcher.readIndexKey(i)
 			if err != nil {
-				return 0, roachpb.NewError(err)
+				return 0, err
 			}
 			k := i[:len(i)-len(after)]
 			if !bytes.Equal(k, prev) {

@@ -17,7 +17,8 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -26,24 +27,24 @@ import (
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
+func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
-	dbDesc, pErr := p.getDatabaseDesc(n.Table.Database())
-	if pErr != nil {
-		return nil, pErr
+	dbDesc, err := p.getDatabaseDesc(n.Table.Database())
+	if err != nil {
+		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, roachpb.NewError(databaseDoesNotExistError(n.Table.Database()))
+		return nil, databaseDoesNotExistError(n.Table.Database())
 	}
 
 	// Check if table exists.
 	tbKey := tableKey{dbDesc.ID, n.Table.Table()}.Key()
-	gr, pErr := p.txn.Get(tbKey)
-	if pErr != nil {
-		return nil, pErr
+	gr, err := p.txn.Get(tbKey)
+	if err != nil {
+		return nil, err
 	}
 	if !gr.Exists() {
 		if n.IfExists {
@@ -51,19 +52,19 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
-		return nil, roachpb.NewUErrorf("table %q does not exist", n.Table.Table())
+		return nil, fmt.Errorf("table %q does not exist", n.Table.Table())
 	}
 
-	tableDesc, pErr := p.getTableDesc(n.Table)
-	if pErr != nil {
-		return nil, pErr
+	tableDesc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+		return nil, tableDoesNotExistError(n.Table.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	// Commands can either change the descriptor directly (for
@@ -78,12 +79,12 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			d := t.ColumnDef
 			col, idx, err := makeColumnDefDescs(d)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			status, i, err := tableDesc.FindColumnByName(col.Name)
 			if err == nil {
 				if status == DescriptorIncomplete && tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
-					return nil, roachpb.NewUErrorf("column %q being dropped, try again later", col.Name)
+					return nil, fmt.Errorf("column %q being dropped, try again later", col.Name)
 				}
 			}
 			tableDesc.addColumnMutation(*col, DescriptorMutation_ADD)
@@ -95,7 +96,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
 				if d.PrimaryKey {
-					return nil, roachpb.NewUErrorf("multiple primary keys for table %q are not allowed", tableDesc.Name)
+					return nil, fmt.Errorf("multiple primary keys for table %q are not allowed", tableDesc.Name)
 				}
 				name := string(d.Name)
 				idx := IndexDescriptor{
@@ -104,18 +105,18 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 					StoreColumnNames: d.Storing,
 				}
 				if err := idx.fillColumns(d.Columns); err != nil {
-					return nil, roachpb.NewError(err)
+					return nil, err
 				}
 				status, i, err := tableDesc.FindIndexByName(name)
 				if err == nil {
 					if status == DescriptorIncomplete && tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
-						return nil, roachpb.NewUErrorf("index %q being dropped, try again later", name)
+						return nil, fmt.Errorf("index %q being dropped, try again later", name)
 					}
 				}
 				tableDesc.addIndexMutation(idx, DescriptorMutation_ADD)
 
 			default:
-				return nil, roachpb.NewErrorf("unsupported constraint: %T", t.ConstraintDef)
+				return nil, fmt.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
 
 		case *parser.AlterTableDropColumn:
@@ -125,17 +126,17 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 					// Noop.
 					continue
 				}
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			switch status {
 			case DescriptorActive:
 				col := tableDesc.Columns[i]
 				if tableDesc.PrimaryIndex.containsColumnID(col.ID) {
-					return nil, roachpb.NewUErrorf("column %q is referenced by the primary key", col.Name)
+					return nil, fmt.Errorf("column %q is referenced by the primary key", col.Name)
 				}
 				for _, idx := range tableDesc.allNonDropIndexes() {
 					if idx.containsColumnID(col.ID) {
-						return nil, roachpb.NewUErrorf("column %q is referenced by existing index %q", col.Name, idx.Name)
+						return nil, fmt.Errorf("column %q is referenced by existing index %q", col.Name, idx.Name)
 					}
 				}
 				tableDesc.addColumnMutation(col, DescriptorMutation_DROP)
@@ -144,7 +145,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			case DescriptorIncomplete:
 				switch tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return nil, roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.Column)
+					return nil, fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
 
 				case DescriptorMutation_DROP:
 					// Noop.
@@ -158,7 +159,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 					// Noop.
 					continue
 				}
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			switch status {
 			case DescriptorActive:
@@ -168,7 +169,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			case DescriptorIncomplete:
 				switch tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return nil, roachpb.NewUErrorf("constraint %q in the middle of being added, try again later", t.Constraint)
+					return nil, fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 
 				case DescriptorMutation_DROP:
 					// Noop.
@@ -179,7 +180,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			// Column mutations
 			status, i, err := tableDesc.FindColumnByName(t.GetColumn())
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 
 			switch status {
@@ -190,14 +191,14 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 			case DescriptorIncomplete:
 				switch tableDesc.Mutations[i].Direction {
 				case DescriptorMutation_ADD:
-					return nil, roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.GetColumn())
+					return nil, fmt.Errorf("column %q in the middle of being added, try again later", t.GetColumn())
 				case DescriptorMutation_DROP:
-					return nil, roachpb.NewUErrorf("column %q in the middle of being dropped", t.GetColumn())
+					return nil, fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 				}
 			}
 
 		default:
-			return nil, roachpb.NewErrorf("unsupported alter cmd: %T", cmd)
+			return nil, fmt.Errorf("unsupported alter cmd: %T", cmd)
 		}
 	}
 	// Were some changes made?
@@ -220,11 +221,11 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, *roachpb.Error) {
 	}
 
 	if err := tableDesc.AllocateIDs(); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
-	if pErr := p.writeTableDesc(tableDesc); pErr != nil {
-		return nil, pErr
+	if err := p.writeTableDesc(tableDesc); err != nil {
+		return nil, err
 	}
 	p.notifySchemaChange(tableDesc.ID, mutationID)
 

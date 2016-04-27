@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"golang.org/x/net/context"
 )
 
@@ -76,10 +77,10 @@ func (tc *treeContext) flush(b *client.Batch) {
 }
 
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
-func getRangeTree(txn *client.Txn) (*treeContext, *roachpb.Error) {
+func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := new(RangeTree)
-	if pErr := txn.GetProto(keys.RangeTreeRoot, tree); pErr != nil {
-		return nil, pErr
+	if err := txn.GetProto(keys.RangeTreeRoot, tree); err != nil {
+		return nil, err
 	}
 	return &treeContext{
 		txn:   txn,
@@ -116,7 +117,7 @@ func (tc *treeContext) dropNode(key roachpb.RKey) {
 
 // getNode returns the RangeTreeNode for the given key. If the key is nil, nil
 // is returned.
-func (tc *treeContext) getNode(key roachpb.RKey) (*RangeTreeNode, *roachpb.Error) {
+func (tc *treeContext) getNode(key roachpb.RKey) (*RangeTreeNode, error) {
 	if key == nil {
 		return nil, nil
 	}
@@ -130,8 +131,8 @@ func (tc *treeContext) getNode(key roachpb.RKey) (*RangeTreeNode, *roachpb.Error
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := new(RangeTreeNode)
-	if pErr := tc.txn.GetProto(keys.RangeTreeNodeKey(key), node); pErr != nil {
-		return nil, pErr
+	if err := tc.txn.GetProto(keys.RangeTreeNodeKey(key), node); err != nil {
+		return nil, err
 	}
 	tc.nodes[keyString] = cachedNode{
 		node:  node,
@@ -150,13 +151,13 @@ func isRed(node *RangeTreeNode) bool {
 
 // getSibling returns the other child of the node's parent. Returns nil if the node
 // has no parent or its parent has only one child.
-func (tc *treeContext) getSibling(node *RangeTreeNode) (*RangeTreeNode, *roachpb.Error) {
+func (tc *treeContext) getSibling(node *RangeTreeNode) (*RangeTreeNode, error) {
 	if node == nil || node.ParentKey == nil {
 		return nil, nil
 	}
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return nil, pErr
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return nil, err
 	}
 	if parent.LeftKey == nil || parent.RightKey == nil {
 		return nil, nil
@@ -169,13 +170,13 @@ func (tc *treeContext) getSibling(node *RangeTreeNode) (*RangeTreeNode, *roachpb
 
 // getUncle returns the node's parent's sibling. Or nil if the node doesn't have a
 // grandparent or their parent has no sibling.
-func (tc *treeContext) getUncle(node *RangeTreeNode) (*RangeTreeNode, *roachpb.Error) {
+func (tc *treeContext) getUncle(node *RangeTreeNode) (*RangeTreeNode, error) {
 	if node == nil || node.ParentKey == nil {
 		return nil, nil
 	}
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return nil, pErr
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return nil, err
 	}
 	return tc.getSibling(parent)
 }
@@ -183,17 +184,17 @@ func (tc *treeContext) getUncle(node *RangeTreeNode) (*RangeTreeNode, *roachpb.E
 // replaceNode cuts a node away form its parent, substituting a new node or
 // nil. The updated new node is returned. Note that this does not in fact alter
 // the old node in any way, but only the old node's parent and the new node.
-func (tc *treeContext) replaceNode(oldNode, newNode *RangeTreeNode) (*RangeTreeNode, *roachpb.Error) {
+func (tc *treeContext) replaceNode(oldNode, newNode *RangeTreeNode) (*RangeTreeNode, error) {
 	if oldNode.ParentKey == nil {
 		if newNode == nil {
-			return nil, roachpb.NewErrorf("cannot replace the root node with nil")
+			return nil, util.Errorf("cannot replace the root node with nil")
 		}
 		// Update the root key if this was the root.
 		tc.setRootKey(newNode.Key)
 	} else {
-		oldParent, pErr := tc.getNode(oldNode.ParentKey)
-		if pErr != nil {
-			return nil, pErr
+		oldParent, err := tc.getNode(oldNode.ParentKey)
+		if err != nil {
+			return nil, err
 		}
 		if oldParent.LeftKey != nil && oldNode.Key.Equal(oldParent.LeftKey) {
 			if newNode == nil {
@@ -218,20 +219,20 @@ func (tc *treeContext) replaceNode(oldNode, newNode *RangeTreeNode) (*RangeTreeN
 }
 
 // rotateLeft performs a left rotation around the node.
-func (tc *treeContext) rotateLeft(node *RangeTreeNode) (*RangeTreeNode, *roachpb.Error) {
-	right, pErr := tc.getNode(node.RightKey)
-	if pErr != nil {
-		return nil, pErr
+func (tc *treeContext) rotateLeft(node *RangeTreeNode) (*RangeTreeNode, error) {
+	right, err := tc.getNode(node.RightKey)
+	if err != nil {
+		return nil, err
 	}
-	right, pErr = tc.replaceNode(node, right)
-	if pErr != nil {
-		return nil, pErr
+	right, err = tc.replaceNode(node, right)
+	if err != nil {
+		return nil, err
 	}
 	node.RightKey = right.LeftKey
 	if right.LeftKey != nil {
-		rightLeft, pErr := tc.getNode(right.LeftKey)
-		if pErr != nil {
-			return nil, pErr
+		rightLeft, err := tc.getNode(right.LeftKey)
+		if err != nil {
+			return nil, err
 		}
 		rightLeft.ParentKey = node.Key
 		tc.setNode(rightLeft)
@@ -244,20 +245,20 @@ func (tc *treeContext) rotateLeft(node *RangeTreeNode) (*RangeTreeNode, *roachpb
 }
 
 // rotateRight performs a right rotation around the node.
-func (tc *treeContext) rotateRight(node *RangeTreeNode) (*RangeTreeNode, *roachpb.Error) {
-	left, pErr := tc.getNode(node.LeftKey)
-	if pErr != nil {
-		return nil, pErr
+func (tc *treeContext) rotateRight(node *RangeTreeNode) (*RangeTreeNode, error) {
+	left, err := tc.getNode(node.LeftKey)
+	if err != nil {
+		return nil, err
 	}
-	left, pErr = tc.replaceNode(node, left)
-	if pErr != nil {
-		return nil, pErr
+	left, err = tc.replaceNode(node, left)
+	if err != nil {
+		return nil, err
 	}
 	node.LeftKey = left.RightKey
 	if left.RightKey != nil {
-		leftRight, pErr := tc.getNode(left.RightKey)
-		if pErr != nil {
-			return nil, pErr
+		leftRight, err := tc.getNode(left.RightKey)
+		if err != nil {
+			return nil, err
 		}
 		leftRight.ParentKey = node.Key
 		tc.setNode(leftRight)
@@ -271,16 +272,16 @@ func (tc *treeContext) rotateRight(node *RangeTreeNode) (*RangeTreeNode, *roachp
 
 // InsertRange adds a new range to the RangeTree. This should only be called
 // from operations that create new ranges, such as AdminSplit.
-func InsertRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) *roachpb.Error {
-	tc, pErr := getRangeTree(txn)
-	if pErr != nil {
-		return pErr
+func InsertRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) error {
+	tc, err := getRangeTree(txn)
+	if err != nil {
+		return err
 	}
 	newNode := &RangeTreeNode{
 		Key: key,
 	}
-	if pErr := tc.insert(newNode); pErr != nil {
-		return pErr
+	if err := tc.insert(newNode); err != nil {
+		return err
 	}
 	tc.flush(b)
 	return nil
@@ -290,19 +291,19 @@ func InsertRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) *roachpb.Er
 // until it finds the correct location. It will fail if the node already exists
 // as that case should not occur. After inserting the node, it checks all insert
 // cases to ensure the tree is balanced and adjusts it if needed.
-func (tc *treeContext) insert(node *RangeTreeNode) *roachpb.Error {
+func (tc *treeContext) insert(node *RangeTreeNode) error {
 	if tc.tree.RootKey == nil {
 		tc.setRootKey(node.Key)
 	} else {
 		// Walk the tree to find the right place to insert the new node.
 		currentKey := tc.tree.RootKey
 		for {
-			currentNode, pErr := tc.getNode(currentKey)
-			if pErr != nil {
-				return pErr
+			currentNode, err := tc.getNode(currentKey)
+			if err != nil {
+				return err
 			}
 			if node.Key.Equal(currentNode.Key) {
-				return roachpb.NewErrorf("key %s already exists in the range tree", node.Key)
+				return util.Errorf("key %s already exists in the range tree", node.Key)
 			}
 			if node.Key.Less(currentNode.Key) {
 				if currentNode.LeftKey == nil {
@@ -329,7 +330,7 @@ func (tc *treeContext) insert(node *RangeTreeNode) *roachpb.Error {
 }
 
 // insertCase1 handles the case when the inserted node is the root node.
-func (tc *treeContext) insertCase1(node *RangeTreeNode) *roachpb.Error {
+func (tc *treeContext) insertCase1(node *RangeTreeNode) error {
 	if node.ParentKey == nil {
 		node.Black = true
 		tc.setNode(node)
@@ -340,10 +341,10 @@ func (tc *treeContext) insertCase1(node *RangeTreeNode) *roachpb.Error {
 
 // insertCase2 handles the case when the inserted node has a black parent.
 // In this is the case, no work need to be done, the tree is already correct.
-func (tc *treeContext) insertCase2(node *RangeTreeNode) *roachpb.Error {
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) insertCase2(node *RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
 	if !isRed(parent) {
 		return nil
@@ -353,23 +354,23 @@ func (tc *treeContext) insertCase2(node *RangeTreeNode) *roachpb.Error {
 
 // insertCase3 handles the case in which the uncle node is red. If so, the uncle
 // and parent become black and the grandparent becomes red.
-func (tc *treeContext) insertCase3(node *RangeTreeNode) *roachpb.Error {
-	uncle, pErr := tc.getUncle(node)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) insertCase3(node *RangeTreeNode) error {
+	uncle, err := tc.getUncle(node)
+	if err != nil {
+		return err
 	}
 	if isRed(uncle) {
-		parent, pErr := tc.getNode(node.ParentKey)
-		if pErr != nil {
-			return pErr
+		parent, err := tc.getNode(node.ParentKey)
+		if err != nil {
+			return err
 		}
 		parent.Black = true
 		tc.setNode(parent)
 		uncle.Black = true
 		tc.setNode(uncle)
-		grandparent, pErr := tc.getNode(parent.ParentKey)
-		if pErr != nil {
-			return pErr
+		grandparent, err := tc.getNode(parent.ParentKey)
+		if err != nil {
+			return err
 		}
 		grandparent.Black = false
 		tc.setNode(grandparent)
@@ -383,39 +384,39 @@ func (tc *treeContext) insertCase3(node *RangeTreeNode) *roachpb.Error {
 // parent is required. Similarly, if the node is the left child of its parent
 // who is the right child of the grandparent, a right rotation around the parent
 // is required. This only prepares the tree for insertCase5.
-func (tc *treeContext) insertCase4(node *RangeTreeNode) *roachpb.Error {
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) insertCase4(node *RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
-	grandparent, pErr := tc.getNode(parent.ParentKey)
-	if pErr != nil {
-		return pErr
+	grandparent, err := tc.getNode(parent.ParentKey)
+	if err != nil {
+		return err
 	}
 	if parent.RightKey != nil && grandparent.LeftKey != nil && node.Key.Equal(parent.RightKey) && parent.Key.Equal(grandparent.LeftKey) {
-		if _, pErr := tc.rotateLeft(parent); pErr != nil {
-			return pErr
+		if _, err := tc.rotateLeft(parent); err != nil {
+			return err
 		}
-		node, pErr = tc.getNode(node.Key)
-		if pErr != nil {
-			return pErr
+		node, err = tc.getNode(node.Key)
+		if err != nil {
+			return err
 		}
-		node, pErr = tc.getNode(node.LeftKey)
-		if pErr != nil {
-			return pErr
+		node, err = tc.getNode(node.LeftKey)
+		if err != nil {
+			return err
 		}
 	} else if parent.LeftKey != nil && grandparent.RightKey != nil && node.Key.Equal(parent.LeftKey) && parent.Key.Equal(grandparent.RightKey) {
-		node, pErr = tc.rotateRight(parent)
-		if pErr != nil {
-			return pErr
+		node, err = tc.rotateRight(parent)
+		if err != nil {
+			return err
 		}
-		node, pErr = tc.getNode(node.Key)
-		if pErr != nil {
-			return pErr
+		node, err = tc.getNode(node.Key)
+		if err != nil {
+			return err
 		}
-		node, pErr = tc.getNode(node.RightKey)
-		if pErr != nil {
-			return pErr
+		node, err = tc.getNode(node.RightKey)
+		if err != nil {
+			return err
 		}
 	}
 	return tc.insertCase5(node)
@@ -426,26 +427,26 @@ func (tc *treeContext) insertCase4(node *RangeTreeNode) *roachpb.Error {
 // grandparent is required. Similarly, if the node is the left child of its
 // parent who is the left child of the grandparent, a left rotation around the
 // grandparent is required.
-func (tc *treeContext) insertCase5(node *RangeTreeNode) *roachpb.Error {
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) insertCase5(node *RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
 	parent.Black = true
 	tc.setNode(parent)
-	grandparent, pErr := tc.getNode(parent.ParentKey)
-	if pErr != nil {
-		return pErr
+	grandparent, err := tc.getNode(parent.ParentKey)
+	if err != nil {
+		return err
 	}
 	grandparent.Black = false
 	tc.setNode(grandparent)
 	if parent.LeftKey != nil && node.Key.Equal(parent.LeftKey) {
-		if _, pErr := tc.rotateRight(grandparent); pErr != nil {
-			return pErr
+		if _, err := tc.rotateRight(grandparent); err != nil {
+			return err
 		}
 	} else {
-		if _, pErr := tc.rotateLeft(grandparent); pErr != nil {
-			return pErr
+		if _, err := tc.rotateLeft(grandparent); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -453,20 +454,20 @@ func (tc *treeContext) insertCase5(node *RangeTreeNode) *roachpb.Error {
 
 // DeleteRange removes a range from the RangeTree. This should only be called
 // from operations that remove ranges, such as AdminMerge.
-func DeleteRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) *roachpb.Error {
-	tc, pErr := getRangeTree(txn)
-	if pErr != nil {
-		return pErr
+func DeleteRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) error {
+	tc, err := getRangeTree(txn)
+	if err != nil {
+		return err
 	}
-	node, pErr := tc.getNode(key)
-	if pErr != nil {
-		return pErr
+	node, err := tc.getNode(key)
+	if err != nil {
+		return err
 	}
 	if node == nil {
-		return roachpb.NewErrorf("could not find range tree node with the key %s", key)
+		return util.Errorf("could not find range tree node with the key %s", key)
 	}
-	if pErr := tc.delete(node); pErr != nil {
-		return pErr
+	if err := tc.delete(node); err != nil {
+		return err
 	}
 	tc.flush(b)
 	return nil
@@ -474,7 +475,7 @@ func DeleteRange(txn *client.Txn, b *client.Batch, key roachpb.RKey) *roachpb.Er
 
 // swapNodes swaps all aspects of nodes a and b except their keys. This function
 // is needed in order to accommodate the in-place style delete.
-func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTreeNode, *roachpb.Error) {
+func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTreeNode, error) {
 	newA := &RangeTreeNode{
 		Key:       a.Key,
 		Black:     b.Black,
@@ -493,9 +494,9 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 	if a.ParentKey != nil {
 		// Only change a's parent's child key if the parent is not b.
 		if !a.ParentKey.Equal(b.Key) {
-			parent, pErr := tc.getNode(a.ParentKey)
-			if pErr != nil {
-				return nil, nil, pErr
+			parent, err := tc.getNode(a.ParentKey)
+			if err != nil {
+				return nil, nil, err
 			}
 			if parent.LeftKey.Equal(a.Key) {
 				parent.LeftKey = b.Key
@@ -512,9 +513,9 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 
 	if a.LeftKey != nil {
 		if !a.LeftKey.Equal(b.Key) {
-			left, pErr := tc.getNode(a.LeftKey)
-			if pErr != nil {
-				return nil, nil, pErr
+			left, err := tc.getNode(a.LeftKey)
+			if err != nil {
+				return nil, nil, err
 			}
 			left.ParentKey = b.Key
 			tc.setNode(left)
@@ -524,9 +525,9 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 	}
 	if a.RightKey != nil {
 		if !a.RightKey.Equal(b.Key) {
-			right, pErr := tc.getNode(a.RightKey)
-			if pErr != nil {
-				return nil, nil, pErr
+			right, err := tc.getNode(a.RightKey)
+			if err != nil {
+				return nil, nil, err
 			}
 			right.ParentKey = b.Key
 			tc.setNode(right)
@@ -538,9 +539,9 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 	if b.ParentKey != nil {
 		// Only change b's parent's child key if the parent is not a.
 		if !b.ParentKey.Equal(a.Key) {
-			parent, pErr := tc.getNode(b.ParentKey)
-			if pErr != nil {
-				return nil, nil, pErr
+			parent, err := tc.getNode(b.ParentKey)
+			if err != nil {
+				return nil, nil, err
 			}
 			if parent.LeftKey.Equal(b.Key) {
 				parent.LeftKey = a.Key
@@ -556,9 +557,9 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 	}
 	if b.LeftKey != nil {
 		if !b.LeftKey.Equal(a.Key) {
-			left, pErr := tc.getNode(b.LeftKey)
-			if pErr != nil {
-				return nil, nil, pErr
+			left, err := tc.getNode(b.LeftKey)
+			if err != nil {
+				return nil, nil, err
 			}
 			left.ParentKey = a.Key
 			tc.setNode(left)
@@ -568,9 +569,9 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 	}
 	if b.RightKey != nil {
 		if !b.RightKey.Equal(a.Key) {
-			right, pErr := tc.getNode(b.RightKey)
-			if pErr != nil {
-				return nil, nil, pErr
+			right, err := tc.getNode(b.RightKey)
+			if err != nil {
+				return nil, nil, err
 			}
 			right.ParentKey = a.Key
 			tc.setNode(right)
@@ -588,54 +589,54 @@ func (tc *treeContext) swapNodes(a, b *RangeTreeNode) (*RangeTreeNode, *RangeTre
 // Since this tree is not stored in memory but persisted through the ranges, in
 // place deletion is not possible. Instead, we use the helper function
 // swapNodes above.
-func (tc *treeContext) delete(node *RangeTreeNode) *roachpb.Error {
+func (tc *treeContext) delete(node *RangeTreeNode) error {
 	key := node.Key
 	if node.LeftKey != nil && node.RightKey != nil {
-		left, pErr := tc.getNode(node.LeftKey)
-		if pErr != nil {
-			return pErr
+		left, err := tc.getNode(node.LeftKey)
+		if err != nil {
+			return err
 		}
-		predecessor, pErr := tc.getMaxNode(left)
-		if pErr != nil {
-			return pErr
+		predecessor, err := tc.getMaxNode(left)
+		if err != nil {
+			return err
 		}
-		node, _, pErr = tc.swapNodes(node, predecessor)
-		if pErr != nil {
-			return pErr
+		node, _, err = tc.swapNodes(node, predecessor)
+		if err != nil {
+			return err
 		}
 	}
 
 	// Node will always have at most one child.
 	var child *RangeTreeNode
-	var pErr *roachpb.Error
+	var err error
 	if node.LeftKey != nil {
-		if child, pErr = tc.getNode(node.LeftKey); pErr != nil {
-			return pErr
+		if child, err = tc.getNode(node.LeftKey); err != nil {
+			return err
 		}
 	} else if node.RightKey != nil {
-		if child, pErr = tc.getNode(node.RightKey); pErr != nil {
-			return pErr
+		if child, err = tc.getNode(node.RightKey); err != nil {
+			return err
 		}
 	}
 	if !isRed(node) {
 		// Paint the node to the color of the child node.
 		node.Black = !isRed(child)
 		tc.setNode(node)
-		if pErr := tc.deleteCase1(node); pErr != nil {
-			return pErr
+		if err := tc.deleteCase1(node); err != nil {
+			return err
 		}
 	}
-	if _, pErr := tc.replaceNode(node, child); pErr != nil {
-		return pErr
+	if _, err := tc.replaceNode(node, child); err != nil {
+		return err
 	}
 
 	// Always set the root back to black
-	if node, pErr = tc.getNode(node.Key); pErr != nil {
-		return pErr
+	if node, err = tc.getNode(node.Key); err != nil {
+		return err
 	}
 	if child != nil && node.ParentKey == nil {
-		if child, pErr = tc.getNode(child.Key); pErr != nil {
-			return pErr
+		if child, err = tc.getNode(child.Key); err != nil {
+			return err
 		}
 		child.Black = true
 		tc.setNode(child)
@@ -647,20 +648,20 @@ func (tc *treeContext) delete(node *RangeTreeNode) *roachpb.Error {
 
 // getMaxNode walks the tree to the right until it gets to a node without a
 // right child and returns that node.
-func (tc *treeContext) getMaxNode(node *RangeTreeNode) (*RangeTreeNode, *roachpb.Error) {
+func (tc *treeContext) getMaxNode(node *RangeTreeNode) (*RangeTreeNode, error) {
 	if node.RightKey == nil {
 		return node, nil
 	}
-	right, pErr := tc.getNode(node.RightKey)
-	if pErr != nil {
-		return nil, pErr
+	right, err := tc.getNode(node.RightKey)
+	if err != nil {
+		return nil, err
 	}
 	return tc.getMaxNode(right)
 }
 
 // deleteCase1 handles the case when node is the new root. If so, there is
 // nothing to do.
-func (tc *treeContext) deleteCase1(node *RangeTreeNode) *roachpb.Error {
+func (tc *treeContext) deleteCase1(node *RangeTreeNode) error {
 	if node.ParentKey == nil {
 		return nil
 	}
@@ -668,27 +669,27 @@ func (tc *treeContext) deleteCase1(node *RangeTreeNode) *roachpb.Error {
 }
 
 // deleteCase2 handles the case when node has a red sibling.
-func (tc *treeContext) deleteCase2(node *RangeTreeNode) *roachpb.Error {
-	sibling, pErr := tc.getSibling(node)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) deleteCase2(node *RangeTreeNode) error {
+	sibling, err := tc.getSibling(node)
+	if err != nil {
+		return err
 	}
 	if isRed(sibling) {
-		parent, pErr := tc.getNode(node.ParentKey)
-		if pErr != nil {
-			return pErr
+		parent, err := tc.getNode(node.ParentKey)
+		if err != nil {
+			return err
 		}
 		parent.Black = false
 		sibling.Black = true
 		tc.setNode(parent)
 		tc.setNode(sibling)
 		if parent.LeftKey.Equal(node.Key) {
-			if _, pErr := tc.rotateLeft(parent); pErr != nil {
-				return pErr
+			if _, err := tc.rotateLeft(parent); err != nil {
+				return err
 			}
 		} else {
-			if _, pErr := tc.rotateRight(parent); pErr != nil {
-				return pErr
+			if _, err := tc.rotateRight(parent); err != nil {
+				return err
 			}
 		}
 	}
@@ -697,26 +698,26 @@ func (tc *treeContext) deleteCase2(node *RangeTreeNode) *roachpb.Error {
 
 // deleteCase3 handles the case when node's parent, sibling and sibling's
 // children are all black.
-func (tc *treeContext) deleteCase3(node *RangeTreeNode) *roachpb.Error {
+func (tc *treeContext) deleteCase3(node *RangeTreeNode) error {
 	// This check uses cascading ifs to limit the number of db reads.
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
 	if !isRed(parent) {
-		sibling, pErr := tc.getSibling(node)
-		if pErr != nil {
-			return pErr
+		sibling, err := tc.getSibling(node)
+		if err != nil {
+			return err
 		}
 		if !isRed(sibling) {
-			siblingLeft, pErr := tc.getNode(sibling.LeftKey)
-			if pErr != nil {
-				return pErr
+			siblingLeft, err := tc.getNode(sibling.LeftKey)
+			if err != nil {
+				return err
 			}
 			if !isRed(siblingLeft) {
-				siblingRight, pErr := tc.getNode(sibling.RightKey)
-				if pErr != nil {
-					return pErr
+				siblingRight, err := tc.getNode(sibling.RightKey)
+				if err != nil {
+					return err
 				}
 				if !isRed(siblingRight) {
 					sibling.Black = false
@@ -731,26 +732,26 @@ func (tc *treeContext) deleteCase3(node *RangeTreeNode) *roachpb.Error {
 
 // deleteCase4 handles the case when node's sibling and siblings children are
 // black, but parent is red.
-func (tc *treeContext) deleteCase4(node *RangeTreeNode) *roachpb.Error {
+func (tc *treeContext) deleteCase4(node *RangeTreeNode) error {
 	// This check uses cascading ifs to limit the number of db reads.
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
 	if isRed(parent) {
-		sibling, pErr := tc.getSibling(node)
-		if pErr != nil {
-			return pErr
+		sibling, err := tc.getSibling(node)
+		if err != nil {
+			return err
 		}
 		if !isRed(sibling) {
-			siblingLeft, pErr := tc.getNode(sibling.LeftKey)
-			if pErr != nil {
-				return pErr
+			siblingLeft, err := tc.getNode(sibling.LeftKey)
+			if err != nil {
+				return err
 			}
 			if !isRed(siblingLeft) {
-				siblingRight, pErr := tc.getNode(sibling.RightKey)
-				if pErr != nil {
-					return pErr
+				siblingRight, err := tc.getNode(sibling.RightKey)
+				if err != nil {
+					return err
 				}
 				if !isRed(siblingRight) {
 					sibling.Black = false
@@ -772,22 +773,22 @@ func (tc *treeContext) deleteCase4(node *RangeTreeNode) *roachpb.Error {
 // its parent, node's sibling is black, node's sibling's left child is black but
 // right child is red. The operations here actually only prepare the tree for
 // deleteCase6.
-func (tc *treeContext) deleteCase5(node *RangeTreeNode) *roachpb.Error {
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) deleteCase5(node *RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
-	sibling, pErr := tc.getSibling(node)
-	if pErr != nil {
-		return pErr
+	sibling, err := tc.getSibling(node)
+	if err != nil {
+		return err
 	}
-	siblingLeft, pErr := tc.getNode(sibling.LeftKey)
-	if pErr != nil {
-		return pErr
+	siblingLeft, err := tc.getNode(sibling.LeftKey)
+	if err != nil {
+		return err
 	}
-	siblingRight, pErr := tc.getNode(sibling.RightKey)
-	if pErr != nil {
-		return pErr
+	siblingRight, err := tc.getNode(sibling.RightKey)
+	if err != nil {
+		return err
 	}
 	if parent.LeftKey.Equal(node.Key) &&
 		!isRed(sibling) &&
@@ -797,8 +798,8 @@ func (tc *treeContext) deleteCase5(node *RangeTreeNode) *roachpb.Error {
 		tc.setNode(sibling)
 		siblingLeft.Black = true
 		tc.setNode(siblingLeft)
-		if _, pErr := tc.rotateRight(sibling); pErr != nil {
-			return pErr
+		if _, err := tc.rotateRight(sibling); err != nil {
+			return err
 		}
 	} else if parent.RightKey.Equal(node.Key) &&
 		!isRed(sibling) &&
@@ -808,8 +809,8 @@ func (tc *treeContext) deleteCase5(node *RangeTreeNode) *roachpb.Error {
 		tc.setNode(sibling)
 		siblingRight.Black = true
 		tc.setNode(siblingRight)
-		if _, pErr := tc.rotateLeft(sibling); pErr != nil {
-			return pErr
+		if _, err := tc.rotateLeft(sibling); err != nil {
+			return err
 		}
 	}
 	return tc.deleteCase6(node)
@@ -820,38 +821,38 @@ func (tc *treeContext) deleteCase5(node *RangeTreeNode) *roachpb.Error {
 // is red. Or similarly, when node is the right child of its parent, node's
 // sibling is black  and node's sibling's left child is red. No checks are
 // needed here since we have already been forced into this case by deleteCase5.
-func (tc *treeContext) deleteCase6(node *RangeTreeNode) *roachpb.Error {
-	parent, pErr := tc.getNode(node.ParentKey)
-	if pErr != nil {
-		return pErr
+func (tc *treeContext) deleteCase6(node *RangeTreeNode) error {
+	parent, err := tc.getNode(node.ParentKey)
+	if err != nil {
+		return err
 	}
-	sibling, pErr := tc.getSibling(node)
-	if pErr != nil {
-		return pErr
+	sibling, err := tc.getSibling(node)
+	if err != nil {
+		return err
 	}
 	sibling.Black = parent.Black
 	tc.setNode(sibling)
 	parent.Black = true
 	tc.setNode(parent)
 	if node.Key.Equal(parent.LeftKey) {
-		siblingRight, pErr := tc.getNode(sibling.RightKey)
-		if pErr != nil {
-			return pErr
+		siblingRight, err := tc.getNode(sibling.RightKey)
+		if err != nil {
+			return err
 		}
 		siblingRight.Black = true
 		tc.setNode(siblingRight)
-		if _, pErr := tc.rotateLeft(parent); pErr != nil {
-			return pErr
+		if _, err := tc.rotateLeft(parent); err != nil {
+			return err
 		}
 	} else {
-		siblingLeft, pErr := tc.getNode(sibling.LeftKey)
-		if pErr != nil {
-			return pErr
+		siblingLeft, err := tc.getNode(sibling.LeftKey)
+		if err != nil {
+			return err
 		}
 		siblingLeft.Black = true
 		tc.setNode(siblingLeft)
-		if _, pErr := tc.rotateRight(parent); pErr != nil {
-			return pErr
+		if _, err := tc.rotateRight(parent); err != nil {
+			return err
 		}
 	}
 	return nil

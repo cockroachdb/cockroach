@@ -65,7 +65,8 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, auto
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows      planNode
+	rows planNode
+	// !!! change to error
 	pErr      *roachpb.Error
 	b         *client.Batch
 	resultRow parser.DTuple

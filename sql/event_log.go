@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // EventLogType represents an event type that can be recorded in the event log.
@@ -79,7 +80,7 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 
 // InsertEventRecord inserts a single event into the event log as part of the
 // provided transaction.
-func (ev EventLogger) InsertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) *roachpb.Error {
+func (ev EventLogger) InsertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) error {
 	const insertEventTableStmt = `
 INSERT INTO system.eventlog (
   timestamp, eventType, targetID, reportingID, info
@@ -98,7 +99,7 @@ VALUES(
 	if info != nil {
 		infoBytes, err := json.Marshal(info)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		args[4] = string(infoBytes)
 	}
@@ -108,7 +109,7 @@ VALUES(
 		return err
 	}
 	if rows != 1 {
-		return roachpb.NewErrorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
+		return util.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
 }

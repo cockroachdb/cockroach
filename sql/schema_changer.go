@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -89,16 +90,16 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 
 func (sc *SchemaChanger) findTableWithLease(
 	txn *client.Txn, lease TableDescriptor_SchemaChangeLease,
-) (*TableDescriptor, *roachpb.Error) {
+) (*TableDescriptor, error) {
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
 	}
 	if tableDesc.Lease == nil {
-		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
+		return nil, util.Errorf("no lease present for tableID: %d", sc.tableID)
 	}
 	if *tableDesc.Lease != lease {
-		return nil, roachpb.NewErrorf("table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
+		return nil, util.Errorf("table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
 	}
 	return tableDesc, nil
 }
@@ -121,9 +122,9 @@ func (sc *SchemaChanger) ReleaseLease(lease TableDescriptor_SchemaChangeLease) e
 // ExtendLease for the current leaser.
 func (sc *SchemaChanger) ExtendLease(
 	existingLease TableDescriptor_SchemaChangeLease,
-) (TableDescriptor_SchemaChangeLease, *roachpb.Error) {
+) (TableDescriptor_SchemaChangeLease, error) {
 	var lease TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
+	err := sc.db.Txn(func(txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(txn, existingLease)
 		if err != nil {
 			return err
@@ -195,7 +196,7 @@ func (sc SchemaChanger) exec() *roachpb.Error {
 // If the version is to be incremented, it also assures that all nodes are on
 // the current (pre-increment) version of the descriptor.
 // Returns the (potentially updated) descriptor.
-func (sc *SchemaChanger) MaybeIncrementVersion() (*Descriptor, *roachpb.Error) {
+func (sc *SchemaChanger) MaybeIncrementVersion() (*Descriptor, error) {
 	return sc.leaseMgr.Publish(sc.tableID, func(desc *TableDescriptor) error {
 		if !desc.UpVersion {
 			// Return error so that Publish() doesn't increment the version.

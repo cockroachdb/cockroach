@@ -359,14 +359,13 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 	planMaker := &session.planner
 	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
 	if err != nil {
-		pErr := roachpb.NewError(err)
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
 		if txnState.txn != nil {
 			// Rollback the txn.
-			txnState.updateStateAndCleanupOnErr(pErr, e)
+			txnState.updateStateAndCleanupOnErr(err, e)
 		}
-		res.ResultList = append(res.ResultList, Result{PErr: pErr})
+		res.ResultList = append(res.ResultList, Result{PErr: roachpb.NewError(err)})
 		return res
 	}
 	if len(stmts) == 0 {
@@ -844,11 +843,11 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State, txnState.txn.Proto))
 	}
-	pErr := p.txn.Rollback()
+	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
-	if pErr != nil {
+	if err != nil {
 		log.Warningf("txn rollback failed. The error was swallowed: %s", pErr)
-		result.PErr = pErr
+		result.PErr = roachpb.NewError(err)
 	}
 	// We're done with this txn.
 	txnState.resetStateAndTxn(NoTxn)
@@ -878,11 +877,11 @@ func commitSQLTransaction(
 	if commitType == commit {
 		txnState.commitSeen = true
 	}
-	pErr := txnState.txn.Commit()
+	err := txnState.txn.Commit()
 	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
-	if pErr != nil {
-		txnState.updateStateAndCleanupOnErr(pErr, e)
-		result.PErr = pErr
+	if err != nil {
+		txnState.updateStateAndCleanupOnErr(err, e)
+		result.PErr = roachpb.NewErrorf(err)
 	} else {
 		switch commitType {
 		case release:

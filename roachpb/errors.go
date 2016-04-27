@@ -22,7 +22,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
+
+type RetryableTxnError struct {
+	message string
+	TxnID   uuid.UUID
+	// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
+	// the backoff hint to the client anyway. See #5249
+	Backoff bool
+}
+
+func (e RetryableTxnError) Error() string {
+	return e.message
+}
+
+var _ error = RetryableTxnError{}
 
 // ResponseWithError is a tuple of a BatchResponse and an error. It is used to
 // pass around a BatchResponse with its associated error where that
@@ -144,7 +159,20 @@ func (e *Error) GoError() error {
 	if e == nil {
 		return nil
 	}
-	return errors.New(e.Message)
+	switch e.TransactionRestart {
+	case TransactionRestart_IMMEDIATE:
+		return RetryableTxnError{
+			message: e.Message,
+			TxnID:   *e.GetTxn().ID}
+	case TransactionRestart_BACKOFF:
+		return RetryableTxnError{
+			message: e.Message,
+			TxnID:   *e.GetTxn().ID,
+			Backoff: true}
+	default:
+		return errors.New(e.Message)
+	}
+	panic("not reached")
 }
 
 // setGoError sets Error using err.

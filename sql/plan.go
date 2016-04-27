@@ -324,6 +324,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, *roachpb.Err
 	return p.makePlan(stmt, false)
 }
 
+// !!! change to return error
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roachpb.Error) {
 	plan, err := p.query(sql, args...)
 	if err != nil {
@@ -348,6 +349,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, *roa
 	return values, nil
 }
 
+// !!! change to error
 func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 	plan, pErr := p.query(sql, args...)
 	if pErr != nil {
@@ -400,7 +402,7 @@ func (p *planner) releaseLeases() {
 	}
 }
 
-func (p *planner) writeTableDesc(tableDesc *TableDescriptor) *roachpb.Error {
+func (p *planner) writeTableDesc(tableDesc *TableDescriptor) error {
 	return p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc))
 }
 
@@ -440,6 +442,7 @@ type planNode interface {
 	Next() bool
 
 	// PErr returns the error, if any, encountered during iteration.
+	// !!! convert to error
 	PErr() *roachpb.Error
 
 	// ExplainPlan returns a name and description and a list of child nodes.
