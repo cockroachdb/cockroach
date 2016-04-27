@@ -45,8 +45,11 @@ type Select struct {
 	Limit   *Limit
 }
 
-func (node *Select) String() string {
-	return fmt.Sprintf("%s%s%s", node.Select, node.OrderBy, node.Limit)
+// Format implements the NodeFormatter interface.
+func (node *Select) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Select)
+	FormatNode(buf, f, node.OrderBy)
+	FormatNode(buf, f, node.Limit)
 }
 
 // ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.
@@ -54,8 +57,11 @@ type ParenSelect struct {
 	Select *Select
 }
 
-func (node *ParenSelect) String() string {
-	return fmt.Sprintf("(%s)", node.Select)
+// Format implements the NodeFormatter interface.
+func (node *ParenSelect) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.Select)
+	buf.WriteByte(')')
 }
 
 // SelectClause represents a SELECT statement.
@@ -70,31 +76,36 @@ type SelectClause struct {
 	tableSelect bool
 }
 
-func (node *SelectClause) String() string {
+// Format implements the NodeFormatter interface.
+func (node *SelectClause) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.tableSelect && len(node.From) == 1 {
-		return fmt.Sprintf("TABLE %s", node.From[0])
+		buf.WriteString("TABLE ")
+		FormatNode(buf, f, node.From[0])
+	} else {
+		buf.WriteString("SELECT ")
+		if node.Distinct {
+			buf.WriteString("DISTINCT ")
+		}
+		FormatNode(buf, f, node.Exprs)
+		FormatNode(buf, f, node.From)
+		FormatNode(buf, f, node.Where)
+		FormatNode(buf, f, node.GroupBy)
+		FormatNode(buf, f, node.Having)
+		buf.WriteString(node.Lock)
 	}
-	var distinct string
-	if node.Distinct {
-		distinct = " DISTINCT"
-	}
-	return fmt.Sprintf("SELECT%s%s%s%s%s%s%s",
-		distinct, node.Exprs,
-		node.From, node.Where,
-		node.GroupBy, node.Having, node.Lock)
 }
 
 // SelectExprs represents SELECT expressions.
 type SelectExprs []SelectExpr
 
-func (node SelectExprs) String() string {
-	prefix := " "
-	var buf bytes.Buffer
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
+// Format implements the NodeFormatter interface.
+func (node SelectExprs) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, n := range node {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, n)
 	}
-	return buf.String()
 }
 
 // SelectExpr represents a SELECT expression.
@@ -109,13 +120,13 @@ func starSelectExpr() SelectExpr {
 	return SelectExpr{Expr: StarExpr()}
 }
 
-func (node SelectExpr) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s", node.Expr)
+// Format implements the NodeFormatter interface.
+func (node SelectExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Expr)
 	if node.As != "" {
-		fmt.Fprintf(&buf, " AS %s", node.As)
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, node.As)
 	}
-	return buf.String()
 }
 
 // AliasClause represents an alias, optionally with a column list:
@@ -125,34 +136,36 @@ type AliasClause struct {
 	Cols  NameList
 }
 
-func (a AliasClause) String() string {
-	if len(a.Cols) == 0 {
-		return a.Alias.String()
+// Format implements the NodeFormatter interface.
+func (a AliasClause) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, a.Alias)
+	if len(a.Cols) != 0 {
+		// Format as "alias (col1, col2, ...)".
+		buf.WriteString(" (")
+		FormatNode(buf, f, a.Cols)
+		buf.WriteByte(')')
 	}
-	// Build a string of the form "alias (col1, col2, ...)".
-	return fmt.Sprintf("%s (%s)", a.Alias, a.Cols)
 }
 
 // TableExprs represents a list of table expressions.
 type TableExprs []TableExpr
 
-func (node TableExprs) String() string {
-	if len(node) == 0 {
-		return ""
+// Format implements the NodeFormatter interface.
+func (node TableExprs) Format(buf *bytes.Buffer, f FmtFlags) {
+	if len(node) != 0 {
+		buf.WriteString(" FROM ")
+		for i, n := range node {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			FormatNode(buf, f, n)
+		}
 	}
-
-	var prefix string
-	var buf bytes.Buffer
-	buf.WriteString(" FROM ")
-	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
-		prefix = ", "
-	}
-	return buf.String()
 }
 
 // TableExpr represents a table expression.
 type TableExpr interface {
+	NodeFormatter
 	tableExpr()
 }
 
@@ -170,14 +183,20 @@ type IndexHints struct {
 	NoIndexJoin bool
 }
 
-func (n *IndexHints) String() string {
+// Format implements the NodeFormatter interface.
+func (n *IndexHints) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !n.NoIndexJoin {
-		return fmt.Sprintf("@%s", n.Index)
+		buf.WriteByte('@')
+		FormatNode(buf, f, n.Index)
+	} else {
+		if n.Index == "" {
+			buf.WriteString("@{NO_INDEX_JOIN}")
+		} else {
+			buf.WriteString("@{FORCE_INDEX=")
+			FormatNode(buf, f, n.Index)
+			buf.WriteString(",NO_INDEX_JOIN}")
+		}
 	}
-	if n.Index == "" {
-		return "@{NO_INDEX_JOIN}"
-	}
-	return fmt.Sprintf("@{FORCE_INDEX=%s,NO_INDEX_JOIN}", n.Index)
 }
 
 // AliasedTableExpr represents a table expression coupled with an optional
@@ -188,20 +207,21 @@ type AliasedTableExpr struct {
 	As    AliasClause
 }
 
-func (node *AliasedTableExpr) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s", node.Expr)
+// Format implements the NodeFormatter interface.
+func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Expr)
 	if node.Hints != nil {
-		buf.WriteString(node.Hints.String())
+		FormatNode(buf, f, node.Hints)
 	}
 	if node.As.Alias != "" {
-		fmt.Fprintf(&buf, " AS %s", node.As)
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, node.As)
 	}
-	return buf.String()
 }
 
 // SimpleTableExpr represents a simple table expression.
 type SimpleTableExpr interface {
+	NodeFormatter
 	simpleTableExpr()
 }
 
@@ -213,8 +233,11 @@ type ParenTableExpr struct {
 	Expr TableExpr
 }
 
-func (node *ParenTableExpr) String() string {
-	return fmt.Sprintf("(%s)", node.Expr)
+// Format implements the NodeFormatter interface.
+func (node *ParenTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
+	FormatNode(buf, f, node.Expr)
+	buf.WriteByte(')')
 }
 
 // JoinTableExpr represents a TableExpr that's a JOIN operation.
@@ -236,17 +259,21 @@ const (
 	astInnerJoin   = "INNER JOIN"
 )
 
-func (node *JoinTableExpr) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s %s", node.Left, node.Join, node.Right)
+// Format implements the NodeFormatter interface.
+func (node *JoinTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Left)
+	buf.WriteByte(' ')
+	buf.WriteString(node.Join)
+	buf.WriteByte(' ')
+	FormatNode(buf, f, node.Right)
 	if node.Cond != nil {
-		fmt.Fprintf(&buf, "%s", node.Cond)
+		FormatNode(buf, f, node.Cond)
 	}
-	return buf.String()
 }
 
 // JoinCond represents a join condition.
 type JoinCond interface {
+	NodeFormatter
 	joinCond()
 }
 
@@ -258,8 +285,10 @@ type OnJoinCond struct {
 	Expr Expr
 }
 
-func (node *OnJoinCond) String() string {
-	return fmt.Sprintf(" ON %s", node.Expr)
+// Format implements the NodeFormatter interface.
+func (node *OnJoinCond) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" ON ")
+	FormatNode(buf, f, node.Expr)
 }
 
 // UsingJoinCond represents a USING join condition.
@@ -267,8 +296,11 @@ type UsingJoinCond struct {
 	Cols NameList
 }
 
-func (node *UsingJoinCond) String() string {
-	return fmt.Sprintf(" USING (%s)", node.Cols)
+// Format implements the NodeFormatter interface.
+func (node *UsingJoinCond) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(" USING (")
+	FormatNode(buf, f, node.Cols)
+	buf.WriteByte(')')
 }
 
 // Where represents a WHERE or HAVING clause.
@@ -292,37 +324,40 @@ func newWhere(typ string, expr Expr) *Where {
 	return &Where{Type: typ, Expr: expr}
 }
 
-func (node *Where) String() string {
-	if node == nil {
-		return ""
+// Format implements the NodeFormatter interface.
+func (node *Where) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node != nil {
+		buf.WriteByte(' ')
+		buf.WriteString(node.Type)
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.Expr)
 	}
-	return fmt.Sprintf(" %s %s", node.Type, node.Expr)
 }
 
 // GroupBy represents a GROUP BY clause.
 type GroupBy []Expr
 
-func (node GroupBy) String() string {
+// Format implements the NodeFormatter interface.
+func (node GroupBy) Format(buf *bytes.Buffer, f FmtFlags) {
 	prefix := " GROUP BY "
-	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
+		buf.WriteString(prefix)
+		FormatNode(buf, f, n)
 		prefix = ", "
 	}
-	return buf.String()
 }
 
 // OrderBy represents an ORDER By clause.
 type OrderBy []*Order
 
-func (node OrderBy) String() string {
+// Format implements the NodeFormatter interface.
+func (node OrderBy) Format(buf *bytes.Buffer, f FmtFlags) {
 	prefix := " ORDER BY "
-	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
+		buf.WriteString(prefix)
+		FormatNode(buf, f, n)
 		prefix = ", "
 	}
-	return buf.String()
 }
 
 // Direction for ordering results.
@@ -354,11 +389,13 @@ type Order struct {
 	Direction Direction
 }
 
-func (node *Order) String() string {
-	if node.Direction == DefaultDirection {
-		return node.Expr.String()
+// Format implements the NodeFormatter interface.
+func (node *Order) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Expr)
+	if node.Direction != DefaultDirection {
+		buf.WriteByte(' ')
+		buf.WriteString(node.Direction.String())
 	}
-	return fmt.Sprintf("%s %s", node.Expr, node.Direction)
 }
 
 // Limit represents a LIMIT clause.
@@ -366,16 +403,16 @@ type Limit struct {
 	Offset, Count Expr
 }
 
-func (node *Limit) String() string {
-	if node == nil {
-		return ""
+// Format implements the NodeFormatter interface.
+func (node *Limit) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node != nil {
+		if node.Count != nil {
+			buf.WriteString(" LIMIT ")
+			FormatNode(buf, f, node.Count)
+		}
+		if node.Offset != nil {
+			buf.WriteString(" OFFSET ")
+			FormatNode(buf, f, node.Offset)
+		}
 	}
-	var buf bytes.Buffer
-	if node.Count != nil {
-		fmt.Fprintf(&buf, " LIMIT %s", node.Count)
-	}
-	if node.Offset != nil {
-		fmt.Fprintf(&buf, " OFFSET %s", node.Offset)
-	}
-	return buf.String()
 }

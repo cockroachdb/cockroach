@@ -28,31 +28,33 @@ type AlterTable struct {
 	Cmds     AlterTableCmds
 }
 
-func (node *AlterTable) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE")
+// Format implements the NodeFormatter interface.
+func (node *AlterTable) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER TABLE ")
 	if node.IfExists {
-		buf.WriteString(" IF EXISTS")
+		buf.WriteString("IF EXISTS ")
 	}
-	fmt.Fprintf(&buf, " %s %s", node.Table, node.Cmds)
-	return buf.String()
+	FormatNode(buf, f, node.Table)
+	buf.WriteByte(' ')
+	FormatNode(buf, f, node.Cmds)
 }
 
 // AlterTableCmds represents a list of table alterations.
 type AlterTableCmds []AlterTableCmd
 
-func (node AlterTableCmds) String() string {
+// Format implements the NodeFormatter interface.
+func (node AlterTableCmds) Format(buf *bytes.Buffer, f FmtFlags) {
 	var prefix string
-	var buf bytes.Buffer
 	for _, n := range node {
-		fmt.Fprintf(&buf, "%s%s", prefix, n)
+		buf.WriteString(prefix)
+		FormatNode(buf, f, n)
 		prefix = ", "
 	}
-	return buf.String()
 }
 
 // AlterTableCmd represents a table modification operation.
 type AlterTableCmd interface {
+	NodeFormatter
 	// Placeholder function to ensure that only desired types
 	// (AlterTable*) conform to the AlterTableCmd interface.
 	alterTableCmd()
@@ -79,17 +81,16 @@ type AlterTableAddColumn struct {
 	ColumnDef     *ColumnTableDef
 }
 
-func (node *AlterTableAddColumn) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("ADD")
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAddColumn) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ADD ")
 	if node.columnKeyword {
-		buf.WriteString(" COLUMN")
+		buf.WriteString("COLUMN ")
 	}
 	if node.IfNotExists {
-		buf.WriteString(" IF NOT EXISTS")
+		buf.WriteString("IF NOT EXISTS ")
 	}
-	fmt.Fprintf(&buf, " %s", node.ColumnDef)
-	return buf.String()
+	FormatNode(buf, f, node.ColumnDef)
 }
 
 // AlterTableAddConstraint represents an ADD CONSTRAINT command.
@@ -97,8 +98,10 @@ type AlterTableAddConstraint struct {
 	ConstraintDef ConstraintTableDef
 }
 
-func (node *AlterTableAddConstraint) String() string {
-	return fmt.Sprintf("ADD %s", node.ConstraintDef)
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAddConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ADD ")
+	FormatNode(buf, f, node.ConstraintDef)
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.
@@ -109,20 +112,19 @@ type AlterTableDropColumn struct {
 	DropBehavior  DropBehavior
 }
 
-func (node *AlterTableDropColumn) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("DROP")
+// Format implements the NodeFormatter interface.
+func (node *AlterTableDropColumn) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DROP")
 	if node.columnKeyword {
-		_, _ = buf.WriteString(" COLUMN")
+		buf.WriteString(" COLUMN")
 	}
 	if node.IfExists {
-		_, _ = buf.WriteString(" IF EXISTS")
+		buf.WriteString(" IF EXISTS")
 	}
-	fmt.Fprintf(&buf, " %s", node.Column)
+	fmt.Fprintf(buf, " %s", node.Column)
 	if node.DropBehavior != DropDefault {
-		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+		fmt.Fprintf(buf, " %s", node.DropBehavior)
 	}
-	return buf.String()
 }
 
 // AlterTableDropConstraint represents a DROP CONSTRAINT command.
@@ -132,17 +134,16 @@ type AlterTableDropConstraint struct {
 	DropBehavior DropBehavior
 }
 
-func (node *AlterTableDropConstraint) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("DROP CONSTRAINT ")
+// Format implements the NodeFormatter interface.
+func (node *AlterTableDropConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DROP CONSTRAINT ")
 	if node.IfExists {
-		_, _ = buf.WriteString("IF EXISTS ")
+		buf.WriteString("IF EXISTS ")
 	}
-	_, _ = buf.WriteString(node.Constraint)
+	buf.WriteString(node.Constraint)
 	if node.DropBehavior != DropDefault {
-		fmt.Fprintf(&buf, " %s", node.DropBehavior)
+		fmt.Fprintf(buf, " %s", node.DropBehavior)
 	}
-	return buf.String()
 }
 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
@@ -158,19 +159,19 @@ func (node *AlterTableSetDefault) GetColumn() string {
 	return node.Column
 }
 
-func (node *AlterTableSetDefault) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("ALTER")
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetDefault) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER ")
 	if node.columnKeyword {
-		_, _ = buf.WriteString(" COLUMN")
+		buf.WriteString("COLUMN ")
 	}
-	fmt.Fprintf(&buf, " %s", node.Column)
+	buf.WriteString(node.Column)
 	if node.Default == nil {
-		_, _ = buf.WriteString(" DROP DEFAULT")
+		buf.WriteString(" DROP DEFAULT")
 	} else {
-		fmt.Fprintf(&buf, " SET DEFAULT %s", node.Default)
+		fmt.Fprintf(buf, " SET DEFAULT ")
+		FormatNode(buf, f, node.Default)
 	}
-	return buf.String()
 }
 
 // AlterTableDropNotNull represents an ALTER COLUMN DROP NOT NULL
@@ -185,13 +186,12 @@ func (node *AlterTableDropNotNull) GetColumn() string {
 	return node.Column
 }
 
-func (node *AlterTableDropNotNull) String() string {
-	var buf bytes.Buffer
-	_, _ = buf.WriteString("ALTER ")
+// Format implements the NodeFormatter interface.
+func (node *AlterTableDropNotNull) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER ")
 	if node.columnKeyword {
-		_, _ = buf.WriteString("COLUMN ")
+		buf.WriteString("COLUMN ")
 	}
-	_, _ = buf.WriteString(node.Column)
-	_, _ = buf.WriteString(" DROP NOT NULL")
-	return buf.String()
+	buf.WriteString(node.Column)
+	buf.WriteString(" DROP NOT NULL")
 }

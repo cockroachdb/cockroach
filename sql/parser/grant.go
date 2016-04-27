@@ -23,7 +23,7 @@
 package parser
 
 import (
-	"fmt"
+	"bytes"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -60,16 +60,22 @@ type TargetList struct {
 	Tables    QualifiedNames
 }
 
-func (tl TargetList) String() string {
+// Format implements the NodeFormatter interface.
+func (tl TargetList) Format(buf *bytes.Buffer, f FmtFlags) {
 	if tl.Databases != nil {
-		return fmt.Sprintf("DATABASE %s", tl.Databases)
+		buf.WriteString("DATABASE ")
+		FormatNode(buf, f, tl.Databases)
+	} else {
+		FormatNode(buf, f, tl.Tables)
 	}
-	return fmt.Sprintf("%s", tl.Tables)
 }
 
-func (node *Grant) String() string {
-	return fmt.Sprintf("GRANT %s ON %s TO %v",
-		node.Privileges,
-		node.Targets,
-		node.Grantees)
+// Format implements the NodeFormatter interface.
+func (node *Grant) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("GRANT ")
+	node.Privileges.Format(buf)
+	buf.WriteString(" ON ")
+	FormatNode(buf, f, node.Targets)
+	buf.WriteString(" TO ")
+	FormatNode(buf, f, node.Grantees)
 }
