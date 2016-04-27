@@ -254,8 +254,8 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, *
 }
 
 // get the table descriptor for the ID passed in using an existing txn.
-// returns nil if the descriptor doesn't exist or if it exists but is not a
-// table.
+// returns an error if the descriptor doesn't exist or if it exists and is not
+// a table.
 func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
@@ -263,9 +263,11 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, *roachpb.Erro
 	if pErr := txn.GetProto(descKey, desc); pErr != nil {
 		return nil, pErr
 	}
-	// TODO(andrei): We're theoretically hiding the error where desc exists, but
-	// is not a TableDescriptor.
-	return desc.GetTable(), nil
+	table := desc.GetTable()
+	if table == nil {
+		return nil, roachpb.NewError(&roachpb.DescriptorNotFoundError{DescriptorId: uint32(id)})
+	}
+	return table, nil
 }
 
 func getKeysForTableDescriptor(
