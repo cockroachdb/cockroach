@@ -519,8 +519,16 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Block until the LeaseManager has processed the gossip update.
 	<-deleted
 
-	// We should still be able to acquire, because we have an active lease.
-	lease3, err := acquire(s.TestServer, tableDesc.ID, 0)
+	// Now we shouldn't be able to acquire any more.
+	_, err = acquire(s.TestServer, tableDesc.ID, 0)
+	if !testutils.IsError(err, fmt.Sprintf("descriptor ID %d not found", tableDesc.ID)) {
+		t.Fatalf("got a different error than expected: %s", err)
+	}
+
+	// We should still be able to acquire if we request a specific version because
+	// we have an active lease.
+	lease1Ver := lease1.Version
+	lease3, err := acquire(s.TestServer, tableDesc.ID, lease1Ver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,9 +543,16 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if err := s.LeaseManager().Release(lease3); err != nil {
 		t.Fatal(err)
 	}
-	// Now we shouldn't be able to acquire any more.
-	_, err = acquire(s.TestServer, tableDesc.ID, 0)
-	if !testutils.IsError(err, "descriptor deleted") {
-		t.Fatalf("got a different error than expected: %s", err)
+
+	// Check that the leases have been truly released from the store, even though
+	// they didn't expire.
+	var leaseCount int
+	err = db.QueryRow(`SELECT COUNT(version) FROM system.lease WHERE descID = $1`,
+		tableDesc.ID).Scan(&leaseCount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leaseCount != 0 {
+		t.Fatalf("still found %d leases in the store", leaseCount)
 	}
 }

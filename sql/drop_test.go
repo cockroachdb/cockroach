@@ -17,6 +17,7 @@
 package sql_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -345,5 +346,89 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+}
 
+// Test that dropping a table doesn't cause another txn to error because it
+// can't take a (another) lease on the table. Taking a lease again should work
+// because the planner caches leases and hands them out repeatedly.
+// This test should continue to work even when we fix issue #6359 which asks for
+// the planner to extend leases. Then, the point of the test will be to check
+// that extending a lease works even though the table has been marked for
+// deletion and "new" leases are not granted any more.
+func TestTxnIsNotAbortedByDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sql.TestDisableAsyncSchemaChangeExec()()
+
+	var mu sync.Mutex
+	clearSchemaChangers := false
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+		func(tscc sql.TestingSchemaChangerCollection) {
+			mu.Lock()
+			defer mu.Unlock()
+			if clearSchemaChangers {
+				tscc.ClearSchemaChangers()
+			}
+		}
+	var waitTableID sql.ID
+	deleted := make(chan bool)
+	ctx.TestingKnobs.LeaseManagerTestingKnobs.TestingLeasesRefreshedEvent =
+		func(cfg config.SystemConfig) {
+			mu.Lock()
+			defer mu.Unlock()
+			if waitTableID != 0 {
+				if isDeleted(waitTableID, cfg) {
+					close(deleted)
+					waitTableID = 0
+				}
+			}
+		}
+	s, db, kvDB := setupWithContext(t, ctx)
+	defer cleanup(s, db)
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+`
+	_, err := db.Exec(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := getTableDescriptor(kvDB, "test", "t")
+	// Block schema changers so that the table we're about to DROP is not actually
+	// dropped; it will be left in a "deleted" state.
+	// Also install a way to wait for the config update to be processed.
+	mu.Lock()
+	clearSchemaChangers = true
+	waitTableID = tableDesc.ID
+	mu.Unlock()
+
+	// Start a transaction and perform an operation that takes a lease on the
+	// table.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO test.t (a) VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// outside of the txn, DROP the table.
+	_, err = db.Exec(`DROP TABLE test.t`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Block until the LeaseManager has processed the gossip update.
+	<-deleted
+	// At this point new leases on the table cannot be taken.
+
+	// Perform another operation that needs a lease in the txn. Checking that this
+	// works is the point of the test.
+	if _, err := tx.Exec(`INSERT INTO test.t (a) VALUES (2)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }
