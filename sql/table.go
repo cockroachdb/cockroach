@@ -547,7 +547,7 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 			return nil, err
 		}
 
-		if vals[i] = getTypeForColumn(*col); vals[i] == nil {
+		if vals[i] = col.Type.toDatum(); vals[i] == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
 		}
 	}
@@ -949,34 +949,6 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 			val.Type(), col.Type.Kind, col.Name)
 	}
 	return err
-}
-
-// getTypeForColumn returns the corresponding Datum type for the given
-// ColumnDescriptor's Type, or nil if there is no correspondence.
-func getTypeForColumn(col ColumnDescriptor) parser.Datum {
-	switch col.Type.Kind {
-	case ColumnType_BOOL:
-		return parser.DummyBool
-	case ColumnType_INT:
-		return parser.DummyInt
-	case ColumnType_FLOAT:
-		return parser.DummyFloat
-	case ColumnType_DECIMAL:
-		return parser.DummyDecimal
-	case ColumnType_STRING:
-		return parser.DummyString
-	case ColumnType_BYTES:
-		return parser.DummyBytes
-	case ColumnType_DATE:
-		return parser.DummyDate
-	case ColumnType_TIMESTAMP:
-		return parser.DummyTimestamp
-	case ColumnType_TIMESTAMPTZ:
-		return parser.DummyTimestampTZ
-	case ColumnType_INTERVAL:
-		return parser.DummyInterval
-	}
-	return nil
 }
 
 // marshalColumnValue returns a Go primitive value equivalent of val, of the

@@ -715,6 +715,34 @@ func (c *ColumnType) SQLString() string {
 	return c.Kind.String()
 }
 
+// toDatum converts the ColumnType to a dummy Datum of the correct type, or nil
+// if there is no correspondence.
+func (c *ColumnType) toDatum() parser.Datum {
+	switch c.Kind {
+	case ColumnType_BOOL:
+		return parser.DummyBool
+	case ColumnType_INT:
+		return parser.DummyInt
+	case ColumnType_FLOAT:
+		return parser.DummyFloat
+	case ColumnType_DECIMAL:
+		return parser.DummyDecimal
+	case ColumnType_STRING:
+		return parser.DummyString
+	case ColumnType_BYTES:
+		return parser.DummyBytes
+	case ColumnType_DATE:
+		return parser.DummyDate
+	case ColumnType_TIMESTAMP:
+		return parser.DummyTimestamp
+	case ColumnType_TIMESTAMPTZ:
+		return parser.DummyTimestampTZ
+	case ColumnType_INTERVAL:
+		return parser.DummyInterval
+	}
+	return nil
+}
+
 // SetID implements the descriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
