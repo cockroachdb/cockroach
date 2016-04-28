@@ -87,8 +87,8 @@ message TableDetailsResponse {
     // nullable is whether this column can contain NULL.
     bool nullable = 3;
 
-    // default is the default value of this column.
-    string default = 4;
+    // default_value is the default value of this column.
+    string default_value = 4;
   }
 
   message Index {
