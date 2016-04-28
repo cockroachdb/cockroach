@@ -74,6 +74,7 @@ type Server struct {
 	db                  *client.DB
 	kvDB                *kv.DBServer
 	pgServer            pgwire.Server
+	distSQLServer       sql.DistSQLServer
 	node                *Node
 	recorder            *status.MetricsRecorder
 	runtime             status.RuntimeStatSampler
@@ -175,6 +176,12 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, sqlRegistry)
 
 	s.pgServer = pgwire.MakeServer(&s.ctx.Context, s.sqlExecutor, sqlRegistry)
+
+	distSQLCtx := sql.DistSQLServerContext{
+		DB: s.db,
+	}
+	s.distSQLServer = sql.NewDistSQLServer(distSQLCtx)
+	sql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
