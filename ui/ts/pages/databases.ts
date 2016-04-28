@@ -158,7 +158,7 @@ module AdminViews {
     export module TablePage {
       class TableController implements MithrilController {
         indexColumns: string[] = ["name", "unique", "seq", "column", "direction", "storing"];
-        columnColumns: string[] = ["name", "type", "nullable", "default"];
+        columnColumns: string[] = ["name", "type", "nullable", "default_value"];
         displayJSON: boolean = false;
         data: Property<SQLTable> = Prop(null);
         updated: Property<number> = Prop(Date.now());

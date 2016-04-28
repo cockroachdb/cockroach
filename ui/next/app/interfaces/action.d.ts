@@ -12,4 +12,6 @@ export interface Action {
  */
 export interface PayloadAction<T> extends Action {
   payload: T;
+  error?: boolean;
+  meta?: any;
 }

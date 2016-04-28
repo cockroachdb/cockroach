@@ -326,8 +326,8 @@ let nodesMainConnected = connect(
     };
   },
   {
-      refreshNodes: refreshNodes,
-      setUISetting: setUISetting,
+    refreshNodes: refreshNodes,
+    setUISetting: setUISetting,
   }
 )(NodesMain);
 
