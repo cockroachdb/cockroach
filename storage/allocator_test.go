@@ -160,22 +160,15 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
-// createTestGossip creates a stopper, gossip, and clock for use in tests.
-// Stopper must be stopped by the caller.
-func createTestGossip() (*stop.Stopper, *gossip.Gossip, *hlc.Clock) {
+// createTestAllocator creates a stopper, gossip, store pool and allocator for
+// use in tests. Stopper must be stopped by the caller.
+func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
-	return stopper, g, clock
-}
-
-// createTestAllocator creates a stopper, gossip, store pool and allocator for
-// use in tests. Stopper must be stopped by the caller.
-func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
-	stopper, g, clock := createTestGossip()
 	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, stopper)
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a
@@ -1178,14 +1171,8 @@ func TestRebalanceInterval(t *testing.T) {
 			defaultMinRebalanceInterval, defaultMaxRebalanceInterval)
 	}
 
-	stopper, g, clock := createTestGossip()
+	stopper, g, _, a := createTestAllocator()
 	defer stopper.Stop()
-	storePoolStopper := stop.NewStopper()
-	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, storePoolStopper)
-	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
-	// Stop the StorePool's goroutine, to prevent a race between its use of
-	// timeutil and ours.
-	storePoolStopper.Stop()
 
 	stores := []*roachpb.StoreDescriptor{
 		{
