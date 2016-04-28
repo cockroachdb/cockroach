@@ -22,8 +22,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -58,13 +58,13 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 // Privileges: None.
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
-func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, *roachpb.Error) {
-	desc, pErr := p.getTableDesc(n.Table)
-	if pErr != nil {
-		return nil, pErr
+func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
+	desc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
 	}
 	if desc == nil {
-		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+		return nil, tableDoesNotExistError(n.Table.String())
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -92,13 +92,13 @@ func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, *roachpb.Error) 
 // ShowCreateTable returns a CREATE TABLE statement for the specified table in
 // Traditional syntax.
 // Privileges: None.
-func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, *roachpb.Error) {
-	desc, pErr := p.getTableDesc(n.Table)
-	if pErr != nil {
-		return nil, pErr
+func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
+	desc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
 	}
 	if desc == nil {
-		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+		return nil, tableDoesNotExistError(n.Table.String())
 	}
 	v := &valuesNode{
 		columns: []ResultColumn{
@@ -167,22 +167,22 @@ func quoteNames(names ...string) string {
 // Privileges: None.
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
-func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, *roachpb.Error) {
+func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 	// TODO(pmattis): This could be implemented as:
 	//
 	//   SELECT id FROM system.namespace WHERE parentID = 0
 
 	prefix := MakeNameMetadataKey(keys.RootNamespaceID, "")
-	sr, pErr := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
-	if pErr != nil {
-		return nil, pErr
+	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
 	}
 	v := &valuesNode{columns: []ResultColumn{{Name: "Database", Typ: parser.DummyString}}}
 	for _, row := range sr {
 		_, name, err := encoding.DecodeUnsafeStringAscending(
 			bytes.TrimPrefix(row.Key, prefix), nil)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		v.rows = append(v.rows, []parser.Datum{parser.NewDString(name)})
 	}
@@ -194,13 +194,13 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, *roachpb.Err
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
-func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
+func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 	if n.Targets == nil {
-		return nil, roachpb.NewErrorf("TODO(marc): implement SHOW GRANT with no targets")
+		return nil, util.Errorf("TODO(marc): implement SHOW GRANT with no targets")
 	}
-	descriptors, pErr := p.getDescriptorsFromTargetList(*n.Targets)
-	if pErr != nil {
-		return nil, pErr
+	descriptors, err := p.getDescriptorsFromTargetList(*n.Targets)
+	if err != nil {
+		return nil, err
 	}
 
 	objectType := "Database"
@@ -245,13 +245,13 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, *roachpb.Error) {
 // Privileges: None.
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, *roachpb.Error) {
-	desc, pErr := p.getTableDesc(n.Table)
-	if pErr != nil {
-		return nil, pErr
+func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
+	desc, err := p.getTableDesc(n.Table)
+	if err != nil {
+		return nil, err
 	}
 	if desc == nil {
-		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
+		return nil, tableDoesNotExistError(n.Table.String())
 	}
 
 	v := &valuesNode{
@@ -296,7 +296,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, *roachpb.Error) {
 // Privileges: None.
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
-func (p *planner) ShowTables(n *parser.ShowTables) (planNode, *roachpb.Error) {
+func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	// TODO(pmattis): This could be implemented as:
 	//
 	//   SELECT name FROM system.namespace
@@ -306,21 +306,21 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, *roachpb.Error) {
 	name := n.Name
 	if name == nil {
 		if p.session.Database == "" {
-			return nil, roachpb.NewError(errNoDatabase)
+			return nil, errNoDatabase
 		}
 		name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
 	}
-	dbDesc, pErr := p.getDatabaseDesc(string(name.Base))
-	if pErr != nil {
-		return nil, pErr
+	dbDesc, err := p.getDatabaseDesc(string(name.Base))
+	if err != nil {
+		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, roachpb.NewError(databaseDoesNotExistError(string(name.Base)))
+		return nil, databaseDoesNotExistError(string(name.Base))
 	}
 
-	tableNames, pErr := p.getTableNames(dbDesc)
-	if pErr != nil {
-		return nil, pErr
+	tableNames, err := p.getTableNames(dbDesc)
+	if err != nil {
+		return nil, err
 	}
 	v := &valuesNode{columns: []ResultColumn{{Name: "Table", Typ: parser.DummyString}}}
 	for _, name := range tableNames {
