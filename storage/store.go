@@ -424,6 +424,10 @@ type storeMetrics struct {
 	replicatedRangeCount *metric.Gauge
 	availableRangeCount  *metric.Gauge
 
+	// Lease data metrics.
+	leaseRequestSuccessCount *metric.Counter
+	leaseRequestErrorCount   *metric.Counter
+
 	// Storage metrics.
 	liveBytes       *metric.Gauge
 	keyBytes        *metric.Gauge
@@ -472,26 +476,28 @@ type storeMetrics struct {
 func newStoreMetrics() *storeMetrics {
 	storeRegistry := metric.NewRegistry()
 	return &storeMetrics{
-		registry:             storeRegistry,
-		replicaCount:         storeRegistry.Counter("replicas"),
-		leaderRangeCount:     storeRegistry.Gauge("ranges.leader"),
-		replicatedRangeCount: storeRegistry.Gauge("ranges.replicated"),
-		availableRangeCount:  storeRegistry.Gauge("ranges.available"),
-		liveBytes:            storeRegistry.Gauge("livebytes"),
-		keyBytes:             storeRegistry.Gauge("keybytes"),
-		valBytes:             storeRegistry.Gauge("valbytes"),
-		intentBytes:          storeRegistry.Gauge("intentbytes"),
-		liveCount:            storeRegistry.Gauge("livecount"),
-		keyCount:             storeRegistry.Gauge("keycount"),
-		valCount:             storeRegistry.Gauge("valcount"),
-		intentCount:          storeRegistry.Gauge("intentcount"),
-		intentAge:            storeRegistry.Gauge("intentage"),
-		gcBytesAge:           storeRegistry.Gauge("gcbytesage"),
-		lastUpdateNanos:      storeRegistry.Gauge("lastupdatenanos"),
-		capacity:             storeRegistry.Gauge("capacity"),
-		available:            storeRegistry.Gauge("capacity.available"),
-		sysBytes:             storeRegistry.Gauge("sysbytes"),
-		sysCount:             storeRegistry.Gauge("syscount"),
+		registry:                 storeRegistry,
+		replicaCount:             storeRegistry.Counter("replicas"),
+		leaderRangeCount:         storeRegistry.Gauge("ranges.leader"),
+		replicatedRangeCount:     storeRegistry.Gauge("ranges.replicated"),
+		availableRangeCount:      storeRegistry.Gauge("ranges.available"),
+		leaseRequestSuccessCount: storeRegistry.Counter("leases.success"),
+		leaseRequestErrorCount:   storeRegistry.Counter("leases.error"),
+		liveBytes:                storeRegistry.Gauge("livebytes"),
+		keyBytes:                 storeRegistry.Gauge("keybytes"),
+		valBytes:                 storeRegistry.Gauge("valbytes"),
+		intentBytes:              storeRegistry.Gauge("intentbytes"),
+		liveCount:                storeRegistry.Gauge("livecount"),
+		keyCount:                 storeRegistry.Gauge("keycount"),
+		valCount:                 storeRegistry.Gauge("valcount"),
+		intentCount:              storeRegistry.Gauge("intentcount"),
+		intentAge:                storeRegistry.Gauge("intentage"),
+		gcBytesAge:               storeRegistry.Gauge("gcbytesage"),
+		lastUpdateNanos:          storeRegistry.Gauge("lastupdatenanos"),
+		capacity:                 storeRegistry.Gauge("capacity"),
+		available:                storeRegistry.Gauge("capacity.available"),
+		sysBytes:                 storeRegistry.Gauge("sysbytes"),
+		sysCount:                 storeRegistry.Gauge("syscount"),
 
 		// RocksDB metrics.
 		rdbBlockCacheHits:           storeRegistry.Gauge("rocksdb.block.cache.hits"),
@@ -581,6 +587,14 @@ func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.rdbFlushes.Update(int64(stats.Flushes))
 	sm.rdbCompactions.Update(int64(stats.Compactions))
 	sm.rdbTableReadersMemEstimate.Update(int64(stats.TableReadersMemEstimate))
+}
+
+func (sm *storeMetrics) leaseRequestComplete(err error) {
+	if err == nil {
+		sm.leaseRequestSuccessCount.Inc(1)
+	} else {
+		sm.leaseRequestErrorCount.Inc(1)
+	}
 }
 
 // Valid returns true if the StoreContext is populated correctly.

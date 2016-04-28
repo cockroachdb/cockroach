@@ -147,6 +147,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	case *roachpb.LeaderLeaseRequest:
 		resp := reply.(*roachpb.LeaderLeaseResponse)
 		*resp, err = r.LeaderLease(ctx, batch, ms, h, *tArgs)
+		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
 		*resp, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
