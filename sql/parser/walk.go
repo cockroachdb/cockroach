@@ -787,7 +787,7 @@ func (v *argVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if !ok {
 		return true, expr
 	}
-	d, found := v.args.Arg(placeholder.name)
+	d, found := v.args.Arg(placeholder.Name)
 	if !found {
 		v.err = fmt.Errorf("arg %s not found", placeholder)
 		return false, expr
