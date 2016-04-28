@@ -35,10 +35,12 @@ import (
 
 func marshalKey(k interface{}) (roachpb.Key, error) {
 	switch t := k.(type) {
-	case string:
-		return roachpb.Key(t), nil
+	case *roachpb.Key:
+		return *t, nil
 	case roachpb.Key:
 		return t, nil
+	case string:
+		return roachpb.Key(t), nil
 	case []byte:
 		return roachpb.Key(t), nil
 	}
@@ -52,6 +54,9 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 
 	// Handle a few common types via a type switch.
 	switch t := v.(type) {
+	case *roachpb.Value:
+		return *t, nil
+
 	case nil:
 		return r, nil
 

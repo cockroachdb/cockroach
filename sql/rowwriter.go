@@ -123,7 +123,9 @@ type rowInserter struct {
 	cols      []ColumnDescriptor
 
 	// For allocation avoidance.
-	marshalled []interface{}
+	marshalled    []roachpb.Value
+	key           roachpb.Key
+	sentinelValue roachpb.Value
 }
 
 // makeRowInserter creates a rowInserter for the given table.
@@ -154,11 +156,12 @@ func makeRowInserter(
 		return rowInserter{}, err
 	}
 
-	return rowInserter{
+	ri := rowInserter{
 		rowHelper:  rh,
 		cols:       cols,
-		marshalled: make([]interface{}, len(cols)),
-	}, nil
+		marshalled: make([]roachpb.Value, len(cols)),
+	}
+	return ri, nil
 }
 
 // insertRow adds to the batch the kv operations necessary to insert a table row
@@ -188,20 +191,24 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 	// we are trying to insert a duplicate primary key: if we write the
 	// secondary indexes first, we may get an error that looks like a
 	// uniqueness violation on a non-unique index.
-	sentinelKey := keys.MakeNonColumnKey(primaryIndexKey)
+	ri.key = keys.MakeNonColumnKey(primaryIndexKey)
 	if log.V(2) {
-		log.Infof("CPut %s -> NULL", roachpb.Key(sentinelKey))
+		log.Infof("CPut %s -> NULL", ri.key)
 	}
-	// This is subtle: An interface{}(nil) deletes the value, so we pass in
-	// []byte{} as a non-nil value.
-	b.CPut(sentinelKey, []byte{}, nil)
+	// Each sentinel value needs a distinct RawBytes field as the computed
+	// checksum includes the key the value is associated with.
+	ri.sentinelValue.SetBytes([]byte{})
+	b.CPut(&ri.key, &ri.sentinelValue, nil)
+	ri.key = nil
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
 		if log.V(2) {
 			log.Infof("CPut %s -> %v", secondaryIndexEntry.key, secondaryIndexEntry.value)
 		}
-		b.CPut(secondaryIndexEntry.key, secondaryIndexEntry.value, nil)
+		ri.key = secondaryIndexEntry.key
+		b.CPut(&ri.key, secondaryIndexEntry.value, nil)
 	}
+	ri.key = nil
 
 	// Write the row columns.
 	for i, val := range values {
@@ -214,17 +221,18 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 			continue
 		}
 
-		if ri.marshalled[i] != nil {
+		if ri.marshalled[i].RawBytes != nil {
 			// We only output non-NULL values. Non-existent column keys are
 			// considered NULL during scanning and the row sentinel ensures we know
 			// the row exists.
 
-			key := keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
+			ri.key = keys.MakeColumnKey(primaryIndexKey, uint32(col.ID))
 			if log.V(2) {
-				log.Infof("CPut %s -> %v", roachpb.Key(key), val)
+				log.Infof("CPut %s -> %v", ri.key, val)
 			}
 
-			b.CPut(key, ri.marshalled[i], nil)
+			b.CPut(&ri.key, &ri.marshalled[i], nil)
+			ri.key = nil
 		}
 	}
 
@@ -241,8 +249,9 @@ type rowUpdater struct {
 	primaryKeyColChange bool
 
 	// For allocation avoidance.
-	marshalled []interface{}
+	marshalled []roachpb.Value
 	newValues  []parser.Datum
+	key        roachpb.Key
 }
 
 // makeRowUpdater creates a rowUpdater for the given table.
@@ -328,7 +337,7 @@ func makeRowUpdater(
 		updateCols:          updateCols,
 		deleteOnlyIndex:     deleteOnlyIndex,
 		primaryKeyColChange: primaryKeyColChange,
-		marshalled:          make([]interface{}, len(updateCols)),
+		marshalled:          make([]roachpb.Value, len(updateCols)),
 		newValues:           make([]parser.Datum, len(tableDesc.Columns)),
 	}
 
@@ -445,26 +454,26 @@ func (ru *rowUpdater) updateRow(
 			continue
 		}
 
-		key := keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
-		if ru.marshalled[i] != nil {
+		ru.key = keys.MakeColumnKey(newPrimaryIndexKey, uint32(col.ID))
+		if ru.marshalled[i].RawBytes != nil {
 			// We only output non-NULL values. Non-existent column keys are
 			// considered NULL during scanning and the row sentinel ensures we know
 			// the row exists.
 			if log.V(2) {
-				log.Infof("Put %s -> %v", roachpb.Key(key), val)
+				log.Infof("Put %s -> %v", ru.key, val)
 			}
 
-			b.Put(key, ru.marshalled[i])
+			b.Put(&ru.key, &ru.marshalled[i])
 		} else {
 			// The column might have already existed but is being set to NULL, so
 			// delete it.
 			if log.V(2) {
-				log.Infof("Del %s", roachpb.Key(key))
+				log.Infof("Del %s", ru.key)
 			}
 
-			b.Del(key)
+			b.Del(&ru.key)
 		}
-
+		ru.key = nil
 	}
 
 	return ru.newValues, nil
@@ -473,6 +482,10 @@ func (ru *rowUpdater) updateRow(
 // rowDeleter abstracts the key/value operations for deleting table rows.
 type rowDeleter struct {
 	rowHelper rowHelper
+
+	// For allocation avoidance.
+	startKey roachpb.Key
+	endKey   roachpb.Key
 }
 
 // makeRowDeleter creates a rowDeleter for the given table.
@@ -494,7 +507,7 @@ func makeRowDeleter(
 	if err := rowHelper.requireAllIndexCols(); err != nil {
 		return rowDeleter{}, err
 	}
-	return rowDeleter{rowHelper}, nil
+	return rowDeleter{rowHelper: rowHelper}, nil
 }
 
 // deleteRow adds to the batch the kv operations necessary to delete a table row
@@ -513,12 +526,13 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) *roachpb
 	}
 
 	// Delete the row.
-	rowStartKey := roachpb.Key(primaryIndexKey)
-	rowEndKey := rowStartKey.PrefixEnd()
+	rd.startKey = roachpb.Key(primaryIndexKey)
+	rd.endKey = rd.startKey.PrefixEnd()
 	if log.V(2) {
-		log.Infof("DelRange %s - %s", rowStartKey, rowEndKey)
+		log.Infof("DelRange %s - %s", rd.startKey, rd.endKey)
 	}
-	b.DelRange(rowStartKey, rowEndKey, false)
+	b.DelRange(&rd.startKey, &rd.endKey, false)
+	rd.startKey, rd.endKey = nil, nil
 
 	return nil
 }

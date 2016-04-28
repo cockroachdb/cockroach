@@ -982,59 +982,76 @@ func getTypeForColumn(col ColumnDescriptor) parser.Datum {
 // marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (interface{}, error) {
+func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, error) {
+	var r roachpb.Value
+
 	if val == parser.DNull {
-		return nil, nil
+		return r, nil
 	}
 
 	switch col.Type.Kind {
 	case ColumnType_BOOL:
 		if v, ok := val.(*parser.DBool); ok {
-			return bool(*v), nil
+			if *v {
+				r.SetInt(1)
+			} else {
+				r.SetInt(0)
+			}
+			return r, nil
 		}
 	case ColumnType_INT:
 		if v, ok := val.(*parser.DInt); ok {
-			return int64(*v), nil
+			r.SetInt(int64(*v))
+			return r, nil
 		}
 	case ColumnType_FLOAT:
 		if v, ok := val.(*parser.DFloat); ok {
-			return float64(*v), nil
+			r.SetFloat(float64(*v))
+			return r, nil
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
-			return v.Dec, nil
+			err := r.SetDecimal(&v.Dec)
+			return r, err
 		}
 	case ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {
-			return string(*v), nil
+			r.SetString(string(*v))
+			return r, nil
 		}
 	case ColumnType_BYTES:
 		if v, ok := val.(*parser.DBytes); ok {
-			return string(*v), nil
+			r.SetString(string(*v))
+			return r, nil
 		}
 		if v, ok := val.(*parser.DString); ok {
-			return string(*v), nil
+			r.SetString(string(*v))
+			return r, nil
 		}
 	case ColumnType_DATE:
 		if v, ok := val.(*parser.DDate); ok {
-			return int64(*v), nil
+			r.SetInt(int64(*v))
+			return r, nil
 		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(*parser.DTimestamp); ok {
-			return v.Time, nil
+			r.SetTime(v.Time)
+			return r, nil
 		}
 	case ColumnType_TIMESTAMPTZ:
 		if v, ok := val.(*parser.DTimestampTZ); ok {
-			return v.Time, nil
+			r.SetTime(v.Time)
+			return r, nil
 		}
 	case ColumnType_INTERVAL:
 		if v, ok := val.(*parser.DInterval); ok {
-			return v.Duration, nil
+			err := r.SetDuration(v.Duration)
+			return r, err
 		}
 	default:
-		return nil, util.Errorf("unsupported column type: %s", col.Type.Kind)
+		return r, util.Errorf("unsupported column type: %s", col.Type.Kind)
 	}
-	return nil, fmt.Errorf("value type %s doesn't match type %s of column %q",
+	return r, fmt.Errorf("value type %s doesn't match type %s of column %q",
 		val.Type(), col.Type.Kind, col.Name)
 }
 

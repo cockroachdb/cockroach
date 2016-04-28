@@ -347,7 +347,7 @@ func (v *Value) ShallowClone() *Value {
 // MakeValueFromString returns a value with bytes and tag set.
 func MakeValueFromString(s string) Value {
 	v := Value{}
-	v.SetBytes([]byte(s))
+	v.SetString(s)
 	return v
 }
 
@@ -386,6 +386,15 @@ func (v Value) dataBytes() []byte {
 func (v *Value) SetBytes(b []byte) {
 	v.RawBytes = make([]byte, headerSize+len(b))
 	copy(v.dataBytes(), b)
+	v.setTag(ValueType_BYTES)
+}
+
+// SetString sets the bytes and tag field of the receiver and clears the
+// checksum. This is identical to SetBytes, but specialized for a string
+// argument.
+func (v *Value) SetString(s string) {
+	v.RawBytes = make([]byte, headerSize+len(s))
+	copy(v.dataBytes(), s)
 	v.setTag(ValueType_BYTES)
 }
 

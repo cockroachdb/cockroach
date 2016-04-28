@@ -246,6 +246,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
+	marshalled := make([]roachpb.Value, len(defaultExprs))
 
 	// Remember any new non nullable column with no default value.
 	nonNullableColumn := ""
@@ -345,13 +346,13 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 								if err != nil {
 									return roachpb.NewError(err)
 								}
-								val, err := marshalColumnValue(col, d)
+								marshalled[i], err = marshalColumnValue(col, d)
 								if err != nil {
 									return roachpb.NewError(err)
 								}
 
 								if log.V(2) {
-									log.Infof("Put %s -> %v", colKey, val)
+									log.Infof("Put %s -> %v", colKey, d)
 								}
 								// Insert default value into the column. If
 								// this row was recently added the default
@@ -365,7 +366,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 								// SQL INSERT cannot directly reference the
 								// column, and the INSERT populates the column
 								// with the default value.
-								writeBatch.Put(colKey, val)
+								writeBatch.Put(colKey, &marshalled[i])
 							}
 						}
 					}
