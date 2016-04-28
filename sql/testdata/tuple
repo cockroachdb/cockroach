@@ -82,6 +82,15 @@ SELECT
 ----
 true true true true false true true true true
 
+query BBBB
+SELECT
+	(1, 1) > (0, NULL),
+	(1, 1) > (1, NULL),
+	(1, 1) > (2, NULL),
+	(1, 1) > (NULL, 0)
+----
+true NULL false NULL
+
 statement error pq: unsupported comparison operator: <string> = <int>
 SELECT (1, 2) > (1, 'hi')
 

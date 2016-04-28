@@ -735,20 +735,17 @@ var CmpOps = map[CmpArgs]CmpOp{
 
 	CmpArgs{EQ, tupleType, tupleType}: {
 		fn: func(_ EvalContext, ldatum, rdatum Datum) (DBool, error) {
-			c := cmpTuple(ldatum, rdatum)
-			return DBool(c == 0), nil
+			return cmpTuple(EQ, ldatum, rdatum)
 		},
 	},
 	CmpArgs{LE, tupleType, tupleType}: {
 		fn: func(_ EvalContext, ldatum, rdatum Datum) (DBool, error) {
-			c := cmpTuple(ldatum, rdatum)
-			return DBool(c <= 0), nil
+			return cmpTuple(LE, ldatum, rdatum)
 		},
 	},
 	CmpArgs{LT, tupleType, tupleType}: {
 		fn: func(_ EvalContext, ldatum, rdatum Datum) (DBool, error) {
-			c := cmpTuple(ldatum, rdatum)
-			return DBool(c < 0), nil
+			return cmpTuple(LT, ldatum, rdatum)
 		},
 	},
 
@@ -764,9 +761,34 @@ var CmpOps = map[CmpArgs]CmpOp{
 	CmpArgs{In, tupleType, tupleType}:       evalTupleIN,
 }
 
-func cmpTuple(ldatum, rdatum Datum) int {
+var cmpNull = errors.New("NULL comparison")
+
+func cmpTuple(op ComparisonOp, ldatum, rdatum Datum) (DBool, error) {
 	left := *ldatum.(*DTuple)
-	return left.Compare(rdatum)
+	right := *rdatum.(*DTuple)
+	var c int
+	for i, l := range left {
+		r := right[i]
+		if l == DNull || r == DNull {
+			return DBool(false), cmpNull
+		}
+		c = l.Compare(r)
+		if c != 0 {
+			break
+		}
+	}
+	var b bool
+	switch op {
+	case EQ:
+		b = c == 0
+	case LE:
+		b = c <= 0
+	case LT:
+		b = c < 0
+	default:
+		return DBool(false), fmt.Errorf("unsupported tuple comparison operator: %s", op)
+	}
+	return DBool(b), nil
 }
 
 var evalTupleIN = CmpOp{
@@ -1268,6 +1290,9 @@ func (expr *ComparisonExpr) Eval(ctx EvalContext) (Datum, error) {
 
 	_, newLeft, newRight, not := foldComparisonExpr(expr.Operator, left, right)
 	d, err := expr.fn.fn(ctx, newLeft, newRight)
+	if err == cmpNull {
+		return DNull, nil
+	}
 	if err == nil && not {
 		return MakeDBool(!d), nil
 	}
