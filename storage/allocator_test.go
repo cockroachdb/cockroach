@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var simpleZoneConfig = config.ZoneConfig{
@@ -160,25 +160,19 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
-// createTestGossip creates a stopper, gossip, and clock for use in tests.
-// Stopper must be stopped by the caller.
-func createTestGossip() (*stop.Stopper, *gossip.Gossip, *hlc.Clock) {
+// createTestAllocator creates a stopper, gossip, store pool and allocator for
+// use in tests. Stopper must be stopped by the caller.
+func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano)
+	manualClock := hlc.NewManualClock(hlc.UnixNano())
+	clock := hlc.NewClock(manualClock.UnixNano)
 	rpcContext := rpc.NewContext(nil, clock, stopper)
 	g := gossip.New(rpcContext, nil, stopper)
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
-	return stopper, g, clock
-}
-
-// createTestAllocator creates a stopper, gossip, store pool and allocator for
-// use in tests. Stopper must be stopped by the caller.
-func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator) {
-	stopper, g, clock := createTestGossip()
 	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, stopper)
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
-	return stopper, g, storePool, a
+	return stopper, g, storePool, a, manualClock
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the
@@ -204,7 +198,7 @@ func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.S
 
 func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
@@ -218,7 +212,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 
 func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, _, a := createTestAllocator()
+	stopper, _, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
 	if result != nil {
@@ -231,7 +225,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 
 func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
@@ -268,7 +262,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 
 func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
@@ -296,7 +290,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 
 func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{
@@ -318,7 +312,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 // if necessary to find an allocation target.
 func TestAllocatorRelaxConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 
@@ -366,7 +360,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 // randomly from amongst stores over the minAvailCapacityThreshold.
 func TestAllocatorRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
 	stores := []*roachpb.StoreDescriptor{
@@ -439,7 +433,7 @@ func TestAllocatorRebalance(t *testing.T) {
 // exceed the maxAvailCapacityThreshold.
 func TestAllocatorRebalanceByCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
 	// Setup the stores so that only one is below the standard deviation threshold.
@@ -489,7 +483,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, g, _, a := createTestAllocator()
+	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
 	// List of replicas that will be passed to RemoveTarget
@@ -553,7 +547,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 func TestAllocatorComputeAction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, sp, a := createTestAllocator()
+	stopper, _, sp, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
 	// Set up seven stores. Stores six and seven are marked as dead.
@@ -1178,14 +1172,8 @@ func TestRebalanceInterval(t *testing.T) {
 			defaultMinRebalanceInterval, defaultMaxRebalanceInterval)
 	}
 
-	stopper, g, clock := createTestGossip()
+	stopper, g, _, a, manualClock := createTestAllocator()
 	defer stopper.Stop()
-	storePoolStopper := stop.NewStopper()
-	storePool := NewStorePool(g, clock, TestTimeUntilStoreDeadOff, storePoolStopper)
-	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
-	// Stop the StorePool's goroutine, to prevent a race between its use of
-	// timeutil and ours.
-	storePoolStopper.Stop()
 
 	stores := []*roachpb.StoreDescriptor{
 		{
@@ -1204,7 +1192,7 @@ func TestRebalanceInterval(t *testing.T) {
 	a.options.Deterministic = true
 	// Store currrent time before the first rebalance decision, to avoid flakiness
 	// for the nextRebalance checks below.
-	now := timeutil.Now()
+	now := time.Unix(0, manualClock.UnixNano())
 
 	// The first ShouldRebalance call should always return true when there is an
 	// imbalance.
@@ -1226,8 +1214,7 @@ func TestRebalanceInterval(t *testing.T) {
 	}
 
 	// Simulate the rebalance interval passing.
-	defer timeutil.SetTimeOffset(0)
-	timeutil.SetTimeOffset(backoff)
+	manualClock.Increment(backoff.Nanoseconds())
 	if a, e := a.ShouldRebalance(1), true; a != e {
 		t.Errorf("ShouldRebalance returned %t != expected %t", a, e)
 	}

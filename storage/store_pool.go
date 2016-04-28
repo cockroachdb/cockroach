@@ -165,6 +165,11 @@ func NewStorePool(g *gossip.Gossip, clock *hlc.Clock, timeUntilStoreDead time.Du
 	return sp
 }
 
+// Clock returns the storepool's clock.
+func (sp *StorePool) Clock() *hlc.Clock {
+	return sp.clock
+}
+
 // storeGossipUpdate is the gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor

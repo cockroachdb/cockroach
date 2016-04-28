@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 const (
@@ -327,7 +326,7 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 		return false
 	}
 
-	now := timeutil.Now()
+	now := a.storePool.Clock().Now().GoTime()
 	if now.Before(a.nextRebalance) {
 		if log.V(2) {
 			log.Infof("ineligible to rebalance for %s", a.nextRebalance.Sub(now))
@@ -362,7 +361,7 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 func (a *Allocator) UpdateNextRebalance() {
 	a.nextRebalance = a.proposedNextRebalance
 	if log.V(2) {
-		log.Infof("next rebalance opportunity in %s", a.nextRebalance.Sub(timeutil.Now()))
+		log.Infof("next rebalance opportunity in %s", a.nextRebalance.Sub(a.storePool.Clock().Now().GoTime()))
 	}
 }
 
