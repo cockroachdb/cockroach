@@ -110,7 +110,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 // ought to be split into two phases.
 func (rh *returningHelper) TypeCheck() *roachpb.Error {
 	for i, expr := range rh.untypedExprs {
-		var desired parser.Datum
+		desired := parser.NoTypePreference
 		if len(rh.desiredTypes) > i {
 			desired = rh.desiredTypes[i]
 		}

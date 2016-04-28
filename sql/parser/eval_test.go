@@ -409,7 +409,7 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, nil)
+		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -449,7 +449,7 @@ func TestEvalError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, nil)
+		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err == nil {
 			_, err = typedExpr.Eval(defaultContext)
 		}
@@ -483,7 +483,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		}
 		ctx := defaultContext
 		ctx.ReCache = NewRegexpCache(8)
-		typedExpr, err := TypeCheck(expr, nil, nil)
+		typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}

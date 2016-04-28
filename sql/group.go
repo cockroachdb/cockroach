@@ -66,7 +66,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 
 		// We could potentially skip this, since it will be checked in addRender,
 		// but checking now allows early err return.
-		typedExpr, err := parser.TypeCheck(resolved, p.evalCtx.Args, nil /* no preference */)
+		typedExpr, err := parser.TypeCheck(resolved, p.evalCtx.Args, parser.NoTypePreference)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
