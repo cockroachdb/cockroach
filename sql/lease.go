@@ -401,6 +401,8 @@ func (l *leaseSet) findIndex(version DescriptorVersion, expiration parser.DTimes
 	return i, false
 }
 
+// findNewest returns the newest lease we (if the version is 0) or the newest
+// lease at a particular version (if version != 0).
 func (l *leaseSet) findNewest(version DescriptorVersion) *LeaseState {
 	if len(l.data) == 0 {
 		return nil
@@ -445,9 +447,24 @@ type tableState struct {
 	deleted bool
 }
 
+// acquire takes a lease on the specified table, at the specified version.
+// If version == 0, the lease is taken at the newest descriptor version.
 func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store LeaseStore) (*LeaseState, *roachpb.Error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// If the table has been marked for deletion, and we want a lease at the
+	// newest version, refuse.
+	// It's less clear how we should behave if we're explicitly requesting a lease
+	// at a known version. This might indicate that the client already has a lease
+	// at that version (maybe one about to expire), so it might be a good thing to
+	// allow getting a new one.
+	// In practice, sql (as a leasing client) has its own layer of reusing leases
+	// inside a transaction, in the planner, so it doesn't matter much
+	if version == 0 && t.deleted {
+		return nil, roachpb.NewError(
+			&roachpb.DescriptorNotFoundError{DescriptorId: uint32(t.id)})
+	}
 
 	for {
 		s := t.active.findNewest(version)
