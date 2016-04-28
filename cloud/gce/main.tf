@@ -6,7 +6,7 @@ resource "google_compute_instance" "cockroach" {
   count = "${var.num_instances}"
 
   name = "cockroach-${count.index}"
-  machine_type = "n1-standard-1"
+  machine_type = "${var.gce_machine_type}"
   zone = "${var.gce_zone}"
   tags = ["cockroach"]
 

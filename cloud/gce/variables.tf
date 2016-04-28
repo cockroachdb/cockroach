@@ -27,6 +27,11 @@ variable "gce_image" {
   default = "ubuntu-os-cloud/ubuntu-1510-wily-v20151021"
 }
 
+# GCE machine type.
+variable "gce_machine_type" {
+  default = "n1-standard-4"
+}
+
 # Path to the cockroach binary. An empty value results in the latest official
 # binary being used.
 variable "cockroach_binary" {
