@@ -402,6 +402,38 @@ func TestBatchRange(t *testing.T) {
 	}
 }
 
+// TestBatchError verifies that Range returns an error if a request has an invalid range.
+func TestBatchError(t *testing.T) {
+	testCases := []struct {
+		req    [2]string
+		errMsg string
+	}{
+		{
+			req:    [2]string{"\xff\xff\xff\xff", "a"},
+			errMsg: "must be less than KeyMax",
+		},
+		{
+			req:    [2]string{"a", "\xff\xff\xff\xff"},
+			errMsg: "must be less than or equal to KeyMax",
+		},
+	}
+
+	for i, c := range testCases {
+		var ba roachpb.BatchRequest
+		ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(c.req[0]), EndKey: roachpb.Key(c.req[1])}})
+		if _, err := Range(ba); !testutils.IsError(err, c.errMsg) {
+			t.Errorf("%d: unexpected error %v", i, err)
+		}
+	}
+
+	// Test a case where a non-range request has an end key.
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}})
+	if _, err := Range(ba); !testutils.IsError(err, "end key specified for non-range operation") {
+		t.Errorf("unexpected error %v", err)
+	}
+}
+
 func TestMakeColumnKey(t *testing.T) {
 	const maxColID = math.MaxUint32
 	key := MakeColumnKey(nil, maxColID)
