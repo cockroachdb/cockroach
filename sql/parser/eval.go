@@ -1578,7 +1578,7 @@ func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
 
 // Eval implements the Expr interface.
 func (t ValArg) Eval(_ EvalContext) (Datum, error) {
-	return &DValArg{name: t.name}, nil
+	return &DValArg{name: t.Name}, nil
 }
 
 // Eval implements the Expr interface.

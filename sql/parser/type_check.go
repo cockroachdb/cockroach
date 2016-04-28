@@ -517,10 +517,10 @@ func (expr *Tuple) TypeCheck(args MapArgs) (Datum, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr ValArg) TypeCheck(args MapArgs) (Datum, error) {
-	if v, ok := args[expr.name]; ok {
+	if v, ok := args[expr.Name]; ok {
 		return v, nil
 	}
-	return &DValArg{name: expr.name}, nil
+	return &DValArg{name: expr.Name}, nil
 }
 
 // TypeCheck implements the Expr interface.

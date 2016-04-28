@@ -310,14 +310,14 @@ var _ VariableExpr = ValArg{}
 
 // ValArg represents a named bind var argument.
 type ValArg struct {
-	name string
+	Name string
 }
 
 // Variable implements the VariableExpr interface.
 func (ValArg) Variable() {}
 
 func (node ValArg) String() string {
-	return fmt.Sprintf("$%s", node.name)
+	return fmt.Sprintf("$%s", node.Name)
 }
 
 type nameType int
