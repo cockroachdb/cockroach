@@ -827,7 +827,6 @@ var Builtins = map[string][]Builtin{
 		}),
 	},
 
-	// TODO(nvanbenschoten) Add native support for decimal.
 	"exp": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Exp(x))), nil
