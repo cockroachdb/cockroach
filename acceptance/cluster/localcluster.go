@@ -199,12 +199,13 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 // can be running at once.
 // Adds the same binds as the cluster containers (certs, binary, etc).
 func (l *LocalCluster) OneShot(
+	ref string,
 	ipo types.ImagePullOptions,
 	containerConfig container.Config,
 	hostConfig container.HostConfig,
 	name string,
 ) error {
-	if err := pullImage(l, ipo); err != nil {
+	if err := pullImage(l, ref, ipo); err != nil {
 		return err
 	}
 	hostConfig.VolumesFrom = []string{l.vols.id}
@@ -268,8 +269,7 @@ func (l *LocalCluster) createNetwork() {
 		}
 	}
 
-	resp, err := l.client.NetworkCreate(context.Background(), types.NetworkCreate{
-		Name:   networkName,
+	resp, err := l.client.NetworkCreate(context.Background(), networkName, types.NetworkCreate{
 		Driver: "bridge",
 		// Docker gets very confused if two networks have the same name.
 		CheckDuplicate: true,
@@ -349,7 +349,7 @@ func (l *LocalCluster) initCluster() {
 	}
 
 	if *cockroachImage == builderImageFull {
-		maybePanic(pullImage(l, types.ImagePullOptions{ImageID: builderImage, Tag: builderTag}))
+		maybePanic(pullImage(l, builderImage+":"+builderTag, types.ImagePullOptions{}))
 	}
 	c, err := createContainer(
 		l,
@@ -517,10 +517,9 @@ func (l *LocalCluster) processEvent(event events.Message) bool {
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
 		log.Errorf("stopping due to unexpected event: %+v", event)
-		if rc, err := l.client.ContainerLogs(context.Background(), types.ContainerLogsOptions{
-			ContainerID: event.Actor.ID,
-			ShowStdout:  true,
-			ShowStderr:  true,
+		if rc, err := l.client.ContainerLogs(context.Background(), event.Actor.ID, types.ContainerLogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
 		}); err == nil {
 			defer rc.Close()
 			if _, err := io.Copy(os.Stderr, rc); err != nil {
@@ -780,14 +779,13 @@ func (l *LocalCluster) Addr(i int) string {
 func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
 	execRoot := func(ctx context.Context) error {
 		cfg := types.ExecConfig{
-			Container:    l.Nodes[i].Container.id,
 			User:         "root",
 			Privileged:   true,
 			Cmd:          cmd,
 			AttachStderr: true,
 			AttachStdout: true,
 		}
-		resp, err := l.client.ContainerExecCreate(ctx, cfg)
+		resp, err := l.client.ContainerExecCreate(ctx, l.Nodes[i].Container.id, cfg)
 		if err != nil {
 			return err
 		}
