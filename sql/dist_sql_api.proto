@@ -1,0 +1,42 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Radu Berinde (radu@cockroachlabs.com)
+//
+// APIs for distributed SQL; see docs/RFCS/distributed_sql.md
+
+syntax = "proto2";
+package cockroach.sql;
+option go_package = "sql";
+
+import "cockroach/roachpb/data.proto";
+import "cockroach/roachpb/errors.proto";
+import "cockroach/sql/dist_sql_data.proto";
+import weak "gogoproto/gogo.proto";
+
+message SetupFlowsRequest {
+  // TODO(radu): would TxnMeta suffice?
+  optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
+  repeated FlowSpec flows = 2;
+}
+
+message EmptyResponse {
+  optional roachpb.Error error = 1;
+}
+
+service DistSQL {
+  // SetupFlows sets up a set flows (subgraphs of a distributed SQL computation)
+  // on the receiving node.
+  rpc SetupFlows(SetupFlowsRequest) returns (EmptyResponse);
+}
