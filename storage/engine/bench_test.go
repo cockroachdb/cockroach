@@ -242,6 +242,28 @@ func runMVCCPut(emk engineMaker, valueSize int, b *testing.B) {
 	b.StopTimer()
 }
 
+func runMVCCBlindPut(emk engineMaker, valueSize int, b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	eng, stopper := emk(b, fmt.Sprintf("put_%d", valueSize))
+	defer stopper.Stop()
+
+	b.SetBytes(int64(valueSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+		ts := makeTS(timeutil.Now().UnixNano(), 0)
+		if err := MVCCBlindPut(context.Background(), eng, nil, key, ts, value, nil); err != nil {
+			b.Fatalf("failed put: %s", err)
+		}
+	}
+
+	b.StopTimer()
+}
+
 func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
@@ -275,6 +297,29 @@ func runMVCCConditionalPut(emk engineMaker, valueSize int, createFirst bool, b *
 
 	b.StopTimer()
 }
+
+func runMVCCBlindConditionalPut(emk engineMaker, valueSize int, b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	eng, stopper := emk(b, fmt.Sprintf("cput_%d", valueSize))
+	defer stopper.Stop()
+
+	b.SetBytes(int64(valueSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+		ts := makeTS(timeutil.Now().UnixNano(), 0)
+		if err := MVCCBlindConditionalPut(context.Background(), eng, nil, key, ts, value, nil, nil); err != nil {
+			b.Fatalf("failed put: %s", err)
+		}
+	}
+
+	b.StopTimer()
+}
+
 func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
