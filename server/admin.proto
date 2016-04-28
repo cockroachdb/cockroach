@@ -234,6 +234,21 @@ message ClusterResponse {
   string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
 }
 
+// ClusterFreezeRequest lets the receiving node go through all Ranges in the
+// cluster, freezing them in preparation for an upgrade.
+message ClusterFreezeRequest {
+  // When set, attempt to freeze the cluster in preparation for a
+  // stop-the-world upgrade. When unset, attempt to unfreeze any
+  // frozen Ranges.
+  bool freeze = 1;
+}
+
+// ClusterFreezeResponse is the response to a ClusterFreezeRequest. It contains
+// the number of Ranges whose freeze state changed as a result of the request.
+message ClusterFreezeResponse {
+  int64 ranges_affected = 1;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -315,6 +330,14 @@ service Admin {
   rpc Cluster(ClusterRequest) returns (ClusterResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/cluster"
+    };
+  }
+
+  // ClusterFreeze freezes/unfreezes the cluster.
+  rpc ClusterFreeze(ClusterFreezeRequest) returns (ClusterFreezeResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/cluster/freeze"
+      body: "*"
     };
   }
 }
