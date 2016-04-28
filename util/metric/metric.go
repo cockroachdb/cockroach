@@ -24,6 +24,8 @@ import (
 
 	"github.com/VividCortex/ewma"
 	"github.com/codahale/hdrhistogram"
+	"github.com/gogo/protobuf/proto"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -59,6 +61,13 @@ type Iterable interface {
 	Each(func(string, interface{}))
 }
 
+// PrometheusExportable provides a method to fill in a prometheus object.
+type PrometheusExportable interface {
+	// FillPrometheusMetric takes an initialized prometheus metric object and
+	// fills the appropriate fields for the metric type.
+	FillPrometheusMetric(promMetric *prometheusgo.MetricFamily)
+}
+
 var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
@@ -71,6 +80,10 @@ var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &Histogram{}
 var _ json.Marshaler = &Rate{}
 var _ json.Marshaler = &Registry{}
+
+var _ PrometheusExportable = &Gauge{}
+var _ PrometheusExportable = &GaugeFloat64{}
+var _ PrometheusExportable = &Counter{}
 
 type periodic interface {
 	nextTick() time.Time
@@ -196,6 +209,14 @@ func (c *Counter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Counter.Count())
 }
 
+// FillPrometheusMetric fills the appropriate metric fields.
+func (g *Counter) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
+	promMetric.Type = prometheusgo.MetricType_COUNTER.Enum()
+	promMetric.Metric = []*prometheusgo.Metric{
+		&prometheusgo.Metric{Counter: &prometheusgo.Counter{Value: proto.Float64(float64(g.Counter.Count()))}},
+	}
+}
+
 // A Gauge atomically stores a single integer value.
 type Gauge struct {
 	metrics.Gauge
@@ -215,6 +236,14 @@ func (g *Gauge) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.Gauge.Value())
 }
 
+// FillPrometheusMetric fills the appropriate metric fields.
+func (g *Gauge) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
+	promMetric.Type = prometheusgo.MetricType_GAUGE.Enum()
+	promMetric.Metric = []*prometheusgo.Metric{
+		&prometheusgo.Metric{Gauge: &prometheusgo.Gauge{Value: proto.Float64(float64(g.Gauge.Value()))}},
+	}
+}
+
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	metrics.GaugeFloat64
@@ -232,6 +261,14 @@ func (g *GaugeFloat64) Each(f func(string, interface{})) { f("", g) }
 // MarshalJSON marshals to JSON.
 func (g *GaugeFloat64) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.GaugeFloat64.Value())
+}
+
+// FillPrometheusMetric fills the appropriate metric fields.
+func (g *GaugeFloat64) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
+	promMetric.Type = prometheusgo.MetricType_GAUGE.Enum()
+	promMetric.Metric = []*prometheusgo.Metric{
+		&prometheusgo.Metric{Gauge: &prometheusgo.Gauge{Value: proto.Float64(g.GaugeFloat64.Value())}},
+	}
 }
 
 // A Rate is a exponential weighted moving average.
