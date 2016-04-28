@@ -4827,7 +4827,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:1129
 		{
-			sqlVAL.union.val = ValArg{name: sqlDollar[1].str}
+			sqlVAL.union.val = ValArg{Name: sqlDollar[1].str}
 		}
 	case 118:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
@@ -7355,7 +7355,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3214
 		{
-			sqlVAL.union.val = ValArg{name: sqlDollar[1].str}
+			sqlVAL.union.val = ValArg{Name: sqlDollar[1].str}
 		}
 	case 556:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
