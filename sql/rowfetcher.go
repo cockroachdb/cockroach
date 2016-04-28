@@ -159,9 +159,12 @@ func (rf *rowFetcher) startScan(txn *client.Txn, spans spans, limitHint int64) *
 
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
+// !!! change to error
 func (rf *rowFetcher) nextKey() (rowDone bool, pErr *roachpb.Error) {
 	var ok bool
-	ok, rf.kv, pErr = rf.kvFetcher.nextKV()
+	var err error
+	ok, rf.kv, err = rf.kvFetcher.nextKV()
+	pErr = roachpb.NewError(err)
 	if pErr != nil {
 		return false, pErr
 	}

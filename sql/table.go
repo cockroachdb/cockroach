@@ -232,14 +232,14 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 // tableDoesNotExistError().
 func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	dbDesc, err := p.getDatabaseDesc(qname.Database())
 	if err != nil {
 		return nil, err
 	}
 	if dbDesc == nil {
-		return nil, roachpb.NewError(databaseDoesNotExistError(qname.Database()))
+		return nil, databaseDoesNotExistError(qname.Database())
 	}
 
 	desc := TableDescriptor{}
@@ -288,7 +288,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		// chicken&egg problem.
 		desc, err := p.getTableDesc(qname)
 		if err != nil {
-			return TableDescriptor{}, err
+			return TableDescriptor{}, roachpb.NewError(err)
 		}
 		if desc == nil {
 			return TableDescriptor{}, roachpb.NewError(tableDoesNotExistError(qname.String()))
@@ -296,9 +296,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 		return *desc, nil
 	}
 
-	tableID, pErr := p.getTableID(qname)
-	if pErr != nil {
-		return TableDescriptor{}, pErr
+	tableID, err := p.getTableID(qname)
+	if err != nil {
+		return TableDescriptor{}, roachpb.NewError(err)
 	}
 
 	var lease *LeaseState
@@ -350,7 +350,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
 		id, err := nameVal.GetInt()
-		return ID(id), roachpb.NewError(err)
+		return ID(id), err
 	}
 
 	gr, err := p.txn.Get(key)

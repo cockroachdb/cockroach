@@ -216,9 +216,10 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	// txn is correctly propagated in an error response.
 	b := &client.Batch{}
 	b.InternalAddRequest(pushReqs...)
-	// !!! is it correct that here we're getting an err instead of a pErr? Will we
-	// get the correct pErr when we transform err to pErr for sending to the
-	// client? Should we do anything about the TODO above?
+	// TODO(tobias): We're getting an err here that will be turned (back) into a
+	// pErr in the caller. Stop using the external RunWithResponse() interface for
+	// running this internal batch. Instead use the DistSender directly, and make
+	// this function return pErr.
 	br, err := ir.store.db.RunWithResponse(b)
 	ir.mu.Lock()
 	for _, intent := range pushIntents {

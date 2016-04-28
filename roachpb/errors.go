@@ -31,6 +31,10 @@ type RetryableTxnError struct {
 	// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
 	// the backoff hint to the client anyway. See #5249
 	Backoff bool
+
+	// TODO(andrei): This is here temporarily for facilitation converting
+	// RetryableTxnError to pErr. Get rid of it afterwards.
+	transaction Transaction
 }
 
 func (e RetryableTxnError) Error() string {
@@ -85,6 +89,22 @@ func NewError(err error) *Error {
 	e := &Error{}
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
+	} else if retErr, ok := err.(RetryableTxnError); ok {
+		// TODO(andrei): constructing an Error from a RetryableError is only needed
+		// in Store.Send(), which runs "internal batches" for pushing other
+		// transactions. It can get a RetryableError which it needs to marhall to
+		// the caller as a pErr. This needs to go away by moving away from using the
+		// external client interface for running these push batches.
+		// It's also needed while the transition from pErr to error is not complete,
+		// because there are some places where we go back and forth between the two
+		// types.
+		e.Message = retErr.message
+		if retErr.Backoff {
+			e.TransactionRestart = TransactionRestart_BACKOFF
+		} else {
+			e.TransactionRestart = TransactionRestart_IMMEDIATE
+		}
+		e.SetTxn(&retErr.transaction)
 	} else {
 		e.setGoError(err)
 	}
@@ -162,13 +182,16 @@ func (e *Error) GoError() error {
 	switch e.TransactionRestart {
 	case TransactionRestart_IMMEDIATE:
 		return RetryableTxnError{
-			message: e.Message,
-			TxnID:   *e.GetTxn().ID}
+			message:     e.Message,
+			TxnID:       *e.GetTxn().ID,
+			transaction: *e.GetTxn(),
+		}
 	case TransactionRestart_BACKOFF:
 		return RetryableTxnError{
-			message: e.Message,
-			TxnID:   *e.GetTxn().ID,
-			Backoff: true}
+			message:     e.Message,
+			TxnID:       *e.GetTxn().ID,
+			transaction: *e.GetTxn(),
+			Backoff:     true}
 	default:
 		return errors.New(e.Message)
 	}

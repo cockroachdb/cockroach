@@ -1695,8 +1695,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
 			err = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
-			// !!! is this correct?
-			pErr = roachpb.NewErrorWithTxn(err, ba.Txn)
+			// TODO(tobias): converting this error (back) into a pErr is janky. See
+			// TODO in processWriteIntentError about returning a pErr.
+			pErr = roachpb.NewError(err)
 			// Preserve the error index.
 			pErr.Index = index
 		}
@@ -1763,8 +1764,27 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now roachpb.Tim
 	})
 	br, err := s.db.RunWithResponse(&b)
 	if err != nil {
-		// !!! is NewError*WithTxn* correct?
-		return nil, roachpb.NewErrorWithTxn(err, txn)
+		// TODO(tobias):
+		// We shouldn't catch an error here (unless it's from the abort cache, in
+		// which case we would not get the crucial information that we've been
+		// aborted; instead we'll go around thinking we're still PENDING,
+		// potentially caught in an infinite loop).  Same issue: we must not used
+		// RunWithResponse on this level - we're trying to do internal kv stuff
+		// through the public interface.  Likely not exercised in tests, so I'd be
+		// ok tackling this separately.
+		//
+		// Scenario:
+		// - we're aborted and don't know it we have a read-write conflict
+		// - the push above fails and we get a WriteIntentError
+		// - we try to update our transaction (right here, and if we don't we might be stuck in a race,
+		// that's why we do this - the txn proto we're using might be outdated)
+		// - query fails because our home range has the abort cache populated we catch
+		// a TransactionAbortedError, but with a pending transaction (since we lose
+		// the original txn, and you just use the txn we had...)
+		//
+		// so something is sketchy here, but it should all resolve nicely when we
+		// don't use s.db for these internal requests any more.
+		return nil, roachpb.NewError(err)
 	}
 	// ID can be nil if no BeginTransaction has been sent yet.
 	if updatedTxn := &br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn; updatedTxn.ID != nil {

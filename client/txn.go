@@ -559,21 +559,17 @@ RetryLoop:
 			break
 		}
 
-		// Make sure the txn record that err carries is for this txn.
-		// We check only when txn.Proto.ID has been initialized after an initial successful send.
-		if retErr, ok := err.(roachpb.RetryableTxnError); ok && txn.Proto.ID != nil {
-			if !uuid.Equal(retErr.TxnID, *txn.Proto.ID) {
-				return util.Errorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
-					retErr, txn.Proto)
-			}
-		}
-
 		if !opt.AutoRetry {
 			break RetryLoop
 		}
 
-		retErr, retryable := err.(roachpb.RetryableTxnError)
-		if retryable {
+		if retErr, retryable := err.(roachpb.RetryableTxnError); retryable {
+			// Make sure the txn record that err carries is for this txn.
+			// We check only when txn.Proto.ID has been initialized after an initial successful send.
+			if txn.Proto.ID != nil && !uuid.Equal(retErr.TxnID, *txn.Proto.ID) {
+				return util.Errorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
+					retErr, txn.Proto)
+			}
 			if !retErr.Backoff {
 				r.Reset()
 			}

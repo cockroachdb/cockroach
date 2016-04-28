@@ -30,7 +30,7 @@ import (
 // Set sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
-func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
+func (p *planner) Set(n *parser.Set) (planNode, error) {
 	// By using QualifiedName.String() here any variables that are keywords will
 	// be double quoted.
 	name := strings.ToUpper(n.Name.String())
@@ -38,16 +38,16 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	case `DATABASE`:
 		dbName, err := p.getStringVal(name, n.Values)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		if len(dbName) != 0 {
 			// Verify database descriptor exists.
-			dbDesc, pErr := p.getDatabaseDesc(dbName)
-			if pErr != nil {
-				return nil, pErr
+			dbDesc, err := p.getDatabaseDesc(dbName)
+			if err != nil {
+				return nil, err
 			}
 			if dbDesc == nil {
-				return nil, roachpb.NewError(databaseDoesNotExistError(dbName))
+				return nil, databaseDoesNotExistError(dbName)
 			}
 		}
 		p.session.Database = dbName
@@ -55,7 +55,7 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 	case `SYNTAX`:
 		s, err := p.getStringVal(name, n.Values)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		switch NormalizeName(s) {
 		case NormalizeName(parser.Modern.String()):
@@ -63,14 +63,14 @@ func (p *planner) Set(n *parser.Set) (planNode, *roachpb.Error) {
 		case NormalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
-			return nil, roachpb.NewUErrorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
+			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)
 		}
 
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
 
 	default:
-		return nil, roachpb.NewUErrorf("unknown variable: %q", name)
+		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
 	return &emptyNode{}, nil
 }

@@ -277,9 +277,9 @@ func (ts *TestServer) WaitForInitialSplits() error {
 	expectedRanges := ExpectedInitialRangeCount()
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
-		rows, pErr := ts.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-		if pErr != nil {
-			return pErr.GoError()
+		rows, err := ts.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		if err != nil {
+			return err
 		}
 		if a, e := len(rows), expectedRanges; a != e {
 			return util.Errorf("had %d ranges at startup, expected %d", a, e)
