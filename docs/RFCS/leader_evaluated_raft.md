@@ -1,5 +1,5 @@
 - Feature Name: leader_evaluated_raft
-- Status: draft
+- Status: in-progress
 - Start Date: 2016-04-19
 - Authors: Tobias Schottdorf
 - RFC PR: #6166
