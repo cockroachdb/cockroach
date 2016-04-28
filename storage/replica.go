@@ -236,6 +236,8 @@ type Replica struct {
 		// or a closed channel. If an error occurs during generation,
 		// this channel may be closed without producing a result.
 		snapshotChan chan raftpb.Snapshot
+		// Whether the Replica is frozen.
+		frozen bool
 	}
 }
 
@@ -288,6 +290,10 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	}
 
 	r.mu.leaderLease, err = loadLeaderLease(r.store.Engine(), desc.RangeID)
+	if err != nil {
+		return err
+	}
+	r.mu.frozen, err = loadFrozenStatus(r.store.Engine(), desc.RangeID)
 	if err != nil {
 		return err
 	}
@@ -423,6 +429,35 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, roachpb.RKeyMin)
+}
+
+func setFrozenStatus(
+	eng engine.Engine, ms *engine.MVCCStats, rangeID roachpb.RangeID, frozen bool,
+) error {
+	var status int64
+	if frozen {
+		status = 1
+	}
+	var val roachpb.Value
+	val.SetInt(status)
+	return engine.MVCCPut(context.Background(), eng, ms,
+		keys.RangeFrozenStatusKey(rangeID), roachpb.ZeroTimestamp, val, nil)
+}
+
+func loadFrozenStatus(eng engine.Engine, rangeID roachpb.RangeID) (bool, error) {
+	val, _, err := engine.MVCCGet(context.Background(), eng, keys.RangeFrozenStatusKey(rangeID),
+		roachpb.ZeroTimestamp, true, nil)
+	if err != nil {
+		return false, err
+	}
+	if val == nil {
+		return false, nil
+	}
+	s, err := val.GetInt()
+	if err != nil {
+		return false, err
+	}
+	return s != 0, nil
 }
 
 func loadLeaderLease(eng engine.Engine, rangeID roachpb.RangeID) (*roachpb.Lease, error) {
@@ -915,7 +950,54 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 // the timestamp cache using the final timestamp of each command.
 func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	r.mu.Lock()
+	if r.mu.frozen {
+		if arg, ok := ba.GetArg(roachpb.ChangeFrozen); ok &&
+			arg.(*roachpb.ChangeFrozenRequest).Frozen {
+			// We're frozen and the batch contains a freeze request, so it's
+			// fair to assume this is the request that froze us. We must make
+			// sure that *all* Replicas have applied this (not only a majority).
+			// TODO(tschottdorf): unintuitively buried here since this is where
+			// we get the "convenient" lock to avoid overhead. Some refactoring
+			// might be in order to move this to a "better" location a few stack
+			// frames up. In particular, we should be able to avoid the panic
+			// but simply return an error to the client (or we risk wedging
+			// ourselves in a bad state while a Replica is offline).
+			waitFor := r.mu.appliedIndex
+			// The defer will run outside of the lock.
+			defer func() {
+				if err := util.RetryForDuration(10*time.Second, func() error {
+					r.mu.Lock()
+					stillFrozen := r.mu.frozen
+					r.mu.Unlock()
+					if !stillFrozen {
+						return nil
+					}
+
+					_, oldestInUse, err := getTruncatableIndexes(r)
+					if err != nil {
+						return err
+					}
+					// TODO(tschottdorf): is this off-by-one? Failing on equality
+					// here stalls since oldestInUse is always >= raftStatus.Applied.
+					if waitFor >= oldestInUse {
+						r.store.stopper.RunAsyncTask(func() {
+							// Give Raft something to do so we commit more log
+							// entries. These are no-ops if we're still frozen
+							// and (at most once) mildly annoying otherwise.
+							_ = r.requestLeaderLease(r.store.Clock().Now())
+						})
+						return util.Errorf("waiting for index %d to be unused "+
+							"(still using %d)", waitFor, oldestInUse)
+					}
+					return nil
+				}); err != nil {
+					panic(err)
+				}
+			}()
+		}
+	}
 	defer r.mu.Unlock()
+
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -1160,9 +1242,19 @@ func (r *Replica) addWriteCmd(
 		endCmdsFunc(br, pErr)
 	}()
 
-	// This replica must have leader lease to process a write.
+	// This replica must have leader lease to process a write, except when it's
+	// an attempt to unfreeze the Range. These are a special case in which any
+	// replica will propose it to get back to an active state.
 	if pErr = r.redirectOnOrAcquireLeaderLease(ctx); pErr != nil {
-		return nil, pErr
+		if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
+			return nil, pErr
+		}
+		// Only continue if the batch appears freezing-related (more focused
+		// checks happen downstream).
+		if _, ok := ba.GetArg(roachpb.ChangeFrozen); !ok {
+			return nil, pErr
+		}
+		pErr = nil
 	}
 
 	// Examine the read and write timestamp caches for preceding
@@ -1555,6 +1647,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	// to update anything or run the command. Simply return a corruption error.
 	r.mu.Lock()
 	oldIndex := r.mu.appliedIndex
+	mayApply := !r.mu.frozen
 	r.mu.Unlock()
 	if oldIndex >= index {
 		return nil, roachpb.NewError(newReplicaCorruptionError(util.Errorf("applied index moved backwards: %d >= %d", oldIndex, index)))
@@ -1562,7 +1655,25 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
-	batch, ms, br, intents, rErr := r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba)
+	var batch engine.Engine
+	var br *roachpb.BatchResponse
+	var ms engine.MVCCStats
+	var intents []intentsWithArg
+	var rErr *roachpb.Error
+
+	if !mayApply {
+		// If it's a freezing-related request and alone in its batch, proceed.
+		if _, ok := ba.GetArg(roachpb.ChangeFrozen); ok && len(ba.Requests) == 1 {
+			mayApply = true
+		}
+	}
+	if mayApply {
+		batch, ms, br, intents, rErr = r.applyRaftCommandInBatch(ctx, idKey,
+			originReplica, ba)
+	} else {
+		batch = r.store.Engine().NewBatch()
+		br, rErr = nil, roachpb.NewError(roachpb.NewRangeFrozenError(*r.Desc()))
+	}
 	defer batch.Close()
 
 	// Advance the last applied index and commit the batch.
@@ -1629,22 +1740,25 @@ func (r *Replica) applyRaftCommandInBatch(
 	}
 
 	for _, union := range ba.Requests {
-		args := union.GetInner()
+		method := union.GetInner().Method()
 
 		// TODO(tschottdorf): shouldn't be in the loop. Currently is because
 		// we haven't cleaned up the timestamp handling fully.
-		if lease, _ := r.getLeaderLease(); args.Method() != roachpb.LeaderLease &&
-			(!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) {
+		lease, _ := r.getLeaderLease()
+		if (!lease.OwnedBy(originReplica.StoreID) || !lease.Covers(ba.Timestamp)) &&
+			method != roachpb.LeaderLease && method != roachpb.ChangeFrozen {
 			// Verify the leader lease is held, unless this command is trying to
-			// obtain it. Any other Raft command has had the leader lease held
-			// by the replica at proposal time, but this may no longer be the case.
-			// Corruption aside, the most likely reason is a leadership change (the
-			// most recent leader assumes responsibility for all past timestamps as
-			// well). In that case, it's not valid to go ahead with the execution:
-			// Writes must be aware of the last time the mutated key was read, and
-			// since reads are served locally by the lease holder without going
-			// through Raft, a read which was not taken into account may have been
-			// served. Hence, we must retry at the current leader.
+			// obtain it or is a freeze change (which can be proposed by any Replica).
+			// Any other Raft command has had the leader lease held by the
+			// replica at proposal time, but this may no longer be the case.
+			// Corruption aside, the most likely reason is a leadership change
+			// (the most recent leader assumes responsibility for all past
+			// timestamps as well). In that case, it's not valid to go ahead
+			// with the execution: Writes must be aware of the last time the
+			// mutated key was read, and since reads are served locally by the
+			// lease holder without going through Raft, a read which was not
+			// taken into account may have been served. Hence, we must retry at
+			// the current leader.
 			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil,
 				roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 		}

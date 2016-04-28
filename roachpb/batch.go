@@ -207,6 +207,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		verifyChecksum     int
 		checkConsistency   int
 		noop               int
+		adminFreeze        int
 	}
 	for _, union := range ba.Requests {
 		switch union.GetInner().(type) {
@@ -262,6 +263,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.checkConsistency++
 		case *NoopRequest:
 			counts.noop++
+		case *ChangeFrozenRequest:
+			counts.adminFreeze++
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
@@ -294,6 +297,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		verifyChecksum     []VerifyChecksumResponse
 		checkConsistency   []CheckConsistencyResponse
 		noop               []NoopResponse
+		adminFreeze        []ChangeFrozenResponse
 	}
 	for i, union := range ba.Requests {
 		var reply Response
@@ -428,6 +432,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.noop = make([]NoopResponse, counts.noop)
 			}
 			reply, bufs.noop = &bufs.noop[0], bufs.noop[1:]
+		case *ChangeFrozenRequest:
+			if bufs.adminFreeze == nil {
+				bufs.adminFreeze = make([]ChangeFrozenResponse, counts.adminFreeze)
+			}
+			reply, bufs.adminFreeze = &bufs.adminFreeze[0], bufs.adminFreeze[1:]
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
