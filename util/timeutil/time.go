@@ -26,20 +26,14 @@ var (
 	nowFunc = time.Now
 )
 
-// SetTimeOffset configures a fixed offset to reported time samples.
-func SetTimeOffset(offset time.Duration) {
-	if offset == 0 {
+func initFakeTime() {
+	if offset := envutil.EnvOrDefaultDuration("simulated_offset", 0); offset == 0 {
 		nowFunc = time.Now
 	} else {
 		nowFunc = func() time.Time {
 			return time.Now().Add(offset)
 		}
 	}
-}
-
-func initFakeTime() {
-	offset := envutil.EnvOrDefaultDuration("simulated_offset", 0)
-	SetTimeOffset(offset)
 }
 
 // Now returns the current local time with an optional offset specified by the
