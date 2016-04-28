@@ -241,8 +241,13 @@ func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleQuit is the shutdown hook. The server is first placed into a
 // draining mode, followed by exit.
+// TODO(tschottdorf,cuongdo): fold this into Drain().
 func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
+	if _, err := s.server.Drain(GracefulDrainModes); err != nil {
+		log.Warning(err)
+	}
+	s.server.stopper.Quiesce()
 	fmt.Fprintln(w, "ok")
 	go func() {
 		time.Sleep(50 * time.Millisecond)
@@ -762,6 +767,30 @@ func (s *adminServer) Cluster(_ context.Context, req *ClusterRequest) (*ClusterR
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 	return &ClusterResponse{ClusterID: clusterID.String()}, nil
+}
+
+func (s *adminServer) Drain(ctx context.Context, req *DrainRequest) (*DrainResponse, error) {
+	on := make([]DrainMode, len(req.On))
+	for i := range req.On {
+		on[i] = DrainMode(req.On[i])
+	}
+	off := make([]DrainMode, len(req.Off))
+	for i := range req.Off {
+		off[i] = DrainMode(req.Off[i])
+	}
+
+	_ = s.server.Undrain(off)
+
+	nowOn, err := s.server.Drain(on)
+	if err != nil {
+		return nil, err
+	}
+
+	nowOnInts := make([]int32, len(nowOn))
+	for i := range nowOn {
+		nowOnInts[i] = int32(nowOn[i])
+	}
+	return &DrainResponse{On: nowOnInts}, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
