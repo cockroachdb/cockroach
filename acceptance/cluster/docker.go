@@ -75,16 +75,16 @@ func (c Container) Name() string {
 	return c.name
 }
 
-func hasImage(l *LocalCluster, name, tag string) bool {
+func hasImage(l *LocalCluster, ref string) bool {
+	name := strings.Split(ref, ":")[0]
 	images, err := l.client.ImageList(context.Background(), types.ImageListOptions{MatchName: name})
 	if err != nil {
 		log.Fatal(err)
 	}
-	nameAndTag := name + ":" + tag
 	for _, image := range images {
 		for _, repoTag := range image.RepoTags {
 			// The Image.RepoTags field contains strings of the form <repo>:<tag>.
-			if nameAndTag == repoTag {
+			if ref == repoTag {
 				return true
 			}
 		}
@@ -97,19 +97,19 @@ func hasImage(l *LocalCluster, name, tag string) bool {
 	return false
 }
 
-func pullImage(l *LocalCluster, options types.ImagePullOptions) error {
+func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) error {
 	// Hack: on CircleCI, docker pulls the image on the first access from an
 	// acceptance test even though that image is already present. So we first
 	// check to see if our image is present in order to avoid this slowness.
-	if hasImage(l, options.ImageID, options.Tag) {
-		log.Infof("ImagePull %s:%s already exists", options.ImageID, options.Tag)
+	if hasImage(l, ref) {
+		log.Infof("ImagePull %s already exists", ref)
 		return nil
 	}
 
-	log.Infof("ImagePull %s:%s starting", options.ImageID, options.Tag)
-	defer log.Infof("ImagePull %s:%s complete", options.ImageID, options.Tag)
+	log.Infof("ImagePull %s starting", ref)
+	defer log.Infof("ImagePull %s complete", ref)
 
-	rc, err := l.client.ImagePull(context.Background(), options, nil)
+	rc, err := l.client.ImagePull(context.Background(), ref, options)
 	if err != nil {
 		return err
 	}
@@ -170,8 +170,7 @@ func maybePanic(err error) {
 // Remove removes the container from docker. It is an error to remove a running
 // container.
 func (c *Container) Remove() error {
-	return c.cluster.client.ContainerRemove(context.Background(), types.ContainerRemoveOptions{
-		ContainerID:   c.id,
+	return c.cluster.client.ContainerRemove(context.Background(), c.id, types.ContainerRemoveOptions{
 		RemoveVolumes: true,
 		Force:         true,
 	})
@@ -256,10 +255,9 @@ func (c *Container) Wait() error {
 
 // Logs outputs the containers logs to the given io.Writer.
 func (c *Container) Logs(w io.Writer) error {
-	rc, err := c.cluster.client.ContainerLogs(context.Background(), types.ContainerLogsOptions{
-		ContainerID: c.id,
-		ShowStdout:  true,
-		ShowStderr:  true,
+	rc, err := c.cluster.client.ContainerLogs(context.Background(), c.id, types.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
 	})
 	if err != nil {
 		return err
@@ -341,12 +339,11 @@ func (cli resilientDockerClient) ContainerCreate(
 					continue
 				}
 				log.Infof("trying to remove %s", c.ID)
-				roptions := types.ContainerRemoveOptions{
-					ContainerID:   c.ID,
+				options := types.ContainerRemoveOptions{
 					RemoveVolumes: true,
 					Force:         true,
 				}
-				if rerr := cli.ContainerRemove(ctx, roptions); rerr != nil {
+				if rerr := cli.ContainerRemove(ctx, c.ID, options); rerr != nil {
 					log.Infof("unable to remove container: %v", rerr)
 					return types.ContainerCreateResponse{}, err
 				}
@@ -360,8 +357,8 @@ func (cli resilientDockerClient) ContainerCreate(
 	return response, err
 }
 
-func (cli resilientDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
-	err := cli.APIClient.ContainerRemove(ctx, options)
+func (cli resilientDockerClient) ContainerRemove(ctx context.Context, container string, options types.ContainerRemoveOptions) error {
+	err := cli.APIClient.ContainerRemove(ctx, container, options)
 
 	if os.Getenv("CIRCLECI") == "true" {
 		// HACK: Removal of docker containers on circleci reports the error:
@@ -449,10 +446,10 @@ func (cli retryingDockerClient) ContainerStart(ctx context.Context, containerID 
 		})
 }
 
-func (cli retryingDockerClient) ContainerRemove(ctx context.Context, options types.ContainerRemoveOptions) error {
+func (cli retryingDockerClient) ContainerRemove(ctx context.Context, container string, options types.ContainerRemoveOptions) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerRemove", "No such container",
 		func(timeoutCtx context.Context) error {
-			return cli.resilientDockerClient.ContainerRemove(timeoutCtx, options)
+			return cli.resilientDockerClient.ContainerRemove(timeoutCtx, container, options)
 		})
 }
 
@@ -489,7 +486,7 @@ func (cli retryingDockerClient) ImageList(
 }
 
 func (cli retryingDockerClient) ImagePull(
-	ctx context.Context, options types.ImagePullOptions, privilegeFunc client.RequestPrivilegeFunc,
+	ctx context.Context, ref string, options types.ImagePullOptions,
 ) (io.ReadCloser, error) {
 	// Image pulling is potentially slow. Make sure the timeout is sufficient.
 	timeout := cli.timeout
@@ -500,7 +497,7 @@ func (cli retryingDockerClient) ImagePull(
 	return ret, retry(ctx, cli.attempts, timeout, "ImagePull", matchNone,
 		func(timeoutCtx context.Context) error {
 			var err error
-			ret, err = cli.resilientDockerClient.ImagePull(timeoutCtx, options, privilegeFunc)
+			ret, err = cli.resilientDockerClient.ImagePull(timeoutCtx, ref, options)
 			_ = ret // silence incorrect unused warning
 			return err
 		})

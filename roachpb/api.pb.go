@@ -1297,6 +1297,10 @@ func init() {
 var _ context.Context
 var _ grpc.ClientConn
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion2
+
 // Client API for Internal service
 
 type InternalClient interface {
@@ -1330,16 +1334,22 @@ func RegisterInternalServer(s *grpc.Server, srv InternalServer) {
 	s.RegisterService(&_Internal_serviceDesc, srv)
 }
 
-func _Internal_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Internal_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BatchRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(InternalServer).Batch(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(InternalServer).Batch(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.roachpb.Internal/Batch",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InternalServer).Batch(ctx, req.(*BatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 var _Internal_serviceDesc = grpc.ServiceDesc{
@@ -1387,16 +1397,22 @@ func RegisterExternalServer(s *grpc.Server, srv ExternalServer) {
 	s.RegisterService(&_External_serviceDesc, srv)
 }
 
-func _External_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _External_Batch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BatchRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(ExternalServer).Batch(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(ExternalServer).Batch(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.roachpb.External/Batch",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExternalServer).Batch(ctx, req.(*BatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 var _External_serviceDesc = grpc.ServiceDesc{
