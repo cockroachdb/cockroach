@@ -17,13 +17,17 @@
 package sql_test
 
 import (
+	dbsql "database/sql"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 )
@@ -346,4 +350,37 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
+}
+
+func TestDropAndCreateTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Skip(`TODO(andrei, dt): Fails with 'table "foo" does not exist'`)
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestDropAndCreateTable")
+	pgURL.Path = "test"
+	defer cleanupFn()
+
+	db, err := dbsql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 20; i++ {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS foo`); err != nil {
+			t.Fatal(err)
+		}
+		//NB: a `time.Sleep(time.Second)` here makes this pass.
+		if _, err := db.Exec(`CREATE TABLE foo (k INT PRIMARY KEY)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO foo VALUES (1), (2), (3)`); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
