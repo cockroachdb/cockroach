@@ -208,6 +208,14 @@ func GetTotalMemory() (int64, error) {
 			}
 			return totalMem, nil
 		}
+		if cgAvlMem > mem.Total {
+			if log.V(1) {
+				log.Infof("available memory from cgroups %s exceeds system memory %s, using system memory",
+					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+			}
+			return totalMem, nil
+		}
+
 		return int64(cgAvlMem), nil
 	}
 	return totalMem, nil
