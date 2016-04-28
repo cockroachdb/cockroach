@@ -1,9 +1,9 @@
 - Feature Name: drain_modes
-- Status: draft
+- Status: completed
 - Start Date: 2016-04-25
 - Authors: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 - RFC PR: #6283
-- Cockroach Issue: (one or more # from the issue tracker)
+- Cockroach Issue:
 
 
 # Summary
