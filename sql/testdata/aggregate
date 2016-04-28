@@ -399,6 +399,13 @@ CREATE TABLE abc (
 statement ok
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 
+# Verify we don't try to apply the single-key optimization to the primary index.
+query ITT
+EXPLAIN SELECT MIN(a) FROM abc
+----
+0 group MIN(a)
+1 scan  abc@primary -
+
 query TRBR
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
 ----
@@ -454,6 +461,17 @@ EXPLAIN SELECT MIN(x) FROM xyz
 ----
 0 group MIN(x)
 1 scan  xyz@xy 1:-
+
+query I
+SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+----
+4
+
+query ITT
+EXPLAIN SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+----
+0 group MIN(x)
+1 scan  xyz@xy 1:/0-/1 1:/4-/5 1:/7-/8
 
 query I
 SELECT MAX(x) FROM xyz

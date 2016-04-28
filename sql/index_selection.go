@@ -219,11 +219,14 @@ func selectIndex(
 	}
 
 	// If we have no filter, we can request a single key in some cases.
-	if noFilter && analyzeOrdering != nil {
+	if noFilter && analyzeOrdering != nil && s.isSecondaryIndex {
 		_, _, singleKey := analyzeOrdering(plan.Ordering())
 		if singleKey {
-			s.spans = s.spans[:1]
-			s.spans[0].count = 1
+			// We only need to retrieve one key, but some spans might contain no
+			// keys so we need to keep all of them.
+			for i := range s.spans {
+				s.spans[i].count = 1
+			}
 		}
 	}
 
@@ -412,8 +415,8 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	}
 
 	if log.V(2) {
-		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d",
-			v.index.Name, weight, v.reverse, fwdIndexOrdering)
+		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
+			v.index.Name, weight, v.reverse, match)
 	}
 }
 
