@@ -1,0 +1,66 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Radu Berinde (radu@cockroachlabs.com)
+
+syntax = "proto2";
+package cockroach.sql;
+option go_package = "sql";
+
+import "cockroach/roachpb/data.proto";
+import "cockroach/sql/structured.proto";
+import weak "gogoproto/gogo.proto";
+
+message SQLExpression {
+  // TODO(radu): TBD how this will be used
+  optional string version = 1 [(gogoproto.nullable) = false];
+
+  // SQL expressions are passed as a string, with ValArgs ($0, $1, ..) used for
+  // "input" variables.
+  optional string expr = 2 [(gogoproto.nullable) = false];
+}
+
+message TableReaderSpan {
+  // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
+  // KVs. The span should be described as starting and ending lists of values
+  // for a prefix of the index columns, along with inclusive/exclusive flags.
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  // TODO(radu): support the single-key optimization (span.count)
+}
+
+// TableReaderSpec is the specification for a table reader. A table reader
+// performs KV operations to retrieve rows for a table and outputs the desired
+// columns of the rows that pass a filter expression.
+message TableReaderSpec {
+  optional TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
+  // i.e. table.indexes[index_idx-1]
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  optional bool reverse = 3 [(gogoproto.nullable) = false];
+  repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
+
+  // The filter expression references the columns in the table (table.columns)
+  // via $0, $1, etc. If a secondary index is used, the columns that are not
+  // available as part of the index cannot be referenced.
+  optional SQLExpression filter = 5 [(gogoproto.nullable) = false];
+
+  // The table reader will only produce values for these columns, referenced by
+  // their indices in table.columns.
+  repeated uint32 output_columns = 6;
+}
+
+message FlowSpec {
+  // TODO(radu): for now a flow is just a table reader.
+  optional TableReaderSpec reader = 2;
+}

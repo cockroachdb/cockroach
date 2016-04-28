@@ -2,24 +2,6 @@
 // source: cockroach/sql/privilege.proto
 // DO NOT EDIT!
 
-/*
-	Package sql is a generated protocol buffer package.
-
-	It is generated from these files:
-		cockroach/sql/privilege.proto
-		cockroach/sql/structured.proto
-
-	It has these top-level messages:
-		UserPrivileges
-		PrivilegeDescriptor
-		ColumnType
-		ColumnDescriptor
-		IndexDescriptor
-		DescriptorMutation
-		TableDescriptor
-		DatabaseDescriptor
-		Descriptor
-*/
 package sql
 
 import proto "github.com/gogo/protobuf/proto"
@@ -34,10 +16,6 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
 
 // UserPrivileges describes the list of privileges available for a given user.
 type UserPrivileges struct {
