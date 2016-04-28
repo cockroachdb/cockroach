@@ -525,6 +525,7 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 			endDone = &trueStartDone
 		}
 
+	exprLoop:
 		for _, e := range andExprs {
 			if c, ok := e.(*parser.ComparisonExpr); ok {
 				var tupleMap []int
@@ -532,6 +533,10 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 				if ok, colIdx := getQValColIdx(c.Left); ok && v.desc.Columns[colIdx].ID != colID {
 					// This expression refers to a column other than the one we're
 					// looking for.
+					continue
+				}
+
+				if _, ok := c.Right.(parser.Datum); !ok {
 					continue
 				}
 
@@ -563,14 +568,30 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 					}
 					// Skip all the next columns covered by this tuple.
 					i += (len(tupleMap) - 1)
-				}
-
-				if _, ok := c.Right.(parser.Datum); !ok {
-					continue
-				}
-				if tupleMap != nil && c.Operator != parser.In {
-					// We can only handle tuples in IN expressions.
-					continue
+					if c.Operator != parser.In {
+						// Make sure all columns specified in the tuple are in the index.
+						// TODO(mjibson): support prefixes: (a,b,c) > (1,2,3) -> (a,b) >= (1,2)
+						if len(t.Exprs) > len(tupleMap) {
+							continue
+						}
+						// Since tuples comparison is lexicographic, we only support it if the tuple
+						// is in the same order as the index.
+						for i, v := range tupleMap {
+							if i != v {
+								continue exprLoop
+							}
+						}
+						// Due to the implementation of the encoding functions, it is currently
+						// difficult to support indexes of varying directions with tuples. For now,
+						// restrict them to a single direction. See #6346.
+						dir := v.index.ColumnDirections[i]
+						for _, ti := range tupleMap {
+							if dir != v.index.ColumnDirections[ti] {
+								continue exprLoop
+							}
+						}
+					}
+					constraint.tupleMap = tupleMap
 				}
 
 				preStart := *startExpr
@@ -613,11 +634,9 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 
 					if !*startDone && (*startExpr == nil || (*startExpr).Operator != parser.EQ) {
 						*startExpr = c
-						constraint.tupleMap = tupleMap
 					}
 					if !*endDone && (*endExpr == nil || (*endExpr).Operator != parser.EQ) {
 						*endExpr = c
-						constraint.tupleMap = tupleMap
 					}
 				case parser.GE:
 					if !*startDone && *startExpr == nil {
@@ -1173,14 +1192,11 @@ func makeSpansForIndexConstraints(constraints indexConstraints, tableID ID,
 		lastEnd := (c.end != nil) &&
 			(i+1 == len(constraints) || constraints[i+1].end == nil)
 
-		// IN is handled separately, since it can affect multiple columns.
+		// IN is handled separately.
 		if (c.start != nil && c.start.Operator == parser.In) ||
 			(c.end != nil && c.end.Operator == parser.In) {
 			resultSpans = applyInConstraint(resultSpans, c, colIdx, index, lastEnd)
 		} else {
-			if c.numColumns() != 1 {
-				panic(fmt.Sprintf("non-IN constraint applies to %d columns", c.numColumns()))
-			}
 			dir, err := index.ColumnDirections[colIdx].toEncodingDirection()
 			if err != nil {
 				panic(err)

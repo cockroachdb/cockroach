@@ -294,12 +294,17 @@ func TestMakeConstraints(t *testing.T) {
 			`b`, `[b >= 10, b <= 20] OR [b >= 1, b <= 9]`},
 		{`(a = 1 AND b >= 10 AND b <= 20) OR (a = 2 AND b >= 1 AND b <= 9)`,
 			`a,b`, `[a = 1, b >= 10, b <= 20] OR [a = 2, b >= 1, b <= 9]`},
+
+		{`(a, b) >= (1, 4)`, `a,b`, `[(a, b) >= (1, 4)]`},
+		{`(a, b) >= (1, 4)`, `a`, ``},
+		{`(a, b) >= (1, 4)`, `b`, ``},
+		{`(b, a) >= (1, 4)`, `a,b`, ``},
 	}
 	for _, d := range testData {
 		desc, index := makeTestIndexFromStr(t, d.columns)
 		constraints, _ := makeConstraints(t, d.expr, desc, index)
 		if s := constraints.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
 		}
 	}
 }
@@ -471,6 +476,13 @@ func TestMakeSpans(t *testing.T) {
 		{fmt.Sprintf(`a = %d`, math.MinInt64), `a`,
 			`/-9223372036854775808-/-9223372036854775807`,
 			`/-9223372036854775808-/<util/encoding/encoding.go: varint 9223372036854775808 overflows int64>`},
+
+		{`(a, b) >= (1, 4)`, `a,b`, `/1/4-`, `-/1/3`},
+		{`(a, b) > (1, 4)`, `a,b`, `/1/5-`, `-/1/4`},
+		{`(a, b) < (1, 4)`, `a,b`, `/#-/1/4`, `/1/3-/#`},
+		{`(a, b) <= (1, 4)`, `a,b`, `/#-/1/5`, `/1/4-/#`},
+		{`(a, b) = (1, 4)`, `a,b`, `/1/4-/1/5`, `/1/4-/1/3`},
+		{`(a, b) != (1, 4)`, `a,b`, `/#-`, `-/#`},
 	}
 	for _, d := range testData {
 		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
@@ -514,6 +526,11 @@ func TestMakeSpans(t *testing.T) {
 		{`i = E'\xaa'`, `i-`,
 			fmt.Sprintf("raw:%c%c\xff\xfe-%c%c\xff\xff",
 				encoding.BytesDescMarker, ^byte(0xaa), encoding.BytesDescMarker, ^byte(0xaa))},
+
+		// Ensure tuples with differing index directions aren't constrained.
+		// TODO(mjibson): fix this, see #6346
+		{`(a, b) >= (1, 4)`, `a-,b`, `-`},
+		{`(a, b) >= (1, 4)`, `a,b-`, `-`},
 	}
 	for _, d := range testData2 {
 		desc, index := makeTestIndexFromStr(t, d.columns)
