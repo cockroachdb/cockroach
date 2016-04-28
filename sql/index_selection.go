@@ -415,8 +415,8 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	}
 
 	if log.V(2) {
-		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v index=%d",
-			v.index.Name, weight, v.reverse, fwdIndexOrdering)
+		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
+			v.index.Name, weight, v.reverse, match)
 	}
 }
 
