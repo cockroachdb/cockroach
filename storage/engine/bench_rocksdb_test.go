@@ -160,6 +160,22 @@ func BenchmarkMVCCPut10000_RocksDB(b *testing.B) {
 	runMVCCPut(setupMVCCInMemRocksDB, 10000, b)
 }
 
+func BenchmarkMVCCBlindPut10_RocksDB(b *testing.B) {
+	runMVCCBlindPut(setupMVCCInMemRocksDB, 10, b)
+}
+
+func BenchmarkMVCCBlindPut100_RocksDB(b *testing.B) {
+	runMVCCBlindPut(setupMVCCInMemRocksDB, 100, b)
+}
+
+func BenchmarkMVCCBlindPut1000_RocksDB(b *testing.B) {
+	runMVCCBlindPut(setupMVCCInMemRocksDB, 1000, b)
+}
+
+func BenchmarkMVCCBlindPut10000_RocksDB(b *testing.B) {
+	runMVCCBlindPut(setupMVCCInMemRocksDB, 10000, b)
+}
+
 func BenchmarkMVCCConditionalPutCreate10_RocksDB(b *testing.B) {
 	runMVCCConditionalPut(setupMVCCInMemRocksDB, 10, false, b)
 }
@@ -191,6 +207,23 @@ func BenchmarkMVCCConditionalPutReplace1000_RocksDB(b *testing.B) {
 func BenchmarkMVCCConditionalPutReplace10000_RocksDB(b *testing.B) {
 	runMVCCConditionalPut(setupMVCCInMemRocksDB, 10000, true, b)
 }
+
+func BenchmarkMVCCBlindConditionalPut10_RocksDB(b *testing.B) {
+	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 10, b)
+}
+
+func BenchmarkMVCCBlindConditionalPut100_RocksDB(b *testing.B) {
+	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 100, b)
+}
+
+func BenchmarkMVCCBlindConditionalPut1000_RocksDB(b *testing.B) {
+	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 1000, b)
+}
+
+func BenchmarkMVCCBlindConditionalPut10000_RocksDB(b *testing.B) {
+	runMVCCBlindConditionalPut(setupMVCCInMemRocksDB, 10000, b)
+}
+
 func BenchmarkMVCCBatch1Put10_RocksDB(b *testing.B) {
 	runMVCCBatchPut(setupMVCCInMemRocksDB, 10, 1, b)
 }
