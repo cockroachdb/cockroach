@@ -463,7 +463,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 				return nil, err
 			}
 			if !isDefaultNull {
-				if err := scanner.Scan(row, defaultCol, &col.Default); err != nil {
+				if err := scanner.Scan(row, defaultCol, &col.DefaultValue); err != nil {
 					return nil, err
 				}
 			}
