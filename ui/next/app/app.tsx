@@ -57,6 +57,7 @@ import thunk from "redux-thunk";
 import nodesReducer from "./redux/nodes";
 import uiReducer from "./redux/ui";
 import metricsReducer from "./redux/metrics";
+import databaseListReducer from "./redux/databases";
 
 import Layout from "./containers/layout";
 import { ClusterMain, ClusterTitle } from "./containers/cluster";
@@ -75,6 +76,7 @@ const store = createStore(
     nodes: nodesReducer,
     ui: uiReducer,
     metrics: metricsReducer,
+    databaseList: databaseListReducer,
   }),
   compose(
     applyMiddleware(thunk),

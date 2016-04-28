@@ -50,7 +50,7 @@ jspm.installed: npm.installed
 	jspm install
 	touch $@
 
-PBJS_ARGS = --path ../../../ ../../server/status/status.proto ../../ts/timeseries.proto
+PBJS_ARGS = --path ../../../ ../../server/status/status.proto ../../ts/timeseries.proto ../../server/admin.proto
 
 app/js/protos.js: npm.installed
 	pbjs -t commonjs $(PBJS_ARGS) > $@
