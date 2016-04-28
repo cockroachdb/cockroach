@@ -26,8 +26,8 @@ module Models {
      * Source message = "Addr".
      */
     export interface Addr {
-      network: string;
-      address: string;
+      network_field: string;
+      address_field: string;
     }
 
     /**
@@ -62,12 +62,12 @@ module Models {
      * build/info.proto
      ****************************/
     export interface BuildInfo {
-      goVersion: string;
+      go_version: string;
       tag: string;
       time: string;
-      deps: string;
+      dependencies: string;
       platform: string;
-      cgoCompiler: string;
+      cgo_compiler: string;
     }
 
     /*****************************

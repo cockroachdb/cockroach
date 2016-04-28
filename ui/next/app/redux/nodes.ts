@@ -11,6 +11,8 @@ import { Action, PayloadAction } from "../interfaces/action";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
 import "whatwg-fetch";
 
+import * as protos from "lib/protos";
+
 const REQUEST = "cockroachui/nodes/REQUEST";
 const RECEIVE = "cockroachui/nodes/RECEIVE";
 const ERROR = "cockroachui/nodes/ERROR";
@@ -97,7 +99,7 @@ export function receiveNodes(statuses: NodeStatus[]): PayloadAction<NodeStatus[]
   };
 }
 
-/** 
+/**
  * errorNodes indicates that an error occurred while fetching node status.
  *
  * @param error Error that occurred while fetching.
@@ -109,7 +111,7 @@ export function errorNodes(error: Error): PayloadAction<Error> {
   };
 }
 
-/** 
+/**
  * invalidateNodes will invalidate the currently stored node status results.
  */
 export function invalidateNodes(): Action {
@@ -144,18 +146,12 @@ export function refreshNodes() {
       return response.json();
     }).then((json: any) => {
       // Extract the result, an array of NodeStatus objects.
-      let { d: result }: { d: NodeStatus[] } = json;
-
+      let { d: jsonResult }: { d: any[] } = json;
       // Roll up store status metrics, additively, on each node status.
-      result.forEach((ns: NodeStatus) => {
-        // store_statuses will be null if the associated node has no
-        // bootstrapped stores; this causes significant null-handling
-        // problems in code. Convert "null" or "undefined" to an empty
-        // object.
-        if (!_.isObject(ns.store_statuses)) {
-          ns.store_statuses = {};
-        }
+      let result = _.map(jsonResult, (nsObj: any) => {
+        let ns = new protos.cockroach.server.status.NodeStatus(nsObj);
         RollupStoreMetrics(ns);
+        return ns;
       });
 
       // Dispatch the processed results to the store.

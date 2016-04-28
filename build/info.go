@@ -50,11 +50,11 @@ func (b Info) Short() string {
 // GetInfo ...
 func GetInfo() Info {
 	return Info{
-		GoVersion:   runtime.Version(),
-		Tag:         tag,
-		Time:        time,
-		Deps:        deps,
-		CgoCompiler: cgoCompiler,
-		Platform:    platform,
+		GoVersion:    runtime.Version(),
+		Tag:          tag,
+		Time:         time,
+		Dependencies: deps,
+		CgoCompiler:  cgoCompiler,
+		Platform:     platform,
 	}
 }

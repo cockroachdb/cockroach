@@ -1,5 +1,9 @@
 import * as _ from "lodash";
-import { NodeStatus, StatusMetrics } from "../interfaces/proto";
+
+import * as protos from "lib/protos";
+
+type NodeStatus = cockroach.server.status.NodeStatus;
+type StatusMetrics = cockroach.ProtoBufMap<string, number>;
 
 /**
  * AccumulateMetrics is a convenience function which accumulates the values
@@ -9,11 +13,11 @@ import { NodeStatus, StatusMetrics } from "../interfaces/proto";
  */
 export function AccumulateMetrics(dest: StatusMetrics, ...srcs: StatusMetrics[]): void {
   srcs.forEach((s: StatusMetrics) => {
-    _.forEach(s, (val: number, key: string) => {
-      if (_.isUndefined(dest[key])) {
-        dest[key] = val;
+    s.forEach((val: number, key: string) => {
+      if (dest.has(key)) {
+        dest.set(key, dest.get(key) + val);
       } else {
-        dest[key] += val;
+        dest.set(key, val);
       }
     });
   });
@@ -63,4 +67,4 @@ export namespace MetricConstants {
   export var rss: string = "sys.rss";
 }
 
-export { NodeStatus, StatusMetrics} from "../interfaces/proto";
+export { NodeStatus };

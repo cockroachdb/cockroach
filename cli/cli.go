@@ -47,7 +47,7 @@ Output build version information.
 		fmt.Fprintf(tw, "C Compiler:  %s\n", info.CgoCompiler)
 		if versionIncludesDeps {
 			fmt.Fprintf(tw, "Build Deps:\n\t%s\n",
-				strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
+				strings.Replace(strings.Replace(info.Dependencies, " ", "\n\t", -1), ":", "\t", -1))
 		}
 		_ = tw.Flush()
 	},

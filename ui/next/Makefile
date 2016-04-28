@@ -19,7 +19,7 @@
 SHELL         := /bin/bash
 
 # Update the path to prefer binstubs over globals
-PATH          := ./node_modules/.bin:$(PATH)
+PATH          := $(shell npm bin):$(PATH)
 
 NODE_MODULES  := node_modules
 JSPM_PACKAGES := jspm_packages
@@ -50,8 +50,18 @@ jspm.installed: npm.installed
 	jspm install
 	touch $@
 
+PBJS_ARGS = --path ../../../ ../../server/status/status.proto
+
+lib/protos/protos.js: npm.installed
+	pbjs -t commonjs $(PBJS_ARGS) > $@
+
+lib/protos/protos.json: npm.installed
+	pbjs $(PBJS_ARGS) > $@
+
+app/interfaces/protos.d.ts: lib/protos/protos.json
+	proto2ts --file lib/protos/protos.json > $@
+
 .PHONY: test
-test: PATH := ../node_modules/.bin:$(PATH)
-test:
+test: npm.installed
 # Execute in /app directory, so that ts-node can pick up tsconfig.json.
 	cd app && mocha '**/*.spec.ts*' --require ts-node/register
