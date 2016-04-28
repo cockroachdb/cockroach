@@ -31,6 +31,10 @@ type RetryableTxnError struct {
 	// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
 	// the backoff hint to the client anyway. See #5249
 	Backoff bool
+
+	// TODO(andrei): This is here temporarily for facilitation converting
+	// RetryableTxnError to pErr. Get rid of it afterwards.
+	transaction Transaction
 }
 
 func (e RetryableTxnError) Error() string {
@@ -85,6 +89,11 @@ func NewError(err error) *Error {
 	e := &Error{}
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
+	} else if retErr, ok := err.(RetryableTxnError); ok {
+		e.Message = retErr.message
+		// The IMMEDIATE value is bogus, we've lost track of immediate vs backoff.
+		e.TransactionRestart = TransactionRestart_IMMEDIATE
+		e.SetTxn(&retErr.transaction)
 	} else {
 		e.setGoError(err)
 	}
@@ -162,13 +171,16 @@ func (e *Error) GoError() error {
 	switch e.TransactionRestart {
 	case TransactionRestart_IMMEDIATE:
 		return RetryableTxnError{
-			message: e.Message,
-			TxnID:   *e.GetTxn().ID}
+			message:     e.Message,
+			TxnID:       *e.GetTxn().ID,
+			transaction: *e.GetTxn(),
+		}
 	case TransactionRestart_BACKOFF:
 		return RetryableTxnError{
-			message: e.Message,
-			TxnID:   *e.GetTxn().ID,
-			Backoff: true}
+			message:     e.Message,
+			TxnID:       *e.GetTxn().ID,
+			transaction: *e.GetTxn(),
+			Backoff:     true}
 	default:
 		return errors.New(e.Message)
 	}

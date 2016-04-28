@@ -218,7 +218,9 @@ func (ir *intentResolver) maybePushTransactions(ctx context.Context, intents []r
 	b.InternalAddRequest(pushReqs...)
 	// !!! is it correct that here we're getting an err instead of a pErr? Will we
 	// get the correct pErr when we transform err to pErr for sending to the
-	// client? Should we do anything about the TODO above?
+	// client? Should we do anything about the TODO above? I think it all works
+	// because store.Send() has a defer() which sets the txn on the returned
+	// error.
 	br, err := ir.store.db.RunWithResponse(b)
 	ir.mu.Lock()
 	for _, intent := range pushIntents {

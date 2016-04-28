@@ -1696,7 +1696,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			h.Timestamp.Forward(now)
 			err = s.intentResolver.processWriteIntentError(ctx, *wiErr, rng, args, h, pushType)
 			// !!! is this correct?
-			pErr = roachpb.NewErrorWithTxn(err, ba.Txn)
+			pErr = roachpb.NewError(err)
 			// Preserve the error index.
 			pErr.Index = index
 		}

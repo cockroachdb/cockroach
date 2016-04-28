@@ -537,7 +537,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *TableDetailsRequest
 		var iexecutor sql.InternalExecutor
 		var tableSpan roachpb.Span
 		if err := s.db.Txn(func(txn *client.Txn) error {
-			var pErr *roachpb.Error
+			var err error
 			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDbName, escTableName)
 			return err
 		}); err != nil {
