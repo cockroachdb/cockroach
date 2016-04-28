@@ -773,7 +773,7 @@ func TestTxnDBLostUpdateAnomaly_Delete(t *testing.T) {
 	// I1(A) C1 R2(A) D3(A) D3(B) W2(B-A) C3 C2
 
 	// When serializable, B can't exceed A.
-	txn1 := "I(A) C"
+	txn1 := "R(A) I(A) C"
 	txn2 := "R(A) W(B,A) C"
 	txn3 := "D(A) D(B) C"
 	verify := &verifier{
@@ -804,7 +804,7 @@ func TestTxnDBLostUpdateAnomaly_DeleteRange(t *testing.T) {
 	t.Skip("TODO(tschottdorf): see #6240")
 
 	// When serializable, B can't exceed A.
-	txn1 := "I(A) C"
+	txn1 := "R(A) I(A) C"
 	txn2 := "R(A) W(B,A) C"
 	txn3 := "DR(A-C) C"
 	verify := &verifier{
