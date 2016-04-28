@@ -47,7 +47,7 @@ func (b Info) Short() string {
 	return fmt.Sprintf("CockroachDB %s (%s, built %s, %s)", b.Tag, b.Platform, b.Time, b.GoVersion)
 }
 
-// GetInfo ...
+// GetInfo returns an Info struct populated with the build information.
 func GetInfo() Info {
 	return Info{
 		GoVersion:   runtime.Version(),

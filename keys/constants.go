@@ -47,7 +47,8 @@ var (
 	// transactions, such as range metadata, range-spanning binary tree
 	// node pointers, and message queues.
 	localPrefix = []byte("\x01")
-	// LocalMax is the end of the local key range.
+	// LocalMax is the end of the local key range. It is itself a global
+	// key.
 	LocalMax = roachpb.Key("\x02")
 
 	// localSuffixLength specifies the length in bytes of all local
@@ -87,6 +88,8 @@ var (
 	// abort cache protects a transaction from re-reading its own intents
 	// after it's been aborted.
 	LocalAbortCacheSuffix = []byte("abc-")
+	// localRangeFrozenStatusSuffix is the suffix for a frozen status.
+	localRangeFrozenStatusSuffix = []byte("fzn-")
 	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
 	localRaftTombstoneSuffix = []byte("rftb")
 	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
