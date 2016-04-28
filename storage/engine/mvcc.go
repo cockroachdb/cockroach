@@ -673,8 +673,15 @@ func MVCCGetAsTxn(
 //    that is the usual contribution of the meta key). The value size returned
 //    will be zero.
 // The passed in MVCCMetadata must not be nil.
+//
+// If the supplied iterator is nil, no seek operation is performed. This is
+// used by the Blind{Put,ConditionalPut} operations to avoid seeking when the
+// metadata is known not to exist.
 func mvccGetMetadata(iter Iterator, metaKey MVCCKey,
 	meta *MVCCMetadata) (ok bool, keyBytes, valBytes int64, err error) {
+	if iter == nil {
+		return false, 0, 0, nil
+	}
 	iter.Seek(metaKey)
 	if !iter.Valid() {
 		return false, 0, 0, nil
@@ -918,6 +925,22 @@ func MVCCPut(
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
+}
+
+// MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
+// of the semantics. MVCCBlindPut skips retrieving the existing metadata for
+// the key requiring the caller to guarantee no versions for the key currently
+// exist.
+func MVCCBlindPut(
+	ctx context.Context,
+	engine Engine,
+	ms *MVCCStats,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	value roachpb.Value,
+	txn *roachpb.Transaction,
+) error {
+	return mvccPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, txn, nil /* valueFn */)
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
@@ -1227,6 +1250,38 @@ func MVCCConditionalPut(
 	iter := engine.NewIterator(key)
 	defer iter.Close()
 
+	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, txn)
+}
+
+// MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
+// MVCCConditionalPut comments for details of the
+// semantics. MVCCBlindConditionalPut skips retrieving the existing metadata
+// for the key requiring the caller to guarantee no versions for the key
+// currently exist.
+func MVCCBlindConditionalPut(
+	ctx context.Context,
+	engine Engine,
+	ms *MVCCStats,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	value roachpb.Value,
+	expVal *roachpb.Value,
+	txn *roachpb.Transaction,
+) error {
+	return mvccConditionalPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, expVal, txn)
+}
+
+func mvccConditionalPutUsingIter(
+	ctx context.Context,
+	engine Engine,
+	iter Iterator,
+	ms *MVCCStats,
+	key roachpb.Key,
+	timestamp roachpb.Timestamp,
+	value roachpb.Value,
+	expVal *roachpb.Value,
+	txn *roachpb.Transaction,
+) error {
 	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(existVal *roachpb.Value) ([]byte, error) {
 		if expValPresent, existValPresent := expVal != nil, existVal != nil; expValPresent && existValPresent {
 			// Every type flows through here, so we can't use the typed getters.
