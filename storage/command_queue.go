@@ -18,6 +18,7 @@ package storage
 
 import (
 	"container/heap"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -49,6 +50,8 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
+	// TODO(peter): Use an interval.Tree directly. There is no need for keeping
+	// the LRU list used by the cache.
 	cache     *cache.IntervalCache
 	idAlloc   int64
 	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait.
@@ -58,7 +61,15 @@ type CommandQueue struct {
 type cmd struct {
 	ID       int64
 	readOnly bool
+	expanded bool              // have the children been added
 	pending  []*sync.WaitGroup // pending commands gated on cmd.
+	children []cmdEntry
+}
+
+type cmdEntry struct {
+	key   cache.IntervalKey
+	value cmd
+	entry cache.Entry
 }
 
 // NewCommandQueue returns a new command queue.
@@ -81,6 +92,17 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 	}
 }
 
+func prepareSpans(spans ...roachpb.Span) {
+	for i, span := range spans {
+		// This gives us a memory-efficient end key if end is empty.
+		if len(span.EndKey) == 0 {
+			span.EndKey = span.Key.Next()
+			span.Key = span.EndKey[:len(span.Key)]
+			spans[i] = span
+		}
+	}
+}
+
 // GetWait initializes the supplied wait group with the number of executing
 // commands which overlap the specified key ranges. If an end key is empty, it
 // only affects the start key. The caller should call wg.Wait() to wait for
@@ -88,12 +110,13 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 // call Add() to add the keys to the command queue. readOnly is true if the
 // requester is a read-only command; false for read-write.
 func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
-	for _, span := range spans {
-		// This gives us a memory-efficient end key if end is empty.
+	prepareSpans(spans...)
+
+	for i := 0; i < len(spans); i++ {
+		span := spans[i]
 		start, end := span.Key, span.EndKey
-		if len(end) == 0 {
-			end = start.Next()
-			start = end[:len(start)]
+		if end == nil {
+			panic(fmt.Sprintf("%d: unexpected nil EndKey: %s", i, span))
 		}
 		newCmdRange := interval.Range{
 			Start: interval.Comparable(start),
@@ -104,6 +127,27 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			// If both commands are read-only, there are no dependencies between them,
 			// so these can be filtered out of the overlapping commands.
 			overlaps = filterReadWrite(overlaps)
+		}
+
+		// Check to see if any of the overlapping entries are "covering"
+		// entries. If we encounter a covering entry, we remove it from the
+		// interval tree and add all of its children.
+		restart := false
+		for _, o := range overlaps {
+			cmd := o.Value.(*cmd)
+			if !cmd.expanded && len(cmd.children) != 0 {
+				restart = true
+				cmd.expanded = true
+				for i := range cmd.children {
+					child := &cmd.children[i]
+					cq.cache.AddEntry(&child.entry)
+				}
+				cq.cache.Del(o.Key)
+			}
+		}
+		if restart {
+			i--
+			continue
 		}
 
 		// Sort overlapping commands by command ID and iterate from latest to earliest,
@@ -293,31 +337,56 @@ func (o *overlapHeap) PopOverlap() cache.Overlap {
 //
 // Add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through GetWait().
-func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} {
-	r := make([]interface{}, 0, len(spans))
-	for _, span := range spans {
-		start, end := span.Key, span.EndKey
-		if len(end) == 0 {
-			end = start.Next()
-			start = end[:len(start)]
+func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) interface{} {
+	prepareSpans(spans...)
+
+	// Compute the min and max key that covers all of the spans.
+	minKey, maxKey := spans[0].Key, spans[0].EndKey
+	for i := 1; i < len(spans); i++ {
+		start, end := spans[i].Key, spans[i].EndKey
+		if minKey.Compare(start) > 0 {
+			minKey = start
 		}
-		alloc := struct {
-			key   cache.IntervalKey
-			value cmd
-			entry cache.Entry
-		}{
-			key: cq.cache.MakeKey(start, end),
-			value: cmd{
+		if maxKey.Compare(end) < 0 {
+			maxKey = end
+		}
+	}
+
+	numEntries := 1
+	if len(spans) > 1 {
+		numEntries += len(spans)
+	}
+	entries := make([]cmdEntry, numEntries)
+
+	// Create the covering entry.
+	entry := &entries[0]
+	entry.key = cq.cache.MakeKey(minKey, maxKey)
+	entry.value = cmd{
+		ID:       cq.nextID(),
+		readOnly: readOnly,
+		expanded: false,
+	}
+	entry.entry.Key = &entry.key
+	entry.entry.Value = &entry.value
+
+	if len(spans) > 1 {
+		// Populate the covering entry's children.
+		entry.value.children = entries[1:]
+		for i, span := range spans {
+			child := &entry.value.children[i]
+			child.key = cq.cache.MakeKey(span.Key, span.EndKey)
+			child.value = cmd{
 				ID:       cq.nextID(),
 				readOnly: readOnly,
-			},
+				expanded: true,
+			}
+			child.entry.Key = &child.key
+			child.entry.Value = &child.value
 		}
-		alloc.entry.Key = &alloc.key
-		alloc.entry.Value = &alloc.value
-		cq.cache.AddEntry(&alloc.entry)
-		r = append(r, &alloc.key)
 	}
-	return r
+
+	cq.cache.AddEntry(&entry.entry)
+	return entry
 }
 
 // Remove is invoked to signal that the command associated with the
@@ -329,9 +398,18 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} 
 // the Raft log and applied to the underlying state machine. Similarly,
 // Remove is invoked after a read-only command has been executed
 // against the underlying state machine.
-func (cq *CommandQueue) Remove(keys []interface{}) {
-	for _, k := range keys {
-		cq.cache.Del(k)
+func (cq *CommandQueue) Remove(key interface{}) {
+	if key == nil {
+		return
+	}
+
+	entry := key.(*cmdEntry)
+	if !entry.value.expanded {
+		cq.cache.Del(&entry.key)
+	} else {
+		for _, child := range entry.value.children {
+			cq.cache.Del(&child.key)
+		}
 	}
 }
 
