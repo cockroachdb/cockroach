@@ -294,28 +294,30 @@ func (o *overlapHeap) PopOverlap() cache.Overlap {
 // Add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through GetWait().
 func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} {
-	r := make([]interface{}, 0, len(spans))
-	for _, span := range spans {
+	type entry struct {
+		key   cache.IntervalKey
+		value cmd
+		entry cache.Entry
+	}
+	buf := make([]entry, len(spans))
+	r := make([]interface{}, len(spans))
+
+	for i, span := range spans {
 		start, end := span.Key, span.EndKey
 		if len(end) == 0 {
 			end = start.Next()
 			start = end[:len(start)]
 		}
-		alloc := struct {
-			key   cache.IntervalKey
-			value cmd
-			entry cache.Entry
-		}{
-			key: cq.cache.MakeKey(start, end),
-			value: cmd{
-				ID:       cq.nextID(),
-				readOnly: readOnly,
-			},
+		alloc := &buf[i]
+		alloc.key = cq.cache.MakeKey(start, end)
+		alloc.value = cmd{
+			ID:       cq.nextID(),
+			readOnly: readOnly,
 		}
 		alloc.entry.Key = &alloc.key
 		alloc.entry.Value = &alloc.value
 		cq.cache.AddEntry(&alloc.entry)
-		r = append(r, &alloc.key)
+		r[i] = &alloc.key
 	}
 	return r
 }
