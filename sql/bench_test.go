@@ -21,6 +21,8 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	_ "github.com/cockroachdb/pq"
 )
@@ -817,4 +820,75 @@ func BenchmarkTrackChoices100_Postgres(b *testing.B) {
 
 func BenchmarkTrackChoices1000_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *sql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
+}
+
+func runBenchmarkInsertDistinct(b *testing.B, db *sql.DB, numUsers int) {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.insert_distinct`); err != nil {
+		b.Fatal(err)
+	}
+	const schema = `
+CREATE TABLE bench.insert_distinct (
+  articleID INT,
+  userID INT,
+  uniqueID INT DEFAULT unique_rowid(),
+  PRIMARY KEY (articleID, userID, uniqueID))
+`
+	if _, err := db.Exec(schema); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	var wg sync.WaitGroup
+	wg.Add(numUsers)
+
+	var count int64
+	for i := 0; i < numUsers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			var buf bytes.Buffer
+
+			rnd, _ := randutil.NewPseudoRand()
+			// Article IDs are chosen from a zipf distribution. These values select
+			// articleIDs that are mostly <10000.
+			zipf := rand.NewZipf(rnd, 2, 10000, 100000)
+
+			for {
+				n := atomic.AddInt64(&count, 1)
+				if int(n) >= b.N {
+					return
+				}
+
+				// Insert between [1,100] articles in a batch.
+				numArticles := 1 + rnd.Intn(100)
+				buf.Reset()
+				buf.WriteString(`INSERT INTO bench.insert_distinct VALUES `)
+				for j := 0; j < numArticles; j++ {
+					if j > 0 {
+						buf.WriteString(", ")
+					}
+					fmt.Fprintf(&buf, "(%d, %d)", zipf.Uint64(), n)
+				}
+
+				if _, err := db.Exec(buf.String()); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	b.StopTimer()
+}
+
+func BenchmarkInsertDistinct1_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkInsertDistinct(b, db, 1) })
+}
+
+func BenchmarkInsertDistinct10_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkInsertDistinct(b, db, 10) })
+}
+
+func BenchmarkInsertDistinct100_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sql.DB) { runBenchmarkInsertDistinct(b, db, 100) })
 }
