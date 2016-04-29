@@ -928,6 +928,24 @@ func (s Span) Overlaps(o Span) bool {
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
 }
 
+// Union returns the union of the two spans.
+func (s Span) Union(o Span) Span {
+	if s.Key == nil {
+		return o
+	}
+	if s.Key.Compare(o.Key) > 0 {
+		s.Key = o.Key
+	}
+	if len(o.EndKey) == 0 {
+		if s.EndKey.Compare(o.Key) <= 0 {
+			s.EndKey = o.Key.Next()
+		}
+	} else if s.EndKey.Compare(o.EndKey) < 0 {
+		s.EndKey = o.EndKey
+	}
+	return s
+}
+
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {
 	Key, EndKey RKey
