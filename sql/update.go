@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -67,68 +66,31 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desi
 type editNodeRun struct {
 	rows      planNode
 	pErr      *roachpb.Error
-	b         *client.Batch
+	tw        tableWriter
 	resultRow parser.DTuple
 	done      bool
 }
 
-func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode) {
+func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWriter) *roachpb.Error {
 	if isSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
 	}
 
 	r.rows = rows
-	r.b = en.p.txn.NewBatch()
-}
-
-func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
-	if en.autoCommit {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		r.pErr = en.p.txn.CommitInBatch(r.b)
-	} else {
-		r.pErr = en.p.txn.Run(r.b)
-	}
-	if r.pErr != nil && convertError {
-		// TODO(dan): Move this logic into rowInsert/rowUpdate.
-		r.pErr = convertBatchError(en.tableDesc, *r.b, r.pErr)
-	}
-
-	r.done = true
-	r.b = nil
-}
-
-// recordCreatorNode (Base, Run) is shared by row creating statements
-// (UPDATE, INSERT).
-
-// rowCreatorNodeBase holds the common (prepare+execute) state needed
-// to run statements that create row values.
-type rowCreatorNodeBase struct {
-	editNodeBase
-	defaultExprs []parser.TypedExpr
-}
-
-func (p *planner) makeRowCreatorNode(en editNodeBase, cols []ColumnDescriptor) (rowCreatorNodeBase, *roachpb.Error) {
-	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
-	if err != nil {
-		return rowCreatorNodeBase{}, roachpb.NewError(err)
-	}
-
-	return rowCreatorNodeBase{
-		editNodeBase: en,
-		defaultExprs: defaultExprs,
-	}, nil
+	r.tw = tw
+	return r.tw.init(en.p.txn)
 }
 
 type updateNode struct {
 	// The following fields are populated during makePlan.
-	rowCreatorNodeBase
+	editNodeBase
+	defaultExprs []parser.TypedExpr
 	n            *parser.Update
 	desiredTypes []parser.Datum
 
-	ru rowUpdater
+	updateCols []ColumnDescriptor
+	tw         tableUpdater
 
 	run struct {
 		// The following fields are populated during Start().
@@ -188,9 +150,9 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, roachpb.NewError(err)
 	}
 
-	rc, rcErr := p.makeRowCreatorNode(en, updateCols)
-	if rcErr != nil {
-		return nil, rcErr
+	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, p.evalCtx)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	ru, err := makeRowUpdater(en.tableDesc, updateCols)
@@ -198,6 +160,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, roachpb.NewError(err)
 	}
 	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
+	tw := tableUpdater{ru: ru, autoCommit: autoCommit}
 
 	tracing.AnnotateTrace()
 
@@ -219,7 +182,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
 					typ := getTypeForColumn(updateCols[i])
-					e := fillDefault(e, typ, i, rc.defaultExprs)
+					e := fillDefault(e, typ, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 					i++
@@ -227,7 +190,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 			}
 		} else {
 			typ := getTypeForColumn(updateCols[i])
-			e := fillDefault(expr.Expr, typ, i, rc.defaultExprs)
+			e := fillDefault(expr.Expr, typ, i, defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 			i++
@@ -272,10 +235,12 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	}
 
 	un := &updateNode{
-		n:                  n,
-		rowCreatorNodeBase: rc,
-		desiredTypes:       desiredTypesFromSelect,
-		ru:                 ru,
+		n:            n,
+		editNodeBase: en,
+		desiredTypes: desiredTypesFromSelect,
+		defaultExprs: defaultExprs,
+		updateCols:   ru.updateCols,
+		tw:           tw,
 	}
 	return un, nil
 }
@@ -337,7 +302,9 @@ func (u *updateNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	u.run.startEditNode(&u.editNodeBase, rows)
+	if pErr := u.run.startEditNode(&u.editNodeBase, rows, &u.tw); pErr != nil {
+		return pErr
+	}
 
 	return nil
 }
@@ -348,7 +315,9 @@ func (u *updateNode) Next() bool {
 	}
 
 	if !u.run.rows.Next() {
-		u.run.finalize(&u.editNodeBase, true)
+		// We're done. Finish the batch.
+		u.run.pErr = u.tw.finalize()
+		u.run.done = true
 		return false
 	}
 
@@ -363,14 +332,14 @@ func (u *updateNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := checkValueWidth(u.ru.updateCols[i], updateValues[i]); err != nil {
+		if err := checkValueWidth(u.updateCols[i], updateValues[i]); err != nil {
 			u.run.pErr = roachpb.NewError(err)
 			return false
 		}
 	}
 
 	// Update the row values.
-	for i, col := range u.ru.updateCols {
+	for i, col := range u.updateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
 			u.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
@@ -378,7 +347,7 @@ func (u *updateNode) Next() bool {
 		}
 	}
 
-	newValues, pErr := u.ru.updateRow(u.run.b, oldValues, updateValues)
+	newValues, pErr := u.tw.row(append(oldValues, updateValues...))
 	if pErr != nil {
 		u.run.pErr = pErr
 		return false
@@ -432,7 +401,7 @@ func (u *updateNode) ExplainPlan(v bool) (name, description string, children []p
 	var buf bytes.Buffer
 	if v {
 		fmt.Fprintf(&buf, "set %s (", u.tableDesc.Name)
-		for i, col := range u.ru.updateCols {
+		for i, col := range u.updateCols {
 			if i > 0 {
 				fmt.Fprintf(&buf, ", ")
 			}
