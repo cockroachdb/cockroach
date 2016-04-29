@@ -107,35 +107,18 @@ func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
 // to run statements that create row values.
 type rowCreatorNodeBase struct {
 	editNodeBase
-	defaultExprs    []parser.TypedExpr
-	cols            []ColumnDescriptor
-	primaryKeyCols  map[ColumnID]struct{}
-	colIDtoRowIndex map[ColumnID]int
+	defaultExprs []parser.TypedExpr
 }
 
-func (p *planner) makeRowCreatorNode(en editNodeBase, cols []ColumnDescriptor, colIDtoRowIndex map[ColumnID]int, forInsert bool) (rowCreatorNodeBase, *roachpb.Error) {
+func (p *planner) makeRowCreatorNode(en editNodeBase, cols []ColumnDescriptor) (rowCreatorNodeBase, *roachpb.Error) {
 	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
 	if err != nil {
 		return rowCreatorNodeBase{}, roachpb.NewError(err)
 	}
 
-	primaryKeyCols := map[ColumnID]struct{}{}
-	for i, id := range en.tableDesc.PrimaryIndex.ColumnIDs {
-		if forInsert {
-			// Verify we have at least the columns that are part of the primary key.
-			if _, ok := colIDtoRowIndex[id]; !ok {
-				return rowCreatorNodeBase{}, roachpb.NewUErrorf("missing %q primary key column", en.tableDesc.PrimaryIndex.ColumnNames[i])
-			}
-		}
-		primaryKeyCols[id] = struct{}{}
-	}
-
 	return rowCreatorNodeBase{
-		editNodeBase:    en,
-		defaultExprs:    defaultExprs,
-		cols:            cols,
-		primaryKeyCols:  primaryKeyCols,
-		colIDtoRowIndex: colIDtoRowIndex,
+		editNodeBase: en,
+		defaultExprs: defaultExprs,
 	}, nil
 }
 
@@ -143,14 +126,13 @@ type updateNode struct {
 	// The following fields are populated during makePlan.
 	rowCreatorNodeBase
 	n            *parser.Update
-	colIDSet     map[ColumnID]int
 	desiredTypes []parser.Datum
+
+	ru rowUpdater
 
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
-
-		ru rowUpdater
 	}
 }
 
@@ -201,21 +183,21 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		names = append(names, expr.Names...)
 	}
 
-	cols, err := p.processColumns(en.tableDesc, names)
+	updateCols, err := p.processColumns(en.tableDesc, names)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
-	rc, rcErr := p.makeRowCreatorNode(en, cols, nil, false)
+	rc, rcErr := p.makeRowCreatorNode(en, updateCols)
 	if rcErr != nil {
 		return nil, rcErr
 	}
 
-	// Set of columns being updated
-	colIDSet := make(map[ColumnID]int, len(cols))
-	for i, c := range en.tableDesc.Columns {
-		colIDSet[c.ID] = i
+	ru, err := makeRowUpdater(en.tableDesc, updateCols)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
+	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 
 	tracing.AnnotateTrace()
 
@@ -236,7 +218,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					typ := getTypeForColumn(cols[i])
+					typ := getTypeForColumn(updateCols[i])
 					e := fillDefault(e, typ, i, rc.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -244,7 +226,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 				}
 			}
 		} else {
-			typ := getTypeForColumn(cols[i])
+			typ := getTypeForColumn(updateCols[i])
 			e := fillDefault(expr.Expr, typ, i, rc.defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -276,11 +258,11 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, getTypeForColumn(cols[i]))
+		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, getTypeForColumn(updateCols[i]))
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if err := checkColumnType(cols[i], typedTarget.ReturnType(), p.evalCtx.Args); err != nil {
+		if err := checkColumnType(updateCols[i], typedTarget.ReturnType(), p.evalCtx.Args); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -289,12 +271,13 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		return nil, pErr
 	}
 
-	return &updateNode{
+	un := &updateNode{
 		n:                  n,
 		rowCreatorNodeBase: rc,
-		colIDSet:           colIDSet,
 		desiredTypes:       desiredTypesFromSelect,
-	}, nil
+		ru:                 ru,
+	}
+	return un, nil
 }
 
 func (u *updateNode) Start() *roachpb.Error {
@@ -321,7 +304,6 @@ func (u *updateNode) Start() *roachpb.Error {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
 			case *parser.Tuple:
-				//panic("unreachable xz")
 				for _, e := range t.Exprs {
 					e = fillDefault(e, u.desiredTypes[i], i, u.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
@@ -355,20 +337,6 @@ func (u *updateNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	// Construct a map from column ID to the index the value appears at within a
-	// row.
-	colIDtoRowIndex := map[ColumnID]int{}
-	for i, col := range u.tableDesc.Columns {
-		colIDtoRowIndex[col.ID] = i
-	}
-	u.colIDtoRowIndex = colIDtoRowIndex
-
-	ru, err := makeRowUpdater(u.tableDesc, u.colIDSet, u.cols)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
-	u.run.ru = ru
-
 	u.run.startEditNode(&u.editNodeBase, rows)
 
 	return nil
@@ -395,14 +363,14 @@ func (u *updateNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := checkValueWidth(u.cols[i], updateValues[i]); err != nil {
+		if err := checkValueWidth(u.ru.updateCols[i], updateValues[i]); err != nil {
 			u.run.pErr = roachpb.NewError(err)
 			return false
 		}
 	}
 
 	// Update the row values.
-	for i, col := range u.cols {
+	for i, col := range u.ru.updateCols {
 		val := updateValues[i]
 		if !col.Nullable && val == parser.DNull {
 			u.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
@@ -410,7 +378,7 @@ func (u *updateNode) Next() bool {
 		}
 	}
 
-	newValues, pErr := u.run.ru.updateRow(u.run.b, oldValues, updateValues)
+	newValues, pErr := u.ru.updateRow(u.run.b, oldValues, updateValues)
 	if pErr != nil {
 		u.run.pErr = pErr
 		return false
@@ -464,7 +432,7 @@ func (u *updateNode) ExplainPlan(v bool) (name, description string, children []p
 	var buf bytes.Buffer
 	if v {
 		fmt.Fprintf(&buf, "set %s (", u.tableDesc.Name)
-		for i, col := range u.cols {
+		for i, col := range u.ru.updateCols {
 			if i > 0 {
 				fmt.Fprintf(&buf, ", ")
 			}

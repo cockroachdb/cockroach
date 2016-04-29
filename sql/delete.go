@@ -31,11 +31,12 @@ type deleteNode struct {
 	editNodeBase
 	n *parser.Delete
 
+	rd rowDeleter
+
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
 
-		rd       rowDeleter
 		fastPath bool
 	}
 }
@@ -68,10 +69,18 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 		return nil, pErr
 	}
 
-	return &deleteNode{
+	rd, err := makeRowDeleter(en.tableDesc)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	// TODO(dan): Use rd.fetchCols to compute the fetch selectors.
+
+	dn := &deleteNode{
 		n:            n,
 		editNodeBase: en,
-	}, nil
+		rd:           rd,
+	}
+	return dn, nil
 }
 
 func (d *deleteNode) Start() *roachpb.Error {
@@ -89,19 +98,6 @@ func (d *deleteNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	// Construct a map from column ID to the index the value appears at within a
-	// row.
-	colIDtoRowIndex, err := makeColIDtoRowIndex(rows, d.tableDesc)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
-
-	rd, err := makeRowDeleter(d.tableDesc, colIDtoRowIndex)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
-	d.run.rd = rd
-
 	d.run.startEditNode(&d.editNodeBase, rows)
 
 	// Check if we can avoid doing a round-trip to read the values and just
@@ -109,7 +105,7 @@ func (d *deleteNode) Start() *roachpb.Error {
 	// TODO(dt): We could probably be smarter when presented with an index-join,
 	// but this goes away anyway once we push-down more of SQL.
 	sel := rows.(*selectNode)
-	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.run.rd) {
+	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.rd) {
 		d.run.fastPath = true
 		d.run.pErr = d.fastDelete()
 		d.run.done = true
@@ -139,7 +135,7 @@ func (d *deleteNode) Next() bool {
 
 	rowVals := d.run.rows.Values()
 
-	d.run.pErr = d.run.rd.deleteRow(d.run.b, rowVals)
+	d.run.pErr = d.rd.deleteRow(d.run.b, rowVals)
 	if d.run.pErr != nil {
 		return false
 	}
@@ -185,7 +181,7 @@ func (d *deleteNode) fastDelete() *roachpb.Error {
 		return scan.pErr
 	}
 
-	rowCount, pErr := d.run.rd.fastDelete(d.run.b, scan, d.fastDeleteCommitFunc)
+	rowCount, pErr := d.rd.fastDelete(d.run.b, scan, d.fastDeleteCommitFunc)
 	if pErr != nil {
 		return pErr
 	}
