@@ -76,6 +76,11 @@ const (
 	// need a periodic gossip to safeguard against failure of a leader
 	// to gossip after performing an update to the map.
 	configGossipInterval = 1 * time.Minute
+	// optimizePutThreshold is the minimum length of a contiguous run
+	// of batched puts or conditional puts, after which the constituent
+	// put operations will possibly be optimized by determining whether
+	// the key space being written is starting out empty.
+	optimizePutThreshold = 10
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -1816,6 +1821,76 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 	return !isEndTransactionExceedingDeadline(ba.Header, *etArg)
 }
 
+// optimizePuts searches for contiguous runs of Put & CPut commands in
+// the supplied request union. Any run which exceeds a minimum length
+// threshold employs a full order iterator to determine whether the
+// range of keys being written is empty. If so, then the run can be
+// set to put "blindly", meaning no iterator need be used to read
+// existing values during the MVCC write.
+func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
+	var iter engine.Iterator
+
+	processPuts := func(startIdx, count int, minKey, maxKey roachpb.Key) {
+		if count < optimizePutThreshold { // don't bother if below this threshold
+			return
+		}
+		if iter == nil {
+			iter = batch.NewIterator(false /* total order iterator */)
+		}
+
+		// If there are enough puts in the run to justify calling seek,
+		// we can determine whether any part of the range being written
+		// is "virgin" and set the puts to write blindly.
+		// Find the first non-empty key in the run.
+		iter.Seek(engine.MakeMVCCMetadataKey(minKey))
+		var iterKey roachpb.Key
+		if iter.Valid() && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
+			iterKey = iter.Key().Key
+		}
+		// Set the prefix of the run which is being written to virgin
+		// keyspace to "blindly" put values.
+		for _, r := range reqs[startIdx : startIdx+count] {
+			if iterKey == nil || bytes.Compare(iterKey, r.GetInner().Header().Key) > 0 {
+				switch t := r.GetInner().(type) {
+				case *roachpb.PutRequest:
+					t.Blind = true
+				case *roachpb.ConditionalPutRequest:
+					t.Blind = true
+				}
+			}
+		}
+	}
+
+	var putCount int
+	var minKey, maxKey roachpb.Key
+	addPut := func(key roachpb.Key) {
+		putCount++
+		if minKey == nil || bytes.Compare(key, minKey) < 0 {
+			minKey = key
+		}
+		if maxKey == nil || bytes.Compare(key, maxKey) > 0 {
+			maxKey = key
+		}
+	}
+	for i, r := range reqs {
+		switch t := r.GetInner().(type) {
+		case *roachpb.PutRequest:
+			addPut(t.Key)
+		case *roachpb.ConditionalPutRequest:
+			addPut(t.Key)
+		default:
+			processPuts(i-putCount, putCount, minKey, maxKey)
+			putCount = 0
+			minKey = nil
+			maxKey = nil
+		}
+	}
+	processPuts(len(reqs)-putCount, putCount, minKey, maxKey)
+	if iter != nil {
+		iter.Close()
+	}
+}
+
 func (r *Replica) executeBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey,
 	batch engine.Engine, ms *engine.MVCCStats, ba roachpb.BatchRequest) (
@@ -1828,6 +1903,11 @@ func (r *Replica) executeBatch(
 		// We have a batch of Scan or ReverseScan requests with a limit. We keep track of how many
 		// remaining results we can return.
 		remScanResults = ba.Header.MaxScanResults
+	}
+
+	// Optimize any contiguous sequences of put and conditional put ops.
+	if len(ba.Requests) >= optimizePutThreshold {
+		optimizePuts(batch, ba.Requests)
 	}
 
 	for index, union := range ba.Requests {
