@@ -30,73 +30,29 @@ import (
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
-	tableDesc             *TableDescriptor
-	indexes               []IndexDescriptor
+	tableDesc *TableDescriptor
+	indexes   []IndexDescriptor
+
+	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-
-	// colIDtoRowIndex defines the expected order of parser.Datums passed to
-	// row{Inserter/Updater/Deleter} by mapping a column id from the table schema
-	// to the index it will appear at in the row. The set of columns present in a row
-	// varies depending on the row operation.
-	//
-	// - insert: columns provided by the user, plus any columns with default values
-	// - update: all columns
-	// - delete: all columns
-	//
-	// TODO(dan): These can be tightened up. Update, for example, only needs all
-	// columns if the primary key is changing. Otherwise, it needs the columns
-	// that are changing, plus the columns in each index that needs to be updated.
-	colIDtoRowIndex map[ColumnID]int
-
-	// Computed and cached by InPrimaryIndex.
-	primaryIndexCols map[ColumnID]struct{}
+	primaryIndexCols      map[ColumnID]struct{}
 }
 
-func makeRowHelper(
-	tableDesc *TableDescriptor,
-	colIDtoRowIndex map[ColumnID]int,
-	indexes []IndexDescriptor,
-) rowHelper {
-	return rowHelper{
-		tableDesc:             tableDesc,
-		colIDtoRowIndex:       colIDtoRowIndex,
-		indexes:               indexes,
-		primaryIndexKeyPrefix: MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID),
-	}
-}
-
-func (rw *rowHelper) requirePrimaryIndexCols() error {
-	for i, col := range rw.tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := rw.colIDtoRowIndex[col]; !ok {
-			return fmt.Errorf("missing %q primary key column", rw.tableDesc.PrimaryIndex.ColumnNames[i])
-		}
-	}
-	return nil
-}
-
-func (rw *rowHelper) requireAllIndexCols() error {
-	for _, index := range rw.indexes {
-		for _, col := range index.ColumnIDs {
-			if _, ok := rw.colIDtoRowIndex[col]; !ok {
-				return fmt.Errorf("missing %q index column", col)
-			}
-		}
-	}
-	return nil
-}
-
-func (rw *rowHelper) encodeIndexes(values []parser.Datum) (
+func (rh *rowHelper) encodeIndexes(colIDtoRowIndex map[ColumnID]int, values []parser.Datum) (
 	primaryIndexKey []byte,
 	secondaryIndexEntries []indexEntry,
 	err error,
 ) {
+	if rh.primaryIndexKeyPrefix == nil {
+		rh.primaryIndexKeyPrefix = MakeIndexKeyPrefix(rh.tableDesc.ID, rh.tableDesc.PrimaryIndex.ID)
+	}
 	primaryIndexKey, _, err = encodeIndexKey(
-		&rw.tableDesc.PrimaryIndex, rw.colIDtoRowIndex, values, rw.primaryIndexKeyPrefix)
+		&rh.tableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
 	secondaryIndexEntries, err = encodeSecondaryIndexes(
-		rw.tableDesc.ID, rw.indexes, rw.colIDtoRowIndex, values)
+		rh.tableDesc.ID, rh.indexes, colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -106,21 +62,22 @@ func (rw *rowHelper) encodeIndexes(values []parser.Datum) (
 
 // TODO(dan): This logic is common and being moved into TableDescriptor (see
 // #6233). Once it is, use the shared one.
-func (rw *rowHelper) columnInPK(colID ColumnID) bool {
-	if rw.primaryIndexCols == nil {
-		rw.primaryIndexCols = make(map[ColumnID]struct{})
-		for _, colID := range rw.tableDesc.PrimaryIndex.ColumnIDs {
-			rw.primaryIndexCols[colID] = struct{}{}
+func (rh *rowHelper) columnInPK(colID ColumnID) bool {
+	if rh.primaryIndexCols == nil {
+		rh.primaryIndexCols = make(map[ColumnID]struct{})
+		for _, colID := range rh.tableDesc.PrimaryIndex.ColumnIDs {
+			rh.primaryIndexCols[colID] = struct{}{}
 		}
 	}
-	_, ok := rw.primaryIndexCols[colID]
+	_, ok := rh.primaryIndexCols[colID]
 	return ok
 }
 
 // rowInserter abstracts the key/value operations for inserting table rows.
 type rowInserter struct {
-	rowHelper rowHelper
-	cols      []ColumnDescriptor
+	helper                rowHelper
+	insertCols            []ColumnDescriptor
+	insertColIDtoRowIndex map[ColumnID]int
 
 	// For allocation avoidance.
 	marshalled    []roachpb.Value
@@ -130,16 +87,10 @@ type rowInserter struct {
 
 // makeRowInserter creates a rowInserter for the given table.
 //
-// colIDtoRowIndex defines the expected order of parser.Datums passed to
-// insertRow by mapping a column id from the table schema to the index it will
-// appear at in the row. It contains the same set of columns as cols, including
-// all default columns being inserted.
-//
-// TODO(dan): Eliminate the duplication.
+// insertCols must contain every column in the primary key.
 func makeRowInserter(
 	tableDesc *TableDescriptor,
-	colIDtoRowIndex map[ColumnID]int,
-	cols []ColumnDescriptor,
+	insertCols []ColumnDescriptor,
 ) (rowInserter, error) {
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state WRITE_ONLY.
@@ -151,24 +102,27 @@ func makeRowInserter(
 		}
 	}
 
-	rh := makeRowHelper(tableDesc, colIDtoRowIndex, indexes)
-	if err := rh.requirePrimaryIndexCols(); err != nil {
-		return rowInserter{}, err
+	ri := rowInserter{
+		helper:                rowHelper{tableDesc: tableDesc, indexes: indexes},
+		insertCols:            insertCols,
+		insertColIDtoRowIndex: colIDtoRowIndexFromCols(insertCols),
+		marshalled:            make([]roachpb.Value, len(insertCols)),
 	}
 
-	ri := rowInserter{
-		rowHelper:  rh,
-		cols:       cols,
-		marshalled: make([]roachpb.Value, len(cols)),
+	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
+		if _, ok := ri.insertColIDtoRowIndex[col]; !ok {
+			return rowInserter{}, fmt.Errorf("missing %q primary key column", tableDesc.PrimaryIndex.ColumnNames[i])
+		}
 	}
+
 	return ri, nil
 }
 
 // insertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachpb.Error {
-	if len(values) != len(ri.cols) {
-		return roachpb.NewErrorf("got %d values but expected %d", len(values), len(ri.cols))
+	if len(values) != len(ri.insertCols) {
+		return roachpb.NewErrorf("got %d values but expected %d", len(values), len(ri.insertCols))
 	}
 
 	// Encode the values to the expected column type. This needs to
@@ -177,12 +131,12 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 	for i, val := range values {
 		// Make sure the value can be written to the column before proceeding.
 		var err error
-		if ri.marshalled[i], err = marshalColumnValue(ri.cols[i], val); err != nil {
+		if ri.marshalled[i], err = marshalColumnValue(ri.insertCols[i], val); err != nil {
 			return roachpb.NewError(err)
 		}
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ri.rowHelper.encodeIndexes(values)
+	primaryIndexKey, secondaryIndexEntries, err := ri.helper.encodeIndexes(ri.insertColIDtoRowIndex, values)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -212,9 +166,9 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 
 	// Write the row columns.
 	for i, val := range values {
-		col := ri.cols[i]
+		col := ri.insertCols[i]
 
-		if ri.rowHelper.columnInPK(col.ID) {
+		if ri.helper.columnInPK(col.ID) {
 			// Skip primary key columns as their values are encoded in the row
 			// sentinel key which is guaranteed to exist for as long as the row
 			// exists.
@@ -241,12 +195,15 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 
 // rowUpdater abstracts the key/value operations for updating table rows.
 type rowUpdater struct {
-	rowHelper           rowHelper
-	rd                  rowDeleter
-	ri                  rowInserter
-	updateCols          []ColumnDescriptor
-	deleteOnlyIndex     map[int]struct{}
-	primaryKeyColChange bool
+	helper               rowHelper
+	fetchCols            []ColumnDescriptor
+	fetchColIDtoRowIndex map[ColumnID]int
+	updateCols           []ColumnDescriptor
+	deleteOnlyIndex      map[int]struct{}
+	primaryKeyColChange  bool
+
+	rd rowDeleter
+	ri rowInserter
 
 	// For allocation avoidance.
 	marshalled []roachpb.Value
@@ -256,19 +213,21 @@ type rowUpdater struct {
 
 // makeRowUpdater creates a rowUpdater for the given table.
 //
-// colIDtoRowIndex defines the expected order of parser.Datums in values (which
-// are the existing values) passed to updateRow by mapping a column id from the
-// table schema to the index it will appear at in the row.
+// updateCols are the columns being updated and correspond to the updateValues
+// that will be passed to updateRow.
 //
-// updateCols are the columns being updated and corresponds to the updateValues
-// that will be passed to updateRow. This means all columns if the primary key
-// is changing. Otherwise, it needs the columns that are changing, plus the
-// columns in each index that needs to be updated.
+// The returned rowUpdater contains a fetchCols field that defines the
+// expectation of which values are passed as oldValues to updateRow.
 func makeRowUpdater(
 	tableDesc *TableDescriptor,
-	colIDtoRowIndex map[ColumnID]int,
 	updateCols []ColumnDescriptor,
 ) (rowUpdater, error) {
+	// TODO(dan): makeRowUpdater should take a param for the sql rows needed for
+	// returningHelper, etc.
+	requestedCols := tableDesc.Columns
+
+	updateColIDtoRowIndex := colIDtoRowIndexFromCols(updateCols)
+
 	primaryIndexCols := make(map[ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
 	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		primaryIndexCols[colID] = struct{}{}
@@ -282,11 +241,6 @@ func makeRowUpdater(
 		}
 	}
 
-	updateColsMap := make(map[ColumnID]struct{})
-	for _, updateCol := range updateCols {
-		updateColsMap[updateCol.ID] = struct{}{}
-	}
-
 	// Secondary indexes needing updating.
 	needsUpdate := func(index IndexDescriptor) bool {
 		// If the primary key changed, we need to update all of them.
@@ -294,7 +248,7 @@ func makeRowUpdater(
 			return true
 		}
 		for _, id := range index.ColumnIDs {
-			if _, ok := updateColsMap[id]; ok {
+			if _, ok := updateColIDtoRowIndex[id]; ok {
 				return true
 			}
 		}
@@ -328,12 +282,8 @@ func makeRowUpdater(
 		}
 	}
 
-	rh := makeRowHelper(tableDesc, colIDtoRowIndex, indexes)
-	// We already had to compute this, so may as well save it.
-	rh.primaryIndexCols = primaryIndexCols
-
 	ru := rowUpdater{
-		rowHelper:           rh,
+		helper:              rowHelper{tableDesc: tableDesc, indexes: indexes},
 		updateCols:          updateCols,
 		deleteOnlyIndex:     deleteOnlyIndex,
 		primaryKeyColChange: primaryKeyColChange,
@@ -341,20 +291,24 @@ func makeRowUpdater(
 		newValues:           make([]parser.Datum, len(tableDesc.Columns)),
 	}
 
+	ru.fetchCols = requestedCols
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		// TODO(dan): Is it safe for these to share rowHelper instead of creating
 		// two more?
 		var err error
-		ru.rd, err = makeRowDeleter(tableDesc, colIDtoRowIndex)
+		ru.rd, err = makeRowDeleter(tableDesc)
 		if err != nil {
 			return rowUpdater{}, err
 		}
-		ru.ri, err = makeRowInserter(tableDesc, colIDtoRowIndex, tableDesc.Columns)
+		ru.fetchCols = ru.rd.fetchCols
+		ru.ri, err = makeRowInserter(tableDesc, tableDesc.Columns)
 		if err != nil {
 			return rowUpdater{}, err
 		}
 	}
+
+	ru.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(ru.fetchCols)
 
 	return ru, nil
 }
@@ -362,23 +316,23 @@ func makeRowUpdater(
 // updateRow adds to the batch the kv operations necessary to update a table row
 // with the given values.
 //
-// The row corresponding to values is updated with the ones in updateValues.
+// The row corresponding to oldValues is updated with the ones in updateValues.
 // Note that updateValues only contains the ones that are changing.
 //
 // The return value is only good until the next call to UpdateRow.
 func (ru *rowUpdater) updateRow(
 	b *client.Batch,
-	values []parser.Datum,
+	oldValues []parser.Datum,
 	updateValues []parser.Datum,
 ) ([]parser.Datum, *roachpb.Error) {
-	if len(values) != len(ru.rowHelper.tableDesc.Columns) {
-		return nil, roachpb.NewErrorf("got %d values but expected %d", len(values), len(ru.rowHelper.tableDesc.Columns))
+	if len(oldValues) != len(ru.fetchCols) {
+		return nil, roachpb.NewErrorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))
 	}
 	if len(updateValues) != len(ru.updateCols) {
 		return nil, roachpb.NewErrorf("got %d values but expected %d", len(updateValues), len(ru.updateCols))
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ru.rowHelper.encodeIndexes(values)
+	primaryIndexKey, secondaryIndexEntries, err := ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, oldValues)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -393,30 +347,30 @@ func (ru *rowUpdater) updateRow(
 	}
 
 	// Update the row values.
-	copy(ru.newValues, values)
+	copy(ru.newValues, oldValues)
 	for i, updateCol := range ru.updateCols {
-		ru.newValues[ru.rowHelper.colIDtoRowIndex[updateCol.ID]] = updateValues[i]
+		ru.newValues[ru.fetchColIDtoRowIndex[updateCol.ID]] = updateValues[i]
 	}
 
 	newPrimaryIndexKey := primaryIndexKey
 	rowPrimaryKeyChanged := false
 	var newSecondaryIndexEntries []indexEntry
 	if ru.primaryKeyColChange {
-		newPrimaryIndexKey, newSecondaryIndexEntries, err = ru.rowHelper.encodeIndexes(ru.newValues)
+		newPrimaryIndexKey, newSecondaryIndexEntries, err = ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
 	} else {
 		newSecondaryIndexEntries, err = encodeSecondaryIndexes(
-			ru.rowHelper.tableDesc.ID, ru.rowHelper.indexes, ru.rowHelper.colIDtoRowIndex, ru.newValues)
+			ru.helper.tableDesc.ID, ru.helper.indexes, ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
 
 	if rowPrimaryKeyChanged {
-		pErr := ru.rd.deleteRow(b, values)
+		pErr := ru.rd.deleteRow(b, oldValues)
 		if pErr != nil {
 			return nil, pErr
 		}
@@ -447,7 +401,7 @@ func (ru *rowUpdater) updateRow(
 	for i, val := range updateValues {
 		col := ru.updateCols[i]
 
-		if ru.rowHelper.columnInPK(col.ID) {
+		if ru.helper.columnInPK(col.ID) {
 			// Skip primary key columns as their values are encoded in the row
 			// sentinel key which is guaranteed to exist for as long as the row
 			// exists.
@@ -481,7 +435,9 @@ func (ru *rowUpdater) updateRow(
 
 // rowDeleter abstracts the key/value operations for deleting table rows.
 type rowDeleter struct {
-	rowHelper rowHelper
+	helper               rowHelper
+	fetchCols            []ColumnDescriptor
+	fetchColIDtoRowIndex map[ColumnID]int
 
 	// For allocation avoidance.
 	startKey roachpb.Key
@@ -490,30 +446,50 @@ type rowDeleter struct {
 
 // makeRowDeleter creates a rowDeleter for the given table.
 //
-// colIDtoRowIndex defines the expected order of parser.Datums passed to
-// deleteRow by mapping a column id from the table schema to the index it will
-// appear at in the row.
+// The returned rowDeleter contains a fetchCols field that defines the
+// expectation of which values are passed as values to deleteRow.
 func makeRowDeleter(
 	tableDesc *TableDescriptor,
-	colIDtoRowIndex map[ColumnID]int,
 ) (rowDeleter, error) {
+	// TODO(dan): makeRowDeleter should take a param for the sql rows needed for
+	// returningHelper, etc.
+	requestedCols := tableDesc.Columns
+
 	indexes := tableDesc.Indexes
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
 			indexes = append(indexes, *index)
 		}
 	}
-	rowHelper := makeRowHelper(tableDesc, colIDtoRowIndex, indexes)
-	if err := rowHelper.requireAllIndexCols(); err != nil {
-		return rowDeleter{}, err
+
+	var fetchCols = requestedCols
+	fetchColIDtoRowIndex := colIDtoRowIndexFromCols(fetchCols)
+	for _, index := range indexes {
+		for _, colID := range index.ColumnIDs {
+			if _, ok := fetchColIDtoRowIndex[colID]; !ok {
+				// TODO(dan): What about non-active columns?
+				col, err := tableDesc.FindActiveColumnByID(colID)
+				if err != nil {
+					return rowDeleter{}, err
+				}
+				fetchColIDtoRowIndex[colID] = len(fetchCols)
+				fetchCols = append(fetchCols, *col)
+			}
+		}
 	}
-	return rowDeleter{rowHelper: rowHelper}, nil
+
+	rd := rowDeleter{
+		helper:               rowHelper{tableDesc: tableDesc, indexes: indexes},
+		fetchCols:            fetchCols,
+		fetchColIDtoRowIndex: fetchColIDtoRowIndex,
+	}
+	return rd, nil
 }
 
 // deleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
 func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) *roachpb.Error {
-	primaryIndexKey, secondaryIndexEntries, err := rd.rowHelper.encodeIndexes(values)
+	primaryIndexKey, secondaryIndexEntries, err := rd.helper.encodeIndexes(rd.fetchColIDtoRowIndex, values)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -539,9 +515,9 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) *roachpb
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
 func (rd *rowDeleter) fastPathAvailable() bool {
-	if len(rd.rowHelper.indexes) != 0 {
+	if len(rd.helper.indexes) != 0 {
 		if log.V(2) {
-			log.Infof("delete forced to scan: values required to update %d secondary indexes", len(rd.rowHelper.indexes))
+			log.Infof("delete forced to scan: values required to update %d secondary indexes", len(rd.helper.indexes))
 		}
 		return false
 	}
@@ -588,4 +564,12 @@ func (rd *rowDeleter) fastDelete(
 	}
 
 	return rowCount, nil
+}
+
+func colIDtoRowIndexFromCols(cols []ColumnDescriptor) map[ColumnID]int {
+	colIDtoRowIndex := make(map[ColumnID]int, len(cols))
+	for i, col := range cols {
+		colIDtoRowIndex[col.ID] = i
+	}
+	return colIDtoRowIndex
 }
