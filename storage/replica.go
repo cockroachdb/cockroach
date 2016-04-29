@@ -921,28 +921,43 @@ func (r *Replica) endCmds(cmdKeys []interface{}, ba *roachpb.BatchRequest, br *r
 	// marked as affecting the cache. Inconsistent reads are excluded.
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
 		timestamp := ba.Timestamp
+		txnID := ba.GetTxnID()
+
+		// Add only a single entry from the timestamp cache for each set of read,
+		// write and txn ops in the batch.
+		var read roachpb.Span
+		var write roachpb.Span
+		var txn roachpb.Span
+
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if updatesTimestampCache(args) {
-				readTSCache := true
-				key := args.Header().Key
-				txnID := ba.GetTxnID()
+				header := args.Header()
 				switch args.(type) {
 				case *roachpb.DeleteRangeRequest:
 					// DeleteRange adds to the write timestamp cache to prevent
 					// subsequent writes from rewriting history.
-					readTSCache = false
+					write = write.Union(args.Header())
 				case *roachpb.EndTransactionRequest:
-					// EndTransaction adds to the write timestamp cache to ensure
-					// replays create a transaction record with WriteTooOld set.
-					// We set txnID=nil because we want hits for same txn ID.
-					key = keys.TransactionKey(key, txnID)
-					txnID = nil
-					readTSCache = false
+					// EndTransaction adds to the write timestamp cache to ensure replays
+					// create a transaction record with WriteTooOld set.
+					key := keys.TransactionKey(header.Key, txnID)
+					txn = txn.Union(roachpb.Span{Key: key})
+				default:
+					read = read.Union(header)
 				}
-				header := args.Header()
-				r.mu.tsCache.Add(key, header.EndKey, timestamp, txnID, readTSCache)
 			}
+		}
+
+		if read.Key != nil {
+			r.mu.tsCache.Add(read.Key, read.EndKey, timestamp, txnID, true)
+		}
+		if write.Key != nil {
+			r.mu.tsCache.Add(write.Key, write.EndKey, timestamp, txnID, false)
+		}
+		if txn.Key != nil {
+			// We set txnID=nil because we want hits for same txn ID.
+			r.mu.tsCache.Add(txn.Key, txn.EndKey, timestamp, nil, false)
 		}
 	}
 	r.mu.cmdQ.Remove(cmdKeys)
