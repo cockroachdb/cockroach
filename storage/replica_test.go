@@ -1717,6 +1717,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	tc.rng.mu.Lock()
 	defer tc.rng.mu.Unlock()
+	tc.rng.mu.tsCache.ExpandRequests(roachpb.ZeroTimestamp)
 	rTS, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
 	wTS, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 || !rOK || wOK {
