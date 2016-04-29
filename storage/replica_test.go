@@ -1189,8 +1189,6 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	}
 }
 
-// getArgs returns a GetRequest and GetResponse pair addressed to
-// the default replica for the specified key.
 func getArgs(key []byte) roachpb.GetRequest {
 	return roachpb.GetRequest{
 		Span: roachpb.Span{
@@ -1199,8 +1197,6 @@ func getArgs(key []byte) roachpb.GetRequest {
 	}
 }
 
-// putArgs returns a PutRequest and PutResponse pair addressed to
-// the default replica for the specified key / value.
 func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
 		Span: roachpb.Span{
@@ -1210,7 +1206,17 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	}
 }
 
-// deleteArgs returns a DeleteRequest and DeleteResponse pair.
+func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutRequest {
+	expV := roachpb.MakeValueFromBytes(expValue)
+	return roachpb.ConditionalPutRequest{
+		Span: roachpb.Span{
+			Key: key,
+		},
+		Value:    roachpb.MakeValueFromBytes(value),
+		ExpValue: &expV,
+	}
+}
+
 func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 	return roachpb.DeleteRequest{
 		Span: roachpb.Span{
@@ -1220,8 +1226,7 @@ func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 }
 
 // readOrWriteArgs returns either get or put arguments depending on
-// value of "read". Get for true; Put for false. Returns method
-// selected and args & reply.
+// value of "read". Get for true; Put for false.
 func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
 	if read {
 		gArgs := getArgs(key)
@@ -1231,8 +1236,6 @@ func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
 	return &pArgs
 }
 
-// incrementArgs returns an IncrementRequest and IncrementResponse pair
-// addressed to the default replica for the specified key / value.
 func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
 		Span: roachpb.Span{
@@ -1260,8 +1263,6 @@ func beginTxnArgs(key []byte, txn *roachpb.Transaction) (_ roachpb.BeginTransact
 	}, h
 }
 
-// endTxnArgs returns a request and header for an EndTransaction RPC for the
-// specified key.
 func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransactionRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.EndTransactionRequest{
@@ -1272,8 +1273,6 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 	}, h
 }
 
-// pushTxnArgs returns a request and header for a PushTxn RPC for the
-// specified key.
 func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
 		Span: roachpb.Span{
@@ -1287,7 +1286,6 @@ func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnTy
 	}
 }
 
-// heartbeatArgs returns request/response pair for HeartbeatTxn RPC.
 func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.HeartbeatTxnRequest{
@@ -1297,9 +1295,6 @@ func heartbeatArgs(txn *roachpb.Transaction) (_ roachpb.HeartbeatTxnRequest, h r
 	}, h
 }
 
-// internalMergeArgs returns a MergeRequest and MergeResponse
-// pair addressed to the default replica for the specified key. The request will
-// contain the given roachpb.Value.
 func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
 		Span: roachpb.Span{
@@ -1330,6 +1325,158 @@ func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roa
 			EndKey: endKey,
 		},
 		Keys: keys,
+	}
+}
+
+// TestOptimizePuts verifies that contiguous runs of puts and
+// conditional puts are marked as "blind" if they're written
+// to a virgin keyspace.
+func TestOptimizePuts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	pArgs := make([]roachpb.PutRequest, optimizePutThreshold)
+	cpArgs := make([]roachpb.ConditionalPutRequest, optimizePutThreshold)
+	for i := 0; i < optimizePutThreshold; i++ {
+		pArgs[i] = putArgs([]byte(fmt.Sprintf("b%02d", i)), []byte("1"))
+		cpArgs[i] = cPutArgs([]byte(fmt.Sprintf("c%02d", i)), []byte("1"), []byte("0"))
+	}
+	incArgs := incrementArgs([]byte("d"), 1)
+
+	testCases := []struct {
+		exKey    roachpb.Key
+		reqs     []roachpb.Request
+		expBlind []bool
+	}{
+		// No existing keys, single put.
+		{
+			nil,
+			[]roachpb.Request{
+				&pArgs[0],
+			},
+			[]bool{
+				false,
+			},
+		},
+		// No existing keys, nine puts.
+		{
+			nil,
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8],
+			},
+			[]bool{
+				false, false, false, false, false, false, false, false, false,
+			},
+		},
+		// No existing keys, ten puts.
+		{
+			nil,
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true,
+			},
+		},
+		// Existing key at "c0", ten conditional puts.
+		{
+			roachpb.Key("c0"),
+			[]roachpb.Request{
+				&cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true,
+			},
+		},
+		// Existing key at "b11", mixed puts and conditional puts.
+		{
+			roachpb.Key("c11"),
+			[]roachpb.Request{
+				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &pArgs[4], &cpArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &cpArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true,
+			},
+		},
+		// Existing key at "b00", ten puts, expect nothing blind.
+		{
+			roachpb.Key("b00"),
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				false, false, false, false, false, false, false, false, false, false,
+			},
+		},
+		// Existing key at "b00", ten puts in reverse order, expect nothing blind.
+		{
+			roachpb.Key("b00"),
+			[]roachpb.Request{
+				&pArgs[9], &pArgs[8], &pArgs[7], &pArgs[6], &pArgs[5], &pArgs[4], &pArgs[3], &pArgs[2], &pArgs[1], &pArgs[0],
+			},
+			[]bool{
+				false, false, false, false, false, false, false, false, false, false,
+			},
+		},
+		// Existing key at "b05", ten puts, expect first five puts are blind.
+		{
+			roachpb.Key("b05"),
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, false, false, false, false, false,
+			},
+		},
+		// No existing key, inc + ten puts + inc + ten cputs.
+		{
+			nil,
+			[]roachpb.Request{
+				&incArgs, &pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+				&incArgs, &cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
+			},
+			[]bool{
+				false, true, true, true, true, true, true, true, true, true, true,
+				false, true, true, true, true, true, true, true, true, true, true,
+			},
+		},
+	}
+
+	for i, c := range testCases {
+		if c.exKey != nil {
+			if err := engine.MVCCPut(context.Background(), tc.engine, nil, c.exKey,
+				roachpb.ZeroTimestamp, roachpb.MakeValueFromString("foo"), nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		batch := roachpb.BatchRequest{}
+		for _, r := range c.reqs {
+			batch.Add(r)
+		}
+		optimizePuts(tc.engine, batch.Requests)
+		blind := []bool{}
+		for _, r := range batch.Requests {
+			switch t := r.GetInner().(type) {
+			case *roachpb.PutRequest:
+				blind = append(blind, t.Blind)
+				t.Blind = false
+			case *roachpb.ConditionalPutRequest:
+				blind = append(blind, t.Blind)
+				t.Blind = false
+			default:
+				blind = append(blind, false)
+			}
+		}
+		if !reflect.DeepEqual(blind, c.expBlind) {
+			t.Errorf("%d: expected %+v; got %+v", i, c.expBlind, blind)
+		}
+		if c.exKey != nil {
+			if err := tc.engine.Clear(engine.MakeMVCCMetadataKey(c.exKey)); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
