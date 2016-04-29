@@ -190,13 +190,21 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	aTS := clock.Now()
 	tc.Add(roachpb.Key("a"), nil, aTS, nil, true)
+	tc.AddRequest(cacheRequest{
+		reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
+		timestamp: aTS,
+	})
 
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
 	tc.Add(roachpb.Key("b"), nil, clock.Now(), nil, true)
+	tc.AddRequest(cacheRequest{
+		reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
+		timestamp: clock.Now(),
+	})
 
-	// Verify that the cache still has 2 entries in it
-	if l, want := tc.Len(), 2; l != want {
+	// Verify that the cache still has 4 entries in it
+	if l, want := tc.Len(), 4; l != want {
 		t.Errorf("expected %d entries to remain, got %d", want, l)
 	}
 }
