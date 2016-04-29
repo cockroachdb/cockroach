@@ -2159,33 +2159,6 @@ func TestEndTransactionDeadline(t *testing.T) {
 	}
 }
 
-// TestEndTransactionDeadline_1PC verifies that a transaction that
-// exceeded its deadline will be aborted even when one phase commit is
-// applicable.
-func TestEndTransactionDeadline_1PC(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	key := roachpb.Key("a")
-	txn := newTransaction("test", key, 1, roachpb.SERIALIZABLE, tc.clock)
-	bt, _ := beginTxnArgs(key, txn)
-	put := putArgs(key, []byte("value"))
-	et, etH := endTxnArgs(txn, true)
-	// Past deadline.
-	ts := txn.Timestamp.Prev()
-	et.Deadline = &ts
-
-	var ba roachpb.BatchRequest
-	ba.Header = etH
-	ba.Add(&bt, &put, &et)
-	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Errorf("expected TransactionAbortedError but got %T: %s", pErr, pErr)
-	}
-}
-
 // TestEndTransactionWithMalformedSplitTrigger verifies an
 // EndTransaction call with a malformed commit trigger fails.
 func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {

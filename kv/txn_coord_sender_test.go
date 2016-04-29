@@ -404,17 +404,20 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 			switch i {
 			case 0:
 				// No deadline.
-				pErr = txn.CommitOrCleanup()
+
 			case 1:
 				// Past deadline.
-				pErr = txn.CommitBy(txn.Proto.Timestamp.Prev())
+				txn.SetDeadline(txn.Proto.Timestamp.Prev())
+
 			case 2:
 				// Equal deadline.
-				pErr = txn.CommitBy(txn.Proto.Timestamp)
+				txn.SetDeadline(txn.Proto.Timestamp)
+
 			case 3:
 				// Future deadline.
-				pErr = txn.CommitBy(txn.Proto.Timestamp.Next())
+				txn.SetDeadline(txn.Proto.Timestamp.Next())
 			}
+			pErr = txn.CommitOrCleanup()
 
 			switch i {
 			case 0:
