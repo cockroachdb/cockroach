@@ -294,30 +294,40 @@ func (o *overlapHeap) PopOverlap() cache.Overlap {
 // Add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through GetWait().
 func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) []interface{} {
-	r := make([]interface{}, 0, len(spans))
-	for _, span := range spans {
-		start, end := span.Key, span.EndKey
-		if len(end) == 0 {
-			end = start.Next()
-			start = end[:len(start)]
-		}
-		alloc := struct {
-			key   cache.IntervalKey
-			value cmd
-			entry cache.Entry
-		}{
-			key: cq.cache.MakeKey(start, end),
-			value: cmd{
-				ID:       cq.nextID(),
-				readOnly: readOnly,
-			},
-		}
-		alloc.entry.Key = &alloc.key
-		alloc.entry.Value = &alloc.value
-		cq.cache.AddEntry(&alloc.entry)
-		r = append(r, &alloc.key)
+	// Compute the min and max key that covers all of the spans.
+	minKey, maxKey := spans[0].Key, spans[0].EndKey
+	if len(maxKey) == 0 {
+		maxKey = minKey.Next()
+		minKey = maxKey[:len(minKey)]
 	}
-	return r
+	for i := 1; i < len(spans); i++ {
+		start, end := spans[i].Key, spans[i].EndKey
+		if start.Compare(minKey) < 0 {
+			minKey = start
+		}
+		if len(end) == 0 {
+			if maxKey.Compare(start) <= 0 {
+				maxKey = start.Next()
+			}
+		} else if maxKey.Compare(end) < 0 {
+			maxKey = end
+		}
+	}
+
+	var alloc struct {
+		key   cache.IntervalKey
+		value cmd
+		entry cache.Entry
+	}
+	alloc.key = cq.cache.MakeKey(minKey, maxKey)
+	alloc.value = cmd{
+		ID:       cq.nextID(),
+		readOnly: readOnly,
+	}
+	alloc.entry.Key = &alloc.key
+	alloc.entry.Value = &alloc.value
+	cq.cache.AddEntry(&alloc.entry)
+	return []interface{}{&alloc.key}
 }
 
 // Remove is invoked to signal that the command associated with the
