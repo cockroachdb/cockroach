@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	basictracer "github.com/opentracing/basictracer-go"
@@ -109,6 +110,9 @@ type Txn struct {
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
 	retrying            bool
+	// The txn has to be committed by this deadline. A nil value indicates no
+	// deadline.
+	deadline *roachpb.Timestamp
 	// see IsFinalized()
 	finalized bool
 }
@@ -374,8 +378,8 @@ func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Erro
 	return sendAndFill(txn.send, b)
 }
 
-func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
-	pErr := txn.sendEndTxnReq(true /* commit */, deadline)
+func (txn *Txn) commit() *roachpb.Error {
+	pErr := txn.sendEndTxnReq(true /* commit */, txn.deadline)
 	if pErr == nil {
 		txn.finalized = true
 	}
@@ -396,7 +400,7 @@ func (txn *Txn) CleanupOnError(pErr *roachpb.Error) {
 // up on failure. This can be used when the caller is prepared to do proper
 // cleanup.
 func (txn *Txn) Commit() *roachpb.Error {
-	return txn.commit(nil)
+	return txn.commit()
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -418,7 +422,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 	if txn != b.txn {
 		return nil, roachpb.NewErrorf("a batch b can only be committed by b.txn")
 	}
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemConfigTrigger()))
+	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
 	b.initResult(1, 0, nil)
 	resp, pErr := txn.RunWithResponse(b)
 	if pErr == nil {
@@ -431,7 +435,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 // If that fails, an attempt to rollback is made.
 // txn should not be used to send any more commands after this call.
 func (txn *Txn) CommitOrCleanup() *roachpb.Error {
-	pErr := txn.commit(nil)
+	pErr := txn.commit()
 	if pErr != nil {
 		txn.CleanupOnError(pErr)
 	}
@@ -441,14 +445,9 @@ func (txn *Txn) CommitOrCleanup() *roachpb.Error {
 	return pErr
 }
 
-// CommitBy sends an EndTransactionRequest with Commit=true and
-// Deadline=deadline.
-func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
-	pErr := txn.commit(&deadline)
-	if pErr != nil {
-		txn.CleanupOnError(pErr)
-	}
-	return pErr
+// SetDeadline sets the transactions deadline.
+func (txn *Txn) SetDeadline(deadline roachpb.Timestamp) {
+	txn.deadline = &deadline
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
@@ -657,6 +656,11 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	if elideEndTxn {
 		reqs = reqs[:lastIndex]
+		if endTxnRequest.Deadline != nil {
+			if endTxnRequest.Deadline.Less(roachpb.Timestamp{WallTime: timeutil.Now().UnixNano()}) {
+				return nil, roachpb.NewError(roachpb.NewTransactionAbortedError())
+			}
+		}
 	}
 
 	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)

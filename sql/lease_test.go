@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -540,4 +541,67 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if !testutils.IsError(err, "descriptor deleted") {
 		t.Fatalf("got a different error than expected: %s", err)
 	}
+}
+
+// TestTxnObeysLeaseExpiration tests that a transaction is aborted when it tries
+// to use a table descriptor with an expired lease.
+func TestTxnObeysLeaseExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Set the lease duration such that it expires quickly, and artificially
+	// turn on the use of expired leases.
+	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
+	csql.TestHandoutExpiredLeases = true
+	defer func() {
+		csql.LeaseDuration, csql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
+		csql.TestHandoutExpiredLeases = false
+	}()
+	csql.MinLeaseDuration = 5 * time.Millisecond
+	csql.LeaseDuration = 5 * time.Millisecond
+
+	s, sqlDB, _ := setup(t)
+	defer cleanup(s, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make a reference to the table so that a table lease is acquired.
+	if _, err := sqlDB.Exec(`INSERT INTO t.kv VALUES ('a', 'b')`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until the table lease expires.
+	time.Sleep(20 * time.Millisecond)
+
+	// Run a number of sql operations with the expired lease.
+	runCommandWithExpiredLease(t, sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
+	runCommandWithExpiredLease(t, sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
+	runCommandWithExpiredLease(t, sqlDB, `DELETE FROM t.kv WHERE k = 'a'`)
+	runCommandWithExpiredLease(t, sqlDB, `SELECT * FROM t.kv`)
+	runCommandWithExpiredLease(t, sqlDB, `TRUNCATE TABLE t.kv`)
+}
+
+func runCommandWithExpiredLease(t *testing.T, sqlDB *sql.DB, sql string) {
+	// Run a transaction that uses the expired table lease. Note: we are
+	// forced to use a multi-statement transaction here because a single
+	// statement transaction retries indefinitely when it gets the txn aborted
+	// error.
+	if _, err := sqlDB.Exec(`BEGIN`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(sql); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`COMMIT`); !testutils.IsError(err, "pq: restart transaction: txn aborted") {
+		t.Fatalf("%s, err = %s", sql, err)
+	}
+
+	if _, err := sqlDB.Exec(`ROLLBACK`); err != nil {
+		t.Fatal(err)
+	}
+
 }

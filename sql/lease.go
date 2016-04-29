@@ -50,6 +50,9 @@ var (
 	// MinLeaseDuration is the minimum duration a lease will have remaining upon
 	// acquisition. Exported for testing purposes only.
 	MinLeaseDuration = time.Minute
+
+	// TestHandoutExpiredLeases is only used for testing
+	TestHandoutExpiredLeases bool
 )
 
 // LeaseState holds the state for a lease. Exported only for testing.
@@ -466,7 +469,7 @@ func (t *tableState) acquire(txn *client.Txn, version DescriptorVersion, store L
 				return s, nil
 			}
 			minDesiredExpiration := store.clock.Now().GoTime().Add(MinLeaseDuration)
-			if s.expiration.After(minDesiredExpiration) {
+			if TestHandoutExpiredLeases || s.expiration.After(minDesiredExpiration) {
 				s.refcount++
 				if log.V(3) {
 					log.Infof("acquire: descID=%d version=%d refcount=%d", s.ID, s.Version, s.refcount)
