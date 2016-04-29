@@ -473,6 +473,10 @@ func init() {
 var _ context.Context
 var _ grpc.ClientConn
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion2
+
 // Client API for Admin service
 
 type AdminClient interface {
@@ -660,112 +664,166 @@ func RegisterAdminServer(s *grpc.Server, srv AdminServer) {
 	s.RegisterService(&_Admin_serviceDesc, srv)
 }
 
-func _Admin_Users_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_Users_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UsersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).Users(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).Users(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/Users",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).Users(ctx, req.(*UsersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_Databases_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_Databases_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DatabasesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).Databases(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).Databases(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/Databases",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).Databases(ctx, req.(*DatabasesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_DatabaseDetails_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_DatabaseDetails_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DatabaseDetailsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).DatabaseDetails(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).DatabaseDetails(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/DatabaseDetails",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).DatabaseDetails(ctx, req.(*DatabaseDetailsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_TableDetails_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_TableDetails_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TableDetailsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).TableDetails(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).TableDetails(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/TableDetails",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).TableDetails(ctx, req.(*TableDetailsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_Events_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_Events_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EventsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).Events(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).Events(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/Events",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).Events(ctx, req.(*EventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_SetUIData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_SetUIData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetUIDataRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).SetUIData(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).SetUIData(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/SetUIData",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).SetUIData(ctx, req.(*SetUIDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_GetUIData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_GetUIData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetUIDataRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).GetUIData(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).GetUIData(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/GetUIData",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).GetUIData(ctx, req.(*GetUIDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_Cluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_Cluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ClusterRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).Cluster(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).Cluster(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/Cluster",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).Cluster(ctx, req.(*ClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-func _Admin_Drain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+func _Admin_Drain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DrainRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	out, err := srv.(AdminServer).Drain(ctx, in)
-	if err != nil {
-		return nil, err
+	if interceptor == nil {
+		return srv.(AdminServer).Drain(ctx, in)
 	}
-	return out, nil
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.Admin/Drain",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).Drain(ctx, req.(*DrainRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 var _Admin_serviceDesc = grpc.ServiceDesc{

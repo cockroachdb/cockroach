@@ -320,6 +320,5 @@ func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 		Cmd: cmd,
 	}
 	hostConfig := container.HostConfig{NetworkMode: "host"}
-	ipo := types.ImagePullOptions{ImageID: postgresTestImage, Tag: postgresTestTag}
-	return l.OneShot(ipo, containerConfig, hostConfig, "docker-"+name)
+	return l.OneShot(postgresTestImage+":"+postgresTestTag, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
 }
