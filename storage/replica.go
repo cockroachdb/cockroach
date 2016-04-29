@@ -1016,30 +1016,32 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
-		timestamp := ba.Timestamp
+		cr := cacheRequest{
+			timestamp: ba.Timestamp,
+			txnID:     ba.GetTxnID(),
+		}
+
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if updatesTimestampCache(args) {
-				readTSCache := true
-				key := args.Header().Key
-				txnID := ba.GetTxnID()
+				header := args.Header()
 				switch args.(type) {
 				case *roachpb.DeleteRangeRequest:
 					// DeleteRange adds to the write timestamp cache to prevent
 					// subsequent writes from rewriting history.
-					readTSCache = false
+					cr.writes = append(cr.writes, args.Header())
 				case *roachpb.EndTransactionRequest:
-					// EndTransaction adds to the write timestamp cache to ensure
-					// replays create a transaction record with WriteTooOld set.
-					// We set txnID=nil because we want hits for same txn ID.
-					key = keys.TransactionKey(key, txnID)
-					txnID = nil
-					readTSCache = false
+					// EndTransaction adds to the write timestamp cache to ensure replays
+					// create a transaction record with WriteTooOld set.
+					key := keys.TransactionKey(header.Key, cr.txnID)
+					cr.txn = roachpb.Span{Key: key}
+				default:
+					cr.reads = append(cr.reads, header)
 				}
-				header := args.Header()
-				r.mu.tsCache.Add(key, header.EndKey, timestamp, txnID, readTSCache)
 			}
 		}
+
+		r.mu.tsCache.AddRequest(cr)
 	}
 	r.mu.cmdQ.remove(cmd)
 	return pErr
@@ -1065,6 +1067,13 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if ba.Txn != nil {
+		r.mu.tsCache.ExpandRequests(ba.Txn.Timestamp)
+	} else {
+		r.mu.tsCache.ExpandRequests(ba.Timestamp)
+	}
+
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if consultsTimestampCache(args) {
