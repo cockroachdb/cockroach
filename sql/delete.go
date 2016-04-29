@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -31,7 +30,7 @@ type deleteNode struct {
 	editNodeBase
 	n *parser.Delete
 
-	rd rowDeleter
+	tw tableDeleter
 
 	run struct {
 		// The following fields are populated during Start().
@@ -74,12 +73,14 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 	// TODO(dan): Use rd.fetchCols to compute the fetch selectors.
+	tw := tableDeleter{rd: rd, autoCommit: autoCommit}
 
-	return &deleteNode{
+	dn := &deleteNode{
 		n:            n,
 		editNodeBase: en,
-		rd:           rd,
-	}, nil
+		tw:           tw,
+	}
+	return dn, nil
 }
 
 func (d *deleteNode) Start() *roachpb.Error {
@@ -97,14 +98,16 @@ func (d *deleteNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	d.run.startEditNode(&d.editNodeBase, rows)
+	if pErr = d.run.startEditNode(&d.editNodeBase, rows, &d.tw); pErr != nil {
+		return pErr
+	}
 
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	// TODO(dt): We could probably be smarter when presented with an index-join,
 	// but this goes away anyway once we push-down more of SQL.
 	sel := rows.(*selectNode)
-	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.rd) {
+	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 		d.run.fastPath = true
 		d.run.pErr = d.fastDelete()
 		d.run.done = true
@@ -128,14 +131,14 @@ func (d *deleteNode) Next() bool {
 
 	if !d.run.rows.Next() {
 		// We're done. Finish the batch.
-		d.run.finalize(&d.editNodeBase, false)
+		d.run.pErr = d.tw.finalize()
+		d.run.done = true
 		return false
 	}
 
 	rowVals := d.run.rows.Values()
 
-	d.run.pErr = d.rd.deleteRow(d.run.b, rowVals)
-	if d.run.pErr != nil {
+	if _, d.run.pErr = d.tw.run(rowVals); d.run.pErr != nil {
 		return false
 	}
 
@@ -152,8 +155,8 @@ func (d *deleteNode) Next() bool {
 // Determine if the deletion of `rows` can be done without actually scanning them,
 // i.e. if we do not need to know their values for filtering expressions or a
 // RETURNING clause or for updating secondary indexes.
-func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, rd *rowDeleter) bool {
-	if !rd.fastPathAvailable() {
+func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bool {
+	if !td.fastPathAvailable() {
 		return false
 	}
 	if n.Returning != nil {
@@ -180,27 +183,14 @@ func (d *deleteNode) fastDelete() *roachpb.Error {
 		return scan.pErr
 	}
 
-	rowCount, pErr := d.rd.fastDelete(d.run.b, scan, d.fastDeleteCommitFunc)
+	if pErr := d.tw.init(d.p.txn); pErr != nil {
+		return pErr
+	}
+	rowCount, pErr := d.tw.fastDelete(scan)
 	if pErr != nil {
 		return pErr
 	}
 	d.rh.rowCount += rowCount
-	return nil
-}
-
-func (d *deleteNode) fastDeleteCommitFunc(b *client.Batch) *roachpb.Error {
-	if d.autoCommit {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		if pErr := d.p.txn.CommitInBatch(b); pErr != nil {
-			return pErr
-		}
-	} else {
-		if pErr := d.p.txn.Run(b); pErr != nil {
-			return pErr
-		}
-	}
 	return nil
 }
 

@@ -293,11 +293,8 @@ func makeRowUpdater(
 
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
-		// TODO(dan): Is it safe for these to share rowHelper instead of creating
-		// two more?
 		var err error
-		ru.rd, err = makeRowDeleter(tableDesc)
-		if err != nil {
+		if ru.rd, err = makeRowDeleter(tableDesc); err != nil {
 			return rowUpdater{}, err
 		}
 		ru.fetchCols = ru.rd.fetchCols
@@ -305,6 +302,8 @@ func makeRowUpdater(
 			return rowUpdater{}, err
 		}
 	} else {
+		// TODO(radu): we only need to select columns necessary to generate primary and
+		// secondary indexes keys, and columns needed by returningHelper.
 		ru.fetchCols = make([]ColumnDescriptor, len(requestedCols))
 		copy(ru.fetchCols, requestedCols)
 	}
@@ -513,59 +512,6 @@ func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) *roachpb
 	rd.startKey, rd.endKey = nil, nil
 
 	return nil
-}
-
-// fastPathAvailable returns true if the fastDelete optimization can be used.
-func (rd *rowDeleter) fastPathAvailable() bool {
-	if len(rd.helper.indexes) != 0 {
-		if log.V(2) {
-			log.Infof("delete forced to scan: values required to update %d secondary indexes", len(rd.helper.indexes))
-		}
-		return false
-	}
-	return true
-}
-
-// fastDelete adds to the batch the kv operations necessary to delete a sql
-// table row without knowing the values that are currently present.
-func (rd *rowDeleter) fastDelete(
-	b *client.Batch,
-	scan *scanNode,
-	commitFunc func(b *client.Batch) *roachpb.Error,
-) (rowCount int, pErr *roachpb.Error) {
-	for _, span := range scan.spans {
-		if log.V(2) {
-			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
-		}
-		b.DelRange(span.start, span.end, true)
-	}
-
-	pErr = commitFunc(b)
-	if pErr != nil {
-		return 0, pErr
-	}
-
-	for _, r := range b.Results {
-		var prev []byte
-		for _, i := range r.Keys {
-			// If prefix is same, don't bother decoding key.
-			if len(prev) > 0 && bytes.HasPrefix(i, prev) {
-				continue
-			}
-
-			after, err := scan.fetcher.readIndexKey(i)
-			if err != nil {
-				return 0, roachpb.NewError(err)
-			}
-			k := i[:len(i)-len(after)]
-			if !bytes.Equal(k, prev) {
-				prev = k
-				rowCount++
-			}
-		}
-	}
-
-	return rowCount, nil
 }
 
 func colIDtoRowIndexFromCols(cols []ColumnDescriptor) map[ColumnID]int {

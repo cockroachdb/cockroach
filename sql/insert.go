@@ -28,13 +28,16 @@ import (
 
 type insertNode struct {
 	// The following fields are populated during makePlan.
-	rowCreatorNodeBase
-	n          *parser.Insert
-	qvals      qvalMap
-	insertRows parser.SelectStatement
-	checkExprs []parser.Expr
+	editNodeBase
+	defaultExprs []parser.Expr
+	n            *parser.Insert
+	qvals        qvalMap
+	insertRows   parser.SelectStatement
+	checkExprs   []parser.Expr
 
-	ri rowInserter
+	insertCols            []ColumnDescriptor
+	insertColIDtoRowIndex map[ColumnID]int
+	tw                    tableWriter
 
 	run struct {
 		// The following fields are populated during Start().
@@ -99,13 +102,13 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		}
 	}
 
-	rc, rcErr := p.makeRowCreatorNode(en, cols)
-	if rcErr != nil {
-		return nil, rcErr
+	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	insertRows, err := p.fillDefaults(rc.defaultExprs, cols, n)
+	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -165,19 +168,23 @@ func (p *planner) Insert(n *parser.Insert, autoCommit bool) (planNode, *roachpb.
 		return nil, pErr
 	}
 
-	in := &insertNode{
-		n:                  n,
-		rowCreatorNodeBase: rc,
-		checkExprs:         checkExprs,
-		qvals:              qvals,
-		insertRows:         insertRows,
-	}
-
-	in.ri, err = makeRowInserter(en.tableDesc, cols)
+	ri, err := makeRowInserter(en.tableDesc, cols)
 	if err != nil {
-		return in, roachpb.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
+	tw := &tableInserter{ri: ri, autoCommit: autoCommit}
 
+	in := &insertNode{
+		n:                     n,
+		editNodeBase:          en,
+		defaultExprs:          defaultExprs,
+		checkExprs:            checkExprs,
+		qvals:                 qvals,
+		insertRows:            insertRows,
+		insertCols:            ri.insertCols,
+		insertColIDtoRowIndex: ri.insertColIDtoRowIndex,
+		tw: tw,
+	}
 	return in, nil
 }
 
@@ -198,7 +205,9 @@ func (n *insertNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	n.run.startEditNode(&n.editNodeBase, rows)
+	if pErr = n.run.startEditNode(&n.editNodeBase, rows, n.tw); pErr != nil {
+		return pErr
+	}
 
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
@@ -217,8 +226,8 @@ func (n *insertNode) Start() *roachpb.Error {
 			colIDToRetIndex[col.ID] = i
 		}
 
-		n.run.rowIdxToRetIdx = make([]int, len(n.ri.insertCols))
-		for i, col := range n.ri.insertCols {
+		n.run.rowIdxToRetIdx = make([]int, len(n.insertCols))
+		for i, col := range n.insertCols {
 			n.run.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 		}
 	}
@@ -233,7 +242,8 @@ func (n *insertNode) Next() bool {
 
 	if !n.run.rows.Next() {
 		// We're done. Finish the batch.
-		n.run.finalize(&n.editNodeBase, true)
+		n.run.pErr = n.tw.finalize()
+		n.run.done = true
 		return false
 	}
 
@@ -242,7 +252,7 @@ func (n *insertNode) Next() bool {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
 	// default expressions.
-	for i := len(rowVals); i < len(n.ri.insertCols); i++ {
+	for i := len(rowVals); i < len(n.insertCols); i++ {
 		if n.defaultExprs == nil {
 			rowVals = append(rowVals, parser.DNull)
 			continue
@@ -258,7 +268,7 @@ func (n *insertNode) Next() bool {
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range n.tableDesc.Columns {
 		if !col.Nullable {
-			if i, ok := n.ri.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
+			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
 				n.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 				return false
 			}
@@ -267,7 +277,7 @@ func (n *insertNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
-		if err := checkValueWidth(n.ri.insertCols[i], rowVals[i]); err != nil {
+		if err := checkValueWidth(n.insertCols[i], rowVals[i]); err != nil {
 			n.run.pErr = roachpb.NewError(err)
 			return false
 		}
@@ -277,7 +287,7 @@ func (n *insertNode) Next() bool {
 		// Populate qvals.
 		for ref, qval := range n.qvals {
 			// The colIdx is 0-based, we need to change it to 1-based.
-			ri, has := n.ri.insertColIDtoRowIndex[ColumnID(ref.colIdx+1)]
+			ri, has := n.insertColIDtoRowIndex[ColumnID(ref.colIdx+1)]
 			if !has {
 				n.run.pErr = roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
 				return false
@@ -299,7 +309,7 @@ func (n *insertNode) Next() bool {
 		}
 	}
 
-	n.run.pErr = n.ri.insertRow(n.run.b, rowVals)
+	_, n.run.pErr = n.tw.run(rowVals)
 	if n.run.pErr != nil {
 		return false
 	}
@@ -495,7 +505,7 @@ func (n *insertNode) ExplainPlan(v bool) (name, description string, children []p
 	var buf bytes.Buffer
 	if v {
 		fmt.Fprintf(&buf, "into %s (", n.tableDesc.Name)
-		for i, col := range n.ri.insertCols {
+		for i, col := range n.insertCols {
 			if i > 0 {
 				fmt.Fprintf(&buf, ", ")
 			}
