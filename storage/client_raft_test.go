@@ -1356,7 +1356,25 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// Now the tombstone on node 1 prevents it from rejoining the rogue
 	// copy of the group.
 	time.Sleep(100 * time.Millisecond)
-	mtc.waitForValues(roachpb.Key("a"), []int64{16, 0, 5})
+	util.SucceedsSoon(t, func() error {
+		actual := mtc.readIntFromEngines(roachpb.Key("a"))
+		// Normally, replica GC has not happened yet on store 2, so we
+		// expect {16, 0, 5}. However, it is possible (on a
+		// slow/overloaded machine) for the end of the ChangeReplicas
+		// transaction to be queued up inside the raft transport for long
+		// enough that it doesn't arrive until after store 2 has been
+		// restarted, so it is able to trigger an early GC on the
+		// restarted node, resulting in {16, 0, 0}.
+		// TODO(bdarnell): When #5789 is fixed, the probabilities flip and
+		// {16, 0, 0} becomes the expected case. When this happens
+		// we should just combine this check with the following one.
+		expected1 := []int64{16, 0, 5}
+		expected2 := []int64{16, 0, 0}
+		if !reflect.DeepEqual(expected1, actual) && !reflect.DeepEqual(expected2, actual) {
+			return util.Errorf("expected %v or %v, got %v", expected1, expected2, actual)
+		}
+		return nil
+	})
 
 	// Run garbage collection on node 2. The lack of an active leader
 	// lease will cause GC to do a consistent range lookup, where it
