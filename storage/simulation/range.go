@@ -98,7 +98,7 @@ func (r *Range) getStores() map[roachpb.StoreID]*Store {
 	return stores
 }
 
-// split range adds a replica to all the stores from the passed in range. This
+// splitRange adds a replica to all the stores from the passed in range. This
 // function should only be called on new ranges as it will overwrite all of the
 // replicas in the range.
 func (r *Range) splitRange(originalRange *Range) {
