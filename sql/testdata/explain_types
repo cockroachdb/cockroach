@@ -1,0 +1,55 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+query ITTT colnames
+EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
+----
+Level  Type   Element   Description
+0      insert result    ()
+1      values result    (column1 int, column2 int)
+1      values tuple 0   (((1)[int], (2)[int]))[tuple]
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+query ITTT
+EXPLAIN (TYPES) SELECT * FROM t
+----
+0      select result   (k int, v int)
+0      select render 0 (k)[int]
+0      select render 1 (v)[int]
+1      scan   result   (k int, v int)
+
+query ITTT
+EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
+----
+0      select result   (k int, v int)
+0      select render 0 (k)[int]
+0      select render 1 (v)[int]
+1      scan   result   (k int, v int)
+1      scan   filter   ((v)[int] > (123)[int])[bool]
+
+query ITTT
+EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
+----
+0      values  result  (column1 int, column2 int, column3 int)
+0      values  tuple 0 (((1)[int], (2)[int], (3)[int]))[tuple]
+0      values  tuple 1 (((4)[int], (5)[int], (6)[int]))[tuple]
+
+query ITTT
+EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2
+----
+0 group  result   (z int, v int)
+0 group  having   ((v)[int] < (2)[int])[bool]
+0 group  render z ((2)[int] * (COUNT((k)[int]))[int])[int]
+0 group  render v (v)[int]
+1 select result   (z int, v int, v int)
+1 select render 0 (k)[int]
+1 select render 1 (v)[int]
+1 select render 2 (v)[int]
+1 select render 3 (v)[int]
+2 scan   result   (k int, v int)
+2 scan   filter   ((v)[int] > (123)[int])[bool]

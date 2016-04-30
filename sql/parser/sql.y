@@ -21,8 +21,8 @@ package parser
 
 import (
 	"errors"
-    "go/constant"
-    "go/token"
+	"go/constant"
+	"go/token"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -66,8 +66,8 @@ type sqlSymUnion struct {
 // becomes a nil instance of the empty interface and therefore will fail a
 // direct type assertion. Instead, a guarded type assertion must be used,
 // which returns nil if the type assertion fails.
-func (u *sqlSymUnion) constVal() *ConstVal {
-    return u.val.(*ConstVal)
+func (u *sqlSymUnion) numVal() *NumVal {
+    return u.val.(*NumVal)
 }
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
@@ -427,7 +427,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 
 %type <ColumnType> typename simple_typename const_typename
 %type <ColumnType> numeric opt_numeric_modifiers
-%type <*ConstVal> opt_float
+%type <*NumVal> opt_float
 %type <ColumnType> character const_character
 %type <ColumnType> character_with_length character_without_length
 %type <ColumnType> const_datetime const_interval
@@ -436,7 +436,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 %type <str> extract_arg
 %type <empty> opt_varying
 
-%type <*ConstVal>  signed_iconst
+%type <*NumVal>  signed_iconst
 %type <Expr>  opt_boolean_or_string
 %type <Exprs> var_list
 %type <*QualifiedName> opt_from_var_name_clause var_name
@@ -482,7 +482,7 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 // DOT_DOT is unused in the core SQL grammar, and so will always provoke parse
 // errors. It is needed by PL/pgsql.
 %token <str>   IDENT SCONST BCONST
-%token <*ConstVal> ICONST FCONST
+%token <*NumVal> ICONST FCONST
 %token <str>   PARAM
 %token <str>   TYPECAST DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
@@ -1177,7 +1177,7 @@ opt_boolean_or_string:
   }
 | ON
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
   // OFF is also accepted as a boolean value, but is handled by the
   // non_reserved_word rule. The action for booleans and strings is the same,
@@ -1192,17 +1192,22 @@ opt_boolean_or_string:
 zone_value:
   SCONST
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 | IDENT
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 | const_interval SCONST opt_interval
   {
-    expr := &CastExpr{Expr: NewDString($2), Type: $1.colType()}
+    expr := &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
+    typedExpr, err := TypeCheck(expr, nil, nil)
+    if err != nil {
+      sqllex.Error("cannot type check interval type")
+      return 1
+    }
     var ctx EvalContext
-    d, err := expr.Eval(ctx)
+    d, err := typedExpr.Eval(ctx)
     if err != nil {
       sqllex.Error("cannot evaluate to an interval type")
       return 1
@@ -1215,11 +1220,11 @@ zone_value:
 | numeric_only
 | DEFAULT
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 | LOCAL
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 
 opt_encoding:
@@ -1230,11 +1235,11 @@ opt_encoding:
 non_reserved_word_or_sconst:
   non_reserved_word
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 | SCONST
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 
 show_stmt:
@@ -1559,15 +1564,15 @@ key_action:
 numeric_only:
   FCONST
   {
-    $$.val = $1.constVal()
+    $$.val = $1.numVal()
   }
 | '-' FCONST
   {
-    $$.val = &ConstVal{Value: constant.UnaryOp(token.SUB, $2.constVal().Value, 0)}
+    $$.val = &NumVal{Value: constant.UnaryOp(token.SUB, $2.numVal().Value, 0)}
   }
 | signed_iconst
   {
-    $$.val = $1.constVal()
+    $$.val = $1.numVal()
   }
 
 // TRUNCATE table relname1, relname2, ...
@@ -1906,7 +1911,7 @@ single_set_clause:
 multiple_set_clause:
   '(' qualified_name_list ')' '=' ctext_row
   {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Tuple{$5.exprs()}}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Tuple{Exprs: $5.exprs()}}
   }
 | '(' qualified_name_list ')' '=' select_with_parens
   {
@@ -2297,12 +2302,12 @@ having_clause:
 values_clause:
   VALUES ctext_row
   {
-    $$.val = &ValuesClause{[]*Tuple{{$2.exprs()}}}
+    $$.val = &ValuesClause{[]*Tuple{{Exprs: $2.exprs()}}}
   }
 | values_clause ',' ctext_row
   {
     valNode := $1.selectStmt().(*ValuesClause)
-    valNode.Tuples = append(valNode.Tuples, &Tuple{$3.exprs()})
+    valNode.Tuples = append(valNode.Tuples, &Tuple{Exprs: $3.exprs()})
     $$.val = valNode
   }
 
@@ -2619,26 +2624,26 @@ const_typename:
 opt_numeric_modifiers:
   '(' ICONST ')'
   {
-    prec, err := $2.constVal().asInt()
+    prec, err := $2.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalType{Prec: prec}
+    $$.val = &DecimalType{Prec: int(prec)}
   }
 | '(' ICONST ',' ICONST ')'
   {
-    prec, err := $2.constVal().asInt()
+    prec, err := $2.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    scale, err := $4.constVal().asInt()
+    scale, err := $4.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalType{Prec: prec, Scale: scale}
+    $$.val = &DecimalType{Prec: int(prec), Scale: int(scale)}
   }
 | /* EMPTY */
   {
@@ -2673,12 +2678,12 @@ numeric:
   }
 | FLOAT opt_float
   {
-    prec, err := $2.constVal().asInt()
+    prec, err := $2.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newFloatType(prec)
+    $$.val = newFloatType(int(prec))
   }
 | DOUBLE PRECISION
   {
@@ -2723,11 +2728,11 @@ numeric:
 opt_float:
   '(' ICONST ')'
   {
-    $$.val = $2.constVal()
+    $$.val = $2.numVal()
   }
 | /* EMPTY */
   {
-    $$.val = &ConstVal{Value: constant.MakeInt64(0)}
+    $$.val = &NumVal{Value: constant.MakeInt64(0)}
   }
 
 // SQL bit-field data types
@@ -2745,12 +2750,12 @@ const_bit:
 bit_with_length:
   BIT opt_varying '(' ICONST ')'
   {
-    n, err := $4.constVal().asInt()
+    n, err := $4.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newIntBitType(n)
+    $$.val = newIntBitType(int(n))
   }
 
 bit_without_length:
@@ -2772,14 +2777,14 @@ const_character:
 character_with_length:
   character_base '(' ICONST ')'
   {
-    n, err := $3.constVal().asInt()
+    n, err := $3.numVal().asInt64()
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
     $$.val = $1.colType()
     if n != 0 {
-      strType := &StringType{N: n}
+      strType := &StringType{N: int(n)}
       strType.Name = $$.val.(*StringType).Name
       $$.val = strType
     }
@@ -3463,31 +3468,31 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$.val = &Row{$3.exprs()}
+    $$.val = &Row{Exprs: $3.exprs()}
   }
 | ROW '(' ')'
   {
-    $$.val = &Row{nil}
+    $$.val = &Row{Exprs: nil}
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$.val = &Tuple{append($2.exprs(), $4.expr())}
+    $$.val = &Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
 
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$.val = &Row{$3.exprs()}
+    $$.val = &Row{Exprs: $3.exprs()}
   }
 | ROW '(' ')'
   {
-    $$.val = &Row{nil}
+    $$.val = &Row{Exprs: nil}
   }
 
 implicit_row:
   '(' expr_list ',' a_expr ')'
   {
-    $$.val = &Tuple{append($2.exprs(), $4.expr())}
+    $$.val = &Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
 
 // sub_type:
@@ -3572,7 +3577,7 @@ array_expr_list:
 extract_list:
   extract_arg FROM a_expr
   {
-    $$.val = Exprs{NewDString($1), $3.expr()}
+    $$.val = Exprs{&StrVal{s: $1}, $3.expr()}
   }
 
 // TODO(vivek): Narrow down to just IDENT once the other
@@ -3688,7 +3693,7 @@ in_expr:
   }
 | '(' expr_list ')'
   {
-    $$.val = &Tuple{$2.exprs()}
+    $$.val = &Tuple{Exprs: $2.exprs()}
   }
 
 // Define SQL-style CASE clause.
@@ -3956,32 +3961,32 @@ func_name:
 a_expr_const:
   ICONST
   {
-    $$.val = $1.constVal()
+    $$.val = $1.numVal()
   }
 | FCONST
   {
-    $$.val = $1.constVal()
+    $$.val = $1.numVal()
   }
 | SCONST
   {
-    $$.val = NewDString($1)
+    $$.val = &StrVal{s: $1}
   }
 | BCONST
   {
-    $$.val = NewDBytes(DBytes($1))
+    $$.val = &StrVal{s: $1, bytesEsc: true}
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: NewDString($2), Type: $1.colType()}
+    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
   }
 | const_interval SCONST opt_interval
   {
-    $$.val = &CastExpr{Expr: NewDString($2), Type: $1.colType()}
+    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
   }
 | const_interval '(' ICONST ')' SCONST
   {
-    $$.val = &CastExpr{Expr: NewDString($5), Type: $1.colType()}
+    $$.val = &CastExpr{Expr: &StrVal{s: $5}, Type: $1.colType()}
   }
 | TRUE
   {
@@ -4000,11 +4005,11 @@ signed_iconst:
   ICONST
 | '+' ICONST
   {
-    $$.val = $2.constVal()
+    $$.val = $2.numVal()
   }
 | '-' ICONST
   {
-    $$.val = &ConstVal{Value: constant.UnaryOp(token.SUB, $2.constVal().Value, 0)}
+    $$.val = &NumVal{Value: constant.UnaryOp(token.SUB, $2.numVal().Value, 0)}
   }
 
 // Name classification hierarchy.

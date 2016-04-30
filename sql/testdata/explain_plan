@@ -4,6 +4,13 @@ CREATE TABLE t (
   v INT
 )
 
+query ITT colnames
+EXPLAIN INSERT INTO t VALUES (1, 2)
+----
+Level  Type   Description
+0      insert
+1      values 2 columns
+
 statement ok
 INSERT INTO t VALUES (1, 2)
 
@@ -19,7 +26,6 @@ EXPLAIN (VERBOSE) SELECT * FROM t
 Level  Type   Description
 0      select (k, v)@t 
 1      scan   t@primary
-
 
 query ITT colnames
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3

@@ -24,7 +24,7 @@ import (
 )
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) UnionClause(n *parser.UnionClause, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
 	var emitAll = false
 	var emit unionNodeEmit
 	switch n.Type {
@@ -50,11 +50,11 @@ func (p *planner) UnionClause(n *parser.UnionClause, autoCommit bool) (planNode,
 		return nil, roachpb.NewErrorf("%v is not supported", n.Type)
 	}
 
-	left, err := p.makePlan(n.Left, autoCommit)
+	left, err := p.makePlan(n.Left, desiredTypes, autoCommit)
 	if err != nil {
 		return nil, err
 	}
-	right, err := p.makePlan(n.Right, autoCommit)
+	right, err := p.makePlan(n.Right, desiredTypes, autoCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +166,8 @@ func (n *unionNode) SetLimitHint(numRows int64, soft bool) {
 func (n *unionNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "union", "-", []planNode{n.left, n.right}
 }
+
+func (n *unionNode) ExplainTypes(_ func(string, string)) {}
 
 func (n *unionNode) MarkDebug(mode explainMode) {
 	if mode != explainDebug {

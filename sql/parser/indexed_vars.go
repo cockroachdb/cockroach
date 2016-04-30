@@ -17,14 +17,15 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 )
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
 type IndexedVarContainer interface {
-	IndexedVarTypeCheck(idx int, args MapArgs) (Datum, error)
 	IndexedVarEval(idx int, ctx EvalContext) (Datum, error)
+	IndexedVarReturnType(idx int) Datum
 	IndexedVarString(idx int) string
 }
 
@@ -36,6 +37,7 @@ type IndexedVar struct {
 	container IndexedVarContainer
 }
 
+var _ TypedExpr = &IndexedVar{}
 var _ VariableExpr = &IndexedVar{}
 
 // Variable is a dummy function part of the VariableExpr interface.
@@ -47,17 +49,23 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(args MapArgs) (Datum, error) {
-	return v.container.IndexedVarTypeCheck(v.Idx, args)
+func (v *IndexedVar) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
+	return v, nil
 }
 
-// Eval is part of the Expr interface.
+// Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx EvalContext) (Datum, error) {
 	return v.container.IndexedVarEval(v.Idx, ctx)
 }
 
-func (v *IndexedVar) String() string {
-	return v.container.IndexedVarString(v.Idx)
+// ReturnType is part of the TypedExpr interface.
+func (v *IndexedVar) ReturnType() Datum {
+	return v.container.IndexedVarReturnType(v.Idx)
+}
+
+// Format implements the NodeFormatter interface.
+func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(v.container.IndexedVarString(v.Idx))
 }
 
 // IndexedVarHelper is a structure that helps with initialization of IndexVars.

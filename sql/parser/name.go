@@ -27,24 +27,24 @@ import "bytes"
 // A Name is an SQL identifier.
 type Name string
 
-// String formats an SQL identifier, applying proper escaping rules.
-func (n Name) String() string {
-	return encodeSQLIdent(string(n))
+// Format implements the NodeFormatter interface.
+func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLIdent(buf, string(n))
 }
+func (n Name) String() string { return AsString(n) }
 
 // A NameList is a list of identifier.
 // TODO(tschottdorf): would be nicer to have []Name here but unless we want
 // to introduce new types to the grammar, NameList([]string{...}) needs to work.
 type NameList []string
 
-// String formats the contained names as a comma-separated, escaped string.
-func (l NameList) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (l NameList) Format(buf *bytes.Buffer, f FmtFlags) {
 	for i, n := range l {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(Name(n).String())
+		FormatNode(buf, f, Name(n))
 	}
-	return buf.String()
 }
+func (l NameList) String() string { return AsString(l) }

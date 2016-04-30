@@ -28,15 +28,23 @@ type returningHelper struct {
 	// Expected columns.
 	columns []ResultColumn
 	// Processed copies of expressions from ReturningExprs.
-	exprs    parser.Exprs
-	qvals    qvalMap
-	rowCount int
+	untypedExprs parser.Exprs
+	exprs        []parser.TypedExpr
+	qvals        qvalMap
+	rowCount     int
+	desiredTypes []parser.Datum
 }
 
 func (p *planner) makeReturningHelper(
-	r parser.ReturningExprs, alias string, tablecols []ColumnDescriptor,
+	r parser.ReturningExprs,
+	desiredTypes []parser.Datum,
+	alias string,
+	tablecols []ColumnDescriptor,
 ) (returningHelper, error) {
-	rh := returningHelper{p: p}
+	rh := returningHelper{
+		p:            p,
+		desiredTypes: desiredTypes,
+	}
 	if len(r) == 0 {
 		return rh, nil
 	}
@@ -47,12 +55,14 @@ func (p *planner) makeReturningHelper(
 		alias:   alias,
 	}
 	rh.qvals = make(qvalMap)
-	rh.exprs = make([]parser.Expr, 0, len(r))
+	rh.untypedExprs = make([]parser.Expr, 0, len(r))
 	for _, target := range r {
 		if isStar, cols, exprs, err := checkRenderStar(target, &table, rh.qvals); err != nil {
 			return returningHelper{}, err
 		} else if isStar {
-			rh.exprs = append(rh.exprs, exprs...)
+			for _, expr := range exprs {
+				rh.untypedExprs = append(rh.untypedExprs, expr)
+			}
 			rh.columns = append(rh.columns, cols...)
 			continue
 		}
@@ -66,9 +76,10 @@ func (p *planner) makeReturningHelper(
 		if err != nil {
 			return returningHelper{}, err
 		}
-		rh.exprs = append(rh.exprs, expr)
+		rh.untypedExprs = append(rh.untypedExprs, expr)
 		rh.columns = append(rh.columns, ResultColumn{Name: outputName})
 	}
+	rh.exprs = make([]parser.TypedExpr, len(rh.untypedExprs))
 	return rh, nil
 }
 
@@ -98,12 +109,21 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 // for placeholders match their context (a task for exec). This
 // ought to be split into two phases.
 func (rh *returningHelper) TypeCheck() *roachpb.Error {
-	for i, expr := range rh.exprs {
-		typ, err := parser.PerformTypeChecking(expr, rh.p.evalCtx.Args)
+	for i, expr := range rh.untypedExprs {
+		var desired parser.Datum
+		if len(rh.desiredTypes) > i {
+			desired = rh.desiredTypes[i]
+		}
+		typedExpr, err := parser.TypeCheck(expr, rh.p.evalCtx.Args, desired)
 		if err != nil {
 			return roachpb.NewError(err)
 		}
-		rh.columns[i].Typ = typ
+		typedExpr, err = rh.p.parser.NormalizeExpr(rh.p.evalCtx, typedExpr)
+		if err != nil {
+			return roachpb.NewError(err)
+		}
+		rh.exprs[i] = typedExpr
+		rh.columns[i].Typ = typedExpr.ReturnType()
 	}
 	return nil
 }

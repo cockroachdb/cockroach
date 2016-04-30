@@ -81,7 +81,7 @@ func makeIndexJoin(indexScan *scanNode, exactPrefix int) *indexJoinNode {
 			iv := expr.(*parser.IndexedVar)
 			return true, table.filterVars.IndexedVar(iv.Idx)
 		}
-		table.filter = exprConvertVars(indexScan.filter, convFunc)
+		table.filter = exprConvertVars(indexScan.filter, convFunc).(parser.TypedExpr)
 
 		// Now we split the filter by extracting the part that can be evaluated using just the index
 		// columns.
@@ -219,6 +219,8 @@ func (n *indexJoinNode) PErr() *roachpb.Error {
 func (n *indexJoinNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "index-join", "", []planNode{n.index, n.table}
 }
+
+func (n *indexJoinNode) ExplainTypes(_ func(string, string)) {}
 
 func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	if numRows < joinBatchSize {

@@ -44,8 +44,8 @@ type deleteNode struct {
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
-func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.Error) {
-	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.DELETE)
+func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
+	en, pErr := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.DELETE)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -59,7 +59,7 @@ func (p *planner) Delete(n *parser.Delete, autoCommit bool) (planNode, *roachpb.
 		Exprs: en.tableDesc.allColumnsSelector(),
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	})
+	}, nil)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -80,7 +80,7 @@ func (d *deleteNode) Start() *roachpb.Error {
 		Exprs: d.tableDesc.allColumnsSelector(),
 		From:  []parser.TableExpr{d.n.Table},
 		Where: d.n.Where,
-	})
+	}, nil)
 	if pErr != nil {
 		return pErr
 	}
@@ -246,6 +246,13 @@ func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []p
 		fmt.Fprintf(&buf, ")")
 	}
 	return "delete", buf.String(), []planNode{d.run.rows}
+}
+
+func (d *deleteNode) ExplainTypes(regTypes func(string, string)) {
+	cols := d.rh.columns
+	for i, rexpr := range d.rh.exprs {
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+	}
 }
 
 func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}

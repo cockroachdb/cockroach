@@ -50,12 +50,8 @@ func testTableDesc() *TableDescriptor {
 	}
 }
 
-func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
+func parseAndNormalizeExpr(t *testing.T, sql string) (parser.TypedExpr, qvalMap) {
 	expr, err := parser.ParseExprTraditional(sql)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	expr, err = (parser.EvalContext{}).NormalizeExpr(expr)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
@@ -64,20 +60,23 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.Expr, qvalMap) {
 	// expressions containing qvalues.
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(desc)
-	if err := desc.AllocateIDs(); err != nil {
+	if err = desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	expr, nErr := sel.resolveQNames(expr)
-	if nErr != nil {
-		t.Fatalf("%s: %v", sql, nErr)
-	}
-	if _, err := parser.PerformTypeChecking(expr, nil); err != nil {
+	if expr, err = sel.resolveQNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	return expr, sel.qvals
+	typedExpr, err := parser.TypeCheck(expr, nil, nil)
+	if err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+	if typedExpr, err = (parser.EvalContext{}).NormalizeExpr(typedExpr); err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+	return typedExpr, sel.qvals
 }
 
-func checkEquivExpr(a, b parser.Expr, qvals qvalMap) error {
+func checkEquivExpr(a, b parser.TypedExpr, qvals qvalMap) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.
@@ -251,7 +250,7 @@ func TestSimplifyExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		expr, equiv := simplifyExpr(expr)
+		expr, equiv := simplifyTypedExpr(expr)
 		if s := expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -287,7 +286,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
+		expr2, equiv := simplifyTypedExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -421,7 +420,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a > 1 AND a IS NOT NULL`, `a > 1`, true},
 		{`a IS NOT NULL AND a > 1`, `a > 1`, true},
 		{`a > 1.0 AND a = 2`, `a = 2`, true},
-		{`a > 1 AND a = 2.0`, `a = 2.0`, true},
+		{`a > 1 AND a = 2.1`, `a = 2.1`, true},
 
 		{`a >= 1 AND a = 1`, `a = 1`, true},
 		{`a >= 1 AND a = 2`, `a = 2`, true},
@@ -520,7 +519,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
+		expr2, equiv := simplifyTypedExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -737,7 +736,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
+		expr2, equiv := simplifyTypedExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}

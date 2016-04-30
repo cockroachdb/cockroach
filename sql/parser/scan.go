@@ -541,7 +541,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		if floatConst.Kind() == constant.Unknown {
 			panic(fmt.Sprintf("could not make constant float from literal %q", lval.str))
 		}
-		lval.union.val = &ConstVal{Value: floatConst, OrigString: lval.str}
+		lval.union.val = &NumVal{Value: floatConst, OrigString: lval.str}
 	} else {
 		if isHex && s.pos == start+2 {
 			lval.id = ERROR
@@ -554,7 +554,7 @@ func (s *scanner) scanNumber(lval *sqlSymType, ch int) {
 		if intConst.Kind() == constant.Unknown {
 			panic(fmt.Sprintf("could not make constant int from literal %q", lval.str))
 		}
-		lval.union.val = &ConstVal{Value: intConst, OrigString: lval.str}
+		lval.union.val = &NumVal{Value: intConst, OrigString: lval.str}
 	}
 }
 
@@ -577,7 +577,7 @@ func (s *scanner) scanParam(lval *sqlSymType) {
 
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = &ConstVal{Value: constant.MakeUint64(uval)}
+	lval.union.val = &NumVal{Value: constant.MakeUint64(uval)}
 	lval.id = PARAM
 }
 

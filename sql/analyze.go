@@ -151,6 +151,11 @@ func simplifyExpr(e parser.Expr) (simplified parser.Expr, equivalent bool) {
 	return parser.MakeDBool(true), false
 }
 
+func simplifyTypedExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent bool) {
+	expr, eq := simplifyExpr(e)
+	return expr.(parser.TypedExpr), eq
+}
+
 func simplifyNotExpr(n *parser.NotExpr) (parser.Expr, bool) {
 	switch t := n.Expr.(type) {
 	case *parser.ComparisonExpr:

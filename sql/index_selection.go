@@ -134,7 +134,11 @@ func selectIndex(
 		// If the simplified expression is equivalent and there is a single
 		// disjunction, use it for the filter instead of the original expression.
 		if equivalent && len(exprs) == 1 {
-			s.filter = joinAndExprs(exprs[0])
+			if untypedFilter := joinAndExprs(exprs[0]); untypedFilter != nil {
+				s.filter = untypedFilter.(parser.TypedExpr)
+			} else {
+				s.filter = nil
+			}
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
@@ -205,7 +209,11 @@ func selectIndex(
 		// There are no spans to scan.
 		return &emptyNode{}, nil
 	}
-	s.filter = applyConstraints(s.filter, c.constraints)
+	if untypedFilter := applyConstraints(s.filter, c.constraints); untypedFilter != nil {
+		s.filter = untypedFilter.(parser.TypedExpr)
+	} else {
+		s.filter = nil
+	}
 	noFilter := (s.filter == nil)
 	s.reverse = c.reverse
 
@@ -494,6 +502,7 @@ func (v *indexInfo) makeOrConstraints(orExprs []parser.Exprs) error {
 // 1", but if we performed this transform in simpilfyComparisonExpr it would
 // simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
 // obvious based on comparisons of the constants.
+// TODO(nvanbenschoten) This should be `andExprs parser.TypedExprs`.
 func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraints, error) {
 	var constraints indexConstraints
 
@@ -703,16 +712,12 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 				// we can not include it in the index constraints because the index
 				// encoding would be incorrect. See #4313.
 				if preStart != *startExpr {
-					if mixed, err := isMixedTypeComparison(*startExpr); err != nil {
-						return nil, err
-					} else if mixed {
+					if isMixedTypeComparison(*startExpr) {
 						*startExpr = nil
 					}
 				}
 				if preEnd != *endExpr {
-					if mixed, err := isMixedTypeComparison(*endExpr); err != nil {
-						return nil, err
-					} else if mixed {
+					if isMixedTypeComparison(*endExpr) {
 						*endExpr = nil
 					}
 				}
@@ -780,31 +785,35 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 	return true
 }
 
-func isMixedTypeComparison(c *parser.ComparisonExpr) (bool, error) {
+func isMixedTypeComparison(c *parser.ComparisonExpr) bool {
 	switch c.Operator {
 	case parser.In, parser.NotIn:
 		tuple := *c.Right.(*parser.DTuple)
 		for _, expr := range tuple {
-			if mixed, err := sameTypeExprs(c.Left, expr); mixed || err != nil {
-				return mixed, err
+			left := c.Left.(parser.TypedExpr)
+			right := expr.(parser.TypedExpr)
+			if !sameTypeExprs(left, right) {
+				return true
 			}
 		}
-		return false, nil
+		return false
 	default:
-		return sameTypeExprs(c.Left, c.Right)
+		left := c.Left.(parser.TypedExpr)
+		right := c.Right.(parser.TypedExpr)
+		return !sameTypeExprs(left, right)
 	}
 }
 
-func sameTypeExprs(left, right parser.Expr) (bool, error) {
-	dummyLeft, err := left.TypeCheck(nil)
-	if err != nil || dummyLeft == parser.DNull {
-		return false, err
+func sameTypeExprs(left, right parser.TypedExpr) bool {
+	leftType := left.ReturnType()
+	if leftType == parser.DNull {
+		return true
 	}
-	dummyRight, err := right.TypeCheck(nil)
-	if err != nil || dummyRight == parser.DNull {
-		return false, err
+	rightType := right.ReturnType()
+	if rightType == parser.DNull {
+		return true
 	}
-	return !dummyLeft.TypeEqual(dummyRight), nil
+	return leftType.TypeEqual(rightType)
 }
 
 type indexInfoByCost []*indexInfo

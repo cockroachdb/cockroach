@@ -60,10 +60,19 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 
 		// Normalize the expression which has the side-effect of evaluating
 		// constant expressions and unwrapping expressions like "((a))" to "a".
-		expr, err := p.parser.NormalizeExpr(p.evalCtx, o.Expr)
-		if err != nil {
-			return nil, roachpb.NewError(err)
+		expr := o.Expr
+		for {
+			if paren, ok := expr.(*parser.ParenExpr); ok {
+				expr = paren.Expr
+			} else {
+				break
+			}
 		}
+
+		// expr, err := p.parser.NormalizeExpr(p.evalCtx, o.Expr.(parser.TypedExpr))
+		// if err != nil {
+		// 	return nil, roachpb.NewError(err)
+		// }
 
 		if qname, ok := expr.(*parser.QualifiedName); ok {
 			if len(qname.Indirect) == 0 {
@@ -119,7 +128,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
-				if err := s.addRender(parser.SelectExpr{Expr: expr}); err != nil {
+				if err := s.addRender(parser.SelectExpr{Expr: expr}, parser.DummyInt); err != nil {
 					return nil, err
 				}
 				index = len(s.columns) - 1
@@ -142,7 +151,12 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
 func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
-	switch i := expr.(type) {
+	typedExpr, err := parser.TypeConstants(expr)
+	if err != nil {
+		return 0, err
+	}
+
+	switch i := typedExpr.(type) {
 	case *parser.DInt:
 		index := int(*i)
 		if numCols := numOriginalCols; index < 1 || index > numCols {
@@ -151,7 +165,7 @@ func colIndex(numOriginalCols int, expr parser.Expr) (int, error) {
 		return index - 1, nil
 
 	case parser.Datum:
-		return -1, fmt.Errorf("non-integer constant column index: %s", expr)
+		return -1, fmt.Errorf("non-integer constant column index: %s", typedExpr)
 
 	default:
 		// expr doesn't look like a col index (i.e. not a constant).
@@ -236,6 +250,8 @@ func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []pla
 
 	return name, description, []planNode{n.plan}
 }
+
+func (n *sortNode) ExplainTypes(_ func(string, string)) {}
 
 func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	if !n.needSort {

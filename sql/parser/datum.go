@@ -20,9 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
-	"strconv"
 	"time"
 
 	"gopkg.in/inf.v0"
@@ -64,29 +62,13 @@ var (
 	DummyInterval Datum = &DInterval{}
 	// dummyTuple is a placeholder DTuple value.
 	dummyTuple Datum = &DTuple{}
-	// dummyTuple is a placeholder DValArg value.
-	dummyValArg Datum = &DValArg{}
 	// DNull is the NULL Datum.
 	DNull Datum = dNull{}
-
-	boolType        = reflect.TypeOf(DummyBool)
-	intType         = reflect.TypeOf(DummyInt)
-	floatType       = reflect.TypeOf(DummyFloat)
-	decimalType     = reflect.TypeOf(DummyDecimal)
-	stringType      = reflect.TypeOf(DummyString)
-	bytesType       = reflect.TypeOf(DummyBytes)
-	dateType        = reflect.TypeOf(DummyDate)
-	timestampType   = reflect.TypeOf(DummyTimestamp)
-	timestampTZType = reflect.TypeOf(DummyTimestampTZ)
-	intervalType    = reflect.TypeOf(DummyInterval)
-	tupleType       = reflect.TypeOf(dummyTuple)
-	nullType        = reflect.TypeOf(DNull)
-	valargType      = reflect.TypeOf(dummyValArg)
 )
 
 // A Datum holds either a bool, int64, float64, string or []Datum.
 type Datum interface {
-	Expr
+	TypedExpr
 	// Type returns the (user-friendly) name of the type.
 	Type() string
 	// TypeEqual determines if the receiver and the other Datum have the same
@@ -145,8 +127,13 @@ func GetBool(d Datum) (DBool, error) {
 	return false, fmt.Errorf("cannot convert %s to bool", d.Type())
 }
 
+// ReturnType implements the TypedExpr interface.
+func (*DBool) ReturnType() Datum {
+	return DummyBool
+}
+
 // Type implements the Datum interface.
-func (d *DBool) Type() string {
+func (*DBool) Type() string {
 	return "bool"
 }
 
@@ -176,22 +163,22 @@ func (d *DBool) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DBool) HasPrev() bool {
+func (*DBool) HasPrev() bool {
 	return true
 }
 
 // Prev implements the Datum interface.
-func (d *DBool) Prev() Datum {
+func (*DBool) Prev() Datum {
 	return DBoolFalse
 }
 
 // HasNext implements the Datum interface.
-func (d *DBool) HasNext() bool {
+func (*DBool) HasNext() bool {
 	return true
 }
 
 // Next implements the Datum interface.
-func (d *DBool) Next() Datum {
+func (*DBool) Next() Datum {
 	return DBoolTrue
 }
 
@@ -205,8 +192,9 @@ func (d *DBool) IsMin() bool {
 	return *d == false
 }
 
-func (d *DBool) String() string {
-	return strconv.FormatBool(bool(*d))
+// Format implements the NodeFormatter interface.
+func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, "%t", bool(*d))
 }
 
 // DInt is the int Datum.
@@ -217,8 +205,13 @@ func NewDInt(d DInt) *DInt {
 	return &d
 }
 
+// ReturnType implements the TypedExpr interface.
+func (*DInt) ReturnType() Datum {
+	return DummyInt
+}
+
 // Type implements the Datum interface.
-func (d *DInt) Type() string {
+func (*DInt) Type() string {
 	return "int"
 }
 
@@ -252,7 +245,7 @@ func (d *DInt) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DInt) HasPrev() bool {
+func (*DInt) HasPrev() bool {
 	return true
 }
 
@@ -262,7 +255,7 @@ func (d *DInt) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DInt) HasNext() bool {
+func (*DInt) HasNext() bool {
 	return true
 }
 
@@ -281,8 +274,9 @@ func (d *DInt) IsMin() bool {
 	return *d == math.MinInt64
 }
 
-func (d *DInt) String() string {
-	return strconv.FormatInt(int64(*d), 10)
+// Format implements the NodeFormatter interface.
+func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, "%d", int64(*d))
 }
 
 // DFloat is the float Datum.
@@ -294,8 +288,13 @@ func NewDFloat(d DFloat) *DFloat {
 	return &d
 }
 
+// ReturnType implements the TypedExpr interface.
+func (*DFloat) ReturnType() Datum {
+	return DummyFloat
+}
+
 // Type implements the Datum interface.
-func (d *DFloat) Type() string {
+func (*DFloat) Type() string {
 	return "float"
 }
 
@@ -329,7 +328,7 @@ func (d *DFloat) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DFloat) HasPrev() bool {
+func (*DFloat) HasPrev() bool {
 	return true
 }
 
@@ -339,7 +338,7 @@ func (d *DFloat) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DFloat) HasNext() bool {
+func (*DFloat) HasNext() bool {
 	return true
 }
 
@@ -360,22 +359,15 @@ func (d *DFloat) IsMin() bool {
 	return *d <= -math.MaxFloat64
 }
 
-func (d *DFloat) String() string {
-	fmt := byte('g')
-	prec := -1
-	if _, frac := math.Modf(float64(*d)); frac == 0 {
-		// d is a whole number.
-		if -1000000 < *d && *d < 1000000 {
-			// Small whole numbers are printed without exponents, and with one
-			// digit of decimal precision to ensure they will parse as floats.
-			fmt = 'f'
-			prec = 1
-		} else {
-			// Large whole numbers are printed with exponents.
-			fmt = 'e'
-		}
+// Format implements the NodeFormatter interface.
+func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
+	fl := float64(*d)
+	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
+		// d is a small whole number. Ensure it is printed using a decimal point.
+		fmt.Fprintf(buf, "%.1f", fl)
+	} else {
+		fmt.Fprintf(buf, "%g", fl)
 	}
-	return strconv.FormatFloat(float64(*d), fmt, prec, 64)
 }
 
 // DDecimal is the decimal Datum.
@@ -383,8 +375,13 @@ type DDecimal struct {
 	inf.Dec
 }
 
+// ReturnType implements the TypedExpr interface.
+func (d *DDecimal) ReturnType() Datum {
+	return DummyDecimal
+}
+
 // Type implements the Datum interface.
-func (d *DDecimal) Type() string {
+func (*DDecimal) Type() string {
 	return "decimal"
 }
 
@@ -412,7 +409,7 @@ func (d *DDecimal) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DDecimal) HasPrev() bool {
+func (*DDecimal) HasPrev() bool {
 	return false
 }
 
@@ -422,7 +419,7 @@ func (d *DDecimal) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DDecimal) HasNext() bool {
+func (*DDecimal) HasNext() bool {
 	return false
 }
 
@@ -432,17 +429,18 @@ func (d *DDecimal) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DDecimal) IsMax() bool {
+func (*DDecimal) IsMax() bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DDecimal) IsMin() bool {
+func (*DDecimal) IsMin() bool {
 	return false
 }
 
-func (d *DDecimal) String() string {
-	return d.Dec.String()
+// Format implements the NodeFormatter interface.
+func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(d.Dec.String())
 }
 
 // DString is the string Datum.
@@ -455,8 +453,13 @@ func NewDString(d string) *DString {
 	return &r
 }
 
+// ReturnType implements the TypedExpr interface.
+func (*DString) ReturnType() Datum {
+	return DummyString
+}
+
 // Type implements the Datum interface.
-func (d *DString) Type() string {
+func (*DString) Type() string {
 	return "string"
 }
 
@@ -486,7 +489,7 @@ func (d *DString) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DString) HasPrev() bool {
+func (*DString) HasPrev() bool {
 	return false
 }
 
@@ -496,7 +499,7 @@ func (d *DString) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DString) HasNext() bool {
+func (*DString) HasNext() bool {
 	return true
 }
 
@@ -506,7 +509,7 @@ func (d *DString) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DString) IsMax() bool {
+func (*DString) IsMax() bool {
 	return false
 }
 
@@ -515,8 +518,9 @@ func (d *DString) IsMin() bool {
 	return len(*d) == 0
 }
 
-func (d *DString) String() string {
-	return encodeSQLString(string(*d))
+// Format implements the NodeFormatter interface.
+func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLString(buf, string(*d))
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
@@ -529,8 +533,13 @@ func NewDBytes(d DBytes) *DBytes {
 	return &d
 }
 
+// ReturnType implements the TypedExpr interface.
+func (d *DBytes) ReturnType() Datum {
+	return DummyBytes
+}
+
 // Type implements the Datum interface.
-func (d *DBytes) Type() string {
+func (*DBytes) Type() string {
 	return "bytes"
 }
 
@@ -560,7 +569,7 @@ func (d *DBytes) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DBytes) HasPrev() bool {
+func (*DBytes) HasPrev() bool {
 	return false
 }
 
@@ -570,7 +579,7 @@ func (d *DBytes) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DBytes) HasNext() bool {
+func (*DBytes) HasNext() bool {
 	return true
 }
 
@@ -580,7 +589,7 @@ func (d *DBytes) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DBytes) IsMax() bool {
+func (*DBytes) IsMax() bool {
 	return false
 }
 
@@ -589,8 +598,9 @@ func (d *DBytes) IsMin() bool {
 	return len(*d) == 0
 }
 
-func (d *DBytes) String() string {
-	return encodeSQLBytes(string(*d))
+// Format implements the NodeFormatter interface.
+func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLBytes(buf, string(*d))
 }
 
 // DDate is the date Datum represented as the number of days after
@@ -603,8 +613,13 @@ func NewDDate(d DDate) *DDate {
 	return &d
 }
 
+// ReturnType implements the TypedExpr interface.
+func (*DDate) ReturnType() Datum {
+	return DummyDate
+}
+
 // Type implements the Datum interface.
-func (d *DDate) Type() string {
+func (*DDate) Type() string {
 	return "date"
 }
 
@@ -634,7 +649,7 @@ func (d *DDate) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DDate) HasPrev() bool {
+func (*DDate) HasPrev() bool {
 	return true
 }
 
@@ -644,7 +659,7 @@ func (d *DDate) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DDate) HasNext() bool {
+func (*DDate) HasNext() bool {
 	return true
 }
 
@@ -663,8 +678,9 @@ func (d *DDate) IsMin() bool {
 	return *d == math.MinInt64
 }
 
-func (d *DDate) String() string {
-	return time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat)
+// Format implements the NodeFormatter interface.
+func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
 }
 
 // DTimestamp is the timestamp Datum.
@@ -672,8 +688,13 @@ type DTimestamp struct {
 	time.Time
 }
 
+// ReturnType implements the TypedExpr interface.
+func (*DTimestamp) ReturnType() Datum {
+	return DummyTimestamp
+}
+
 // Type implements the Datum interface.
-func (d *DTimestamp) Type() string {
+func (*DTimestamp) Type() string {
 	return "timestamp"
 }
 
@@ -703,7 +724,7 @@ func (d *DTimestamp) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DTimestamp) HasPrev() bool {
+func (*DTimestamp) HasPrev() bool {
 	return true
 }
 
@@ -713,7 +734,7 @@ func (d *DTimestamp) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DTimestamp) HasNext() bool {
+func (*DTimestamp) HasNext() bool {
 	return true
 }
 
@@ -734,13 +755,19 @@ func (d *DTimestamp) IsMin() bool {
 	return d.Before(d.Add(-1))
 }
 
-func (d *DTimestamp) String() string {
-	return d.UTC().Format(timestampWithOffsetZoneFormat)
+// Format implements the NodeFormatter interface.
+func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
 type DTimestampTZ struct {
 	time.Time
+}
+
+// ReturnType implements the TypedExpr interface.
+func (*DTimestampTZ) ReturnType() Datum {
+	return DummyTimestampTZ
 }
 
 // Type implements the Datum interface.
@@ -805,8 +832,9 @@ func (d *DTimestampTZ) IsMin() bool {
 	return d.Before(d.Add(-1))
 }
 
-func (d *DTimestampTZ) String() string {
-	return d.UTC().Format(timestampWithOffsetZoneFormat)
+// Format implements the NodeFormatter interface.
+func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(d.UTC().Format(timestampWithOffsetZoneFormat))
 }
 
 // DInterval is the interval Datum.
@@ -814,8 +842,13 @@ type DInterval struct {
 	duration.Duration
 }
 
+// ReturnType implements the TypedExpr interface.
+func (d *DInterval) ReturnType() Datum {
+	return DummyInterval
+}
+
 // Type implements the Datum interface.
-func (d *DInterval) Type() string {
+func (*DInterval) Type() string {
 	return "interval"
 }
 
@@ -839,7 +872,7 @@ func (d *DInterval) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DInterval) HasPrev() bool {
+func (*DInterval) HasPrev() bool {
 	return false
 }
 
@@ -849,7 +882,7 @@ func (d *DInterval) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DInterval) HasNext() bool {
+func (*DInterval) HasNext() bool {
 	return false
 }
 
@@ -868,19 +901,26 @@ func (d *DInterval) IsMin() bool {
 	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
 }
 
-// String implements the Datum interface.
-func (d *DInterval) String() string {
+// Format implements the NodeFormatter interface.
+// Format implements the NodeFormatter interface.
+func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.Months != 0 || d.Days != 0 {
-		return d.Duration.String()
+		buf.WriteString(d.Duration.String())
+	} else {
+		buf.WriteString((time.Duration(d.Duration.Nanos) * time.Nanosecond).String())
 	}
-	return (time.Duration(d.Duration.Nanos) * time.Nanosecond).String()
 }
 
 // DTuple is the tuple Datum.
 type DTuple []Datum
 
+// ReturnType implements the TypedExpr interface.
+func (d *DTuple) ReturnType() Datum {
+	return d
+}
+
 // Type implements the Datum interface.
-func (d *DTuple) Type() string {
+func (*DTuple) Type() string {
 	return "tuple"
 }
 
@@ -977,7 +1017,7 @@ func (d *DTuple) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d *DTuple) IsMax() bool {
+func (*DTuple) IsMax() bool {
 	// Unimplemented for DTuple. Seems possible to provide an implementation
 	// which called IsMax for each of the elements, but currently this isn't
 	// needed.
@@ -985,24 +1025,23 @@ func (d *DTuple) IsMax() bool {
 }
 
 // IsMin implements the Datum interface.
-func (d *DTuple) IsMin() bool {
+func (*DTuple) IsMin() bool {
 	// Unimplemented for DTuple. Seems possible to provide an implementation
 	// which called IsMin for each of the elements, but currently this isn't
 	// needed.
 	return false
 }
 
-func (d *DTuple) String() string {
-	var buf bytes.Buffer
-	_ = buf.WriteByte('(')
+// Format implements the NodeFormatter interface.
+func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('(')
 	for i, v := range *d {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(v.String())
+		FormatNode(buf, f, v)
 	}
-	_ = buf.WriteByte(')')
-	return buf.String()
+	buf.WriteByte(')')
 }
 
 func (d *DTuple) Len() int {
@@ -1039,6 +1078,11 @@ func (d *DTuple) makeUnique() {
 
 type dNull struct{}
 
+// ReturnType implements the TypedExpr interface.
+func (dNull) ReturnType() Datum {
+	return DNull
+}
+
 // Type implements the Datum interface.
 func (d dNull) Type() string {
 	return "NULL"
@@ -1059,7 +1103,7 @@ func (d dNull) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d dNull) HasPrev() bool {
+func (dNull) HasPrev() bool {
 	return false
 }
 
@@ -1069,7 +1113,7 @@ func (d dNull) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d dNull) HasNext() bool {
+func (dNull) HasNext() bool {
 	return false
 }
 
@@ -1079,17 +1123,18 @@ func (d dNull) Next() Datum {
 }
 
 // IsMax implements the Datum interface.
-func (d dNull) IsMax() bool {
+func (dNull) IsMax() bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (d dNull) IsMin() bool {
+func (dNull) IsMin() bool {
 	return true
 }
 
-func (d dNull) String() string {
-	return "NULL"
+// Format implements the NodeFormatter interface.
+func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("NULL")
 }
 
 var _ VariableExpr = &DValArg{}
@@ -1097,6 +1142,15 @@ var _ VariableExpr = &DValArg{}
 // DValArg is the named bind var argument Datum.
 type DValArg struct {
 	name string
+	typeAnnotation
+}
+
+// ReturnType implements the TypedExpr interface.
+func (d *DValArg) ReturnType() Datum {
+	if d.typeAnnotation.typ != nil {
+		return d.typeAnnotation.typ
+	}
+	return d
 }
 
 // Variable implements the VariableExpr interface.
@@ -1119,7 +1173,7 @@ func (d *DValArg) Compare(other Datum) int {
 }
 
 // HasPrev implements the Datum interface.
-func (d *DValArg) HasPrev() bool {
+func (*DValArg) HasPrev() bool {
 	return false
 }
 
@@ -1129,7 +1183,7 @@ func (d *DValArg) Prev() Datum {
 }
 
 // HasNext implements the Datum interface.
-func (d *DValArg) HasNext() bool {
+func (*DValArg) HasNext() bool {
 	return false
 }
 
@@ -1148,19 +1202,18 @@ func (*DValArg) IsMin() bool {
 	return true
 }
 
-func (d *DValArg) String() string {
-	return "$" + d.name
+// Format implements the NodeFormatter interface.
+func (d *DValArg) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('$')
+	buf.WriteString(d.name)
 }
 
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.
-// TODO(andreimatei) Remove when type inference improves.
+// TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?
 func mixedTypeCompare(l, r Datum) (int, bool) {
-	lType := reflect.TypeOf(l)
-	rType := reflect.TypeOf(r)
-
 	// Check equality.
-	eqOp, ok := CmpOps[CmpArgs{EQ, lType, rType}]
+	eqOp, ok := CmpOps[EQ].lookupImpl(l, r)
 	if !ok {
 		return 0, false
 	}
@@ -1173,7 +1226,7 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	}
 
 	// Check less than.
-	ltOp, ok := CmpOps[CmpArgs{LT, lType, rType}]
+	ltOp, ok := CmpOps[LT].lookupImpl(l, r)
 	if !ok {
 		return 0, false
 	}

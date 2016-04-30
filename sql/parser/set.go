@@ -22,10 +22,7 @@
 
 package parser
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 // Set represents a SET statement.
 type Set struct {
@@ -33,11 +30,16 @@ type Set struct {
 	Values Exprs
 }
 
-func (node *Set) String() string {
+// Format implements the NodeFormatter interface.
+func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SET ")
+	FormatNode(buf, f, node.Name)
+	buf.WriteString(" = ")
 	if node.Values == nil {
-		return fmt.Sprintf("SET %s = DEFAULT", node.Name)
+		buf.WriteString("DEFAULT")
+	} else {
+		FormatNode(buf, f, node.Values)
 	}
-	return fmt.Sprintf("SET %s = %v", node.Name, node.Values)
 }
 
 // SetTransaction represents a SET TRANSACTION statement.
@@ -46,18 +48,20 @@ type SetTransaction struct {
 	UserPriority UserPriority
 }
 
-func (node *SetTransaction) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *SetTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
 	var sep string
 	buf.WriteString("SET TRANSACTION")
 	if node.Isolation != UnspecifiedIsolation {
-		fmt.Fprintf(&buf, " ISOLATION LEVEL %s", node.Isolation)
+		buf.WriteString(" ISOLATION LEVEL ")
+		buf.WriteString(node.Isolation.String())
 		sep = ","
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
-		fmt.Fprintf(&buf, "%s PRIORITY %s", sep, node.UserPriority)
+		buf.WriteString(sep)
+		buf.WriteString(" PRIORITY ")
+		buf.WriteString(node.UserPriority.String())
 	}
-	return buf.String()
 }
 
 // SetTimeZone represents a SET TIME ZONE statement.
@@ -65,18 +69,28 @@ type SetTimeZone struct {
 	Value Expr
 }
 
-func (node *SetTimeZone) String() string {
-	prefix := "SET TIME ZONE"
-	switch v := node.Value.(type) {
+// Format implements the NodeFormatter interface.
+func (node *SetTimeZone) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SET TIME ZONE ")
+	switch node.Value.(type) {
 	case *DInterval:
-		return fmt.Sprintf("%s INTERVAL '%s'", prefix, v)
-
-	case *DString:
-		if zone := string(*v); zone == "DEFAULT" || zone == "LOCAL" {
-			return fmt.Sprintf("%s %s", prefix, zone)
+		buf.WriteString("INTERVAL '")
+		FormatNode(buf, f, node.Value)
+		buf.WriteByte('\'')
+	default:
+		var s string
+		switch v := node.Value.(type) {
+		case *DString:
+			s = string(*v)
+		case *StrVal:
+			s = v.s
+		}
+		if s == "DEFAULT" || s == "LOCAL" {
+			buf.WriteString(s)
+		} else {
+			FormatNode(buf, f, node.Value)
 		}
 	}
-	return fmt.Sprintf("%s %s", prefix, node.Value)
 }
 
 // SetDefaultIsolation represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
@@ -84,11 +98,11 @@ type SetDefaultIsolation struct {
 	Isolation IsolationLevel
 }
 
-func (node *SetDefaultIsolation) String() string {
-	var buf bytes.Buffer
+// Format implements the NodeFormatter interface.
+func (node *SetDefaultIsolation) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL")
 	if node.Isolation != UnspecifiedIsolation {
-		fmt.Fprintf(&buf, " %s", node.Isolation)
+		buf.WriteByte(' ')
+		buf.WriteString(node.Isolation.String())
 	}
-	return buf.String()
 }

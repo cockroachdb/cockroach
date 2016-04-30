@@ -42,11 +42,11 @@ func TestValues(t *testing.T) {
 
 	unsupp := &parser.RangeCond{}
 
-	intVal := func(v int64) *parser.ConstVal {
-		return &parser.ConstVal{Value: constant.MakeInt64(v)}
+	intVal := func(v int64) *parser.NumVal {
+		return &parser.NumVal{Value: constant.MakeInt64(v)}
 	}
-	floatVal := func(f float64) *parser.ConstVal {
-		return &parser.ConstVal{Value: constant.MakeFloat64(f)}
+	floatVal := func(f float64) *parser.NumVal {
+		return &parser.NumVal{Value: constant.MakeFloat64(f)}
 	}
 	asRow := func(datums ...parser.Datum) []parser.DTuple {
 		return []parser.DTuple{datums}
@@ -108,7 +108,7 @@ func TestValues(t *testing.T) {
 					pErr = roachpb.NewErrorf("%v", r)
 				}
 			}()
-			return p.ValuesClause(tc.stmt)
+			return p.ValuesClause(tc.stmt, nil)
 		}()
 		if pErr == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, pErr)

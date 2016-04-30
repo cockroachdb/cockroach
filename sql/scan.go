@@ -63,7 +63,7 @@ type scanNode struct {
 
 	// filter that can be evaluated using only this table/index; it contains
 	// parser.IndexedVar leaves generated using filterVars.
-	filter     parser.Expr
+	filter     parser.TypedExpr
 	filterVars parser.IndexedVarHelper
 
 	scanInitialized bool
@@ -211,6 +211,12 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	return name, description, nil
 }
 
+func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
+	if n.filter != nil {
+		regTypes("filter", parser.AsStringWithFlags(n.filter, parser.FmtShowTypes))
+	}
+}
+
 // Initializes a scanNode with a tableName. Returns the table or index name that can be used for
 // fully-qualified columns if an alias is not specified.
 func (n *scanNode) initTable(
@@ -333,12 +339,12 @@ func (n *scanNode) computeOrdering(
 // scanNode implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &scanNode{}
 
-func (n *scanNode) IndexedVarTypeCheck(idx int, args parser.MapArgs) (parser.Datum, error) {
-	return n.resultColumns[idx].Typ.TypeCheck(args)
-}
-
 func (n *scanNode) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
 	return n.row[idx].Eval(ctx)
+}
+
+func (n *scanNode) IndexedVarReturnType(idx int) parser.Datum {
+	return n.resultColumns[idx].Typ.ReturnType()
 }
 
 func (n *scanNode) IndexedVarString(idx int) string {

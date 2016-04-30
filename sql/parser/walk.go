@@ -58,7 +58,7 @@ func (expr *AndExpr) Walk(v Visitor) Expr {
 	left, changedL := WalkExpr(v, expr.Left)
 	right, changedR := WalkExpr(v, expr.Right)
 	if changedL || changedR {
-		return &AndExpr{left, right}
+		return &AndExpr{Left: left, Right: right}
 	}
 	return expr
 }
@@ -172,7 +172,7 @@ func (expr *ComparisonExpr) Walk(v Visitor) Expr {
 func (expr *ExistsExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Subquery)
 	if changed {
-		return &ExistsExpr{e}
+		return &ExistsExpr{Subquery: e}
 	}
 	return expr
 }
@@ -205,7 +205,11 @@ func (expr *IfExpr) Walk(v Visitor) Expr {
 	t, changedT := WalkExpr(v, expr.True)
 	e, changedE := WalkExpr(v, expr.Else)
 	if changedC || changedT || changedE {
-		return &IfExpr{c, t, e}
+		exprCopy := *expr
+		exprCopy.Cond = c
+		exprCopy.True = t
+		exprCopy.Else = e
+		return &exprCopy
 	}
 	return expr
 }
@@ -225,7 +229,7 @@ func (expr *IsOfTypeExpr) Walk(v Visitor) Expr {
 func (expr *NotExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Expr)
 	if changed {
-		return &NotExpr{e}
+		return &NotExpr{Expr: e}
 	}
 	return expr
 }
@@ -235,7 +239,10 @@ func (expr *NullIfExpr) Walk(v Visitor) Expr {
 	e1, changed1 := WalkExpr(v, expr.Expr1)
 	e2, changed2 := WalkExpr(v, expr.Expr2)
 	if changed1 || changed2 {
-		return &NullIfExpr{e1, e2}
+		exprCopy := *expr
+		exprCopy.Expr1 = e1
+		exprCopy.Expr2 = e2
+		return &exprCopy
 	}
 	return expr
 }
@@ -245,7 +252,7 @@ func (expr *OrExpr) Walk(v Visitor) Expr {
 	left, changedL := WalkExpr(v, expr.Left)
 	right, changedR := WalkExpr(v, expr.Right)
 	if changedL || changedR {
-		return &OrExpr{left, right}
+		return &OrExpr{Left: left, Right: right}
 	}
 	return expr
 }
@@ -254,7 +261,9 @@ func (expr *OrExpr) Walk(v Visitor) Expr {
 func (expr *ParenExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Expr)
 	if changed {
-		return &ParenExpr{e}
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
 	}
 	return expr
 }
@@ -322,7 +331,9 @@ func (expr *Array) Walk(v Visitor) Expr {
 func (expr *Row) Walk(v Visitor) Expr {
 	exprs, changed := walkExprSlice(v, expr.Exprs)
 	if changed {
-		return &Row{exprs}
+		exprCopy := *expr
+		exprCopy.Exprs = exprs
+		return &exprCopy
 	}
 	return expr
 }
@@ -331,7 +342,9 @@ func (expr *Row) Walk(v Visitor) Expr {
 func (expr *Tuple) Walk(v Visitor) Expr {
 	exprs, changed := walkExprSlice(v, expr.Exprs)
 	if changed {
-		return &Tuple{exprs}
+		exprCopy := *expr
+		exprCopy.Exprs = exprs
+		return &exprCopy
 	}
 	return expr
 }
@@ -343,7 +356,10 @@ func (expr *QualifiedName) Walk(_ Visitor) Expr { return expr }
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *ConstVal) Walk(_ Visitor) Expr { return expr }
+func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr ValArg) Walk(_ Visitor) Expr { return expr }

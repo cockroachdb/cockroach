@@ -176,24 +176,32 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
+		typedExpr, err := TypeConstants(expr)
+		if err != nil {
+			t.Fatalf("%s: %v", expr, err)
+		}
 		// str may differ than exprStr (we may be adding some parens).
-		str := expr.String()
+		str := typedExpr.String()
 		expr2, err := ParseExprTraditional(str)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
+		typedExpr2, err := TypeConstants(expr2)
+		if err != nil {
+			t.Fatalf("%s: %v", expr2, err)
+		}
 		// Verify that when we stringify the expression again, the string is the
 		// same. This is important because we don't want cycles of parsing and
 		// printing an expression to keep adding parens.
-		if str2 := expr2.String(); str != str2 {
+		if str2 := typedExpr2.String(); str != str2 {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		normalized, err := defaultContext.NormalizeExpr(expr)
+		normalized, err := defaultContext.NormalizeExpr(typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		normalized2, err := defaultContext.NormalizeExpr(expr2)
+		normalized2, err := defaultContext.NormalizeExpr(typedExpr2)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}

@@ -23,12 +23,12 @@ import (
 
 type testVarContainer []Datum
 
-func (d testVarContainer) IndexedVarTypeCheck(idx int, args MapArgs) (Datum, error) {
-	return d[idx].TypeCheck(args)
-}
-
 func (d testVarContainer) IndexedVarEval(idx int, ctx EvalContext) (Datum, error) {
 	return d[idx].Eval(ctx)
+}
+
+func (d testVarContainer) IndexedVarReturnType(idx int) Datum {
+	return d[idx].ReturnType()
 }
 
 func (d testVarContainer) IndexedVarString(idx int) string {
@@ -49,30 +49,32 @@ func TestIndexedVars(t *testing.T) {
 			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
 	}
 
-	binary := func(op BinaryOp, left, right Expr) Expr {
+	binary := func(op BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
 	expr := binary(Plus, v0, binary(Mult, v1, v2))
-
-	str := expr.String()
-	expectedStr := "var0 + (var1 * var2)"
-	if str != expectedStr {
-		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
-	}
 
 	// Set values for the variables and verify the expression evaluates
 	// correctly.
 	c[0] = NewDInt(3)
 	c[1] = NewDInt(5)
 	c[2] = NewDInt(6)
-	d, err := expr.TypeCheck(nil)
+	typedExpr, err := expr.TypeCheck(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	str := typedExpr.String()
+	expectedStr := "var0 + (var1 * var2)"
+	if str != expectedStr {
+		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
+	}
+
+	d := typedExpr.ReturnType()
 	if !d.TypeEqual(DummyInt) {
 		t.Errorf("invalid expression type %s", d.Type())
 	}
-	d, err = expr.Eval(defaultContext)
+	d, err = typedExpr.Eval(defaultContext)
 	if err != nil {
 		t.Fatal(err)
 	}
