@@ -173,15 +173,15 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, expected int, key st
 	db.lookupCount = 0
 }
 
-func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, evictionToken) {
-	return doLookupWithToken(t, rc, key, evictionToken{}, false)
+func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, *evictionToken) {
+	return doLookupWithToken(t, rc, key, nil, false)
 }
 
-func doLookupConsideringIntents(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, evictionToken) {
-	return doLookupWithToken(t, rc, key, evictionToken{}, true)
+func doLookupConsideringIntents(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, *evictionToken) {
+	return doLookupWithToken(t, rc, key, nil, true)
 }
 
-func doLookupWithToken(t *testing.T, rc *rangeDescriptorCache, key string, evictToken evictionToken, considerIntents bool) (*roachpb.RangeDescriptor, evictionToken) {
+func doLookupWithToken(t *testing.T, rc *rangeDescriptorCache, key string, evictToken *evictionToken, considerIntents bool) (*roachpb.RangeDescriptor, *evictionToken) {
 	r, returnToken, pErr := rc.LookupRangeDescriptor(roachpb.RKey(key), evictToken, considerIntents, false /* useReverseScan */)
 	if pErr != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
@@ -308,7 +308,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := initTestDescriptorDB(t)
 
-	pauseLookupResumeAndAssert := func(key string, expected int, evictToken evictionToken) {
+	pauseLookupResumeAndAssert := func(key string, expected int, evictToken *evictionToken) {
 		var wg sync.WaitGroup
 		db.pauseRangeLookups()
 		for i := 0; i < 3; i++ {
