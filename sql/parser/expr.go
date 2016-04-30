@@ -884,7 +884,12 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Type != 0 {
 		typ = funcTypeName[node.Type] + " "
 	}
-	FormatNode(buf, f, node.Name)
+	// TODO(nvanbenschoten) We should probably either remove
+	// *QualifiedName as a TypedExpr or special case it in
+	// FormatNode. The reason it's a TypedExpr in the first place is for
+	// testing (I believe), but this doesn't seem like a good enough
+	// reason to justify the strangeness.
+	buf.WriteString(node.Name.String())
 	buf.WriteByte('(')
 	buf.WriteString(typ)
 	FormatNode(buf, f, node.Exprs)

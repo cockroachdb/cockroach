@@ -282,4 +282,12 @@ func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []p
 	return name, description, nil
 }
 
+func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {
+	if n.n != nil {
+		for i, tuple := range n.rows {
+			regTypes(fmt.Sprintf("tuple %d", i), parser.AsStringWithFlags(&tuple, parser.FmtShowTypes))
+		}
+	}
+}
+
 func (*valuesNode) SetLimitHint(_ int64, _ bool) {}

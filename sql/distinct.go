@@ -184,6 +184,8 @@ func (n *distinctNode) ExplainPlan(_ bool) (string, string, []planNode) {
 	return "distinct", description, []planNode{n.planNode}
 }
 
+func (n *distinctNode) ExplainTypes(_ func(string, string)) {}
+
 func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 	// Any limit becomes a "soft" limit underneath.
 	n.planNode.SetLimitHint(numRows, true)
