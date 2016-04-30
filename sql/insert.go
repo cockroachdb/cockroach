@@ -584,4 +584,17 @@ func (n *insertNode) ExplainPlan(v bool) (name, description string, children []p
 	return "insert", buf.String(), []planNode{n.run.rows}
 }
 
+func (n *insertNode) ExplainTypes(regTypes func(string, string)) {
+	for i, dexpr := range n.defaultExprs {
+		regTypes(fmt.Sprintf("default %d", i), parser.AsStringWithFlags(dexpr, parser.FmtShowTypes))
+	}
+	for i, cexpr := range n.checkExprs {
+		regTypes(fmt.Sprintf("check %d", i), parser.AsStringWithFlags(cexpr, parser.FmtShowTypes))
+	}
+	cols := n.rh.columns
+	for i, rexpr := range n.rh.exprs {
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+	}
+}
+
 func (n *insertNode) SetLimitHint(numRows int64, soft bool) {}

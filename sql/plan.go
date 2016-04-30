@@ -475,6 +475,10 @@ type planNode interface {
 	// ExplainPlan returns a name and description and a list of child nodes.
 	ExplainPlan(verbose bool) (name, description string, children []planNode)
 
+	// ExplainTypes reports the data types involved in the node, excluding
+	// the result column types.
+	ExplainTypes(explainFn func(elem string, desc string))
+
 	// SetLimitHint tells this node to optimize things under the assumption that
 	// we will only need the first `numRows` rows.
 	//
@@ -528,6 +532,8 @@ func (*emptyNode) PErr() *roachpb.Error    { return nil }
 func (*emptyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "empty", "-", nil
 }
+
+func (e *emptyNode) ExplainTypes(_ func(string, string)) {}
 
 func (*emptyNode) MarkDebug(_ explainMode) {}
 

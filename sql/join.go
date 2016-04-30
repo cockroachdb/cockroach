@@ -220,6 +220,8 @@ func (n *indexJoinNode) ExplainPlan(_ bool) (name, description string, children 
 	return "index-join", "", []planNode{n.index, n.table}
 }
 
+func (n *indexJoinNode) ExplainTypes(_ func(string, string)) {}
+
 func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	if numRows < joinBatchSize {
 		numRows = joinBatchSize
