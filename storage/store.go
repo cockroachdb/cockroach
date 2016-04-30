@@ -1855,6 +1855,27 @@ func (s *Store) enqueueRaftMessage(req *RaftMessageRequest) error {
 // Replica. It requires that processRaftMu is held and that s.mu is
 // not held.
 func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
+	// Drop messages that come from a node that we believe was once
+	// a member of the group but has been removed.
+	s.mu.Lock()
+	r, ok := s.mu.replicas[req.GroupID]
+	s.mu.Unlock()
+	if ok {
+		found := false
+		desc := r.Desc()
+		for _, rep := range desc.Replicas {
+			if rep.ReplicaID == req.FromReplica.ReplicaID {
+				found = true
+				break
+			}
+		}
+		// It's not a current member of the group. Is it from the future
+		// or the past?
+		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
+			return nil
+		}
+	}
+
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
 		if !s.canApplySnapshot(req.GroupID, req.Message.Snapshot) {
@@ -1864,26 +1885,8 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			return nil
 		}
 
-	// TODO(bdarnell): handle coalesced heartbeats
 	case raftpb.MsgHeartbeat:
-		// A subset of coalesced heartbeats: drop heartbeats (but not
-		// other messages!) that come from a node that we don't believe to
-		// be a current member of the group.
-		s.mu.Lock()
-		r, ok := s.mu.replicas[req.GroupID]
-		s.mu.Unlock()
-		if ok {
-			found := false
-			for _, rep := range r.Desc().Replicas {
-				if rep.ReplicaID == req.FromReplica.ReplicaID {
-					found = true
-					break
-				}
-			}
-			if !found && req.FromReplica.ReplicaID < r.Desc().NextReplicaID {
-				return nil
-			}
-		}
+		// TODO(bdarnell): handle coalesced heartbeats
 	}
 
 	s.mu.Lock()
