@@ -482,4 +482,14 @@ func (u *updateNode) ExplainPlan(v bool) (name, description string, children []p
 	return "update", buf.String(), []planNode{u.run.rows}
 }
 
+func (u *updateNode) ExplainTypes(regTypes func(string, string)) {
+	cols := u.rh.columns
+	for i, rexpr := range u.rh.exprs {
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+	}
+	for i, dexpr := range u.defaultExprs {
+		regTypes(fmt.Sprintf("default %d", i), parser.AsStringWithFlags(dexpr, parser.FmtShowTypes))
+	}
+}
+
 func (u *updateNode) SetLimitHint(numRows int64, soft bool) {}

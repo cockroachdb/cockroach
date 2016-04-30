@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -35,6 +36,7 @@ const (
 	explainDebug
 	explainPlan
 	explainTrace
+	explainTypes
 )
 
 // Explain executes the explain statement, providing debugging and analysis
@@ -52,6 +54,8 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 			newMode = explainTrace
 		} else if strings.EqualFold(opt, "PLAN") {
 			newMode = explainPlan
+		} else if strings.EqualFold(opt, "TYPES") {
+			newMode = explainTypes
 		} else if strings.EqualFold(opt, "VERBOSE") {
 			verbose = true
 		} else {
@@ -84,18 +88,35 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 	}
 	switch mode {
 	case explainDebug:
-		// Wrap the plan in an explainDebugNode.
 		return &explainDebugNode{plan}, nil
 
-	case explainPlan:
-		v := &valuesNode{}
-		v.columns = []ResultColumn{
-			{Name: "Level", Typ: parser.DummyInt},
-			{Name: "Type", Typ: parser.DummyString},
-			{Name: "Description", Typ: parser.DummyString},
+	case explainTypes:
+		node := &explainTypesNode{
+			plan: plan,
+			results: &valuesNode{
+				columns: []ResultColumn{
+					{Name: "Level", Typ: parser.DummyInt},
+					{Name: "Type", Typ: parser.DummyString},
+					{Name: "Element", Typ: parser.DummyString},
+					{Name: "Description", Typ: parser.DummyString},
+				},
+			},
 		}
-		populateExplain(verbose, v, plan, 0)
-		return v, nil
+		return node, nil
+
+	case explainPlan:
+		node := &explainPlanNode{
+			verbose: verbose,
+			plan:    plan,
+			results: &valuesNode{
+				columns: []ResultColumn{
+					{Name: "Level", Typ: parser.DummyInt},
+					{Name: "Type", Typ: parser.DummyString},
+					{Name: "Description", Typ: parser.DummyString},
+				},
+			},
+		}
+		return node, nil
 
 	case explainTrace:
 		return (&sortNode{
@@ -106,6 +127,100 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 	default:
 		return nil, roachpb.NewUErrorf("unsupported EXPLAIN mode: %d", mode)
 	}
+}
+
+type explainTypesNode struct {
+	plan    planNode
+	results *valuesNode
+}
+
+func (e *explainTypesNode) ExplainTypes(fn func(string, string)) {}
+func (e *explainTypesNode) Next() bool                           { return e.results.Next() }
+func (e *explainTypesNode) Columns() []ResultColumn              { return e.results.Columns() }
+func (e *explainTypesNode) Ordering() orderingInfo               { return e.results.Ordering() }
+func (e *explainTypesNode) Values() parser.DTuple                { return e.results.Values() }
+func (e *explainTypesNode) DebugValues() debugValues             { return e.results.DebugValues() }
+func (e *explainTypesNode) PErr() *roachpb.Error                 { return e.results.PErr() }
+func (e *explainTypesNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
+func (e *explainTypesNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
+func (e *explainTypesNode) Start() *roachpb.Error {
+	if pErr := e.plan.Start(); pErr != nil {
+		return pErr
+	}
+	populateTypes(e.results, e.plan, 0)
+	return nil
+}
+func (e *explainTypesNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return e.plan.ExplainPlan(v)
+}
+
+func populateTypes(v *valuesNode, plan planNode, level int) {
+	name, _, children := plan.ExplainPlan(true)
+
+	// Format the result column types.
+	{
+		var colDesc bytes.Buffer
+		colDesc.WriteByte('(')
+		for i, rCol := range plan.Columns() {
+			if i > 0 {
+				colDesc.WriteString(", ")
+			}
+			colDesc.WriteString(parser.Name(rCol.Name).String())
+			colDesc.WriteByte(' ')
+			colDesc.WriteString(rCol.Typ.Type())
+		}
+		colDesc.WriteByte(')')
+		row := parser.DTuple{
+			parser.NewDInt(parser.DInt(level)),
+			parser.NewDString(name),
+			parser.NewDString("result"),
+			parser.NewDString(colDesc.String()),
+		}
+		v.rows = append(v.rows, row)
+	}
+
+	// Format the node's typing details.
+	regType := func(elt string, desc string) {
+		row := parser.DTuple{
+			parser.NewDInt(parser.DInt(level)),
+			parser.NewDString(name),
+			parser.NewDString(elt),
+			parser.NewDString(desc),
+		}
+		v.rows = append(v.rows, row)
+	}
+	plan.ExplainTypes(regType)
+
+	// Recurse into sub-nodes.
+	for _, child := range children {
+		populateTypes(v, child, level+1)
+	}
+}
+
+type explainPlanNode struct {
+	verbose bool
+	plan    planNode
+	results *valuesNode
+}
+
+func (e *explainPlanNode) ExplainTypes(fn func(string, string)) {}
+func (e *explainPlanNode) Next() bool                           { return e.results.Next() }
+func (e *explainPlanNode) Columns() []ResultColumn              { return e.results.Columns() }
+func (e *explainPlanNode) Ordering() orderingInfo               { return e.results.Ordering() }
+func (e *explainPlanNode) Values() parser.DTuple                { return e.results.Values() }
+func (e *explainPlanNode) DebugValues() debugValues             { return e.results.DebugValues() }
+func (e *explainPlanNode) PErr() *roachpb.Error                 { return e.results.PErr() }
+func (e *explainPlanNode) SetLimitHint(n int64, s bool)         { e.results.SetLimitHint(n, s) }
+func (e *explainPlanNode) MarkDebug(mode explainMode)           { e.results.MarkDebug(mode) }
+func (e *explainPlanNode) Start() *roachpb.Error {
+	if pErr := e.plan.Start(); pErr != nil {
+		return pErr
+	}
+	populateExplain(e.verbose, e.results, e.plan, 0)
+	return nil
+}
+func (e *explainPlanNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return e.plan.ExplainPlan(v)
 }
 
 func populateExplain(verbose bool, v *valuesNode, plan planNode, level int) {
@@ -223,6 +338,10 @@ func (n *explainDebugNode) Next() bool { return n.plan.Next() }
 
 func (n *explainDebugNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	return n.plan.ExplainPlan(v)
+}
+
+func (n *explainDebugNode) ExplainTypes(fn func(string, string)) {
+	n.plan.ExplainTypes(fn)
 }
 
 func (n *explainDebugNode) Values() parser.DTuple {
