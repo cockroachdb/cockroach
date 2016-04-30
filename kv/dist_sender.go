@@ -680,27 +680,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 			}
 
-			// It's possible that the returned descriptor misses parts of the
-			// keys it's supposed to scan after it's truncated to match the
-			// descriptor. Example revscan [a,g), first desc lookup for "g"
-			// returns descriptor [c,d) -> [d,g) is never scanned.
-			// We evict and retry in such a case.
-			includesFrontOfCurSpan := func(rd *roachpb.RangeDescriptor) bool {
-				if isReverse {
-					// This approach is needed because rs.EndKey is exclusive.
-					return desc.ContainsKeyRange(desc.StartKey, rs.EndKey)
-				}
-				return desc.ContainsKey(rs.Key)
-			}
-			if !includesFrontOfCurSpan(desc) {
-				if err := evictToken.Evict(); err != nil {
-					return nil, roachpb.NewError(err), false
-				}
-				// On addressing errors, don't backoff; retry immediately.
-				r.Reset()
-				continue
-			}
-
 			curReply, pErr = func() (*roachpb.BatchResponse, *roachpb.Error) {
 				// Truncate the request to our current key range.
 				intersected, iErr := rs.Intersect(desc)
@@ -773,6 +752,13 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					replacements = append(replacements, *tErr.MismatchedRange)
 				}
 				if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
+					includesFrontOfCurSpan := func(rd *roachpb.RangeDescriptor) bool {
+						if isReverse {
+							// This approach is needed because rs.EndKey is exclusive.
+							return desc.ContainsKeyRange(desc.StartKey, rs.EndKey)
+						}
+						return desc.ContainsKey(rs.Key)
+					}
 					if includesFrontOfCurSpan(tErr.SuggestedRange) {
 						replacements = append(replacements, *tErr.SuggestedRange)
 
