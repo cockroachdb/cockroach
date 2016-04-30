@@ -136,6 +136,10 @@ func (n *explainTraceNode) ExplainPlan(v bool) (name, description string, childr
 	return n.plan.ExplainPlan(v)
 }
 
+func (n *explainTraceNode) ExplainTypes(fn func(string, string)) {
+	n.plan.ExplainTypes(fn)
+}
+
 func (n *explainTraceNode) Values() parser.DTuple {
 	return n.rows[0]
 }

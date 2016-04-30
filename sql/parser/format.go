@@ -16,21 +16,30 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
 // FmtFlags enables conditional formatting in the pretty-printer.
 type FmtFlags interface {
-	fmtFlags()
+	ShowTypes() bool
 }
 
-type fmtSimpleS struct{}
+type fmtFlags struct {
+	showTypes bool
+}
 
-func (s fmtSimpleS) fmtFlags() {}
+func (s fmtFlags) ShowTypes() bool { return s.showTypes }
 
 // FmtSimple instructs the pretty-printer to produce
 // a straightforward representation, ideally using SQL
 // syntax that makes prettyprint+parse idempotent.
-var FmtSimple = fmtSimpleS{}
+var FmtSimple FmtFlags = fmtFlags{showTypes: false}
+
+// FmtShowTypes instructs the pretty-printer to
+// annotate expressions with their resolved types.
+var FmtShowTypes FmtFlags = fmtFlags{showTypes: true}
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
 type NodeFormatter interface {
@@ -42,6 +51,24 @@ type NodeFormatter interface {
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
+	if f.ShowTypes() {
+		if te, ok := n.(TypedExpr); ok {
+			buf.WriteByte('(')
+			n.Format(buf, f)
+			buf.WriteString(")[")
+			if rt := te.ReturnType(); rt == nil {
+				// An attempt is made to pretty-print an expression that was
+				// not assigned a type yet. This should not happen, so we make
+				// it clear in the output this needs to be investigated
+				// further.
+				buf.WriteString(fmt.Sprintf("??? %v", te))
+			} else {
+				buf.WriteString(rt.Type())
+			}
+			buf.WriteByte(']')
+			return
+		}
+	}
 	n.Format(buf, f)
 }
 
