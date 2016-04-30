@@ -251,6 +251,8 @@ func (n *sortNode) ExplainPlan(_ bool) (name, description string, children []pla
 	return name, description, []planNode{n.plan}
 }
 
+func (n *sortNode) ExplainTypes(_ func(string, string)) {}
+
 func (n *sortNode) SetLimitHint(numRows int64, soft bool) {
 	if !n.needSort {
 		// The limit is only useful to the wrapped node if we don't need to sort.
