@@ -220,14 +220,14 @@ func (ls *Stores) lookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 
 // FirstRange implements the RangeDescriptorDB interface. It returns the
 // range descriptor which contains KeyMin.
-func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
 	_, replica, err := ls.lookupReplica(roachpb.RKeyMin, nil)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	store, err := ls.GetStore(replica.StoreID)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	rpl := store.LookupReplica(roachpb.RKeyMin, nil)

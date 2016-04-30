@@ -460,7 +460,7 @@ func (rd rangeDescByAge) Less(i, j int) bool {
 //
 // DistSender's implementation of FirstRange() does not work correctly because
 // the gossip network used by multiTestContext is only partially operational.
-func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 	var descs []*roachpb.RangeDescriptor
 	m.mu.RLock()
 	defer m.mu.RUnlock()

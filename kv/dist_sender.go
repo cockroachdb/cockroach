@@ -242,7 +242,7 @@ func (ds *DistSender) RangeLookup(
 	// caused this lookup.
 	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, orderRandom, ba)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, roachpb.NewError(err)
 	}
 	if br.Error != nil {
 		return nil, nil, br.Error
@@ -253,13 +253,13 @@ func (ds *DistSender) RangeLookup(
 
 // FirstRange returns the RangeDescriptor for the first range on the cluster,
 // which is retrieved from the gossip protocol instead of the datastore.
-func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error) {
+func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	if ds.gossip == nil {
 		panic("with `nil` Gossip, DistSender must not use itself as rangeDescriptorDB")
 	}
 	rangeDesc := &roachpb.RangeDescriptor{}
 	if err := ds.gossip.GetInfoProto(gossip.KeyFirstRangeDescriptor, rangeDesc); err != nil {
-		return nil, roachpb.NewError(firstRangeMissingError{})
+		return nil, firstRangeMissingError{}
 	}
 	return rangeDesc, nil
 }
@@ -325,9 +325,9 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
 func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice,
-	order orderingPolicy, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	order orderingPolicy, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
-		return nil, roachpb.NewError(noNodeAddrsAvailError{})
+		return nil, noNodeAddrsAvailError{}
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
@@ -347,7 +347,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 
 	reply, err := ds.rpcSend(rpcOpts, replicas, ba, ds.rpcContext)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	return reply, nil
 }
@@ -460,9 +460,9 @@ func (ds *DistSender) sendSingleRange(
 	}
 
 	// TODO(tschottdorf): should serialize the trace here, not higher up.
-	br, pErr := ds.sendRPC(ctx, desc.RangeID, replicas, order, ba)
-	if pErr != nil {
-		return nil, pErr
+	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, order, ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// If the reply contains a timestamp, update the local HLC with it.
@@ -473,7 +473,7 @@ func (ds *DistSender) sendSingleRange(
 	}
 
 	// Untangle the error from the received response.
-	pErr = br.Error
+	pErr := br.Error
 	br.Error = nil // scrub the response error
 	return br, pErr
 }

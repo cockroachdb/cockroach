@@ -82,7 +82,7 @@ type RangeDescriptorDB interface {
 	RangeLookup(roachpb.RKey, *roachpb.RangeDescriptor, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all \x00\x00meta1 entries.
-	FirstRange() (*roachpb.RangeDescriptor, *roachpb.Error)
+	FirstRange() (*roachpb.RangeDescriptor, error)
 }
 
 // rangeDescriptorCache is used to retrieve range descriptors for
@@ -396,14 +396,14 @@ func (rdc *rangeDescriptorCache) performRangeLookup(
 		// In this case, the requested key is stored in the cluster's first
 		// range. Return the first range, which is always gossiped and not
 		// queried from the datastore.
-		if desc, pErr = rdc.db.FirstRange(); pErr != nil {
-			return nil, nil, pErr
+		if desc, err = rdc.db.FirstRange(); err != nil {
+			return nil, nil, roachpb.NewError(err)
 		}
 		return []roachpb.RangeDescriptor{*desc}, nil, nil
 	case bytes.HasPrefix(metadataKey, keys.Meta1Prefix):
 		// In this case, desc is the cluster's first range.
-		if desc, pErr = rdc.db.FirstRange(); pErr != nil {
-			return nil, nil, pErr
+		if desc, err = rdc.db.FirstRange(); err != nil {
+			return nil, nil, roachpb.NewError(err)
 		}
 	default:
 		// Look up desc from the cache, which will recursively call into
