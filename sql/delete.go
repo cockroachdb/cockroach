@@ -233,4 +233,11 @@ func (d *deleteNode) ExplainPlan(v bool) (name, description string, children []p
 	return "delete", buf.String(), []planNode{d.run.rows}
 }
 
+func (d *deleteNode) ExplainTypes(regTypes func(string, string)) {
+	cols := d.rh.columns
+	for i, rexpr := range d.rh.exprs {
+		regTypes(fmt.Sprintf("returning %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+	}
+}
+
 func (d *deleteNode) SetLimitHint(numRows int64, soft bool) {}
