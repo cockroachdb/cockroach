@@ -211,6 +211,12 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 	return name, description, nil
 }
 
+func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
+	if n.filter != nil {
+		regTypes("filter", parser.AsStringWithFlags(n.filter, parser.FmtShowTypes))
+	}
+}
+
 // Initializes a scanNode with a tableName. Returns the table or index name that can be used for
 // fully-qualified columns if an alias is not specified.
 func (n *scanNode) initTable(

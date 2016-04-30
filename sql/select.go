@@ -149,6 +149,15 @@ func (s *selectNode) PErr() *roachpb.Error {
 	return s.table.node.PErr()
 }
 
+func (s *selectNode) ExplainTypes(regTypes func(string, string)) {
+	if s.filter != nil {
+		regTypes("filter", parser.AsStringWithFlags(s.filter, parser.FmtShowTypes))
+	}
+	for i, rexpr := range s.render {
+		regTypes(fmt.Sprintf("render %d", i), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+	}
+}
+
 func (s *selectNode) ExplainPlan(v bool) (name, description string, children []planNode) {
 	if !v {
 		return s.table.node.ExplainPlan(v)
