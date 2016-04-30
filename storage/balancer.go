@@ -104,7 +104,7 @@ func (rcb rangeCountBalancer) improve(
 		math.Abs(float64(candidate.Capacity.RangeCount)-sl.candidateCount.mean) {
 		if log.V(2) {
 			log.Infof("not rebalancing: candidate store %d wouldn't converge on the mean",
-				store.StoreID)
+				candidate.StoreID)
 		}
 		return nil
 	}
