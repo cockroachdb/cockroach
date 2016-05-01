@@ -703,17 +703,30 @@ func TestReplicaNotLeaderError(t *testing.T) {
 // correctly after a lease request.
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	var numProp int64
+	sCtx := TestStoreContext()
+	sCtx.TestingKnobs.TestingCommandFilter = func(
+		args storageutils.FilterArgs,
+	) *roachpb.Error {
+		if args.Req.Method() == roachpb.LeaderLease {
+			atomic.AddInt64(&numProp, 1)
+		}
+		return nil
+	}
+
 	tc := testContext{}
-	tc.Start(t)
+	tc.StartWithStoreContext(t, sCtx)
 	defer tc.Stop()
 
 	assert := func(actual, expected int64) {
 		if actual != expected {
-			t.Fatalf("metrics counters actual=%d, expected=%d", actual, expected)
+			t.Fatal(util.ErrorfSkipFrames(1,
+				"metrics counters actual=%d, expected=%d", actual, expected))
 		}
 	}
 	metrics := tc.rng.store.metrics
-	assert(metrics.leaseRequestSuccessCount.Count(), 1)
+	assert(metrics.leaseRequestSuccessCount.Count(), atomic.LoadInt64(&numProp))
 	assert(metrics.leaseRequestErrorCount.Count(), 0)
 
 	now := tc.clock.Now()
@@ -729,7 +742,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	assert(metrics.leaseRequestSuccessCount.Count(), 2)
+	lastCount := atomic.LoadInt64(&numProp)
+	assert(metrics.leaseRequestSuccessCount.Count(), lastCount)
 	assert(metrics.leaseRequestErrorCount.Count(), 0)
 
 	// Make setLeaderLease fail by providing an invalid ReplicaDescriptor.
@@ -743,11 +757,11 @@ func TestReplicaLeaseCounters(t *testing.T) {
 			StoreID:   99,
 		},
 	}); err == nil {
-		t.Fatal("Expected setLeaderLease to fail on invalid ReplicaDescriptor. It didn't.")
+		t.Fatal("setLeaderLease did not fail on invalid ReplicaDescriptor")
 	}
 
-	assert(metrics.leaseRequestSuccessCount.Count(), 2)
-	assert(metrics.leaseRequestErrorCount.Count(), 1)
+	assert(metrics.leaseRequestSuccessCount.Count(), lastCount)
+	assert(metrics.leaseRequestErrorCount.Count(), atomic.LoadInt64(&numProp)-lastCount)
 }
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
