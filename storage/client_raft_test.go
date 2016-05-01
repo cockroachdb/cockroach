@@ -1391,6 +1391,79 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	finishWG.Wait()
 }
 
+func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := startMultiTestContext(t, 4)
+	defer mtc.Stop()
+
+	// Move the first range from the first node to the other three.
+	rangeID := roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2, 3)
+	mtc.unreplicateRange(rangeID, 0)
+	mtc.expireLeaderLeases()
+
+	// Write on the second node, to ensure that the other nodes have
+	// established leadership after the first node's removal.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(mtc.distSenders[1], nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Save the current term, which is the latest among the live stores.
+	findTerm := func() uint64 {
+		var term uint64
+		for i := 1; i < 4; i++ {
+			s := mtc.stores[i].RaftStatus(rangeID)
+			if s.Term > term {
+				term = s.Term
+			}
+		}
+		return term
+	}
+	term := findTerm()
+	if term == 0 {
+		t.Fatalf("expected non-zero term")
+	}
+
+	replica0 := roachpb.ReplicaDescriptor{
+		ReplicaID: roachpb.ReplicaID(mtc.stores[0].StoreID()),
+		NodeID:    roachpb.NodeID(mtc.stores[0].StoreID()),
+		StoreID:   mtc.stores[0].StoreID(),
+	}
+	replica1 := roachpb.ReplicaDescriptor{
+		ReplicaID: roachpb.ReplicaID(mtc.stores[1].StoreID()),
+		NodeID:    roachpb.NodeID(mtc.stores[1].StoreID()),
+		StoreID:   mtc.stores[1].StoreID(),
+	}
+	// Simulate an election triggered by the removed node.
+	if err := mtc.transports[0].Send(&storage.RaftMessageRequest{
+		GroupID:     rangeID,
+		ToReplica:   replica1,
+		FromReplica: replica0,
+		Message: raftpb.Message{
+			From: uint64(replica0.ReplicaID),
+			To:   uint64(replica1.ReplicaID),
+			Type: raftpb.MsgVote,
+			Term: term + 1,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait a bit for the message to be processed.
+	// TODO(bdarnell): This will be easier to test without waiting
+	// when #5789 is done.
+	time.Sleep(10 * time.Millisecond)
+
+	// The message should have been discarded without triggering an
+	// election or changing the term.
+	newTerm := findTerm()
+	if term != newTerm {
+		t.Errorf("expected term to be constant, but changed from %v to %v", term, newTerm)
+	}
+}
+
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
