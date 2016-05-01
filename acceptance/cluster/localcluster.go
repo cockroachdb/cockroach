@@ -785,13 +785,13 @@ func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
 			AttachStderr: true,
 			AttachStdout: true,
 		}
-		resp, err := l.client.ContainerExecCreate(ctx, l.Nodes[i].Container.id, cfg)
+		createResp, err := l.client.ContainerExecCreate(ctx, l.Nodes[i].Container.id, cfg)
 		if err != nil {
 			return err
 		}
 		var outputStream, errorStream bytes.Buffer
 		{
-			resp, err := l.client.ContainerExecAttach(ctx, resp.ID, cfg)
+			resp, err := l.client.ContainerExecAttach(ctx, createResp.ID, cfg)
 			if err != nil {
 				return err
 			}
@@ -806,7 +806,7 @@ func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
 			}
 		}
 		{
-			resp, err := l.client.ContainerExecInspect(ctx, resp.ID)
+			resp, err := l.client.ContainerExecInspect(ctx, createResp.ID)
 			if err != nil {
 				return err
 			}
