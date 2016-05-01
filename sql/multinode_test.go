@@ -17,7 +17,7 @@
 package sql_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 
@@ -29,7 +29,7 @@ import (
 )
 
 // Starts up a cluster made of up `nodes` in-memory testing servers,
-// creates database `name and returns open sql.DB connections to each
+// creates database `name and returns open gosql.DB connections to each
 // node (to the named db), as well as a cleanup func that stops and
 // cleans up all nodes and connections.
 // TODO(davidt): Change zone config to actually add replication.
@@ -38,7 +38,7 @@ import (
 // useful for benchmarking, as without replication overhead it is the same as
 // single-node operation, except without the local-call optimization for the
 // additional nodes.
-func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*sql.DB, func()) {
+func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.DB, func()) {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
@@ -49,14 +49,14 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*sql.DB,
 		servers = append(servers, server.StartTestServerJoining(t, first))
 	}
 
-	var conns []*sql.DB
+	var conns []*gosql.DB
 	var closes []func() error
 	var cleanups []func()
 
 	for i, s := range servers {
 		pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, fmt.Sprintf("node%d", i))
 		pgURL.Path = name
-		db, err := sql.Open("postgres", pgURL.String())
+		db, err := gosql.Open("postgres", pgURL.String())
 		if err != nil {
 			t.Fatal(err)
 		}

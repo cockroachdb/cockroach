@@ -18,7 +18,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"os"
 	"sync"
@@ -206,16 +206,16 @@ func setupTestServerWithContext(t *testing.T, ctx *server.Context) *testServer {
 	return s
 }
 
-func setup(t *testing.T) (*testServer, *sql.DB, *client.DB) {
+func setup(t *testing.T) (*testServer, *gosql.DB, *client.DB) {
 	return setupWithContext(t, server.NewTestContext())
 }
 
-func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *sql.DB, *client.DB) {
+func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *gosql.DB, *client.DB) {
 	s := setupTestServerWithContext(t, ctx)
 
 	// SQL requests use security.RootUser which has ALL permissions on everything.
 	url, cleanupFn := sqlutils.PGUrl(t, &s.TestServer, security.RootUser, "setupWithContext")
-	sqlDB, err := sql.Open("postgres", url.String())
+	sqlDB, err := gosql.Open("postgres", url.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func cleanupTestServer(s *testServer) {
 	}
 }
 
-func cleanup(s *testServer, db *sql.DB) {
+func cleanup(s *testServer, db *gosql.DB) {
 	_ = db.Close()
 	cleanupTestServer(s)
 }

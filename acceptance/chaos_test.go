@@ -18,7 +18,7 @@ package acceptance
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -43,7 +43,7 @@ var numAccounts = flag.Int("num-accounts", 999, "Number of accounts.")
 
 type testClient struct {
 	sync.RWMutex
-	db    *sql.DB
+	db    *gosql.DB
 	count uint64
 }
 

@@ -17,7 +17,7 @@
 package sql_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -34,7 +34,7 @@ import (
 
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
-func runPgbenchQuery(b *testing.B, db *sql.DB) {
+func runPgbenchQuery(b *testing.B, db *gosql.DB) {
 	if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 		b.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func runPgbenchQuery(b *testing.B, db *sql.DB) {
 
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
-func runPgbenchQueryParallel(b *testing.B, db *sql.DB) {
+func runPgbenchQueryParallel(b *testing.B, db *gosql.DB) {
 	if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 		b.Fatal(err)
 	}

@@ -18,7 +18,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -52,7 +52,7 @@ func genValues(num, valRange int) []int {
 // testScanBatchQuery runs a query of the form
 //  SELECT a,B FROM test.scan WHERE a IN (1,5,3..) AND b >= 5 AND b <= 10
 // numSpans controls the number of possible values for a.
-func testScanBatchQuery(t *testing.T, db *sql.DB, numSpans, numAs, numBs int, reverse bool) {
+func testScanBatchQuery(t *testing.T, db *gosql.DB, numSpans, numAs, numBs int, reverse bool) {
 	// Generate numSpans values for A
 	aVals := genValues(numSpans, numAs)
 
@@ -136,7 +136,7 @@ func TestScanBatches(t *testing.T) {
 	pgURL.Path = "test"
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}

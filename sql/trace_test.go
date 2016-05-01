@@ -18,7 +18,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"reflect"
 	"sort"
@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func rowsToStrings(rows *sql.Rows) [][]string {
+func rowsToStrings(rows *gosql.Rows) [][]string {
 	cols, err := rows.Columns()
 	if err != nil {
 		panic(err)

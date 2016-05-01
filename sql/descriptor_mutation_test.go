@@ -17,7 +17,7 @@
 package sql_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -33,7 +33,7 @@ import (
 type mutationTest struct {
 	*testing.T
 	kvDB    *client.DB
-	sqlDB   *sql.DB
+	sqlDB   *gosql.DB
 	descKey roachpb.Key
 	desc    *csql.Descriptor
 }

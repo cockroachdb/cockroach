@@ -29,7 +29,7 @@
 package sql_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -49,7 +49,7 @@ var (
 )
 
 type testDB struct {
-	db      *sql.DB
+	db      *gosql.DB
 	cleanup func()
 }
 
@@ -73,7 +73,7 @@ func (t *parallelTest) close() {
 
 func (t *parallelTest) addClient(createDB bool) {
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, &t.srv.TestServer, security.RootUser, "TestParallel")
-	db, err := sql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func (t *parallelTest) addClient(createDB bool) {
 	t.clients = append(t.clients, testDB{db: db, cleanup: cleanupFunc})
 }
 
-func (t *parallelTest) processTestFile(path string, db *sql.DB, ch chan bool) {
+func (t *parallelTest) processTestFile(path string, db *gosql.DB, ch chan bool) {
 	if ch != nil {
 		defer func() { ch <- true }()
 	}
