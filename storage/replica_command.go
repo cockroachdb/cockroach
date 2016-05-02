@@ -390,17 +390,6 @@ func (r *Replica) EndTransaction(
 		return roachpb.EndTransactionResponse{}, nil, roachpb.NewTransactionStatusError("does not exist")
 	}
 
-	if isEndTransactionExceedingDeadline(h, args) {
-		reply.Txn.Status = roachpb.ABORTED
-		// FIXME(#3037):
-		// If the deadline has lapsed, return all the intents for
-		// resolution. Unfortunately, since we're (a) returning an error,
-		// and (b) not able to write on error (see #1989), we can't write
-		// ABORTED into the master transaction record, which remains
-		// PENDING, and that's pretty bad.
-		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
-	}
-
 	// Verify that we can either commit it or abort it (according
 	// to args.Commit), and also that the Timestamp and Epoch have
 	// not suffered regression.
@@ -455,6 +444,17 @@ func (r *Replica) EndTransaction(
 	// a transaction is always set to the txn's original timestamp.
 	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
 
+	if isEndTransactionExceedingDeadline(reply.Txn.Timestamp, args) {
+		reply.Txn.Status = roachpb.ABORTED
+		// FIXME(#3037):
+		// If the deadline has lapsed, return all the intents for
+		// resolution. Unfortunately, since we're (a) returning an error,
+		// and (b) not able to write on error (see #1989), we can't write
+		// ABORTED into the master transaction record, which remains
+		// PENDING, and that's pretty bad.
+		return reply, roachpb.AsIntents(args.IntentSpans, reply.Txn), roachpb.NewTransactionAbortedError()
+	}
+
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
@@ -504,8 +504,8 @@ func (r *Replica) EndTransaction(
 
 // isEndTransactionExceedingDeadline returns true if the transaction
 // exceeded its deadline.
-func isEndTransactionExceedingDeadline(h roachpb.Header, args roachpb.EndTransactionRequest) bool {
-	return args.Deadline != nil && args.Deadline.Less(h.Timestamp)
+func isEndTransactionExceedingDeadline(t roachpb.Timestamp, args roachpb.EndTransactionRequest) bool {
+	return args.Deadline != nil && args.Deadline.Less(t)
 }
 
 // isEndTransactionTriggeringRetryError returns true if the
