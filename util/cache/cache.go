@@ -417,10 +417,9 @@ func (oc *OrderedCache) Do(f func(k, v interface{})) {
 }
 
 // DoRange invokes f on all cache entries in the range of from -> to.
-func (oc *OrderedCache) DoRange(f func(k, v interface{}), from, to interface{}) {
-	oc.llrb.DoRange(func(e llrb.Comparable) (done bool) {
-		f(e.(*Entry).Key, e.(*Entry).Value)
-		return
+func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interface{}) bool {
+	return oc.llrb.DoRange(func(e llrb.Comparable) bool {
+		return f(e.(*Entry).Key, e.(*Entry).Value)
 	}, &Entry{Key: from}, &Entry{Key: to})
 }
 
