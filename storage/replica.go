@@ -1799,7 +1799,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 		return false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	return !isEndTransactionExceedingDeadline(ba.Header, *etArg)
+	return !isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg)
 }
 
 func (r *Replica) executeBatch(

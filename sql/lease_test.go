@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -540,5 +542,72 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	_, err = acquire(s.TestServer, tableDesc.ID, 0)
 	if !testutils.IsError(err, "descriptor deleted") {
 		t.Fatalf("got a different error than expected: %s", err)
+	}
+}
+
+// TestTxnObeysLeaseExpiration tests that a transaction is aborted when it tries
+// to use a table descriptor with an expired lease.
+func TestTxnObeysLeaseExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Set the lease duration such that it expires quickly.
+	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
+	//csql.TestHandoutExpiredLeases = true
+	defer func() {
+		csql.LeaseDuration, csql.MinLeaseDuration = savedLeaseDuration, savedMinLeaseDuration
+	}()
+	csql.MinLeaseDuration = 5 * time.Millisecond
+	csql.LeaseDuration = 50 * time.Millisecond
+
+	s, sqlDB, _ := setup(t)
+	defer cleanup(s, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	clock := s.Clock()
+
+	clock.SetMaxOffset(time.Second)
+
+	// Run a number of sql operations and expire the lease they acquire.
+	runCommandAndExpireLease(t, clock, sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
+	runCommandAndExpireLease(t, clock, sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
+	runCommandAndExpireLease(t, clock, sqlDB, `DELETE FROM t.kv WHERE k = 'a'`)
+	runCommandAndExpireLease(t, clock, sqlDB, `TRUNCATE TABLE t.kv`)
+}
+
+func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, sql string) {
+	// Run a transaction that waits for its table lease to expire. Note: we
+	// are forced to use a multi-statement transaction here because a single
+	// statement transaction retries indefinitely when it gets the txn aborted
+	// error.
+	txn, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Use snapshot isolation so that the transaction is pushed without being
+	// restarted.
+	if _, err := txn.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec(sql); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update the clock to expire the table lease.
+	_ = clock.Update(clock.Now().Add(int64(100*time.Millisecond), 0))
+
+	// Run another transaction that pushes the above transaction.
+	if _, err := sqlDB.Query("SELECT * FROM t.kv"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Commit and see the aborted txn.
+	if err := txn.Commit(); !testutils.IsError(err, "pq: restart transaction: txn aborted") {
+		t.Fatalf("%s, err = %s", sql, err)
 	}
 }
