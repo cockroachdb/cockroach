@@ -45,7 +45,7 @@ func get(t *testing.T, base, rel string) []byte {
 	// TODO(bram) #2059: Remove retry logic.
 	url := fmt.Sprintf("%s/%s", base, rel)
 	for r := retry.Start(retryOptions); r.Next(); {
-		resp, err := cluster.HTTPClient.Get(url)
+		resp, err := cluster.HTTPClient().Get(url)
 		if err != nil {
 			log.Infof("could not GET %s - %s", url, err)
 			continue

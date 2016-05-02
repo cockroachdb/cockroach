@@ -30,6 +30,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -154,6 +155,9 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 	case *roachpb.VerifyChecksumRequest:
 		resp := reply.(*roachpb.VerifyChecksumResponse)
 		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
+	case *roachpb.ChangeFrozenRequest:
+		resp := reply.(*roachpb.ChangeFrozenResponse)
+		*resp, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
 	default:
 		err = util.Errorf("unrecognized command %s", args.Method())
 	}
@@ -1741,6 +1745,78 @@ func (r *Replica) VerifyChecksum(
 		logFunc("replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 	return roachpb.VerifyChecksumResponse{}, nil
+}
+
+// ChangeFrozen freezes or unfreezes the Replica idempotently.
+func (r *Replica) ChangeFrozen(
+	ctx context.Context,
+	batch engine.Engine,
+	ms *engine.MVCCStats,
+	h roachpb.Header,
+	args roachpb.ChangeFrozenRequest,
+) (roachpb.ChangeFrozenResponse, error) {
+	var resp roachpb.ChangeFrozenResponse
+	resp.MinStartKey = roachpb.RKeyMax
+	curStart, err := keys.Addr(args.Key)
+	if err != nil {
+		return resp, err
+	}
+	if !bytes.Equal(curStart, args.Key) {
+		return resp, util.Errorf("unsupported range-local key")
+	}
+
+	desc := r.Desc()
+
+	frozen, err := loadFrozenStatus(batch, desc.RangeID)
+	if err != nil || frozen == args.Frozen {
+		// Something went wrong or we're already in the right frozen state. In
+		// the latter case, we avoid writing the "same thing" because "we"
+		// might actually not be the same version of the code (picture a couple
+		// of freeze requests lined up, but not all of them applied between
+		// version changes).
+		return resp, err
+	}
+
+	if args.MustVersion == "" {
+		return resp, util.Errorf("empty version tag")
+	} else if bi := build.GetInfo(); !frozen && args.Frozen && args.MustVersion != bi.Tag {
+		// Some earlier version tried to freeze but we never applied it until
+		// someone restarted this node with another version. No bueno - have to
+		// assume that integrity has already been compromised.
+		// Note that we have extra hooks upstream which delay returning succeess
+		// to the caller until it's reasonable to assume that all Replicas have
+		// applied the freeze.
+		// This is a classical candidate for returning replica corruption, but
+		// we don't do it (yet); for now we'll assume that the update steps
+		// are carried out in correct order.
+		return resp, util.Errorf("attempt to freeze %s issued from %s was applied by %s",
+			desc, args.MustVersion, bi)
+	}
+
+	// Generally, we want to act only if the request hits the Range's StartKey.
+	// The one case in which that behaves unexpectedly is if we're the first
+	// range, which has StartKey equal to KeyMin, but the lowest curStart which
+	// is feasible is LocaLMax.
+	if !desc.StartKey.Less(curStart) {
+		resp.RangesAffected++
+	} else if locMax, err := keys.Addr(keys.LocalMax); err != nil {
+		return resp, err
+	} else if !locMax.Less(curStart) {
+		resp.RangesAffected++
+	}
+
+	if resp.RangesAffected == 0 {
+		return resp, nil
+	}
+
+	resp.MinStartKey = desc.StartKey
+
+	batch.Defer(func() {
+		r.mu.Lock()
+		r.mu.frozen = args.Frozen
+		r.mu.Unlock()
+	})
+	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
