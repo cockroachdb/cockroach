@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -358,12 +359,24 @@ func (n *groupNode) PErr() *roachpb.Error {
 
 func (n *groupNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	name = "group"
-	strs := make([]string, 0, len(n.funcs))
-	for _, f := range n.funcs {
-		strs = append(strs, f.String())
+	var buf bytes.Buffer
+	for i, f := range n.funcs {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		f.Format(&buf, parser.FmtSimple)
 	}
-	description = strings.Join(strs, ", ")
-	return name, description, []planNode{n.plan}
+	return name, buf.String(), []planNode{n.plan}
+}
+
+func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
+	if n.having != nil {
+		regTypes("having", parser.AsStringWithFlags(n.having, parser.FmtShowTypes))
+	}
+	cols := n.Columns()
+	for i, rexpr := range n.render {
+		regTypes(fmt.Sprintf("render %s", cols[i].Name), parser.AsStringWithFlags(rexpr, parser.FmtShowTypes))
+	}
 }
 
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
@@ -632,9 +645,10 @@ func (a *aggregateFunc) add(bucket []byte, d parser.Datum) error {
 
 func (*aggregateFunc) Variable() {}
 
-func (a *aggregateFunc) String() string {
-	return a.expr.String()
+func (a *aggregateFunc) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	a.expr.Format(buf, f)
 }
+func (a *aggregateFunc) String() string { return parser.AsString(a) }
 
 func (a *aggregateFunc) Walk(v parser.Visitor) parser.Expr { return a }
 
