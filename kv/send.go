@@ -67,24 +67,6 @@ func (so SendOptions) contextWithTimeout() (context.Context, func()) {
 	return so.Context, func() {}
 }
 
-// An rpcError indicates a failure to send the RPC. rpcErrors are
-// retryable.
-type rpcError struct {
-	error
-}
-
-func newRPCError(err error) rpcError {
-	return rpcError{err}
-}
-
-// CanRetry implements the Retryable interface.
-// TODO(tschottdorf): the way this is used by rpc/send suggests that it
-// may be better if these weren't retriable - they are returned when the
-// connection fails, i.e. for example when a node is down or the network
-// fails. Retrying on such errors keeps the caller waiting for a long time
-// and without a positive outlook.
-func (r rpcError) CanRetry() bool { return true }
-
 type batchClient struct {
 	remoteAddr string
 	conn       *grpc.ClientConn
@@ -272,13 +254,13 @@ func sendOne(opts SendOptions, rpcContext *rpc.Context, client batchClient, done
 		c := client.conn
 		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
 			if err != nil {
-				done <- batchCall{err: newRPCError(
-					util.Errorf("rpc to %s failed: %s", addr, err))}
+				done <- batchCall{err: roachpb.NewSendError(
+					fmt.Sprintf("rpc to %s failed: %s", addr, err), true)}
 				return
 			}
 			if state == grpc.Shutdown {
-				done <- batchCall{err: newRPCError(
-					util.Errorf("rpc to %s failed as client connection was closed", addr))}
+				done <- batchCall{err: roachpb.NewSendError(
+					fmt.Sprintf("rpc to %s failed as client connection was closed", addr), true)}
 				return
 			}
 		}
