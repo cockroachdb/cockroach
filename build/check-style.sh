@@ -72,6 +72,16 @@ TestForbiddenImports() {
   return $ret
 }
 
+TestImportNames() {
+    echo "checking for named imports"
+    if git grep -h '^\(import \|[[:space:]]*\)\(\|[a-z]* \)"database/sql"$' -- '*.go' | grep -v '\<gosql "database/sql"'; then
+        echo "Import 'database/sql' as 'gosql' to avoid confusion with 'cockroach/sql'."
+        return 1
+    fi
+    return 0
+}
+
+
 TestIneffassign() {
   ! ineffassign . | grep -vF '.pb.go' # gogo/protobuf#152
 }
