@@ -704,30 +704,19 @@ func TestReplicaNotLeaderError(t *testing.T) {
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var numProp int64
-	sCtx := TestStoreContext()
-	sCtx.TestingKnobs.TestingCommandFilter = func(
-		args storageutils.FilterArgs,
-	) *roachpb.Error {
-		if args.Req.Method() == roachpb.LeaderLease {
-			atomic.AddInt64(&numProp, 1)
-		}
-		return nil
-	}
-
 	tc := testContext{}
-	tc.StartWithStoreContext(t, sCtx)
+	tc.Start(t)
 	defer tc.Stop()
 
-	assert := func(actual, expected int64) {
-		if actual != expected {
+	assert := func(actual, min, max int64) {
+		if actual < min || actual > max {
 			t.Fatal(util.ErrorfSkipFrames(1,
-				"metrics counters actual=%d, expected=%d", actual, expected))
+				"metrics counters actual=%d, expected=[%d,%d]", actual, min, max))
 		}
 	}
 	metrics := tc.rng.store.metrics
-	assert(metrics.leaseRequestSuccessCount.Count(), atomic.LoadInt64(&numProp))
-	assert(metrics.leaseRequestErrorCount.Count(), 0)
+	assert(metrics.leaseRequestSuccessCount.Count(), 1, 1000)
+	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
 
 	now := tc.clock.Now()
 	if err := setLeaderLease(tc.rng, &roachpb.Lease{
@@ -742,9 +731,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	lastCount := atomic.LoadInt64(&numProp)
-	assert(metrics.leaseRequestSuccessCount.Count(), lastCount)
-	assert(metrics.leaseRequestErrorCount.Count(), 0)
+	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
+	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
 
 	// Make setLeaderLease fail by providing an invalid ReplicaDescriptor.
 	if err := setLeaderLease(tc.rng, &roachpb.Lease{
@@ -760,8 +748,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		t.Fatal("setLeaderLease did not fail on invalid ReplicaDescriptor")
 	}
 
-	assert(metrics.leaseRequestSuccessCount.Count(), lastCount)
-	assert(metrics.leaseRequestErrorCount.Count(), atomic.LoadInt64(&numProp)-lastCount)
+	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
+	assert(metrics.leaseRequestErrorCount.Count(), 1, 1000)
 }
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
