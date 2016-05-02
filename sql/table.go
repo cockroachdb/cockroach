@@ -123,6 +123,35 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 		}
 	}
 
+	// Verify CheckExprs
+	qvals := make(qvalMap)
+	table := tableInfo{
+		columns: makeResultColumns(desc.Columns),
+	}
+	qv := qnameVisitor{
+		qt: qvalResolver{
+			table: &table,
+			qvals: qvals,
+		},
+	}
+	for _, def := range p.Defs {
+		switch d := def.(type) {
+		case *parser.ColumnTableDef:
+			if d.CheckExpr == nil {
+				continue
+			}
+			expr, err := resolveQNames(d.CheckExpr, &table, qvals, &qv)
+			if err != nil {
+				return desc, err
+			}
+			if typ, err := expr.TypeCheck(nil); err != nil {
+				return desc, err
+			} else if !typ.TypeEqual(parser.DummyBool) {
+				return desc, fmt.Errorf("%s: CHECK expression must return a bool", d.CheckExpr)
+			}
+		}
+	}
+
 	if primaryIndexColumnSet != nil {
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
@@ -209,7 +238,6 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	}
 
 	if d.CheckExpr != nil {
-		// TODO(guanqun): add more checks here.
 		s := d.CheckExpr.String()
 		col.CheckExpr = &s
 	}

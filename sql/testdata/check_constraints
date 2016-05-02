@@ -39,10 +39,17 @@ ALTER TABLE t2 RENAME COLUMN b TO c
 statement error pq: qualified name "b" not found
 INSERT INTO t2 (c) VALUES (-1)
 
-### Add check constraint to non-existing column
-# TODO(seif): this should fail on creation
-statement ok
+# Check constraint of non-existing column
+statement error pq: qualified name "b" not found
 CREATE TABLE t3 (a INT CHECK (a > b))
+
+# non-boolean expressions are errors
+statement error pq: 1: CHECK expression must return a bool
+CREATE TABLE t4 (a INT CHECK(1))
+
+# fail on bad check types
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE t4 (a INT CHECK (false - true))
 
 #### table CHECK constraints
 # TODO(seif):
