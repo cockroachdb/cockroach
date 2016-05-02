@@ -236,6 +236,9 @@ type Replica struct {
 		// or a closed channel. If an error occurs during generation,
 		// this channel may be closed without producing a result.
 		snapshotChan chan raftpb.Snapshot
+
+		// Counts calls to Replica.tick()
+		ticks int
 	}
 }
 
@@ -1433,12 +1436,19 @@ func (r *Replica) handleRaftReady() error {
 func (r *Replica) tick() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.mu.ticks++
 	r.mu.raftGroup.Tick()
-	// TODO(tamird/bdarnell): Reproposals should occur less frequently than
-	// ticks, but this is acceptable for now.
-	// TODO(tamird/bdarnell): Add unit tests.
-	err := r.reproposePendingCmdsLocked()
-	return err
+	if r.mu.ticks%r.store.ctx.RaftElectionTimeoutTicks == 0 {
+		// RaftElectionTimeoutTicks is a reasonable approximation of how
+		// long we should wait before deciding that our previous proposal
+		// didn't go through.
+		//
+		// TODO(tamird/bdarnell): Add unit tests.
+		if err := r.reproposePendingCmdsLocked(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Replica) reproposePendingCmdsLocked() error {
