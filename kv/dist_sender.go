@@ -356,7 +356,7 @@ func (ds *DistSender) sendRPC(ctx context.Context, rangeID roachpb.RangeID, repl
 func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 	var count int64
 	for {
-		desc, needAnother, _, pErr := ds.getDescriptors(rs, evictionToken{}, false /*useReverseScan*/)
+		desc, needAnother, _, pErr := ds.getDescriptors(rs, nil, false /*useReverseScan*/)
 		if pErr != nil {
 			return -1, pErr
 		}
@@ -384,8 +384,8 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, *roachpb.Error) {
 // returned bool is true in case the given range reaches outside the returned
 // descriptor.
 func (ds *DistSender) getDescriptors(
-	rs roachpb.RSpan, evictToken evictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, bool, evictionToken, *roachpb.Error) {
+	rs roachpb.RSpan, evictToken *evictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, bool, *evictionToken, *roachpb.Error) {
 	var descKey roachpb.RKey
 	if !useReverseScan {
 		descKey = rs.Key
@@ -406,7 +406,7 @@ func (ds *DistSender) getDescriptors(
 	//
 	// Note that with the current implementation of replica.RangeLookup,
 	// this will disable prefetching.
-	considerIntents := evictToken.prevDesc != nil
+	considerIntents := evictToken != nil
 
 	desc, returnToken, pErr := ds.rangeCache.LookupRangeDescriptor(descKey, evictToken, considerIntents, useReverseScan)
 	if pErr != nil {
@@ -635,7 +635,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		var curReply *roachpb.BatchResponse
 		var desc *roachpb.RangeDescriptor
-		var evictToken evictionToken
+		var evictToken *evictionToken
 		var needAnother bool
 		var pErr *roachpb.Error
 		var finished bool
