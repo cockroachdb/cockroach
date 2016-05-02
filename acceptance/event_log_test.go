@@ -17,7 +17,7 @@
 package acceptance
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"encoding/json"
 	"testing"
 
@@ -65,7 +65,7 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 		var clusterID uuid.UUID
 		for rows.Next() {
 			var targetID int64
-			var infoStr sql.NullString
+			var infoStr gosql.NullString
 			if err := rows.Scan(&targetID, &infoStr); err != nil {
 				t.Fatal(err)
 			}
@@ -135,7 +135,7 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 		seenCount := 0
 		for rows.Next() {
 			var targetID int64
-			var infoStr sql.NullString
+			var infoStr gosql.NullString
 			if err := rows.Scan(&targetID, &infoStr); err != nil {
 				t.Fatal(err)
 			}

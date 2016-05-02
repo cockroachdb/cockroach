@@ -20,7 +20,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -39,7 +39,7 @@ import (
 type leaseTest struct {
 	*testing.T
 	server *testServer
-	db     *sql.DB
+	db     *gosql.DB
 	kvDB   *client.DB
 	nodes  map[uint32]*csql.LeaseManager
 }

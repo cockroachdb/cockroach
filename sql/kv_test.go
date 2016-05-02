@@ -18,7 +18,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -163,7 +163,7 @@ func (kv *kvNative) done() {
 
 // kvSQL is a SQL-based implementation of the KV interface.
 type kvSQL struct {
-	db     *sql.DB
+	db     *gosql.DB
 	doneFn func()
 }
 
@@ -172,7 +172,7 @@ func newKVSQL(b *testing.B) kvInterface {
 	s := server.StartTestServer(b)
 	pgURL, cleanupURL := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
 	pgURL.Path = "bench"
-	db, err := sql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -17,7 +17,7 @@
 package storage_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -41,7 +41,7 @@ func TestLogSplits(t *testing.T) {
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogSplits")
 	defer cleanupFn()
 
-	db, err := sql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +84,8 @@ func TestLogSplits(t *testing.T) {
 	}
 	for rows.Next() {
 		var rangeID int64
-		var otherRangeID sql.NullInt64
-		var infoStr sql.NullString
+		var otherRangeID gosql.NullInt64
+		var infoStr gosql.NullString
 		if err := rows.Scan(&rangeID, &otherRangeID, &infoStr); err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +187,7 @@ func TestLogRebalances(t *testing.T) {
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogRebalances")
 	defer cleanupFn()
 
-	sqlDB, err := sql.Open("postgres", pgURL.String())
+	sqlDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestLogRebalances(t *testing.T) {
 	for rows.Next() {
 		count++
 		var rangeID int64
-		var infoStr sql.NullString
+		var infoStr gosql.NullString
 		if err := rows.Scan(&rangeID, &infoStr); err != nil {
 			t.Fatal(err)
 		}
@@ -248,7 +248,7 @@ func TestLogRebalances(t *testing.T) {
 	for rows.Next() {
 		count++
 		var rangeID int64
-		var infoStr sql.NullString
+		var infoStr gosql.NullString
 		if err := rows.Scan(&rangeID, &infoStr); err != nil {
 			t.Fatal(err)
 		}

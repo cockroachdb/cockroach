@@ -15,7 +15,7 @@
 package acceptance
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -37,7 +37,7 @@ type dynamicClient struct {
 		sync.Mutex
 		// clients is a map from node indexes used by methods passed to the
 		// cluster `c` to db clients.
-		clients map[int]*sql.DB
+		clients map[int]*gosql.DB
 	}
 }
 
@@ -48,7 +48,7 @@ func newDynamicClient(cluster cluster.Cluster, stopper *stop.Stopper) *dynamicCl
 		cluster: cluster,
 		stopper: stopper,
 	}
-	dc.mu.clients = make(map[int]*sql.DB)
+	dc.mu.clients = make(map[int]*gosql.DB)
 	return dc
 }
 
@@ -74,7 +74,7 @@ func isRetryableError(err error) bool {
 var errTestFinished = errors.New("test is shutting down")
 
 // exec calls exec on a client using a preexisting or new connection.
-func (dc *dynamicClient) exec(query string, args ...interface{}) (sql.Result, error) {
+func (dc *dynamicClient) exec(query string, args ...interface{}) (gosql.Result, error) {
 	for dc.isRunning() {
 		client, err := dc.getClient()
 		if err != nil {
@@ -103,7 +103,7 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 }
 
 // getClient returns open client to a random node from the cluster.
-func (dc *dynamicClient) getClient() (*sql.DB, error) {
+func (dc *dynamicClient) getClient() (*gosql.DB, error) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 
@@ -112,7 +112,7 @@ func (dc *dynamicClient) getClient() (*sql.DB, error) {
 		if client, ok := dc.mu.clients[index]; ok {
 			return client, nil
 		}
-		client, err := sql.Open("postgres", dc.cluster.PGUrl(index))
+		client, err := gosql.Open("postgres", dc.cluster.PGUrl(index))
 		if err != nil {
 			log.Infof("could not establish connection to %s: %s", dc.cluster.Addr(index), err)
 			continue

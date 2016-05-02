@@ -19,7 +19,7 @@ package acceptance
 import (
 	"bytes"
 	"crypto/tls"
-	"database/sql"
+	gosql "database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -219,8 +219,8 @@ func SkipUnlessPrivileged(t *testing.T) {
 	}
 }
 
-func makePGClient(t *testing.T, dest string) *sql.DB {
-	db, err := sql.Open("postgres", dest)
+func makePGClient(t *testing.T, dest string) *gosql.DB {
+	db, err := gosql.Open("postgres", dest)
 	if err != nil {
 		t.Fatal(err)
 	}
