@@ -30,6 +30,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -215,6 +216,7 @@ func newStoreRangeSet(store *Store) *storeRangeSet {
 	}
 }
 
+// Visit calls the visitor with each Replica until false is returned.
 func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 	// Copy the  range IDs to a slice and iterate over the slice so
 	// that we can safely (e.g., no race, no range skip) iterate
@@ -850,6 +852,62 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// Start Raft processing goroutines.
 	s.ctx.Transport.Listen(s.StoreID(), s.enqueueRaftMessage)
 	s.processRaft()
+
+	doneUnfreezing := make(chan struct{})
+	s.stopper.RunAsyncTask(func() {
+		defer close(doneUnfreezing)
+		sem := make(chan struct{}, 512)
+		var wg sync.WaitGroup // wait for unfreeze goroutines
+		var unfrozen int64    // updated atomically
+		newStoreRangeSet(s).Visit(func(r *Replica) bool {
+			r.mu.Lock()
+			frozen := r.mu.frozen
+			r.mu.Unlock()
+			if !frozen {
+				return true
+			}
+			wg.Add(1)
+			if !s.stopper.RunLimitedAsyncTask(sem, func() {
+				defer wg.Done()
+				desc := r.Desc()
+				var ba roachpb.BatchRequest
+				fReq := roachpb.ChangeFrozenRequest{
+					Span: roachpb.Span{
+						Key:    desc.StartKey.AsRawKey(),
+						EndKey: desc.EndKey.AsRawKey(),
+					},
+					Frozen:      false,
+					MustVersion: build.GetInfo().Tag,
+				}
+				ba.Add(&fReq)
+				if _, pErr := r.Send(context.TODO(), ba); pErr != nil {
+					log.Errorf("could not unfreeze Range %s on startup: %s", r, pErr)
+				} else {
+					// We don't use the returned RangesAffected (0 or 1) for
+					// counting. One of the other Replicas may have beaten us
+					// to it, but it is still fair to count this as "our"
+					// success; otherwise, the logged count will be distributed
+					// across various nodes' logs.
+					atomic.AddInt64(&unfrozen, 1)
+				}
+			}) {
+				wg.Done()
+			}
+			return true
+		})
+		wg.Wait()
+		if unfrozen > 0 {
+			log.Infof("reactivated %d frozen Ranges", unfrozen)
+		}
+	})
+	// We don't want to jump into gossiping too early - if the first range is
+	// frozen, that means waiting for the next attempt to happen. Instead,
+	// wait for a little bit and if things take too long, let the Gossip
+	// loop figure it out.
+	select {
+	case <-doneUnfreezing:
+	case <-time.After(10 * time.Second):
+	}
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.

@@ -18,7 +18,6 @@ package acceptance
 
 import (
 	"bytes"
-	"crypto/tls"
 	gosql "database/sql"
 	"encoding/json"
 	"flag"
@@ -227,22 +226,10 @@ func makePGClient(t *testing.T, dest string) *gosql.DB {
 	return db
 }
 
-// HTTPClient is an http.Client configured for querying a cluster. We need to
-// run with "InsecureSkipVerify" (at least on Docker) due to the fact that we
-// cannot use a fixed hostname to reach the cluster. This in turn means that we
-// do not have a verified server name in the certs.
-var HTTPClient = http.Client{
-	Timeout: base.NetworkTimeout,
-	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}}
-
 // getJSON retrieves the URL specified by the parameters and
 // and unmarshals the result into the supplied interface.
 func getJSON(url, rel string, v interface{}) error {
-	resp, err := HTTPClient.Get(url + rel)
+	resp, err := cluster.HTTPClient().Get(url + rel)
 	if err != nil {
 		if log.V(1) {
 			log.Info(err)
@@ -262,13 +249,13 @@ func getJSON(url, rel string, v interface{}) error {
 
 // postJSON POSTs to the URL specified by the parameters and unmarshals the
 // result into the supplied interface.
-func postJSON(url, rel string, reqBody interface{}, v interface{}) error {
+func postJSON(c *http.Client, url, rel string, reqBody interface{}, v interface{}) error {
 	reqBodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return err
 	}
 
-	resp, err := HTTPClient.Post(url+rel, util.JSONContentType, bytes.NewReader(reqBodyBytes))
+	resp, err := c.Post(url+rel, util.JSONContentType, bytes.NewReader(reqBodyBytes))
 	if err != nil {
 		return err
 	}
@@ -276,6 +263,9 @@ func postJSON(url, rel string, reqBody interface{}, v interface{}) error {
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return util.Errorf("%d: %s", resp.StatusCode, b)
 	}
 	return json.Unmarshal(b, v)
 }

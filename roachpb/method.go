@@ -115,4 +115,7 @@ const (
 	// an error if the key exists and the existing value is different from the
 	// supplied one.
 	InitPut
+	// ChangeFrozen freezes or unfreezes all Ranges with StartKey in a given
+	// key span.
+	ChangeFrozen
 )

@@ -210,6 +210,32 @@ message CheckConsistencyResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// ChangeFrozenRequest idempotently freezes or unfreezes all of the Ranges whose
+// whose StartKey is contained in the specified range.
+// For example with ranges [a,c), [c,g) and [g,z), a request for [b,e) would
+// affect [c,g) only.
+message ChangeFrozenRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional bool frozen = 2 [(gogoproto.nullable) = false];
+  // When freezing, the version all Replicas be running. On mismatch, the Replica
+  // must stall itself as it may already have diverged due to version skew.
+  optional string must_version = 3 [(gogoproto.nullable) = false];
+}
+
+// ChangeFrozenResponse is the return value from the ChangeFrozen() method.
+message ChangeFrozenResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The number of Ranges whose state changed (i.e. from unfrozen to frozen or
+  // vice versa) as a result of the operation.
+  optional int64 ranges_affected = 2 [(gogoproto.nullable) = false];
+  // The StartKey of the first Range (i.e. the one sorting first) encountered
+  // during execution (regardless of whether the command had any effect on that
+  // specific Range).
+  optional bytes min_start_key = 3 [(gogoproto.casttype) = "RKey"];
+}
+
+
+
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 message BeginTransactionRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -602,7 +628,6 @@ message RequestUnion {
   optional GetRequest get = 1;
   optional PutRequest put = 2;
   optional ConditionalPutRequest conditional_put = 3;
-  optional InitPutRequest init_put = 26;
   optional IncrementRequest increment = 4;
   optional DeleteRequest delete = 5;
   optional DeleteRangeRequest delete_range = 6;
@@ -625,6 +650,8 @@ message RequestUnion {
   optional VerifyChecksumRequest verify_checksum = 23;
   optional CheckConsistencyRequest check_consistency = 24;
   optional NoopRequest noop = 25;
+  optional InitPutRequest init_put = 26;
+  optional ChangeFrozenRequest change_frozen = 27;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -635,7 +662,6 @@ message ResponseUnion {
   optional GetResponse get = 1;
   optional PutResponse put = 2;
   optional ConditionalPutResponse conditional_put = 3;
-  optional InitPutResponse init_put = 26;
   optional IncrementResponse increment = 4;
   optional DeleteResponse delete = 5;
   optional DeleteRangeResponse delete_range = 6;
@@ -658,6 +684,8 @@ message ResponseUnion {
   optional VerifyChecksumResponse verify_checksum = 23;
   optional CheckConsistencyResponse check_consistency = 24;
   optional NoopResponse noop = 25;
+  optional InitPutResponse init_put = 26;
+  optional ChangeFrozenResponse change_frozen = 27;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
