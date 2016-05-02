@@ -2111,6 +2111,13 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	return kvs, config.SystemConfig{Values: kvs}.Hash(), nil
 }
 
+// needsSplitBySize returns true if the size of the range requires it
+// to be split.
+func (r *Replica) needsSplitBySize() bool {
+	maxBytes := r.GetMaxBytes()
+	return maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes
+}
+
 // maybeAddToSplitQueue checks whether the current size of the range
 // exceeds the max size specified in the zone config. If yes, the
 // range is added to the split queue.
