@@ -132,6 +132,21 @@ func (node *AndExpr) String() string {
 	return fmt.Sprintf("%s AND %s", exprStrWithParen(node.Left), exprStrWithParen(node.Right))
 }
 
+// NewTypedAndExpr returns a new AndExpr that is verified to be well-typed.
+func NewTypedAndExpr(left, right TypedExpr) *AndExpr {
+	return &AndExpr{Left: left, Right: right}
+}
+
+// TypedLeft returns the AndExpr's left expression as a TypedExpr.
+func (node *AndExpr) TypedLeft() TypedExpr {
+	return node.Left.(TypedExpr)
+}
+
+// TypedRight returns the AndExpr's right expression as a TypedExpr.
+func (node *AndExpr) TypedRight() TypedExpr {
+	return node.Right.(TypedExpr)
+}
+
 // OrExpr represents an OR expression.
 type OrExpr struct {
 	Left, Right Expr
@@ -143,6 +158,21 @@ func (*OrExpr) operatorExpr() {}
 
 func (node *OrExpr) String() string {
 	return fmt.Sprintf("%s OR %s", exprStrWithParen(node.Left), exprStrWithParen(node.Right))
+}
+
+// NewTypedOrExpr returns a new OrExpr that is verified to be well-typed.
+func NewTypedOrExpr(left, right TypedExpr) *OrExpr {
+	return &OrExpr{Left: left, Right: right}
+}
+
+// TypedLeft returns the OrExpr's left expression as a TypedExpr.
+func (node *OrExpr) TypedLeft() TypedExpr {
+	return node.Left.(TypedExpr)
+}
+
+// TypedRight returns the OrExpr's right expression as a TypedExpr.
+func (node *OrExpr) TypedRight() TypedExpr {
+	return node.Right.(TypedExpr)
 }
 
 // NotExpr represents a NOT expression.
@@ -158,6 +188,16 @@ func (node *NotExpr) String() string {
 	return fmt.Sprintf("NOT %s", exprStrWithParen(node.Expr))
 }
 
+// NewTypedNotExpr returns a new NotExpr that is verified to be well-typed.
+func NewTypedNotExpr(expr TypedExpr) *NotExpr {
+	return &NotExpr{Expr: expr}
+}
+
+// TypedInnerExpr returns the NotExpr's inner expression as a TypedExpr.
+func (node *NotExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
+}
+
 // ParenExpr represents a parenthesized expression.
 type ParenExpr struct {
 	Expr Expr
@@ -167,6 +207,11 @@ type ParenExpr struct {
 
 func (node *ParenExpr) String() string {
 	return fmt.Sprintf("(%s)", node.Expr)
+}
+
+// TypedInnerExpr returns the ParenExpr's inner expression as a TypedExpr.
+func (node *ParenExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
 }
 
 // ComparisonOperator represents a binary operator.
@@ -232,6 +277,21 @@ func (*ComparisonExpr) operatorExpr() {}
 func (node *ComparisonExpr) String() string {
 	return fmt.Sprintf("%s %s %s", exprStrWithParen(node.Left), node.Operator,
 		exprStrWithParen(node.Right))
+}
+
+// NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
+func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
+	return &ComparisonExpr{Operator: op, Left: left, Right: right}
+}
+
+// TypedLeft returns the ComparisonExpr's left expression as a TypedExpr.
+func (node *ComparisonExpr) TypedLeft() TypedExpr {
+	return node.Left.(TypedExpr)
+}
+
+// TypedRight returns the ComparisonExpr's right expression as a TypedExpr.
+func (node *ComparisonExpr) TypedRight() TypedExpr {
+	return node.Right.(TypedExpr)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -679,6 +739,20 @@ func (node *Array) String() string {
 type Exprs []Expr
 
 func (node Exprs) String() string {
+	var prefix string
+	var buf bytes.Buffer
+	for _, n := range node {
+		fmt.Fprintf(&buf, "%s%s", prefix, n)
+		prefix = ", "
+	}
+	return buf.String()
+}
+
+// TypedExprs represents a list of well-typed value expressions. It's not a valid expression
+// because it's not parenthesized.
+type TypedExprs []TypedExpr
+
+func (node TypedExprs) String() string {
 	var prefix string
 	var buf bytes.Buffer
 	for _, n := range node {

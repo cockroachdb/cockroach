@@ -250,7 +250,7 @@ func TestSimplifyExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		expr, equiv := simplifyTypedExpr(expr)
+		expr, equiv := simplifyExpr(expr)
 		if s := expr.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -286,7 +286,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyTypedExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -519,7 +519,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyTypedExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
@@ -736,7 +736,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyTypedExpr(expr1)
+		expr2, equiv := simplifyExpr(expr1)
 		if s := expr2.String(); d.expected != s {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}

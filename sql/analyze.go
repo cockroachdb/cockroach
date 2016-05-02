@@ -46,10 +46,10 @@ import (
 // Returns false for equivalent if the resulting expressions are not equivalent
 // to the originals. This occurs for expressions which are currently not
 // handled by simplification (they are replaced by "true").
-func analyzeExpr(e parser.Expr) (exprs []parser.Exprs, equivalent bool) {
+func analyzeExpr(e parser.TypedExpr) (exprs []parser.TypedExprs, equivalent bool) {
 	e, equivalent = simplifyExpr(e)
 	orExprs := splitOrExpr(e, nil)
-	results := make([]parser.Exprs, len(orExprs))
+	results := make([]parser.TypedExprs, len(orExprs))
 	for i := range orExprs {
 		results[i] = splitAndExpr(orExprs[i], nil)
 	}
@@ -61,10 +61,10 @@ func analyzeExpr(e parser.Expr) (exprs []parser.Exprs, equivalent bool) {
 // in the list.
 //
 //   a OR b OR c OR d -> [a, b, c, d]
-func splitOrExpr(e parser.Expr, exprs parser.Exprs) parser.Exprs {
+func splitOrExpr(e parser.TypedExpr, exprs parser.TypedExprs) parser.TypedExprs {
 	switch t := e.(type) {
 	case *parser.OrExpr:
-		return splitOrExpr(t.Right, splitOrExpr(t.Left, exprs))
+		return splitOrExpr(t.TypedRight(), splitOrExpr(t.TypedLeft(), exprs))
 	}
 	return append(exprs, e)
 }
@@ -74,31 +74,31 @@ func splitOrExpr(e parser.Expr, exprs parser.Exprs) parser.Exprs {
 // element in the list.
 //
 //   a AND b AND c AND d -> [a, b, c, d]
-func splitAndExpr(e parser.Expr, exprs parser.Exprs) parser.Exprs {
+func splitAndExpr(e parser.TypedExpr, exprs parser.TypedExprs) parser.TypedExprs {
 	switch t := e.(type) {
 	case *parser.AndExpr:
-		return splitAndExpr(t.Right, splitAndExpr(t.Left, exprs))
+		return splitAndExpr(t.TypedRight(), splitAndExpr(t.TypedLeft(), exprs))
 	}
 	return append(exprs, e)
 }
 
 // joinOrExprs performs the inverse operation of splitOrExpr, joining
 // together the individual expressions using OrExpr nodes.
-func joinOrExprs(exprs parser.Exprs) parser.Expr {
-	return joinExprs(exprs, func(left, right parser.Expr) parser.Expr {
-		return &parser.OrExpr{Left: left, Right: right}
+func joinOrExprs(exprs parser.TypedExprs) parser.TypedExpr {
+	return joinExprs(exprs, func(left, right parser.TypedExpr) parser.TypedExpr {
+		return parser.NewTypedOrExpr(left, right)
 	})
 }
 
 // joinAndExprs performs the inverse operation of splitAndExpr, joining
 // together the individual expressions using AndExpr nodes.
-func joinAndExprs(exprs parser.Exprs) parser.Expr {
-	return joinExprs(exprs, func(left, right parser.Expr) parser.Expr {
-		return &parser.AndExpr{Left: left, Right: right}
+func joinAndExprs(exprs parser.TypedExprs) parser.TypedExpr {
+	return joinExprs(exprs, func(left, right parser.TypedExpr) parser.TypedExpr {
+		return parser.NewTypedAndExpr(left, right)
 	})
 }
 
-func joinExprs(exprs parser.Exprs, joinExprsFn func(left, right parser.Expr) parser.Expr) parser.Expr {
+func joinExprs(exprs parser.TypedExprs, joinExprsFn func(left, right parser.TypedExpr) parser.TypedExpr) parser.TypedExpr {
 	switch len(exprs) {
 	case 0:
 		return nil
@@ -133,7 +133,7 @@ func joinExprs(exprs parser.Exprs, joinExprsFn func(left, right parser.Expr) par
 // Returns false for equivalent if the resulting expression is not equivalent
 // to the original. This occurs for expressions which are currently not handled
 // by simplification.
-func simplifyExpr(e parser.Expr) (simplified parser.Expr, equivalent bool) {
+func simplifyExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent bool) {
 	switch t := e.(type) {
 	case *parser.NotExpr:
 		return simplifyNotExpr(t)
@@ -151,12 +151,7 @@ func simplifyExpr(e parser.Expr) (simplified parser.Expr, equivalent bool) {
 	return parser.MakeDBool(true), false
 }
 
-func simplifyTypedExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent bool) {
-	expr, eq := simplifyExpr(e)
-	return expr.(parser.TypedExpr), eq
-}
-
-func simplifyNotExpr(n *parser.NotExpr) (parser.Expr, bool) {
+func simplifyNotExpr(n *parser.NotExpr) (parser.TypedExpr, bool) {
 	switch t := n.Expr.(type) {
 	case *parser.ComparisonExpr:
 		op := t.Operator
@@ -188,30 +183,30 @@ func simplifyNotExpr(n *parser.NotExpr) (parser.Expr, bool) {
 		default:
 			return parser.MakeDBool(true), false
 		}
-		return simplifyExpr(&parser.ComparisonExpr{
-			Operator: op,
-			Left:     t.Left,
-			Right:    t.Right,
-		})
+		return simplifyExpr(parser.NewTypedComparisonExpr(
+			op,
+			t.TypedLeft(),
+			t.TypedRight(),
+		))
 
 	case *parser.AndExpr:
 		// De Morgan's Law: NOT (a AND b) -> (NOT a) OR (NOT b)
-		return simplifyExpr(&parser.OrExpr{
-			Left:  &parser.NotExpr{Expr: t.Left},
-			Right: &parser.NotExpr{Expr: t.Right},
-		})
+		return simplifyExpr(parser.NewTypedOrExpr(
+			parser.NewTypedNotExpr(t.TypedLeft()),
+			parser.NewTypedNotExpr(t.TypedRight()),
+		))
 
 	case *parser.OrExpr:
 		// De Morgan's Law: NOT (a OR b) -> (NOT a) AND (NOT b)
-		return simplifyExpr(&parser.AndExpr{
-			Left:  &parser.NotExpr{Expr: t.Left},
-			Right: &parser.NotExpr{Expr: t.Right},
-		})
+		return simplifyExpr(parser.NewTypedAndExpr(
+			parser.NewTypedNotExpr(t.TypedLeft()),
+			parser.NewTypedNotExpr(t.TypedRight()),
+		))
 	}
 	return parser.MakeDBool(true), false
 }
 
-func simplifyAndExpr(n *parser.AndExpr) (parser.Expr, bool) {
+func simplifyAndExpr(n *parser.AndExpr) (parser.TypedExpr, bool) {
 	// a AND b AND c AND d -> [a, b, c, d]
 	equivalent := true
 	exprs := splitAndExpr(n, nil)
@@ -265,7 +260,7 @@ outer:
 	return joinAndExprs(exprs), equivalent
 }
 
-func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool) {
+func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.TypedExpr, bool) {
 	lcmp, ok := left.(*parser.ComparisonExpr)
 	if !ok {
 		return left, right, true
@@ -274,38 +269,40 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 	if !ok {
 		return left, right, true
 	}
-	if !isDatum(lcmp.Right) || !isDatum(rcmp.Right) {
+	lcmpLeft, lcmpRight := lcmp.TypedLeft(), lcmp.TypedRight()
+	rcmpLeft, rcmpRight := rcmp.TypedLeft(), rcmp.TypedRight()
+	if !isDatum(lcmpRight) || !isDatum(rcmpRight) {
 		return parser.MakeDBool(true), nil, false
 	}
-	if !varEqual(lcmp.Left, rcmp.Left) {
+	if !varEqual(lcmpLeft, rcmpLeft) {
 		return left, right, true
 	}
 
 	if lcmp.Operator == parser.IsNot || rcmp.Operator == parser.IsNot {
 		switch lcmp.Operator {
 		case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE, parser.In:
-			if rcmp.Right == parser.DNull {
+			if rcmpRight == parser.DNull {
 				// a <cmp> x AND a IS NOT NULL
 				return left, nil, true
 			}
 		case parser.Is:
-			if lcmp.Right == parser.DNull && rcmp.Right == parser.DNull {
+			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
 				// a IS NULL AND a IS NOT NULL
 				return parser.MakeDBool(false), nil, true
 			}
 		case parser.IsNot:
-			if lcmp.Right == parser.DNull {
+			if lcmpRight == parser.DNull {
 				switch rcmp.Operator {
 				case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE, parser.In:
 					// a IS NOT NULL AND a <cmp> x
 					return right, nil, true
 				case parser.Is:
-					if rcmp.Right == parser.DNull {
+					if rcmpRight == parser.DNull {
 						// a IS NOT NULL AND a IS NULL
 						return parser.MakeDBool(false), nil, true
 					}
 				case parser.IsNot:
-					if rcmp.Right == parser.DNull {
+					if rcmpRight == parser.DNull {
 						// a IS NOT NULL AND a IS NOT NULL
 						return left, nil, true
 					}
@@ -320,7 +317,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 		return left, right, true
 	}
 
-	if reflect.TypeOf(lcmp.Right) != reflect.TypeOf(rcmp.Right) {
+	if reflect.TypeOf(lcmpRight) != reflect.TypeOf(rcmpRight) {
 		allowCmp := false
 		switch lcmp.Operator {
 		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
@@ -331,11 +328,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			}
 		}
 		if !allowCmp {
-			if lcmp.Operator == parser.Is && lcmp.Right == parser.DNull {
+			if lcmp.Operator == parser.Is && lcmpRight == parser.DNull {
 				// a IS NULL AND a <cmp> x
 				return parser.MakeDBool(false), nil, true
 			}
-			if rcmp.Operator == parser.Is && rcmp.Right == parser.DNull {
+			if rcmp.Operator == parser.Is && rcmpRight == parser.DNull {
 				// a <cmp> x AND a IS NULL
 				return parser.MakeDBool(false), nil, true
 			}
@@ -345,8 +342,8 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 		}
 	}
 
-	ldatum := lcmp.Right.(parser.Datum)
-	rdatum := rcmp.Right.(parser.Datum)
+	ldatum := lcmpRight.(parser.Datum)
+	rdatum := rcmpRight.(parser.Datum)
 	cmp := ldatum.Compare(rdatum)
 
 	// Determine which expression to use when either expression (left or right)
@@ -355,7 +352,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 	// type is that it makes index constraint construction easier.
 	either := lcmp
 	if !ldatum.TypeEqual(rdatum) {
-		switch ta := lcmp.Left.(type) {
+		switch ta := lcmpLeft.(type) {
 		case *qvalue:
 			if ta.datum.TypeEqual(rdatum) {
 				either = rcmp
@@ -423,11 +420,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			// a != x AND a >= y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.GT,
-					Left:     rcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.GT,
+					rcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x != y
 			return right, nil, cmp == -1
@@ -435,11 +432,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			// a != x AND a <= y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.LT,
-					Left:     rcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.LT,
+					rcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x != y
 			return right, nil, cmp == +1
@@ -490,11 +487,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			// a >= x AND x != y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.GT,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.GT,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x != y
 			return left, nil, cmp == +1
@@ -521,11 +518,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return left, right, true
 			} else if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.EQ,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.EQ,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x > y
 			return parser.MakeDBool(false), nil, true
@@ -576,11 +573,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 			// a <= x AND a != y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.LT,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.LT,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x != y
 			return left, nil, cmp == -1
@@ -598,11 +595,11 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 				return left, right, true
 			} else if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.EQ,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.EQ,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x < y
 			return parser.MakeDBool(false), nil, true
@@ -619,7 +616,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 	case parser.Is:
 		switch rcmp.Operator {
 		case parser.Is:
-			if lcmp.Right == parser.DNull && rcmp.Right == parser.DNull {
+			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
 				// a IS NULL AND a IS NULL
 				return left, nil, true
 			}
@@ -629,7 +626,7 @@ func simplifyOneAndExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool
 	return parser.MakeDBool(true), nil, false
 }
 
-func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parser.Expr) {
+func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, parser.TypedExpr) {
 	if left.Operator != parser.In && right.Operator != parser.In {
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
@@ -674,11 +671,11 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 					}
 					ltuple = remove(ltuple, i)
 				}
-				return &parser.ComparisonExpr{
-					Operator: parser.In,
-					Left:     left.Left,
-					Right:    &ltuple,
-				}, nil
+				return parser.NewTypedComparisonExpr(
+					parser.In,
+					left.TypedLeft(),
+					&ltuple,
+				), nil
 
 			case parser.GT:
 				if i < len(ltuple) {
@@ -688,11 +685,11 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 						ltuple = ltuple[i:]
 					}
 					if len(ltuple) > 0 {
-						return &parser.ComparisonExpr{
-							Operator: parser.In,
-							Left:     left.Left,
-							Right:    &ltuple,
-						}, nil
+						return parser.NewTypedComparisonExpr(
+							parser.In,
+							left.TypedLeft(),
+							&ltuple,
+						), nil
 					}
 				}
 				return parser.MakeDBool(false), nil
@@ -701,11 +698,11 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 				if i < len(ltuple) {
 					ltuple = ltuple[i:]
 					if len(ltuple) > 0 {
-						return &parser.ComparisonExpr{
-							Operator: parser.In,
-							Left:     left.Left,
-							Right:    &ltuple,
-						}, nil
+						return parser.NewTypedComparisonExpr(
+							parser.In,
+							left.TypedLeft(),
+							&ltuple,
+						), nil
 					}
 				}
 				return parser.MakeDBool(false), nil
@@ -716,11 +713,11 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 						return parser.MakeDBool(false), nil
 					}
 					ltuple = ltuple[:i]
-					return &parser.ComparisonExpr{
-						Operator: parser.In,
-						Left:     left.Left,
-						Right:    &ltuple,
-					}, nil
+					return parser.NewTypedComparisonExpr(
+						parser.In,
+						left.TypedLeft(),
+						&ltuple,
+					), nil
 				}
 				return left, nil
 
@@ -733,11 +730,11 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 						return parser.MakeDBool(false), nil
 					}
 					ltuple = ltuple[:i]
-					return &parser.ComparisonExpr{
-						Operator: parser.In,
-						Left:     left.Left,
-						Right:    &ltuple,
-					}, nil
+					return parser.NewTypedComparisonExpr(
+						parser.In,
+						left.TypedLeft(),
+						&ltuple,
+					), nil
 				}
 				return left, nil
 			}
@@ -749,18 +746,18 @@ func simplifyOneAndInExpr(left, right *parser.ComparisonExpr) (parser.Expr, pars
 			if len(*intersection) == 0 {
 				return parser.MakeDBool(false), nil
 			}
-			return &parser.ComparisonExpr{
-				Operator: parser.In,
-				Left:     left.Left,
-				Right:    intersection,
-			}, nil
+			return parser.NewTypedComparisonExpr(
+				parser.In,
+				left.TypedLeft(),
+				intersection,
+			), nil
 		}
 	}
 
 	return origLeft, origRight
 }
 
-func simplifyOrExpr(n *parser.OrExpr) (parser.Expr, bool) {
+func simplifyOrExpr(n *parser.OrExpr) (parser.TypedExpr, bool) {
 	// a OR b OR c OR d -> [a, b, c, d]
 	equivalent := true
 	exprs := splitOrExpr(n, nil)
@@ -814,7 +811,7 @@ outer:
 	return joinOrExprs(exprs), equivalent
 }
 
-func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool) {
+func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.TypedExpr, bool) {
 	lcmp, ok := left.(*parser.ComparisonExpr)
 	if !ok {
 		return left, right, true
@@ -823,30 +820,32 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 	if !ok {
 		return left, right, true
 	}
-	if !isDatum(lcmp.Right) || !isDatum(rcmp.Right) {
+	lcmpLeft, lcmpRight := lcmp.TypedLeft(), lcmp.TypedRight()
+	rcmpLeft, rcmpRight := rcmp.TypedLeft(), rcmp.TypedRight()
+	if !isDatum(lcmpRight) || !isDatum(rcmpRight) {
 		return parser.MakeDBool(true), nil, false
 	}
-	if !varEqual(lcmp.Left, rcmp.Left) {
+	if !varEqual(lcmpLeft, rcmpLeft) {
 		return left, right, true
 	}
 
 	if lcmp.Operator == parser.IsNot || rcmp.Operator == parser.IsNot {
 		switch lcmp.Operator {
 		case parser.Is:
-			if lcmp.Right == parser.DNull && rcmp.Right == parser.DNull {
+			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
 				// a IS NULL OR a IS NOT NULL
 				return parser.MakeDBool(true), nil, true
 			}
 		case parser.IsNot:
-			if lcmp.Right == parser.DNull {
+			if lcmpRight == parser.DNull {
 				switch rcmp.Operator {
 				case parser.Is:
-					if rcmp.Right == parser.DNull {
+					if rcmpRight == parser.DNull {
 						// a IS NOT NULL OR a IS NULL
 						return parser.MakeDBool(true), nil, true
 					}
 				case parser.IsNot:
-					if rcmp.Right == parser.DNull {
+					if rcmpRight == parser.DNull {
 						// a IS NOT NULL OR a IS NOT NULL
 						return left, nil, true
 					}
@@ -861,7 +860,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 		return left, right, true
 	}
 
-	if reflect.TypeOf(lcmp.Right) != reflect.TypeOf(rcmp.Right) {
+	if reflect.TypeOf(lcmpRight) != reflect.TypeOf(rcmpRight) {
 		allowCmp := false
 		switch lcmp.Operator {
 		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
@@ -878,8 +877,8 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 		}
 	}
 
-	ldatum := lcmp.Right.(parser.Datum)
-	rdatum := rcmp.Right.(parser.Datum)
+	ldatum := lcmpRight.(parser.Datum)
+	rdatum := rcmpRight.(parser.Datum)
 	cmp := ldatum.Compare(rdatum)
 
 	// Determine which expression to use when either expression (left or right)
@@ -888,7 +887,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 	// type is that it makes index constraint construction easier.
 	either := lcmp
 	if !ldatum.TypeEqual(rdatum) {
-		switch ta := lcmp.Left.(type) {
+		switch ta := lcmpLeft.(type) {
 		case *qvalue:
 			if ta.datum.TypeEqual(rdatum) {
 				either = rcmp
@@ -909,16 +908,16 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				// x > y
 				ldatum, rdatum = rdatum, ldatum
 			}
-			return &parser.ComparisonExpr{
-				Operator: parser.In,
-				Left:     lcmp.Left,
-				Right:    &parser.DTuple{ldatum, rdatum},
-			}, nil, true
+			return parser.NewTypedComparisonExpr(
+				parser.In,
+				lcmpLeft,
+				&parser.DTuple{ldatum, rdatum},
+			), nil, true
 		case parser.NE:
 			// a = x OR a != y
 			if cmp == 0 {
 				// x = y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			return right, nil, true
 		case parser.GT:
@@ -927,11 +926,11 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				// x > y OR x = y
 				return right, nil, true
 			} else if cmp == 0 {
-				return &parser.ComparisonExpr{
-					Operator: parser.GE,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.GE,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			return left, right, true
 		case parser.GE:
@@ -947,11 +946,11 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				// x < y OR x = y
 				return right, nil, true
 			} else if cmp == 0 {
-				return &parser.ComparisonExpr{
-					Operator: parser.LE,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.LE,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			return left, right, true
 		case parser.LE:
@@ -969,7 +968,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a != x OR a = y
 			if cmp == 0 {
 				// x = y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x != y
 			return left, nil, true
@@ -980,12 +979,12 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return either, nil, true
 			}
 			// x != y
-			return makeIsNotNull(lcmp.Left), nil, true
+			return makeIsNotNull(lcmpLeft), nil, true
 		case parser.GT:
 			// a != x OR a > y
 			if cmp == 1 {
 				// x > y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x <= y
 			return left, nil, true
@@ -993,7 +992,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a != x OR a >= y
 			if cmp != -1 {
 				// x >= y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x < y
 			return left, nil, true
@@ -1001,7 +1000,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a != x OR a < y
 			if cmp == -1 {
 				// x < y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x >= y
 			return left, nil, true
@@ -1009,7 +1008,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a != x OR a <= y
 			if cmp != 1 {
 				// x <= y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x > y
 			return left, nil, true
@@ -1023,11 +1022,11 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				// x < y
 				return left, nil, true
 			} else if cmp == 0 {
-				return &parser.ComparisonExpr{
-					Operator: parser.GE,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.GE,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			}
 			// x > y
 			return left, right, true
@@ -1035,7 +1034,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a > x OR a != y
 			if cmp == -1 {
 				// x < y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x >= y
 			return right, nil, true
@@ -1049,13 +1048,13 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a > x OR a < y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.NE,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.NE,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			} else if cmp == -1 {
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x != y
 			return left, right, true
@@ -1063,7 +1062,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a > x OR a <= y
 			if cmp != 1 {
 				// x = y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x != y
 			return left, right, true
@@ -1083,7 +1082,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a >= x OR a != y
 			if cmp != 1 {
 				// x <= y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x > y
 			return right, nil, true
@@ -1107,7 +1106,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a >= x OR a < y
 			if cmp != 1 {
 				// x <= y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x > y
 			return left, right, true
@@ -1119,11 +1118,11 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a < x OR a = y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.LE,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.LE,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			} else if cmp == 1 {
 				// x > y
 				return left, nil, true
@@ -1133,21 +1132,21 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 		case parser.NE:
 			// a < x OR a != y
 			if cmp == 1 {
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			return right, nil, true
 		case parser.GT:
 			// a < x OR a > y
 			if cmp == 0 {
 				// x = y
-				return &parser.ComparisonExpr{
-					Operator: parser.NE,
-					Left:     lcmp.Left,
-					Right:    either.Right,
-				}, nil, true
+				return parser.NewTypedComparisonExpr(
+					parser.NE,
+					lcmpLeft,
+					either.TypedRight(),
+				), nil, true
 			} else if cmp == 1 {
 				// x > y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			return left, right, true
 		case parser.GE:
@@ -1157,7 +1156,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 				return left, right, true
 			}
 			// x >= y
-			return makeIsNotNull(lcmp.Left), nil, true
+			return makeIsNotNull(lcmpLeft), nil, true
 		case parser.LT, parser.LE:
 			// a < x OR (a < y OR a <= y)
 			if cmp == 1 {
@@ -1182,7 +1181,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a <= x OR a != y
 			if cmp != -1 {
 				// x >= y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x < y
 			return right, nil, true
@@ -1190,7 +1189,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 			// a <= x OR (a > y OR a >= y)
 			if cmp != -1 {
 				// x >= y
-				return makeIsNotNull(lcmp.Left), nil, true
+				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			// x < y
 			return left, right, true
@@ -1207,7 +1206,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 	case parser.Is:
 		switch rcmp.Operator {
 		case parser.Is:
-			if lcmp.Right == parser.DNull && rcmp.Right == parser.DNull {
+			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
 				// a IS NULL OR a IS NULL
 				return left, nil, true
 			}
@@ -1217,7 +1216,7 @@ func simplifyOneOrExpr(left, right parser.Expr) (parser.Expr, parser.Expr, bool)
 	return parser.MakeDBool(true), nil, false
 }
 
-func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parser.Expr) {
+func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.TypedExpr, parser.TypedExpr) {
 	if left.Operator != parser.In && right.Operator != parser.In {
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
@@ -1239,11 +1238,11 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 			datum := right.Right.(parser.Datum)
 			// We keep the tuples for an IN expression in sorted order. So now we just
 			// merge the two sorted lists.
-			return &parser.ComparisonExpr{
-				Operator: parser.In,
-				Left:     left.Left,
-				Right:    mergeSorted(tuple, parser.DTuple{datum}),
-			}, nil
+			return parser.NewTypedComparisonExpr(
+				parser.In,
+				left.TypedLeft(),
+				mergeSorted(tuple, parser.DTuple{datum}),
+			), nil
 
 		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
 			datum := right.Right.(parser.Datum)
@@ -1254,7 +1253,7 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 			switch right.Operator {
 			case parser.NE:
 				if i < len(tuple) && tuple[i].Compare(datum) == 0 {
-					return makeIsNotNull(right.Left), nil
+					return makeIsNotNull(right.TypedLeft()), nil
 				}
 				return right, nil
 
@@ -1263,11 +1262,11 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 					// datum >= tuple[0]
 					if tuple[i].Compare(datum) == 0 {
 						// datum = tuple[0]
-						return &parser.ComparisonExpr{
-							Operator: parser.GE,
-							Left:     left.Left,
-							Right:    datum,
-						}, nil
+						return parser.NewTypedComparisonExpr(
+							parser.GE,
+							left.TypedLeft(),
+							datum,
+						), nil
 					}
 					return right, nil
 				}
@@ -1284,11 +1283,11 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 					// datum >= tuple[len(tuple)-1]
 					if tuple[i].Compare(datum) == 0 {
 						// datum == tuple[len(tuple)-1]
-						return &parser.ComparisonExpr{
-							Operator: parser.LE,
-							Left:     left.Left,
-							Right:    datum,
-						}, nil
+						return parser.NewTypedComparisonExpr(
+							parser.LE,
+							left.TypedLeft(),
+							datum,
+						), nil
 					}
 				}
 			case parser.LE:
@@ -1302,46 +1301,47 @@ func simplifyOneOrInExpr(left, right *parser.ComparisonExpr) (parser.Expr, parse
 		case parser.In:
 			// We keep the tuples for an IN expression in sorted order. So now we
 			// just merge the two sorted lists.
-			return &parser.ComparisonExpr{
-				Operator: parser.In,
-				Left:     left.Left,
-				Right:    mergeSorted(tuple, *right.Right.(*parser.DTuple)),
-			}, nil
+			return parser.NewTypedComparisonExpr(
+				parser.In,
+				left.TypedLeft(),
+				mergeSorted(tuple, *right.Right.(*parser.DTuple)),
+			), nil
 		}
 	}
 
 	return origLeft, origRight
 }
 
-func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
+func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 	// NormalizeExpr will have left comparisons in the form "<var> <op>
 	// <datum>" unless they could not be simplified further in which case
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
-	if isVar(n.Left) && isDatum(n.Right) {
-		if n.Right == parser.DNull {
+	left, right := n.TypedLeft(), n.TypedRight()
+	if isVar(left) && isDatum(right) {
+		if right == parser.DNull {
 			switch n.Operator {
 			case parser.IsNotDistinctFrom:
-				switch n.Left.(type) {
+				switch left.(type) {
 				case *qvalue, *parser.IndexedVar:
 					// Transform "a IS NOT DISTINCT FROM NULL" into "a IS NULL".
-					return &parser.ComparisonExpr{
-						Operator: parser.Is,
-						Left:     n.Left,
-						Right:    n.Right,
-					}, true
+					return parser.NewTypedComparisonExpr(
+						parser.Is,
+						left,
+						right,
+					), true
 				}
 			case parser.IsDistinctFrom:
-				switch n.Left.(type) {
+				switch left.(type) {
 				case *qvalue, *parser.IndexedVar:
 					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
-					return &parser.ComparisonExpr{
-						Operator: parser.IsNot,
-						Left:     n.Left,
-						Right:    n.Right,
-					}, true
+					return parser.NewTypedComparisonExpr(
+						parser.IsNot,
+						left,
+						right,
+					), true
 				}
 			case parser.Is, parser.IsNot:
-				switch n.Left.(type) {
+				switch left.(type) {
 				case *qvalue, *parser.IndexedVar:
 					// "a IS {,NOT} NULL" can be used during index selection to restrict
 					// the range of scanned keys.
@@ -1359,13 +1359,13 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 		switch n.Operator {
 		case parser.EQ:
 			// Translate "(a, b) = (1, 2)" to "(a, b) IN ((1, 2))".
-			switch n.Left.(type) {
+			switch left.(type) {
 			case *parser.Tuple:
-				return &parser.ComparisonExpr{
-					Operator: parser.In,
-					Left:     n.Left,
-					Right:    &parser.DTuple{n.Right.(parser.Datum)},
-				}, true
+				return parser.NewTypedComparisonExpr(
+					parser.In,
+					left,
+					&parser.DTuple{right.(parser.Datum)},
+				), true
 			}
 			return n, true
 		case parser.NE, parser.GE, parser.LE:
@@ -1376,39 +1376,39 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 			// next value exists. Note that if the variable (n.Left) is NULL, this
 			// comparison would evaluate to NULL which is equivalent to false for a
 			// boolean expression.
-			if n.Right.(parser.Datum).IsMax() {
+			if right.(parser.Datum).IsMax() {
 				return parser.MakeDBool(false), true
 			}
 			return n, true
 		case parser.LT:
 			// Note that if the variable is NULL, this would evaluate to NULL which
 			// would equivalent to false for a boolean expression.
-			if n.Right.(parser.Datum).IsMin() {
+			if right.(parser.Datum).IsMin() {
 				return parser.MakeDBool(false), true
 			}
 			return n, true
 		case parser.In, parser.NotIn:
-			tuple := *n.Right.(*parser.DTuple)
+			tuple := *right.(*parser.DTuple)
 			if len(tuple) == 0 {
 				return parser.MakeDBool(false), true
 			}
 			return n, true
 		case parser.Like:
 			// a LIKE 'foo%' -> a >= "foo" AND a < "fop"
-			if d, ok := n.Right.(*parser.DString); ok {
+			if d, ok := right.(*parser.DString); ok {
 				if i := strings.IndexAny(string(*d), "_%"); i >= 0 {
-					return makePrefixRange((*d)[:i], n.Left, false), false
+					return makePrefixRange((*d)[:i], left, false), false
 				}
-				return makePrefixRange(*d, n.Left, true), false
+				return makePrefixRange(*d, left, true), false
 			}
 			// TODO(pmattis): Support parser.DBytes?
 		case parser.SimilarTo:
 			// a SIMILAR TO "foo.*" -> a >= "foo" AND a < "fop"
-			if d, ok := n.Right.(*parser.DString); ok {
+			if d, ok := right.(*parser.DString); ok {
 				pattern := parser.SimilarEscape(string(*d))
 				if re, err := regexp.Compile(pattern); err == nil {
 					prefix, complete := re.LiteralPrefix()
-					return makePrefixRange(parser.DString(prefix), n.Left, complete), false
+					return makePrefixRange(parser.DString(prefix), left, complete), false
 				}
 			}
 			// TODO(pmattis): Support parser.DBytes?
@@ -1417,29 +1417,29 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.Expr, bool) {
 	return parser.MakeDBool(true), false
 }
 
-func makePrefixRange(prefix parser.DString, datum parser.Expr, complete bool) parser.Expr {
+func makePrefixRange(prefix parser.DString, datum parser.TypedExpr, complete bool) parser.TypedExpr {
 	if complete {
-		return &parser.ComparisonExpr{
-			Operator: parser.EQ,
-			Left:     datum,
-			Right:    &prefix,
-		}
+		return parser.NewTypedComparisonExpr(
+			parser.EQ,
+			datum,
+			&prefix,
+		)
 	}
 	if len(prefix) == 0 {
 		return parser.MakeDBool(true)
 	}
-	return &parser.AndExpr{
-		Left: &parser.ComparisonExpr{
-			Operator: parser.GE,
-			Left:     datum,
-			Right:    &prefix,
-		},
-		Right: &parser.ComparisonExpr{
-			Operator: parser.LT,
-			Left:     datum,
-			Right:    parser.NewDString(string(roachpb.Key(prefix).PrefixEnd())),
-		},
-	}
+	return parser.NewTypedAndExpr(
+		parser.NewTypedComparisonExpr(
+			parser.GE,
+			datum,
+			&prefix,
+		),
+		parser.NewTypedComparisonExpr(
+			parser.LT,
+			datum,
+			parser.NewDString(string(roachpb.Key(prefix).PrefixEnd())),
+		),
+	)
 }
 
 func mergeSorted(a, b parser.DTuple) *parser.DTuple {
@@ -1497,21 +1497,21 @@ func remove(a parser.DTuple, i int) parser.DTuple {
 	return r
 }
 
-func isDatum(e parser.Expr) bool {
+func isDatum(e parser.TypedExpr) bool {
 	_, ok := e.(parser.Datum)
 	return ok
 }
 
 // isVar returns true if the expression is a qvalue or a tuple composed of
 // qvalues.
-func isVar(e parser.Expr) bool {
+func isVar(e parser.TypedExpr) bool {
 	switch t := e.(type) {
 	case *qvalue, *parser.IndexedVar:
 		return true
 
 	case *parser.Tuple:
 		for _, v := range t.Exprs {
-			if !isVar(v) {
+			if !isVar(v.(parser.TypedExpr)) {
 				return false
 			}
 		}
@@ -1524,7 +1524,7 @@ func isVar(e parser.Expr) bool {
 // varEqual returns true if the two expressions are both qvalues pointing to
 // the same column or are both tuples composed of qvalues pointing at the same
 // columns.
-func varEqual(a, b parser.Expr) bool {
+func varEqual(a, b parser.TypedExpr) bool {
 	switch ta := a.(type) {
 	case *qvalue:
 		switch tb := b.(type) {
@@ -1543,7 +1543,7 @@ func varEqual(a, b parser.Expr) bool {
 		case *parser.Tuple:
 			if len(ta.Exprs) == len(tb.Exprs) {
 				for i := range ta.Exprs {
-					if !varEqual(ta.Exprs[i], tb.Exprs[i]) {
+					if !varEqual(ta.Exprs[i].(parser.TypedExpr), tb.Exprs[i].(parser.TypedExpr)) {
 						return false
 					}
 				}
@@ -1555,10 +1555,10 @@ func varEqual(a, b parser.Expr) bool {
 	return false
 }
 
-func makeIsNotNull(left parser.Expr) parser.Expr {
-	return &parser.ComparisonExpr{
-		Operator: parser.IsNot,
-		Left:     left,
-		Right:    parser.DNull,
-	}
+func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
+	return parser.NewTypedComparisonExpr(
+		parser.IsNot,
+		left,
+		parser.DNull,
+	)
 }
