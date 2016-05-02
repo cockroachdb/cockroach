@@ -99,31 +99,22 @@ type typeAnnotation struct {
 }
 
 func (ta typeAnnotation) ReturnType() Datum {
-	if ta.typ == nil {
-		return DNull
-	}
+	ta.assertTyped()
 	return ta.typ
 }
 
-// boolTypeAnnotation is an embeddable struct to provide a TypedExpr with a static
-// boolean type annotation.
-type boolTypeAnnotation struct {
-	// TODO(nvanbenschoten) This will come into play when we migrate to typed null handling.
-	null bool
-}
-
-func (ta boolTypeAnnotation) ReturnType() Datum {
-	if ta.null {
-		return DNull
+func (ta typeAnnotation) assertTyped() {
+	if ta.typ == nil {
+		panic("ReturnType called on TypedExpr with empty typeAnnotation. " +
+			"Was the underlying Expr type-checked before asserting a type of TypedExpr?")
 	}
-	return DummyBool
 }
 
 // AndExpr represents an AND expression.
 type AndExpr struct {
 	Left, Right Expr
 
-	boolTypeAnnotation
+	typeAnnotation
 }
 
 func (*AndExpr) operatorExpr() {}
@@ -134,7 +125,9 @@ func (node *AndExpr) String() string {
 
 // NewTypedAndExpr returns a new AndExpr that is verified to be well-typed.
 func NewTypedAndExpr(left, right TypedExpr) *AndExpr {
-	return &AndExpr{Left: left, Right: right}
+	node := &AndExpr{Left: left, Right: right}
+	node.typ = DummyBool
+	return node
 }
 
 // TypedLeft returns the AndExpr's left expression as a TypedExpr.
@@ -151,7 +144,7 @@ func (node *AndExpr) TypedRight() TypedExpr {
 type OrExpr struct {
 	Left, Right Expr
 
-	boolTypeAnnotation
+	typeAnnotation
 }
 
 func (*OrExpr) operatorExpr() {}
@@ -162,7 +155,9 @@ func (node *OrExpr) String() string {
 
 // NewTypedOrExpr returns a new OrExpr that is verified to be well-typed.
 func NewTypedOrExpr(left, right TypedExpr) *OrExpr {
-	return &OrExpr{Left: left, Right: right}
+	node := &OrExpr{Left: left, Right: right}
+	node.typ = DummyBool
+	return node
 }
 
 // TypedLeft returns the OrExpr's left expression as a TypedExpr.
@@ -179,7 +174,7 @@ func (node *OrExpr) TypedRight() TypedExpr {
 type NotExpr struct {
 	Expr Expr
 
-	boolTypeAnnotation
+	typeAnnotation
 }
 
 func (*NotExpr) operatorExpr() {}
@@ -190,7 +185,9 @@ func (node *NotExpr) String() string {
 
 // NewTypedNotExpr returns a new NotExpr that is verified to be well-typed.
 func NewTypedNotExpr(expr TypedExpr) *NotExpr {
-	return &NotExpr{Expr: expr}
+	node := &NotExpr{Expr: expr}
+	node.typ = DummyBool
+	return node
 }
 
 // TypedInnerExpr returns the NotExpr's inner expression as a TypedExpr.
@@ -268,7 +265,7 @@ type ComparisonExpr struct {
 	Operator    ComparisonOperator
 	Left, Right Expr
 
-	boolTypeAnnotation
+	typeAnnotation
 	fn CmpOp
 }
 
@@ -281,7 +278,9 @@ func (node *ComparisonExpr) String() string {
 
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
 func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
-	return &ComparisonExpr{Operator: op, Left: left, Right: right}
+	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
+	node.typ = DummyBool
+	return node
 }
 
 // TypedLeft returns the ComparisonExpr's left expression as a TypedExpr.
@@ -300,7 +299,7 @@ type RangeCond struct {
 	Left     Expr
 	From, To Expr
 
-	boolTypeAnnotation
+	typeAnnotation
 }
 
 func (*RangeCond) operatorExpr() {}
@@ -314,13 +313,28 @@ func (node *RangeCond) String() string {
 		exprStrWithParen(node.From), exprStrWithParen(node.To))
 }
 
+// TypedLeft returns the RangeCond's left expression as a TypedExpr.
+func (node *RangeCond) TypedLeft() TypedExpr {
+	return node.Left.(TypedExpr)
+}
+
+// TypedFrom returns the RangeCond's from expression as a TypedExpr.
+func (node *RangeCond) TypedFrom() TypedExpr {
+	return node.From.(TypedExpr)
+}
+
+// TypedTo returns the RangeCond's to expression as a TypedExpr.
+func (node *RangeCond) TypedTo() TypedExpr {
+	return node.To.(TypedExpr)
+}
+
 // IsOfTypeExpr represents an IS {,NOT} OF (type_list) expression.
 type IsOfTypeExpr struct {
 	Not   bool
 	Expr  Expr
 	Types []ColumnType
 
-	boolTypeAnnotation
+	typeAnnotation
 }
 
 func (*IsOfTypeExpr) operatorExpr() {}
@@ -347,7 +361,7 @@ func (node *IsOfTypeExpr) String() string {
 type ExistsExpr struct {
 	Subquery Expr
 
-	boolTypeAnnotation
+	typeAnnotation
 }
 
 func (node *ExistsExpr) String() string {

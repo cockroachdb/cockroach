@@ -262,7 +262,7 @@ func typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types.
 	for _, expr := range resolvableExprs {
-		var paramDesired Datum
+		paramDesired := NoTypePreference
 		if len(overloads) == 1 {
 			// Once we get down to a single overload candidate, begin desiring its
 			// parameter types for the corresponding argument expressions.

@@ -79,6 +79,7 @@ func (expr *AndExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
+	expr.typ = DummyBool
 	return expr, nil
 }
 
@@ -112,7 +113,7 @@ func (expr *BinaryExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn.(BinOp)
-	expr.typeAnnotation.typ = fn.returnType()
+	expr.typ = fn.returnType()
 	return expr, nil
 }
 
@@ -162,7 +163,7 @@ func (expr *CaseExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	for i, whenVal := range typedSubExprs {
 		expr.Whens[i].Val = whenVal
 	}
-	expr.typeAnnotation.typ = retType
+	expr.typ = retType
 	return expr, nil
 }
 
@@ -238,7 +239,7 @@ func (expr *CastExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 	for _, t := range validTypes {
 		if castFrom.TypeEqual(t) {
 			expr.Expr = typedSubExpr
-			expr.typeAnnotation.typ = returnDatum
+			expr.typ = returnDatum
 			return expr, nil
 		}
 	}
@@ -256,7 +257,7 @@ func (expr *CoalesceExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, err
 	for i, subExpr := range typedSubExprs {
 		expr.Exprs[i] = subExpr
 	}
-	expr.typeAnnotation.typ = retType
+	expr.typ = retType
 	return expr, nil
 }
 
@@ -266,7 +267,9 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, e
 	if err != nil {
 		return nil, err
 	}
-	expr.Left, expr.Right, expr.fn = leftTyped, rightTyped, fn
+	expr.Left, expr.Right = leftTyped, rightTyped
+	expr.fn = fn
+	expr.typ = DummyBool
 	return expr, err
 }
 
@@ -277,6 +280,7 @@ func (expr *ExistsExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
+	expr.typ = DummyBool
 	return expr, nil
 }
 
@@ -325,7 +329,7 @@ func (expr *FuncExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) 
 			returnType = DNull
 		}
 	}
-	expr.typeAnnotation.typ = returnType
+	expr.typ = returnType
 	return expr, nil
 }
 
@@ -342,7 +346,7 @@ func (expr *IfExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	}
 
 	expr.True, expr.Else = typedSubExprs[0], typedSubExprs[1]
-	expr.typeAnnotation.typ = retType
+	expr.typ = retType
 	return expr, nil
 }
 
@@ -353,6 +357,7 @@ func (expr *IsOfTypeExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, err
 		return nil, err
 	}
 	expr.Expr = exprTyped
+	expr.typ = DummyBool
 	return expr, nil
 }
 
@@ -363,6 +368,7 @@ func (expr *NotExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Expr = exprTyped
+	expr.typ = DummyBool
 	return expr, nil
 }
 
@@ -374,7 +380,7 @@ func (expr *NullIfExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error
 	}
 
 	expr.Expr1, expr.Expr2 = typedSubExprs[0], typedSubExprs[1]
-	expr.typeAnnotation.typ = retType
+	expr.typ = retType
 	return expr, nil
 }
 
@@ -389,6 +395,7 @@ func (expr *OrExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
+	expr.typ = DummyBool
 	return expr, nil
 }
 
@@ -399,7 +406,7 @@ func (expr *ParenExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typeAnnotation.typ = exprTyped.ReturnType()
+	expr.typ = exprTyped.ReturnType()
 	return expr, nil
 }
 
@@ -416,6 +423,7 @@ func (expr *RangeCond) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 	}
 
 	expr.Left, expr.From, expr.To = typedSubExprs[0], typedSubExprs[1], typedSubExprs[2]
+	expr.typ = DummyBool
 	return expr, nil
 }
 
@@ -455,7 +463,7 @@ func (expr *UnaryExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error)
 	}
 	expr.Expr = exprTyped
 	expr.fn = fn.(UnaryOp)
-	expr.typeAnnotation.typ = fn.returnType()
+	expr.typ = fn.returnType()
 	return expr, nil
 }
 
