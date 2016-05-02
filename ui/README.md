@@ -74,3 +74,40 @@ Be sure to commit any changes to `npm-shrinkwrap.json`.
 The `--save` modifier and `shonkwrap` invocation above are necessary to properly
 lock down dependencies for other developers on the project, so make sure you don't
 elide them!
+
+If anything seems amiss with your dependencies, try running `make clean` from
+within your `ui` directory.
+
+## Testing your change
+
+Before you submit your change for review, please run the following tests:
+
+- [ ] Make your browser window really narrow, checking for strange wrapping of
+  HTML elements and any other weird behavior.
+- [ ] Make your browser window really wide, checking for undesired movement of
+  HTML elements.
+- If you're changing graphs on one page, when applicable, ensure that the same
+  graph works in all of these places:
+  - [ ] Cluster overview
+  - [ ] Nodes page - Overview
+  - [ ] Nodes page - Graph
+  - [ ] Single-node graphs: go to Nodes page, click on a single node, and view
+    its graphs
+
+Checking your work with different browser window dimensions is especially
+important, because we don't yet have a responsive admin UI design.
+
+## Reviewing UI changes
+
+We really should have a UI style guide when the UI code is more settled.
+
+In addition to reviewing for correctness and consistent, idiomatic use of
+TypeScript and the various UI frameworks we use, pay particular attention to
+clarity. TypeScript, especially when combined with various functional
+programming libraries, can be succinct at the expense of readability. If the
+code can't be made clearer, check that there are sufficient comments.
+
+If possible, walk through the changes with the pull request author interactively,
+in-person or via Google Hangout. If that's not possible, pull their working
+branch and test the changes yourself. A little interactive UI testing can go a
+long way.
