@@ -78,9 +78,6 @@ func (sc *SchemaChanger) AcquireLease() (TableDescriptor_SchemaChangeLease, *roa
 		if err != nil {
 			return err
 		}
-		if tableDesc == nil {
-			return roachpb.NewError(&roachpb.DescriptorDeletedError{})
-		}
 
 		// A second to deal with the time uncertainty across nodes.
 		// It is perfectly valid for two or more goroutines to hold a valid
@@ -108,9 +105,6 @@ func (sc *SchemaChanger) findTableWithLease(
 	tableDesc, err := getTableDescFromID(txn, sc.tableID)
 	if err != nil {
 		return nil, err
-	}
-	if tableDesc == nil {
-		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
 	if tableDesc.Lease == nil {
 		return nil, roachpb.NewErrorf("no lease present for tableID: %d", sc.tableID)
@@ -185,6 +179,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) *roachpb.Error {
 		// Wait for everybody to see the version with the deleted bit set. When
 		// this returns, nobody has any leases on the table, nor can get new leases,
 		// so the table will no longer be modified.
+
 		lease, pErr = sc.ExtendLease(lease)
 		if pErr != nil {
 			return pErr
@@ -192,6 +187,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) *roachpb.Error {
 		if err := sc.waitToUpdateLeases(); err != nil {
 			return roachpb.NewError(err)
 		}
+
 		// Truncate the table and delete the descriptor.
 		if pErr := sc.truncateAndDropTable(&lease, desc.GetTable()); pErr != nil {
 			return pErr
@@ -406,11 +402,6 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		if pErr != nil {
 			return pErr
 		}
-		if tableDesc == nil {
-			// The table has been deleted => no more schema changes to be done for this table.
-			done = true
-			return nil
-		}
 		if sc.mutationID == invalidMutationID {
 			if tableDesc.UpVersion {
 				done = false
@@ -425,7 +416,7 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 		}
 		return nil
 	})
-	return done && pErr == nil, pErr.GoError()
+	return done, pErr.GoError()
 }
 
 // SchemaChangeManager processes pending schema changes seen in gossip
@@ -596,7 +587,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if pErr != nil {
 							switch pErr.GetDetail().(type) {
 							case *roachpb.ExistingSchemaChangeLeaseError:
-							case *roachpb.DescriptorDeletedError:
+							case *roachpb.DescriptorNotFoundError:
 								// Someone deleted this table. Don't try to run the schema
 								// changer again. Note that there's no gossip update for the
 								// deletion which would remove this schemaChanger.
