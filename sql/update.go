@@ -95,8 +95,16 @@ func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
 	}
 	if err != nil && convertError {
 		// TODO(dan): Move this logic into rowInsert/rowUpdate.
-		r.pErr = roachpb.NewError(
-			convertBatchError(err, en.tableDesc, r.b.Results))
+		for _, res := range r.b.Results {
+			if res.PErr != nil {
+				r.pErr = roachpb.NewError(
+					convertBatchError(en.tableDesc, *r.b, res.PErr))
+				break
+			}
+		}
+		if r.pErr == nil {
+			r.pErr = roachpb.NewError(err)
+		}
 	}
 
 	r.done = true

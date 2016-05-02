@@ -348,17 +348,7 @@ func (txn *Txn) DelRange(begin, end interface{}) error {
 	return err
 }
 
-// Run executes the operations queued up within a batch. Before executing any
-// of the operations the batch is first checked to see if there were any errors
-// during its construction (e.g. failure to marshal a proto message).
-//
-// The operations within a batch are run in parallel and the order is
-// non-deterministic. It is an unspecified behavior to modify and retrieve the
-// same key within a batch.
-//
-// Upon completion, Batch.Results will contain the results for each
-// operation. The order of the results matches the order the operations were
-// added to the batch.
+// Run implements Runner.Run(). See comments there.
 func (txn *Txn) Run(b *Batch) error {
 	_, err := txn.RunWithResponse(b)
 	return err

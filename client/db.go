@@ -119,8 +119,10 @@ func (kv *KeyValue) ValueProto(msg proto.Message) error {
 // etc).
 type Result struct {
 	calls int
-	// Err contains any error encountered when performing the operation.
-	Err error
+	// PErr contains any error encountered when performing the operation.
+	// Code that doesn't need a pErr (so, most code) should use the Err() function
+	// below.
+	PErr *roachpb.Error
 	// Rows contains the key/value pairs for the operation. The number of rows
 	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
 	// of rows returned is the number of keys operated on. For Scan the number of
@@ -132,9 +134,14 @@ type Result struct {
 	Keys []roachpb.Key
 }
 
+// Err returns the error that encountered when performing the operation, if any.
+func (r Result) Err() error {
+	return r.PErr.GoError()
+}
+
 func (r Result) String() string {
-	if r.Err != nil {
-		return r.Err.Error()
+	if r.Err() != nil {
+		return r.Err().Error()
 	}
 	var buf bytes.Buffer
 	for i, row := range r.Rows {
@@ -403,9 +410,8 @@ func sendAndFill(
 	br, pErr := send(b.MaxScanResults, b.ReadConsistency, b.reqs...)
 	if pErr != nil {
 		// Discard errors from fillResults.
-		err := pErr.GoError()
-		_ = b.fillResults(nil, err)
-		return nil, err
+		_ = b.fillResults(nil, pErr)
+		return nil, pErr.GoError()
 	}
 	if err := b.fillResults(br, nil); err != nil {
 		return nil, err
@@ -413,17 +419,7 @@ func sendAndFill(
 	return br, nil
 }
 
-// Run executes the operations queued up within a batch. Before executing any
-// of the operations the batch is first checked to see if there were any errors
-// during its construction (e.g. failure to marshal a proto message).
-//
-// The operations within a batch are run in parallel and the order is
-// non-deterministic. It is an unspecified behavior to modify and retrieve the
-// same key within a batch.
-//
-// Upon completion, Batch.Results will contain the results for each
-// operation. The order of the results matches the order the operations were
-// added to the batch.
+// Run implements Runner.Run(). See comments there.
 func (db *DB) Run(b *Batch) error {
 	_, err := db.RunWithResponse(b)
 	return err
@@ -499,15 +495,32 @@ func (db *DB) send(maxScanResults int64, readConsistency roachpb.ReadConsistency
 
 // Runner only exports the Run method on a batch of operations.
 type Runner interface {
+	// Run executes the operations queued up within a batch. Before executing any
+	// of the operations the batch is first checked to see if there were any errors
+	// during its construction (e.g. failure to marshal a proto message).
+	//
+	// The operations within a batch are run in parallel and the order is
+	// non-deterministic. It is an unspecified behavior to modify and retrieve the
+	// same key within a batch.
+	//
+	// Upon completion, Batch.Results will contain the results for each
+	// operation. The order of the results matches the order the operations were
+	// added to the batch.
 	Run(b *Batch) error
 }
 
 func runOneResult(r Runner, b *Batch) (Result, error) {
 	if err := r.Run(b); err != nil {
-		return Result{Err: err}, err
+		if len(b.Results) > 0 {
+			return b.Results[0], b.Results[0].Err()
+		}
+		return Result{PErr: roachpb.NewError(err)}, err
 	}
 	res := b.Results[0]
-	return res, res.Err
+	if res.Err() != nil {
+		panic("r.Run() succeeded even through the result has an error")
+	}
+	return res, nil
 }
 
 func runOneRow(r Runner, b *Batch) (KeyValue, error) {
@@ -515,5 +528,8 @@ func runOneRow(r Runner, b *Batch) (KeyValue, error) {
 		return KeyValue{}, err
 	}
 	res := b.Results[0]
-	return res.Rows[0], res.Err
+	if res.Err() != nil {
+		panic("r.Run() succeeded even through the result has an error")
+	}
+	return res.Rows[0], nil
 }

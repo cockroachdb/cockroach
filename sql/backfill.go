@@ -71,7 +71,7 @@ func (ids indexesByID) Swap(i, j int) {
 }
 
 func convertBackfillError(
-	tableDesc *TableDescriptor, b *client.Batch, err error,
+	tableDesc *TableDescriptor, b *client.Batch, pErr *roachpb.Error,
 ) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
@@ -88,7 +88,7 @@ func convertBackfillError(
 		}
 		tableDesc.makeMutationComplete(mutation)
 	}
-	return convertBatchError(err, tableDesc, b.Results)
+	return convertBatchError(tableDesc, *b, pErr)
 }
 
 var errDescriptorChangedVersion = fmt.Errorf("table descriptor has changed version")
@@ -318,7 +318,12 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 				}
 			}
 			if err := txn.Run(writeBatch); err != nil {
-				return convertBackfillError(tableDesc, writeBatch, err)
+				for _, r := range writeBatch.Results {
+					if r.PErr != nil {
+						return convertBackfillError(tableDesc, writeBatch, r.PErr)
+					}
+				}
+				return err
 			}
 			return nil
 		})
@@ -434,7 +439,12 @@ func (sc *SchemaChanger) backfillIndexes(
 			return rows.PErr().GoError()
 		}
 		if err := txn.Run(b); err != nil {
-			return convertBackfillError(tableDesc, b, err)
+			for _, r := range b.Results {
+				if r.PErr != nil {
+					return convertBackfillError(tableDesc, b, r.PErr)
+				}
+			}
+			return err
 		}
 		return nil
 	})

@@ -131,10 +131,17 @@ func (e *errUniquenessConstraintViolation) Error() string {
 		e.index.Name)
 }
 
-func convertBatchError(err error, tableDesc *TableDescriptor, results []client.Result) error {
+func convertBatchError(tableDesc *TableDescriptor, b client.Batch, origPErr *roachpb.Error) error {
+	if origPErr.Index == nil {
+		return origPErr.GoError()
+	}
+	index := origPErr.Index.Index
+	if index >= int32(len(b.Results)) {
+		panic(fmt.Sprintf("index %d outside of results: %+v", index, b.Results))
+	}
+	result := b.Results[index]
 	var alloc datumAlloc
-	if cfe, ok := err.(*roachpb.ConditionFailedError); ok {
-		result := results[cfe.Index]
+	if _, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 		for _, row := range result.Rows {
 			indexID, key, err := decodeIndexKeyPrefix(tableDesc, row.Key)
 			if err != nil {
@@ -167,7 +174,7 @@ func convertBatchError(err error, tableDesc *TableDescriptor, results []client.R
 				Message:   errConstraintViolation.Error()}
 		}
 	}
-	return err
+	return origPErr.GoError()
 }
 
 // convertToErrWithPGCode recognizes pErrs that should have SQL error codes to be
