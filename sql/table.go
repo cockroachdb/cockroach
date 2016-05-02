@@ -305,6 +305,13 @@ func getKeysForTableDescriptor(
 	return
 }
 
+func updateCommitBy(commitBy time.Time, lease *LeaseState) time.Time {
+	if commitBy.IsZero() || commitBy.After(lease.Expiration()) {
+		return lease.Expiration()
+	}
+	return commitBy
+}
+
 // getTableLease acquires a lease for the specified table. The lease will be
 // released when the planner closes. Note that a shallow copy of the table
 // descriptor is returned. It is safe to mutate fields of the returned
@@ -335,14 +342,14 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 	}
 
 	var lease *LeaseState
-	found := false
-	for _, lease = range p.leases {
-		if lease.TableDescriptor.ID == tableID {
-			found = true
-			break
+	var commitBy time.Time
+	for _, l := range p.leases {
+		commitBy = updateCommitBy(commitBy, l)
+		if l.TableDescriptor.ID == tableID {
+			lease = l
 		}
 	}
-	if !found {
+	if lease == nil {
 		var pErr *roachpb.Error
 		lease, pErr = p.leaseMgr.Acquire(p.txn, tableID, 0)
 		if pErr != nil {
@@ -354,8 +361,9 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, *
 			return TableDescriptor{}, pErr
 		}
 		p.leases = append(p.leases, lease)
+		commitBy = updateCommitBy(commitBy, lease)
 	}
-
+	p.txn.SetDeadline(roachpb.Timestamp{WallTime: commitBy.UnixNano()})
 	return lease.TableDescriptor, nil
 }
 

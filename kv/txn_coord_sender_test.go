@@ -394,27 +394,41 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
 		txn := client.NewTxn(context.Background(), *s.DB)
-		// Initialize the transaction
+		// Set to SNAPSHOT so that it can be pushed without restarting.
+		if err := txn.SetIsolation(roachpb.SNAPSHOT); err != nil {
+			t.Fatal(err)
+		}
+		// Initialize the transaction.
 		if pErr := txn.Put(key, []byte("value")); pErr != nil {
 			t.Fatal(pErr)
 		}
+		// Conflicting transaction that psuhes the above transaction.
+		conflictTxn := client.NewTxn(context.Background(), *s.DB)
+		if _, pErr := conflictTxn.Get(key); pErr != nil {
+			t.Fatal(pErr)
+		}
+		// The transaction was pushed to this new timestamp.
+		pushedTimestamp := conflictTxn.Proto.Timestamp.Next().Next()
 
 		{
 			var pErr *roachpb.Error
 			switch i {
 			case 0:
 				// No deadline.
-				pErr = txn.CommitOrCleanup()
+
 			case 1:
 				// Past deadline.
-				pErr = txn.CommitBy(txn.Proto.Timestamp.Prev())
+				txn.SetDeadline(pushedTimestamp.Prev())
+
 			case 2:
 				// Equal deadline.
-				pErr = txn.CommitBy(txn.Proto.Timestamp)
+				txn.SetDeadline(pushedTimestamp)
+
 			case 3:
 				// Future deadline.
-				pErr = txn.CommitBy(txn.Proto.Timestamp.Next())
+				txn.SetDeadline(pushedTimestamp.Next())
 			}
+			pErr = txn.CommitOrCleanup()
 
 			switch i {
 			case 0:
