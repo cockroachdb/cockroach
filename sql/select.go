@@ -472,14 +472,10 @@ func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
 		return s.pErr
 	}
 
-	s.filter, err = parser.TypeCheck(untypedFilter, s.planner.evalCtx.Args, parser.DummyBool)
+	s.filter, err = parser.TypeCheckAndRequire(untypedFilter, s.planner.evalCtx.Args,
+		parser.DummyBool, "WHERE")
 	if err != nil {
 		s.pErr = roachpb.NewError(err)
-		return s.pErr
-	}
-	if whereType := s.filter.ReturnType(); !(whereType.TypeEqual(parser.DummyBool) || whereType == parser.DNull) {
-		s.pErr = roachpb.NewUErrorf("argument of WHERE must be type %s, not type %s",
-			parser.DummyBool.Type(), whereType.Type())
 		return s.pErr
 	}
 

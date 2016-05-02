@@ -45,7 +45,8 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 
 	for _, datum := range data {
 		if datum.src != nil {
-			typedSrc, err := parser.TypeCheck(datum.src, p.evalCtx.Args, parser.DummyInt)
+			typedSrc, err := parser.TypeCheckAndRequire(datum.src, p.evalCtx.Args,
+				parser.DummyInt, datum.name)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -53,11 +54,6 @@ func (p *planner) evalLimit(limit *parser.Limit) (count, offset int64, err error
 			normalized, err := p.parser.NormalizeExpr(p.evalCtx, typedSrc)
 			if err != nil {
 				return 0, 0, err
-			}
-
-			if typ := normalized.ReturnType(); !(typ.TypeEqual(parser.DummyInt) || typ == parser.DNull) {
-				return 0, 0, fmt.Errorf("argument of %s must be type %s, not type %s",
-					datum.name, parser.DummyInt.Type(), typ.Type())
 			}
 
 			if p.evalCtx.PrepareOnly {
