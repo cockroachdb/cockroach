@@ -17,7 +17,7 @@
 package main
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"flag"
 	"fmt"
 	"net/url"
@@ -45,7 +45,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	var db *sql.DB
+	var db *gosql.DB
 	var err error
 
 	if *createDb {
@@ -61,7 +61,7 @@ func main() {
 
 		db, err = pgbench.CreateAndConnect(*parsed, name)
 	} else {
-		db, err = sql.Open("postgres", flag.Arg(0))
+		db, err = gosql.Open("postgres", flag.Arg(0))
 	}
 	if err != nil {
 		panic(err)

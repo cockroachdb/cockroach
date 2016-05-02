@@ -17,7 +17,7 @@
 package sql_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -425,7 +425,7 @@ ALTER INDEX t.test@foo RENAME TO ufo
 // soon as the schema change starts executing its backfill.
 func runSchemaChangeWithOperations(
 	t *testing.T,
-	sqlDB *sql.DB,
+	sqlDB *gosql.DB,
 	kvDB *client.DB,
 	schemaChange string,
 	maxValue int,

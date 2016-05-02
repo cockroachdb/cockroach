@@ -17,7 +17,7 @@
 package pgbench
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"net"
@@ -37,7 +37,7 @@ INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (%[3]d, %[4]d, 
 END;` // vars: 1 delta, 2 aid, 3 tid, 4 bid
 
 // RunOne executes one iteration of the query batch that `pgbench` executes.
-func RunOne(db *sql.DB, r *rand.Rand, accounts int) error {
+func RunOne(db *gosql.DB, r *rand.Rand, accounts int) error {
 	account := r.Intn(accounts)
 	delta := r.Intn(5000)
 	teller := r.Intn(tellers)

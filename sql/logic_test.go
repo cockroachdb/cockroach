@@ -20,7 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/md5"
-	"database/sql"
+	gosql "database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -161,10 +161,10 @@ type logicTest struct {
 	srv *testServer
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
-	clients map[string]*sql.DB
+	clients map[string]*gosql.DB
 	// client currently in use.
 	user            string
-	db              *sql.DB
+	db              *gosql.DB
 	progress        int
 	lastProgress    time.Time
 	traceFile       *os.File
@@ -212,7 +212,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 
 	if t.clients == nil {
-		t.clients = map[string]*sql.DB{}
+		t.clients = map[string]*gosql.DB{}
 	}
 	if db, ok := t.clients[user]; ok {
 		t.db = db
@@ -227,7 +227,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, &t.srv.TestServer, user, "TestLogic")
-	db, err := sql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}

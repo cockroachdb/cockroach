@@ -17,7 +17,7 @@
 package sql_test
 
 import (
-	dbsql "database/sql"
+	gosql "database/sql"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -361,7 +361,7 @@ func TestDropAndCreateTable(t *testing.T) {
 	pgURL.Path = "test"
 	defer cleanupFn()
 
-	db, err := dbsql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}

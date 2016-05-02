@@ -18,7 +18,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -319,7 +319,7 @@ BEGIN;
 // server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
 // TODO(andrei): change this to return an error and make runTestTxn inspect the
 // error to see if it's retriable once we get a retriable error code.
-func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
+func exec(t *testing.T, sqlDB *gosql.DB, fn func(*gosql.Tx) bool) {
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -341,7 +341,7 @@ func exec(t *testing.T, sqlDB *sql.DB, fn func(*sql.Tx) bool) {
 
 // Returns true on retriable errors.
 func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
-	injectReleaseError *bool, sqlDB *sql.DB, tx *sql.Tx) bool {
+	injectReleaseError *bool, sqlDB *gosql.DB, tx *gosql.Tx) bool {
 	retriesNeeded :=
 		(magicVals.restartCounts["boulanger"] + magicVals.abortCounts["boulanger"]) > 0
 	var err error
@@ -383,9 +383,9 @@ func runTestTxn(t *testing.T, magicVals *filterVals, expectedErr string,
 // up the intents of the pushee.
 // This function needs to be called from tests that set
 // server.Context.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
-func abortTxn(t *testing.T, sqlDB *sql.DB, key int) {
+func abortTxn(t *testing.T, sqlDB *gosql.DB, key int) {
 	var err error
-	var tx *sql.Tx
+	var tx *gosql.Tx
 	tx, err = sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -452,7 +452,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 		commitCount := server.TestServer.MustGetSQLCounter("txn.commit.count")
 		// This is the magic. Run the txn closure until all the retries are exhausted.
-		exec(t, sqlDB, func(tx *sql.Tx) bool {
+		exec(t, sqlDB, func(tx *gosql.Tx) bool {
 			return runTestTxn(t, tc.magicVals, tc.expectedErr, &injectReleaseError, sqlDB, tx)
 		})
 		checkRestarts(t, tc.magicVals)
@@ -552,7 +552,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 
 	// Check that there's no error reading and we don't see any rows.
-	var rows *sql.Rows
+	var rows *gosql.Rows
 	if rows, err = sqlDB.Query("SELECT * FROM t.test"); err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +617,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 
-	var tx *sql.Tx
+	var tx *gosql.Tx
 	var err error
 	if tx, err = sqlDB.Begin(); err != nil {
 		t.Fatal(err)

@@ -18,7 +18,7 @@ package pgbench
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"os/exec"
@@ -62,10 +62,10 @@ CREATE TABLE pgbench_history (
 
 // CreateAndConnect connects and creates the requested DB (dropping
 // if exists) then returns a new connection to the created DB.
-func CreateAndConnect(pgURL url.URL, name string) (*sql.DB, error) {
+func CreateAndConnect(pgURL url.URL, name string) (*gosql.DB, error) {
 	{
 		pgURL.Path = ""
-		db, err := sql.Open("postgres", pgURL.String())
+		db, err := gosql.Open("postgres", pgURL.String())
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +82,7 @@ func CreateAndConnect(pgURL url.URL, name string) (*sql.DB, error) {
 
 	pgURL.Path = name
 
-	db, err := sql.Open("postgres", pgURL.String())
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func SetupExec(pgURL url.URL, name string, accounts, transactions int) (*exec.Cm
 // not support. The queries this script runs are based on a dump of a db created
 // by `pgbench -i`, but sticking to the compatible subset that both cockroach and
 // postgres support.
-func SetupBenchDB(db *sql.DB, accounts int, quiet bool) error {
+func SetupBenchDB(db *gosql.DB, accounts int, quiet bool) error {
 	if _, err := db.Exec(schema); err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func SetupBenchDB(db *sql.DB, accounts int, quiet bool) error {
 
 const tellers = 10
 
-func populateDB(db *sql.DB, accounts int, quiet bool) error {
+func populateDB(db *gosql.DB, accounts int, quiet bool) error {
 	branches := `INSERT INTO pgbench_branches (bid, bbalance, filler) VALUES (1, 7354, NULL)`
 	if r, err := db.Exec(branches); err != nil {
 		return err

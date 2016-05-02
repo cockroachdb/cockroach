@@ -18,7 +18,7 @@ package sql_test
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -30,7 +30,7 @@ const maxTransfer = 999
 // runBenchmarkBank mirrors the SQL performed by examples/sql_bank, but
 // structured as a benchmark for easier usage of the Go performance analysis
 // tools like pprof, memprof and trace.
-func runBenchmarkBank(b *testing.B, db *sql.DB, numAccounts int) {
+func runBenchmarkBank(b *testing.B, db *gosql.DB, numAccounts int) {
 	{
 		// Initialize the "bank" table.
 		schema := `
@@ -83,8 +83,8 @@ UPDATE bench.bank
 	b.StopTimer()
 }
 
-func bankRunner(numAccounts int) func(*testing.B, *sql.DB) {
-	return func(b *testing.B, db *sql.DB) {
+func bankRunner(numAccounts int) func(*testing.B, *gosql.DB) {
+	return func(b *testing.B, db *gosql.DB) {
 		runBenchmarkBank(b, db, numAccounts)
 	}
 }
