@@ -35,8 +35,8 @@ func TestRangeStatsEmpty(t *testing.T) {
 	defer tc.Stop()
 
 	s := tc.rng.stats
-	if !reflect.DeepEqual(s.MVCCStats, engine.MVCCStats{}) {
-		t.Errorf("expected empty stats; got %+v", s.MVCCStats)
+	if !reflect.DeepEqual(s.mvccStats, engine.MVCCStats{}) {
+		t.Errorf("expected empty stats; got %+v", s.mvccStats)
 	}
 }
 
@@ -65,8 +65,8 @@ func TestRangeStatsInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(ms, s.MVCCStats) {
-		t.Errorf("mvcc stats mismatch %+v != %+v", ms, s.MVCCStats)
+	if !reflect.DeepEqual(ms, s.mvccStats) {
+		t.Errorf("mvcc stats mismatch %+v != %+v", ms, s.mvccStats)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	if !reflect.DeepEqual(ms, expMS) {
 		t.Errorf("expected %+v; got %+v", expMS, ms)
 	}
-	if !reflect.DeepEqual(tc.rng.stats.MVCCStats, expMS) {
-		t.Errorf("expected %+v; got %+v", expMS, tc.rng.stats.MVCCStats)
+	if !reflect.DeepEqual(tc.rng.stats.mvccStats, expMS) {
+		t.Errorf("expected %+v; got %+v", expMS, tc.rng.stats.mvccStats)
 	}
 }
