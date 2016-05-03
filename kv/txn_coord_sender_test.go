@@ -70,7 +70,7 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) *LocalTestCluster {
 	s := &LocalTestCluster{}
-	s.Start(t)
+	s.Start(t, testutils.NewNodeTestBaseContext())
 	return s
 }
 

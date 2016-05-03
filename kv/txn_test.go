@@ -106,7 +106,7 @@ func TestTxnDBBasics(t *testing.T) {
 func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
 	s := &LocalTestCluster{}
 	s.Latency = latency
-	s.Start(b)
+	s.Start(b, testutils.NewNodeTestBaseContext())
 	defer s.Stop()
 	defer b.StopTimer()
 	key := roachpb.Key("key")

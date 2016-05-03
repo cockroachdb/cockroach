@@ -22,13 +22,13 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -41,8 +41,8 @@ import (
 // cockroach node with a single store using a local sender. Example
 // usage of a LocalTestCluster follows:
 //
-//   s := &server.LocalTestCluster{}
-//   s.Start(t)
+//   s := &LocalTestCluster{}
+//   s.Start(t, testutils.NewNodeTestBaseContext())
 //   defer s.Stop()
 //
 // Note that the LocalTestCluster is different from server.TestCluster
@@ -67,14 +67,14 @@ type LocalTestCluster struct {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t util.Tester) {
+func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context) {
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 	ltc.tester = t
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(testutils.NewNodeTestBaseContext(), ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(baseCtx, ltc.Clock, ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, nil, ltc.Stopper)
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
