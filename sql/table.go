@@ -203,6 +203,9 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 			return nil, nil, fmt.Errorf("incompatible column type and default expression: %s vs %s",
 				col.Type.Kind, defaultType.Type())
 		}
+		if parser.ContainsVars(typedExpr) {
+			return nil, nil, fmt.Errorf("default expression contains placeholders")
+		}
 
 		s := d.DefaultExpr.String()
 		col.DefaultExpr = &s
