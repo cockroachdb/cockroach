@@ -135,6 +135,29 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 	return desc, nil
 }
 
+func defaultContainsPlaceholdersError(typedExpr parser.TypedExpr) error {
+	return fmt.Errorf("default expression '%s' may not contain placeholders", typedExpr)
+}
+
+func incompatibleColumnDefaultTypeError(colDatumType parser.Datum, defaultType parser.Datum) error {
+	return fmt.Errorf("incompatible column type and default expression: %s vs %s",
+		colDatumType.Type(), defaultType.Type())
+}
+
+func sanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
+	typedExpr, err := parser.TypeCheck(expr, nil, colDatumType)
+	if err != nil {
+		return err
+	}
+	if defaultType := typedExpr.ReturnType(); colDatumType != defaultType {
+		return incompatibleColumnDefaultTypeError(colDatumType, defaultType)
+	}
+	if parser.ContainsVars(typedExpr) {
+		return defaultContainsPlaceholdersError(typedExpr)
+	}
+	return nil
+}
+
 func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
@@ -195,15 +218,9 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 
 	if d.DefaultExpr != nil {
 		// Verify the default expression type is compatible with the column type.
-		typedExpr, err := parser.TypeCheck(d.DefaultExpr, nil, colDatumType)
-		if err != nil {
+		if err := sanitizeDefaultExpr(d.DefaultExpr, colDatumType); err != nil {
 			return nil, nil, err
 		}
-		if defaultType := typedExpr.ReturnType(); colDatumType != defaultType {
-			return nil, nil, fmt.Errorf("incompatible column type and default expression: %s vs %s",
-				col.Type.Kind, defaultType.Type())
-		}
-
 		s := d.DefaultExpr.String()
 		col.DefaultExpr = &s
 	}
