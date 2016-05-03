@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -416,7 +417,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// The first failed replica change has laid down intents. Make sure those
 	// are pushable by making the transaction abandoned.
-	mtc.manualClock.Increment(10 * storage.DefaultHeartbeatInterval.Nanoseconds())
+	mtc.manualClock.Increment(10 * base.DefaultHeartbeatInterval.Nanoseconds())
 
 	err = rng.ChangeReplicas(roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{

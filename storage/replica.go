@@ -52,13 +52,6 @@ import (
 )
 
 const (
-	// DefaultHeartbeatInterval is how often heartbeats are sent from the
-	// transaction coordinator to a live transaction. These keep it from
-	// being preempted by other transactions writing the same keys. If a
-	// transaction fails to be heartbeat within 2x the heartbeat interval,
-	// it may be aborted by conflicting txns.
-	DefaultHeartbeatInterval = 5 * time.Second
-
 	// sentinelGossipTTL is time-to-live for the gossip sentinel. The
 	// sentinel informs a node whether or not it's connected to the
 	// primary gossip network and not just a partition. As such it must

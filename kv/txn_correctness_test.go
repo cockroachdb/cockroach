@@ -678,9 +678,9 @@ func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry, cmdIdx int, cm
 func checkConcurrency(name string, isolations []roachpb.IsolationType, txns []string,
 	verify *verifier, expSuccess bool, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
-	defer setCorrectnessRetryOptions(s.stores)()
+	defer setCorrectnessRetryOptions(s.Stores)()
 	verifier.run(isolations, s.DB, t)
 }
 
