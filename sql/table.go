@@ -208,10 +208,36 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.DefaultExpr = &s
 	}
 
+	// CHECK expressions seem to vary across databases. Wikipedia's entry on
+	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
+	// that if the constraint refers to a single column only, it is possible to
+	// specify the constraint as part of the column definition. Postgres allows
+	// specifying them anywhere about any columns, but it moves all constraints to
+	// the table level (i.e., columns never have a check constraint themselves). We
+	// will adhere to the stricter definition.
 	if d.CheckExpr != nil {
-		// TODO(guanqun): add more checks here.
 		s := d.CheckExpr.String()
 		col.CheckExpr = &s
+
+		qvals := make(qvalMap)
+		table := tableInfo{
+			columns: makeResultColumns([]ColumnDescriptor{*col}),
+		}
+		qv := qnameVisitor{
+			qt: qvalResolver{
+				table: &table,
+				qvals: qvals,
+			},
+		}
+		expr, err := resolveQNames(d.CheckExpr, &table, qvals, &qv)
+		if err != nil {
+			return nil, nil, fmt.Errorf("argument of CHECK cannot refer to other columns: %s", err)
+		}
+		if typ, err := expr.TypeCheck(nil); err != nil {
+			return nil, nil, err
+		} else if !typ.TypeEqual(parser.DummyBool) {
+			return nil, nil, fmt.Errorf("argument of CHECK must be type bool, not type %s", typ.Type())
+		}
 	}
 
 	var idx *IndexDescriptor
