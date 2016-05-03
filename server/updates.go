@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -67,9 +68,16 @@ type storeInfo struct {
 	RangeCount int             `json:"range_count"`
 }
 
-// SetupReportingURLs parses the phone-home for version updates URL and should be
-// called before server starts except in tests.
+// SetupReportingURLs parses the phone-home for version updates URL and should
+// be called before a server starts.
+// Where update checks are not useful (eg in tests), skipping this call, or
+// setting env var COCKROACH_SKIP_UPDATE_CHECK=1, skips the acutal network calls
+// (note though the check is treated as having succeeded, meaning the cluster
+// will wait until the next scheduled check to try again).
 func (s *Server) SetupReportingURLs() error {
+	if envutil.EnvOrDefaultBool("skip_update_check", false) {
+		return nil
+	}
 	var err error
 	s.parsedUpdatesURL, err = url.Parse(baseUpdatesURL)
 	if err != nil {
