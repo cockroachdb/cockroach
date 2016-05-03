@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -42,7 +43,7 @@ import (
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 	value := []byte("value")
 
@@ -104,9 +105,9 @@ func TestTxnDBBasics(t *testing.T) {
 // the same key back to back in a single round-trip. Latency is simulated
 // by pausing before each RPC sent.
 func benchmarkSingleRoundtripWithLatency(b *testing.B, latency time.Duration) {
-	s := &LocalTestCluster{}
+	s := &localtestcluster.LocalTestCluster{}
 	s.Latency = latency
-	s.Start(b, testutils.NewNodeTestBaseContext())
+	s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	defer s.Stop()
 	defer b.StopTimer()
 	key := roachpb.Key("key")
@@ -135,7 +136,7 @@ func BenchmarkSingleRoundtripTxnWithLatency_10(b *testing.B) {
 // the transaction, not the forwarded timestamp.
 func TestSnapshotIsolationIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	var key = roachpb.Key("a")
@@ -216,7 +217,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 //   R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
 func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 	var key = roachpb.Key("a")
 
@@ -285,7 +286,7 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 // concurrent reader pushes an intent.
 func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	const pusheePri = 1
@@ -372,11 +373,12 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 // uncertainty, which interferes with the tests. The feature is disabled simply
 // by poisoning the gossip NodeID; this may break other functionality which
 // is usually not relevant in uncertainty tests.
-func disableOwnNodeCertain(tc *LocalTestCluster) {
-	desc := tc.distSender.getNodeDescriptor()
+func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) {
+	distSender := tc.Sender.(*TxnCoordSender).wrapped.(*DistSender)
+	desc := distSender.getNodeDescriptor()
 	desc.NodeID = 999
-	tc.distSender.gossip.ResetNodeID(desc.NodeID)
-	if err := tc.distSender.gossip.SetNodeDescriptor(desc); err != nil {
+	distSender.gossip.ResetNodeID(desc.NodeID)
+	if err := distSender.gossip.SetNodeDescriptor(desc); err != nil {
 		panic(err)
 	}
 }
@@ -386,7 +388,7 @@ func disableOwnNodeCertain(tc *LocalTestCluster) {
 // that node's clock for its new timestamp.
 func TestUncertaintyRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
 	const maxOffset = 250 * time.Millisecond
@@ -436,7 +438,7 @@ func TestUncertaintyRestart(t *testing.T) {
 // timestamp) is free from uncertainty. See roachpb.Transaction for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	disableOwnNodeCertain(s)
 	defer s.Stop()
 	// Large offset so that any value in the future is an uncertain read.
@@ -513,7 +515,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 // the transaction's current timestamp instead of original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"
@@ -555,7 +557,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	keyA := roachpb.Key("a")
@@ -630,7 +632,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	keyA := roachpb.Key("a")
@@ -721,7 +723,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 // with the original timestamp of a restarted transaction.
 func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"

@@ -103,7 +103,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 // which are resolved synchronously with EndTransaction and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	splitKeys := []roachpb.RKey{roachpb.RKey("G"), mustMeta(roachpb.RKey("F")),
@@ -131,7 +131,7 @@ func TestRangeSplitMeta(t *testing.T) {
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	// This channel shuts the whole apparatus down.
@@ -181,7 +181,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	cfg.RangeMaxBytes = 1 << 18
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper)
 	defer s.Stop()
@@ -227,7 +227,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey should not cause infinite retry loop.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s, _ := createTestDB(t)
 	defer s.Stop()
 
 	splitKey := roachpb.Key("aa")

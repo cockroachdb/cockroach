@@ -30,7 +30,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/interval"
@@ -45,6 +44,8 @@ const (
 	statusLogInterval = 5 * time.Second
 	opTxnCoordSender  = "txn coordinator"
 	opHeartbeatLoop   = "heartbeat"
+	// This should be the same with storage.DefaultHeartbeatInterval.
+	defaultHeartbeatInterval = 5 * time.Second
 )
 
 var errNoState = errors.New("writing transaction timed out " +
@@ -216,7 +217,7 @@ func NewTxnCoordSender(
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
-		heartbeatInterval: storage.DefaultHeartbeatInterval,
+		heartbeatInterval: defaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[uuid.UUID]*txnMetadata{},
 		linearizable:      linearizable,
