@@ -190,10 +190,6 @@ func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
-	// Disable one phase commits as they otherwise confuse the
-	// various bits of machinery in sql tests which inject via
-	// the testing command filter and inspect the transaction.
-	ctx.TestingKnobs.StoreTestingKnobs.DisableOnePhaseCommits = true
 	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter = cmdFilters.runFilters
 	return ctx, &cmdFilters
 }
