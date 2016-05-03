@@ -33,7 +33,7 @@ all: lint $(REMOTE_DEPS)
 
 .PHONY: lint
 lint: npm.installed
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
+	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -not -path app/interfaces/protos.d.ts)
 
 npm.installed: npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
