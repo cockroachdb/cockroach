@@ -124,7 +124,8 @@ func (n *scanNode) initScan() (success bool) {
 
 	if len(n.spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
-		// index key prefix.
+		// index key prefix. This isn't needed for the fetcher, but it is for
+		// other external users of n.spans.
 		start := roachpb.Key(MakeIndexKeyPrefix(n.desc.ID, n.index.ID))
 		n.spans = append(n.spans, span{start: start, end: start.PrefixEnd()})
 	}
@@ -253,7 +254,7 @@ func makeResultColumns(colDescs []ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
-		typ := getTypeForColumn(colDesc)
+		typ := colDesc.Type.toDatumType()
 		if typ == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}

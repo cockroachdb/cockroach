@@ -518,8 +518,8 @@ func (expr *Tuple) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr ValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	dVal := &DValArg{name: expr.name}
-	if v, ok := args[expr.name]; ok {
+	dVal := &DValArg{name: expr.Name}
+	if v, ok := args[expr.Name]; ok {
 		dVal.typeAnnotation.typ = v
 		return dVal, nil
 	}
@@ -686,7 +686,7 @@ func verifyTupleIN(args MapArgs, arg, values Datum) error {
 
 func isUnresolvedArgument(args MapArgs, expr Expr) bool {
 	if t, ok := expr.(ValArg); ok {
-		if _, ok := args[t.name]; !ok {
+		if _, ok := args[t.Name]; !ok {
 			return true
 		}
 	}
@@ -696,7 +696,7 @@ func isUnresolvedArgument(args MapArgs, expr Expr) bool {
 func isUnresolvedVariable(args MapArgs, expr Expr) bool {
 	// TODO(nvanbenschoten) move to expr.go
 	if t, ok := expr.(ValArg); ok {
-		_, ok := args[t.name]
+		_, ok := args[t.Name]
 		return !ok
 	}
 	if _, ok := expr.(*QualifiedName); ok {

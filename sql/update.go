@@ -181,7 +181,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					typ := getTypeForColumn(updateCols[i])
+					typ := updateCols[i].Type.toDatumType()
 					e := fillDefault(e, typ, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -189,7 +189,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 				}
 			}
 		} else {
-			typ := getTypeForColumn(updateCols[i])
+			typ := updateCols[i].Type.toDatumType()
 			e := fillDefault(expr.Expr, typ, i, defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -221,7 +221,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, getTypeForColumn(updateCols[i]))
+		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.toDatumType())
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}

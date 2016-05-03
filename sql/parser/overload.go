@@ -211,7 +211,7 @@ func typeCheckOverloadedExprs(
 				return err
 			}
 			// If we dont want to error on args, avoid type checking them without a desired type.
-			typedExprs[expr.i] = &DValArg{name: expr.e.(ValArg).name}
+			typedExprs[expr.i] = &DValArg{name: expr.e.(ValArg).Name}
 		}
 		return nil
 	}
