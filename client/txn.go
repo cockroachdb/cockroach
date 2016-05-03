@@ -17,6 +17,7 @@
 package client
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	basictracer "github.com/opentracing/basictracer-go"
@@ -655,6 +657,14 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	if elideEndTxn {
 		reqs = reqs[:lastIndex]
+		if endTxnRequest.Deadline != nil {
+			now := timeutil.Now()
+			if endTxnRequest.Deadline.Less(roachpb.Timestamp{WallTime: now.UnixNano()}) {
+				panic(fmt.Sprintf(
+					"read-only txn deadline: %s before now: %s", endTxnRequest.Deadline, now,
+				))
+			}
+		}
 	}
 
 	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)
