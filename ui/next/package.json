@@ -14,7 +14,7 @@
     "ts-node": "^0.7.2",
     "tslint": "^3.8.1",
     "typescript": "^1.8.10",
-    "typings": "^0.7.12"
+    "typings": "^0.8.1"
   },
   "jspm": {
     "dependencies": {
@@ -32,12 +32,11 @@
       "redux": "npm:redux@^3.4.0",
       "redux-thunk": "npm:redux-thunk@^2.0.1",
       "reselect": "npm:reselect@^2.5.1",
-      "ts": "github:frankwallis/plugin-typescript@^4.0.5",
       "whatwg-fetch": "npm:whatwg-fetch@^0.11.0"
     },
     "devDependencies": {
-      "ts-runtime": "npm:babel-runtime@^5.8.24",
-      "typescript": "npm:typescript@^1.6.2"
+      "ts": "github:frankwallis/plugin-typescript@^4.0.5",
+      "ts-runtime": "npm:babel-runtime@^6.6.1"
     }
   }
 }
