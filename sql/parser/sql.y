@@ -1201,7 +1201,7 @@ zone_value:
 | const_interval SCONST opt_interval
   {
     expr := &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
-    typedExpr, err := TypeCheck(expr, nil, nil)
+    typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
     if err != nil {
       sqllex.Error("cannot type check interval type: " + err.Error())
       return 1

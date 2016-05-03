@@ -69,7 +69,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			if pErr != nil {
 				return nil, pErr
 			}
-			var desired parser.Datum
+			desired := parser.NoTypePreference
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
@@ -121,7 +121,7 @@ func (n *valuesNode) Start() *roachpb.Error {
 			if pErr != nil {
 				return pErr
 			}
-			var desired parser.Datum
+			desired := parser.NoTypePreference
 			if len(n.desiredTypes) > i {
 				desired = n.desiredTypes[i]
 			}

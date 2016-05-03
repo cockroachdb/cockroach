@@ -272,7 +272,7 @@ func (expr *ComparisonExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, e
 
 // TypeCheck implements the Expr interface.
 func (expr *ExistsExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	subqueryTyped, err := expr.Subquery.TypeCheck(args, nil /* no preference */)
+	subqueryTyped, err := expr.Subquery.TypeCheck(args, NoTypePreference)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +348,7 @@ func (expr *IfExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 
 // TypeCheck implements the Expr interface.
 func (expr *IsOfTypeExpr) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	exprTyped, err := expr.Expr.TypeCheck(args, nil /* no preference */)
+	exprTyped, err := expr.Expr.TypeCheck(args, NoTypePreference)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +523,7 @@ func (expr ValArg) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 		dVal.typeAnnotation.typ = v
 		return dVal, nil
 	}
-	if desired == nil || desired == DNull {
+	if desired == NoTypePreference || desired == DNull {
 		return nil, parameterTypeAmbiguityError{expr}
 	}
 	if _, err := args.SetInferredType(dVal, desired); err != nil {
@@ -776,7 +776,7 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 			for _, numVal := range constExprs {
 				if !canConstantBecome(numVal.e.(*NumVal), typ) {
 					if required {
-						typedExpr, err := numVal.e.TypeCheck(args, nil)
+						typedExpr, err := numVal.e.TypeCheck(args, NoTypePreference)
 						if err != nil {
 							return nil, err
 						}

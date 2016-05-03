@@ -81,6 +81,10 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 	return p.scanner.stmts, nil
 }
 
+// NoTypePreference can be provided to TypeCheck's desired type parameter to indicate that
+// the caller of the function has no preference on the type of the resulting TypedExpr.
+var NoTypePreference = Datum(nil)
+
 // TypeCheck performs type checking on the provided expression tree, returning
 // the new typed expression tree, which additionally permits evaluation and type
 // introspection globally and on each sub-tree.

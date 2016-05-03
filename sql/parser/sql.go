@@ -4912,7 +4912,7 @@ sqldefault:
 		//line sql.y:1202
 		{
 			expr := &CastExpr{Expr: &StrVal{s: sqlDollar[2].str}, Type: sqlDollar[1].union.colType()}
-			typedExpr, err := TypeCheck(expr, nil, nil)
+			typedExpr, err := TypeCheck(expr, nil, NoTypePreference)
 			if err != nil {
 				sqllex.Error("cannot type check interval type: " + err.Error())
 				return 1
