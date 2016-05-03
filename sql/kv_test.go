@@ -20,6 +20,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"testing"
 
@@ -94,11 +95,12 @@ func (kv *kvNative) insert(rows, run int) error {
 }
 
 func (kv *kvNative) update(rows, run int) error {
+	perm := rand.Perm(rows)
 	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		// Read all values in a batch.
 		b := txn.NewBatch()
 		for i := 0; i < rows; i++ {
-			b.Get(fmt.Sprintf("%s%06d", kv.prefix, i))
+			b.Get(fmt.Sprintf("%s%06d", kv.prefix, perm[i]))
 		}
 		if pErr := txn.Run(b); pErr != nil {
 			return pErr
@@ -107,7 +109,7 @@ func (kv *kvNative) update(rows, run int) error {
 		wb := txn.NewBatch()
 		for i, result := range b.Results {
 			v := result.Rows[0].ValueInt()
-			wb.Put(fmt.Sprintf("%s%06d", kv.prefix, i), v+1)
+			wb.Put(fmt.Sprintf("%s%06d", kv.prefix, perm[i]), v+1)
 		}
 		if pErr := txn.CommitInBatch(wb); pErr != nil {
 			return pErr
@@ -118,9 +120,11 @@ func (kv *kvNative) update(rows, run int) error {
 }
 
 func (kv *kvNative) del(rows, run int) error {
+	firstRow := rows * run
+	lastRow := rows * (run + 1)
 	pErr := kv.db.Txn(func(txn *client.Txn) *roachpb.Error {
 		b := txn.NewBatch()
-		for i := 0; i < rows; i++ {
+		for i := firstRow; i < lastRow; i++ {
 			b.Del(fmt.Sprintf("%s%06d", kv.prefix, i))
 		}
 		return txn.CommitInBatch(b)
@@ -206,13 +210,14 @@ func (kv *kvSQL) insert(rows, run int) error {
 }
 
 func (kv *kvSQL) update(rows, run int) error {
+	perm := rand.Perm(rows)
 	var buf bytes.Buffer
 	buf.WriteString(`UPDATE bench.kv SET v = v + 1 WHERE k IN (`)
 	for j := 0; j < rows; j++ {
 		if j > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, `'%06d'`, j)
+		fmt.Fprintf(&buf, `'%06d'`, perm[j])
 	}
 	buf.WriteString(`)`)
 	_, err := kv.db.Exec(buf.String())
@@ -220,13 +225,14 @@ func (kv *kvSQL) update(rows, run int) error {
 }
 
 func (kv *kvSQL) del(rows, run int) error {
+	firstRow := rows * run
 	var buf bytes.Buffer
 	buf.WriteString(`DELETE FROM bench.kv WHERE k IN (`)
 	for j := 0; j < rows; j++ {
 		if j > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, `'%06d'`, j)
+		fmt.Fprintf(&buf, `'%06d'`, j+firstRow)
 	}
 	buf.WriteString(`)`)
 	_, err := kv.db.Exec(buf.String())
@@ -302,7 +308,7 @@ func runKVBenchmark(b *testing.B, typ, op string, rows int) {
 		opFn = kv.scan
 	}
 
-	if err := kv.prep(rows, op != "insert"); err != nil {
+	if err := kv.prep(rows, op != "insert" && op != "delete"); err != nil {
 		b.Fatal(err)
 	}
 	b.ResetTimer()
