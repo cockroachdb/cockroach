@@ -59,6 +59,15 @@ func TestNoLinkForbidden(t *testing.T) {
 			t.Errorf("The cockroach binary includes %s, which is forbidden", forbidden)
 		}
 	}
+	for _, forbiddenPrefix := range []string{
+		"github.com/cockroachdb/cockroach/testutils", // meant for testing code only
+	} {
+		for k := range imports {
+			if strings.HasPrefix(k, forbiddenPrefix) {
+				t.Errorf("The cockroach binary includes %s, which is forbidden", k)
+			}
+		}
+	}
 }
 
 func TestCacheFlagValue(t *testing.T) {
