@@ -218,22 +218,23 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	}
 }
 
-func TestCommandQueueClear(t *testing.T) {
+func TestCommandQueueRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
 
 	// Add multiple commands and commands which access each.
-	add(cq, roachpb.Key("a"), nil, false)
-	add(cq, roachpb.Key("b"), nil, false)
+	wk1 := add(cq, roachpb.Key("a"), nil, false)
+	wk2 := add(cq, roachpb.Key("b"), nil, false)
 	getWait(cq, roachpb.Key("a"), nil, false, &wg1)
 	getWait(cq, roachpb.Key("b"), nil, false, &wg2)
 	cmdDone1 := waitForCmd(&wg1)
 	cmdDone2 := waitForCmd(&wg2)
 
-	// Clear the queue and verify both commands are signaled.
-	cq.Clear()
+	// Remove the commands from the queue and verify both commands are signaled.
+	cq.Remove(wk1)
+	cq.Remove(wk2)
 
 	if !testCmdDone(cmdDone1, 100*time.Millisecond) ||
 		!testCmdDone(cmdDone2, 100*time.Millisecond) {
