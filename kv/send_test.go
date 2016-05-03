@@ -162,46 +162,6 @@ func TestRetryableError(t *testing.T) {
 	}
 }
 
-// TestUnretryableError verifies that Send returns an unretryable
-// error when it hits a critical error.
-func TestUnretryableError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	nodeContext := newNodeTestContext(nil, stopper)
-	_, ln := newTestServer(t, nodeContext)
-
-	opts := SendOptions{
-		Ordering:        orderStable,
-		SendNextTimeout: 1 * time.Second,
-		Timeout:         10 * time.Second,
-		Context:         context.Background(),
-	}
-
-	sendOneFn = func(_ SendOptions, _ *rpc.Context,
-		_ batchClient, done chan batchCall) {
-		done <- batchCall{
-			reply: &roachpb.BatchResponse{},
-			err:   errors.New("unretryable"),
-		}
-	}
-	defer func() { sendOneFn = sendOne }()
-
-	_, err := sendBatch(opts, []net.Addr{ln.Addr()}, nodeContext)
-	if err == nil {
-		t.Fatalf("Unexpected success")
-	}
-	retryErr, ok := err.(retry.Retryable)
-	if !ok {
-		t.Fatalf("Unexpected error type: %v", err)
-	}
-	if retryErr.CanRetry() {
-		t.Errorf("Unexpected retryable error: %v", retryErr)
-	}
-}
-
 // setupSendNextTest sets up a situation in which SendNextTimeout has
 // caused RPCs to be sent to all three replicas simultaneously. The
 // caller may then cause those RPCs to finish by writing to one of the
@@ -275,8 +235,8 @@ func TestSendNext_AllSlow(t *testing.T) {
 }
 
 // Test the behavior of SendNextTimeout when some servers return
-// retryable RPC errors but one succeeds.
-func TestSendNext_RetryableRPCErrorThenSuccess(t *testing.T) {
+// RPC errors but one succeeds.
+func TestSendNext_RPCErrorThenSuccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
@@ -312,19 +272,19 @@ func TestSendNext_RetryableRPCErrorThenSuccess(t *testing.T) {
 }
 
 // Test the behavior of SendNextTimeout when all servers return
-// retryable errors (this is effectively the same whether
+// RPC errors (this is effectively the same whether
 // SendNextTimeout is used or not).
-func TestSendNext_AllRetryableRPCErrors(t *testing.T) {
+func TestSendNext_AllRPCErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	doneChans, sendChan, stopper := setupSendNextTest(t)
 	defer stopper.Stop()
 
-	// All replicas finish with retryable errors.
+	// All replicas finish with RPC errors.
 	for i := 0; i <= 2; i++ {
 		doneChans[i] <- batchCall{
 			reply: nil,
-			err:   roachpb.NewSendError("boom", true),
+			err:   errors.New("boom"),
 		}
 	}
 
@@ -334,31 +294,6 @@ func TestSendNext_AllRetryableRPCErrors(t *testing.T) {
 		t.Errorf("did not get expected SendError; got %T instead", bc.err)
 	} else if !sErr.CanRetry() {
 		t.Errorf("expected a retryable error")
-	}
-}
-
-// Test the behavior of SendNextTimeout when one server returns a
-// non-retryable RPC error.
-func TestSendNext_NonRetryableRPCError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	doneChans, sendChan, stopper := setupSendNextTest(t)
-	defer stopper.Stop()
-
-	// All replicas finish with non-retryable errors.
-	for i := 0; i <= 2; i++ {
-		doneChans[i] <- batchCall{
-			reply: nil,
-			err:   roachpb.NewSendError("boom", false),
-		}
-	}
-
-	// The client side completes with a non-retryable send error.
-	bc := <-sendChan
-	if sErr, ok := bc.err.(*roachpb.SendError); !ok {
-		t.Errorf("did not get expected SendError; got %T instead", bc.err)
-	} else if sErr.CanRetry() {
-		t.Errorf("expected a non-retryable error")
 	}
 }
 
@@ -457,6 +392,9 @@ func TestComplexScenarios(t *testing.T) {
 
 	nodeContext := newNodeTestContext(nil, stopper)
 
+	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
+	// Rework this test to incorporate application-level errors carried in
+	// the BatchResponse.
 	testCases := []struct {
 		numServers               int
 		numErrors                int
@@ -474,7 +412,7 @@ func TestComplexScenarios(t *testing.T) {
 
 		// --- Failure scenarios ---
 		// All RPCs fail.
-		{5, 5, 0, false, false},
+		{5, 5, 0, false, true},
 		// All RPCs fail, but some of the errors are retryable.
 		{5, 5, 1, false, true},
 		{5, 5, 3, false, true},
