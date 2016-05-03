@@ -384,11 +384,11 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	clearSchemaChangers := false
 	ctx, _ := createTestServerContext()
 	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
-		func(tscc csql.TestingSchemaChangerCollection) {
+		func(scc csql.SchemaChangersCallback) {
 			mu.Lock()
 			defer mu.Unlock()
 			if clearSchemaChangers {
-				tscc.ClearSchemaChangers()
+				scc.ClearSchemaChangers()
 			}
 		}
 	t := newLeaseTest(testingT, ctx)
@@ -460,11 +460,11 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	clearSchemaChangers := false
 	ctx, _ := createTestServerContext()
 	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
-		func(tscc csql.TestingSchemaChangerCollection) {
+		func(scc csql.SchemaChangersCallback) {
 			mu.Lock()
 			defer mu.Unlock()
 			if clearSchemaChangers {
-				tscc.ClearSchemaChangers()
+				scc.ClearSchemaChangers()
 			}
 		}
 	var waitTableID csql.ID
