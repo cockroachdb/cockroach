@@ -527,7 +527,11 @@ func (r *Replica) requestLeaderLease(timestamp roachpb.Timestamp) <-chan *roachp
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		for i, llChan := range r.mu.llChans {
-			if i == 0 {
+			// Don't send the same pErr object twice; this can lead to
+			// races. We could clone every time but it's more efficient to
+			// send pErr itself to one of the channels (the last one; if we
+			// send it earlier the race can still happen).
+			if i == len(r.mu.llChans)-1 {
 				llChan <- pErr
 			} else {
 				llChan <- protoutil.Clone(pErr).(*roachpb.Error) // works with `nil`
