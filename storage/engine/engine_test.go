@@ -215,7 +215,7 @@ func TestEngineBatch(t *testing.T) {
 				t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 			}
 			// Try using an iterator to get the value from the batch.
-			iter := b.NewIterator(nil)
+			iter := b.NewIterator(false)
 			iter.Seek(key)
 			if !iter.Valid() {
 				if currentBatch[len(currentBatch)-1].value != nil {
@@ -694,7 +694,7 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify NewIterator still iterates over original snapshot.
-		iter := snap.NewIterator(nil)
+		iter := snap.NewIterator(false)
 		iter.Seek(newKey)
 		if iter.Valid() {
 			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
