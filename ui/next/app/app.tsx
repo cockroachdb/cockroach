@@ -1,6 +1,5 @@
 /// <reference path="../typings/main.d.ts" />
 /// <reference path="interfaces/protos.d.ts" />
-/// <reference path="../lib/protos/protos.d.ts" />
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
