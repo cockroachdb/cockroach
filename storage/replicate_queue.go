@@ -82,13 +82,17 @@ func (*replicateQueue) acceptsUnsplitRanges() bool {
 func (rq *replicateQueue) shouldQueue(now roachpb.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 
-	desc := repl.Desc()
-	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
-		// If the replica's range needs splitting, wait until done.
+	if repl.needsSplitBySize() {
+		// If the range exceeds the split threshold, let that finish
+		// first. Ranges must fit in memory on both sender and receiver
+		// nodes while being replicated. This supplements the check
+		// provided by acceptsUnsplitRanges, which looks at zone config
+		// boundaries rather than data size.
 		return
 	}
 
 	// Find the zone config for this range.
+	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
 		log.Error(err)

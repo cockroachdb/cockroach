@@ -27,16 +27,15 @@ import (
 
 // A rangeStats encapsulates access to a range's stats. Range
 // statistics are maintained on every range operation using
-// stat increments accumulated via MVCCStats structs. Stats are
-// efficiently aggregated using the engine.Merge operator.
+// stat increments accumulated via MVCCStats structs.
 //
-// MVCC stats values should be accessed directly only from the raft
-// processing goroutine and should never be individually updated; use
-// Update() instead. For access from other goroutines, use GetMVCC().
+// Do not access members of this struct directly; always use its
+// exported methods such as GetMVCC(). All exported methods on this
+// type are thread-safe.
 type rangeStats struct {
-	rangeID          roachpb.RangeID
-	sync.Mutex       // Protects MVCCStats
-	engine.MVCCStats // embedded, cached version of stat values
+	rangeID    roachpb.RangeID
+	sync.Mutex                  // Protects mvccStats
+	mvccStats  engine.MVCCStats // cached version of stat values
 }
 
 // newRangeStats creates a new instance of rangeStats using the
@@ -46,7 +45,7 @@ type rangeStats struct {
 // require the values to be read from the engine).
 func newRangeStats(rangeID roachpb.RangeID, e engine.Engine) (*rangeStats, error) {
 	rs := &rangeStats{rangeID: rangeID}
-	if err := engine.MVCCGetRangeStats(context.Background(), e, rangeID, &rs.MVCCStats); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), e, rangeID, &rs.mvccStats); err != nil {
 		return nil, err
 	}
 	return rs, nil
@@ -64,16 +63,14 @@ func (rs *rangeStats) Replace(other *rangeStats) {
 	other.Lock()
 	defer other.Unlock()
 
-	rs.MVCCStats = other.MVCCStats
+	rs.mvccStats = other.mvccStats
 }
 
-// GetMVCC returns a copy of the underlying MVCCStats. Use this for
-// thread-safe access from goroutines other than the store raft
-// processing goroutine.
+// GetMVCC returns a copy of the underlying MVCCStats.
 func (rs *rangeStats) GetMVCC() engine.MVCCStats {
 	rs.Lock()
 	defer rs.Unlock()
-	return rs.MVCCStats
+	return rs.mvccStats
 }
 
 // GetSize returns the range size as the sum of the key and value
@@ -81,7 +78,7 @@ func (rs *rangeStats) GetMVCC() engine.MVCCStats {
 func (rs *rangeStats) GetSize() int64 {
 	rs.Lock()
 	defer rs.Unlock()
-	return rs.KeyBytes + rs.ValBytes
+	return rs.mvccStats.KeyBytes + rs.mvccStats.ValBytes
 }
 
 // MergeMVCCStats merges the results of an MVCC operation or series of MVCC
@@ -90,15 +87,15 @@ func (rs *rangeStats) GetSize() int64 {
 func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
-	rs.MVCCStats.Add(ms)
-	return engine.MVCCSetRangeStats(context.Background(), e, rs.rangeID, &rs.MVCCStats)
+	rs.mvccStats.Add(ms)
+	return engine.MVCCSetRangeStats(context.Background(), e, rs.rangeID, &rs.mvccStats)
 }
 
 // SetStats sets stats wholesale.
 func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 	rs.Lock()
 	defer rs.Unlock()
-	rs.MVCCStats = ms
+	rs.mvccStats = ms
 	return engine.MVCCSetRangeStats(context.Background(), e, rs.rangeID, &ms)
 }
 
@@ -107,11 +104,11 @@ func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) error {
 func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
 	rs.Lock()
 	defer rs.Unlock()
-	if rs.IntentCount == 0 {
+	if rs.mvccStats.IntentCount == 0 {
 		return 0
 	}
 	// Make a copy so that rs is not updated.
-	cp := rs.MVCCStats
+	cp := rs.mvccStats
 	// Advance age by any elapsed time since last computed.
 	cp.AgeTo(nowNanos)
 	return float64(cp.IntentAge) / float64(cp.IntentCount)
@@ -125,7 +122,7 @@ func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 	rs.Lock()
 	defer rs.Unlock()
 	// Make a copy so that rs is not updated.
-	cp := rs.MVCCStats
+	cp := rs.mvccStats
 	cp.AgeTo(nowNanos)
 	return cp.GCBytesAge
 }

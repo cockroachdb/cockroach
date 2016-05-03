@@ -55,7 +55,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			RangeID: desc.RangeID,
 			stats: &rangeStats{
 				rangeID: desc.RangeID,
-				MVCCStats: engine.MVCCStats{
+				mvccStats: engine.MVCCStats{
 					KeyBytes:  1,
 					ValBytes:  2,
 					KeyCount:  1,
