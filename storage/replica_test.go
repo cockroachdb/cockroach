@@ -34,6 +34,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -3524,7 +3525,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer tc.Stop()
 
 	ts := roachpb.Timestamp{WallTime: 1}
-	ns := DefaultHeartbeatInterval.Nanoseconds()
+	ns := base.DefaultHeartbeatInterval.Nanoseconds()
 	testCases := []struct {
 		heartbeat   roachpb.Timestamp // zero value indicates no heartbeat
 		currentTime int64             // nanoseconds

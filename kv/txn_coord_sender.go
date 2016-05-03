@@ -28,9 +28,9 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/interval"
@@ -216,7 +216,7 @@ func NewTxnCoordSender(
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
-		heartbeatInterval: storage.DefaultHeartbeatInterval,
+		heartbeatInterval: base.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[uuid.UUID]*txnMetadata{},
 		linearizable:      linearizable,

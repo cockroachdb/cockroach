@@ -26,6 +26,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -64,7 +65,7 @@ const (
 	// interval used by transaction coordinators throughout the cluster to make
 	// sure that no coordinator can run with a transaction which has been
 	// aborted and whose abort cache entry is being deleted.
-	abortCacheAgeThreshold = 5 * DefaultHeartbeatInterval
+	abortCacheAgeThreshold = 5 * base.DefaultHeartbeatInterval
 
 	// considerThreshold is used in shouldQueue. Only an a normalized GC bytes
 	// or intent byte age larger than the threshold queues the replica for GC.

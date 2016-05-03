@@ -416,7 +416,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// The first failed replica change has laid down intents. Make sure those
 	// are pushable by making the transaction abandoned.
-	mtc.manualClock.Increment(10 * storage.DefaultHeartbeatInterval.Nanoseconds())
+	mtc.manualClock.Increment(10 * base.DefaultHeartbeatInterval.Nanoseconds())
 
 	err = rng.ChangeReplicas(roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{
