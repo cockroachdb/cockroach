@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -407,7 +407,7 @@ type StoreTestingKnobs struct {
 	// A callback to be called when executing every replica command.
 	// If your filter is not idempotent, consider wrapping it in a
 	// ReplayProtectionFilterWrapper.
-	TestingCommandFilter storageutils.ReplicaCommandFilter
+	TestingCommandFilter storagebase.ReplicaCommandFilter
 	// A callback to be called instead of panicking due to a
 	// checksum mismatch in VerifyChecksum()
 	BadChecksumPanic func([]ReplicaSnapshotDiff)

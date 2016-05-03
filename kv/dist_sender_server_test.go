@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -511,7 +511,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	ctx := server.NewTestContext()
 	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
-		func(fArgs storageutils.FilterArgs) *roachpb.Error {
+		func(fArgs storagebase.FilterArgs) *roachpb.Error {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {

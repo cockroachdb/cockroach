@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -407,7 +407,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
 				resolved[id] = append(resolved[id], roachpb.Span{
