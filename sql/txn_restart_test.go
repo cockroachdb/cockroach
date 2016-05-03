@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -408,7 +409,7 @@ func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cmdFilters := createTestServerContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
+	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
@@ -525,7 +526,7 @@ func TestErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := server.NewTestContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
+	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 	if _, err := sqlDB.Exec(`

@@ -504,13 +504,12 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var storeKnobs storage.StoreTestingKnobs
 	// Set up a filter to so that the first CPut operation will
 	// get a ReadWithinUncertaintyIntervalError.
 	targetKey := roachpb.Key("b")
 	var numGets int32
-
-	ctx := server.NewTestContext()
-	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
+	storeKnobs.TestingCommandFilter =
 		func(fArgs storagebase.FilterArgs) *roachpb.Error {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
@@ -522,6 +521,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := server.NewTestContext()
+	ctx.TestingKnobs.Store = &storeKnobs
 	s := server.StartTestServerWithContext(t, ctx)
 	defer s.Stop()
 	db := setupMultipleRanges(t, s, "b")

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -250,8 +251,10 @@ func (t *logicTest) setup() {
 	// MySQL or Postgres instance.
 	ctx := server.NewTestContext()
 	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingKnobs.ExecutorTestingKnobs.WaitForGossipUpdate = true
-	ctx.TestingKnobs.ExecutorTestingKnobs.CheckStmtStringChange = true
+	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		WaitForGossipUpdate:   true,
+		CheckStmtStringChange: true,
+	}
 	t.srv = setupTestServerWithContext(t.T, ctx)
 
 	// db may change over the lifetime of this function, with intermediate
@@ -279,7 +282,7 @@ func (t *logicTest) processTestFile(path string) error {
 
 	t.lastProgress = timeutil.Now()
 
-	testingKnobs := &t.srv.Ctx.TestingKnobs
+	execKnobs := t.srv.Ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 
 	repeat := 1
 	s := newLineScanner(file)
@@ -507,8 +510,8 @@ func (t *logicTest) processTestFile(path string) error {
 			}
 			fmt.Println("Setting deterministic priorities.")
 
-			testingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
-			defer func() { testingKnobs.ExecutorTestingKnobs.FixTxnPriority = false }()
+			execKnobs.FixTxnPriority = true
+			defer func() { execKnobs.FixTxnPriority = false }()
 		default:
 			return fmt.Errorf("%s:%d: unknown command: %s", path, s.line, cmd)
 		}

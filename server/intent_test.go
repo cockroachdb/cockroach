@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -75,11 +76,11 @@ func TestIntentResolution(t *testing.T) {
 
 		results := map[string]struct{}{}
 		func() {
+			var storeKnobs storage.StoreTestingKnobs
 			var mu sync.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
-			ctx := NewTestContext()
-			ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter =
+			storeKnobs.TestingCommandFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					mu.Lock()
 					defer mu.Unlock()
@@ -109,6 +110,9 @@ func TestIntentResolution(t *testing.T) {
 					}
 					return nil
 				}
+
+			ctx := NewTestContext()
+			ctx.TestingKnobs.Store = &storeKnobs
 
 			s := StartTestServerWithContext(t, ctx)
 			defer s.Stop()

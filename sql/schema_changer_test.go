@@ -294,13 +294,15 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+	var execKnobs csql.ExecutorTestingKnobs
+	execKnobs.SyncSchemaChangersFilter =
 		func(scc csql.SchemaChangersCallback) {
 			scc.ClearSchemaChangers()
 		}
 	defer csql.TestSpeedupAsyncSchemaChanges()()
 
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLExecutor = &execKnobs
 	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
@@ -533,15 +535,17 @@ func TestRaceWithBackfill(t *testing.T) {
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	defer csql.TestDisableAsyncSchemaChangeExec()()
-	ctx, _ := createTestServerContext()
+	var execKnobs csql.ExecutorTestingKnobs
 	var backfillNotification chan bool
-	ctx.TestingKnobs.ExecutorTestingKnobs.SchemaChangersStartBackfillNotification =
+	execKnobs.SchemaChangersStartBackfillNotification =
 		func() {
 			if backfillNotification != nil {
 				// Close channel to notify that the backfill has started.
 				close(backfillNotification)
 			}
 		}
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLExecutor = &execKnobs
 	server, sqlDB, kvDB := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 

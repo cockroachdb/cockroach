@@ -165,15 +165,25 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
-	s.leaseMgr = sql.NewLeaseManager(
-		0, *s.db, s.clock, ctx.TestingKnobs.LeaseManagerTestingKnobs)
+	// Set up Lease Manager
+	var lmKnobs sql.LeaseManagerTestingKnobs
+	if ctx.TestingKnobs.SQLLeaseManager != nil {
+		lmKnobs = *ctx.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
+	}
+	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+
+	// Set up Executor
 	eCtx := sql.ExecutorContext{
 		DB:           s.db,
 		Gossip:       s.gossip,
 		LeaseManager: s.leaseMgr,
 		Clock:        s.clock,
-		TestingKnobs: &ctx.TestingKnobs.ExecutorTestingKnobs,
+	}
+	if ctx.TestingKnobs.SQLExecutor != nil {
+		eCtx.TestingKnobs = ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	} else {
+		eCtx.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
 
 	sqlRegistry := metric.NewRegistry()
@@ -200,7 +210,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
-		TestingKnobs: ctx.TestingKnobs.StoreTestingKnobs,
+	}
+	if ctx.TestingKnobs.Store != nil {
+		nCtx.TestingKnobs = *ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)

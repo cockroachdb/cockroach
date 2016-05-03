@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
@@ -190,11 +191,13 @@ func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
-	// Disable one phase commits as they otherwise confuse the
-	// various bits of machinery in sql tests which inject via
-	// the testing command filter and inspect the transaction.
-	ctx.TestingKnobs.StoreTestingKnobs.DisableOnePhaseCommits = true
-	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter = cmdFilters.runFilters
+	ctx.TestingKnobs.Store = &storage.StoreTestingKnobs{
+		// Disable one phase commits as they otherwise confuse the
+		// various bits of machinery in sql tests which inject via
+		// the testing command filter and inspect the transaction.
+		DisableOnePhaseCommits: true,
+		TestingCommandFilter:   cmdFilters.runFilters,
+	}
 	return ctx, &cmdFilters
 }
 

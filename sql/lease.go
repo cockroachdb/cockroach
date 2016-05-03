@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -640,6 +641,11 @@ type LeaseManagerTestingKnobs struct {
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
 }
+
+var _ base.ModuleTestingKnobs = &LeaseManagerTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*LeaseManagerTestingKnobs) ModuleTestingKnobs() {}
 
 // LeaseManager manages acquiring and releasing per-table leases. Exported only
 // for testing.
