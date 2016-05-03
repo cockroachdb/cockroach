@@ -1,7 +1,5 @@
 import * as _ from "lodash";
 
-import * as protos from "lib/protos";
-
 type NodeStatus = cockroach.server.status.NodeStatus;
 type StatusMetrics = cockroach.ProtoBufMap<string, number>;
 
