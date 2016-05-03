@@ -1053,3 +1053,16 @@ query I
 SELECT strpos(version(), 'CockroachDB')
 ----
 1
+
+query T
+SELECT typeof('hello world')
+----
+string
+
+query T
+SELECT typeof(1.9 > 1.1)
+----
+bool
+
+query error unknown signature for typeof: typeof\(string, int\)
+SELECT typeof('hello world', 1)

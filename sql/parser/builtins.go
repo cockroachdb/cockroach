@@ -74,10 +74,16 @@ func (a ArgTypes) match(types ArgTypes) bool {
 	return true
 }
 
-// AnyType accepts any arguments.
-type AnyType struct{}
+// AnyType accepts arguments of any type.
+// If `count` is non-zero, the number of args must match `count`.
+type AnyType struct {
+	count int
+}
 
-func (AnyType) match(types ArgTypes) bool {
+func (a AnyType) match(types ArgTypes) bool {
+	if a.count > 0 {
+		return a.count == len(types)
+	}
 	return true
 }
 
@@ -1003,6 +1009,15 @@ var Builtins = map[string][]Builtin{
 			dd.Round(x, 0, inf.RoundDown)
 			return dd, nil
 		}),
+	},
+	"typeof": {
+		Builtin{
+			ReturnType: TypeString,
+			Types:      AnyType{1},
+			fn: func(_ EvalContext, args DTuple) (Datum, error) {
+				return DString(args[0].Type()), nil
+			},
+		},
 	},
 	"version": {
 		Builtin{
