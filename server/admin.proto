@@ -18,8 +18,8 @@ syntax = "proto3";
 package cockroach.server;
 option go_package = "server";
 
-import "google/api/annotations.proto";
 import weak "gogoproto/gogo.proto";
+import weak "google/api/annotations.proto";
 
 // DatabasesRequest requests a list of databases.
 message DatabasesRequest {
