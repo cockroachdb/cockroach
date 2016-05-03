@@ -444,7 +444,7 @@ type IntervalCache struct {
 	getEntry   *Entry
 	tmpEntry   Entry
 	overlapKey IntervalKey
-	overlaps   []Overlap
+	overlaps   []*Entry
 }
 
 // IntervalKey provides uniqueness as well as key interval.
@@ -529,16 +529,9 @@ func (ic *IntervalCache) length() int {
 	return ic.tree.Len()
 }
 
-// Overlap contains the key/value pair for one overlap instance.
-type Overlap struct {
-	Entry *Entry
-	Key   *IntervalKey
-	Value interface{}
-}
-
 // GetOverlaps returns a slice of values which overlap the specified
 // interval. The slice is only valid until the next call to GetOverlaps.
-func (ic *IntervalCache) GetOverlaps(start, end []byte) []Overlap {
+func (ic *IntervalCache) GetOverlaps(start, end []byte) []*Entry {
 	ic.overlapKey.Range = interval.Range{
 		Start: interval.Comparable(start),
 		End:   interval.Comparable(end),
@@ -552,11 +545,7 @@ func (ic *IntervalCache) GetOverlaps(start, end []byte) []Overlap {
 func (ic *IntervalCache) doOverlaps(i interval.Interface) bool {
 	e := i.(*Entry)
 	ic.access(e) // maintain cache eviction ordering
-	ic.overlaps = append(ic.overlaps, Overlap{
-		Entry: e,
-		Key:   e.Key.(*IntervalKey),
-		Value: e.Value,
-	})
+	ic.overlaps = append(ic.overlaps, e)
 	return false
 }
 
