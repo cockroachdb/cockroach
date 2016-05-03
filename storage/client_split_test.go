@@ -36,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -932,7 +932,7 @@ func TestStoreSplitReadRace(t *testing.T) {
 	var getStarted sync.WaitGroup
 	sCtx := storage.TestStoreContext()
 	sCtx.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()
 				if st == nil || !st.UpdatedDesc.EndKey.Equal(splitKey) {

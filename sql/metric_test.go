@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -105,7 +105,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 
 	// Inject errors on the INSERT below.
 	restarted := false
-	cmdFilters.AppendFilter(func(args storageutils.FilterArgs) *roachpb.Error {
+	cmdFilters.AppendFilter(func(args storagebase.FilterArgs) *roachpb.Error {
 		switch req := args.Req.(type) {
 		// SQL INSERT generates ConditionalPuts for unique indexes (such as the PK).
 		case *roachpb.ConditionalPutRequest:

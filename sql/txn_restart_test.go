@@ -25,8 +25,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -241,7 +241,7 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT, t DECIMAL);
 		"hooly":     2,
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storageutils.FilterArgs) *roachpb.Error {
+		func(args storagebase.FilterArgs) *roachpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
@@ -289,7 +289,7 @@ INSERT INTO t.test (k, v, t) VALUES ('k', 'laureal', cluster_logical_timestamp()
 		"hooly": 2,
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
-		func(args storageutils.FilterArgs) *roachpb.Error {
+		func(args storagebase.FilterArgs) *roachpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
@@ -440,7 +440,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 	for _, tc := range testCases {
 		cleanupFilter := cmdFilters.AppendFilter(
-			func(args storageutils.FilterArgs) *roachpb.Error {
+			func(args storagebase.FilterArgs) *roachpb.Error {
 				if err := injectErrors(args.Req, args.Hdr, tc.magicVals); err != nil {
 					return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 				}
@@ -665,7 +665,7 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 		"boulanger": 1,
 	}
 	cmdFilters.AppendFilter(
-		func(args storageutils.FilterArgs) *roachpb.Error {
+		func(args storagebase.FilterArgs) *roachpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}

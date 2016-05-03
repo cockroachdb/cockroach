@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -67,7 +66,7 @@ func (r *Replica) executeCmd(ctx context.Context, raftCmdID storagebase.CmdIDKey
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
-		filterArgs := storageutils.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
+		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
 			log.Infof("test injecting error: %s", pErr)
