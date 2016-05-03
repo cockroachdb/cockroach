@@ -1471,7 +1471,12 @@ func TestLeaderLeaseConcurrent(t *testing.T) {
 				tc.stopper.RunAsyncTask(func() {
 					leaseCh := tc.rng.requestLeaderLease(ts)
 					wg.Done()
-					pErrCh <- (<-leaseCh)
+					pErr := <-leaseCh
+					// Mutate the errors as we receive them to expose races.
+					if pErr != nil {
+						pErr.OriginNode = 0
+					}
+					pErrCh <- pErr
 				})
 			}
 
