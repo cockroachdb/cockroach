@@ -18,7 +18,6 @@ package kv
 
 import (
 	"fmt"
-	"io"
 	"math/rand"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 )
 
 // orderingPolicy is an enum for ordering strategies when there
@@ -143,7 +141,7 @@ func send(opts SendOptions, replicas ReplicaSlice,
 	sendOneFn(opts, rpcContext, orderedClients[0], done)
 	orderedClients = orderedClients[1:]
 
-	var errors, retryableErrors int
+	var errors int
 
 	// Wait for completions.
 	var sendNextTimer util.Timer
@@ -177,16 +175,10 @@ func send(opts SendOptions, replicas ReplicaSlice,
 
 			errors++
 
-			// Since we have a reconnecting client here, disconnect errors are retryable.
-			disconnected := err == io.ErrUnexpectedEOF
-			if retryErr, ok := err.(retry.Retryable); disconnected || (ok && retryErr.CanRetry()) {
-				retryableErrors++
-			}
-
 			if remainingNonErrorRPCs := len(replicas) - errors; remainingNonErrorRPCs < 1 {
 				return nil, roachpb.NewSendError(
-					fmt.Sprintf("too many errors encountered (%d of %d total): %v",
-						errors, len(clients), err), remainingNonErrorRPCs+retryableErrors >= 1)
+					fmt.Sprintf("failed to send to any of %d replicas failed: %v",
+						len(clients), err), true)
 			}
 			// Send to additional replicas if available.
 			if len(orderedClients) > 0 {
@@ -254,13 +246,11 @@ func sendOne(opts SendOptions, rpcContext *rpc.Context, client batchClient, done
 		c := client.conn
 		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
 			if err != nil {
-				done <- batchCall{err: roachpb.NewSendError(
-					fmt.Sprintf("rpc to %s failed: %s", addr, err), true)}
+				done <- batchCall{err: err}
 				return
 			}
 			if state == grpc.Shutdown {
-				done <- batchCall{err: roachpb.NewSendError(
-					fmt.Sprintf("rpc to %s failed as client connection was closed", addr), true)}
+				done <- batchCall{err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
 				return
 			}
 		}
