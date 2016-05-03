@@ -18,6 +18,7 @@ package client
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -451,6 +452,12 @@ func (db *DB) Txn(retryable func(txn *Txn) error) error {
 		})
 	if err != nil {
 		txn.CleanupOnError(err)
+	}
+	// Terminate RetryableTxnError here, so it doesn't cause a higher-level txn to
+	// be retried. We don't do this in any of the other functions in DB; I guess
+	// we should.
+	if _, ok := err.(*roachpb.RetryableTxnError); ok {
+		return errors.New(err.Error())
 	}
 	return err
 }

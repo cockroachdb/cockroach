@@ -471,8 +471,19 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	}
 }
 
+func assertTransactionRetryError(t *testing.T, e error) {
+	if retErr, ok := e.(*roachpb.RetryableTxnError); ok {
+		if _, ok := retErr.Cause.(*roachpb.TransactionRetryError); !ok {
+			t.Fatalf("expected a TransactionRetryError, but got %s (%T)",
+				retErr.Cause, retErr.Cause)
+		}
+	} else {
+		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
+	}
+}
+
 func assertTransactionAbortedError(t *testing.T, e error) {
-	if retErr, ok := e.(roachpb.RetryableTxnError); ok {
+	if retErr, ok := e.(*roachpb.RetryableTxnError); ok {
 		if _, ok := retErr.Cause.(*roachpb.TransactionAbortedError); !ok {
 			t.Fatalf("expected a TransactionAbortedError, but got %s (%T)",
 				retErr.Cause, retErr.Cause)
@@ -1228,17 +1239,6 @@ func TestTxnAbortCount(t *testing.T) {
 	}
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "abort txn", 0, 0, 0, 1, 0)
-}
-
-func assertTransactionRetryError(t *testing.T, e error) {
-	if retErr, ok := e.(roachpb.RetryableTxnError); ok {
-		if _, ok := retErr.Cause.(*roachpb.TransactionRetryError); !ok {
-			t.Fatalf("expected a TransactionRetryError, but got %s (%T)",
-				retErr.Cause, retErr.Cause)
-		}
-	} else {
-		t.Fatalf("expected a retryable error, but got %s (%T)", e, e)
-	}
 }
 
 func TestTxnRestartCount(t *testing.T) {

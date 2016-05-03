@@ -201,7 +201,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) erro
 	for i := range b.Results {
 		result := &b.Results[i]
 		if result.PErr != nil {
-			return result.PErr.GoError()
+			return result.Err()
 		}
 	}
 	return nil

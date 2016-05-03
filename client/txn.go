@@ -17,6 +17,7 @@
 package client
 
 import (
+	"errors"
 	"strconv"
 	"time"
 
@@ -506,14 +507,27 @@ type TxnExecOptions struct {
 // used.
 func (txn *Txn) Exec(
 	opt TxnExecOptions,
-	fn func(txn *Txn, opt *TxnExecOptions) error) error {
+	fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	var err error
 	var retryOptions retry.Options
 	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
 		panic("asked to retry or commit a txn that is already aborted")
 	}
+
+	// Ensure that a RetryableTxnError escaping this function is not used by
+	// another (higher-level) Exec() invocation to restart its unrelated
+	// transaction. Technically, setting TxnID to nil here ius best-effort and
+	// doesn't ensure that (the error will be wrongly used if the outter txn also
+	// has a nil TxnID).
+	// TODO(andrei): set TxnID to a bogus non-nil value once we get rid of the
+	// retErr.Transaction field.
+	defer func() {
+		if retErr, ok := err.(*roachpb.RetryableTxnError); ok {
+			retErr.TxnID = nil
+			retErr.Transaction = nil
+		}
+	}()
 
 	if opt.AutoRetry {
 		retryOptions = txn.db.txnRetryOptions
@@ -549,18 +563,18 @@ RetryLoop:
 			break RetryLoop
 		}
 
-		if retErr, retryable := err.(roachpb.RetryableTxnError); retryable {
+		if retErr, retryable := err.(*roachpb.RetryableTxnError); retryable {
 			// Make sure the txn record that err carries is for this txn.
-			// We check only when txn.Proto.ID has been initialized after an initial successful send.
+			// If it's not, we terminate the "retryable" character of the error.
 			if txn.Proto.ID != nil {
 				if retErr.TxnID == nil {
-					return util.Errorf("retryable error with no txn id: %s (%T)", retErr, retErr.Cause)
+					return errors.New(retErr.Error())
 				}
 				if !uuid.Equal(*retErr.TxnID, *txn.Proto.ID) {
-					return util.Errorf("mismatching transaction record in the error:\n%s\nv.s.\n%s",
-						retErr, txn.Proto)
+					return errors.New(retErr.Error())
 				}
 			}
+
 			if !retErr.Backoff {
 				r.Reset()
 			}

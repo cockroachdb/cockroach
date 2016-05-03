@@ -23,7 +23,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -400,5 +402,42 @@ func TestCommonMethods(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Tests that a retryable error for an inner txn doesn't cause the outer txn to
+// be retried.
+func TestWrongTxnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := newDB(newTestSender(nil, nil))
+
+	var retries int
+	txnClosure := func(outerTxn *Txn) error {
+		log.Infof("outer retry")
+		retries++
+		// Ensure the KV transaction is created.
+		if err := outerTxn.Put("a", "b"); err != nil {
+			t.Fatal(err)
+		}
+		var execOpt TxnExecOptions
+		execOpt.AutoRetry = false
+		err := outerTxn.Exec(
+			execOpt,
+			func(innerTxn *Txn, opt *TxnExecOptions) error {
+				// Ensure the KV transaction is created.
+				if err := innerTxn.Put("x", "y"); err != nil {
+					t.Fatal(err)
+				}
+				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
+					PusheeTxn: outerTxn.Proto}, &innerTxn.Proto).GoError()
+			})
+		return err
+	}
+
+	if err := db.Txn(txnClosure); !testutils.IsError(err, "failed to push") {
+		t.Fatal(err)
+	}
+	if retries != 1 {
+		t.Fatalf("unexpected retries: %d", retries)
 	}
 }

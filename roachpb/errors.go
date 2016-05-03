@@ -43,11 +43,11 @@ type RetryableTxnError struct {
 	CauseProto  *ErrorDetail
 }
 
-func (e RetryableTxnError) Error() string {
+func (e *RetryableTxnError) Error() string {
 	return e.message
 }
 
-var _ error = RetryableTxnError{}
+var _ error = &RetryableTxnError{}
 
 // ResponseWithError is a tuple of a BatchResponse and an error. It is used to
 // pass around a BatchResponse with its associated error where that
@@ -95,7 +95,7 @@ func NewError(err error) *Error {
 	e := &Error{}
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
-	} else if retErr, ok := err.(RetryableTxnError); ok {
+	} else if retErr, ok := err.(*RetryableTxnError); ok {
 		// TODO(andrei): constructing an Error from a RetryableError is only needed
 		// in Store.Send(), which runs "internal batches" for pushing other
 		// transactions. It can get a RetryableError which it needs to marhall to
@@ -196,7 +196,7 @@ func (e *Error) GoError() error {
 		if e.GetTxn() != nil {
 			txnID = e.GetTxn().ID
 		}
-		return RetryableTxnError{
+		return &RetryableTxnError{
 			message:     e.Message,
 			TxnID:       txnID,
 			Transaction: e.GetTxn(),
@@ -269,6 +269,7 @@ func (e *Error) SetErrorIndex(index int32) {
 }
 
 // StripErrorTransaction strips the txn information in the error.
+// !!!
 func (e *Error) StripErrorTransaction() {
 	// Do not call SetTxn() as we do not want to update e.Message with nil txn.
 	e.UnexposedTxn = nil

@@ -155,6 +155,7 @@ message OpRequiresTxnError {
 message ConditionFailedError {
   optional Value actual_value = 1;
   // The index of the error within the batch.
+  // !!! remove
   // TODO(andrei): this was only added here to help SQL construct a good error
   // message. It should be replaced by having the error associated with the
   // correct command in the batch results.
