@@ -1,6 +1,9 @@
 statement error incompatible column type and default expression: INT vs bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 
+statement error default expression contains placeholders
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT $1)
+
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY DEFAULT 42,
