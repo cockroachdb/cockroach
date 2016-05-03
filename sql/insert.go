@@ -28,26 +28,30 @@ import (
 
 type insertNode struct {
 	// The following fields are populated during makePlan.
-	rowCreatorNodeBase
-	n          *parser.Insert
-	qvals      qvalMap
-	insertRows parser.SelectStatement
-	checkExprs []parser.TypedExpr
+	editNodeBase
+	defaultExprs []parser.TypedExpr
+	n            *parser.Insert
+	qvals        qvalMap
+	insertRows   parser.SelectStatement
+	checkExprs   []parser.TypedExpr
 
 	desiredTypes []parser.Datum // This will go away when we only type check once.
+
+	insertCols            []ColumnDescriptor
+	insertColIDtoRowIndex map[ColumnID]int
+	tw                    tableWriter
 
 	run struct {
 		// The following fields are populated during Start().
 		editNodeRun
 
-		ri             rowInserter
 		rowIdxToRetIdx []int
 		rowTemplate    parser.DTuple
 	}
 }
 
 // Insert inserts rows into the database.
-// Privileges: INSERT on table
+// Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
@@ -56,6 +60,15 @@ func (p *planner) Insert(
 	en, pErr := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.INSERT)
 	if pErr != nil {
 		return nil, pErr
+	}
+	if n.OnConflict != nil {
+		if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// TODO(dan): Support RETURNING in UPSERTs.
+		if n.Returning != nil {
+			return nil, roachpb.NewErrorf("RETURNING is not supported with UPSERT")
+		}
 	}
 
 	var cols []ColumnDescriptor
@@ -72,18 +85,16 @@ func (p *planner) Insert(
 	// columns receiving a default value.
 	numInputColumns := len(cols)
 
-	// Construct a map from column ID to the index the value appears at within a
-	// row.
-	colIDtoRowIndex := map[ColumnID]int{}
-	for i, c := range cols {
-		colIDtoRowIndex[c.ID] = i
+	colIDSet := make(map[ColumnID]struct{}, len(cols))
+	for _, col := range cols {
+		colIDSet[col.ID] = struct{}{}
 	}
 
 	// Add the column if it has a DEFAULT expression.
 	addIfDefault := func(col ColumnDescriptor) {
 		if col.DefaultExpr != nil {
-			if _, ok := colIDtoRowIndex[col.ID]; !ok {
-				colIDtoRowIndex[col.ID] = len(cols)
+			if _, ok := colIDSet[col.ID]; !ok {
+				colIDSet[col.ID] = struct{}{}
 				cols = append(cols, col)
 			}
 		}
@@ -104,22 +115,13 @@ func (p *planner) Insert(
 		}
 	}
 
-	rc, rcErr := p.makeRowCreatorNode(en, cols, colIDtoRowIndex, true)
-	if rcErr != nil {
-		return nil, rcErr
-	}
-
-	// Verify we have at least the columns that are part of the primary key.
-	primaryKeyCols := map[ColumnID]struct{}{}
-	for i, id := range en.tableDesc.PrimaryIndex.ColumnIDs {
-		if _, ok := colIDtoRowIndex[id]; !ok {
-			return nil, roachpb.NewUErrorf("missing %q primary key column", en.tableDesc.PrimaryIndex.ColumnNames[i])
-		}
-		primaryKeyCols[id] = struct{}{}
+	defaultExprs, err := makeDefaultExprs(cols, &p.parser, p.evalCtx)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Replace any DEFAULT markers with the corresponding default expressions.
-	insertRows, err := p.fillDefaults(rc.defaultExprs, cols, n)
+	insertRows, err := p.fillDefaults(defaultExprs, cols, n)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -191,14 +193,59 @@ func (p *planner) Insert(
 		return nil, pErr
 	}
 
-	return &insertNode{
-		n:                  n,
-		rowCreatorNodeBase: rc,
-		checkExprs:         typedCheckExprs,
-		qvals:              qvals,
-		insertRows:         insertRows,
-		desiredTypes:       desiredTypesFromSelect,
-	}, nil
+	ri, err := makeRowInserter(en.tableDesc, cols)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	var tw tableWriter
+	if n.OnConflict == nil {
+		tw = &tableInserter{ri: ri, autoCommit: autoCommit}
+	} else {
+		// TODO(dan): These are both implied by the short form of UPSERT. When the
+		// INSERT INTO ON CONFLICT form is implemented, get these values from
+		// n.OnConfict.
+		upsertConflictIndex := en.tableDesc.PrimaryIndex
+		insertCols := ri.insertCols
+
+		indexColSet := make(map[ColumnID]struct{}, len(upsertConflictIndex.ColumnIDs))
+		for _, colID := range upsertConflictIndex.ColumnIDs {
+			indexColSet[colID] = struct{}{}
+		}
+
+		// updateCols contains the columns that will be updated when a conflict is
+		// found. For the UPSERT short form, it is the set of columns in insertCols
+		// minus any columns in the conflict index. Example:
+		// `UPSERT INTO abc VALUES (1, 2, 3)` is syntactic sugar for
+		// `INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT a DO UPDATE SET b = 2, c = 3`.
+		updateCols := make([]ColumnDescriptor, 0, len(insertCols))
+		for _, c := range insertCols {
+			if _, ok := indexColSet[c.ID]; !ok {
+				updateCols = append(updateCols, c)
+			}
+		}
+		ru, err := makeRowUpdater(en.tableDesc, updateCols)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
+
+		tw = &tableUpserter{ri: ri, ru: ru, autoCommit: autoCommit}
+	}
+
+	in := &insertNode{
+		n:                     n,
+		editNodeBase:          en,
+		defaultExprs:          defaultExprs,
+		checkExprs:            typedCheckExprs,
+		qvals:                 qvals,
+		insertRows:            insertRows,
+		insertCols:            ri.insertCols,
+		insertColIDtoRowIndex: ri.insertColIDtoRowIndex,
+		desiredTypes:          desiredTypesFromSelect,
+		tw:                    tw,
+	}
+	return in, nil
 }
 
 func (n *insertNode) Start() *roachpb.Error {
@@ -218,13 +265,9 @@ func (n *insertNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	ri, err := makeRowInserter(n.tableDesc, n.colIDtoRowIndex, n.cols)
-	if err != nil {
-		return roachpb.NewError(err)
+	if pErr := n.run.startEditNode(&n.editNodeBase, rows, n.tw); pErr != nil {
+		return pErr
 	}
-	n.run.ri = ri
-
-	n.run.startEditNode(&n.editNodeBase, rows)
 
 	// Prepare structures for building values to pass to rh.
 	if n.rh.exprs != nil {
@@ -243,8 +286,8 @@ func (n *insertNode) Start() *roachpb.Error {
 			colIDToRetIndex[col.ID] = i
 		}
 
-		n.run.rowIdxToRetIdx = make([]int, len(n.cols))
-		for i, col := range n.cols {
+		n.run.rowIdxToRetIdx = make([]int, len(n.insertCols))
+		for i, col := range n.insertCols {
 			n.run.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
 		}
 	}
@@ -259,7 +302,8 @@ func (n *insertNode) Next() bool {
 
 	if !n.run.rows.Next() {
 		// We're done. Finish the batch.
-		n.run.finalize(&n.editNodeBase, true)
+		n.run.pErr = n.tw.finalize()
+		n.run.done = true
 		return false
 	}
 
@@ -268,7 +312,7 @@ func (n *insertNode) Next() bool {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
 	// default expressions.
-	for i := len(rowVals); i < len(n.cols); i++ {
+	for i := len(rowVals); i < len(n.insertCols); i++ {
 		if n.defaultExprs == nil {
 			rowVals = append(rowVals, parser.DNull)
 			continue
@@ -284,7 +328,7 @@ func (n *insertNode) Next() bool {
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range n.tableDesc.Columns {
 		if !col.Nullable {
-			if i, ok := n.colIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
+			if i, ok := n.insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
 				n.run.pErr = roachpb.NewUErrorf("null value in column %q violates not-null constraint", col.Name)
 				return false
 			}
@@ -293,7 +337,7 @@ func (n *insertNode) Next() bool {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
-		if err := checkValueWidth(n.cols[i], rowVals[i]); err != nil {
+		if err := checkValueWidth(n.insertCols[i], rowVals[i]); err != nil {
 			n.run.pErr = roachpb.NewError(err)
 			return false
 		}
@@ -303,7 +347,7 @@ func (n *insertNode) Next() bool {
 		// Populate qvals.
 		for ref, qval := range n.qvals {
 			// The colIdx is 0-based, we need to change it to 1-based.
-			ri, has := n.colIDtoRowIndex[ColumnID(ref.colIdx+1)]
+			ri, has := n.insertColIDtoRowIndex[ColumnID(ref.colIdx+1)]
 			if !has {
 				n.run.pErr = roachpb.NewUErrorf("failed to to find column %d in row", ColumnID(ref.colIdx+1))
 				return false
@@ -325,7 +369,7 @@ func (n *insertNode) Next() bool {
 		}
 	}
 
-	n.run.pErr = n.run.ri.insertRow(n.run.b, rowVals)
+	_, n.run.pErr = n.tw.row(rowVals)
 	if n.run.pErr != nil {
 		return false
 	}
@@ -521,7 +565,7 @@ func (n *insertNode) ExplainPlan(v bool) (name, description string, children []p
 	var buf bytes.Buffer
 	if v {
 		fmt.Fprintf(&buf, "into %s (", n.tableDesc.Name)
-		for i, col := range n.cols {
+		for i, col := range n.insertCols {
 			if i > 0 {
 				fmt.Fprintf(&buf, ", ")
 			}

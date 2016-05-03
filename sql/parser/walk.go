@@ -519,6 +519,8 @@ func (stmt *Insert) WalkStmt(v Visitor) Statement {
 			ret.Returning[i].Expr = e
 		}
 	}
+	// TODO(dan): Walk OnConflict once the ON CONFLICT DO UPDATE form of upsert is
+	// implemented.
 	return ret
 }
 
