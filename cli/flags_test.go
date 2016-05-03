@@ -18,7 +18,6 @@ package cli
 
 import (
 	"flag"
-	"go/build"
 	"strings"
 	"testing"
 
@@ -41,33 +40,17 @@ func TestStdFlagToPflag(t *testing.T) {
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if build.Default.GOPATH == "" {
-		t.Skip("GOPATH isn't set")
-	}
-
-	imports, err := buildutil.TransitiveImports("github.com/cockroachdb/cockroach", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, forbidden := range []string{
-		"testing",  // defines flags
-		"go/build", // probably not something we want in the main binary
-		"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
-	} {
-		if _, ok := imports[forbidden]; ok {
-			t.Errorf("The cockroach binary includes %s, which is forbidden", forbidden)
-		}
-	}
-	for _, forbiddenPrefix := range []string{
-		"github.com/cockroachdb/cockroach/testutils", // meant for testing code only
-	} {
-		for k := range imports {
-			if strings.HasPrefix(k, forbiddenPrefix) {
-				t.Errorf("The cockroach binary includes %s, which is forbidden", k)
-			}
-		}
-	}
+	// Verify that the cockroach binary doesn't depend on certain packages.
+	buildutil.VerifyNoImports(t,
+		"github.com/cockroachdb/cockroach", true,
+		[]string{
+			"testing",  // defines flags
+			"go/build", // probably not something we want in the main binary
+			"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
+		},
+		[]string{
+			"github.com/cockroachdb/cockroach/testutils", // meant for testing code only
+		})
 }
 
 func TestCacheFlagValue(t *testing.T) {

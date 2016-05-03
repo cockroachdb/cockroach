@@ -16,7 +16,11 @@
 
 package buildutil
 
-import "go/build"
+import (
+	"go/build"
+	"strings"
+	"testing"
+)
 
 // TransitiveImports returns a set containing all of importpath's
 // transitive dependencies.
@@ -49,4 +53,32 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 	}
 
 	return imports, addImports(importpath)
+}
+
+// VerifyNoImports verifies that a package doesn't depend (directly or
+// indirectly) on forbidden packages. The forbidden packages are specified as
+// either exact matches or prefix matches.
+func VerifyNoImports(
+	t testing.TB,
+	pkgPath string,
+	cgo bool,
+	forbiddenPkgs, forbiddenPrefixes []string,
+) {
+	imports, err := TransitiveImports(pkgPath, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, forbidden := range forbiddenPkgs {
+		if _, ok := imports[forbidden]; ok {
+			t.Errorf("Package %s includes %s, which is forbidden", pkgPath, forbidden)
+		}
+	}
+	for _, forbiddenPrefix := range forbiddenPrefixes {
+		for k := range imports {
+			if strings.HasPrefix(k, forbiddenPrefix) {
+				t.Errorf("Package %s includes %s, which is forbidden", pkgPath, k)
+			}
+		}
+	}
 }
