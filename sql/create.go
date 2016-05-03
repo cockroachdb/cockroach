@@ -23,6 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
 
+type createDatabaseNode struct {
+	p *planner
+	n *parser.CreateDatabase
+}
+
 // CreateDatabase creates a database.
 // Privileges: security.RootUser user.
 //   Notes: postgres requires superuser or "CREATEDB".
@@ -36,28 +41,51 @@ func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, *roachpb.E
 		return nil, roachpb.NewUErrorf("only %s is allowed to create databases", security.RootUser)
 	}
 
-	desc := makeDatabaseDesc(n)
+	return &createDatabaseNode{p: p, n: n}, nil
+}
 
-	created, err := p.createDescriptor(databaseKey{string(n.Name)}, &desc, n.IfNotExists)
+func (n *createDatabaseNode) Start() *roachpb.Error {
+	desc := makeDatabaseDesc(n.n)
+
+	created, err := n.p.createDescriptor(databaseKey{string(n.n.Name)}, &desc, n.n.IfNotExists)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if created {
 		// Log Create Database event.
-		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
+		if pErr := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(p.evalCtx.NodeID),
+			int32(n.p.evalCtx.NodeID),
 			struct {
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.Name.String(), n.String(), p.session.User},
+			}{n.n.Name.String(), n.n.String(), n.p.session.User},
 		); pErr != nil {
-			return nil, pErr
+			return pErr
 		}
 	}
-	return &emptyNode{}, nil
+	return nil
+}
+
+func (n *createDatabaseNode) Next() bool                           { return false }
+func (n *createDatabaseNode) Columns() []ResultColumn              { return make([]ResultColumn, 0) }
+func (n *createDatabaseNode) ExplainTypes(fn func(string, string)) {}
+func (n *createDatabaseNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *createDatabaseNode) Values() parser.DTuple                { return parser.DTuple{} }
+func (n *createDatabaseNode) DebugValues() debugValues             { return debugValues{} }
+func (n *createDatabaseNode) PErr() *roachpb.Error                 { return nil }
+func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool)         {}
+func (n *createDatabaseNode) MarkDebug(mode explainMode)           {}
+func (n *createDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create database", "", nil
+}
+
+type createIndexNode struct {
+	p         *planner
+	n         *parser.CreateIndex
+	tableDesc *TableDescriptor
 }
 
 // CreateIndex creates an index.
@@ -73,51 +101,73 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, *roachpb.Error) 
 		return nil, roachpb.NewError(tableDoesNotExistError(n.Table.String()))
 	}
 
-	status, i, err := tableDesc.FindIndexByName(string(n.Name))
+	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	return &createIndexNode{p: p, tableDesc: tableDesc, n: n}, nil
+}
+
+func (n *createIndexNode) Start() *roachpb.Error {
+	status, i, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if status == DescriptorIncomplete {
-			switch tableDesc.Mutations[i].Direction {
+			switch n.tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_DROP:
-				return nil, roachpb.NewUErrorf("index %q being dropped, try again later", string(n.Name))
+				return roachpb.NewUErrorf("index %q being dropped, try again later", string(n.n.Name))
 
 			case DescriptorMutation_ADD:
 				// Noop, will fail in AllocateIDs below.
 			}
 		}
-		if n.IfNotExists {
-			// Noop.
-			return &emptyNode{}, nil
+		if n.n.IfNotExists {
+			return nil
 		}
 	}
 
-	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
 	indexDesc := IndexDescriptor{
-		Name:             string(n.Name),
-		Unique:           n.Unique,
-		StoreColumnNames: n.Storing,
+		Name:             string(n.n.Name),
+		Unique:           n.n.Unique,
+		StoreColumnNames: n.n.Storing,
 	}
-	if err := indexDesc.fillColumns(n.Columns); err != nil {
-		return nil, roachpb.NewError(err)
+	if err := indexDesc.fillColumns(n.n.Columns); err != nil {
+		return roachpb.NewError(err)
 	}
 
-	tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
-	mutationID, err := tableDesc.finalizeMutation()
+	n.tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
+	mutationID, err := n.tableDesc.finalizeMutation()
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
-	if err := tableDesc.AllocateIDs(); err != nil {
-		return nil, roachpb.NewError(err)
+	if err := n.tableDesc.AllocateIDs(); err != nil {
+		return roachpb.NewError(err)
 	}
 
-	if pErr := p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc)); pErr != nil {
-		return nil, pErr
+	if pErr := n.p.txn.Put(MakeDescMetadataKey(n.tableDesc.GetID()), wrapDescriptor(n.tableDesc)); pErr != nil {
+		return pErr
 	}
-	p.notifySchemaChange(tableDesc.ID, mutationID)
+	n.p.notifySchemaChange(n.tableDesc.ID, mutationID)
 
-	return &emptyNode{}, nil
+	return nil
+}
+
+func (n *createIndexNode) Next() bool                           { return false }
+func (n *createIndexNode) Columns() []ResultColumn              { return make([]ResultColumn, 0) }
+func (n *createIndexNode) ExplainTypes(fn func(string, string)) {}
+func (n *createIndexNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *createIndexNode) Values() parser.DTuple                { return parser.DTuple{} }
+func (n *createIndexNode) DebugValues() debugValues             { return debugValues{} }
+func (n *createIndexNode) PErr() *roachpb.Error                 { return nil }
+func (n *createIndexNode) SetLimitHint(_ int64, _ bool)         {}
+func (n *createIndexNode) MarkDebug(mode explainMode)           {}
+func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create index", "", nil
+}
+
+type createTableNode struct {
+	p      *planner
+	n      *parser.CreateTable
+	dbDesc *DatabaseDescriptor
 }
 
 // CreateTable creates a table.
@@ -140,12 +190,16 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 		return nil, roachpb.NewError(err)
 	}
 
-	desc, err := makeTableDesc(n, dbDesc.ID)
+	return &createTableNode{p: p, n: n, dbDesc: dbDesc}, nil
+}
+
+func (n *createTableNode) Start() *roachpb.Error {
+	desc, err := makeTableDesc(n.n, n.dbDesc.ID)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
 	// Inherit permissions from the database descriptor.
-	desc.Privileges = dbDesc.GetPrivileges()
+	desc.Privileges = n.dbDesc.GetPrivileges()
 
 	if len(desc.PrimaryIndex.ColumnNames) == 0 {
 		// Ensure a Primary Key exists.
@@ -166,34 +220,47 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, *roachpb.Error) 
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		}
 		if err := desc.AddIndex(idx, true); err != nil {
-			return nil, roachpb.NewError(err)
+			return roachpb.NewError(err)
 		}
 	}
 
 	if err := desc.AllocateIDs(); err != nil {
-		return nil, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
 
-	created, pErr := p.createDescriptor(tableKey{dbDesc.ID, n.Table.Table()}, &desc, n.IfNotExists)
+	created, pErr := n.p.createDescriptor(tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
 	if pErr != nil {
-		return nil, pErr
+		return pErr
 	}
 
 	if created {
 		// Log Create Table event.
-		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
+		if pErr := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogCreateTable,
 			int32(desc.ID),
-			int32(p.evalCtx.NodeID),
+			int32(n.p.evalCtx.NodeID),
 			struct {
 				TableName string
 				Statement string
 				User      string
-			}{n.Table.String(), n.String(), p.session.User},
+			}{n.n.Table.String(), n.n.String(), n.p.session.User},
 		); pErr != nil {
-			return nil, pErr
+			return pErr
 		}
 	}
 
-	return &emptyNode{}, nil
+	return nil
+}
+
+func (n *createTableNode) Next() bool                           { return false }
+func (n *createTableNode) Columns() []ResultColumn              { return make([]ResultColumn, 0) }
+func (n *createTableNode) ExplainTypes(fn func(string, string)) {}
+func (n *createTableNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *createTableNode) Values() parser.DTuple                { return parser.DTuple{} }
+func (n *createTableNode) DebugValues() debugValues             { return debugValues{} }
+func (n *createTableNode) PErr() *roachpb.Error                 { return nil }
+func (n *createTableNode) SetLimitHint(_ int64, _ bool)         {}
+func (n *createTableNode) MarkDebug(mode explainMode)           {}
+func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create table", "", nil
 }

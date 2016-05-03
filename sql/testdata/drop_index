@@ -80,6 +80,12 @@ CREATE INDEX foo ON users (name)
 statement ok
 CREATE INDEX bar ON users (title)
 
+statement ok
+CREATE INDEX baz ON users (name, title)
+
+statement ok
+DROP INDEX IF EXISTS users@invalid, users@baz
+
 query TTBITTB colnames
 SHOW INDEXES FROM users
 ----

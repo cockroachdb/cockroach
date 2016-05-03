@@ -25,6 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+type dropDatabaseNode struct {
+	p      *planner
+	n      *parser.DropDatabase
+	dbDesc *DatabaseDescriptor
+	td     []*TableDescriptor
+}
+
 // DropDatabase drops a database.
 // Privileges: DROP on database.
 //   Notes: postgres allows only the database owner to DROP a database.
@@ -60,21 +67,33 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil, pErr
 	}
 
-	tbNameStrings := make([]string, len(tbNames))
+	td := make([]*TableDescriptor, len(tbNames))
 	for i, tbName := range tbNames {
-		tbDesc, err := p.dropTableImpl(tbName)
-		if err != nil {
-			return nil, err
+		tbDesc, pErr := p.dropTablePrepare(tbName)
+		if pErr != nil {
+			return nil, pErr
 		}
 		if tbDesc == nil {
 			// Database claims to have this table, but it does not exist.
 			return nil, roachpb.NewErrorf("table %q was described by database %q, but does not exist",
 				tbName.String())
 		}
+		td[i] = tbDesc
+	}
+
+	return &dropDatabaseNode{n: n, p: p, dbDesc: dbDesc, td: td}, nil
+}
+
+func (n *dropDatabaseNode) Start() *roachpb.Error {
+	tbNameStrings := make([]string, len(n.td))
+	for i, tbDesc := range n.td {
+		if err := n.p.dropTableImpl(tbDesc); err != nil {
+			return err
+		}
 		tbNameStrings[i] = tbDesc.Name
 	}
 
-	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(dbDesc)
+	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 
 	b := &client.Batch{}
 	b.Del(descKey)
@@ -82,7 +101,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 	// Delete the zone config entry for this database.
 	b.Del(zoneKey)
 
-	p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	n.p.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
 			if err := expectDeleted(systemConfig, key); err != nil {
 				return err
@@ -91,25 +110,43 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, *roachpb.Error
 		return nil
 	})
 
-	if pErr := p.txn.Run(b); pErr != nil {
-		return nil, pErr
+	if pErr := n.p.txn.Run(b); pErr != nil {
+		return pErr
 	}
 
 	// Log Drop Database event.
-	if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
+	if pErr := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 		EventLogDropDatabase,
-		int32(dbDesc.ID),
-		int32(p.evalCtx.NodeID),
+		int32(n.dbDesc.ID),
+		int32(n.p.evalCtx.NodeID),
 		struct {
 			DatabaseName  string
 			Statement     string
 			User          string
 			DroppedTables []string
-		}{n.Name.String(), n.String(), p.session.User, tbNameStrings},
+		}{n.n.Name.String(), n.n.String(), n.p.session.User, tbNameStrings},
 	); pErr != nil {
-		return nil, pErr
+		return pErr
 	}
-	return &emptyNode{}, nil
+	return nil
+}
+
+func (n *dropDatabaseNode) Next() bool                           { return false }
+func (n *dropDatabaseNode) Columns() []ResultColumn              { return make([]ResultColumn, 0) }
+func (n *dropDatabaseNode) ExplainTypes(fn func(string, string)) {}
+func (n *dropDatabaseNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropDatabaseNode) Values() parser.DTuple                { return parser.DTuple{} }
+func (n *dropDatabaseNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropDatabaseNode) PErr() *roachpb.Error                 { return nil }
+func (n *dropDatabaseNode) SetLimitHint(_ int64, _ bool)         {}
+func (n *dropDatabaseNode) MarkDebug(mode explainMode)           {}
+func (n *dropDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "drop database", "", nil
+}
+
+type dropIndexNode struct {
+	p *planner
+	n *parser.DropIndex
 }
 
 // DropIndex drops an index.
@@ -133,15 +170,32 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
 			return nil, roachpb.NewError(err)
 		}
+	}
+	return &dropIndexNode{n: n, p: p}, nil
+}
+
+func (n *dropIndexNode) Start() *roachpb.Error {
+	for _, index := range n.n.IndexList {
+		// Need to retrieve the descriptor again for each index name in
+		// the list: when two or more index names refer to the same table,
+		// the mutation list and new version number created by the first
+		// drop need to be visible to the second drop.
+		tableDesc, pErr := n.p.getTableDesc(index.Table)
+		if pErr != nil || tableDesc == nil {
+			// makePlan() and Start() ultimately run within the same
+			// transaction. If we got a descriptor during makePlan(), we
+			// must have it here too.
+			panic("this should not happen.")
+		}
 		idxName := string(index.Index)
 		status, i, err := tableDesc.FindIndexByName(idxName)
 		if err != nil {
-			if n.IfExists {
+			if n.n.IfExists {
 				// Noop.
-				return &emptyNode{}, nil
+				continue
 			}
 			// Index does not exist, but we want it to: error out.
-			return nil, roachpb.NewError(err)
+			return roachpb.NewError(err)
 		}
 		// Queue the mutation.
 		switch status {
@@ -152,25 +206,44 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 		case DescriptorIncomplete:
 			switch tableDesc.Mutations[i].Direction {
 			case DescriptorMutation_ADD:
-				return nil, roachpb.NewUErrorf("index %q in the middle of being added, try again later", idxName)
+				return roachpb.NewUErrorf("index %q in the middle of being added, try again later", idxName)
 
 			case DescriptorMutation_DROP:
-				return &emptyNode{}, nil
+				continue
 			}
 		}
 		mutationID, err := tableDesc.finalizeMutation()
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return roachpb.NewError(err)
 		}
-		if err := tableDesc.Validate(); pErr != nil {
-			return nil, roachpb.NewError(err)
+		if err := tableDesc.Validate(); err != nil {
+			return roachpb.NewError(err)
 		}
-		if pErr := p.writeTableDesc(tableDesc); pErr != nil {
-			return nil, pErr
+		if pErr := n.p.writeTableDesc(tableDesc); pErr != nil {
+			return pErr
 		}
-		p.notifySchemaChange(tableDesc.ID, mutationID)
+		n.p.notifySchemaChange(tableDesc.ID, mutationID)
 	}
-	return &emptyNode{}, nil
+	return nil
+}
+
+func (n *dropIndexNode) Next() bool                           { return false }
+func (n *dropIndexNode) Columns() []ResultColumn              { return make([]ResultColumn, 0) }
+func (n *dropIndexNode) ExplainTypes(fn func(string, string)) {}
+func (n *dropIndexNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropIndexNode) Values() parser.DTuple                { return parser.DTuple{} }
+func (n *dropIndexNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropIndexNode) PErr() *roachpb.Error                 { return nil }
+func (n *dropIndexNode) SetLimitHint(_ int64, _ bool)         {}
+func (n *dropIndexNode) MarkDebug(mode explainMode)           {}
+func (n *dropIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "drop index", "", nil
+}
+
+type dropTableNode struct {
+	p  *planner
+	n  *parser.DropTable
+	td []*TableDescriptor
 }
 
 // DropTable drops a table.
@@ -178,8 +251,10 @@ func (p *planner) DropIndex(n *parser.DropIndex) (planNode, *roachpb.Error) {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
-	for i := range n.Names {
-		droppedDesc, err := p.dropTableImpl(n.Names[i])
+	td := make([]*TableDescriptor, len(n.Names))
+	count := 0
+	for i, name := range n.Names {
+		droppedDesc, err := p.dropTablePrepare(name)
 		if err != nil {
 			return nil, err
 		}
@@ -188,37 +263,68 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, *roachpb.Error) {
 				continue
 			}
 			// Table does not exist, but we want it to: error out.
-			return nil, roachpb.NewError(tableDoesNotExistError(n.Names[i].String()))
+			return nil, roachpb.NewError(tableDoesNotExistError(name.String()))
+		}
+		td[i] = droppedDesc
+		count++
+	}
+	if count == 0 {
+		return &emptyNode{}, nil
+	}
+	return &dropTableNode{p: p, n: n, td: td}, nil
+}
+
+func (n *dropTableNode) Start() *roachpb.Error {
+	for _, droppedDesc := range n.td {
+		if droppedDesc == nil {
+			continue
+		}
+		if err := n.p.dropTableImpl(droppedDesc); err != nil {
+			return err
 		}
 		// Log a Drop Table event for this table.
-		if pErr := MakeEventLogger(p.leaseMgr).InsertEventRecord(p.txn,
+		if pErr := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
 			EventLogDropTable,
 			int32(droppedDesc.ID),
-			int32(p.evalCtx.NodeID),
+			int32(n.p.evalCtx.NodeID),
 			struct {
 				TableName string
 				Statement string
 				User      string
-			}{droppedDesc.Name, n.String(), p.session.User},
+			}{droppedDesc.Name, n.n.String(), n.p.session.User},
 		); pErr != nil {
-			return nil, pErr
+			return pErr
 		}
 	}
-	return &emptyNode{}, nil
+	return nil
 }
 
-// dropTableImpl is used to drop a single table by name, which can result from
-// either a DROP TABLE or DROP DATABASE statement. This method returns the
-// dropped table descriptor, to be used for the purpose of logging the event.
-// The table is not actually truncated or deleted synchronously. Instead, it is
-// marked as deleted (meaning up_version is set and deleted is set) and the
-// actual deletion happens async in a schema changer. Note that, courtesy of
-// up_version, the actual truncation and dropping will only happen once every
-// node ACKs the version of the descriptor with the deleted bit set, meaning the
-// lease manager will not hand out new leases for it and existing leases are
-// released).
+func (n *dropTableNode) Next() bool                           { return false }
+func (n *dropTableNode) Columns() []ResultColumn              { return make([]ResultColumn, 0) }
+func (n *dropTableNode) ExplainTypes(fn func(string, string)) {}
+func (n *dropTableNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (n *dropTableNode) Values() parser.DTuple                { return parser.DTuple{} }
+func (n *dropTableNode) DebugValues() debugValues             { return debugValues{} }
+func (n *dropTableNode) PErr() *roachpb.Error                 { return nil }
+func (n *dropTableNode) SetLimitHint(_ int64, _ bool)         {}
+func (n *dropTableNode) MarkDebug(mode explainMode)           {}
+func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "drop table", "", nil
+}
+
+// dropTablePrepare/dropTableImpl is used to drop a single table by
+// name, which can result from either a DROP TABLE or DROP DATABASE
+// statement. This method returns the dropped table descriptor, to be
+// used for the purpose of logging the event.  The table is not
+// actually truncated or deleted synchronously. Instead, it is marked
+// as deleted (meaning up_version is set and deleted is set) and the
+// actual deletion happens async in a schema changer. Note that,
+// courtesy of up_version, the actual truncation and dropping will
+// only happen once every node ACKs the version of the descriptor with
+// the deleted bit set, meaning the lease manager will not hand out
+// new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTableImpl(name *parser.QualifiedName,
+func (p *planner) dropTablePrepare(name *parser.QualifiedName,
 ) (*TableDescriptor, *roachpb.Error) {
 	tableDesc, pErr := p.getTableDesc(name)
 	if pErr != nil {
@@ -231,14 +337,17 @@ func (p *planner) dropTableImpl(name *parser.QualifiedName,
 	if pErr := p.checkPrivilege(tableDesc, privilege.DROP); pErr != nil {
 		return nil, roachpb.NewError(pErr)
 	}
+	return tableDesc, nil
+}
 
+func (p *planner) dropTableImpl(tableDesc *TableDescriptor) *roachpb.Error {
 	err := tableDesc.setUpVersion()
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
 	tableDesc.Deleted = true
-	if pErr = p.writeTableDesc(tableDesc); pErr != nil {
-		return nil, pErr
+	if pErr := p.writeTableDesc(tableDesc); pErr != nil {
+		return pErr
 	}
 	p.notifySchemaChange(tableDesc.ID, invalidMutationID)
 
@@ -259,7 +368,7 @@ func (p *planner) dropTableImpl(name *parser.QualifiedName,
 		return verifyMetadataCallback(systemConfig, tableDesc.ID)
 	})
 
-	return tableDesc, nil
+	return nil
 }
 
 // truncateAndDropTable batches all the commands required for truncating and deleting the
