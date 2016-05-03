@@ -41,8 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -703,6 +703,17 @@ func TestReplicaNotLeaderError(t *testing.T) {
 // correctly after a lease request.
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	var numProp int64
+	sCtx := TestStoreContext()
+	sCtx.TestingKnobs.TestingCommandFilter = func(
+		args storagebase.FilterArgs,
+	) *roachpb.Error {
+		if args.Req.Method() == roachpb.LeaderLease {
+			atomic.AddInt64(&numProp, 1)
+		}
+		return nil
+	}
 
 	tc := testContext{}
 	tc.Start(t)
@@ -1554,7 +1565,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
 				blockingStart <- struct{}{}
 				<-blockingDone
@@ -1671,7 +1682,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
 				putBytes, err := put.Value.GetBytes()
 				if err != nil {
@@ -2792,7 +2803,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if filterArgs.Req.Method() == roachpb.GC {
 				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -2896,7 +2907,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				return roachpb.NewErrorWithTxn(util.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -2983,7 +2994,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	var count int64
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
@@ -3058,7 +3069,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	key := roachpb.Key("zresolveme")
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(key) {
 				atomic.StoreInt32(&seen, 1)
@@ -4112,7 +4123,7 @@ func TestReplicaCorruption(t *testing.T) {
 
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
 				return roachpb.NewError(newReplicaCorruptionError())
 			}
@@ -4961,7 +4972,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			tsc := TestStoreContext()
 			if !cancelEarly {
 				tsc.TestingKnobs.TestingCommandFilter =
-					func(filterArgs storageutils.FilterArgs) *roachpb.Error {
+					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 						if !filterArgs.Req.Header().Key.Equal(key) {
 							return nil
 						}

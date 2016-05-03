@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/util"
@@ -51,17 +52,17 @@ type CommandFilters struct {
 	filters []struct {
 		id         int
 		idempotent bool
-		filter     storageutils.ReplicaCommandFilter
+		filter     storagebase.ReplicaCommandFilter
 	}
 	nextID int
 
 	numFiltersTrackingReplays int
-	replayProtection          storageutils.ReplicaCommandFilter
+	replayProtection          storagebase.ReplicaCommandFilter
 }
 
 // runFilters executes the registered filters, stopping at the first one
 // that returns an error.
-func (c *CommandFilters) runFilters(args storageutils.FilterArgs) *roachpb.Error {
+func (c *CommandFilters) runFilters(args storagebase.FilterArgs) *roachpb.Error {
 
 	c.RLock()
 	defer c.RUnlock()
@@ -73,7 +74,7 @@ func (c *CommandFilters) runFilters(args storageutils.FilterArgs) *roachpb.Error
 	}
 }
 
-func (c *CommandFilters) runFiltersInternal(args storageutils.FilterArgs) *roachpb.Error {
+func (c *CommandFilters) runFiltersInternal(args storagebase.FilterArgs) *roachpb.Error {
 	for _, f := range c.filters {
 		if pErr := f.filter(args); pErr != nil {
 			return pErr
@@ -90,7 +91,7 @@ func (c *CommandFilters) runFiltersInternal(args storageutils.FilterArgs) *roach
 // Returns a closure that the client must run for doing cleanup when the
 // filter should be deregistered.
 func (c *CommandFilters) AppendFilter(
-	filter storageutils.ReplicaCommandFilter, idempotent bool) func() {
+	filter storagebase.ReplicaCommandFilter, idempotent bool) func() {
 
 	c.Lock()
 	defer c.Unlock()
@@ -99,7 +100,7 @@ func (c *CommandFilters) AppendFilter(
 	c.filters = append(c.filters, struct {
 		id         int
 		idempotent bool
-		filter     storageutils.ReplicaCommandFilter
+		filter     storagebase.ReplicaCommandFilter
 	}{id, idempotent, filter})
 
 	if !idempotent {
@@ -137,7 +138,7 @@ func (c *CommandFilters) removeFilter(id int) {
 
 // checkEndTransactionTrigger verifies that an EndTransactionRequest
 // that includes intents for the SystemDB keys sets the proper trigger.
-func checkEndTransactionTrigger(args storageutils.FilterArgs) *roachpb.Error {
+func checkEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 	req, ok := args.Req.(*roachpb.EndTransactionRequest)
 	if !ok {
 		return nil
