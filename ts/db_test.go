@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -71,7 +72,7 @@ func newTestModel(t *testing.T) testModel {
 // Start constructs and starts the local test server and creates a
 // time series DB.
 func (tm *testModel) Start() {
-	tm.LocalTestCluster.Start(tm.t)
+	tm.LocalTestCluster.Start(tm.t, testutils.NewNodeTestBaseContext())
 	tm.DB = NewDB(tm.LocalTestCluster.DB)
 }
 

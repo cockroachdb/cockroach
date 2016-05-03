@@ -16,7 +16,14 @@
 
 package buildutil
 
-import "go/build"
+import (
+	"go/build"
+	"testing"
+)
+
+// Force dependency on "testing" to ensure only test code depends
+// on this package.
+var _ testing.T
 
 // TransitiveImports returns a set containing all of importpath's
 // transitive dependencies.
