@@ -880,7 +880,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // already in the queue. Returns a cleanup function to be called when the
 // commands are done and can be removed from the queue.
 func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchResponse, *roachpb.Error) {
-	var cmdEntry interface{}
+	var cmd *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		spans := make([]roachpb.Span, 0, len(ba.Requests))
@@ -891,8 +891,8 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 		}
 		var wg sync.WaitGroup
 		r.mu.Lock()
-		r.mu.cmdQ.GetWait(readOnly, &wg, spans...)
-		cmdEntry = r.mu.cmdQ.Add(readOnly, spans...)
+		r.mu.cmdQ.getWait(readOnly, &wg, spans...)
+		cmd = r.mu.cmdQ.add(readOnly, spans...)
 		r.mu.Unlock()
 		wg.Wait()
 	}
@@ -915,13 +915,13 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 	}
 
 	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) {
-		r.endCmds(cmdEntry, ba, br, pErr)
+		r.endCmds(cmd, ba, br, pErr)
 	}
 }
 
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
-func (r *Replica) endCmds(cmdEntry interface{}, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
+func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Only update the timestamp cache if the command succeeded and is
@@ -952,7 +952,7 @@ func (r *Replica) endCmds(cmdEntry interface{}, ba *roachpb.BatchRequest, br *ro
 			}
 		}
 	}
-	r.mu.cmdQ.Remove(cmdEntry)
+	r.mu.cmdQ.remove(cmd)
 }
 
 // applyTimestampCache moves the batch timestamp forward depending on

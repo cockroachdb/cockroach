@@ -27,14 +27,14 @@ import (
 )
 
 func getWait(cq *CommandQueue, from, to roachpb.Key, readOnly bool, wg *sync.WaitGroup) {
-	cq.GetWait(readOnly, wg, roachpb.Span{Key: from, EndKey: to})
+	cq.getWait(readOnly, wg, roachpb.Span{Key: from, EndKey: to})
 }
 
-func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) interface{} {
-	return cq.Add(readOnly, roachpb.Span{Key: from, EndKey: to})
+func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) *cmd {
+	return cq.add(readOnly, roachpb.Span{Key: from, EndKey: to})
 }
 
-func getWaitAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool, wg *sync.WaitGroup) interface{} {
+func getWaitAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool, wg *sync.WaitGroup) *cmd {
 	getWait(cq, from, to, readOnly, wg)
 	return add(cq, from, to, readOnly)
 }
@@ -81,7 +81,7 @@ func TestCommandQueue(t *testing.T) {
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
 	}
-	cq.Remove(wk)
+	cq.remove(wk)
 	if !testCmdDone(cmdDone, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
@@ -125,13 +125,13 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 	assert(true)
 
 	// The second read returns, but the first one remains.
-	cq.Remove(wk2)
+	cq.remove(wk2)
 
 	// Should still block. This being broken is why this test exists.
 	assert(true)
 
 	// First read returns.
-	cq.Remove(wk1)
+	cq.remove(wk1)
 
 	// Now it goes through.
 	assert(false)
@@ -152,7 +152,7 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
 	}
-	cq.Remove(wk)
+	cq.remove(wk)
 	if !testCmdDone(cmdDone, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
@@ -169,15 +169,15 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	wk3 := add(cq, roachpb.Key("0"), roachpb.Key("d"), false)
 	getWait(cq, roachpb.Key("a"), roachpb.Key("cc"), false, &wg)
 	cmdDone := waitForCmd(&wg)
-	cq.Remove(wk1)
+	cq.remove(wk1)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with two commands outstanding")
 	}
-	cq.Remove(wk2)
+	cq.remove(wk2)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with one command outstanding")
 	}
-	cq.Remove(wk3)
+	cq.remove(wk3)
 	if !testCmdDone(cmdDone, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
@@ -204,7 +204,7 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 		testCmdDone(cmdDone3, 1*time.Millisecond) {
 		t.Fatal("no commands should finish with command outstanding")
 	}
-	cq.Remove(wk0)
+	cq.remove(wk0)
 	if !testCmdDone(cmdDone1, 5*time.Millisecond) ||
 		!testCmdDone(cmdDone3, 5*time.Millisecond) {
 		t.Fatal("command 1 and 3 should finish")
@@ -212,7 +212,7 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	if testCmdDone(cmdDone2, 5*time.Millisecond) {
 		t.Fatal("command 2 should remain outstanding")
 	}
-	cq.Remove(wk1)
+	cq.remove(wk1)
 	if !testCmdDone(cmdDone2, 5*time.Millisecond) {
 		t.Fatal("command 2 should finish with no commands outstanding")
 	}
@@ -233,8 +233,8 @@ func TestCommandQueueRemove(t *testing.T) {
 	cmdDone2 := waitForCmd(&wg2)
 
 	// Remove the commands from the queue and verify both commands are signaled.
-	cq.Remove(wk1)
-	cq.Remove(wk2)
+	cq.remove(wk1)
+	cq.remove(wk2)
 
 	if !testCmdDone(cmdDone1, 100*time.Millisecond) ||
 		!testCmdDone(cmdDone2, 100*time.Millisecond) {
@@ -268,8 +268,8 @@ func TestCommandQueueSelfOverlap(t *testing.T) {
 	a := roachpb.Key("a")
 	k := add(cq, a, roachpb.Key("b"), false)
 	var wg sync.WaitGroup
-	cq.GetWait(false, &wg, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
-	cq.Remove(k)
+	cq.getWait(false, &wg, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
+	cq.remove(k)
 	wg.Wait()
 }
 
@@ -283,19 +283,19 @@ func TestCommandQueueCovering(t *testing.T) {
 
 	{
 		// Test adding a covering entry and then not expanding it.
-		wk := cq.Add(false, a, b)
+		wk := cq.add(false, a, b)
 		var wg sync.WaitGroup
-		cq.GetWait(false, &wg, c)
+		cq.getWait(false, &wg, c)
 		wg.Wait()
-		cq.Remove(wk)
+		cq.remove(wk)
 	}
 
 	{
 		// Test adding a covering entry and expanding it.
-		wk := cq.Add(false, a, b)
+		wk := cq.add(false, a, b)
 		var wg sync.WaitGroup
-		cq.GetWait(false, &wg, a)
-		cq.Remove(wk)
+		cq.getWait(false, &wg, a)
+		cq.remove(wk)
 		wg.Wait()
 	}
 }

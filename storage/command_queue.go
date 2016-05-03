@@ -105,7 +105,7 @@ func prepareSpans(spans ...roachpb.Span) {
 // confirmation that all gating commands have completed or failed, and then
 // call Add() to add the keys to the command queue. readOnly is true if the
 // requester is a read-only command; false for read-write.
-func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
+func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
 	prepareSpans(spans...)
 
 	for i := 0; i < len(spans); i++ {
@@ -351,8 +351,8 @@ func (o *overlapHeap) PopOverlap() *cmd {
 // of Remove().
 //
 // Add should be invoked after waiting on already-executing, overlapping
-// commands via the WaitGroup initialized through GetWait().
-func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) interface{} {
+// commands via the WaitGroup initialized through getWait().
+func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 	prepareSpans(spans...)
 
 	// Compute the min and max key that covers all of the spans.
@@ -413,12 +413,11 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) interface{} {
 // the Raft log and applied to the underlying state machine. Similarly,
 // Remove is invoked after a read-only command has been executed
 // against the underlying state machine.
-func (cq *CommandQueue) Remove(key interface{}) {
-	if key == nil {
+func (cq *CommandQueue) remove(cmd *cmd) {
+	if cmd == nil {
 		return
 	}
 
-	cmd := key.(*cmd)
 	if !cmd.expanded {
 		if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
 			log.Error(err)
