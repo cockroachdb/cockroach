@@ -19,15 +19,10 @@ package testutils
 import (
 	"fmt"
 	"path/filepath"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 )
-
-// Force dependency on "testing" to ensure only test code depends
-// on this package.
-var _ testing.T
 
 // NewNodeTestBaseContext creates a base context for testing. This uses
 // embedded certs and the default node user. The default node user has both
