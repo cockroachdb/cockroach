@@ -201,6 +201,8 @@ func TestTxnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cmdFilters := createTestServerContext()
+	// Disable one phase commits because they cannot be restarted.
+	ctx.TestingKnobs.StoreTestingKnobs.DisableOnePhaseCommits = true
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
