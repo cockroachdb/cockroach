@@ -78,7 +78,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, *roachp
 		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
 	}
 
-	plan, err := p.makePlan(n.Statement, autoCommit)
+	plan, err := p.makePlan(n.Statement, nil, autoCommit)
 	if err != nil {
 		return nil, err
 	}

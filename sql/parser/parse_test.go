@@ -682,7 +682,7 @@ SET a = 1,
 b = 2
   ^
 `},
-		{`SET TIME ZONE INTERVAL 'foobar'`, `cannot evaluate to an interval type at or near "EOF"
+		{`SET TIME ZONE INTERVAL 'foobar'`, `cannot evaluate to an interval type: time: invalid duration foobar at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
 `},
@@ -889,10 +889,10 @@ func TestParsePrecedence(t *testing.T) {
 	unary := func(op UnaryOperator, expr Expr) Expr {
 		return &UnaryExpr{Operator: op, Expr: expr}
 	}
-	binary := func(op BinaryOp, left, right Expr) Expr {
+	binary := func(op BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	cmp := func(op ComparisonOp, left, right Expr) Expr {
+	cmp := func(op ComparisonOperator, left, right Expr) Expr {
 		return &ComparisonExpr{Operator: op, Left: left, Right: right}
 	}
 	not := func(expr Expr) Expr {
@@ -905,9 +905,9 @@ func TestParsePrecedence(t *testing.T) {
 		return &OrExpr{Left: left, Right: right}
 	}
 
-	one := &ConstVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	two := &ConstVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	three := &ConstVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
 
 	testData := []struct {
 		sql      string

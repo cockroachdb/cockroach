@@ -63,7 +63,7 @@ type scanNode struct {
 
 	// filter that can be evaluated using only this table/index; it contains
 	// parser.IndexedVar leaves generated using filterVars.
-	filter     parser.Expr
+	filter     parser.TypedExpr
 	filterVars parser.IndexedVarHelper
 
 	scanInitialized bool
@@ -333,12 +333,12 @@ func (n *scanNode) computeOrdering(
 // scanNode implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &scanNode{}
 
-func (n *scanNode) IndexedVarTypeCheck(idx int, args parser.MapArgs) (parser.Datum, error) {
-	return n.resultColumns[idx].Typ.TypeCheck(args)
-}
-
 func (n *scanNode) IndexedVarEval(idx int, ctx parser.EvalContext) (parser.Datum, error) {
 	return n.row[idx].Eval(ctx)
+}
+
+func (n *scanNode) IndexedVarReturnType(idx int) parser.Datum {
+	return n.resultColumns[idx].Typ.ReturnType()
 }
 
 func (n *scanNode) IndexedVarString(idx int) string {

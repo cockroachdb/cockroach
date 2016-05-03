@@ -39,7 +39,7 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, autoCommit bool, priv privilege.Kind) (editNodeBase, *roachpb.Error) {
+func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desiredTypes []parser.Datum, autoCommit bool, priv privilege.Kind) (editNodeBase, *roachpb.Error) {
 	tableDesc, pErr := p.getAliasedTableLease(t)
 	if pErr != nil {
 		return editNodeBase{}, pErr
@@ -49,7 +49,7 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, auto
 		return editNodeBase{}, roachpb.NewError(err)
 	}
 
-	rh, err := p.makeReturningHelper(r, tableDesc.Name, tableDesc.Columns)
+	rh, err := p.makeReturningHelper(r, desiredTypes, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
 		return editNodeBase{}, roachpb.NewError(err)
 	}
@@ -107,7 +107,7 @@ func (r *editNodeRun) finalize(en *editNodeBase, convertError bool) {
 // to run statements that create row values.
 type rowCreatorNodeBase struct {
 	editNodeBase
-	defaultExprs    []parser.Expr
+	defaultExprs    []parser.TypedExpr
 	cols            []ColumnDescriptor
 	primaryKeyCols  map[ColumnID]struct{}
 	colIDtoRowIndex map[ColumnID]int
@@ -142,8 +142,9 @@ func (p *planner) makeRowCreatorNode(en editNodeBase, cols []ColumnDescriptor, c
 type updateNode struct {
 	// The following fields are populated during makePlan.
 	rowCreatorNodeBase
-	n        *parser.Update
-	colIDSet map[ColumnID]int
+	n            *parser.Update
+	colIDSet     map[ColumnID]int
+	desiredTypes []parser.Datum
 
 	run struct {
 		// The following fields are populated during Start().
@@ -158,10 +159,10 @@ type updateNode struct {
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
-func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
 	tracing.AnnotateTrace()
 
-	en, pErr := p.makeEditNode(n.Table, n.Returning, autoCommit, privilege.UPDATE)
+	en, pErr := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.UPDATE)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -230,18 +231,23 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
+	desiredTypesFromSelect := make([]parser.Datum, len(targets), len(targets)+len(exprs))
 	for _, expr := range n.Exprs {
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					e = fillDefault(e, i, rc.defaultExprs)
+					typ := getTypeForColumn(cols[i])
+					e := fillDefault(e, typ, i, rc.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
+					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 					i++
 				}
 			}
 		} else {
-			e := fillDefault(expr.Expr, i, rc.defaultExprs)
+			typ := getTypeForColumn(cols[i])
+			e := fillDefault(expr.Expr, typ, i, rc.defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
+			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
 			i++
 		}
 	}
@@ -255,7 +261,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		Exprs: targets,
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
-	})
+	}, desiredTypesFromSelect)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -270,11 +276,11 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		d, err := parser.PerformTypeChecking(target, p.evalCtx.Args)
+		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, getTypeForColumn(cols[i]))
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if err := checkColumnType(cols[i], d, p.evalCtx.Args); err != nil {
+		if err := checkColumnType(cols[i], typedTarget.ReturnType(), p.evalCtx.Args); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -287,6 +293,7 @@ func (p *planner) Update(n *parser.Update, autoCommit bool) (planNode, *roachpb.
 		n:                  n,
 		rowCreatorNodeBase: rc,
 		colIDSet:           colIDSet,
+		desiredTypes:       desiredTypesFromSelect,
 	}, nil
 }
 
@@ -316,7 +323,7 @@ func (u *updateNode) Start() *roachpb.Error {
 			case *parser.Tuple:
 				//panic("unreachable xz")
 				for _, e := range t.Exprs {
-					e = fillDefault(e, i, u.defaultExprs)
+					e = fillDefault(e, u.desiredTypes[i], i, u.defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					i++
 				}
@@ -327,7 +334,7 @@ func (u *updateNode) Start() *roachpb.Error {
 				}
 			}
 		} else {
-			e := fillDefault(expr.Expr, i, u.defaultExprs)
+			e := fillDefault(expr.Expr, u.desiredTypes[i], i, u.defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			i++
 		}
@@ -339,7 +346,7 @@ func (u *updateNode) Start() *roachpb.Error {
 		Exprs: targets,
 		From:  []parser.TableExpr{u.n.Table},
 		Where: u.n.Where,
-	})
+	}, u.desiredTypes)
 	if pErr != nil {
 		return pErr
 	}
@@ -419,7 +426,9 @@ func (u *updateNode) Next() bool {
 	return true
 }
 
-func fillDefault(expr parser.Expr, index int, defaultExprs []parser.Expr) parser.Expr {
+func fillDefault(
+	expr parser.Expr, desired parser.Datum, index int, defaultExprs []parser.TypedExpr,
+) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:
 		return defaultExprs[index]

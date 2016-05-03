@@ -241,7 +241,7 @@ func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
 	added []ColumnDescriptor,
 	dropped []ColumnDescriptor,
 	nonNullableColumn string,
-	defaultExprs []parser.Expr,
+	defaultExprs []parser.TypedExpr,
 	evalCtx parser.EvalContext,
 	sp span,
 ) (roachpb.Key, bool, *roachpb.Error) {

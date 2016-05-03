@@ -34,16 +34,18 @@ type valuesNode struct {
 	ordering columnOrdering
 	rows     []parser.DTuple
 
+	desiredTypes []parser.Datum // This can be removed when we only type check once.
+
 	nextRow       int           // The index of the next row.
 	invertSorting bool          // Inverts the sorting predicate.
 	tmpValues     parser.DTuple // Used to store temporary values.
 }
 
-// ValuesClause constructs a valuesNode from a VALUES expression.
-func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error) {
+func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, *roachpb.Error) {
 	v := &valuesNode{
-		p: p,
-		n: n,
+		p:            p,
+		n:            n,
+		desiredTypes: desiredTypes,
 	}
 	if len(n.Tuples) == 0 {
 		return v, nil
@@ -57,21 +59,30 @@ func (p *planner) ValuesClause(n *parser.ValuesClause) (planNode, *roachpb.Error
 			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
-		for i := range tuple.Exprs {
+		for i, expr := range tuple.Exprs {
 			// TODO(knz): We need to expand subqueries two times, once here
 			// and once in Start() below, until the logic for select is split
 			// between makePlan and Start(). This is because a first call is
 			// needed for typechecking, and a separate call is needed to
 			// select indexes.
-			expr, pErr := p.expandSubqueries(tuple.Exprs[i], 1)
+			expr, pErr := p.expandSubqueries(expr, 1)
 			if pErr != nil {
 				return nil, pErr
 			}
-			var err error
-			typ, err := parser.PerformTypeChecking(expr, p.evalCtx.Args)
+			var desired parser.Datum
+			if len(desiredTypes) > i {
+				desired = desiredTypes[i]
+			}
+			typedExpr, err := parser.TypeCheck(expr, p.evalCtx.Args, desired)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
+			typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+
+			typ := typedExpr.ReturnType()
 			if num == 0 {
 				v.columns = append(v.columns, ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ == parser.DNull {
@@ -104,18 +115,26 @@ func (n *valuesNode) Start() *roachpb.Error {
 		row := rowBuf[:numCols:numCols]
 		rowBuf = rowBuf[numCols:]
 
-		for i := range tuple.Exprs {
+		for i, expr := range tuple.Exprs {
 			// TODO(knz): see comment above about expandSubqueries in ValuesClause().
-			expr, pErr := n.p.expandSubqueries(tuple.Exprs[i], 1)
+			expr, pErr := n.p.expandSubqueries(expr, 1)
 			if pErr != nil {
 				return pErr
 			}
-			var err error
-			expr, err = n.p.parser.NormalizeExpr(n.p.evalCtx, expr)
+			var desired parser.Datum
+			if len(n.desiredTypes) > i {
+				desired = n.desiredTypes[i]
+			}
+			typedExpr, err := parser.TypeCheck(expr, n.p.evalCtx.Args, desired)
 			if err != nil {
 				return roachpb.NewError(err)
 			}
-			row[i], err = expr.Eval(n.p.evalCtx)
+			typedExpr, err = n.p.parser.NormalizeExpr(n.p.evalCtx, typedExpr)
+			if err != nil {
+				return roachpb.NewError(err)
+			}
+
+			row[i], err = typedExpr.Eval(n.p.evalCtx)
 			if err != nil {
 				return roachpb.NewError(err)
 			}

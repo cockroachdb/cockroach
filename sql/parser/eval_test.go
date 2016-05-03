@@ -64,6 +64,7 @@ func TestEval(t *testing.T) {
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
 		{`'a' || (1 + 2)::char`, `'a3'`},
+		{`'hello' || b'world'`, `'helloworld'`},
 		// Bit shift operators.
 		{`1 << 2`, `4`},
 		{`4 >> 2`, `1`},
@@ -90,8 +91,8 @@ func TestEval(t *testing.T) {
 		{`NOT true`, `false`},
 		{`NOT NULL`, `NULL`},
 		// Boolean expressions short-circuit the evaluation.
-		{`false AND (a = 1)`, `false`},
-		{`true OR (a = 1)`, `true`},
+		{`false AND (2 = 1)`, `false`},
+		{`true OR (3 = 1)`, `true`},
 		// Comparisons.
 		{`0 = 1`, `false`},
 		{`0 != 1`, `true`},
@@ -373,18 +374,18 @@ func TestEval(t *testing.T) {
 		{`'PT3H'::interval / 2`, `1h30m0s`},
 		{`'3 hours'::interval / 2`, `1h30m0s`},
 		// Conditional expressions.
-		{`IF(true, 1, 2/0)`, `1`},
-		{`IF(false, 1/0, 2)`, `2`},
-		{`IF(NULL, 1/0, 2)`, `2`},
+		{`IF(true, 1, 2/0)`, `1.0`},
+		{`IF(false, 1/0, 2)`, `2.0`},
+		{`IF(NULL, 1/0, 2)`, `2.0`},
 		{`NULLIF(1, 1)`, `NULL`},
 		{`NULLIF(1, 2)`, `1`},
 		{`NULLIF(2, 1)`, `2`},
-		{`IFNULL(1, 2/0)`, `1`},
+		{`IFNULL(1, 2/0)`, `1.0`},
 		{`IFNULL(NULL, 2)`, `2`},
 		{`IFNULL(1, NULL)`, `1`},
 		{`IFNULL(NULL, NULL)`, `NULL`},
-		{`COALESCE(1, 2, 3, 4/0)`, `1`},
-		{`COALESCE(NULL, 2, 3, 4/0)`, `2`},
+		{`COALESCE(1, 2, 3, 4/0)`, `1.0`},
+		{`COALESCE(NULL, 2, 3, 4/0)`, `2.0`},
 		{`COALESCE(NULL, NULL, NULL, 4)`, `4`},
 		{`COALESCE(NULL, NULL, NULL, NULL)`, `NULL`},
 		// Infinities
@@ -408,10 +409,14 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if expr, err = defaultContext.NormalizeExpr(expr); err != nil {
+		typedExpr, err := TypeCheck(expr, nil, nil)
+		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		r, err := expr.Eval(defaultContext)
+		if typedExpr, err = defaultContext.NormalizeExpr(typedExpr); err != nil {
+			t.Fatalf("%s: %v", d.expr, err)
+		}
+		r, err := typedExpr.Eval(defaultContext)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -433,7 +438,6 @@ func TestEvalError(t *testing.T) {
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
 			`could not parse '2010-09-28 12:00.1 MST' in any supported timestamp format`},
 		{`'11h2m'::interval / 0`, `division by zero`},
-		{`'hello' || b'world'`, `unsupported binary operator: <string> || <bytes>`},
 		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},
 		{`'' LIKE ` + string([]byte{0x27, 0xc2, 0x30, 0x7a, 0xd5, 0x25, 0x30, 0x27}),
 			`LIKE regexp compilation failed: error parsing regexp: invalid UTF-8: .*`},
@@ -445,7 +449,11 @@ func TestEvalError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := expr.Eval(defaultContext); !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
+		typedExpr, err := TypeCheck(expr, nil, nil)
+		if err == nil {
+			_, err = typedExpr.Eval(defaultContext)
+		}
+		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
@@ -453,7 +461,7 @@ func TestEvalError(t *testing.T) {
 
 func TestEvalComparisonExprCaching(t *testing.T) {
 	testExprs := []struct {
-		op          ComparisonOp
+		op          ComparisonOperator
 		left, right string
 		cacheCount  int
 	}{
@@ -475,10 +483,14 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		}
 		ctx := defaultContext
 		ctx.ReCache = NewRegexpCache(8)
-		if _, err := expr.Eval(ctx); err != nil {
+		typedExpr, err := TypeCheck(expr, nil, nil)
+		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if expr.fn.fn == nil {
+		if _, err := typedExpr.Eval(ctx); err != nil {
+			t.Fatalf("%v: %v", d, err)
+		}
+		if typedExpr.(*ComparisonExpr).fn.fn == nil {
 			t.Errorf("%s: expected the comparison function to be looked up and memoized, but it wasn't", expr)
 		}
 		if count := ctx.ReCache.Len(); count != d.cacheCount {
@@ -549,10 +561,10 @@ var benchmarkLikePatterns = []string{
 }
 
 func benchmarkLike(b *testing.B, ctx EvalContext) {
-	likeFn := CmpOps[CmpArgs{Like, stringType, stringType}].fn
+	likeFn, _ := CmpOps[Like].lookupImpl(DummyString, DummyString)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
-			if _, err := likeFn(ctx, NewDString("test"), NewDString(p)); err != nil {
+			if _, err := likeFn.fn(ctx, NewDString("test"), NewDString(p)); err != nil {
 				b.Fatalf("LIKE evaluation failed with error: %v", err)
 			}
 		}

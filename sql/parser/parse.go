@@ -81,23 +81,31 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 	return p.scanner.stmts, nil
 }
 
-// PerformTypeChecking performs type checking on the provided expression. While doing
-// so, it will fold numeric constants and bind var argument names to their inferred
-// types in the args parameter.
-func PerformTypeChecking(expr Expr, args MapArgs) (Datum, error) {
+// TypeCheck performs type checking on the provided expression tree, returning
+// the new typed expression tree, which additionally permits evaluation and type
+// introspection globally and on each sub-tree.
+//
+// While doing so, it will fold numeric constants and bind var argument names to
+// their inferred types in the args parameter. The optional desired parameter can
+// be used to hint the desired type for the root of the resulting typed expression
+// tree.
+func TypeCheck(expr Expr, args MapArgs, desired Datum) (TypedExpr, error) {
 	expr, err := foldNumericConstants(expr)
 	if err != nil {
 		return nil, err
 	}
-	return expr.TypeCheck(args)
+	return expr.TypeCheck(args, desired)
 }
 
 // NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
 // a normalizeVisitor.
-func (p *Parser) NormalizeExpr(ctx EvalContext, expr Expr) (Expr, error) {
+func (p *Parser) NormalizeExpr(ctx EvalContext, typedExpr TypedExpr) (TypedExpr, error) {
 	p.normalizeVisitor = normalizeVisitor{ctx: ctx}
-	expr, _ = WalkExpr(&p.normalizeVisitor, expr)
-	return expr, p.normalizeVisitor.err
+	expr, _ := WalkExpr(&p.normalizeVisitor, typedExpr)
+	if err := p.normalizeVisitor.err; err != nil {
+		return nil, err
+	}
+	return expr.(TypedExpr), nil
 }
 
 // parse parses the sql and returns a list of statements.
