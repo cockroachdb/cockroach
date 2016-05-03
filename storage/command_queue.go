@@ -22,8 +22,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/interval"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A CommandQueue maintains an interval tree of keys or key ranges for
@@ -50,48 +50,44 @@ import (
 //
 // CommandQueue is not thread safe.
 type CommandQueue struct {
-	// TODO(peter): Use an interval.Tree directly. There is no need for keeping
-	// the LRU list used by the cache.
-	cache     *cache.IntervalCache
+	tree      interval.Tree
 	idAlloc   int64
-	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait.
-	oHeap     overlapHeap         // avoids allocating in GetWait.
+	wRg, rwRg interval.RangeGroup // avoids allocating in GetWait
+	oHeap     overlapHeap         // avoids allocating in GetWait
+	overlaps  []*cmd
 }
 
 type cmd struct {
-	ID       int64
+	id       int64
+	key      interval.Range
 	readOnly bool
 	expanded bool              // have the children been added
-	pending  []*sync.WaitGroup // pending commands gated on cmd.
-	children []cmdEntry
+	pending  []*sync.WaitGroup // pending commands gated on cmd
+	children []cmd
 }
 
-type cmdEntry struct {
-	key   cache.IntervalKey
-	value cmd
-	entry cache.Entry
+// ID implements interval.Interface.
+func (c *cmd) ID() uintptr {
+	return uintptr(c.id)
+}
+
+// Range implements interval.Interface.
+func (c *cmd) Range() interval.Range {
+	return c.key
 }
 
 // NewCommandQueue returns a new command queue.
 func NewCommandQueue() *CommandQueue {
 	cq := &CommandQueue{
-		cache: cache.NewIntervalCache(cache.Config{Policy: cache.CacheNone}),
-		wRg:   interval.NewRangeTree(),
-		rwRg:  interval.NewRangeTree(),
+		tree: interval.Tree{Overlapper: interval.Range.OverlapExclusive},
+		wRg:  interval.NewRangeTree(),
+		rwRg: interval.NewRangeTree(),
 	}
-	cq.cache.OnEvicted = cq.onEvicted
 	return cq
 }
 
-// onEvicted is called when any entry is removed from the interval
-// tree. This happens on calls to Remove() and to Clear().
-func (cq *CommandQueue) onEvicted(key, value interface{}) {
-	c := value.(*cmd)
-	for _, wg := range c.pending {
-		wg.Done()
-	}
-}
-
+// prepareSpans ensures the spans all have an end key. Note that this function
+// mutates its arguments.
 func prepareSpans(spans ...roachpb.Span) {
 	for i, span := range spans {
 		// This gives us a memory-efficient end key if end is empty.
@@ -122,7 +118,7 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 			Start: interval.Comparable(start),
 			End:   interval.Comparable(end),
 		}
-		overlaps := cq.cache.GetOverlaps(newCmdRange.Start, newCmdRange.End)
+		overlaps := cq.getOverlaps(newCmdRange.Start, newCmdRange.End)
 		if readOnly {
 			// If both commands are read-only, there are no dependencies between them,
 			// so these can be filtered out of the overlapping commands.
@@ -133,16 +129,19 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		// entries. If we encounter a covering entry, we remove it from the
 		// interval tree and add all of its children.
 		restart := false
-		for _, o := range overlaps {
-			cmd := o.Value.(*cmd)
+		for _, cmd := range overlaps {
 			if !cmd.expanded && len(cmd.children) != 0 {
 				restart = true
 				cmd.expanded = true
+				if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
+					log.Error(err)
+				}
 				for i := range cmd.children {
 					child := &cmd.children[i]
-					cq.cache.AddEntry(&child.entry)
+					if err := cq.tree.Insert(child, false /* !fast */); err != nil {
+						log.Error(err)
+					}
 				}
-				cq.cache.Del(o.Key)
 			}
 		}
 		if restart {
@@ -207,8 +206,8 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 		//
 		cq.oHeap.Init(overlaps)
 		for enclosed := false; cq.oHeap.Len() > 0 && !enclosed; {
-			o := cq.oHeap.PopOverlap()
-			keyRange, cmd := o.Key.Range, o.Value.(*cmd)
+			cmd := cq.oHeap.PopOverlap()
+			keyRange := cmd.key
 			if cmd.readOnly {
 				// If the current overlap is a read (meaning we're a write because other reads will
 				// be filtered out if we're a read as well), we only need to wait if the write RangeGroup
@@ -277,11 +276,30 @@ func (cq *CommandQueue) GetWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 	}
 }
 
+// getOverlaps returns a slice of values which overlap the specified
+// interval. The slice is only valid until the next call to GetOverlaps.
+func (cq *CommandQueue) getOverlaps(start, end []byte) []*cmd {
+	rng := interval.Range{
+		Start: interval.Comparable(start),
+		End:   interval.Comparable(end),
+	}
+	cq.tree.DoMatching(cq.doOverlaps, rng)
+	overlaps := cq.overlaps
+	cq.overlaps = cq.overlaps[:0]
+	return overlaps
+}
+
+func (cq *CommandQueue) doOverlaps(i interval.Interface) bool {
+	c := i.(*cmd)
+	cq.overlaps = append(cq.overlaps, c)
+	return false
+}
+
 // filterReadWrite filters out the read-only commands from the provided slice.
-func filterReadWrite(cmds []cache.Overlap) []cache.Overlap {
+func filterReadWrite(cmds []*cmd) []*cmd {
 	rwIdx := len(cmds)
 	for i := 0; i < rwIdx; {
-		c := cmds[i].Value.(*cmd)
+		c := cmds[i]
 		if !c.readOnly {
 			i++
 		} else {
@@ -293,12 +311,12 @@ func filterReadWrite(cmds []cache.Overlap) []cache.Overlap {
 }
 
 // overlapHeap is a max-heap of cache.Overlaps, sorting the elements
-// in decreasing Value.(*cmd).ID order.
-type overlapHeap []cache.Overlap
+// in decreasing Value.(*cmd).id order.
+type overlapHeap []*cmd
 
 func (o overlapHeap) Len() int { return len(o) }
 func (o overlapHeap) Less(i, j int) bool {
-	return o[i].Value.(*cmd).ID > o[j].Value.(*cmd).ID
+	return o[i].id > o[j].id
 }
 func (o overlapHeap) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
 
@@ -308,15 +326,12 @@ func (o *overlapHeap) Push(x interface{}) {
 
 func (o *overlapHeap) Pop() interface{} {
 	n := len(*o) - 1
-	// Returning a pointer to avoid an allocation when storing the cache.Overlap in an interface{}.
-	// A *cache.Overlap stored in an interface{} won't allocate, but the value pointed to may
-	// change if the heap is later modified, so the pointer should be dereferenced immediately.
-	x := &(*o)[n]
+	x := (*o)[n]
 	*o = (*o)[:n]
 	return x
 }
 
-func (o *overlapHeap) Init(overlaps []cache.Overlap) {
+func (o *overlapHeap) Init(overlaps []*cmd) {
 	*o = overlaps
 	heap.Init(o)
 }
@@ -325,9 +340,9 @@ func (o *overlapHeap) Clear() {
 	*o = nil
 }
 
-func (o *overlapHeap) PopOverlap() cache.Overlap {
+func (o *overlapHeap) PopOverlap() *cmd {
 	x := heap.Pop(o)
-	return *x.(*cache.Overlap)
+	return x.(*cmd)
 }
 
 // Add adds commands to the queue which affect the specified key ranges. Ranges
@@ -352,41 +367,41 @@ func (cq *CommandQueue) Add(readOnly bool, spans ...roachpb.Span) interface{} {
 		}
 	}
 
-	numEntries := 1
+	numCmds := 1
 	if len(spans) > 1 {
-		numEntries += len(spans)
+		numCmds += len(spans)
 	}
-	entries := make([]cmdEntry, numEntries)
+	cmds := make([]cmd, numCmds)
 
 	// Create the covering entry.
-	entry := &entries[0]
-	entry.key = cq.cache.MakeKey(minKey, maxKey)
-	entry.value = cmd{
-		ID:       cq.nextID(),
-		readOnly: readOnly,
-		expanded: false,
+	cmd := &cmds[0]
+	cmd.id = cq.nextID()
+	cmd.key = interval.Range{
+		Start: interval.Comparable(minKey),
+		End:   interval.Comparable(maxKey),
 	}
-	entry.entry.Key = &entry.key
-	entry.entry.Value = &entry.value
+	cmd.readOnly = readOnly
+	cmd.expanded = false
 
 	if len(spans) > 1 {
 		// Populate the covering entry's children.
-		entry.value.children = entries[1:]
+		cmd.children = cmds[1:]
 		for i, span := range spans {
-			child := &entry.value.children[i]
-			child.key = cq.cache.MakeKey(span.Key, span.EndKey)
-			child.value = cmd{
-				ID:       cq.nextID(),
-				readOnly: readOnly,
-				expanded: true,
+			child := &cmd.children[i]
+			child.id = cq.nextID()
+			child.key = interval.Range{
+				Start: interval.Comparable(span.Key),
+				End:   interval.Comparable(span.EndKey),
 			}
-			child.entry.Key = &child.key
-			child.entry.Value = &child.value
+			child.readOnly = readOnly
+			child.expanded = true
 		}
 	}
 
-	cq.cache.AddEntry(&entry.entry)
-	return entry
+	if err := cq.tree.Insert(cmd, false /* !fast */); err != nil {
+		log.Error(err)
+	}
+	return cmd
 }
 
 // Remove is invoked to signal that the command associated with the
@@ -403,19 +418,24 @@ func (cq *CommandQueue) Remove(key interface{}) {
 		return
 	}
 
-	entry := key.(*cmdEntry)
-	if !entry.value.expanded {
-		cq.cache.Del(&entry.key)
+	cmd := key.(*cmd)
+	if !cmd.expanded {
+		if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
+			log.Error(err)
+		}
+		for _, wg := range cmd.pending {
+			wg.Done()
+		}
 	} else {
-		for _, child := range entry.value.children {
-			cq.cache.Del(&child.key)
+		for _, child := range cmd.children {
+			if err := cq.tree.Delete(&child, false /* !fast */); err != nil {
+				log.Error(err)
+			}
+			for _, wg := range child.pending {
+				wg.Done()
+			}
 		}
 	}
-}
-
-// Clear removes all executing commands, signaling any waiting commands.
-func (cq *CommandQueue) Clear() {
-	cq.cache.Clear()
 }
 
 func (cq *CommandQueue) nextID() int64 {
