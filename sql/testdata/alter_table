@@ -170,6 +170,16 @@ a   d     x     y     z
 31  32    NULL  1.3   1.4
 33  34    2     2.1   2.2
 
+# fix #6463
+statement error column "d" is referenced by existing index "t_d_key"
+ALTER TABLE t DROP COLUMN d
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT t_d_key
+
+statement ok
+ALTER TABLE t DROP COLUMN d
+
 # Subsequent operations succeed because the table is empty
 statement ok
 CREATE TABLE tt (a INT PRIMARY KEY)
