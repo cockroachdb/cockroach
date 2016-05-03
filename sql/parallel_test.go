@@ -73,7 +73,8 @@ func (t *parallelTest) close() {
 }
 
 func (t *parallelTest) addClient(createDB bool) {
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, &t.srv.TestServer, security.RootUser, "TestParallel")
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.TestServer.ServingAddr(), security.RootUser,
+		"TestParallel")
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)

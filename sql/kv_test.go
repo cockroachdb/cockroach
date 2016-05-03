@@ -170,7 +170,7 @@ type kvSQL struct {
 func newKVSQL(b *testing.B) kvInterface {
 	enableTracing := tracing.Disable()
 	s := server.StartTestServer(b)
-	pgURL, cleanupURL := sqlutils.PGUrl(b, s, security.RootUser, "benchmarkCockroach")
+	pgURL, cleanupURL := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
 	pgURL.Path = "bench"
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {

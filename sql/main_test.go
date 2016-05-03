@@ -215,7 +215,8 @@ func setupWithContext(t *testing.T, ctx *server.Context) (*testServer, *gosql.DB
 	s := setupTestServerWithContext(t, ctx)
 
 	// SQL requests use security.RootUser which has ALL permissions on everything.
-	url, cleanupFn := sqlutils.PGUrl(t, &s.TestServer, security.RootUser, "setupWithContext")
+	url, cleanupFn := sqlutils.PGUrl(t, s.TestServer.ServingAddr(), security.RootUser,
+		"setupWithContext")
 	sqlDB, err := gosql.Open("postgres", url.String())
 	if err != nil {
 		t.Fatal(err)

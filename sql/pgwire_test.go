@@ -208,7 +208,7 @@ func TestPGWireDBName(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGWireDBName")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGWireDBName")
 	pgURL.Path = "foo"
 	defer cleanupFn()
 	{
@@ -243,7 +243,7 @@ func TestPGPrepareFail(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareFail")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPrepareFail")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -475,7 +475,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedQuery")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPreparedQuery")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -689,7 +689,7 @@ func TestPGPreparedExec(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPreparedExec")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPreparedExec")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -748,7 +748,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGPrepareNameQual")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPrepareNameQual")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -798,7 +798,8 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestCmdCompleteVsEmptyStatements")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
+		"TestCmdCompleteVsEmptyStatements")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -839,7 +840,7 @@ func TestPGCommandTags(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPGCommandTags")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGCommandTags")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -959,7 +960,8 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	defer s.Stop()
 
 	// Setup pgwire client.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestSQLNetworkMetrics")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
+		"TestSQLNetworkMetrics")
 	defer cleanupFn()
 
 	const minbytes = 20
@@ -1025,7 +1027,7 @@ func TestPrepareSyntax(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestPrepareSyntax")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPrepareSyntax")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())

@@ -357,7 +357,8 @@ func TestDropAndCreateTable(t *testing.T) {
 	t.Skip(`TODO(andrei, dt): Fails with 'table "foo" does not exist'`)
 	s := server.StartTestServer(t)
 	defer s.Stop()
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestDropAndCreateTable")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(),
+		security.RootUser, "TestDropAndCreateTable")
 	pgURL.Path = "test"
 	defer cleanupFn()
 

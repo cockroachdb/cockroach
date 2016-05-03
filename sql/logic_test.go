@@ -227,7 +227,7 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, &t.srv.TestServer, user, "TestLogic")
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.TestServer.ServingAddr(), user, "TestLogic")
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
