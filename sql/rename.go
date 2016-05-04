@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 var (
@@ -345,7 +346,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	// Rename the column in the indexes.
-	renameColumnInIndex := func(idx *IndexDescriptor) {
+	renameColumnInIndex := func(idx *sqlbase.IndexDescriptor) {
 		for i, id := range idx.ColumnIDs {
 			if id == column.ID {
 				idx.ColumnNames[i] = newColName

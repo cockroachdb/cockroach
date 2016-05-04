@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -86,7 +87,7 @@ func (n *createDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
 type createIndexNode struct {
 	p         *planner
 	n         *parser.CreateIndex
-	tableDesc *TableDescriptor
+	tableDesc *sqlbase.TableDescriptor
 }
 
 // CreateIndex creates an index.
@@ -112,12 +113,12 @@ func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
 func (n *createIndexNode) Start() *roachpb.Error {
 	status, i, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
-		if status == DescriptorIncomplete {
+		if status == sqlbase.DescriptorIncomplete {
 			switch n.tableDesc.Mutations[i].Direction {
-			case DescriptorMutation_DROP:
+			case sqlbase.DescriptorMutation_DROP:
 				return roachpb.NewErrorf("index %q being dropped, try again later", string(n.n.Name))
 
-			case DescriptorMutation_ADD:
+			case sqlbase.DescriptorMutation_ADD:
 				// Noop, will fail in AllocateIDs below.
 			}
 		}
@@ -126,16 +127,16 @@ func (n *createIndexNode) Start() *roachpb.Error {
 		}
 	}
 
-	indexDesc := IndexDescriptor{
+	indexDesc := sqlbase.IndexDescriptor{
 		Name:             string(n.n.Name),
 		Unique:           n.n.Unique,
 		StoreColumnNames: n.n.Storing,
 	}
-	if err := indexDesc.fillColumns(n.n.Columns); err != nil {
+	if err := indexDesc.FillColumns(n.n.Columns); err != nil {
 		return roachpb.NewError(err)
 	}
 
-	n.tableDesc.addIndexMutation(indexDesc, DescriptorMutation_ADD)
+	n.tableDesc.addIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD)
 	mutationID, err := n.tableDesc.finalizeMutation()
 	if err != nil {
 		return roachpb.NewError(err)
@@ -168,7 +169,7 @@ func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 type createTableNode struct {
 	p      *planner
 	n      *parser.CreateTable
-	dbDesc *DatabaseDescriptor
+	dbDesc *sqlbase.DatabaseDescriptor
 }
 
 // CreateTable creates a table.
@@ -205,20 +206,20 @@ func (n *createTableNode) Start() *roachpb.Error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 {
 		// Ensure a Primary Key exists.
 		s := "unique_rowid()"
-		col := ColumnDescriptor{
+		col := sqlbase.ColumnDescriptor{
 			Name: "rowid",
-			Type: ColumnType{
-				Kind: ColumnType_INT,
+			Type: sqlbase.ColumnType{
+				Kind: sqlbase.ColumnType_INT,
 			},
 			DefaultExpr: &s,
 			Hidden:      true,
 			Nullable:    false,
 		}
 		desc.AddColumn(col)
-		idx := IndexDescriptor{
+		idx := sqlbase.IndexDescriptor{
 			Unique:           true,
 			ColumnNames:      []string{col.Name},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 		}
 		if err := desc.AddIndex(idx, true); err != nil {
 			return roachpb.NewError(err)

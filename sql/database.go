@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -51,10 +52,10 @@ func (dk databaseKey) Name() string {
 // system the periodic reset whenever the system config is gossiped.
 type databaseCache struct {
 	mu        sync.Mutex
-	databases map[string]ID
+	databases map[string]sqlbase.ID
 }
 
-func (s *databaseCache) getID(name string) ID {
+func (s *databaseCache) getID(name string) sqlbase.ID {
 	if s == nil {
 		return 0
 	}
@@ -63,7 +64,7 @@ func (s *databaseCache) getID(name string) ID {
 	return s.databases[name]
 }
 
-func (s *databaseCache) setID(name string, id ID) {
+func (s *databaseCache) setID(name string, id sqlbase.ID) {
 	if s == nil {
 		return
 	}
@@ -72,8 +73,8 @@ func (s *databaseCache) setID(name string, id ID) {
 	s.databases[name] = id
 }
 
-func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
-	return DatabaseDescriptor{
+func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
+	return sqlbase.DatabaseDescriptor{
 		Name:       p.Name.String(),
 		Privileges: NewDefaultPrivilegeDescriptor(),
 	}
@@ -82,8 +83,8 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 // getDatabaseDesc looks up the database descriptor given its name.
 // Returns nil if the descriptor is not found. If you want to turn the "not
 // found" condition into an error, use databaseDoesNotExistError().
-func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
-	desc := &DatabaseDescriptor{}
+func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	desc := &sqlbase.DatabaseDescriptor{}
 	found, err := p.getDescriptor(databaseKey{name}, desc)
 	if !found {
 		return nil, err
@@ -93,7 +94,7 @@ func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
 
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
 // descriptor cache.
-func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error) {
+func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	if name == systemDB.Name {
 		return &systemDB, nil
 	}
@@ -109,7 +110,7 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 		return nil, err
 	}
 
-	descKey := MakeDescMetadataKey(ID(id))
+	descKey := MakeDescMetadataKey(sqlbase.ID(id))
 	descVal := p.systemConfig.GetValue(descKey)
 	if descVal == nil {
 		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
@@ -129,15 +130,15 @@ func (p *planner) getCachedDatabaseDesc(name string) (*DatabaseDescriptor, error
 }
 
 func getKeysForDatabaseDescriptor(
-	dbDesc *DatabaseDescriptor,
+	dbDesc *sqlbase.DatabaseDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = MakeZoneKey(dbDesc.ID)
-	nameKey = MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
-	descKey = MakeDescMetadataKey(dbDesc.ID)
+	zoneKey = sqlbase.MakeZoneKey(dbDesc.ID)
+	nameKey = sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
+	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
 	return
 }
 
-func (p *planner) getDatabaseID(name string) (ID, error) {
+func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 	if id := p.databaseCache.getID(name); id != 0 {
 		return id, nil
 	}

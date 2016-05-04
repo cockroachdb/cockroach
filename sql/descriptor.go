@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -119,13 +120,13 @@ func (p *planner) getDescriptor(plainKey descriptorKey, descriptor descriptorPro
 	}
 
 	switch t := descriptor.(type) {
-	case *TableDescriptor:
+	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
 			return false, util.Errorf("%q is not a table", plainKey.Name())
 		}
 		*t = *table
-	case *DatabaseDescriptor:
+	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
 			return false, util.Errorf("%q is not a database", plainKey.Name())

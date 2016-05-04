@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -51,7 +52,7 @@ func tableDoesNotExistError(name string) error {
 
 // tableKey implements descriptorKey.
 type tableKey struct {
-	parentID ID
+	parentID sqlbase.ID
 	name     string
 }
 
@@ -67,7 +68,7 @@ func (tk tableKey) Name() string {
 // found.
 // If you want to transform the not found condition into an error, use
 // tableDoesNotExistError().
-func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, error) {
+func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
@@ -93,7 +94,7 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*TableDescriptor, e
 // get the table descriptor for the ID passed in using an existing txn.
 // returns an error if the descriptor doesn't exist or if it exists and is not
 // a table.
-func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
+func getTableDescFromID(txn *client.Txn, id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
 	desc := &Descriptor{}
 	descKey := MakeDescMetadataKey(id)
 
@@ -108,11 +109,11 @@ func getTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
 }
 
 func getKeysForTableDescriptor(
-	tableDesc *TableDescriptor,
+	tableDesc *sqlbase.TableDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = MakeZoneKey(tableDesc.ID)
-	nameKey = MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
-	descKey = MakeDescMetadataKey(tableDesc.ID)
+	zoneKey = sqlbase.MakeZoneKey(tableDesc.ID)
+	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
+	descKey = sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	return
 }
 
@@ -127,9 +128,9 @@ func updateCommitBy(commitBy time.Time, lease *LeaseState) time.Time {
 // released when the planner closes. Note that a shallow copy of the table
 // descriptor is returned. It is safe to mutate fields of the returned
 // descriptor, but the values those fields point to should not be modified.
-func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, error) {
+func (p *planner) getTableLease(qname *parser.QualifiedName) (sqlbase.TableDescriptor, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
-		return TableDescriptor{}, err
+		return sqlbase.TableDescriptor{}, err
 	}
 
 	if qname.Database() == systemDB.Name || testDisableTableLeases {
@@ -139,17 +140,17 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, e
 		// chicken&egg problem.
 		desc, err := p.getTableDesc(qname)
 		if err != nil {
-			return TableDescriptor{}, err
+			return sqlbase.TableDescriptor{}, err
 		}
 		if desc == nil {
-			return TableDescriptor{}, tableDoesNotExistError(qname.String())
+			return sqlbase.TableDescriptor{}, tableDoesNotExistError(qname.String())
 		}
 		return *desc, nil
 	}
 
 	tableID, err := p.getTableID(qname)
 	if err != nil {
-		return TableDescriptor{}, err
+		return sqlbase.TableDescriptor{}, err
 	}
 
 	var lease *LeaseState
@@ -181,7 +182,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (TableDescriptor, e
 // getTableID retrieves the table ID for the specified table. It uses the
 // descriptor cache to perform lookups, falling back to the KV store when
 // necessary.
-func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
+func (p *planner) getTableID(qname *parser.QualifiedName) (sqlbase.ID, error) {
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return 0, err
 	}
@@ -202,7 +203,7 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	key := nameKey.Key()
 	if nameVal := p.systemConfig.GetValue(key); nameVal != nil {
 		id, err := nameVal.GetInt()
-		return ID(id), err
+		return sqlbase.ID(id), err
 	}
 
 	gr, err := p.txn.Get(key)
@@ -212,10 +213,10 @@ func (p *planner) getTableID(qname *parser.QualifiedName) (ID, error) {
 	if !gr.Exists() {
 		return 0, tableDoesNotExistError(qname.String())
 	}
-	return ID(gr.ValueInt()), nil
+	return sqlbase.ID(gr.ValueInt()), nil
 }
 
-func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNames, error) {
+func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.QualifiedNames, error) {
 	prefix := MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
@@ -243,7 +244,7 @@ func (p *planner) getTableNames(dbDesc *DatabaseDescriptor) (parser.QualifiedNam
 
 // encodeIndexKey doesn't deal with ImplicitColumnIDs, so it doesn't always produce
 // a full index key.
-func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
+func encodeIndexKey(index *sqlbase.IndexDescriptor, colMap map[sqlbase.ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	dirs := make([]encoding.Direction, 0, len(index.ColumnIDs))
 	for _, dir := range index.ColumnDirections {
@@ -256,8 +257,8 @@ func encodeIndexKey(index *IndexDescriptor, colMap map[ColumnID]int,
 	return encodeColumns(index.ColumnIDs, dirs, colMap, values, indexKey)
 }
 
-// Version of encodeIndexKey that takes ColumnIDs and directions explicitly.
-func encodeColumns(columnIDs []ColumnID, directions []encoding.Direction, colMap map[ColumnID]int,
+// Version of encodeIndexKey that takes sqlbase.ColumnIDs and directions explicitly.
+func encodeColumns(columnIDs []sqlbase.ColumnID, directions []encoding.Direction, colMap map[sqlbase.ColumnID]int,
 	values []parser.Datum, indexKey []byte) ([]byte, bool, error) {
 	var key []byte
 	var containsNull bool
@@ -386,7 +387,7 @@ func encodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 	return nil, util.Errorf("unable to encode table key: %T", val)
 }
 
-func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, error) {
+func makeKeyVals(desc *sqlbase.TableDescriptor, columnIDs []sqlbase.ColumnID) ([]parser.Datum, error) {
 	vals := make([]parser.Datum, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
@@ -401,7 +402,9 @@ func makeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, e
 	return vals, nil
 }
 
-func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, error) {
+func decodeIndexKeyPrefix(desc *sqlbase.TableDescriptor, key []byte) (
+	sqlbase.IndexID, []byte, error,
+) {
 	if encoding.PeekType(key) != encoding.Int {
 		return 0, nil, util.Errorf("%s: invalid key prefix: %q", desc.Name, key)
 	}
@@ -415,7 +418,7 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 		return 0, nil, err
 	}
 
-	if ID(tableID) != desc.ID {
+	if sqlbase.ID(tableID) != desc.ID {
 		return IndexID(indexID), nil, util.Errorf("%s: unexpected table ID: %d != %d", desc.Name, desc.ID, tableID)
 	}
 
@@ -427,8 +430,14 @@ func decodeIndexKeyPrefix(desc *TableDescriptor, key []byte) (IndexID, []byte, e
 // index key are returned which will either be an encoded column ID for the
 // primary key index, the primary key suffix for non-unique secondary indexes
 // or unique secondary indexes containing NULL or empty.
-func decodeIndexKey(a *datumAlloc, desc *TableDescriptor, indexID IndexID,
-	valTypes, vals []parser.Datum, colDirs []encoding.Direction, key []byte) ([]byte, error) {
+func decodeIndexKey(
+	a *datumAlloc,
+	desc *sqlbase.TableDescriptor,
+	indexID sqlbase.IndexID,
+	valTypes, vals []parser.Datum,
+	colDirs []encoding.Direction,
+	key []byte,
+) ([]byte, error) {
 	decodedIndexID, remaining, err := decodeIndexKeyPrefix(desc, key)
 	if err != nil {
 		return nil, err
@@ -691,8 +700,12 @@ type indexEntry struct {
 }
 
 // colMap maps ColumnIds to indexes in `values`.
-func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
-	colMap map[ColumnID]int, values []parser.Datum) ([]indexEntry, error) {
+func encodeSecondaryIndexes(
+	tableID sqlbase.ID,
+	indexes []sqlbase.IndexDescriptor,
+	colMap map[sqlbase.ColumnID]int,
+	values []parser.Datum,
+) ([]indexEntry, error) {
 	var secondaryIndexEntries []indexEntry
 	for _, secondaryIndex := range indexes {
 		secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableID, secondaryIndex.ID)
@@ -743,7 +756,7 @@ func encodeSecondaryIndexes(tableID ID, indexes []IndexDescriptor,
 // checkColumnType verifies that a given value is compatible
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
-func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs) error {
+func checkColumnType(col sqlbase.ColumnDescriptor, val parser.Datum, args parser.MapArgs) error {
 	if val == parser.DNull {
 		return nil
 	}
@@ -801,7 +814,7 @@ func checkColumnType(col ColumnDescriptor, val parser.Datum, args parser.MapArgs
 // marshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, error) {
+func marshalColumnValue(col sqlbase.ColumnDescriptor, val parser.Datum) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if val == parser.DNull {
@@ -878,7 +891,7 @@ func marshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
 func unmarshalColumnValue(
-	a *datumAlloc, kind ColumnType_Kind, value *roachpb.Value,
+	a *datumAlloc, kind sqlbase.ColumnType_Kind, value *roachpb.Value,
 ) (parser.Datum, error) {
 	if value == nil {
 		return parser.DNull, nil
@@ -955,7 +968,7 @@ func unmarshalColumnValue(
 // checkValueWidth checks that the width (for strings/byte arrays) and
 // scale (for decimals) of the value fits the specified column type.
 // Used by INSERT and UPDATE.
-func checkValueWidth(col ColumnDescriptor, val parser.Datum) error {
+func checkValueWidth(col sqlbase.ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
 	case ColumnType_STRING:
 		if v, ok := val.(*parser.DString); ok {

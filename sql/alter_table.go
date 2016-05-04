@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
 type alterTableNode struct {
 	p         *planner
 	n         *parser.AlterTable
-	tableDesc *TableDescriptor
+	tableDesc *sqlbase.TableDescriptor
 }
 
 // AlterTable applies a schema change on a table.
@@ -79,13 +80,14 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			}
 			status, i, err := n.tableDesc.FindColumnByName(col.Name)
 			if err == nil {
-				if status == DescriptorIncomplete && n.tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
+				if status == sqlbase.DescriptorIncomplete &&
+					n.tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_DROP {
 					return roachpb.NewUErrorf("column %q being dropped, try again later", col.Name)
 				}
 			}
-			n.tableDesc.addColumnMutation(*col, DescriptorMutation_ADD)
+			n.tableDesc.addColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
-				n.tableDesc.addIndexMutation(*idx, DescriptorMutation_ADD)
+				n.tableDesc.addIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
 			}
 
 		case *parser.AlterTableAddConstraint:
@@ -95,21 +97,22 @@ func (n *alterTableNode) Start() *roachpb.Error {
 					return roachpb.NewUErrorf("multiple primary keys for table %q are not allowed", n.tableDesc.Name)
 				}
 				name := string(d.Name)
-				idx := IndexDescriptor{
+				idx := sqlbase.IndexDescriptor{
 					Name:             name,
 					Unique:           true,
 					StoreColumnNames: d.Storing,
 				}
-				if err := idx.fillColumns(d.Columns); err != nil {
+				if err := idx.FillColumns(d.Columns); err != nil {
 					return roachpb.NewError(err)
 				}
 				status, i, err := n.tableDesc.FindIndexByName(name)
 				if err == nil {
-					if status == DescriptorIncomplete && n.tableDesc.Mutations[i].Direction == DescriptorMutation_DROP {
+					if status == sqlbase.DescriptorIncomplete &&
+						n.tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_DROP {
 						return roachpb.NewUErrorf("index %q being dropped, try again later", name)
 					}
 				}
-				n.tableDesc.addIndexMutation(idx, DescriptorMutation_ADD)
+				n.tableDesc.addIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
 
 			default:
 				return roachpb.NewUErrorf("unsupported constraint: %T", t.ConstraintDef)
@@ -125,25 +128,25 @@ func (n *alterTableNode) Start() *roachpb.Error {
 				return roachpb.NewError(err)
 			}
 			switch status {
-			case DescriptorActive:
+			case sqlbase.DescriptorActive:
 				col := n.tableDesc.Columns[i]
-				if n.tableDesc.PrimaryIndex.containsColumnID(col.ID) {
+				if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
 					return roachpb.NewUErrorf("column %q is referenced by the primary key", col.Name)
 				}
-				for _, idx := range n.tableDesc.allNonDropIndexes() {
-					if idx.containsColumnID(col.ID) {
+				for _, idx := range n.tableDesc.AllNonDropIndexes() {
+					if idx.ContainsColumnID(col.ID) {
 						return roachpb.NewUErrorf("column %q is referenced by existing index %q", col.Name, idx.Name)
 					}
 				}
-				n.tableDesc.addColumnMutation(col, DescriptorMutation_DROP)
+				n.tableDesc.addColumnMutation(col, sqlbase.DescriptorMutation_DROP)
 				n.tableDesc.Columns = append(n.tableDesc.Columns[:i], n.tableDesc.Columns[i+1:]...)
 
-			case DescriptorIncomplete:
+			case sqlbase.DescriptorIncomplete:
 				switch n.tableDesc.Mutations[i].Direction {
-				case DescriptorMutation_ADD:
+				case sqlbase.DescriptorMutation_ADD:
 					return roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.Column)
 
-				case DescriptorMutation_DROP:
+				case sqlbase.DescriptorMutation_DROP:
 					// Noop.
 				}
 			}
@@ -159,15 +162,17 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			}
 			switch status {
 			case DescriptorActive:
-				n.tableDesc.addIndexMutation(n.tableDesc.Indexes[i], DescriptorMutation_DROP)
+				n.tableDesc.AddIndexMutation(n.tableDesc.Indexes[i], DescriptorMutation_DROP)
+			case sqlbase.DescriptorActive:
+				n.tableDesc.addIndexMutation(n.tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
 				n.tableDesc.Indexes = append(n.tableDesc.Indexes[:i], n.tableDesc.Indexes[i+1:]...)
 
-			case DescriptorIncomplete:
+			case sqlbase.DescriptorIncomplete:
 				switch n.tableDesc.Mutations[i].Direction {
-				case DescriptorMutation_ADD:
+				case sqlbase.DescriptorMutation_ADD:
 					return roachpb.NewUErrorf("constraint %q in the middle of being added, try again later", t.Constraint)
 
-				case DescriptorMutation_DROP:
+				case sqlbase.DescriptorMutation_DROP:
 					// Noop.
 				}
 			}
@@ -180,17 +185,17 @@ func (n *alterTableNode) Start() *roachpb.Error {
 			}
 
 			switch status {
-			case DescriptorActive:
+			case sqlbase.DescriptorActive:
 				if err := applyColumnMutation(&n.tableDesc.Columns[i], t); err != nil {
 					return roachpb.NewError(err)
 				}
 				descriptorChanged = true
 
-			case DescriptorIncomplete:
+			case sqlbase.DescriptorIncomplete:
 				switch n.tableDesc.Mutations[i].Direction {
-				case DescriptorMutation_ADD:
+				case sqlbase.DescriptorMutation_ADD:
 					return roachpb.NewUErrorf("column %q in the middle of being added, try again later", t.GetColumn())
-				case DescriptorMutation_DROP:
+				case sqlbase.DescriptorMutation_DROP:
 					return roachpb.NewUErrorf("column %q in the middle of being dropped", t.GetColumn())
 				}
 			}
@@ -247,7 +252,7 @@ func (n *alterTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "alter table", "", nil
 }
 
-func applyColumnMutation(col *ColumnDescriptor, mut parser.ColumnMutationCmd) error {
+func applyColumnMutation(col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd) error {
 	switch t := mut.(type) {
 	case *parser.AlterTableSetDefault:
 		if t.Default == nil {

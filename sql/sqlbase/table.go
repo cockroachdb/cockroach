@@ -54,7 +54,7 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing,
 			}
-			if err := idx.fillColumns(d.Columns); err != nil {
+			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
 			}
 			if err := desc.AddIndex(idx, false); err != nil {
@@ -66,7 +66,7 @@ func makeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				Unique:           true,
 				StoreColumnNames: d.Storing,
 			}
-			if err := idx.fillColumns(d.Columns); err != nil {
+			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {

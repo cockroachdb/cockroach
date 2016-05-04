@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -47,7 +48,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	var lease csql.TableDescriptor_SchemaChangeLease
+	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = csql.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	db := server.DB()
@@ -64,7 +65,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	var newLease csql.TableDescriptor_SchemaChangeLease
+	var newLease sqlbase.TableDescriptor_SchemaChangeLease
 	newLease, pErr = changer.AcquireLease()
 	if pErr == nil {
 		t.Fatalf("acquired new lease: %v, while unexpired lease exists: %v", newLease, lease)

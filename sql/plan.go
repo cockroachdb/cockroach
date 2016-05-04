@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -400,7 +401,7 @@ func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 
 // getAliasedTableLease looks up the table descriptor for an alias table
 // expression.
-func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, error) {
+func (p *planner) getAliasedTableLease(n parser.TableExpr) (*sqlbase.TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
 		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
@@ -417,7 +418,7 @@ func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, er
 }
 
 // notify that an outstanding schema change exists for the table.
-func (p *planner) notifySchemaChange(id ID, mutationID MutationID) {
+func (p *planner) notifySchemaChange(id sqlbase.ID, mutationID sqlbase.MutationID) {
 	sc := SchemaChanger{
 		tableID:    id,
 		mutationID: mutationID,
@@ -439,7 +440,7 @@ func (p *planner) releaseLeases() {
 	}
 }
 
-func (p *planner) writeTableDesc(tableDesc *TableDescriptor) error {
+func (p *planner) writeTableDesc(tableDesc *sqlbase.TableDescriptor) error {
 	return p.txn.Put(MakeDescMetadataKey(tableDesc.GetID()), wrapDescriptor(tableDesc))
 }
 

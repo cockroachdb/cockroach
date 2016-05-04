@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -266,7 +267,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 		},
 	}
 
-	appendRow := func(index IndexDescriptor, colName string, sequence int,
+	appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
 		direction string, isStored bool) {
 		v.rows = append(v.rows, []parser.Datum{
 			parser.NewDString(n.Table.Table()),

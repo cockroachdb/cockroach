@@ -20,10 +20,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func testInitDummySelectNode(desc *TableDescriptor) *selectNode {
+func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 	scan := &scanNode{}
 	scan.desc = *desc
 	scan.initDescDefaults()

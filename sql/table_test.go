@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -133,7 +134,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 
 	testData := []struct {
 		sql     string
-		primary IndexDescriptor
+		primary sqlbase.IndexDescriptor
 		indexes []IndexDescriptor
 	}{
 		{
@@ -169,7 +170,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Name:             "c",
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
 			[]IndexDescriptor{},
 		},
@@ -179,7 +180,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Name:             "primary",
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
 			[]IndexDescriptor{
 				{
@@ -196,7 +197,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Name:             PrimaryKeyIndexName,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
 			[]IndexDescriptor{},
 		},

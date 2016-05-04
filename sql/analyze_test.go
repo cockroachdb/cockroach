@@ -21,15 +21,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func testTableDesc() *TableDescriptor {
-	return &TableDescriptor{
+func testTableDesc() *sqlbase.TableDescriptor {
+	return &sqlbase.TableDescriptor{
 		Name:     "test",
 		ID:       1001,
 		ParentID: 1000,
-		Columns: []ColumnDescriptor{
+		Columns: []sqlbase.ColumnDescriptor{
 			{Name: "a", Type: ColumnType{Kind: ColumnType_INT}},
 			{Name: "b", Type: ColumnType{Kind: ColumnType_INT}},
 			{Name: "c", Type: ColumnType{Kind: ColumnType_BOOL}},
@@ -41,7 +42,7 @@ func testTableDesc() *TableDescriptor {
 			{Name: "i", Type: ColumnType{Kind: ColumnType_STRING}},
 			{Name: "j", Type: ColumnType{Kind: ColumnType_INT}},
 		},
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 		},

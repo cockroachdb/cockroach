@@ -132,8 +132,8 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	desc.Name = name
 }
 
-// Fill in column names and directions.
-func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
+// FillColumns sets the column names and directions in desc.
+func (desc *IndexDescriptor) FillColumns(elems parser.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
@@ -150,10 +150,10 @@ func (desc *IndexDescriptor) fillColumns(elems parser.IndexElemList) error {
 	return nil
 }
 
-// containsColumnID returns true if the index descriptor contains the specified
+// ContainsColumnID returns true if the index descriptor contains the specified
 // column ID either in its explicit column IDs or the implicit "extra" column
 // IDs.
-func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
+func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 	for _, id := range desc.ColumnIDs {
 		if id == colID {
 			return true
@@ -167,10 +167,10 @@ func (desc *IndexDescriptor) containsColumnID(colID ColumnID) bool {
 	return false
 }
 
-// fullColumnIDs returns the index column IDs including any implicit column IDs
+// FullColumnIDs returns the index column IDs including any implicit column IDs
 // for non-unique indexes. It also returns the direction with which each column
 // was encoded.
-func (desc *IndexDescriptor) fullColumnIDs() ([]ColumnID, []encoding.Direction) {
+func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) {
 	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
 	for _, dir := range desc.ColumnDirections {
 		convertedDir, err := dir.toEncodingDirection()
@@ -223,9 +223,9 @@ func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
 	return cols
 }
 
-// allNonDropIndexes returns all the indexes, including those being added
+// AllNonDropIndexes returns all the indexes, including those being added
 // in the mutations.
-func (desc *TableDescriptor) allNonDropIndexes() []IndexDescriptor {
+func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 	indexes := make([]IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
 	indexes = append(indexes, desc.PrimaryIndex)
 	indexes = append(indexes, desc.Indexes...)
@@ -315,11 +315,11 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		}
 		if index != &desc.PrimaryIndex {
 			// Need to clear ImplicitColumnIDs because it is used by
-			// containsColumnID.
+			// ContainsColumnID.
 			index.ImplicitColumnIDs = nil
 			var implicitColumnIDs []ColumnID
 			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
-				if !index.containsColumnID(primaryColID) {
+				if !index.ContainsColumnID(primaryColID) {
 					implicitColumnIDs = append(implicitColumnIDs, primaryColID)
 				}
 			}
@@ -336,10 +336,10 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				} else {
 					col = desc.Mutations[i].GetColumn()
 				}
-				if desc.PrimaryIndex.containsColumnID(col.ID) {
+				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
 					continue
 				}
-				if index.containsColumnID(col.ID) {
+				if index.ContainsColumnID(col.ID) {
 					return fmt.Errorf("index \"%s\" already contains column \"%s\"", index.Name, col.Name)
 				}
 				index.ImplicitColumnIDs = append(index.ImplicitColumnIDs, col.ID)
@@ -441,7 +441,7 @@ func (desc *TableDescriptor) Validate() error {
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[IndexID]string{}
-	for _, index := range desc.allNonDropIndexes() {
+	for _, index := range desc.AllNonDropIndexes() {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
 		}

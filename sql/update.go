@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -35,7 +36,7 @@ import (
 type editNodeBase struct {
 	p          *planner
 	rh         returningHelper
-	tableDesc  *TableDescriptor
+	tableDesc  *sqlbase.TableDescriptor
 	autoCommit bool
 }
 
@@ -91,7 +92,7 @@ type updateNode struct {
 	n            *parser.Update
 	desiredTypes []parser.Datum
 
-	updateCols []ColumnDescriptor
+	updateCols []sqlbase.ColumnDescriptor
 	tw         tableUpdater
 
 	run struct {

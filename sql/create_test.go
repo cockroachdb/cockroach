@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -51,10 +52,10 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sql.MakeDescMetadataKey(sql.ID(expectedCounter))
-	dbDesc := &sql.Descriptor{
-		Union: &sql.Descriptor_Database{
-			Database: &sql.DatabaseDescriptor{
+	dbDescKey := sqlbase.MakeDescMetadataKey(sql.ID(expectedCounter))
+	dbDesc := &sqlbase.Descriptor{
+		Union: &sqlbase.Descriptor_Database{
+			Database: &sqlbase.DatabaseDescriptor{
 				Name:       "sentinel",
 				ID:         sql.ID(expectedCounter),
 				Privileges: &sql.PrivilegeDescriptor{},

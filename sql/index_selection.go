@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -312,8 +313,8 @@ func (oic orIndexConstraints) String() string {
 }
 
 type indexInfo struct {
-	desc        *TableDescriptor
-	index       *IndexDescriptor
+	desc        *sqlbase.TableDescriptor
+	index       *sqlbase.IndexDescriptor
 	constraints orIndexConstraints
 	cost        float64
 	covering    bool // Does the index cover the required qvalues?
@@ -768,7 +769,7 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 	for i, needed := range scan.valNeededForCol {
 		if needed {
 			colID := v.desc.Columns[i].ID
-			if !v.index.containsColumnID(colID) {
+			if !v.index.ContainsColumnID(colID) {
 				return false
 			}
 		}
@@ -1023,7 +1024,7 @@ func encodeInclusiveEndValue(
 //
 // Returns the exploded spans.
 func applyInConstraint(spans []span, c indexConstraint, firstCol int,
-	index *IndexDescriptor, isLastEndConstraint bool) []span {
+	index *sqlbase.IndexDescriptor, isLastEndConstraint bool) []span {
 	var e *parser.ComparisonExpr
 	// It might be that the IN constraint is a start constraint, an
 	// end constraint, or both, depending on how whether we had
@@ -1113,7 +1114,9 @@ func (a spanEvents) Less(i, j int) bool {
 // makeSpans constructs the spans for an index given the orIndexConstraints by
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
-func makeSpans(constraints orIndexConstraints, tableID ID, index *IndexDescriptor) spans {
+func makeSpans(
+	constraints orIndexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
+) spans {
 	if len(constraints) == 0 {
 		return makeSpansForIndexConstraints(nil, tableID, index)
 	}
@@ -1171,8 +1174,9 @@ func mergeAndSortSpans(s spans) spans {
 // makeSpansForIndexConstraints constructs the spans for an index given an
 // instance of indexConstraints. The resulting spans are non-overlapping (by
 // virtue of the input constraints being disjunct).
-func makeSpansForIndexConstraints(constraints indexConstraints, tableID ID,
-	index *IndexDescriptor) spans {
+func makeSpansForIndexConstraints(
+	constraints indexConstraints, tableID sqlbase.ID, index *sqlbase.IndexDescriptor,
+) spans {
 	prefix := roachpb.Key(MakeIndexKeyPrefix(tableID, index.ID))
 	// We have one constraint per column, so each contributes something
 	// to the start and/or the end key of the span.

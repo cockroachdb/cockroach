@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -117,20 +118,20 @@ func TestMergeAndSortSpans(t *testing.T) {
 }
 
 func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
-	*TableDescriptor, *IndexDescriptor) {
+	*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
 	desc := testTableDesc()
-	desc.Indexes = append(desc.Indexes, IndexDescriptor{
+	desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
 		Name:        "foo",
 		ColumnNames: columns,
 	})
 	idx := &desc.Indexes[len(desc.Indexes)-1]
 	// Fill in the directions for the columns.
 	for i := range columns {
-		var dir IndexDescriptor_Direction
+		var dir sqlbase.IndexDescriptor_Direction
 		if dirs[i] == encoding.Ascending {
-			dir = IndexDescriptor_ASC
+			dir = sqlbase.IndexDescriptor_ASC
 		} else {
-			dir = IndexDescriptor_DESC
+			dir = sqlbase.IndexDescriptor_DESC
 		}
 		idx.ColumnDirections = append(idx.ColumnDirections, dir)
 	}
@@ -144,7 +145,7 @@ func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
 // makeTestIndexFromStr creates a test index from a string that enumerates the
 // columns, separated by commas. Each column has an optional '-' at the end if
 // it is descending.
-func makeTestIndexFromStr(t *testing.T, columnsStr string) (*TableDescriptor, *IndexDescriptor) {
+func makeTestIndexFromStr(t *testing.T, columnsStr string) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
 	columns := strings.Split(columnsStr, ",")
 	dirs := make([]encoding.Direction, len(columns))
 	for i, c := range columns {
@@ -158,8 +159,8 @@ func makeTestIndexFromStr(t *testing.T, columnsStr string) (*TableDescriptor, *I
 	return makeTestIndex(t, columns, dirs)
 }
 
-func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
-	index *IndexDescriptor) (orIndexConstraints, parser.TypedExpr) {
+func makeConstraints(t *testing.T, sql string, desc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor) (orIndexConstraints, parser.TypedExpr) {
 	expr, _ := parseAndNormalizeExpr(t, sql)
 	exprs, equiv := analyzeExpr(expr)
 
@@ -309,7 +310,7 @@ func TestMakeConstraints(t *testing.T) {
 	}
 }
 
-func indexToDirs(index *IndexDescriptor) []encoding.Direction {
+func indexToDirs(index *sqlbase.IndexDescriptor) []encoding.Direction {
 	var dirs []encoding.Direction
 	for _, dir := range index.ColumnDirections {
 		d, err := dir.toEncodingDirection()
