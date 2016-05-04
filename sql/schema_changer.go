@@ -164,9 +164,16 @@ func (sc *SchemaChanger) ExtendLease(
 	return lease, err
 }
 
+func schemaChangeRetryError(err error) bool {
+	if _, ok := err.(*roachpb.DescriptorNotFoundError); ok || isIntegrityConstraintError(err) {
+		return false
+	}
+	return true
+}
+
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
-func (sc SchemaChanger) exec(startBackfillNotification func()) error {
+func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -229,26 +236,32 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) error {
 	// Another transaction might set the up_version bit again,
 	// but we're no longer responsible for taking care of that.
 
-	// Run through mutation state machine before backfill.
-	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
-		return err
-	}
+	// Run through mutation state machine and backfill.
+	err = sc.runStateMachineAndBackfill(&lease, startBackfillNotification)
 
-	if startBackfillNotification != nil {
-		startBackfillNotification()
-	}
-
-	// Run backfill.
-	if err := sc.runBackfill(&lease); err != nil {
-		// Purge the mutations if the application of the mutations fail.
-		if errPurge := sc.purgeMutations(&lease); errPurge != nil {
-			return util.Errorf("error purging mutation: %s, after error: %s", errPurge, err)
+	// Purge the mutations if the application of the mutations fail due to
+	// a integrity constraint violation. All other errors are transient
+	// errors that can accommodate retrying the backfill.
+	if isIntegrityConstraintError(err) {
+		if errReverse := sc.reverseMutations(); errReverse != nil {
+			// Although the backfill did hit an integrity constraint and made
+			// a decision to reverse the mutations, reverseMutations() failed.
+			// If exec() is called again the entire schema change will be retried.
+			return errReverse
 		}
-		return err
+
+		// After this point the schema change has been reversed and any retry
+		// of the schema change will act upon the reversed schema change.
+		errPurge := sc.runStateMachineAndBackfill(&lease, startBackfillNotification)
+		if errPurge != nil {
+			// Don't return this error because we do want the caller to know
+			// that an integrity constraint was violated with the original
+			// schema change. The reversed schema change will be
+			// retried via the async schema change manager.
+			log.Warningf("error purging mutation: %s, after error: %s", errPurge, err)
+		}
 	}
 
-	// Mark the mutations as completed.
-	_, err = sc.done()
 	return err
 }
 
@@ -362,19 +375,48 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 	})
 }
 
-// Purge all mutations with the mutationID. This is called after
-// hitting an irrecoverable error. Reverse the direction of the mutations
-// and run through the state machine until the mutations are deleted.
-func (sc *SchemaChanger) purgeMutations(lease *sqlbase.TableDescriptor_SchemaChangeLease) error {
+// runStateMachineAndBackfill runs the schema change state machine followed by
+// the backfill.
+func (sc *SchemaChanger) runStateMachineAndBackfill(
+	lease *sqlbase.TableDescriptor_SchemaChangeLease, startBackfillNotification func() error,
+) error {
+	// Run through mutation state machine before backfill.
+	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
+		return err
+	}
+
+	if startBackfillNotification != nil {
+		if err := startBackfillNotification(); err != nil {
+			return err
+		}
+	}
+
+	// Run backfill.
+	if err := sc.runBackfill(lease); err != nil {
+		return err
+	}
+
+	// Mark the mutations as completed.
+	_, err := sc.done()
+	return err
+}
+
+// reverseMutations reverses the direction of all the mutations with the
+// mutationID. This is called after hitting an irrecoverable error while
+// applying a schema change.
+func (sc *SchemaChanger) reverseMutations() error {
+	if log.V(2) {
+		log.Info("reversing schema change due to integrity constraints violation")
+	}
 	// Reverse the flow of the state machine.
-	if _, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+	_, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
-			log.Warningf("Purging schema change mutation: %v", desc.Mutations[i])
+			log.Warningf("reversing schema change mutation: %v", desc.Mutations[i])
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_DROP
@@ -385,26 +427,7 @@ func (sc *SchemaChanger) purgeMutations(lease *sqlbase.TableDescriptor_SchemaCha
 		}
 		// Publish() will increment the version.
 		return nil
-	}); err != nil {
-		return err
-	}
-
-	// Run through mutation state machine before backfill.
-	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
-		return err
-	}
-
-	// Run backfill and don't run purge on hitting an error.
-	// TODO(vivek): If this fails we can get into a permanent
-	// failure with some mutations, where subsequent schema
-	// changers keep attempting to apply and purge mutations.
-	// This is a theoretical problem at this stage (2015/12).
-	if err := sc.runBackfill(lease); err != nil {
-		return err
-	}
-
-	// Mark the mutations as completed.
-	_, err := sc.done()
+	})
 	return err
 }
 
@@ -615,6 +638,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								// deletion which would remove this schemaChanger.
 								delete(s.schemaChangers, tableID)
 							} else {
+								// We don't need to act on integrity
+								// constraints violations because exec() is
+								// capable of purging mutations that violate
+								// integrity constrinsts.
 								log.Warningf("Error executing schema change: %s", err)
 							}
 						}

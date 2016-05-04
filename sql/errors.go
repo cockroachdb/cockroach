@@ -32,6 +32,8 @@ const (
 	// PG error codes from:
 	// http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html
 
+	// CodeNonNullViolationError represents violation of a non-null constraint.
+	CodeNonNullViolationError string = "23502"
 	// CodeUniquenessConstraintViolationError represents violations of uniqueness
 	// constraints.
 	CodeUniquenessConstraintViolationError string = "23505"
@@ -60,6 +62,7 @@ type ErrorWithPGCode interface {
 	Code() string
 }
 
+var _ ErrorWithPGCode = &errNonNullViolation{}
 var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
 var _ ErrorWithPGCode = &errTransactionAborted{}
 var _ ErrorWithPGCode = &errTransactionCommitted{}
@@ -112,6 +115,18 @@ func (*errTransactionCommitted) Code() string {
 	return CodeTransactionCommittedError
 }
 
+type errNonNullViolation struct {
+	column string
+}
+
+func (e *errNonNullViolation) Error() string {
+	return fmt.Sprintf("column %s contains null values", e.column)
+}
+
+func (*errNonNullViolation) Code() string {
+	return CodeNonNullViolationError
+}
+
 type errUniquenessConstraintViolation struct {
 	index *sqlbase.IndexDescriptor
 	vals  []parser.Datum
@@ -131,6 +146,15 @@ func (e *errUniquenessConstraintViolation) Error() string {
 		strings.Join(e.index.ColumnNames, ","),
 		strings.Join(valStrs, ","),
 		e.index.Name)
+}
+
+func isIntegrityConstraintError(err error) bool {
+	switch err.(type) {
+	case *errNonNullViolation, *errUniquenessConstraintViolation:
+		return true
+	default:
+		return false
+	}
 }
 
 func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origPErr *roachpb.Error) error {

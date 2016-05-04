@@ -18,6 +18,7 @@ package sql_test
 
 import (
 	gosql "database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -537,11 +539,12 @@ func TestRaceWithBackfill(t *testing.T) {
 	var execKnobs csql.ExecutorTestingKnobs
 	var backfillNotification chan bool
 	execKnobs.SchemaChangersStartBackfillNotification =
-		func() {
+		func() error {
 			if backfillNotification != nil {
 				// Close channel to notify that the backfill has started.
 				close(backfillNotification)
 			}
+			return nil
 		}
 	ctx, _ := createTestServerContext()
 	ctx.TestingKnobs.SQLExecutor = &execKnobs
@@ -710,5 +713,167 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatal(err)
 	} else if len(kvs) != 0 {
 		t.Fatalf("expected %d key value pairs, but got %d", 0, len(kvs))
+	}
+}
+
+// Test schema changes are retried and complete properly
+func TestSchemaChangeRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Disable asynchronous schema change execution so that we can trust
+	// everything runs through the synchronous path.
+	defer csql.TestDisableAsyncSchemaChangeExec()()
+	var execKnobs csql.ExecutorTestingKnobs
+	attempts := 0
+	execKnobs.SchemaChangersStartBackfillNotification =
+		func() error {
+			attempts++
+			// Return a deadline exceeded error once.
+			if attempts == 1 {
+				return errors.New("context deadline exceeded")
+			}
+			return nil
+		}
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLExecutor = &execKnobs
+	server, sqlDB, kvDB := setupWithContext(t, ctx)
+	defer cleanup(server, sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 10
+	insert := fmt.Sprintf(`INSERT INTO t.test VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run a schema change.
+	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
+		t.Fatal(err)
+	}
+	// The schema change retried once.
+	if attempts != 2 {
+		t.Fatal("the schema changer didn't get triggered")
+	}
+
+	// The schema change succeeded. Verify that the index foo over v is
+	// consistent.
+	rows, err := sqlDB.Query(`SELECT v from t.test@foo`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	for ; rows.Next(); count++ {
+		var val int
+		if err := rows.Scan(&val); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if count != val {
+			t.Errorf("e = %d, v = %d", count, val)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if eCount := maxValue + 1; eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// Drop the index.
+	if _, err := sqlDB.Exec("DROP INDEX t.test@foo"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add a row with a duplicate value for v
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1, $2)`, maxValue+1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now recreate index where a constraint violation triggers a reverse of
+	// the schema change.
+
+	// Have the backfill operate on one row at a time so that when it violates
+	// a constraint it has left some garbage around.
+	backfillChunkSize := csql.IndexBackfillChunkSize
+	defer func() {
+		csql.IndexBackfillChunkSize = backfillChunkSize
+	}()
+	csql.IndexBackfillChunkSize = 1
+
+	attempts = 0
+	execKnobs.SchemaChangersStartBackfillNotification =
+		func() error {
+			attempts++
+			// Return a deadline exceeded error during the second attempt
+			// which attempts to clean up the schema change.
+			if attempts == 2 {
+				return errors.New("context deadline exceeded")
+			}
+			return nil
+		}
+
+	// Schema change that violates integrity constraints.
+	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); !testutils.IsError(err, "violates unique constraint") {
+		t.Fatal(err)
+	}
+	// The deadline exceeded error in the schema change purge results in no
+	// retry attempt of the purge.
+	if attempts != 2 {
+		t.Fatalf("the schema changer made %d retries despite a constraint violation", attempts)
+	}
+
+	// The index doesn't exist
+	if _, err := sqlDB.Query(`SELECT v from t.test@foo`); !testutils.IsError(err, "not found") {
+		t.Fatal(err)
+	}
+
+	// Read table descriptor.
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "test")
+	gr, err := kvDB.Get(nameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	desc := &sqlbase.Descriptor{}
+	if err := kvDB.GetProto(descKey, desc); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := desc.GetTable()
+
+	// There is still a mutation hanging off of it, guaranteeing that it will
+	// eventually execute via the asynchronous path.
+	if len(tableDesc.Mutations) != 1 {
+		t.Fatalf("the schema changer has %d mutations", len(tableDesc.Mutations))
+	}
+
+	// The mutation is for a DROP.
+	if tableDesc.Mutations[0].Direction != sqlbase.DescriptorMutation_DROP {
+		t.Fatalf("the schema changer has invalid mutation %v", tableDesc.Mutations[0])
+	}
+
+	// There is still some garbage index data that needs to be purged. All the
+	// rows from k = 0 to k = maxValue have index values. The k = maxValue + 1
+	// row with the conflict doesn't contain an index value.
+	numGarbageValues := maxValue + 1
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 2*(maxValue+2) + numGarbageValues; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }

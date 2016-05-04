@@ -18,7 +18,6 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -284,9 +283,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 				// Still processing table.
 				done = false
 				if nonNullableColumn != "" {
-					return fmt.Errorf("column %s contains null values", nonNullableColumn)
+					return &errNonNullViolation{column: nonNullableColumn}
 				}
-
 				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
 					// Sentinel keys have a 0 suffix indicating 0 bytes of
 					// column ID. Strip off that suffix to determine the
@@ -406,7 +404,7 @@ func (sc *SchemaChanger) truncateIndexes(
 // TODO(vivek) Run some experiments to set this value to something sensible or
 // adjust it dynamically. Also add in a sleep after every chunk is processed,
 // to slow down the backfill and not have it interfere with OLTP commands.
-const IndexBackfillChunkSize = 100
+var IndexBackfillChunkSize = 100
 
 func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,

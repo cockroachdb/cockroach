@@ -263,8 +263,8 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			if err := sc.exec(
 				e.ctx.TestingKnobs.SchemaChangersStartBackfillNotification,
 			); err != nil {
-				if err == errExistingSchemaChangeLease {
-					// Try again.
+				if schemaChangeRetryError(err) {
+					// Try again
 					continue
 				}
 				// All other errors can be reported; we report it as the result
