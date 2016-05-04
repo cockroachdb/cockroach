@@ -16,16 +16,17 @@
 
 package parser
 
-import "fmt"
+import "bytes"
 
 // ReturningExprs represents RETURNING expressions.
 type ReturningExprs SelectExprs
 
-func (r ReturningExprs) String() string {
-	if len(r) == 0 {
-		return ""
+// Format implements the NodeFormatter interface.
+func (r ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
+	if len(r) != 0 {
+		buf.WriteString(" RETURNING ")
+		FormatNode(buf, f, SelectExprs(r))
 	}
-	return fmt.Sprintf(" RETURNING%s", SelectExprs(r))
 }
 
 // StatementType implements the Statement interface.
