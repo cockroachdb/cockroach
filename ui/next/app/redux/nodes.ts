@@ -9,7 +9,7 @@ import { Dispatch } from "redux";
 import assign = require("object-assign");
 import { Action, PayloadAction } from "../interfaces/action";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
-import "whatwg-fetch";
+import "isomorphic-fetch";
 
 import * as protos from "../js/protos";
 
@@ -36,9 +36,6 @@ export class NodeStatusState {
  * Redux reducer which processes actions related to the nodes status query.
  */
 export default function reducer(state: NodeStatusState, action: Action): NodeStatusState {
-  if (action === undefined) {
-    return;
-  }
   if (state === undefined) {
     state = new NodeStatusState();
   }

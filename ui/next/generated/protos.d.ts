@@ -22,6 +22,7 @@ declare module cockroach {
 		roachpb: roachpbBuilder;
 		build: buildBuilder;
 		server: serverBuilder;
+		ts: tsBuilder;
 		
 }
 }
@@ -800,6 +801,387 @@ export interface NodeStatusBuilder {
 }
 
 
+
+
+declare module cockroach {
+	
+	export interface ts {
+	
+		
+
+}
+	
+		
+export interface tsMessage extends ts {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface tsBuilder {
+	new(data?: ts): tsMessage;
+	decode(buffer: ArrayBuffer) : tsMessage;
+	//decode(buffer: NodeBuffer) : tsMessage;
+	//decode(buffer: ByteArrayBuffer) : tsMessage;
+	decode(buffer: ByteBuffer) : tsMessage;
+	decode64(buffer: string) : tsMessage;
+	TimeSeriesDatapoint: ts.TimeSeriesDatapointBuilder;
+	TimeSeriesData: ts.TimeSeriesDataBuilder;
+	Query: ts.QueryBuilder;
+	TimeSeriesQueryRequest: ts.TimeSeriesQueryRequestBuilder;
+	TimeSeriesQueryResponse: ts.TimeSeriesQueryResponseBuilder;
+	TimeSeriesQueryAggregator: ts.TimeSeriesQueryAggregator;
+	TimeSeriesQueryDerivative: ts.TimeSeriesQueryDerivative;
+	
+}
+	
+}
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesDatapoint {
+	
+		
+
+timestamp_nanos?: Long;
+		
+
+getTimestampNanos?() : Long;
+		setTimestampNanos?(timestampNanos : Long): void;
+		
+
+
+
+value?: number;
+		
+
+getValue?() : number;
+		setValue?(value : number): void;
+		
+
+
+
+}
+	
+		
+export interface TimeSeriesDatapointMessage extends TimeSeriesDatapoint {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesDatapointBuilder {
+	new(data?: TimeSeriesDatapoint): TimeSeriesDatapointMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesDatapointMessage;
+	//decode(buffer: NodeBuffer) : TimeSeriesDatapointMessage;
+	//decode(buffer: ByteArrayBuffer) : TimeSeriesDatapointMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesDatapointMessage;
+	decode64(buffer: string) : TimeSeriesDatapointMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesData {
+	
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+source?: string;
+		
+
+getSource?() : string;
+		setSource?(source : string): void;
+		
+
+
+
+datapoints?: TimeSeriesDatapoint[];
+		
+
+getDatapoints?() : TimeSeriesDatapoint[];
+		setDatapoints?(datapoints : TimeSeriesDatapoint[]): void;
+		
+
+
+
+}
+	
+		
+export interface TimeSeriesDataMessage extends TimeSeriesData {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesDataBuilder {
+	new(data?: TimeSeriesData): TimeSeriesDataMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesDataMessage;
+	//decode(buffer: NodeBuffer) : TimeSeriesDataMessage;
+	//decode(buffer: ByteArrayBuffer) : TimeSeriesDataMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesDataMessage;
+	decode64(buffer: string) : TimeSeriesDataMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface Query {
+	
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+downsampler?: TimeSeriesQueryAggregator;
+		
+
+getDownsampler?() : TimeSeriesQueryAggregator;
+		setDownsampler?(downsampler : TimeSeriesQueryAggregator): void;
+		
+
+
+
+source_aggregator?: TimeSeriesQueryAggregator;
+		
+
+getSourceAggregator?() : TimeSeriesQueryAggregator;
+		setSourceAggregator?(sourceAggregator : TimeSeriesQueryAggregator): void;
+		
+
+
+
+derivative?: TimeSeriesQueryDerivative;
+		
+
+getDerivative?() : TimeSeriesQueryDerivative;
+		setDerivative?(derivative : TimeSeriesQueryDerivative): void;
+		
+
+
+
+sources?: string[];
+		
+
+getSources?() : string[];
+		setSources?(sources : string[]): void;
+		
+
+
+
+}
+	
+		
+export interface QueryMessage extends Query {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface QueryBuilder {
+	new(data?: Query): QueryMessage;
+	decode(buffer: ArrayBuffer) : QueryMessage;
+	//decode(buffer: NodeBuffer) : QueryMessage;
+	//decode(buffer: ByteArrayBuffer) : QueryMessage;
+	decode(buffer: ByteBuffer) : QueryMessage;
+	decode64(buffer: string) : QueryMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesQueryRequest {
+	
+		
+
+start_nanos?: Long;
+		
+
+getStartNanos?() : Long;
+		setStartNanos?(startNanos : Long): void;
+		
+
+
+
+end_nanos?: Long;
+		
+
+getEndNanos?() : Long;
+		setEndNanos?(endNanos : Long): void;
+		
+
+
+
+queries?: Query[];
+		
+
+getQueries?() : Query[];
+		setQueries?(queries : Query[]): void;
+		
+
+
+
+}
+	
+		
+export interface TimeSeriesQueryRequestMessage extends TimeSeriesQueryRequest {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesQueryRequestBuilder {
+	new(data?: TimeSeriesQueryRequest): TimeSeriesQueryRequestMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesQueryRequestMessage;
+	//decode(buffer: NodeBuffer) : TimeSeriesQueryRequestMessage;
+	//decode(buffer: ByteArrayBuffer) : TimeSeriesQueryRequestMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesQueryRequestMessage;
+	decode64(buffer: string) : TimeSeriesQueryRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesQueryResponse {
+	
+		
+
+results?: TimeSeriesQueryResponse.Result[];
+		
+
+getResults?() : TimeSeriesQueryResponse.Result[];
+		setResults?(results : TimeSeriesQueryResponse.Result[]): void;
+		
+
+
+
+}
+	
+		
+export interface TimeSeriesQueryResponseMessage extends TimeSeriesQueryResponse {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesQueryResponseBuilder {
+	new(data?: TimeSeriesQueryResponse): TimeSeriesQueryResponseMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesQueryResponseMessage;
+	//decode(buffer: NodeBuffer) : TimeSeriesQueryResponseMessage;
+	//decode(buffer: ByteArrayBuffer) : TimeSeriesQueryResponseMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesQueryResponseMessage;
+	decode64(buffer: string) : TimeSeriesQueryResponseMessage;
+	Result: TimeSeriesQueryResponse.ResultBuilder;
+	
+}
+	
+}
+
+declare module cockroach.ts.TimeSeriesQueryResponse {
+	
+	export interface Result {
+	
+		
+
+query?: Query;
+		
+
+getQuery?() : Query;
+		setQuery?(query : Query): void;
+		
+
+
+
+datapoints?: TimeSeriesDatapoint[];
+		
+
+getDatapoints?() : TimeSeriesDatapoint[];
+		setDatapoints?(datapoints : TimeSeriesDatapoint[]): void;
+		
+
+
+
+}
+	
+		
+export interface ResultMessage extends Result {
+	toArrayBuffer(): ArrayBuffer;
+	//toBuffer(): NodeBuffer;
+	encode(): ByteBuffer;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ResultBuilder {
+	new(data?: Result): ResultMessage;
+	decode(buffer: ArrayBuffer) : ResultMessage;
+	//decode(buffer: NodeBuffer) : ResultMessage;
+	//decode(buffer: ByteArrayBuffer) : ResultMessage;
+	decode(buffer: ByteBuffer) : ResultMessage;
+	decode64(buffer: string) : ResultMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.ts {
+	export const enum TimeSeriesQueryAggregator {
+		AVG = 1,
+		SUM = 2,
+		MAX = 3,
+		MIN = 4,
+		
+}
+}
+
+declare module cockroach.ts {
+	export const enum TimeSeriesQueryDerivative {
+		NONE = 0,
+		DERIVATIVE = 1,
+		NON_NEGATIVE_DERIVATIVE = 2,
+		
+}
+}
 
 
 

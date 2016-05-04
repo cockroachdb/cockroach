@@ -58,7 +58,9 @@ System.config({
   map: {
     "d3": "npm:d3@3.5.16",
     "es6-promise": "npm:es6-promise@3.1.2",
+    "isomorphic-fetch": "npm:isomorphic-fetch@2.2.1",
     "lodash": "npm:lodash@4.11.2",
+    "long": "npm:long@3.1.0",
     "moment": "npm:moment@2.13.0",
     "object-assign": "npm:object-assign@4.1.0",
     "protobufjs": "npm:protobufjs@5.0.1",
