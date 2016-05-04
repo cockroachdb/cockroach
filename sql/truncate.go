@@ -31,9 +31,9 @@ import (
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	for _, tableQualifiedName := range n.Tables {
-		tableDesc, pErr := p.getTableLease(tableQualifiedName)
-		if pErr != nil {
-			return nil, pErr.GoError()
+		tableDesc, err := p.getTableLease(tableQualifiedName)
+		if err != nil {
+			return nil, err
 		}
 
 		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
