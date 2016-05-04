@@ -27,8 +27,8 @@ type normalizableExpr interface {
 }
 
 func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
-	left := expr.Left.(TypedExpr)
-	right := expr.Right.(TypedExpr)
+	left := expr.TypedLeft()
+	right := expr.TypedRight()
 
 	// Use short-circuit evaluation to simplify AND expressions.
 	if v.isConst(left) {
@@ -45,10 +45,10 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 			}
 			return DNull
 		}
-		return &AndExpr{
-			Left:  left,
-			Right: expr.Right,
-		}
+		return NewTypedAndExpr(
+			left,
+			right,
+		)
 	}
 	if v.isConst(right) {
 		right, v.err = right.Eval(v.ctx)
@@ -64,10 +64,10 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 			}
 			return DNull
 		}
-		return &AndExpr{
-			Left:  expr.Left,
-			Right: right,
-		}
+		return NewTypedAndExpr(
+			left,
+			right,
+		)
 	}
 	return expr
 }
@@ -119,6 +119,9 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					Operator: invertComparisonOp(expr.Operator),
 					Left:     expr.Right,
 					Right:    expr.Left,
+					typeAnnotation: typeAnnotation{
+						typ: DummyBool,
+					},
 				}
 			} else if !v.isConst(expr.Right) {
 				return expr
@@ -234,8 +237,8 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 }
 
 func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
-	left := expr.Left.(TypedExpr)
-	right := expr.Right.(TypedExpr)
+	left := expr.TypedLeft()
+	right := expr.TypedRight()
 
 	// Use short-circuit evaluation to simplify OR expressions.
 	if v.isConst(left) {
@@ -252,10 +255,10 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 			}
 			return DNull
 		}
-		return &OrExpr{
-			Left:  left,
-			Right: right,
-		}
+		return NewTypedOrExpr(
+			left,
+			right,
+		)
 	}
 	if v.isConst(right) {
 		right, v.err = right.Eval(v.ctx)
@@ -271,48 +274,48 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 			}
 			return DNull
 		}
-		return &OrExpr{
-			Left:  left,
-			Right: right,
-		}
+		return NewTypedOrExpr(
+			left,
+			right,
+		)
 	}
 	return expr
 }
 
 func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
-	return expr.Expr.(TypedExpr)
+	return expr.TypedInnerExpr()
 }
 
 func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	if expr.Not {
 		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
-		return &OrExpr{
-			Left: &ComparisonExpr{
-				Operator: LT,
-				Left:     expr.Left,
-				Right:    expr.From,
-			},
-			Right: &ComparisonExpr{
-				Operator: GT,
-				Left:     expr.Left,
-				Right:    expr.To,
-			},
-		}
+		return NewTypedOrExpr(
+			NewTypedComparisonExpr(
+				LT,
+				expr.TypedLeft(),
+				expr.TypedFrom(),
+			),
+			NewTypedComparisonExpr(
+				GT,
+				expr.TypedLeft(),
+				expr.TypedTo(),
+			),
+		)
 	}
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
-	return &AndExpr{
-		Left: &ComparisonExpr{
-			Operator: GE,
-			Left:     expr.Left,
-			Right:    expr.From,
-		},
-		Right: &ComparisonExpr{
-			Operator: LE,
-			Left:     expr.Left,
-			Right:    expr.To,
-		},
-	}
+	return NewTypedAndExpr(
+		NewTypedComparisonExpr(
+			GE,
+			expr.TypedLeft(),
+			expr.TypedFrom(),
+		),
+		NewTypedComparisonExpr(
+			LE,
+			expr.TypedLeft(),
+			expr.TypedTo(),
+		),
+	)
 }
 
 func (expr *Row) normalize(v *normalizeVisitor) TypedExpr {
