@@ -3475,11 +3475,11 @@ frame_bound:
 row:
   ROW '(' expr_list ')'
   {
-    $$.val = &Row{Exprs: $3.exprs()}
+    $$.val = &Tuple{Exprs: $3.exprs(), row: true}
   }
 | ROW '(' ')'
   {
-    $$.val = &Row{Exprs: nil}
+    $$.val = &Tuple{Exprs: nil, row: true}
   }
 | '(' expr_list ',' a_expr ')'
   {
@@ -3489,11 +3489,11 @@ row:
 explicit_row:
   ROW '(' expr_list ')'
   {
-    $$.val = &Row{Exprs: $3.exprs()}
+    $$.val = &Tuple{Exprs: $3.exprs(), row: true}
   }
 | ROW '(' ')'
   {
-    $$.val = &Row{Exprs: nil}
+    $$.val = &Tuple{Exprs: nil, row: true}
   }
 
 implicit_row:

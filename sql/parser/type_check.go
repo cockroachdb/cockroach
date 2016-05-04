@@ -487,40 +487,21 @@ func (expr *StrVal) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
 	return typeCheckConstant(expr, desired)
 }
 
-func typeCheckExprs(args MapArgs, exprs []Expr, desired Datum) ([]Expr, DTuple, error) {
-	types := make(DTuple, 0, len(exprs))
-	for i, expr := range exprs {
+// TypeCheck implements the Expr interface.
+func (expr *Tuple) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
+	expr.types = make(DTuple, len(expr.Exprs))
+	for i, subExpr := range expr.Exprs {
 		var desiredElem Datum
 		if t, ok := desired.(*DTuple); ok && len(*t) > i {
 			desiredElem = (*t)[i]
 		}
-		var err error
-		exprs[i], err = expr.TypeCheck(args, desiredElem)
+		typedExpr, err := subExpr.TypeCheck(args, desiredElem)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		types = append(types, exprs[i].(TypedExpr).ReturnType())
+		expr.Exprs[i] = typedExpr
+		expr.types[i] = typedExpr.ReturnType()
 	}
-	return exprs, types, nil
-}
-
-// TypeCheck implements the Expr interface.
-func (expr *Row) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	typedExprs, types, err := typeCheckExprs(args, expr.Exprs, desired)
-	if err != nil {
-		return nil, err
-	}
-	expr.Exprs, expr.types = typedExprs, types
-	return expr, nil
-}
-
-// TypeCheck implements the Expr interface.
-func (expr *Tuple) TypeCheck(args MapArgs, desired Datum) (TypedExpr, error) {
-	typedExprs, types, err := typeCheckExprs(args, expr.Exprs, desired)
-	if err != nil {
-		return nil, err
-	}
-	expr.Exprs, expr.types = typedExprs, types
 	return expr, nil
 }
 

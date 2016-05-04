@@ -318,20 +318,12 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	)
 }
 
-func (expr *Row) normalize(v *normalizeVisitor) TypedExpr {
-	return &Tuple{
-		Exprs: expr.Exprs,
-		types: expr.types,
-	}
-}
-
 // NormalizeExpr normalizes a typed expression, simplifying where possible,
 // but guaranteeing that the result of evaluating the expression is
 // unchanged and that resulting expression tree is still well-typed.
 // Example normalizations:
 //
 //   (a)                   -> a
-//   ROW(a, b, c)          -> (a, b, c)
 //   a = 1 + 1             -> a = 2
 //   a + 1 = 2             -> a = 1
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)

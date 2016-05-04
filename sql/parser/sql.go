@@ -7809,13 +7809,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:3477
 		{
-			sqlVAL.union.val = &Row{Exprs: sqlDollar[3].union.exprs()}
+			sqlVAL.union.val = &Tuple{Exprs: sqlDollar[3].union.exprs(), row: true}
 		}
 	case 630:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3481
 		{
-			sqlVAL.union.val = &Row{Exprs: nil}
+			sqlVAL.union.val = &Tuple{Exprs: nil, row: true}
 		}
 	case 631:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]
@@ -7827,13 +7827,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:3491
 		{
-			sqlVAL.union.val = &Row{Exprs: sqlDollar[3].union.exprs()}
+			sqlVAL.union.val = &Tuple{Exprs: sqlDollar[3].union.exprs(), row: true}
 		}
 	case 633:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3495
 		{
-			sqlVAL.union.val = &Row{Exprs: nil}
+			sqlVAL.union.val = &Tuple{Exprs: nil, row: true}
 		}
 	case 634:
 		sqlDollar = sqlS[sqlpt-5 : sqlpt+1]

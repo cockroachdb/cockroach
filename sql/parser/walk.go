@@ -338,17 +338,6 @@ func (expr *Array) Walk(v Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
-func (expr *Row) Walk(v Visitor) Expr {
-	exprs, changed := walkExprSlice(v, expr.Exprs)
-	if changed {
-		exprCopy := *expr
-		exprCopy.Exprs = exprs
-		return &exprCopy
-	}
-	return expr
-}
-
-// Walk implements the Expr interface.
 func (expr *Tuple) Walk(v Visitor) Expr {
 	exprs, changed := walkExprSlice(v, expr.Exprs)
 	if changed {
