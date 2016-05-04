@@ -30,6 +30,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -414,6 +415,11 @@ type StoreTestingKnobs struct {
 	// Disables the use of one phase commits.
 	DisableOnePhaseCommits bool
 }
+
+var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*StoreTestingKnobs) ModuleTestingKnobs() {}
 
 type storeMetrics struct {
 	registry *metric.Registry

@@ -132,7 +132,7 @@ func TestScanBatches(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "scanTestCockroach")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "scanTestCockroach")
 	pgURL.Path = "test"
 	defer cleanupFn()
 

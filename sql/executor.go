@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 	"gopkg.in/inf.v0"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -161,6 +162,11 @@ type ExecutorContext struct {
 
 	TestingKnobs *ExecutorTestingKnobs
 }
+
+var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
 
 // TestingSchemaChangerCollection is an exported (for testing) version of
 // schemaChangerCollection.

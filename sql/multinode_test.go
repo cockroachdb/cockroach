@@ -54,7 +54,8 @@ func SetupMultinodeTestCluster(t testing.TB, nodes int, name string) ([]*gosql.D
 	var cleanups []func()
 
 	for i, s := range servers {
-		pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, fmt.Sprintf("node%d", i))
+		pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
+			fmt.Sprintf("node%d", i))
 		pgURL.Path = name
 		db, err := gosql.Open("postgres", pgURL.String())
 		if err != nil {

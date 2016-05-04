@@ -25,6 +25,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -202,7 +204,7 @@ func TestTxnRestart(t *testing.T) {
 
 	ctx, cmdFilters := createTestServerContext()
 	// Disable one phase commits because they cannot be restarted.
-	ctx.TestingKnobs.StoreTestingKnobs.DisableOnePhaseCommits = true
+	ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
@@ -410,7 +412,7 @@ func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cmdFilters := createTestServerContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
+	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 
@@ -527,7 +529,7 @@ func TestErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := server.NewTestContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.FixTxnPriority = true
+	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{FixTxnPriority: true}
 	server, sqlDB, _ := setupWithContext(t, ctx)
 	defer cleanup(server, sqlDB)
 	if _, err := sqlDB.Exec(`
