@@ -128,23 +128,68 @@ func TestTypeCheckError(t *testing.T) {
 	}
 }
 
-func intConst(s string) Expr {
-	return &NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
-}
+var (
+	mapArgsInt           = MapArgs{"a": DummyInt}
+	mapArgsFloat         = MapArgs{"a": DummyFloat}
+	mapArgsIntAndInt     = MapArgs{"a": DummyInt, "b": DummyInt}
+	mapArgsIntAndFloat   = MapArgs{"a": DummyInt, "b": DummyFloat}
+	mapArgsFloatAndFloat = MapArgs{"a": DummyFloat, "b": DummyFloat}
+)
 
-func floatConst(s string) Expr {
-	return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
-}
+// copyableExpr can provide each test permutation with a deep copy of the expression tree.
+type copyableExpr func() Expr
 
-func cloneMapArgs(args MapArgs) MapArgs {
-	clone := make(MapArgs)
-	for k, v := range args {
-		clone[k] = v
+func buildExprs(exprs []copyableExpr) []Expr {
+	freshExprs := make([]Expr, 0, len(exprs))
+	for _, expr := range exprs {
+		freshExprs = append(freshExprs, expr())
 	}
-	return clone
+	return freshExprs
 }
 
-func forEachPerm(exprs []Expr, i int, fn func([]Expr)) {
+var dnull = func() Expr {
+	return DNull
+}
+
+func exprs(fns ...copyableExpr) []copyableExpr {
+	return fns
+}
+func intConst(s string) copyableExpr {
+	return func() Expr {
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.INT, 0), OrigString: s}
+	}
+}
+func floatConst(s string) copyableExpr {
+	return func() Expr {
+		return &NumVal{Value: constant.MakeFromLiteral(s, token.FLOAT, 0), OrigString: s}
+	}
+}
+func dint(i DInt) copyableExpr {
+	return func() Expr {
+		return NewDInt(i)
+	}
+}
+func dfloat(f DFloat) copyableExpr {
+	return func() Expr {
+		return NewDFloat(f)
+	}
+}
+func valArg(name string) copyableExpr {
+	return func() Expr {
+		return ValArg{name}
+	}
+}
+func tuple(exprs ...copyableExpr) copyableExpr {
+	return func() Expr {
+		return &Tuple{Exprs: buildExprs(exprs)}
+	}
+}
+func dtuple(datums ...Datum) *DTuple {
+	dt := DTuple(datums)
+	return &dt
+}
+
+func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
 	if i == len(exprs)-1 {
 		fn(exprs)
 	}
@@ -155,111 +200,165 @@ func forEachPerm(exprs []Expr, i int, fn func([]Expr)) {
 	}
 }
 
-func TestTypeCheckSameTypedExprs(t *testing.T) {
-	mapArgsInt := MapArgs{"a": DummyInt}
-	mapArgsFloat := MapArgs{"a": DummyFloat}
-	mapArgsIntAndFloat := MapArgs{"a": DummyFloat, "b": DummyFloat}
-
-	testData := []struct {
-		args    MapArgs
-		desired Datum
-		exprs   []Expr
-
-		expectedType Datum
-		expectedArgs MapArgs
-	}{
-		// Constants.
-		{nil, nil, []Expr{intConst("1")}, DummyInt, nil},
-		{nil, nil, []Expr{floatConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{intConst("1"), floatConst("1")}, DummyFloat, nil},
-		// Resolved exprs.
-		{nil, nil, []Expr{NewDInt(1)}, DummyInt, nil},
-		{nil, nil, []Expr{NewDFloat(1)}, DummyFloat, nil},
-		// Mixing constants and resolved exprs.
-		{nil, nil, []Expr{NewDInt(1), intConst("1")}, DummyInt, nil},
-		{nil, nil, []Expr{NewDInt(1), floatConst("1")}, DummyInt, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
-		{nil, nil, []Expr{NewDInt(1), NewDInt(1)}, DummyInt, nil},
-		{nil, nil, []Expr{NewDFloat(1), intConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{NewDFloat(1), floatConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{NewDFloat(1), NewDFloat(1)}, DummyFloat, nil},
-		// Mixing resolved constants and resolved exprs with MapArgs.
-		{mapArgsFloat, nil, []Expr{NewDFloat(1), ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		{mapArgsFloat, nil, []Expr{intConst("1"), ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		{mapArgsFloat, nil, []Expr{floatConst("1"), ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		{mapArgsInt, nil, []Expr{intConst("1"), ValArg{"a"}}, DummyInt, mapArgsInt},
-		{mapArgsInt, nil, []Expr{floatConst("1"), ValArg{"a"}}, DummyInt, mapArgsInt},
-		{mapArgsIntAndFloat, nil, []Expr{ValArg{"b"}, ValArg{"a"}}, DummyFloat, mapArgsIntAndFloat},
-		// Mixing unresolved constants and resolved exprs with MapArgs.
-		{nil, nil, []Expr{NewDFloat(1), ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		{nil, nil, []Expr{intConst("1"), ValArg{"a"}}, DummyInt, mapArgsInt},
-		{nil, nil, []Expr{floatConst("1"), ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		// Verify dealing with Null.
-		{nil, nil, []Expr{DNull}, DNull, nil},
-		{nil, nil, []Expr{DNull, DNull}, DNull, nil},
-		{nil, nil, []Expr{DNull, intConst("1")}, DummyInt, nil},
-		{nil, nil, []Expr{DNull, floatConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{DNull, NewDInt(1)}, DummyInt, nil},
-		{nil, nil, []Expr{DNull, NewDFloat(1)}, DummyFloat, nil},
-		{nil, nil, []Expr{DNull, NewDFloat(1), intConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{DNull, NewDFloat(1), floatConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{DNull, NewDFloat(1), floatConst("1")}, DummyFloat, nil},
-		{nil, nil, []Expr{DNull, intConst("1"), floatConst("1")}, DummyFloat, nil},
-		// Verify desired type when possible.
-		{nil, DummyInt, []Expr{intConst("1")}, DummyInt, nil},
-		{nil, DummyInt, []Expr{NewDInt(1)}, DummyInt, nil},
-		{nil, DummyInt, []Expr{floatConst("1")}, DummyInt, nil},
-		{nil, DummyInt, []Expr{NewDFloat(1)}, DummyFloat, nil},
-		{nil, DummyFloat, []Expr{intConst("1")}, DummyFloat, nil},
-		{nil, DummyFloat, []Expr{NewDInt(1)}, DummyInt, nil},
-		{nil, DummyInt, []Expr{intConst("1"), floatConst("1")}, DummyInt, nil},
-		{nil, DummyInt, []Expr{intConst("1"), floatConst("1.1")}, DummyFloat, nil},
-		{nil, DummyFloat, []Expr{intConst("1"), floatConst("1")}, DummyFloat, nil},
-		// Verify desired type when possible with unresolved constants.
-		{nil, DummyFloat, []Expr{ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		{nil, DummyFloat, []Expr{intConst("1"), ValArg{"a"}}, DummyFloat, mapArgsFloat},
-		{nil, DummyFloat, []Expr{floatConst("1"), ValArg{"a"}}, DummyFloat, mapArgsFloat},
+func cloneMapArgs(args MapArgs) MapArgs {
+	clone := make(MapArgs)
+	for k, v := range args {
+		clone[k] = v
 	}
-	for i, d := range testData {
-		if d.expectedArgs == nil {
-			d.expectedArgs = make(MapArgs)
-		}
-		forEachPerm(d.exprs, 0, func(exprs []Expr) {
-			args := cloneMapArgs(d.args)
-			_, typ, err := typeCheckSameTypedExprs(args, d.desired, exprs...)
-			if err != nil {
-				t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", i, err)
-			} else {
-				if !typ.TypeEqual(d.expectedType) {
-					t.Errorf("%d: expected type %s when type checking %s, found %s", i, d.expectedType.Type(), exprs, typ.Type())
-				}
-				if !reflect.DeepEqual(args, d.expectedArgs) {
-					t.Errorf("%d: expected args %v after typeCheckSameTypedExprs for %v, found %v", i, d.expectedArgs, exprs, args)
-				}
+	return clone
+}
+
+type sameTypedExprsTestCase struct {
+	args    MapArgs
+	desired Datum
+	exprs   []copyableExpr
+
+	expectedType Datum
+	expectedArgs MapArgs
+}
+
+func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTestCase) {
+	if test.expectedArgs == nil {
+		test.expectedArgs = make(MapArgs)
+	}
+	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
+		args := cloneMapArgs(test.args)
+		_, typ, err := typeCheckSameTypedExprs(args, test.desired, buildExprs(exprs)...)
+		if err != nil {
+			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
+		} else {
+			if !typ.TypeEqual(test.expectedType) {
+				t.Errorf("%d: expected type %s:%s when type checking %s:%s, found %s", idx, test.expectedType, test.expectedType.Type(), buildExprs(exprs), typ, typ.Type())
 			}
-		})
+			if !reflect.DeepEqual(args, test.expectedArgs) {
+				t.Errorf("%d: expected args %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedArgs, buildExprs(exprs), args)
+			}
+		}
+	})
+}
+
+func TestTypeCheckSameTypedExprs(t *testing.T) {
+	for i, d := range []sameTypedExprsTestCase{
+		// Constants.
+		{nil, nil, exprs(intConst("1")), DummyInt, nil},
+		{nil, nil, exprs(floatConst("1.1")), DummyFloat, nil},
+		{nil, nil, exprs(intConst("1"), floatConst("1.0")), DummyFloat, nil},
+		{nil, nil, exprs(intConst("1"), floatConst("1.1")), DummyFloat, nil},
+		// Resolved exprs.
+		{nil, nil, exprs(dint(1)), DummyInt, nil},
+		{nil, nil, exprs(dfloat(1)), DummyFloat, nil},
+		// Mixing constants and resolved exprs.
+		{nil, nil, exprs(dint(1), intConst("1")), DummyInt, nil},
+		{nil, nil, exprs(dint(1), floatConst("1.0")), DummyInt, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
+		{nil, nil, exprs(dint(1), dint(1)), DummyInt, nil},
+		{nil, nil, exprs(dfloat(1), intConst("1")), DummyFloat, nil},
+		{nil, nil, exprs(dfloat(1), floatConst("1.1")), DummyFloat, nil},
+		{nil, nil, exprs(dfloat(1), dfloat(1)), DummyFloat, nil},
+		// Mixing resolved params with constants and resolved exprs.
+		{mapArgsFloat, nil, exprs(dfloat(1), valArg("a")), DummyFloat, mapArgsFloat},
+		{mapArgsFloat, nil, exprs(intConst("1"), valArg("a")), DummyFloat, mapArgsFloat},
+		{mapArgsFloat, nil, exprs(floatConst("1.1"), valArg("a")), DummyFloat, mapArgsFloat},
+		{mapArgsInt, nil, exprs(intConst("1"), valArg("a")), DummyInt, mapArgsInt},
+		{mapArgsInt, nil, exprs(floatConst("1.0"), valArg("a")), DummyInt, mapArgsInt},
+		{mapArgsFloatAndFloat, nil, exprs(valArg("b"), valArg("a")), DummyFloat, mapArgsFloatAndFloat},
+		// Mixing unresolved params with constants and resolved exprs.
+		{nil, nil, exprs(dfloat(1), valArg("a")), DummyFloat, mapArgsFloat},
+		{nil, nil, exprs(intConst("1"), valArg("a")), DummyInt, mapArgsInt},
+		{nil, nil, exprs(floatConst("1.1"), valArg("a")), DummyFloat, mapArgsFloat},
+		// Verify dealing with Null.
+		{nil, nil, exprs(dnull), DNull, nil},
+		{nil, nil, exprs(dnull, dnull), DNull, nil},
+		{nil, nil, exprs(dnull, intConst("1")), DummyInt, nil},
+		{nil, nil, exprs(dnull, floatConst("1.1")), DummyFloat, nil},
+		{nil, nil, exprs(dnull, dint(1)), DummyInt, nil},
+		{nil, nil, exprs(dnull, dfloat(1)), DummyFloat, nil},
+		{nil, nil, exprs(dnull, dfloat(1), intConst("1")), DummyFloat, nil},
+		{nil, nil, exprs(dnull, dfloat(1), floatConst("1.1")), DummyFloat, nil},
+		{nil, nil, exprs(dnull, dfloat(1), floatConst("1.1")), DummyFloat, nil},
+		{nil, nil, exprs(dnull, intConst("1"), floatConst("1.1")), DummyFloat, nil},
+		// Verify desired type when possible.
+		{nil, DummyInt, exprs(intConst("1")), DummyInt, nil},
+		{nil, DummyInt, exprs(dint(1)), DummyInt, nil},
+		{nil, DummyInt, exprs(floatConst("1.0")), DummyInt, nil},
+		{nil, DummyInt, exprs(floatConst("1.1")), DummyFloat, nil},
+		{nil, DummyInt, exprs(dfloat(1)), DummyFloat, nil},
+		{nil, DummyFloat, exprs(intConst("1")), DummyFloat, nil},
+		{nil, DummyFloat, exprs(dint(1)), DummyInt, nil},
+		{nil, DummyInt, exprs(intConst("1"), floatConst("1.0")), DummyInt, nil},
+		{nil, DummyInt, exprs(intConst("1"), floatConst("1.1")), DummyFloat, nil},
+		{nil, DummyFloat, exprs(intConst("1"), floatConst("1.1")), DummyFloat, nil},
+		// Verify desired type when possible with unresolved placeholders.
+		{nil, DummyFloat, exprs(valArg("a")), DummyFloat, mapArgsFloat},
+		{nil, DummyFloat, exprs(intConst("1"), valArg("a")), DummyFloat, mapArgsFloat},
+		{nil, DummyFloat, exprs(floatConst("1.1"), valArg("a")), DummyFloat, mapArgsFloat},
+	} {
+		attemptTypeCheckSameTypedExprs(t, i, d)
+	}
+}
+
+func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
+	for i, d := range []sameTypedExprsTestCase{
+		// // Constants.
+		{nil, nil, exprs(tuple(intConst("1"))), dtuple(DummyInt), nil},
+		{nil, nil, exprs(tuple(intConst("1"), intConst("1"))), dtuple(DummyInt, DummyInt), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(intConst("1"))), dtuple(DummyInt), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(floatConst("1.0"))), dtuple(DummyFloat), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(floatConst("1.1"))), dtuple(DummyFloat), nil},
+		// Resolved exprs.
+		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1))), dtuple(DummyInt), nil},
+		{nil, nil, exprs(tuple(dint(1), dfloat(1)), tuple(dint(1), dfloat(1))), dtuple(DummyInt, DummyFloat), nil},
+		// Mixing constants and resolved exprs.
+		{nil, nil, exprs(tuple(dint(1), floatConst("1.1")), tuple(intConst("1"), dfloat(1))), dtuple(DummyInt, DummyFloat), nil},
+		{nil, nil, exprs(tuple(dint(1), floatConst("1.0")), tuple(intConst("1"), dint(1))), dtuple(DummyInt, DummyInt), nil},
+		// Mixing resolved params with constants and resolved exprs.
+		{mapArgsFloat, nil, exprs(tuple(dfloat(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(DummyFloat, DummyFloat), mapArgsFloat},
+		{mapArgsFloatAndFloat, nil, exprs(tuple(valArg("b"), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(DummyFloat, DummyFloat), mapArgsFloatAndFloat},
+		{mapArgsIntAndFloat, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(DummyInt, DummyFloat), mapArgsIntAndFloat},
+		// Mixing unresolved params with constants and resolved exprs.
+		{nil, nil, exprs(tuple(dfloat(1), intConst("1")), tuple(valArg("a"), valArg("a"))), dtuple(DummyFloat, DummyFloat), mapArgsFloat},
+		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(valArg("a"), valArg("b"))), dtuple(DummyInt, DummyInt), mapArgsIntAndInt},
+		// Verify dealing with Null.
+		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, floatConst("1"))), dtuple(DummyInt, DummyFloat), nil},
+		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, dfloat(1))), dtuple(DummyInt, DummyFloat), nil},
+		// Verify desired type when possible.
+		{nil, dtuple(DummyInt, DummyFloat), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), dtuple(DummyInt, DummyFloat), nil},
+		// Verify desired type when possible with unresolved constants.
+		{nil, dtuple(DummyInt, DummyFloat), exprs(tuple(valArg("a"), intConst("1")), tuple(intConst("1"), valArg("b"))), dtuple(DummyInt, DummyFloat), mapArgsIntAndFloat},
+	} {
+		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
 }
 
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	floatIntMismatchErr := `expected .* to be of type (float|int), found type (float|int)`
+	tupleFloatIntMismatchErr := `tuples .* coerced to the same types: ` + floatIntMismatchErr
+	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
+	tupleLenErr := `expected a tuple of length .*`
 	paramErr := `could not determine data type of parameter .*`
 
 	testData := []struct {
-		args        MapArgs
-		desired     Datum
-		exprs       []Expr
+		args    MapArgs
+		desired Datum
+		exprs   []copyableExpr
+
 		expectedErr string
 	}{
-		{nil, nil, []Expr{NewDInt(1), floatConst("1.1")}, floatIntMismatchErr},
-		{nil, nil, []Expr{NewDInt(1), NewDFloat(1)}, floatIntMismatchErr},
-		{MapArgs{"a": DummyInt}, nil, []Expr{NewDFloat(1.1), ValArg{"a"}}, floatIntMismatchErr},
-		{MapArgs{"a": DummyInt}, nil, []Expr{floatConst("1.1"), ValArg{"a"}}, floatIntMismatchErr},
-		{MapArgs{"a": DummyFloat, "b": DummyInt}, nil, []Expr{ValArg{"b"}, ValArg{"a"}}, floatIntMismatchErr},
-		{nil, nil, []Expr{ValArg{"b"}, ValArg{"a"}}, paramErr},
+		// Single type mismatches.
+		{nil, nil, exprs(dint(1), floatConst("1.1")), floatIntMismatchErr},
+		{nil, nil, exprs(dint(1), dfloat(1)), floatIntMismatchErr},
+		{mapArgsInt, nil, exprs(dfloat(1.1), valArg("a")), floatIntMismatchErr},
+		{mapArgsInt, nil, exprs(floatConst("1.1"), valArg("a")), floatIntMismatchErr},
+		{mapArgsIntAndFloat, nil, exprs(valArg("b"), valArg("a")), floatIntMismatchErr},
+		// Tuple type mismatches.
+		{nil, nil, exprs(tuple(dint(1)), tuple(dfloat(1))), tupleFloatIntMismatchErr},
+		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
+		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1), dint(1))), tupleLenErr},
+		// Parameter ambiguity.
+		{nil, nil, exprs(valArg("b"), valArg("a")), paramErr},
 	}
 	for i, d := range testData {
-		forEachPerm(d.exprs, 0, func(exprs []Expr) {
-			if _, _, err := typeCheckSameTypedExprs(d.args, d.desired, exprs...); !testutils.IsError(err, d.expectedErr) {
+		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
+			if _, _, err := typeCheckSameTypedExprs(d.args, d.desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 			}
 		})

@@ -693,6 +693,11 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		return []TypedExpr{typedExpr}, typedExpr.ReturnType(), nil
 	}
 
+	// Handle tuples, which will in turn call into this function recursively for each element.
+	if _, ok := exprs[0].(*Tuple); ok {
+		return typeCheckSameTypedTupleExprs(args, desired, exprs...)
+	}
+
 	// Hold the resolved type expressions of the provided exprs, in order.
 	// TODO(nvanbenschoten) Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
@@ -777,7 +782,7 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(constExprs) > 0 {
+		if len(valExprs) > 0 {
 			if err := typeCheckSameTypedArgs(typ); err != nil {
 				return nil, nil, err
 			}
@@ -846,4 +851,83 @@ func typeCheckSameTypedExprs(args MapArgs, desired Datum, exprs ...Expr) ([]Type
 		}
 		return typedExprs, firstValidType, nil
 	}
+}
+
+// typeCheckSameTypedTupleExprs type checks a list of expressions, asserting that all
+// are tuples which have the same type. The function expects the first provided expression
+// to be a tuple, and will panic if it is not. However, it does not expect all other
+// expressions are tuples, and will return a sane error if they are not. An optional
+// desired type can be provided, which will hint that type which the expressions should
+// resolve to, if possible.
+func typeCheckSameTypedTupleExprs(args MapArgs, desired Datum, exprs ...Expr) ([]TypedExpr, Datum, error) {
+	// Hold the resolved type expressions of the provided exprs, in order.
+	// TODO(nvanbenschoten) Look into reducing allocations here.
+	typedExprs := make([]TypedExpr, len(exprs))
+
+	// All other exprs must be tuples.
+	first := exprs[0].(*Tuple)
+	if err := checkAllExprsAreTuples(args, exprs[1:]); err != nil {
+		return nil, nil, err
+	}
+
+	// All tuples must have the same length.
+	firstLen := len(first.Exprs)
+	if err := checkAllTuplesHaveLength(exprs[1:], firstLen); err != nil {
+		return nil, nil, err
+	}
+
+	// Pull out desired types.
+	var desiredTuple DTuple
+	if t, ok := desired.(*DTuple); ok {
+		desiredTuple = *t
+	}
+
+	// All expressions at the same indexes must be the same type.
+	resTypes := make(DTuple, firstLen)
+	sameTypeExprs := make([]Expr, len(exprs))
+	for elemIdx := range first.Exprs {
+		for tupleIdx, expr := range exprs {
+			sameTypeExprs[tupleIdx] = expr.(*Tuple).Exprs[elemIdx]
+		}
+		desiredElem := NoTypePreference
+		if len(desiredTuple) > elemIdx {
+			desiredElem = desiredTuple[elemIdx]
+		}
+		typedSubExprs, resType, err := typeCheckSameTypedExprs(args, desiredElem, sameTypeExprs...)
+		if err != nil {
+			return nil, nil, fmt.Errorf("tuples %s could not be coerced to the same types: %v", Exprs(exprs), err)
+		}
+		for j, typedExpr := range typedSubExprs {
+			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
+		}
+		resTypes[elemIdx] = resType
+	}
+	for tupleIdx, expr := range exprs {
+		expr.(*Tuple).types = resTypes
+		typedExprs[tupleIdx] = expr.(TypedExpr)
+	}
+	return typedExprs, &resTypes, nil
+}
+
+func checkAllExprsAreTuples(args MapArgs, exprs []Expr) error {
+	for _, expr := range exprs {
+		if _, ok := expr.(*Tuple); !ok {
+			typedExpr, err := expr.TypeCheck(args, NoTypePreference)
+			if err != nil {
+				return err
+			}
+			return unexpectedTypeError{expr, dummyTuple, typedExpr.ReturnType()}
+		}
+	}
+	return nil
+}
+
+func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
+	for _, expr := range exprs {
+		t := expr.(*Tuple)
+		if len(t.Exprs) != expectedLen {
+			return fmt.Errorf("expected a tuple of length %d for tuple %v", expectedLen, t)
+		}
+	}
+	return nil
 }
