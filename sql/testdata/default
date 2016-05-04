@@ -4,6 +4,9 @@ CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 statement error default expression .* may not contain placeholders
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT $1)
 
+statement error qualified name "b" not found
+CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
+
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY DEFAULT 42,

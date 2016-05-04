@@ -223,6 +223,9 @@ ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'foo'
 statement error default expression .* may not contain placeholders
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT $1
 
+statement error qualified name "c" not found
+ALTER TABLE add_default ALTER COLUMN b SET DEFAULT c
+
 statement error default expression contains a subquery
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT (SELECT 1)
 
