@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/server"
 )
 
 // PGUrl returns a postgres connection url which connects to this server with the given user, and a
@@ -42,8 +41,8 @@ import (
 //
 // Args:
 //  prefix: A prefix to be prepended to the temp file names generated, for debugging.
-func PGUrl(t testing.TB, ts *server.TestServer, user, prefix string) (url.URL, func()) {
-	host, port, err := net.SplitHostPort(ts.ServingAddr())
+func PGUrl(t testing.TB, servingAddr, user, prefix string) (url.URL, func()) {
+	host, port, err := net.SplitHostPort(servingAddr)
 	if err != nil {
 		t.Fatal(err)
 	}

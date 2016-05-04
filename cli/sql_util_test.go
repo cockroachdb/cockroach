@@ -32,7 +32,7 @@ func TestRunQuery(t *testing.T) {
 	s := server.StartTestServer(nil)
 	defer s.Stop()
 
-	url, cleanup := sqlutils.PGUrl(t, s, security.RootUser, "TestRunQuery")
+	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestRunQuery")
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

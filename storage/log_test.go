@@ -38,7 +38,7 @@ func TestLogSplits(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogSplits")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestLogSplits")
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -184,7 +184,7 @@ func TestLogRebalances(t *testing.T) {
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s, security.RootUser, "TestLogRebalances")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestLogRebalances")
 	defer cleanupFn()
 
 	sqlDB, err := gosql.Open("postgres", pgURL.String())
