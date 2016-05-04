@@ -29,20 +29,20 @@ TS_ROOT       := app
 REMOTE_DEPS   := npm.installed jspm.installed typings.installed
 
 .PHONY: all
-all: lint $(REMOTE_DEPS)
+all: lint $(REMOTE_DEPS) app/js/protos.js generated/protos.d.ts
 
 .PHONY: lint
 lint: npm.installed
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -not -path app/interfaces/protos.d.ts)
+	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -not -path app/interfaces/protos.d.ts)
 
-npm.installed: npm-shrinkwrap.json
+npm.installed: package.json npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
-	npm install --progress=false
+	npm install --no-progress
 	touch $@
 
 typings.installed: typings.json npm.installed
-	rm -rf $(TYPINGS)/
 	typings install
+	typings prune
 	touch $@
 
 jspm.installed: npm.installed
@@ -52,16 +52,15 @@ jspm.installed: npm.installed
 
 PBJS_ARGS = --path ../../../ ../../server/status/status.proto
 
-lib/protos/protos.js: npm.installed
+app/js/protos.js: npm.installed
 	pbjs -t commonjs $(PBJS_ARGS) > $@
 
-lib/protos/protos.json: npm.installed
+generated/protos.json: npm.installed
 	pbjs $(PBJS_ARGS) > $@
 
-app/interfaces/protos.d.ts: lib/protos/protos.json
-	proto2ts --file lib/protos/protos.json > $@
+generated/protos.d.ts: generated/protos.json
+	proto2ts --file generated/protos.json > $@
 
 .PHONY: test
-test: npm.installed
-# Execute in /app directory, so that ts-node can pick up tsconfig.json.
-	cd app && mocha '**/*.spec.ts*' --require ts-node/register
+test: npm.installed typings.installed
+	mocha $(TS_ROOT)/'**/*.spec.ts*' --require ts-node/register

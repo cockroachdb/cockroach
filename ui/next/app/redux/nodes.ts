@@ -11,7 +11,7 @@ import { Action, PayloadAction } from "../interfaces/action";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
 import "whatwg-fetch";
 
-import * as protos from "lib/protos";
+import * as protos from "../js/protos";
 
 const REQUEST = "cockroachui/nodes/REQUEST";
 const RECEIVE = "cockroachui/nodes/RECEIVE";
