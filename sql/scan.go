@@ -218,7 +218,10 @@ func (n *scanNode) ExplainPlan(_ bool) (name, description string, children []pla
 func (n *scanNode) initTable(
 	p *planner, tableName *parser.QualifiedName, indexHints *parser.IndexHints,
 ) (string, *roachpb.Error) {
-	if n.desc, n.pErr = p.getTableLease(tableName); n.pErr != nil {
+	var err error
+	n.desc, err = p.getTableLease(tableName)
+	n.pErr = roachpb.NewError(err)
+	if n.pErr != nil {
 		return "", n.pErr
 	}
 

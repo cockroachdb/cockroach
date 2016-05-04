@@ -38,19 +38,19 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desiredTypes []parser.Datum, autoCommit bool, priv privilege.Kind) (editNodeBase, *roachpb.Error) {
-	tableDesc, pErr := p.getAliasedTableLease(t)
-	if pErr != nil {
-		return editNodeBase{}, pErr
+func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desiredTypes []parser.Datum, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
+	tableDesc, err := p.getAliasedTableLease(t)
+	if err != nil {
+		return editNodeBase{}, err
 	}
 
 	if err := p.checkPrivilege(tableDesc, priv); err != nil {
-		return editNodeBase{}, roachpb.NewError(err)
+		return editNodeBase{}, err
 	}
 
 	rh, err := p.makeReturningHelper(r, desiredTypes, tableDesc.Name, tableDesc.Columns)
 	if err != nil {
-		return editNodeBase{}, roachpb.NewError(err)
+		return editNodeBase{}, err
 	}
 
 	return editNodeBase{
@@ -107,9 +107,9 @@ type updateNode struct {
 func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
 	tracing.AnnotateTrace()
 
-	en, pErr := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.UPDATE)
-	if pErr != nil {
-		return nil, pErr
+	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.UPDATE)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	exprs := make([]parser.UpdateExpr, len(n.Exprs))

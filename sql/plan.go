@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -390,18 +391,18 @@ func (p *planner) exec(sql string, args ...interface{}) (int, *roachpb.Error) {
 
 // getAliasedTableLease looks up the table descriptor for an alias table
 // expression.
-func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, *roachpb.Error) {
+func (p *planner) getAliasedTableLease(n parser.TableExpr) (*TableDescriptor, error) {
 	ate, ok := n.(*parser.AliasedTableExpr)
 	if !ok {
-		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
 	table, ok := ate.Expr.(*parser.QualifiedName)
 	if !ok {
-		return nil, roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, util.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	desc, pErr := p.getTableLease(table)
-	if pErr != nil {
-		return nil, pErr
+	desc, err := p.getTableLease(table)
+	if err != nil {
+		return nil, err
 	}
 	return &desc, nil
 }

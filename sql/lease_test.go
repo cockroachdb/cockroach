@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	csql "github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -98,9 +97,9 @@ func (t *leaseTest) expectLeases(descID csql.ID, expected string) {
 func (t *leaseTest) acquire(nodeID uint32, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := t.server.DB().Txn(func(txn *client.Txn) error {
-		var pErr *roachpb.Error
-		lease, pErr = t.node(nodeID).Acquire(txn, descID, version)
-		return pErr.GoError()
+		var err error
+		lease, err = t.node(nodeID).Acquire(txn, descID, version)
+		return err
 	})
 	return lease, err
 }
@@ -312,7 +311,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, pErr := n1.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n1.Publish(descID, func(*csql.TableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -323,8 +322,8 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 			<-n1update
 			return nil
 		})
-		if pErr != nil {
-			panic(pErr)
+		if err != nil {
+			panic(err)
 		}
 		wg.Done()
 	}(n1update, n2start)
@@ -333,11 +332,11 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, pErr := n2.Publish(descID, func(*csql.TableDescriptor) error {
+		_, err := n2.Publish(descID, func(*csql.TableDescriptor) error {
 			return nil
 		})
-		if pErr != nil {
-			panic(pErr)
+		if err != nil {
+			panic(err)
 		}
 		close(n1update)
 		wg.Done()
@@ -371,7 +370,7 @@ func getTableDescriptor(db *client.DB, database string, table string) *csql.Tabl
 
 	descKey := csql.MakeDescMetadataKey(csql.ID(gr.ValueInt()))
 	desc := &csql.Descriptor{}
-	if pErr := db.GetProto(descKey, desc); pErr != nil {
+	if err := db.GetProto(descKey, desc); err != nil {
 		panic("proto missing")
 	}
 	return desc.GetTable()
@@ -446,9 +445,9 @@ func isDeleted(tableID csql.ID, cfg config.SystemConfig) bool {
 func acquire(s server.TestServer, descID csql.ID, version csql.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := s.DB().Txn(func(txn *client.Txn) error {
-		var pErr *roachpb.Error
-		lease, pErr = s.LeaseManager().Acquire(txn, descID, version)
-		return pErr.GoError()
+		var err error
+		lease, err = s.LeaseManager().Acquire(txn, descID, version)
+		return err
 	})
 	return lease, err
 }

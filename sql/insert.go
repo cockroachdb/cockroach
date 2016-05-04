@@ -57,9 +57,9 @@ type insertNode struct {
 func (p *planner) Insert(
 	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
 ) (planNode, *roachpb.Error) {
-	en, pErr := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.INSERT)
-	if pErr != nil {
-		return nil, pErr
+	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.INSERT)
+	if err != nil {
+		return nil, roachpb.NewError(err)
 	}
 	if n.OnConflict != nil {
 		if err := p.checkPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
