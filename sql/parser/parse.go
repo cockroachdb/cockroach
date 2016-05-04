@@ -25,6 +25,7 @@ package parser
 import (
 	"bytes"
 	"errors"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -99,6 +100,22 @@ func TypeCheck(expr Expr, args MapArgs, desired Datum) (TypedExpr, error) {
 		return nil, err
 	}
 	return expr.TypeCheck(args, desired)
+}
+
+// TypeCheckAndRequire performs type checking on the provided expression tree in
+// an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
+// has the provided return type, returning both the typed expression and an error
+// if it does not.
+func TypeCheckAndRequire(expr Expr, args MapArgs, required Datum, op string) (TypedExpr, error) {
+	typedExpr, err := TypeCheck(expr, args, required)
+	if err != nil {
+		return nil, err
+	}
+	if typ := typedExpr.ReturnType(); !(typ.TypeEqual(required) || typ == DNull) {
+		return typedExpr, fmt.Errorf("argument of %s must be type %s, not type %s",
+			op, required.Type(), typ.Type())
+	}
+	return typedExpr, nil
 }
 
 // NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of

@@ -97,13 +97,10 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 			return nil, roachpb.NewError(err)
 		}
 
-		typedHaving, err = parser.TypeCheck(having, p.evalCtx.Args, parser.DummyBool)
+		typedHaving, err = parser.TypeCheckAndRequire(having, p.evalCtx.Args,
+			parser.DummyBool, "HAVING")
 		if err != nil {
 			return nil, roachpb.NewError(err)
-		}
-		if typ := typedHaving.ReturnType(); !(typ.TypeEqual(parser.DummyBool) || typ == parser.DNull) {
-			return nil, roachpb.NewUErrorf("argument of HAVING must be type %s, not type %s",
-				parser.DummyBool.Type(), typ.Type())
 		}
 
 		typedHaving, err = p.parser.NormalizeExpr(p.evalCtx, typedHaving)
