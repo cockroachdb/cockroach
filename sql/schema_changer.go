@@ -164,9 +164,19 @@ func (sc *SchemaChanger) ExtendLease(
 	return lease, err
 }
 
+func isSchemaChangeRetryError(err error) bool {
+	switch err {
+	case errDescriptorNotFound:
+		return false
+	default:
+		return !isIntegrityConstraintError(err)
+	}
+}
+
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
-func (sc SchemaChanger) exec(startBackfillNotification func()) error {
+func (sc SchemaChanger) exec(startBackfillNotification func() error) error {
+	log.Info("excuting schema change")
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -229,26 +239,35 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) error {
 	// Another transaction might set the up_version bit again,
 	// but we're no longer responsible for taking care of that.
 
-	// Run through mutation state machine before backfill.
-	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
-		return err
-	}
+	// Run through mutation state machine and backfill.
+	err = sc.runStateMachineAndBackfill(&lease, startBackfillNotification)
 
-	if startBackfillNotification != nil {
-		startBackfillNotification()
-	}
-
-	// Run backfill.
-	if err := sc.runBackfill(&lease); err != nil {
-		// Purge the mutations if the application of the mutations fail.
-		if errPurge := sc.purgeMutations(&lease); errPurge != nil {
-			return util.Errorf("error purging mutation: %s, after error: %s", errPurge, err)
+	// Purge the mutations if the application of the mutations failed due to a
+	// integrity constraint violation. All other errors are transient errors
+	// that are resolved by retrying the backfill.
+	if isIntegrityConstraintError(err) {
+		log.Warning("reversing schema change due to irrecoverable error %s", err)
+		if errReverse := sc.reverseMutations(); errReverse != nil {
+			// Although the backfill did hit an integrity constraint violation
+			// and made a decision to reverse the mutations,
+			// reverseMutations() failed. If exec() is called again the entire
+			// schema change will be retried.
+			return errReverse
 		}
-		return err
+
+		// After this point the schema change has been reversed and any retry
+		// of the schema change will act upon the reversed schema change.
+		if errPurge := sc.runStateMachineAndBackfill(
+			&lease, startBackfillNotification,
+		); errPurge != nil {
+			// Don't return this error because we do want the caller to know
+			// that an integrity constraint was violated with the original
+			// schema change. The reversed schema change will be
+			// retried via the async schema change manager.
+			log.Warningf("error purging mutation: %s, after error: %s", errPurge, err)
+		}
 	}
 
-	// Mark the mutations as completed.
-	_, err = sc.done()
 	return err
 }
 
@@ -362,19 +381,45 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 	})
 }
 
-// Purge all mutations with the mutationID. This is called after
-// hitting an irrecoverable error. Reverse the direction of the mutations
-// and run through the state machine until the mutations are deleted.
-func (sc *SchemaChanger) purgeMutations(lease *sqlbase.TableDescriptor_SchemaChangeLease) error {
+// runStateMachineAndBackfill runs the schema change state machine followed by
+// the backfill.
+func (sc *SchemaChanger) runStateMachineAndBackfill(
+	lease *sqlbase.TableDescriptor_SchemaChangeLease, startBackfillNotification func() error,
+) error {
+	// Run through mutation state machine before backfill.
+	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
+		return err
+	}
+
+	if startBackfillNotification != nil {
+		if err := startBackfillNotification(); err != nil {
+			return err
+		}
+	}
+
+	// Run backfill.
+	if err := sc.runBackfill(lease); err != nil {
+		return err
+	}
+
+	// Mark the mutations as completed.
+	_, err := sc.done()
+	return err
+}
+
+// reverseMutations reverses the direction of all the mutations with the
+// mutationID. This is called after hitting an irrecoverable error while
+// applying a schema change.
+func (sc *SchemaChanger) reverseMutations() error {
 	// Reverse the flow of the state machine.
-	if _, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+	_, err := sc.leaseMgr.Publish(sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
-			log.Warningf("Purging schema change mutation: %v", desc.Mutations[i])
+			log.Warningf("reversing schema change mutation: %v", desc.Mutations[i])
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_DROP
@@ -385,26 +430,7 @@ func (sc *SchemaChanger) purgeMutations(lease *sqlbase.TableDescriptor_SchemaCha
 		}
 		// Publish() will increment the version.
 		return nil
-	}); err != nil {
-		return err
-	}
-
-	// Run through mutation state machine before backfill.
-	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
-		return err
-	}
-
-	// Run backfill and don't run purge on hitting an error.
-	// TODO(vivek): If this fails we can get into a permanent
-	// failure with some mutations, where subsequent schema
-	// changers keep attempting to apply and purge mutations.
-	// This is a theoretical problem at this stage (2015/12).
-	if err := sc.runBackfill(lease); err != nil {
-		return err
-	}
-
-	// Mark the mutations as completed.
-	_, err := sc.done()
+	})
 	return err
 }
 
@@ -461,7 +487,11 @@ func NewSchemaChangeManager(
 }
 
 var (
-	disableAsyncSchemaChangeExec = false
+	// DisableAsyncSchemaChangeExec can be turned on in tests to disable the
+	// async processing of schema changes when predictable processing through
+	// the synchronous path is desired. Use TestDisableAsyncSchemaChangeExec()
+	// whenever possible.
+	DisableAsyncSchemaChangeExec = false
 	// How often does the SchemaChangeManager attempt to execute
 	// pending schema changes.
 	asyncSchemaChangeExecInterval = 60 * time.Second
@@ -483,12 +513,12 @@ func TestSpeedupAsyncSchemaChanges() func() {
 	}
 }
 
-// TestDisableAsyncSchemaChangeExec is used in tests to
-// disable the asynchronous execution of schema changes.
+// TestDisableAsyncSchemaChangeExec is used in tests to disable the
+// asynchronous execution of schema changes.
 func TestDisableAsyncSchemaChangeExec() func() {
-	disableAsyncSchemaChangeExec = true
+	DisableAsyncSchemaChangeExec = true
 	return func() {
-		disableAsyncSchemaChangeExec = false
+		DisableAsyncSchemaChangeExec = false
 	}
 }
 
@@ -513,9 +543,6 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 // Start starts a goroutine that runs outstanding schema changes
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
-	if disableAsyncSchemaChangeExec {
-		return
-	}
 	stopper.RunWorker(func() {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
@@ -604,6 +631,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				timer = s.newTimer()
 
 			case <-timer.C:
+				if DisableAsyncSchemaChangeExec {
+					timer = s.newTimer()
+					continue
+				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						err := sc.exec(nil)
@@ -615,11 +646,15 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								// deletion which would remove this schemaChanger.
 								delete(s.schemaChangers, tableID)
 							} else {
+								// We don't need to act on integrity
+								// constraints violations because exec() is
+								// capable of purging mutations that violate
+								// integrity constraints.
 								log.Warningf("Error executing schema change: %s", err)
 							}
 						}
-						// Advance the execAfter time so that this schema changer
-						// doesn't get called again for a while.
+						// Advance the execAfter time so that this schema
+						// changer doesn't get called again for a while.
 						sc.execAfter = timeutil.Now().Add(asyncSchemaChangeExecDelay)
 					}
 					// Only attempt to run one schema changer.

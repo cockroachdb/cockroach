@@ -131,7 +131,7 @@ statement ok
 ALTER TABLE t ADD COLUMN y DECIMAL NOT NULL DEFAULT (DECIMAL '1.3')
 
 # Add a non NULL column with no default value
-statement error column q contains null values
+statement error null value in column \"q\" violates not-null constraint
 ALTER TABLE t ADD COLUMN q DECIMAL NOT NULL
 
 statement ok

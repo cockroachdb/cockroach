@@ -214,7 +214,7 @@ type ExecutorTestingKnobs struct {
 
 	// SchemaChangersStartBackfillNotification is called before applying the
 	// backfill for a schema change operation.
-	SchemaChangersStartBackfillNotification func()
+	SchemaChangersStartBackfillNotification func() error
 }
 
 // NewExecutor creates an Executor and registers a callback on the
