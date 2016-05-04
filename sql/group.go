@@ -329,10 +329,10 @@ func (n *groupNode) computeAggregates() {
 				n.pErr = roachpb.NewError(err)
 				return
 			}
-			if res, err := parser.GetBool(res); err != nil {
+			if val, err := parser.GetBool(res); err != nil {
 				n.pErr = roachpb.NewError(err)
 				return
-			} else if !res {
+			} else if !val {
 				continue
 			}
 		}
