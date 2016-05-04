@@ -623,32 +623,21 @@ var Builtins = map[string][]Builtin{
 	},
 
 	// Aggregate functions.
+	// These functions are handled in sql/group.go and are not evaluated normally,
+	// so they do not need to define an fn function.
 
 	"avg": {
 		Builtin{
 			Types:      ArgTypes{DummyInt},
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				if args[0] == DNull {
-					return args[0], nil
-				}
-				// AVG returns a float when given an int argument.
-				return NewDFloat(DFloat(*args[0].(*DInt))), nil
-			},
 		},
 		Builtin{
 			Types:      ArgTypes{DummyFloat},
 			ReturnType: TypeFloat,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return args[0], nil
-			},
 		},
 		Builtin{
 			Types:      ArgTypes{DummyDecimal},
 			ReturnType: TypeDecimal,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return args[0], nil
-			},
 		},
 	},
 
@@ -662,17 +651,14 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{DummyInt},
 			ReturnType: TypeDecimal,
-			fn:         funcNull,
 		},
 		Builtin{
 			Types:      ArgTypes{DummyDecimal},
 			ReturnType: TypeDecimal,
-			fn:         funcNull,
 		},
 		Builtin{
 			Types:      ArgTypes{DummyFloat},
 			ReturnType: TypeFloat,
-			fn:         funcNull,
 		},
 	},
 
@@ -680,17 +666,14 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{DummyInt},
 			ReturnType: TypeDecimal,
-			fn:         funcNull,
 		},
 		Builtin{
 			Types:      ArgTypes{DummyDecimal},
 			ReturnType: TypeDecimal,
-			fn:         funcNull,
 		},
 		Builtin{
 			Types:      ArgTypes{DummyFloat},
 			ReturnType: TypeFloat,
-			fn:         funcNull,
 		},
 	},
 
@@ -979,10 +962,6 @@ var Builtins = map[string][]Builtin{
 	},
 }
 
-func funcNull(_ EvalContext, _ DTuple) (Datum, error) {
-	return DNull, nil
-}
-
 // The aggregate functions all just return their first argument. We don't
 // perform any type checking here either. The bulk of the aggregate function
 // implementation is performed at a higher level in sql.groupNode.
@@ -992,9 +971,6 @@ func aggregateImpls(types ...Datum) []Builtin {
 		r = append(r, Builtin{
 			Types:      ArgTypes{t},
 			ReturnType: t,
-			fn: func(_ EvalContext, args DTuple) (Datum, error) {
-				return args[0], nil
-			},
 		})
 	}
 	return r
