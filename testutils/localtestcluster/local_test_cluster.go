@@ -14,13 +14,10 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package kv
+package localtestcluster
 
 import (
 	"time"
-
-	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
@@ -31,10 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -42,34 +38,47 @@ import (
 // usage of a LocalTestCluster follows:
 //
 //   s := &LocalTestCluster{}
-//   s.Start(t, testutils.NewNodeTestBaseContext())
+//   s.Start(t, testutils.NewNodeTestBaseContext(),
+//           kv.InitSenderForLocalTestCluster)
 //   defer s.Stop()
 //
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
-	Manual     *hlc.ManualClock
-	Clock      *hlc.Clock
-	Gossip     *gossip.Gossip
-	Eng        engine.Engine
-	Store      *storage.Store
-	DB         *client.DB
-	stores     *storage.Stores
-	Sender     *TxnCoordSender
-	distSender *DistSender
-	Stopper    *stop.Stopper
-	Latency    time.Duration // sleep for each RPC sent
-	tester     util.Tester
+	Manual  *hlc.ManualClock
+	Clock   *hlc.Clock
+	Gossip  *gossip.Gossip
+	Eng     engine.Engine
+	Store   *storage.Store
+	DB      *client.DB
+	Stores  *storage.Stores
+	Sender  client.Sender
+	Stopper *stop.Stopper
+	Latency time.Duration // sleep for each RPC sent
+	tester  util.Tester
 }
+
+// InitSenderFn is a callback used to initiate the txn coordinator (we don't
+// do it directly from this package to avoid a dependency on kv).
+type InitSenderFn func(
+	nodeDesc *roachpb.NodeDescriptor,
+	tracer opentracing.Tracer,
+	clock *hlc.Clock,
+	latency time.Duration,
+	stores client.Sender,
+	stopper *stop.Stopper,
+	gossip *gossip.Gossip,
+) client.Sender
 
 // Start starts the test cluster by bootstrapping an in-memory store
 // (defaults to maximum of 50M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context) {
+func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSender InitSenderFn) {
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
+	tracer := tracing.NewTracer()
 	ltc.tester = t
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
@@ -78,45 +87,10 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context) {
 	ltc.Gossip = gossip.New(rpcContext, nil, ltc.Stopper)
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
-	ltc.stores = storage.NewStores(ltc.Clock)
-	tracer := tracing.NewTracer()
-	var rpcSend rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
-		args roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
-		if ltc.Latency > 0 {
-			time.Sleep(ltc.Latency)
-		}
-		sp := tracer.StartSpan("node")
-		defer sp.Finish()
-		ctx := opentracing.ContextWithSpan(context.Background(), sp)
-		log.Trace(ctx, args.String())
-		br, pErr := ltc.stores.Send(ctx, args)
-		if br == nil {
-			br = &roachpb.BatchResponse{}
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(ltc.stores, br))
-		}
-		br.Error = pErr
-		if pErr != nil {
-			log.Trace(ctx, "error: "+pErr.String())
-		}
-		return br, nil
-	}
-	retryOpts := GetDefaultDistSenderRetryOptions()
-	retryOpts.Closer = ltc.Stopper.ShouldDrain()
-	ltc.distSender = NewDistSender(&DistSenderContext{
-		Clock: ltc.Clock,
-		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
-		RangeLookupMaxRanges:     defaultRangeLookupMaxRanges,
-		LeaderCacheSize:          defaultLeaderCacheSize,
-		RPCRetryOptions:          &retryOpts,
-		nodeDescriptor:           nodeDesc,
-		RPCSend:                  rpcSend,    // defined above
-		RangeDescriptorDB:        ltc.stores, // for descriptor lookup
-	}, ltc.Gossip)
+	ltc.Stores = storage.NewStores(ltc.Clock)
 
-	ltc.Sender = NewTxnCoordSender(ltc.distSender, ltc.Clock, false /* !linearizable */, tracer,
-		ltc.Stopper, NewTxnMetrics(metric.NewRegistry()))
+	ltc.Sender = initSender(nodeDesc, tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
+		ltc.Gossip)
 	ltc.DB = client.NewDB(ltc.Sender)
 	transport := storage.NewDummyRaftTransport()
 	ctx := storage.TestStoreContext()
@@ -129,7 +103,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context) {
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	ltc.stores.AddStore(ltc.Store)
+	ltc.Stores.AddStore(ltc.Store)
 	if err := ltc.Store.BootstrapRange(nil); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

@@ -30,6 +30,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -1140,7 +1141,7 @@ func (r *Replica) PushTxn(
 	var reason string
 
 	switch {
-	case reply.PusheeTxn.LastActive().Less(args.Now.Add(-2*DefaultHeartbeatInterval.Nanoseconds(), 0)):
+	case reply.PusheeTxn.LastActive().Less(args.Now.Add(-2*base.DefaultHeartbeatInterval.Nanoseconds(), 0)):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).

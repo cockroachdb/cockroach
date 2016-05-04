@@ -17,12 +17,27 @@
 package kv_test
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
+}
+
+func TestForbiddenDeps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Verify kv does not depend on storage (or any of its subpackages).
+	buildutil.VerifyNoImports(t,
+		"github.com/cockroachdb/cockroach/kv", true,
+		[]string{},
+		[]string{
+			"github.com/cockroachdb/cockroach/storage",
+		})
 }
