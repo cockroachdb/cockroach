@@ -237,7 +237,7 @@ func (p *planner) dropTableImpl(name *parser.QualifiedName,
 	if err := tableDesc.setUpVersion(); err != nil {
 		return nil, err
 	}
-	tableDesc.Deleted = true
+	tableDesc.State = TableDescriptor_DROP
 	if err = p.writeTableDesc(tableDesc); err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (p *planner) dropTableImpl(name *parser.QualifiedName,
 		if desc == nil {
 			return util.Errorf("table %d missing", tableID)
 		}
-		if desc.Deleted {
+		if desc.Deleted() {
 			return nil
 		}
 		return util.Errorf("expected table %d to be marked as deleted", tableID)

@@ -651,10 +651,15 @@ func (desc *TableDescriptor) finalizeMutation() (MutationID, error) {
 	return mutationID, nil
 }
 
+// Deleted returns true if the table is being deleted.
+func (desc *TableDescriptor) Deleted() bool {
+	return desc.State == TableDescriptor_DROP
+}
+
 // setUpVersion sets the up_version marker on the table descriptor (see the proto
 // for comments).
 func (desc *TableDescriptor) setUpVersion() error {
-	if desc.Deleted {
+	if desc.Deleted() {
 		// We don't allow the version to be incremented any more once a table
 		// has been deleted. This will block new mutations from being queued on the
 		// table; it'd be misleading to allow them to be queued, since the

@@ -177,7 +177,7 @@ func (sc SchemaChanger) exec(startBackfillNotification func()) error {
 		return err
 	}
 
-	if desc.GetTable().Deleted {
+	if desc.GetTable().Deleted() {
 		// Wait for everybody to see the version with the deleted bit set. When
 		// this returns, nobody has any leases on the table, nor can get new leases,
 		// so the table will no longer be modified.
@@ -543,7 +543,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Deleted || len(table.Mutations) > 0 {
+						if table.UpVersion || table.Deleted() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof("%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)

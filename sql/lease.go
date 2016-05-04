@@ -118,12 +118,15 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	}
 
 	tableDesc := desc.GetTable()
-	if tableDesc == nil {
-		return nil, roachpb.NewErrorf("ID %d is not a table", tableID)
-	}
-	if tableDesc.Deleted {
+	// Special-case: non-public state of deleted gets special error code.
+	if tableDesc != nil && tableDesc.Deleted() {
 		return nil, roachpb.NewError(&roachpb.DescriptorDeletedError{})
 	}
+
+	if tableDesc == nil || tableDesc.State != TableDescriptor_PUBLIC {
+		return nil, roachpb.NewErrorf("ID %d is not a table", tableID)
+	}
+
 	lease.TableDescriptor = *tableDesc
 
 	if err := lease.Validate(); err != nil {
@@ -752,7 +755,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
-								db, table.Deleted, table.Version, m.LeaseStore); err != nil {
+								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
 								log.Warningf("error purging leases for table %d(%s): %s",
 									table.ID, table.Name, err)
 							}
