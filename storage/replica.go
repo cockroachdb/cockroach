@@ -1811,7 +1811,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 		return false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	return !isEndTransactionExceedingDeadline(ba.Header, *etArg)
+	return !isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg)
 }
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in

@@ -109,6 +109,9 @@ type Txn struct {
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
 	retrying            bool
+	// The txn has to be committed by this deadline. A nil value indicates no
+	// deadline.
+	deadline *roachpb.Timestamp
 	// see IsFinalized()
 	finalized bool
 }
@@ -374,8 +377,8 @@ func (txn *Txn) RunWithResponse(b *Batch) (*roachpb.BatchResponse, *roachpb.Erro
 	return sendAndFill(txn.send, b)
 }
 
-func (txn *Txn) commit(deadline *roachpb.Timestamp) *roachpb.Error {
-	pErr := txn.sendEndTxnReq(true /* commit */, deadline)
+func (txn *Txn) commit() *roachpb.Error {
+	pErr := txn.sendEndTxnReq(true /* commit */, txn.deadline)
 	if pErr == nil {
 		txn.finalized = true
 	}
@@ -396,7 +399,7 @@ func (txn *Txn) CleanupOnError(pErr *roachpb.Error) {
 // up on failure. This can be used when the caller is prepared to do proper
 // cleanup.
 func (txn *Txn) Commit() *roachpb.Error {
-	return txn.commit(nil)
+	return txn.commit()
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -418,7 +421,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 	if txn != b.txn {
 		return nil, roachpb.NewErrorf("a batch b can only be committed by b.txn")
 	}
-	b.reqs = append(b.reqs, endTxnReq(true /* commit */, nil, txn.SystemConfigTrigger()))
+	b.reqs = append(b.reqs, endTxnReq(true /* commit */, txn.deadline, txn.SystemConfigTrigger()))
 	b.initResult(1, 0, nil)
 	resp, pErr := txn.RunWithResponse(b)
 	if pErr == nil {
@@ -431,7 +434,7 @@ func (txn *Txn) CommitInBatchWithResponse(b *Batch) (*roachpb.BatchResponse, *ro
 // If that fails, an attempt to rollback is made.
 // txn should not be used to send any more commands after this call.
 func (txn *Txn) CommitOrCleanup() *roachpb.Error {
-	pErr := txn.commit(nil)
+	pErr := txn.commit()
 	if pErr != nil {
 		txn.CleanupOnError(pErr)
 	}
@@ -441,14 +444,9 @@ func (txn *Txn) CommitOrCleanup() *roachpb.Error {
 	return pErr
 }
 
-// CommitBy sends an EndTransactionRequest with Commit=true and
-// Deadline=deadline.
-func (txn *Txn) CommitBy(deadline roachpb.Timestamp) *roachpb.Error {
-	pErr := txn.commit(&deadline)
-	if pErr != nil {
-		txn.CleanupOnError(pErr)
-	}
-	return pErr
+// SetDeadline sets the transactions deadline.
+func (txn *Txn) SetDeadline(deadline roachpb.Timestamp) {
+	txn.deadline = &deadline
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
@@ -661,6 +659,16 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)
 	if elideEndTxn && pErr == nil {
+		// Check that read only transactions do not violate their deadline.
+		if endTxnRequest.Deadline != nil {
+			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
+				return nil, roachpb.NewErrorf(
+					"read-only txn timestamp violates deadline: %s < %s",
+					endTxnRequest.Deadline,
+					txn.Proto.Timestamp,
+				)
+			}
+		}
 		// This normally happens on the server and sent back in response
 		// headers, but this transaction was optimized away. The caller may
 		// still inspect the transaction struct, so we manually update it

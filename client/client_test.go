@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -767,5 +768,27 @@ func TestInconsistentReads(t *testing.T) {
 		if pErr := db.Run(ba); pErr != nil {
 			t.Fatal(pErr)
 		}
+	}
+}
+
+// TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
+// deadline.
+func TestReadOnlyTxnObeysDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+
+	if pErr := db.Put("k", "v"); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		// Set deadline to sometime in the past.
+		txn.SetDeadline(roachpb.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
+		_, pErr := txn.Get("k")
+		return pErr
+	}); !testutils.IsPError(pErr, "read-only txn timestamp violates deadline") {
+		t.Fatal(pErr)
 	}
 }
