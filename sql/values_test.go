@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -102,16 +103,16 @@ func TestValues(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		plan, pErr := func() (_ planNode, pErr *roachpb.Error) {
+		plan, err := func() (_ planNode, err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					pErr = roachpb.NewErrorf("%v", r)
+					err = util.Errorf("%v", r)
 				}
 			}()
 			return p.ValuesClause(tc.stmt, nil)
 		}()
-		if pErr == nil != tc.ok {
-			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, pErr)
+		if err == nil != tc.ok {
+			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}
 		if plan != nil {
 			if pErr := plan.Start(); pErr != nil {

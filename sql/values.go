@@ -41,7 +41,7 @@ type valuesNode struct {
 	tmpValues     parser.DTuple // Used to store temporary values.
 }
 
-func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, *roachpb.Error) {
+func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, error) {
 	v := &valuesNode{
 		p:            p,
 		n:            n,
@@ -56,7 +56,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
-			return nil, roachpb.NewUErrorf("VALUES lists must all be the same length, %d for %d", a, e)
+			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
 		}
 
 		for i, expr := range tuple.Exprs {
@@ -65,9 +65,9 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			// between makePlan and Start(). This is because a first call is
 			// needed for typechecking, and a separate call is needed to
 			// select indexes.
-			expr, pErr := p.expandSubqueries(expr, 1)
-			if pErr != nil {
-				return nil, pErr
+			expr, err := p.expandSubqueries(expr, 1)
+			if err != nil {
+				return nil, err
 			}
 			desired := parser.NoTypePreference
 			if len(desiredTypes) > i {
@@ -75,11 +75,11 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			}
 			typedExpr, err := parser.TypeCheck(expr, p.evalCtx.Args, desired)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 			typedExpr, err = p.parser.NormalizeExpr(p.evalCtx, typedExpr)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			}
 
 			typ := typedExpr.ReturnType()
@@ -88,7 +88,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 			} else if v.columns[i].Typ == parser.DNull {
 				v.columns[i].Typ = typ
 			} else if typ != parser.DNull && !typ.TypeEqual(v.columns[i].Typ) {
-				return nil, roachpb.NewUErrorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
+				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
 			}
 		}
 	}
@@ -117,9 +117,9 @@ func (n *valuesNode) Start() *roachpb.Error {
 
 		for i, expr := range tuple.Exprs {
 			// TODO(knz): see comment above about expandSubqueries in ValuesClause().
-			expr, pErr := n.p.expandSubqueries(expr, 1)
-			if pErr != nil {
-				return pErr
+			expr, err := n.p.expandSubqueries(expr, 1)
+			if err != nil {
+				return roachpb.NewError(err)
 			}
 			desired := parser.NoTypePreference
 			if len(n.desiredTypes) > i {

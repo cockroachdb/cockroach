@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -133,18 +132,18 @@ func NewTableReader(spec *TableReaderSpec, txn *client.Txn, evalCtx parser.EvalC
 }
 
 // Run is the "main loop".
-func (tr *TableReader) Run() *roachpb.Error {
+func (tr *TableReader) Run() error {
 	if log.V(1) {
 		log.Infof("TableReader filter: %s\n", tr.filter)
 	}
-	pErr := tr.fetcher.startScan(tr.txn, tr.spans, 0)
-	if pErr != nil {
-		return pErr
+	err := tr.fetcher.startScan(tr.txn, tr.spans, 0)
+	if err != nil {
+		return err
 	}
 	for {
-		tr.row, pErr = tr.fetcher.nextRow()
-		if pErr != nil {
-			return pErr
+		tr.row, err = tr.fetcher.nextRow()
+		if err != nil {
+			return err
 		}
 		if tr.row == nil {
 			// No more rows.
@@ -152,7 +151,7 @@ func (tr *TableReader) Run() *roachpb.Error {
 		}
 		passesFilter, err := runFilter(tr.filter, tr.evalCtx)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		if passesFilter {
 			// TODO(radu): these Printfs are temporary and only serve as a way

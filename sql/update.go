@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -104,12 +105,12 @@ type updateNode struct {
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
-func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 
 	en, err := p.makeEditNode(n.Table, n.Returning, desiredTypes, autoCommit, privilege.UPDATE)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	exprs := make([]parser.UpdateExpr, len(n.Exprs))
@@ -123,9 +124,9 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		// TODO(knz): We need to (attempt to) expand subqueries here already
 		// so that it retrieves the column names. But then we need to do
 		// it again when the placeholder values are known below.
-		newExpr, epErr := p.expandSubqueries(expr.Expr, len(expr.Names))
-		if epErr != nil {
-			return nil, epErr
+		newExpr, eErr := p.expandSubqueries(expr.Expr, len(expr.Names))
+		if eErr != nil {
+			return nil, eErr
 		}
 
 		if expr.Tuple {
@@ -136,10 +137,10 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 			case *parser.DTuple:
 				n = len(*t)
 			default:
-				return nil, roachpb.NewErrorf("unsupported tuple assignment: %T", newExpr)
+				return nil, util.Errorf("unsupported tuple assignment: %T", newExpr)
 			}
 			if len(expr.Names) != n {
-				return nil, roachpb.NewUErrorf("number of columns (%d) does not match number of values (%d)",
+				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
 					len(expr.Names), n)
 			}
 		}
@@ -148,17 +149,17 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 
 	updateCols, err := p.processColumns(en.tableDesc, names)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	defaultExprs, err := makeDefaultExprs(updateCols, &p.parser, p.evalCtx)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	ru, err := makeRowUpdater(en.tableDesc, updateCols)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	// TODO(dan): Use ru.fetchCols to compute the fetch selectors.
 	tw := tableUpdater{ru: ru, autoCommit: autoCommit}
@@ -203,13 +204,13 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 	// this node's initSelect() method both does type checking and also
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
-	rows, pErr := p.SelectClause(&parser.SelectClause{
+	rows, err := p.SelectClause(&parser.SelectClause{
 		Exprs: targets,
 		From:  []parser.TableExpr{n.Table},
 		Where: n.Where,
 	}, desiredTypesFromSelect)
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, err
 	}
 
 	// ValArgs have their types populated in the above Select if they are part
@@ -224,15 +225,15 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		}
 		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.toDatumType())
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		if err := checkColumnType(updateCols[i], typedTarget.ReturnType(), p.evalCtx.Args); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 	}
 
-	if pErr := en.rh.TypeCheck(); pErr != nil {
-		return nil, pErr
+	if err := en.rh.TypeCheck(); err != nil {
+		return nil, err
 	}
 
 	un := &updateNode{
@@ -254,9 +255,9 @@ func (u *updateNode) Start() *roachpb.Error {
 
 	// Expand the sub-queries and construct the real list of targets.
 	for i, expr := range exprs {
-		newExpr, epErr := u.p.expandSubqueries(expr.Expr, len(expr.Names))
-		if epErr != nil {
-			return epErr
+		newExpr, eErr := u.p.expandSubqueries(expr.Expr, len(expr.Names))
+		if eErr != nil {
+			return roachpb.NewError(eErr)
 		}
 		exprs[i].Expr = newExpr
 	}
@@ -290,13 +291,13 @@ func (u *updateNode) Start() *roachpb.Error {
 
 	// Create the workhorse select clause for rows that need updating.
 	// TODO(knz): See comment above in Update().
-	rows, pErr := u.p.SelectClause(&parser.SelectClause{
+	rows, err := u.p.SelectClause(&parser.SelectClause{
 		Exprs: targets,
 		From:  []parser.TableExpr{u.n.Table},
 		Where: u.n.Where,
 	}, u.desiredTypes)
-	if pErr != nil {
-		return pErr
+	if err != nil {
+		return roachpb.NewError(err)
 	}
 
 	if pErr := rows.Start(); pErr != nil {
