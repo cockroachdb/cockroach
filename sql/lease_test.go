@@ -412,7 +412,7 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 		panic("unable to unmarshal table descriptor")
 	}
 	table := descriptor.GetTable()
-	return table.Deleted
+	return table.Deleted()
 }
 
 func acquire(s server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {

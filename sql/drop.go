@@ -345,7 +345,7 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
-	tableDesc.Deleted = true
+	tableDesc.State = sqlbase.TableDescriptor_DROP
 	if err := p.writeTableDesc(tableDesc); err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func (p *planner) dropTableImpl(tableDesc *sqlbase.TableDescriptor) error {
 		if desc == nil {
 			return util.Errorf("table %d missing", tableID)
 		}
-		if desc.Deleted {
+		if desc.Deleted() {
 			return nil
 		}
 		return util.Errorf("expected table %d to be marked as deleted", tableID)
