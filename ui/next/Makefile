@@ -33,14 +33,14 @@ all: lint $(REMOTE_DEPS) app/js/protos.js generated/protos.d.ts
 
 .PHONY: lint
 lint: npm.installed
-	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -not -path app/interfaces/protos.d.ts)
+	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 npm.installed: package.json npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
 	npm install --no-progress
 	touch $@
 
-typings.installed: typings.json npm.installed
+typings.installed: typings.json npm.installed generated/protos.d.ts
 	typings install
 	typings prune
 	touch $@
@@ -50,7 +50,7 @@ jspm.installed: npm.installed
 	jspm install
 	touch $@
 
-PBJS_ARGS = --path ../../../ ../../server/status/status.proto
+PBJS_ARGS = --path ../../../ ../../server/status/status.proto ../../ts/timeseries.proto
 
 app/js/protos.js: npm.installed
 	pbjs -t commonjs $(PBJS_ARGS) > $@
