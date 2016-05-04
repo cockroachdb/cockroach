@@ -318,11 +318,10 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	)
 }
 
-func (expr *Row) normalize(v *normalizeVisitor) TypedExpr {
-	return &Tuple{
-		Exprs: expr.Exprs,
-		types: expr.types,
-	}
+func (expr *Tuple) normalize(v *normalizeVisitor) TypedExpr {
+	exprCopy := *expr
+	exprCopy.row = false
+	return &exprCopy
 }
 
 // NormalizeExpr normalizes a typed expression, simplifying where possible,

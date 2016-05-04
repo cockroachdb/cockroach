@@ -710,32 +710,20 @@ func (n TableNameWithIndexList) String() string {
 type Tuple struct {
 	Exprs Exprs
 
+	row   bool // preserve if the tuple should be textually represented as a row.
 	types DTuple
 }
 
 func (node *Tuple) String() string {
-	return fmt.Sprintf("(%s)", node.Exprs)
+	var prefix string
+	if node.row {
+		prefix = "ROW"
+	}
+	return fmt.Sprintf("%s(%s)", prefix, node.Exprs)
 }
 
 // ReturnType implements the TypedExpr interface.
 func (node *Tuple) ReturnType() Datum {
-	return &node.types
-}
-
-// Row represents a parenthesized list of expressions. Similar to Tuple except
-// in how it is textually represented.
-type Row struct {
-	Exprs Exprs
-
-	types DTuple
-}
-
-func (node *Row) String() string {
-	return fmt.Sprintf("ROW(%s)", node.Exprs)
-}
-
-// ReturnType implements the TypedExpr interface.
-func (node *Row) ReturnType() Datum {
 	return &node.types
 }
 

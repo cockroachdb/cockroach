@@ -1904,9 +1904,10 @@ func (expr *QualifiedName) Eval(ctx EvalContext) (Datum, error) {
 	return nil, util.Errorf("unhandled type %T", expr)
 }
 
-func evalExprs(ctx EvalContext, exprs []Expr) (Datum, error) {
-	tuple := make(DTuple, 0, len(exprs))
-	for _, v := range exprs {
+// Eval implements the Expr interface.
+func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
+	tuple := make(DTuple, 0, len(t.Exprs))
+	for _, v := range t.Exprs {
 		d, err := v.(TypedExpr).Eval(ctx)
 		if err != nil {
 			return DNull, err
@@ -1914,16 +1915,6 @@ func evalExprs(ctx EvalContext, exprs []Expr) (Datum, error) {
 		tuple = append(tuple, d)
 	}
 	return &tuple, nil
-}
-
-// Eval implements the Expr interface.
-func (t *Row) Eval(ctx EvalContext) (Datum, error) {
-	return evalExprs(ctx, t.Exprs)
-}
-
-// Eval implements the Expr interface.
-func (t *Tuple) Eval(ctx EvalContext) (Datum, error) {
-	return evalExprs(ctx, t.Exprs)
 }
 
 // Eval implements the Expr interface.
