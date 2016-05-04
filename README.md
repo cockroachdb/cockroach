@@ -33,15 +33,15 @@ CockroachDB is currently in beta. See our
 2.  [Start a local cluster](https://www.cockroachlabs.com/docs/start-a-local-cluster.html) with three nodes listening on different ports:
 
     ```shell
-    $ ./cockroach start --insecure &
-    $ ./cockroach start --insecure --store=cockroach-data2 --port=26258 --http-port=8081 --join=localhost:26257 &
-    $ ./cockroach start --insecure --store=cockroach-data3 --port=26259 --http-port=8082 --join=localhost:26257 &
+    $ ./cockroach start --background
+    $ ./cockroach start --store=cockroach-data2 --port=26258 --http-port=8081 --join=localhost:26257 --background
+    $ ./cockroach start --store=cockroach-data3 --port=26259 --http-port=8082 --join=localhost:26257 --background
     ```
 
 3.  [Start the built-in SQL client](https://www.cockroachlabs.com/docs/use-the-built-in-sql-client.html) as an interactive shell:
 
     ```shell
-    $ ./cockroach sql --insecure
+    $ ./cockroach sql
     # Welcome to the cockroach SQL interface.
     # All statements must be terminated by a semicolon.
     # To exit: CTRL + D.
