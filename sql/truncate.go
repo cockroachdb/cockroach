@@ -29,19 +29,19 @@ import (
 // Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
-func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
+func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	for _, tableQualifiedName := range n.Tables {
 		tableDesc, pErr := p.getTableLease(tableQualifiedName)
 		if pErr != nil {
-			return nil, pErr
+			return nil, pErr.GoError()
 		}
 
 		if err := p.checkPrivilege(&tableDesc, privilege.DROP); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
-		if pErr := truncateTable(&tableDesc, p.txn); pErr != nil {
-			return nil, pErr
+		if err := truncateTable(&tableDesc, p.txn); err != nil {
+			return nil, err
 		}
 	}
 
@@ -51,9 +51,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, *roachpb.Error) {
 // truncateTable truncates the data of a table.
 // It deletes a range of data for the table, which includes the PK and all
 // indexes.
-func truncateTable(
-	tableDesc *TableDescriptor, txn *client.Txn) *roachpb.Error {
-
+func truncateTable(tableDesc *TableDescriptor, txn *client.Txn) error {
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 	// Delete rows and indexes starting with the table's prefix.

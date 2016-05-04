@@ -17,12 +17,37 @@
 package roachpb
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
+
+// RetryableTxnError represent a retryable transaction error - the transaction
+// that caused it should be re-run.
+type RetryableTxnError struct {
+	message string
+	TxnID   *uuid.UUID
+	// TODO(spencer): Get rid of BACKOFF retries. Note that we don't propagate
+	// the backoff hint to the client anyway. See #5249
+	Backoff bool
+
+	// The error that this RetryableTxnError wraps. Useful for tests that want to
+	// assert that they got the expected error.
+	Cause ErrorDetailInterface
+
+	// TODO(andrei): These are here temporarily for facilitation converting
+	// RetryableTxnError to pErr. Get rid of it afterwards.
+	Transaction *Transaction
+	CauseProto  *ErrorDetail
+}
+
+func (e *RetryableTxnError) Error() string {
+	return e.message
+}
+
+var _ error = &RetryableTxnError{}
 
 // ResponseWithError is a tuple of a BatchResponse and an error. It is used to
 // pass around a BatchResponse with its associated error where that
@@ -70,6 +95,28 @@ func NewError(err error) *Error {
 	e := &Error{}
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
+	} else if retErr, ok := err.(*RetryableTxnError); ok {
+		// TODO(andrei): constructing an Error from a RetryableError is only needed
+		// in Store.Send(), which runs "internal batches" for pushing other
+		// transactions. It can get a RetryableError which it needs to marhall to
+		// the caller as a pErr. This needs to go away by moving away from using the
+		// external client interface for running these push batches.
+		// It's also needed while the transition from pErr to error is not complete,
+		// because there are some places where we go back and forth between the two
+		// types.
+		// TODO(andrei): at the very least move this to a separate function that's
+		// called only from Store.Send() after the sql layer is free of pErr.
+		e.Message = retErr.message
+		if retErr.Backoff {
+			e.TransactionRestart = TransactionRestart_BACKOFF
+		} else {
+			e.TransactionRestart = TransactionRestart_IMMEDIATE
+		}
+		e.SetTxn(retErr.Transaction)
+		if retErr.CauseProto == nil {
+			panic("RetryableTxnProto without a cause")
+		}
+		e.Detail = retErr.CauseProto
 	} else {
 		e.setGoError(err)
 	}
@@ -130,6 +177,7 @@ var _ ErrorDetailInterface = &internalError{}
 
 // ErrorDetailInterface is an interface for each error detail.
 type ErrorDetailInterface interface {
+	error
 	// message returns an error message.
 	message(*Error) string
 }
@@ -144,7 +192,23 @@ func (e *Error) GoError() error {
 	if e == nil {
 		return nil
 	}
-	return errors.New(e.Message)
+	if e.TransactionRestart != TransactionRestart_NONE {
+		backoff := e.TransactionRestart == TransactionRestart_BACKOFF
+		var txnID *uuid.UUID
+		if e.GetTxn() != nil {
+			txnID = e.GetTxn().ID
+		}
+		return &RetryableTxnError{
+			message:     e.Message,
+			TxnID:       txnID,
+			Transaction: e.GetTxn(),
+			Cause:       e.GetDetail(),
+			CauseProto:  e.Detail,
+			Backoff:     backoff,
+		}
+	}
+	detail := e.GetDetail()
+	return detail
 }
 
 // setGoError sets Error using err.
@@ -201,12 +265,6 @@ func (e *Error) GetTxn() *Transaction {
 // SetErrorIndex sets the index of the error.
 func (e *Error) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
-}
-
-// StripErrorTransaction strips the txn information in the error.
-func (e *Error) StripErrorTransaction() {
-	// Do not call SetTxn() as we do not want to update e.Message with nil txn.
-	e.UnexposedTxn = nil
 }
 
 func (e *ErrorWithPGCode) Error() string {

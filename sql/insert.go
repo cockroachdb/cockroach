@@ -265,8 +265,8 @@ func (n *insertNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	if pErr := n.run.startEditNode(&n.editNodeBase, rows, n.tw); pErr != nil {
-		return pErr
+	if err := n.run.startEditNode(&n.editNodeBase, rows, n.tw); err != nil {
+		return roachpb.NewError(err)
 	}
 
 	// Prepare structures for building values to pass to rh.
@@ -302,7 +302,7 @@ func (n *insertNode) Next() bool {
 
 	if !n.run.rows.Next() {
 		// We're done. Finish the batch.
-		n.run.pErr = n.tw.finalize()
+		n.run.pErr = roachpb.NewError(n.tw.finalize())
 		n.run.done = true
 		return false
 	}
@@ -369,7 +369,8 @@ func (n *insertNode) Next() bool {
 		}
 	}
 
-	_, n.run.pErr = n.tw.row(rowVals)
+	_, err := n.tw.row(rowVals)
+	n.run.pErr = roachpb.NewError(err)
 	if n.run.pErr != nil {
 		return false
 	}

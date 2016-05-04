@@ -18,12 +18,14 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -70,7 +72,7 @@ func (ids indexesByID) Swap(i, j int) {
 
 func convertBackfillError(
 	tableDesc *TableDescriptor, b *client.Batch, pErr *roachpb.Error,
-) *roachpb.Error {
+) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// convertBatchError() will only work correctly if the schema elements are
@@ -90,10 +92,10 @@ func convertBackfillError(
 }
 
 // runBackfill runs the backfill for the schema changer.
-func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *roachpb.Error {
-	l, pErr := sc.ExtendLease(*lease)
-	if pErr != nil {
-		return pErr
+func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) error {
+	l, err := sc.ExtendLease(*lease)
+	if err != nil {
+		return err
 	}
 	*lease = l
 
@@ -103,10 +105,10 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *
 	var droppedIndexDescs []IndexDescriptor
 	var addedColumnDescs []ColumnDescriptor
 	var addedIndexDescs []IndexDescriptor
-	if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
-		if pErr != nil {
-			return pErr
+	if err := sc.db.Txn(func(txn *client.Txn) error {
+		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		if err != nil {
+			return err
 		}
 
 		for _, m := range tableDesc.Mutations {
@@ -121,7 +123,7 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *
 				case *DescriptorMutation_Index:
 					addedIndexDescs = append(addedIndexDescs, *t.Index)
 				default:
-					return roachpb.NewErrorf("unsupported mutation: %+v", m)
+					return util.Errorf("unsupported mutation: %+v", m)
 				}
 
 			case DescriptorMutation_DROP:
@@ -131,44 +133,44 @@ func (sc *SchemaChanger) runBackfill(lease *TableDescriptor_SchemaChangeLease) *
 				case *DescriptorMutation_Index:
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				default:
-					return roachpb.NewErrorf("unsupported mutation: %+v", m)
+					return util.Errorf("unsupported mutation: %+v", m)
 				}
 			}
 		}
 		return nil
-	}); pErr != nil {
-		return pErr
+	}); err != nil {
+		return err
 	}
 
 	// Add and drop columns.
-	if pErr := sc.truncateAndBackfillColumns(
+	if err := sc.truncateAndBackfillColumns(
 		lease, addedColumnDescs, droppedColumnDescs,
-	); pErr != nil {
-		return pErr
+	); err != nil {
+		return err
 	}
 
 	// Drop indexes.
-	if pErr := sc.truncateIndexes(lease, droppedIndexDescs); pErr != nil {
-		return pErr
+	if err := sc.truncateIndexes(lease, droppedIndexDescs); err != nil {
+		return err
 	}
 
 	// Add new indexes.
-	if pErr := sc.backfillIndexes(lease, addedIndexDescs); pErr != nil {
-		return pErr
+	if err := sc.backfillIndexes(lease, addedIndexDescs); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 // getTableSpan returns a span containing the start and end key for a table.
-func (sc *SchemaChanger) getTableSpan() (span, *roachpb.Error) {
+func (sc *SchemaChanger) getTableSpan() (span, error) {
 	var tableDesc *TableDescriptor
-	if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		var pErr *roachpb.Error
-		tableDesc, pErr = getTableDescFromID(txn, sc.tableID)
-		return pErr
-	}); pErr != nil {
-		return span{}, pErr
+	if err := sc.db.Txn(func(txn *client.Txn) error {
+		var err error
+		tableDesc, err = getTableDescFromID(txn, sc.tableID)
+		return err
+	}); err != nil {
+		return span{}, err
 	}
 	prefix := roachpb.Key(MakeIndexKeyPrefix(tableDesc.ID, tableDesc.PrimaryIndex.ID))
 	return span{
@@ -189,7 +191,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	lease *TableDescriptor_SchemaChangeLease,
 	added []ColumnDescriptor,
 	dropped []ColumnDescriptor,
-) *roachpb.Error {
+) error {
 	evalCtx := parser.EvalContext{}
 	// Set the eval context timestamps.
 	pTime := timeutil.Now()
@@ -197,7 +199,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	evalCtx.SetStmtTimestamp(pTime)
 	defaultExprs, err := makeDefaultExprs(added, &parser.Parser{}, evalCtx)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Remember any new non nullable column with no default value.
@@ -219,18 +221,18 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		// Run through the entire table key space adding and deleting columns.
 		for done := false; !done; {
 			// First extend the schema change lease.
-			l, pErr := sc.ExtendLease(*lease)
-			if pErr != nil {
-				return pErr
+			l, err := sc.ExtendLease(*lease)
+			if err != nil {
+				return err
 			}
 			*lease = l
 
 			// Add and delete columns for a chunk of the key space.
-			sp.start, done, pErr = sc.truncateAndBacfillColumnsChunk(
+			sp.start, done, err = sc.truncateAndBacfillColumnsChunk(
 				added, dropped, nonNullableColumn, defaultExprs, evalCtx, sp,
 			)
-			if pErr != nil {
-				return pErr
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -244,13 +246,13 @@ func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
 	defaultExprs []parser.TypedExpr,
 	evalCtx parser.EvalContext,
 	sp span,
-) (roachpb.Key, bool, *roachpb.Error) {
+) (roachpb.Key, bool, error) {
 	var curSentinel roachpb.Key
 	done := false
-	pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
-		if pErr != nil {
-			return pErr
+	err := sc.db.Txn(func(txn *client.Txn) error {
+		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		if err != nil {
+			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
 		if tableDesc.Deleted {
@@ -265,8 +267,8 @@ func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
 		// values during the scan.
 		b := &client.Batch{}
 		b.Scan(sp.start, sp.end, ColumnTruncateAndBackfillChunkSize)
-		if pErr := txn.Run(b); pErr != nil {
-			return pErr
+		if err := txn.Run(b); err != nil {
+			return err
 		}
 
 		// Use a different batch to truncate/backfill columns.
@@ -279,7 +281,7 @@ func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
 				// Still processing table.
 				done = false
 				if nonNullableColumn != "" {
-					return roachpb.NewErrorf("column %s contains null values", nonNullableColumn)
+					return fmt.Errorf("column %s contains null values", nonNullableColumn)
 				}
 
 				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
@@ -314,11 +316,11 @@ func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
 						colKey := keys.MakeColumnKey(sentinelKey, uint32(col.ID))
 						d, err := expr.Eval(evalCtx)
 						if err != nil {
-							return roachpb.NewError(err)
+							return err
 						}
 						marshalled[i], err = marshalColumnValue(col, d)
 						if err != nil {
-							return roachpb.NewError(err)
+							return err
 						}
 
 						if log.V(2) {
@@ -339,29 +341,34 @@ func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
 				}
 			}
 		}
-		if pErr := txn.Run(writeBatch); pErr != nil {
-			return convertBackfillError(tableDesc, writeBatch, pErr)
+		if err := txn.Run(writeBatch); err != nil {
+			for _, r := range writeBatch.Results {
+				if r.PErr != nil {
+					return convertBackfillError(tableDesc, writeBatch, r.PErr)
+				}
+			}
+			return err
 		}
 		return nil
 	})
-	return curSentinel.PrefixEnd(), done, pErr
+	return curSentinel.PrefixEnd(), done, err
 }
 
 func (sc *SchemaChanger) truncateIndexes(
 	lease *TableDescriptor_SchemaChangeLease,
 	dropped []IndexDescriptor,
-) *roachpb.Error {
+) error {
 	for _, desc := range dropped {
 		// First extend the schema change lease.
-		l, pErr := sc.ExtendLease(*lease)
-		if pErr != nil {
-			return pErr
+		l, err := sc.ExtendLease(*lease)
+		if err != nil {
+			return err
 		}
 		*lease = l
-		if pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-			tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
-			if pErr != nil {
-				return pErr
+		if err := sc.db.Txn(func(txn *client.Txn) error {
+			tableDesc, err := getTableDescFromID(txn, sc.tableID)
+			if err != nil {
+				return err
 			}
 			// Short circuit the truncation if the table has been deleted.
 			if tableDesc.Deleted {
@@ -379,12 +386,12 @@ func (sc *SchemaChanger) truncateIndexes(
 			b := &client.Batch{}
 			b.DelRange(indexStartKey, indexEndKey, false)
 
-			if pErr := txn.Run(b); pErr != nil {
-				return pErr
+			if err := txn.Run(b); err != nil {
+				return err
 			}
 			return nil
-		}); pErr != nil {
-			return pErr
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -401,7 +408,7 @@ const IndexBackfillChunkSize = 100
 func (sc *SchemaChanger) backfillIndexes(
 	lease *TableDescriptor_SchemaChangeLease,
 	added []IndexDescriptor,
-) *roachpb.Error {
+) error {
 	if len(added) == 0 {
 		return nil
 	}
@@ -415,15 +422,15 @@ func (sc *SchemaChanger) backfillIndexes(
 	// Backfill the index entries for all the rows.
 	for done := false; !done; {
 		// First extend the schema change lease.
-		l, pErr := sc.ExtendLease(*lease)
-		if pErr != nil {
-			return pErr
+		l, err := sc.ExtendLease(*lease)
+		if err != nil {
+			return err
 		}
 		*lease = l
 
-		sp.start, done, pErr = sc.backfillIndexesChunk(added, sp)
-		if pErr != nil {
-			return pErr
+		sp.start, done, err = sc.backfillIndexesChunk(added, sp)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -432,13 +439,13 @@ func (sc *SchemaChanger) backfillIndexes(
 func (sc *SchemaChanger) backfillIndexesChunk(
 	added []IndexDescriptor,
 	sp span,
-) (roachpb.Key, bool, *roachpb.Error) {
+) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
 	done := false
-	pErr := sc.db.Txn(func(txn *client.Txn) *roachpb.Error {
-		tableDesc, pErr := getTableDescFromID(txn, sc.tableID)
-		if pErr != nil {
-			return pErr
+	err := sc.db.Txn(func(txn *client.Txn) error {
+		tableDesc, err := getTableDescFromID(txn, sc.tableID)
+		if err != nil {
+			return err
 		}
 		// Short circuit the backfill if the table has been deleted.
 		if tableDesc.Deleted {
@@ -465,13 +472,13 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		scan.initDescDefaults()
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		// Construct a map from column ID to the index the value appears at
 		// within a row.
 		colIDtoRowIndex, err := makeColIDtoRowIndex(rows, tableDesc)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		b := &client.Batch{}
 		numRows := 0
@@ -482,7 +489,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 				secondaryIndexEntries, err := encodeSecondaryIndexes(
 					tableDesc.ID, []IndexDescriptor{desc}, colIDtoRowIndex, rowVals)
 				if err != nil {
-					return roachpb.NewError(err)
+					return err
 				}
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
@@ -494,11 +501,16 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			}
 		}
 		if rows.PErr() != nil {
-			return rows.PErr()
+			return rows.PErr().GoError()
 		}
 		// Write the new index values.
-		if pErr := txn.Run(b); pErr != nil {
-			return convertBackfillError(tableDesc, b, pErr)
+		if err := txn.Run(b); err != nil {
+			for _, r := range b.Results {
+				if r.PErr != nil {
+					return convertBackfillError(tableDesc, b, r.PErr)
+				}
+			}
+			return err
 		}
 		// Have we processed all the table rows?
 		if numRows < IndexBackfillChunkSize {
@@ -509,5 +521,5 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		nextKey = scan.fetcher.kv.Key
 		return nil
 	})
-	return nextKey, done, pErr
+	return nextKey, done, err
 }

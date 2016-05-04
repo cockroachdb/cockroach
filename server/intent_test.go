@@ -121,7 +121,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if pErr := s.db.Txn(func(txn *client.Txn) *roachpb.Error {
+			if err := s.db.Txn(func(txn *client.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
@@ -133,8 +133,8 @@ func TestIntentResolution(t *testing.T) {
 					log.Infof("%d: %s: local: %t", i, key, local)
 					if local {
 						b.Put(key, "test")
-					} else if pErr := txn.Put(key, "test"); pErr != nil {
-						return pErr
+					} else if err := txn.Put(key, "test"); err != nil {
+						return err
 					}
 				}
 
@@ -143,21 +143,21 @@ func TestIntentResolution(t *testing.T) {
 					log.Infof("%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
 					if local {
 						b.DelRange(kr[0], kr[1], false)
-					} else if pErr := txn.DelRange(kr[0], kr[1]); pErr != nil {
-						return pErr
+					} else if err := txn.DelRange(kr[0], kr[1]); err != nil {
+						return err
 					}
 				}
 
 				return txn.CommitInBatch(b)
-			}); pErr != nil {
-				t.Fatalf("%d: %s", i, pErr)
+			}); err != nil {
+				t.Fatalf("%d: %s", i, err)
 			}
 			<-closer // wait for async intents
 			// Use Raft to make it likely that any straddling intent
 			// resolutions have come in. Don't touch existing data; that could
 			// generate unexpected intent resolutions.
-			if _, pErr := s.db.Scan("z\x00", "z\x00\x00", 0); pErr != nil {
-				t.Fatal(pErr)
+			if _, err := s.db.Scan("z\x00", "z\x00\x00", 0); err != nil {
+				t.Fatal(err)
 			}
 		}()
 		// Verification. Note that this runs after the system has stopped, so that

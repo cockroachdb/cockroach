@@ -55,7 +55,8 @@ type scanNode struct {
 	isSecondaryIndex bool
 	reverse          bool
 	ordering         orderingInfo
-	pErr             *roachpb.Error
+	// TODO(andrei): change to error
+	pErr *roachpb.Error
 
 	explain   explainMode
 	rowIndex  int // the index of the current row

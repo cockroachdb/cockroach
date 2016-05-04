@@ -141,7 +141,7 @@ func (rlq *raftLogQueue) process(now roachpb.Timestamp, r *Replica, _ config.Sys
 			Index:   oldestIndex,
 			RangeID: r.RangeID,
 		})
-		return rlq.db.Run(b).GoError()
+		return rlq.db.Run(b)
 	}
 	return nil
 }

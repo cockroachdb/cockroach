@@ -369,14 +369,13 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 	planMaker := &session.planner
 	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
 	if err != nil {
-		pErr := roachpb.NewError(err)
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
 		if txnState.txn != nil {
 			// Rollback the txn.
-			txnState.updateStateAndCleanupOnErr(pErr, e)
+			txnState.updateStateAndCleanupOnErr(err, e)
 		}
-		res.ResultList = append(res.ResultList, Result{PErr: pErr})
+		res.ResultList = append(res.ResultList, Result{PErr: roachpb.NewError(err)})
 		return res
 	}
 	if len(stmts) == 0 {
@@ -427,16 +426,16 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		var results []Result
 		origState := txnState.State
 
-		txnClosure := func(txn *client.Txn, opt *client.TxnExecOptions) *roachpb.Error {
+		txnClosure := func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			if txnState.State == Open && txnState.txn != txn {
 				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
 					"\ntxnState.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.txn, txn, txnState))
 			}
 			txnState.txn = txn
 
-			var pErr *roachpb.Error
-			results, remainingStmts, pErr = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
-			return pErr
+			var err error
+			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
+			return err
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
@@ -515,7 +514,7 @@ func runTxnAttempt(
 	txnState *txnState,
 	opt *client.TxnExecOptions,
 	stmts parser.StatementList,
-) ([]Result, parser.StatementList, *roachpb.Error) {
+) ([]Result, parser.StatementList, error) {
 
 	// Ignore the state that might have been set by a previous try
 	// of this closure.
@@ -530,7 +529,7 @@ func runTxnAttempt(
 		panic("implicit txn failed to execute all stmts")
 	}
 	planMaker.resetTxn()
-	return results, remainingStmts, pErr
+	return results, remainingStmts, pErr.GoError()
 }
 
 // execStmtsInCurrentTxn consumes a prefix of stmts, namely the
@@ -737,8 +736,8 @@ func (e *Executor) execStmtInOpenTxn(
 	switch s := stmt.(type) {
 	case *parser.BeginTransaction:
 		if !firstInTxn {
+			txnState.updateStateAndCleanupOnErr(errTransactionInProgress, e)
 			pErr := roachpb.NewError(errTransactionInProgress)
-			txnState.updateStateAndCleanupOnErr(pErr, e)
 			return Result{PErr: pErr}, pErr
 		}
 	case *parser.CommitTransaction:
@@ -747,7 +746,8 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
-		return commitSQLTransaction(txnState, planMaker, commit, e)
+		res, err := commitSQLTransaction(txnState, planMaker, commit, e)
+		return res, roachpb.NewError(err)
 	case *parser.ReleaseSavepoint:
 		if implicitTxn {
 			return e.noTransactionHelper(txnState)
@@ -757,7 +757,8 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and the planner is not involved at all.
-		return commitSQLTransaction(txnState, planMaker, release, e)
+		res, err := commitSQLTransaction(txnState, planMaker, release, e)
+		return res, roachpb.NewError(err)
 	case *parser.RollbackTransaction:
 		if implicitTxn {
 			return e.noTransactionHelper(txnState)
@@ -786,10 +787,10 @@ func (e *Executor) execStmtInOpenTxn(
 		// beginning. We should figure out how to track whether we started using the
 		// transaction during a retry.
 		if txnState.txn.Proto.IsInitialized() && !txnState.retrying {
-			pErr := roachpb.NewError(util.Errorf(
-				"SAVEPOINT %s needs to be the first statement in a transaction",
-				parser.RestartSavepointName))
-			txnState.updateStateAndCleanupOnErr(pErr, e)
+			err := util.Errorf("SAVEPOINT %s needs to be the first statement in a transaction",
+				parser.RestartSavepointName)
+			txnState.updateStateAndCleanupOnErr(err, e)
+			pErr := roachpb.NewError(err)
 			return Result{PErr: pErr}, pErr
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
@@ -803,15 +804,15 @@ func (e *Executor) execStmtInOpenTxn(
 			// txn in a different state.
 			pErr = roachpb.NewError(errNotRetriable)
 		}
-		txnState.updateStateAndCleanupOnErr(pErr, e)
+		txnState.updateStateAndCleanupOnErr(pErr.GoError(), e)
 		return Result{PErr: pErr}, pErr
 	}
 
 	// Bind all the placeholder variables in the stmt to actual values.
 	stmt, err := parser.FillArgs(stmt, &planMaker.params)
 	if err != nil {
+		txnState.updateStateAndCleanupOnErr(err, e)
 		pErr := roachpb.NewError(err)
-		txnState.updateStateAndCleanupOnErr(pErr, e)
 		return Result{PErr: pErr}, pErr
 	}
 
@@ -823,7 +824,7 @@ func (e *Executor) execStmtInOpenTxn(
 		if txnState.tr != nil {
 			txnState.tr.LazyPrintf("ERROR: %v", pErr)
 		}
-		txnState.updateStateAndCleanupOnErr(pErr, e)
+		txnState.updateStateAndCleanupOnErr(pErr.GoError(), e)
 		result = Result{PErr: pErr}
 	} else if txnState.tr != nil {
 		tResult := &traceResult{tag: result.PGTag, count: -1}
@@ -841,9 +842,9 @@ func (e *Executor) execStmtInOpenTxn(
 // Clean up after trying to execute a transactional statement while not in a SQL
 // transaction.
 func (e *Executor) noTransactionHelper(txnState *txnState) (Result, *roachpb.Error) {
-	pErr := roachpb.NewError(errNoTransactionInProgress)
 	// Clean up the KV txn and set the SQL state to Aborted.
-	txnState.updateStateAndCleanupOnErr(pErr, e)
+	txnState.updateStateAndCleanupOnErr(errNoTransactionInProgress, e)
+	pErr := roachpb.NewError(errNoTransactionInProgress)
 	return Result{PErr: pErr}, pErr
 }
 
@@ -856,11 +857,11 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State, txnState.txn.Proto))
 	}
-	pErr := p.txn.Rollback()
+	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
-	if pErr != nil {
-		log.Warningf("txn rollback failed. The error was swallowed: %s", pErr)
-		result.PErr = pErr
+	if err != nil {
+		log.Warningf("txn rollback failed. The error was swallowed: %s", err)
+		result.PErr = roachpb.NewError(err)
 	}
 	// We're done with this txn.
 	txnState.resetStateAndTxn(NoTxn)
@@ -879,7 +880,7 @@ const (
 // commitSqlTransaction commits a transaction.
 func commitSQLTransaction(
 	txnState *txnState, p *planner, commitType commitType, e *Executor,
-) (Result, *roachpb.Error) {
+) (Result, error) {
 
 	if p.txn != txnState.txn {
 		panic("commitSQLTransaction called on a different txn than the planner's")
@@ -890,11 +891,11 @@ func commitSQLTransaction(
 	if commitType == commit {
 		txnState.commitSeen = true
 	}
-	pErr := txnState.txn.Commit()
+	err := txnState.txn.Commit()
 	result := Result{PGTag: (*parser.CommitTransaction)(nil).StatementTag()}
-	if pErr != nil {
-		txnState.updateStateAndCleanupOnErr(pErr, e)
-		result.PErr = pErr
+	if err != nil {
+		txnState.updateStateAndCleanupOnErr(err, e)
+		result.PErr = roachpb.NewError(err)
 	} else {
 		switch commitType {
 		case release:
@@ -908,7 +909,7 @@ func commitSQLTransaction(
 	}
 	// Reset transaction to prevent running further commands on this planner.
 	p.resetTxn()
-	return result, pErr
+	return result, err
 }
 
 // the current transaction might have been committed/rolled back when this returns.

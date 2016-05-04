@@ -146,25 +146,25 @@ func TestLogRebalances(t *testing.T) {
 	// this range's information to log fake rebalance events.
 	db := s.DB()
 	desc := &roachpb.RangeDescriptor{}
-	if pErr := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); pErr != nil {
-		t.Fatal(pErr)
+	if err := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
+		t.Fatal(err)
 	}
 
 	// This code assumes that there is only one TestServer, and thus that
 	// StoreID 1 is present on the testserver. If this assumption changes in the
 	// future, *any* store will work, but a new method will need to be added to
 	// Stores (or a creative usage of VisitStores could suffice).
-	store, pErr := s.Stores().GetStore(roachpb.StoreID(1))
-	if pErr != nil {
-		t.Fatal(pErr)
+	store, err := s.Stores().GetStore(roachpb.StoreID(1))
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Log several fake events using the store.
 	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if pErr := db.Txn(func(txn *client.Txn) *roachpb.Error {
+		if err := db.Txn(func(txn *client.Txn) error {
 			return store.LogReplicaChangeTest(txn, changeType, desc.Replicas[0], *desc)
-		}); pErr != nil {
-			t.Fatal(pErr)
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 	reg := store.Registry()

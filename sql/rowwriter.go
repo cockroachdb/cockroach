@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -120,9 +121,9 @@ func makeRowInserter(
 
 // insertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
-func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachpb.Error {
+func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) error {
 	if len(values) != len(ri.insertCols) {
-		return roachpb.NewErrorf("got %d values but expected %d", len(values), len(ri.insertCols))
+		return util.Errorf("got %d values but expected %d", len(values), len(ri.insertCols))
 	}
 
 	// Encode the values to the expected column type. This needs to
@@ -132,13 +133,13 @@ func (ri *rowInserter) insertRow(b *client.Batch, values []parser.Datum) *roachp
 		// Make sure the value can be written to the column before proceeding.
 		var err error
 		if ri.marshalled[i], err = marshalColumnValue(ri.insertCols[i], val); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 	}
 
 	primaryIndexKey, secondaryIndexEntries, err := ri.helper.encodeIndexes(ri.insertColIDtoRowIndex, values)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	// Write the row sentinel. We want to write the sentinel first in case
@@ -323,17 +324,17 @@ func (ru *rowUpdater) updateRow(
 	b *client.Batch,
 	oldValues []parser.Datum,
 	updateValues []parser.Datum,
-) ([]parser.Datum, *roachpb.Error) {
+) ([]parser.Datum, error) {
 	if len(oldValues) != len(ru.fetchCols) {
-		return nil, roachpb.NewErrorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))
+		return nil, util.Errorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))
 	}
 	if len(updateValues) != len(ru.updateCols) {
-		return nil, roachpb.NewErrorf("got %d values but expected %d", len(updateValues), len(ru.updateCols))
+		return nil, util.Errorf("got %d values but expected %d", len(updateValues), len(ru.updateCols))
 	}
 
 	primaryIndexKey, secondaryIndexEntries, err := ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, oldValues)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	// Check that the new value types match the column types. This needs to
@@ -341,7 +342,7 @@ func (ru *rowUpdater) updateRow(
 	// cannot be used as index values.
 	for i, val := range updateValues {
 		if ru.marshalled[i], err = marshalColumnValue(ru.updateCols[i], val); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 	}
 
@@ -357,24 +358,24 @@ func (ru *rowUpdater) updateRow(
 	if ru.primaryKeyColChange {
 		newPrimaryIndexKey, newSecondaryIndexEntries, err = ru.helper.encodeIndexes(ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
 	} else {
 		newSecondaryIndexEntries, err = encodeSecondaryIndexes(
 			ru.helper.tableDesc.ID, ru.helper.indexes, ru.fetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 	}
 
 	if rowPrimaryKeyChanged {
-		pErr := ru.rd.deleteRow(b, oldValues)
-		if pErr != nil {
-			return nil, pErr
+		err := ru.rd.deleteRow(b, oldValues)
+		if err != nil {
+			return nil, err
 		}
-		pErr = ru.ri.insertRow(b, ru.newValues)
-		return ru.newValues, pErr
+		err = ru.ri.insertRow(b, ru.newValues)
+		return ru.newValues, err
 	}
 
 	// Update secondary indexes.
@@ -487,10 +488,10 @@ func makeRowDeleter(
 
 // deleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
-func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) *roachpb.Error {
+func (rd *rowDeleter) deleteRow(b *client.Batch, values []parser.Datum) error {
 	primaryIndexKey, secondaryIndexEntries, err := rd.helper.encodeIndexes(rd.fetchColIDtoRowIndex, values)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {

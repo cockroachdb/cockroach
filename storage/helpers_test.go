@@ -87,7 +87,7 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the
 // range which contains the given key. This is intended for usage only in unit tests.
-func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) *roachpb.Error {
+func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) error {
 	return s.logChange(txn, changeType, replica, desc)
 }
 

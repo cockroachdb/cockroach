@@ -64,14 +64,15 @@ func (p *planner) makeEditNode(t parser.TableExpr, r parser.ReturningExprs, desi
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows      planNode
+	rows planNode
+	// TODO(andrei): change this to error
 	pErr      *roachpb.Error
 	tw        tableWriter
 	resultRow parser.DTuple
 	done      bool
 }
 
-func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWriter) *roachpb.Error {
+func (r *editNodeRun) startEditNode(en *editNodeBase, rows planNode, tw tableWriter) error {
 	if isSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
 		en.p.txn.SetSystemConfigTrigger()
@@ -302,8 +303,8 @@ func (u *updateNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	if pErr := u.run.startEditNode(&u.editNodeBase, rows, &u.tw); pErr != nil {
-		return pErr
+	if err := u.run.startEditNode(&u.editNodeBase, rows, &u.tw); err != nil {
+		return roachpb.NewError(err)
 	}
 
 	return nil
@@ -316,7 +317,8 @@ func (u *updateNode) Next() bool {
 
 	if !u.run.rows.Next() {
 		// We're done. Finish the batch.
-		u.run.pErr = u.tw.finalize()
+		err := u.tw.finalize()
+		u.run.pErr = roachpb.NewError(err)
 		u.run.done = true
 		return false
 	}
@@ -347,9 +349,9 @@ func (u *updateNode) Next() bool {
 		}
 	}
 
-	newValues, pErr := u.tw.row(append(oldValues, updateValues...))
-	if pErr != nil {
-		u.run.pErr = pErr
+	newValues, err := u.tw.row(append(oldValues, updateValues...))
+	if err != nil {
+		u.run.pErr = roachpb.NewError(err)
 		return false
 	}
 

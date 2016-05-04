@@ -58,10 +58,10 @@ type Batch struct {
 	rowsStaticIdx int
 }
 
-func (b *Batch) prepare() *roachpb.Error {
+func (b *Batch) prepare() error {
 	for _, r := range b.Results {
-		if pErr := r.PErr; pErr != nil {
-			return pErr
+		if r.Err() != nil {
+			return r.Err()
 		}
 	}
 	return nil
@@ -105,7 +105,8 @@ func (b *Batch) initResult(calls, numRows int, err error) {
 	b.Results = append(b.Results, r)
 }
 
-func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
+// Returns the first error.
+func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -133,37 +134,37 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 			case *roachpb.GetRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.PErr == nil {
+				if result.Err() == nil {
 					row.Value = reply.(*roachpb.GetResponse).Value
 				}
 			case *roachpb.PutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.PErr == nil {
+				if result.Err() == nil {
 					row.Value = &req.Value
 				}
 			case *roachpb.ConditionalPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.PErr == nil {
+				if result.Err() == nil {
 					row.Value = &req.Value
 				}
 			case *roachpb.InitPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.PErr == nil {
+				if result.Err() == nil {
 					row.Value = &req.Value
 				}
 			case *roachpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
-				if result.PErr == nil {
+				if result.Err() == nil {
 					t := reply.(*roachpb.IncrementResponse)
 					row.Value = &roachpb.Value{}
 					row.Value.SetInt(t.NewValue)
 				}
 			case *roachpb.ScanRequest:
-				if result.PErr == nil {
+				if result.Err() == nil {
 					t := reply.(*roachpb.ScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
@@ -174,7 +175,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 					}
 				}
 			case *roachpb.ReverseScanRequest:
-				if result.PErr == nil {
+				if result.Err() == nil {
 					t := reply.(*roachpb.ReverseScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
@@ -189,7 +190,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
 
 			case *roachpb.DeleteRangeRequest:
-				if result.PErr == nil {
+				if result.Err() == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
@@ -222,7 +223,7 @@ func (b *Batch) fillResults(br *roachpb.BatchResponse, pErr *roachpb.Error) *roa
 	for i := range b.Results {
 		result := &b.Results[i]
 		if result.PErr != nil {
-			return result.PErr
+			return result.Err()
 		}
 	}
 	return nil

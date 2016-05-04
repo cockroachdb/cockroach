@@ -157,7 +157,7 @@ func makeKVFetcher(txn *client.Txn, spans spans, reverse bool, firstBatchLimit i
 }
 
 // fetch retrieves spans from the kv
-func (f *kvFetcher) fetch() *roachpb.Error {
+func (f *kvFetcher) fetch() error {
 	batchSize := f.getBatchSize()
 
 	b := &client.Batch{MaxScanResults: batchSize}
@@ -221,8 +221,8 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 		return nil
 	}
 
-	if pErr := f.txn.Run(b); pErr != nil {
-		return pErr
+	if err := f.txn.Run(b); err != nil {
+		return err
 	}
 
 	if f.kvs == nil {
@@ -255,14 +255,14 @@ func (f *kvFetcher) fetch() *roachpb.Error {
 
 // nextKV returns the next key/value (initiating fetches as necessary). When there are no more keys,
 // returns false and an empty key/value.
-func (f *kvFetcher) nextKV() (bool, client.KeyValue, *roachpb.Error) {
+func (f *kvFetcher) nextKV() (bool, client.KeyValue, error) {
 	if f.kvIndex == len(f.kvs) {
 		if f.fetchEnd {
 			return false, client.KeyValue{}, nil
 		}
-		pErr := f.fetch()
-		if pErr != nil {
-			return false, client.KeyValue{}, pErr
+		err := f.fetch()
+		if err != nil {
+			return false, client.KeyValue{}, err
 		}
 		if len(f.kvs) == 0 {
 			return false, client.KeyValue{}, nil

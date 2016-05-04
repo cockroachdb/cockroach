@@ -41,16 +41,16 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn to write to and returns an error
 	// if it was misconfigured.
-	init(*client.Txn) *roachpb.Error
+	init(*client.Txn) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
 	// The returned DTuple is suitable for use with returningHelper.
-	row(parser.DTuple) (parser.DTuple, *roachpb.Error)
+	row(parser.DTuple) (parser.DTuple, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.
-	finalize() *roachpb.Error
+	finalize() error
 }
 
 var _ tableWriter = (*tableInserter)(nil)
@@ -68,31 +68,36 @@ type tableInserter struct {
 	b   *client.Batch
 }
 
-func (ti *tableInserter) init(txn *client.Txn) *roachpb.Error {
+func (ti *tableInserter) init(txn *client.Txn) error {
 	ti.txn = txn
 	ti.b = txn.NewBatch()
 	return nil
 }
 
-func (ti *tableInserter) row(values parser.DTuple) (parser.DTuple, *roachpb.Error) {
+func (ti *tableInserter) row(values parser.DTuple) (parser.DTuple, error) {
 	return nil, ti.ri.insertRow(ti.b, values)
 }
 
-func (ti *tableInserter) finalize() *roachpb.Error {
-	var pErr *roachpb.Error
+func (ti *tableInserter) finalize() error {
+	var err error
 	if ti.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		pErr = ti.txn.CommitInBatch(ti.b)
+		err = ti.txn.CommitInBatch(ti.b)
 	} else {
-		pErr = ti.txn.Run(ti.b)
+		err = ti.txn.Run(ti.b)
 	}
 
-	if pErr != nil {
-		pErr = convertBatchError(ti.ri.helper.tableDesc, *ti.b, pErr)
+	if err != nil {
+		for _, r := range ti.b.Results {
+			if r.PErr != nil {
+				return convertBatchError(ti.ri.helper.tableDesc, *ti.b, r.PErr)
+			}
+		}
+		return err
 	}
-	return pErr
+	return nil
 }
 
 // tableUpdater handles writing kvs and forming table rows for updates.
@@ -105,33 +110,38 @@ type tableUpdater struct {
 	b   *client.Batch
 }
 
-func (tu *tableUpdater) init(txn *client.Txn) *roachpb.Error {
+func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
 	tu.b = txn.NewBatch()
 	return nil
 }
 
-func (tu *tableUpdater) row(values parser.DTuple) (parser.DTuple, *roachpb.Error) {
+func (tu *tableUpdater) row(values parser.DTuple) (parser.DTuple, error) {
 	oldValues := values[:len(tu.ru.fetchCols)]
 	updateValues := values[len(tu.ru.fetchCols):]
 	return tu.ru.updateRow(tu.b, oldValues, updateValues)
 }
 
-func (tu *tableUpdater) finalize() *roachpb.Error {
-	var pErr *roachpb.Error
+func (tu *tableUpdater) finalize() error {
+	var err error
 	if tu.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		pErr = tu.txn.CommitInBatch(tu.b)
+		err = tu.txn.CommitInBatch(tu.b)
 	} else {
-		pErr = tu.txn.Run(tu.b)
+		err = tu.txn.Run(tu.b)
 	}
 
-	if pErr != nil {
-		pErr = convertBatchError(tu.ru.helper.tableDesc, *tu.b, pErr)
+	if err != nil {
+		for _, r := range tu.b.Results {
+			if r.PErr != nil {
+				return convertBatchError(tu.ru.helper.tableDesc, *tu.b, r.PErr)
+			}
+		}
+		return err
 	}
-	return pErr
+	return nil
 }
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
@@ -155,7 +165,7 @@ type tableUpserter struct {
 	updateRow      parser.DTuple
 }
 
-func (tu *tableUpserter) init(txn *client.Txn) *roachpb.Error {
+func (tu *tableUpserter) init(txn *client.Txn) error {
 	tu.txn = txn
 
 	tu.tableDesc = tu.ri.helper.tableDesc
@@ -175,12 +185,12 @@ func (tu *tableUpserter) init(txn *client.Txn) *roachpb.Error {
 		tu.tableDesc, tu.ru.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex,
 		false, false, valNeededForCol)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	return nil
 }
 
-func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, *roachpb.Error) {
+func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, error) {
 	tu.upsertRows = append(tu.upsertRows, row)
 
 	// TODO(dan): The presence of OnConflict currently implies the short form
@@ -189,7 +199,7 @@ func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, *roachpb.Error) 
 	upsertRowPK, _, err := encodeIndexKey(
 		&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	tu.upsertRowPKs = append(tu.upsertRowPKs, upsertRowPK)
 
@@ -197,7 +207,7 @@ func (tu *tableUpserter) row(row parser.DTuple) (parser.DTuple, *roachpb.Error) 
 	return nil, nil
 }
 
-func (tu *tableUpserter) flush() *roachpb.Error {
+func (tu *tableUpserter) flush() error {
 	pkSpans := make(spans, len(tu.upsertRowPKs))
 	for i, upsertRowPK := range tu.upsertRowPKs {
 		pkSpans[i] = span{start: upsertRowPK, end: upsertRowPK.PrefixEnd()}
@@ -205,7 +215,7 @@ func (tu *tableUpserter) flush() *roachpb.Error {
 
 	pErr := tu.fetcher.startScan(tu.txn, pkSpans, int64(len(pkSpans)))
 	if pErr != nil {
-		return pErr
+		return pErr.GoError()
 	}
 
 	var upsertRowPKIdx int
@@ -213,7 +223,7 @@ func (tu *tableUpserter) flush() *roachpb.Error {
 	for {
 		row, pErr := tu.fetcher.nextRow()
 		if pErr != nil {
-			return pErr
+			return pErr.GoError()
 		}
 		if row == nil {
 			break
@@ -224,7 +234,7 @@ func (tu *tableUpserter) flush() *roachpb.Error {
 		rowPK, _, err := encodeIndexKey(
 			&tu.tableDesc.PrimaryIndex, tu.ri.insertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if pErr != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 
 		for ; upsertRowPKIdx < len(tu.upsertRowPKs); upsertRowPKIdx++ {
@@ -239,31 +249,36 @@ func (tu *tableUpserter) flush() *roachpb.Error {
 	for i, upsertRow := range tu.upsertRows {
 		existingRow := existingRows[i]
 		if existingRow == nil {
-			pErr = tu.ri.insertRow(b, upsertRow)
-			if pErr != nil {
-				return pErr
+			err := tu.ri.insertRow(b, upsertRow)
+			if err != nil {
+				return err
 			}
 		} else {
 			for uCol, uIdx := range tu.updateColIDtoRowIndex {
 				tu.updateRow[uIdx] = upsertRow[tu.ri.insertColIDtoRowIndex[uCol]]
 			}
-			_, pErr := tu.ru.updateRow(b, existingRow, tu.updateRow)
-			if pErr != nil {
-				return pErr
+			_, err := tu.ru.updateRow(b, existingRow, tu.updateRow)
+			if err != nil {
+				return err
 			}
 		}
 	}
 	tu.upsertRows = nil
 	tu.upsertRowPKs = nil
 
-	pErr = tu.txn.Run(b)
-	if pErr != nil {
-		pErr = convertBatchError(tu.tableDesc, *b, pErr)
+	err := tu.txn.Run(b)
+	if err != nil {
+		for _, r := range b.Results {
+			if r.PErr != nil {
+				return convertBatchError(tu.tableDesc, *b, r.PErr)
+			}
+		}
+		return err
 	}
-	return pErr
+	return nil
 }
 
-func (tu *tableUpserter) finalize() *roachpb.Error {
+func (tu *tableUpserter) finalize() error {
 	return tu.flush()
 }
 
@@ -277,17 +292,17 @@ type tableDeleter struct {
 	b   *client.Batch
 }
 
-func (td *tableDeleter) init(txn *client.Txn) *roachpb.Error {
+func (td *tableDeleter) init(txn *client.Txn) error {
 	td.txn = txn
 	td.b = txn.NewBatch()
 	return nil
 }
 
-func (td *tableDeleter) row(values parser.DTuple) (parser.DTuple, *roachpb.Error) {
+func (td *tableDeleter) row(values parser.DTuple) (parser.DTuple, error) {
 	return nil, td.rd.deleteRow(td.b, values)
 }
 
-func (td *tableDeleter) finalize() *roachpb.Error {
+func (td *tableDeleter) finalize() error {
 	if td.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
@@ -313,7 +328,7 @@ func (td *tableDeleter) fastPathAvailable() bool {
 // finalize, so it should not be called after.
 func (td *tableDeleter) fastDelete(
 	scan *scanNode,
-) (rowCount int, pErr *roachpb.Error) {
+) (rowCount int, err error) {
 	for _, span := range scan.spans {
 		if log.V(2) {
 			log.Infof("Skipping scan and just deleting %s - %s", span.start, span.end)
@@ -321,9 +336,9 @@ func (td *tableDeleter) fastDelete(
 		td.b.DelRange(span.start, span.end, true)
 	}
 
-	pErr = td.finalize()
-	if pErr != nil {
-		return 0, pErr
+	err = td.finalize()
+	if err != nil {
+		return 0, err
 	}
 
 	for _, r := range td.b.Results {
@@ -336,7 +351,7 @@ func (td *tableDeleter) fastDelete(
 
 			after, err := scan.fetcher.readIndexKey(i)
 			if err != nil {
-				return 0, roachpb.NewError(err)
+				return 0, err
 			}
 			k := i[:len(i)-len(after)]
 			if !bytes.Equal(k, prev) {

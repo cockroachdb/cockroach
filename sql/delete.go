@@ -98,8 +98,8 @@ func (d *deleteNode) Start() *roachpb.Error {
 		return pErr
 	}
 
-	if pErr := d.run.startEditNode(&d.editNodeBase, rows, &d.tw); pErr != nil {
-		return pErr
+	if err := d.run.startEditNode(&d.editNodeBase, rows, &d.tw); err != nil {
+		return roachpb.NewError(err)
 	}
 
 	// Check if we can avoid doing a round-trip to read the values and just
@@ -109,7 +109,7 @@ func (d *deleteNode) Start() *roachpb.Error {
 	sel := rows.(*selectNode)
 	if scan, ok := sel.table.node.(*scanNode); ok && canDeleteWithoutScan(d.n, scan, &d.tw) {
 		d.run.fastPath = true
-		d.run.pErr = d.fastDelete()
+		d.run.pErr = roachpb.NewError(d.fastDelete())
 		d.run.done = true
 		return d.run.pErr
 	}
@@ -131,14 +131,16 @@ func (d *deleteNode) Next() bool {
 
 	if !d.run.rows.Next() {
 		// We're done. Finish the batch.
-		d.run.pErr = d.tw.finalize()
+		d.run.pErr = roachpb.NewError(d.tw.finalize())
 		d.run.done = true
 		return false
 	}
 
 	rowVals := d.run.rows.Values()
 
-	if _, d.run.pErr = d.tw.row(rowVals); d.run.pErr != nil {
+	_, err := d.tw.row(rowVals)
+	d.run.pErr = roachpb.NewError(err)
+	if d.run.pErr != nil {
 		return false
 	}
 
@@ -177,18 +179,18 @@ func canDeleteWithoutScan(n *parser.Delete, scan *scanNode, td *tableDeleter) bo
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
-func (d *deleteNode) fastDelete() *roachpb.Error {
+func (d *deleteNode) fastDelete() error {
 	scan := d.run.rows.(*selectNode).table.node.(*scanNode)
 	if !scan.initScan() {
-		return scan.pErr
+		return scan.pErr.GoError()
 	}
 
-	if pErr := d.tw.init(d.p.txn); pErr != nil {
-		return pErr
+	if err := d.tw.init(d.p.txn); err != nil {
+		return err
 	}
-	rowCount, pErr := d.tw.fastDelete(scan)
-	if pErr != nil {
-		return pErr
+	rowCount, err := d.tw.fastDelete(scan)
+	if err != nil {
+		return err
 	}
 	d.rh.rowCount += rowCount
 	return nil

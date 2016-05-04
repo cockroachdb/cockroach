@@ -82,13 +82,13 @@ func makeDatabaseDesc(p *parser.CreateDatabase) DatabaseDescriptor {
 // getDatabaseDesc looks up the database descriptor given its name.
 // Returns nil if the descriptor is not found. If you want to turn the "not
 // found" condition into an error, use databaseDoesNotExistError().
-func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, *roachpb.Error) {
+func (p *planner) getDatabaseDesc(name string) (*DatabaseDescriptor, error) {
 	desc := &DatabaseDescriptor{}
-	found, pErr := p.getDescriptor(databaseKey{name}, desc)
+	found, err := p.getDescriptor(databaseKey{name}, desc)
 	if !found {
-		return nil, pErr
+		return nil, err
 	}
-	return desc, pErr
+	return desc, err
 }
 
 // getCachedDatabaseDesc looks up the database descriptor given its name in the
@@ -137,7 +137,7 @@ func getKeysForDatabaseDescriptor(
 	return
 }
 
-func (p *planner) getDatabaseID(name string) (ID, *roachpb.Error) {
+func (p *planner) getDatabaseID(name string) (ID, error) {
 	if id := p.databaseCache.getID(name); id != 0 {
 		return id, nil
 	}
@@ -150,13 +150,13 @@ func (p *planner) getDatabaseID(name string) (ID, *roachpb.Error) {
 		if log.V(3) {
 			log.Infof("%v", err)
 		}
-		var pErr *roachpb.Error
-		desc, pErr = p.getDatabaseDesc(name)
-		if pErr != nil {
-			return 0, pErr
+		var err error
+		desc, err = p.getDatabaseDesc(name)
+		if err != nil {
+			return 0, err
 		}
 		if desc == nil {
-			return 0, roachpb.NewError(databaseDoesNotExistError(name))
+			return 0, databaseDoesNotExistError(name)
 		}
 	}
 
