@@ -219,19 +219,26 @@ func makeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		s := d.CheckExpr.String()
 		col.CheckExpr = &s
 
-		qvals := make(qvalMap)
-		table := tableInfo{
-			columns: makeResultColumns([]ColumnDescriptor{*col}),
+		preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+			qname, ok := expr.(*parser.QualifiedName)
+			if !ok {
+				// Not a qname, don't do anything to this node.
+				return nil, true, expr
+			}
+			if err := qname.NormalizeColumnName(); err != nil {
+				return err, false, nil
+			}
+			if qname.IsStar() || qname.Base != "" || qname.Column() != col.Name {
+				err := fmt.Errorf("argument of CHECK cannot refer to other columns: \"%s\"", qname)
+				return err, false, nil
+			}
+			// Convert to a dummy datum of the correct type.
+			return nil, false, colDatumType
 		}
-		qv := qnameVisitor{
-			qt: qvalResolver{
-				table: &table,
-				qvals: qvals,
-			},
-		}
-		expr, err := resolveQNames(d.CheckExpr, &table, qvals, &qv)
+
+		expr, err := parser.SimpleVisit(d.CheckExpr, preFn)
 		if err != nil {
-			return nil, nil, fmt.Errorf("argument of CHECK cannot refer to other columns: %s", err)
+			return nil, nil, err
 		}
 		if typedExpr, err := expr.TypeCheck(nil, parser.DummyBool); err != nil {
 			return nil, nil, err
