@@ -380,10 +380,10 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer csql.TestDisableAsyncSchemaChangeExec()()
 
+	var execKnobs csql.ExecutorTestingKnobs
 	var mu sync.Mutex
 	clearSchemaChangers := false
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+	execKnobs.SyncSchemaChangersFilter =
 		func(tscc csql.TestingSchemaChangerCollection) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -391,6 +391,8 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 				tscc.ClearSchemaChangers()
 			}
 		}
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLExecutor = &execKnobs
 	t := newLeaseTest(testingT, ctx)
 	defer t.cleanup()
 
@@ -456,10 +458,11 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer csql.TestDisableAsyncSchemaChangeExec()()
 
+	var execKnobs csql.ExecutorTestingKnobs
+	var lmKnobs csql.LeaseManagerTestingKnobs
 	var mu sync.Mutex
 	clearSchemaChangers := false
-	ctx, _ := createTestServerContext()
-	ctx.TestingKnobs.ExecutorTestingKnobs.SyncSchemaChangersFilter =
+	execKnobs.SyncSchemaChangersFilter =
 		func(tscc csql.TestingSchemaChangerCollection) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -469,7 +472,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 		}
 	var waitTableID csql.ID
 	deleted := make(chan bool)
-	ctx.TestingKnobs.LeaseManagerTestingKnobs.TestingLeasesRefreshedEvent =
+	lmKnobs.TestingLeasesRefreshedEvent =
 		func(cfg config.SystemConfig) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -480,6 +483,9 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				}
 			}
 		}
+	ctx, _ := createTestServerContext()
+	ctx.TestingKnobs.SQLExecutor = &execKnobs
+	ctx.TestingKnobs.SQLLeaseManager = &lmKnobs
 	s, db, kvDB := setupWithContext(t, ctx)
 	defer cleanup(s, db)
 

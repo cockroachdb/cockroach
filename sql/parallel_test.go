@@ -39,6 +39,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -154,8 +155,10 @@ func (t *parallelTest) run(dir string) {
 func (t *parallelTest) setup() {
 	ctx := server.NewTestContext()
 	ctx.MaxOffset = logicMaxOffset
-	ctx.TestingKnobs.ExecutorTestingKnobs.WaitForGossipUpdate = true
-	ctx.TestingKnobs.ExecutorTestingKnobs.CheckStmtStringChange = true
+	ctx.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		WaitForGossipUpdate:   true,
+		CheckStmtStringChange: true,
+	}
 	t.srv = setupTestServerWithContext(t.T, ctx)
 }
 

@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/cli/cliflags"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
@@ -159,15 +157,7 @@ type Context struct {
 	TimeUntilStoreDead time.Duration
 
 	// TestingKnobs is used for internal test controls only.
-	TestingKnobs TestingKnobs
-}
-
-// TestingKnobs contains facilities for controlling various parts of the
-// system for testing.
-type TestingKnobs struct {
-	StoreTestingKnobs        storage.StoreTestingKnobs
-	ExecutorTestingKnobs     sql.ExecutorTestingKnobs
-	LeaseManagerTestingKnobs sql.LeaseManagerTestingKnobs
+	TestingKnobs base.TestingKnobs
 }
 
 // GetTotalMemory returns either the total system memory or if possible the

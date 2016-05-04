@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
@@ -190,7 +191,9 @@ func createTestServerContext() (*server.Context, *CommandFilters) {
 	ctx := server.NewTestContext()
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
-	ctx.TestingKnobs.StoreTestingKnobs.TestingCommandFilter = cmdFilters.runFilters
+	ctx.TestingKnobs.Store = &storage.StoreTestingKnobs{
+		TestingCommandFilter: cmdFilters.runFilters,
+	}
 	return ctx, &cmdFilters
 }
 
