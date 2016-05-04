@@ -3,7 +3,7 @@ System.config({
   transpiler: "ts",
   typescriptOptions: {
     "typeCheck": "strict",
-    "tsconfig": "app/tsconfig.json",
+    "tsconfig": true,
     "targetLib": "ES5"
   },
   paths: {

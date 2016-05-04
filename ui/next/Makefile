@@ -33,7 +33,7 @@ all: lint $(REMOTE_DEPS)
 
 .PHONY: lint
 lint: npm.installed
-	tslint -c $(TS_ROOT)/tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -not -path app/interfaces/protos.d.ts)
+	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -not -path app/interfaces/protos.d.ts)
 
 npm.installed: npm-shrinkwrap.json
 	rm -rf $(NODE_MODULES)/ $(TYPINGS)/
@@ -62,6 +62,5 @@ app/interfaces/protos.d.ts: lib/protos/protos.json
 	proto2ts --file lib/protos/protos.json > $@
 
 .PHONY: test
-test: npm.installed
-# Execute in /app directory, so that ts-node can pick up tsconfig.json.
-	cd app && mocha '**/*.spec.ts*' --require ts-node/register
+test: npm.installed typings.installed
+	mocha $(TS_ROOT)/'**/*.spec.ts*' --require ts-node/register
