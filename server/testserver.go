@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server/testingshim"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -378,4 +379,25 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 		panic(fmt.Sprintf("couldn't find metric %s", name))
 	}
 	return c
+}
+
+var _ testingshim.TestServerInterface = &TestServer{}
+
+// ClientDB is part of TestServerInterface.
+func (ts *TestServer) ClientDB() interface{} { return ts.db }
+
+// KVDB is part of TestServerInterface.
+func (ts *TestServer) KVDB() interface{} { return ts.kvDB }
+
+type testServerFactoryImpl struct{}
+
+// TestServerFactory can be passed to testingshim.InitTestServerFactory
+var TestServerFactory testingshim.TestServerFactory = testServerFactoryImpl{}
+
+// New is part of TestServerInterface.
+func (testServerFactoryImpl) New(params testingshim.TestServerParams) testingshim.TestServerInterface {
+	ctx := NewTestContext()
+	ctx.TestingKnobs = params.Knobs
+	ctx.JoinUsing = params.JoinAddr
+	return &TestServer{Ctx: ctx}
 }
