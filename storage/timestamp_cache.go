@@ -139,16 +139,16 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
-		cache := tc.wCache
+		tcache := tc.wCache
 		if readTSCache {
-			cache = tc.rCache
+			tcache = tc.rCache
 		}
 
 		addRange := func(r interval.Range) {
 			value := cacheValue{timestamp: timestamp, txnID: txnID}
-			key := cache.MakeKey(r.Start, r.End)
+			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
-			cache.AddEntry(entry)
+			tcache.AddEntry(entry)
 		}
 		r := interval.Range{
 			Start: interval.Comparable(start),
@@ -158,10 +158,11 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 		// Check existing, overlapping entries and truncate/split/remove if
 		// superseded and in the past. If existing entries are in the future,
 		// subtract from the range/ranges that need to be added to cache.
-		for _, o := range cache.GetOverlaps(r.Start, r.End) {
-			cv := o.Value.(*cacheValue)
-			sCmp := r.Start.Compare(o.Key.Start)
-			eCmp := r.End.Compare(o.Key.End)
+		for _, entry := range tcache.GetOverlaps(r.Start, r.End) {
+			cv := entry.Value.(*cacheValue)
+			key := entry.Key.(*cache.IntervalKey)
+			sCmp := r.Start.Compare(key.Start)
+			eCmp := r.End.Compare(key.End)
 			if !timestamp.Less(cv.timestamp) {
 				// The existing interval has a timestamp less than or equal to the new interval.
 				// Compare interval ranges to determine how to modify existing interval.
@@ -174,7 +175,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					//
 					// New: ------------
 					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
-					cache.MoveToEnd(o.Entry)
+					tcache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
 					// New contains or is equal to old; delete old.
@@ -183,7 +184,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old:   --------    or    ----------  or  ----------
 					//
 					// Old:
-					cache.DelEntry(o.Entry)
+					tcache.DelEntry(entry)
 				case sCmp > 0 && eCmp < 0:
 					// Old contains new; split up old into two.
 					//
@@ -191,12 +192,12 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old: ------------
 					//
 					// Old: ----    ----
-					oldEnd := o.Key.End
-					o.Key.End = r.Start
+					oldEnd := key.End
+					key.End = r.Start
 
-					key := cache.MakeKey(r.End, oldEnd)
-					entry := makeCacheEntry(key, *cv)
-					cache.AddEntryAfter(entry, o.Entry)
+					key := tcache.MakeKey(r.End, oldEnd)
+					newEntry := makeCacheEntry(key, *cv)
+					tcache.AddEntryAfter(newEntry, entry)
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
 					//
@@ -204,7 +205,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old: --------      or  ------------
 					//
 					// Old: ----              ----
-					o.Key.End = r.Start
+					key.End = r.Start
 				case sCmp <= 0:
 					// Right partial overlap; truncate old start.
 					//
@@ -212,9 +213,9 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// Old:     --------  or  ------------
 					//
 					// Old:         ----              ----
-					o.Key.Start = r.End
+					key.Start = r.End
 				default:
-					panic(fmt.Sprintf("no overlap between %v and %v", o.Key.Range, r))
+					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
 			} else {
 				// The existing interval has a timestamp greater than the new interval.
@@ -238,10 +239,10 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// New: ------------
 					//
 					// New: ---      ---
-					lr := interval.Range{Start: r.Start, End: o.Key.Start}
+					lr := interval.Range{Start: r.Start, End: key.Start}
 					addRange(lr)
 
-					r.Start = o.Key.End
+					r.Start = key.End
 				case eCmp > 0:
 					// Left partial overlap; truncate new start.
 					//
@@ -249,7 +250,7 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// New:     --------  or  ------------
 					//
 					// New:         ----              ----
-					r.Start = o.Key.End
+					r.Start = key.End
 				case sCmp < 0:
 					// Right partial overlap; truncate new end.
 					//
@@ -257,9 +258,9 @@ func (tc *TimestampCache) Add(start, end roachpb.Key, timestamp roachpb.Timestam
 					// New: --------      or  ------------
 					//
 					// New: ----              ----
-					r.End = o.Key.Start
+					r.End = key.Start
 				default:
-					panic(fmt.Sprintf("no overlap between %v and %v", o.Key.Range, r))
+					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
 			}
 		}
