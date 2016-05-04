@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/interval"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A CommandQueue maintains an interval tree of keys or key ranges for
@@ -134,12 +133,12 @@ func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roac
 				restart = true
 				cmd.expanded = true
 				if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
-					log.Error(err)
+					panic(err)
 				}
 				for i := range cmd.children {
 					child := &cmd.children[i]
 					if err := cq.tree.Insert(child, false /* !fast */); err != nil {
-						log.Error(err)
+						panic(err)
 					}
 				}
 			}
@@ -399,7 +398,7 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 	}
 
 	if err := cq.tree.Insert(cmd, false /* !fast */); err != nil {
-		log.Error(err)
+		panic(err)
 	}
 	return cmd
 }
@@ -420,7 +419,7 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 
 	if !cmd.expanded {
 		if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
-			log.Error(err)
+			panic(err)
 		}
 		for _, wg := range cmd.pending {
 			wg.Done()
@@ -428,7 +427,7 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	} else {
 		for _, child := range cmd.children {
 			if err := cq.tree.Delete(&child, false /* !fast */); err != nil {
-				log.Error(err)
+				panic(err)
 			}
 			for _, wg := range child.pending {
 				wg.Done()
