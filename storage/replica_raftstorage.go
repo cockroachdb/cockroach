@@ -720,6 +720,11 @@ func (r *Replica) applySnapshot(batch engine.Engine, snap raftpb.Snapshot) (uint
 			panic(err)
 		}
 	})
+
+	// After applying a snapshot, always have the store gossip its store
+	// descriptor to keep the cluster as up to date as possible.
+	go r.store.GossipStore()
+
 	return snap.Metadata.Index, nil
 }
 
