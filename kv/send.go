@@ -162,15 +162,25 @@ func send(opts SendOptions, replicas ReplicaSlice,
 			err := call.err
 			if err == nil {
 				if log.V(2) {
-					log.Infof("successful reply: %+v", call.reply)
+					log.Infof("RPC reply: %+v", call.reply)
+				} else if call.reply.Error != nil && log.V(1) {
+					log.Infof("application error: %s", call.reply.Error)
 				}
 
-				return call.reply, nil
-			}
+				if !isPerReplicaError(call.reply.Error) {
+					return call.reply, nil
+				}
 
-			// Error handling.
-			if log.V(1) {
-				log.Warningf("error reply: %s", err)
+				// Extract the detail so it can be included in the error
+				// message if this is our last replica.
+				//
+				// TODO(bdarnell): The last error is not necessarily the best
+				// one to return; we may want to remember the "best" error
+				// we've seen (for example, a NotLeaderError conveys more
+				// information than a RangeNotFound).
+				err = call.reply.Error.GetDetail()
+			} else if log.V(1) {
+				log.Warningf("RPC error: %s", err)
 			}
 
 			errors++
@@ -258,4 +268,19 @@ func sendOne(opts SendOptions, rpcContext *rpc.Context, client batchClient, done
 		reply, err := client.client.Batch(ctx, &client.args)
 		done <- batchCall{reply: reply, err: err}
 	}()
+}
+
+// isPerReplicaError returns true if the given error is likely to be
+// unique to the replica that reported it, and retrying on other
+// replicas is likely to produce different results.
+func isPerReplicaError(pErr *roachpb.Error) bool {
+	switch pErr.GetDetail().(type) {
+	case *roachpb.RangeNotFoundError:
+		return true
+	case *roachpb.NodeUnavailableError:
+		return true
+		// TODO(bdarnell): add NotLeaderError here after refactoring so we
+		// can interact with the leader cache from here.
+	}
+	return false
 }
