@@ -226,7 +226,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			*lease = l
 
 			// Add and delete columns for a chunk of the key space.
-			sp.start, done, pErr = sc.truncateAndBacfillColumnsChunk(
+			sp.start, done, pErr = sc.truncateAndBackfillColumnsChunk(
 				added, dropped, nonNullableColumn, defaultExprs, evalCtx, sp,
 			)
 			if pErr != nil {
@@ -237,7 +237,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return nil
 }
 
-func (sc *SchemaChanger) truncateAndBacfillColumnsChunk(
+func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	added []ColumnDescriptor,
 	dropped []ColumnDescriptor,
 	nonNullableColumn string,
