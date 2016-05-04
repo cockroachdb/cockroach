@@ -36,13 +36,13 @@ import (
 // pending command can proceed.
 //
 // After waiting, a command is added to the queue's already-executing
-// set via Add(). Add accepts a parameter indicating whether the
+// set via add(). add accepts a parameter indicating whether the
 // command is read-only. Read-only commands don't need to wait on
 // other read-only commands, so the wait group returned via GetWait()
 // doesn't include read-only on read-only overlapping commands as an
 // optimization.
 //
-// Once commands complete, Remove() is invoked to remove the executing
+// Once commands complete, remove() is invoked to remove the executing
 // command and decrement the counts on any pending WaitGroups,
 // possibly signaling waiting commands who were gated by the executing
 // command's affected key(s).
@@ -102,7 +102,7 @@ func prepareSpans(spans ...roachpb.Span) {
 // commands which overlap the specified key ranges. If an end key is empty, it
 // only affects the start key. The caller should call wg.Wait() to wait for
 // confirmation that all gating commands have completed or failed, and then
-// call Add() to add the keys to the command queue. readOnly is true if the
+// call add() to add the keys to the command queue. readOnly is true if the
 // requester is a read-only command; false for read-write.
 func (cq *CommandQueue) getWait(readOnly bool, wg *sync.WaitGroup, spans ...roachpb.Span) {
 	prepareSpans(spans...)
@@ -344,12 +344,12 @@ func (o *overlapHeap) PopOverlap() *cmd {
 	return x.(*cmd)
 }
 
-// Add adds commands to the queue which affect the specified key ranges. Ranges
+// add adds commands to the queue which affect the specified key ranges. Ranges
 // without an end key affect only the start key. The returned interface is the
 // key for the command queue and must be re-supplied on subsequent invocation
-// of Remove().
+// of remove().
 //
-// Add should be invoked after waiting on already-executing, overlapping
+// add should be invoked after waiting on already-executing, overlapping
 // commands via the WaitGroup initialized through getWait().
 func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 	prepareSpans(spans...)
@@ -372,7 +372,9 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 	}
 	cmds := make([]cmd, numCmds)
 
-	// Create the covering entry.
+	// Create the covering entry. Note that this may have an "illegal" key range
+	// spanning from range-local to range-global, but that's acceptable here as
+	// long as we're careful in the future.
 	cmd := &cmds[0]
 	cmd.id = cq.nextID()
 	cmd.key = interval.Range{
@@ -403,15 +405,10 @@ func (cq *CommandQueue) add(readOnly bool, spans ...roachpb.Span) *cmd {
 	return cmd
 }
 
-// Remove is invoked to signal that the command associated with the
+// remove is invoked to signal that the command associated with the
 // specified key has completed and should be removed. Any pending
 // commands waiting on this command will be signaled if this is the
 // only command upon which they are still waiting.
-//
-// Remove is invoked after a mutating command has been committed to
-// the Raft log and applied to the underlying state machine. Similarly,
-// Remove is invoked after a read-only command has been executed
-// against the underlying state machine.
 func (cq *CommandQueue) remove(cmd *cmd) {
 	if cmd == nil {
 		return
