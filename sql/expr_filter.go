@@ -107,13 +107,13 @@ func exprCheckVars(expr parser.Expr, conv varConvertFunc) bool {
 
 // Convert the variables in the given expression; the expression must only contain
 // variables known to the conversion function (exprCheckVars should be used first).
-func exprConvertVars(expr parser.Expr, conv varConvertFunc) parser.Expr {
+func exprConvertVars(expr parser.TypedExpr, conv varConvertFunc) parser.TypedExpr {
 	v := varConvertVisitor{justCheck: false, conv: conv}
 	ret, _ := parser.WalkExpr(&v, expr)
-	return ret
+	return ret.(parser.TypedExpr)
 }
 
-func makeAnd(left parser.Expr, right parser.Expr) parser.Expr {
+func makeAnd(left parser.TypedExpr, right parser.TypedExpr) parser.TypedExpr {
 	if left == parser.DBoolFalse || right == parser.DBoolFalse {
 		return parser.DBoolFalse
 	}
@@ -123,10 +123,10 @@ func makeAnd(left parser.Expr, right parser.Expr) parser.Expr {
 	if right == parser.DBoolTrue {
 		return left
 	}
-	return &parser.AndExpr{Left: left, Right: right}
+	return parser.NewTypedAndExpr(left, right)
 }
 
-func makeOr(left parser.Expr, right parser.Expr) parser.Expr {
+func makeOr(left parser.TypedExpr, right parser.TypedExpr) parser.TypedExpr {
 	if left == parser.DBoolTrue || right == parser.DBoolTrue {
 		return parser.DBoolTrue
 	}
@@ -136,17 +136,17 @@ func makeOr(left parser.Expr, right parser.Expr) parser.Expr {
 	if right == parser.DBoolFalse {
 		return left
 	}
-	return &parser.OrExpr{Left: left, Right: right}
+	return parser.NewTypedOrExpr(left, right)
 }
 
-func makeNot(expr parser.Expr) parser.Expr {
+func makeNot(expr parser.TypedExpr) parser.TypedExpr {
 	if expr == parser.DBoolTrue {
 		return parser.DBoolFalse
 	}
 	if expr == parser.DBoolFalse {
 		return parser.DBoolTrue
 	}
-	return &parser.NotExpr{Expr: expr}
+	return parser.NewTypedNotExpr(expr)
 }
 
 // splitBoolExpr splits a boolean expression E into two boolean expressions RES and REM such that:
@@ -161,7 +161,7 @@ func makeNot(expr parser.Expr) parser.Expr {
 //  - If weaker is false:
 //       E(x) = (RES(x) OR REM(x))
 //    This implies RES(x) => E(x), i.e. RES is "stronger"
-func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restricted, remainder parser.Expr) {
+func splitBoolExpr(expr parser.TypedExpr, conv varConvertFunc, weaker bool) (restricted, remainder parser.TypedExpr) {
 	// If the expression only contains "restricted" vars, the split is trivial.
 	if exprCheckVars(expr, conv) {
 		// An "empty" filter is always true in the weaker (normal) case (where the filter is
@@ -177,8 +177,8 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 			//   E = (leftRes AND leftRem) AND (rightRes AND rightRem)
 			// We can just rearrange:
 			//   E = (leftRes AND rightRes) AND (leftRem AND rightRem)
-			leftRes, leftRem := splitBoolExpr(t.Left, conv, weaker)
-			rightRes, rightRem := splitBoolExpr(t.Right, conv, weaker)
+			leftRes, leftRem := splitBoolExpr(t.TypedLeft(), conv, weaker)
+			rightRes, rightRem := splitBoolExpr(t.TypedRight(), conv, weaker)
 			return makeAnd(leftRes, rightRes), makeAnd(leftRem, rightRem)
 		}
 
@@ -186,8 +186,8 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 		//   E = (leftRes OR leftRem) AND (rightRes OR rightRem)
 		// We can't do more than:
 		//   E = (leftRes AND rightRes) OR E
-		leftRes, _ := splitBoolExpr(t.Left, conv, weaker)
-		rightRes, _ := splitBoolExpr(t.Right, conv, weaker)
+		leftRes, _ := splitBoolExpr(t.TypedLeft(), conv, weaker)
+		rightRes, _ := splitBoolExpr(t.TypedRight(), conv, weaker)
 		return makeAnd(leftRes, rightRes), expr
 
 	case *parser.OrExpr:
@@ -196,8 +196,8 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 			//   E = (leftRes OR leftRem) OR (rightRes AND rightRem)
 			// We can just rearrange:
 			//   E = (leftRes OR rightRes) OR (leftRem AND rightRem)
-			leftRes, leftRem := splitBoolExpr(t.Left, conv, weaker)
-			rightRes, rightRem := splitBoolExpr(t.Right, conv, weaker)
+			leftRes, leftRem := splitBoolExpr(t.TypedLeft(), conv, weaker)
+			rightRes, rightRem := splitBoolExpr(t.TypedRight(), conv, weaker)
 			return makeOr(leftRes, rightRes), makeOr(leftRem, rightRem)
 		}
 
@@ -205,15 +205,15 @@ func splitBoolExpr(expr parser.Expr, conv varConvertFunc, weaker bool) (restrict
 		//   E = (leftRes AND leftRem) OR (rightRes AND rightRem)
 		// We can't do more than:
 		//   E = (leftRes OR rightRes) OR E
-		leftRes, _ := splitBoolExpr(t.Left, conv, weaker)
-		rightRes, _ := splitBoolExpr(t.Right, conv, weaker)
+		leftRes, _ := splitBoolExpr(t.TypedLeft(), conv, weaker)
+		rightRes, _ := splitBoolExpr(t.TypedRight(), conv, weaker)
 		return makeOr(leftRes, rightRes), expr
 
 	case *parser.ParenExpr:
-		return splitBoolExpr(t.Expr, conv, weaker)
+		return splitBoolExpr(t.TypedInnerExpr(), conv, weaker)
 
 	case *parser.NotExpr:
-		exprRes, exprRem := splitBoolExpr(t.Expr, conv, !weaker)
+		exprRes, exprRem := splitBoolExpr(t.TypedInnerExpr(), conv, !weaker)
 		return makeNot(exprRes), makeNot(exprRem)
 
 	default:
@@ -246,23 +246,17 @@ func splitFilter(
 	if expr == nil {
 		return nil, nil
 	}
-	res, rem := splitBoolExpr(expr, conv, true)
-	if res == parser.DBoolTrue {
-		res = nil
+	restricted, remainder = splitBoolExpr(expr, conv, true)
+	if restricted == parser.DBoolTrue {
+		restricted = nil
 	}
-	if res != nil {
-		restricted = res.(parser.TypedExpr)
-	}
-	if rem == parser.DBoolTrue {
-		rem = nil
-	}
-	if rem != nil {
-		remainder = rem.(parser.TypedExpr)
+	if remainder == parser.DBoolTrue {
+		remainder = nil
 	}
 	return restricted, remainder
 }
 
-// runFilter runs a filter expression and returs whether the filter passes.
+// runFilter runs a filter expression and returns whether the filter passes.
 func runFilter(filter parser.TypedExpr, evalCtx parser.EvalContext) (bool, error) {
 	if filter == nil {
 		return true, nil

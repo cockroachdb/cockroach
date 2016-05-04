@@ -378,24 +378,24 @@ func (n *groupNode) wrap(plan planNode) planNode {
 // the groupNode has a desired ordering on col (see
 // desiredAggregateOrdering). A desired ordering will only be present if there
 // is a single MIN/MAX aggregation function.
-func (n *groupNode) isNotNullFilter(expr parser.Expr) parser.Expr {
+func (n *groupNode) isNotNullFilter(expr parser.TypedExpr) parser.TypedExpr {
 	if len(n.desiredOrdering) != 1 {
 		return expr
 	}
 	i := n.desiredOrdering[0].colIdx
 	f := n.funcs[i]
-	isNotNull := &parser.ComparisonExpr{
-		Operator: parser.IsNot,
-		Left:     f.arg,
-		Right:    parser.DNull,
-	}
+	isNotNull := parser.NewTypedComparisonExpr(
+		parser.IsNot,
+		f.arg,
+		parser.DNull,
+	)
 	if expr == nil {
 		return isNotNull
 	}
-	return &parser.AndExpr{
-		Left:  expr,
-		Right: isNotNull,
-	}
+	return parser.NewTypedAndExpr(
+		expr,
+		isNotNull,
+	)
 }
 
 // desiredAggregateOrdering computes the desired output ordering from the

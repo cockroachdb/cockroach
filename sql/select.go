@@ -268,7 +268,7 @@ func (p *planner) initSelect(
 
 	if s.filter != nil && group != nil {
 		// Allow the group-by to add an implicit "IS NOT NULL" filter.
-		s.filter = group.isNotNullFilter(s.filter).(parser.TypedExpr)
+		s.filter = group.isNotNullFilter(s.filter)
 	}
 
 	// Get the ordering for index selection (if any).

@@ -134,11 +134,7 @@ func selectIndex(
 		// If the simplified expression is equivalent and there is a single
 		// disjunction, use it for the filter instead of the original expression.
 		if equivalent && len(exprs) == 1 {
-			if untypedFilter := joinAndExprs(exprs[0]); untypedFilter != nil {
-				s.filter = untypedFilter.(parser.TypedExpr)
-			} else {
-				s.filter = nil
-			}
+			s.filter = joinAndExprs(exprs[0])
 		}
 
 		// TODO(pmattis): If "len(exprs) > 1" then we have multiple disjunctive
@@ -209,11 +205,7 @@ func selectIndex(
 		// There are no spans to scan.
 		return &emptyNode{}, nil
 	}
-	if untypedFilter := applyConstraints(s.filter, c.constraints); untypedFilter != nil {
-		s.filter = untypedFilter.(parser.TypedExpr)
-	} else {
-		s.filter = nil
-	}
+	s.filter = applyConstraints(s.filter, c.constraints)
 	noFilter := (s.filter == nil)
 	s.reverse = c.reverse
 
@@ -350,7 +342,7 @@ func (v *indexInfo) init(s *scanNode) {
 
 // analyzeExprs examines the range map to determine the cost of using the
 // index.
-func (v *indexInfo) analyzeExprs(exprs []parser.Exprs) {
+func (v *indexInfo) analyzeExprs(exprs []parser.TypedExprs) {
 	if err := v.makeOrConstraints(exprs); err != nil {
 		panic(err)
 	}
@@ -442,7 +434,7 @@ func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
 // makeOrConstraints populates the indexInfo.constraints field based on the
 // analyzed expressions. Each element of constraints corresponds to one
 // of the top-level disjunctions and is generated using makeIndexConstraint.
-func (v *indexInfo) makeOrConstraints(orExprs []parser.Exprs) error {
+func (v *indexInfo) makeOrConstraints(orExprs []parser.TypedExprs) error {
 	constraints := make(orIndexConstraints, len(orExprs))
 	for i, e := range orExprs {
 		var err error
@@ -502,8 +494,7 @@ func (v *indexInfo) makeOrConstraints(orExprs []parser.Exprs) error {
 // 1", but if we performed this transform in simpilfyComparisonExpr it would
 // simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
 // obvious based on comparisons of the constants.
-// TODO(nvanbenschoten) This should be `andExprs parser.TypedExprs`.
-func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraints, error) {
+func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConstraints, error) {
 	var constraints indexConstraints
 
 	trueStartDone := false
@@ -626,11 +617,11 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 					if *startDone || *startExpr != nil {
 						continue
 					}
-					*startExpr = &parser.ComparisonExpr{
-						Operator: parser.IsNot,
-						Left:     c.Left,
-						Right:    parser.DNull,
-					}
+					*startExpr = parser.NewTypedComparisonExpr(
+						parser.IsNot,
+						c.TypedLeft(),
+						parser.DNull,
+					)
 				case parser.In:
 					// Only allow the IN constraint if the previous constraints are all
 					// EQ. This is necessary to prevent overlapping spans from being
@@ -660,17 +651,17 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 						continue
 					}
 					if c.Right.(parser.Datum).IsMax() {
-						*startExpr = &parser.ComparisonExpr{
-							Operator: parser.EQ,
-							Left:     c.Left,
-							Right:    c.Right,
-						}
+						*startExpr = parser.NewTypedComparisonExpr(
+							parser.EQ,
+							c.TypedLeft(),
+							c.TypedRight(),
+						)
 					} else if c.Right.(parser.Datum).HasNext() {
-						*startExpr = &parser.ComparisonExpr{
-							Operator: parser.GE,
-							Left:     c.Left,
-							Right:    c.Right.(parser.Datum).Next(),
-						}
+						*startExpr = parser.NewTypedComparisonExpr(
+							parser.GE,
+							c.TypedLeft(),
+							c.Right.(parser.Datum).Next(),
+						)
 					} else {
 						*startExpr = c
 					}
@@ -680,17 +671,17 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 					}
 					// Transform "<" into "<=".
 					if c.Right.(parser.Datum).IsMin() {
-						*endExpr = &parser.ComparisonExpr{
-							Operator: parser.EQ,
-							Left:     c.Left,
-							Right:    c.Right,
-						}
+						*endExpr = parser.NewTypedComparisonExpr(
+							parser.EQ,
+							c.TypedLeft(),
+							c.TypedRight(),
+						)
 					} else if c.Right.(parser.Datum).HasPrev() {
-						*endExpr = &parser.ComparisonExpr{
-							Operator: parser.LE,
-							Left:     c.Left,
-							Right:    c.Right.(parser.Datum).Prev(),
-						}
+						*endExpr = parser.NewTypedComparisonExpr(
+							parser.LE,
+							c.TypedLeft(),
+							c.Right.(parser.Datum).Prev(),
+						)
 					} else {
 						*endExpr = c
 					}
@@ -732,11 +723,11 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.Exprs) (indexConstraint
 			// Add an IS NOT NULL constraint if there's an end constraint.
 			if (*endExpr != nil) &&
 				!((*endExpr).Operator == parser.Is && (*endExpr).Right == parser.DNull) {
-				*startExpr = &parser.ComparisonExpr{
-					Operator: parser.IsNot,
-					Left:     (*endExpr).Left,
-					Right:    parser.DNull,
-				}
+				*startExpr = parser.NewTypedComparisonExpr(
+					parser.IsNot,
+					(*endExpr).TypedLeft(),
+					parser.DNull,
+				)
 			}
 		}
 
@@ -790,17 +781,13 @@ func isMixedTypeComparison(c *parser.ComparisonExpr) bool {
 	case parser.In, parser.NotIn:
 		tuple := *c.Right.(*parser.DTuple)
 		for _, expr := range tuple {
-			left := c.Left.(parser.TypedExpr)
-			right := expr.(parser.TypedExpr)
-			if !sameTypeExprs(left, right) {
+			if !sameTypeExprs(c.TypedLeft(), expr.(parser.TypedExpr)) {
 				return true
 			}
 		}
 		return false
 	default:
-		left := c.Left.(parser.TypedExpr)
-		right := c.Right.(parser.TypedExpr)
-		return !sameTypeExprs(left, right)
+		return !sameTypeExprs(c.TypedLeft(), c.TypedRight())
 	}
 }
 
@@ -1382,13 +1369,14 @@ func (oic orIndexConstraints) exactPrefix() int {
 // constraint is "a = 1", the expression is simplified to "b > 2".
 //
 // Note that applyConstraints currently only handles simple cases.
-func applyConstraints(expr parser.Expr, constraints orIndexConstraints) parser.Expr {
+func applyConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).
-		return expr
+		return typedExpr
 	}
 	v := &applyConstraintsVisitor{}
+	expr := typedExpr.(parser.Expr)
 	for _, c := range constraints[0] {
 		v.constraint = c
 		expr, _ = parser.WalkExpr(v, expr)
@@ -1411,7 +1399,7 @@ func applyConstraints(expr parser.Expr, constraints orIndexConstraints) parser.E
 	if expr == parser.DBoolTrue {
 		return nil
 	}
-	return expr
+	return expr.(parser.TypedExpr)
 }
 
 type applyConstraintsVisitor struct {
@@ -1428,10 +1416,10 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 		if c == nil {
 			return true, expr
 		}
-		if !varEqual(t.Left, c.Left) {
+		if !varEqual(t.TypedLeft(), c.TypedLeft()) {
 			return true, expr
 		}
-		if !isDatum(t.Right) || !isDatum(c.Right) {
+		if !isDatum(t.TypedRight()) || !isDatum(c.TypedRight()) {
 			return true, expr
 		}
 		if tuple, ok := c.Left.(*parser.Tuple); ok {

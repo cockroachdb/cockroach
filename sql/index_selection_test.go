@@ -170,7 +170,7 @@ func makeConstraints(t *testing.T, sql string, desc *TableDescriptor,
 	}
 	c.analyzeExprs(exprs)
 	if equiv && len(exprs) == 1 {
-		expr = joinAndExprs(exprs[0]).(parser.TypedExpr)
+		expr = joinAndExprs(exprs[0])
 	}
 	return c.constraints, expr
 }
