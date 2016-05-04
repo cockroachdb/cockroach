@@ -40,8 +40,12 @@ statement error pq: qualified name "b" not found
 INSERT INTO t2 (c) VALUES (-1)
 
 # Check on a column can only refer to that column
-statement error pq: argument of CHECK cannot refer to other columns: qualified name "a" not found
+statement error pq: argument of CHECK cannot refer to other columns: "a"
 CREATE TABLE t3 (a INT, b INT CHECK (b < a))
+
+# Verify we don't accept COUNT(*)
+statement error pq: argument of CHECK cannot refer to other columns: "*"
+CREATE TABLE t3 (a INT, b INT CHECK (COUNT(*) = 1))
 
 # non-boolean expressions are errors
 statement error pq: argument of CHECK must be type bool, not type int

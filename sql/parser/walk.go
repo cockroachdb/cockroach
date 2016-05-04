@@ -853,11 +853,48 @@ func (v *containsSubqueryVisitor) VisitPre(expr Expr) (recurse bool, newExpr Exp
 	return true, expr
 }
 
-func (v *containsSubqueryVisitor) VisitPost(expr Expr) Expr { return expr }
+func (*containsSubqueryVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // containsSubquery returns true if the expression contains a subquery.
 func containsSubquery(expr Expr) bool {
 	v := containsSubqueryVisitor{containsSubquery: false}
 	WalkExprConst(&v, expr)
 	return v.containsSubquery
+}
+
+type simpleVisitor struct {
+	fn  SimpleVisitFn
+	err error
+}
+
+var _ Visitor = &simpleVisitor{}
+
+func (v *simpleVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	v.err, recurse, newExpr = v.fn(expr)
+	if v.err != nil {
+		return false, expr
+	}
+	return recurse, newExpr
+}
+
+func (*simpleVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// SimpleVisitFn is a function that is run for every node in the VisitPre stage;
+// see SimpleVisit.
+type SimpleVisitFn func(expr Expr) (err error, recurse bool, newExpr Expr)
+
+// SimpleVisit is a convenience wrapper for visitors that only have VisitPre
+// code and don't return any results except an error. The given function is
+// called in VisitPre for every node. The visitor stops as soon as an error is
+// returned.
+func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
+	v := simpleVisitor{fn: preFn}
+	newExpr, _ := WalkExpr(&v, expr)
+	if v.err != nil {
+		return nil, v.err
+	}
+	return newExpr, nil
 }
