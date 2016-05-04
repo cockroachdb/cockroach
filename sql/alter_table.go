@@ -234,14 +234,15 @@ func (n *alterTableNode) Start() *roachpb.Error {
 	return nil
 }
 
-func (n *alterTableNode) Next() bool                   { return false }
-func (n *alterTableNode) Columns() []ResultColumn      { return make([]ResultColumn, 0) }
-func (n *alterTableNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *alterTableNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *alterTableNode) DebugValues() debugValues     { return debugValues{} }
-func (n *alterTableNode) PErr() *roachpb.Error         { return nil }
-func (n *alterTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *alterTableNode) MarkDebug(mode explainMode)   {}
+func (n *alterTableNode) Next() bool                          { return false }
+func (n *alterTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *alterTableNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *alterTableNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *alterTableNode) DebugValues() debugValues            { return debugValues{} }
+func (n *alterTableNode) ExplainTypes(_ func(string, string)) {}
+func (n *alterTableNode) PErr() *roachpb.Error                { return nil }
+func (n *alterTableNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *alterTableNode) MarkDebug(mode explainMode)          {}
 func (n *alterTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "alter table", "", nil
 }

@@ -70,14 +70,15 @@ func (n *createDatabaseNode) Start() *roachpb.Error {
 	return nil
 }
 
-func (n *createDatabaseNode) Next() bool                   { return false }
-func (n *createDatabaseNode) Columns() []ResultColumn      { return make([]ResultColumn, 0) }
-func (n *createDatabaseNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createDatabaseNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createDatabaseNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createDatabaseNode) PErr() *roachpb.Error         { return nil }
-func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createDatabaseNode) MarkDebug(mode explainMode)   {}
+func (n *createDatabaseNode) Next() bool                          { return false }
+func (n *createDatabaseNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createDatabaseNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createDatabaseNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createDatabaseNode) ExplainTypes(_ func(string, string)) {}
+func (n *createDatabaseNode) PErr() *roachpb.Error                { return nil }
+func (n *createDatabaseNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createDatabaseNode) MarkDebug(mode explainMode)          {}
 func (n *createDatabaseNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create database", "", nil
 }
@@ -151,14 +152,15 @@ func (n *createIndexNode) Start() *roachpb.Error {
 	return nil
 }
 
-func (n *createIndexNode) Next() bool                   { return false }
-func (n *createIndexNode) Columns() []ResultColumn      { return make([]ResultColumn, 0) }
-func (n *createIndexNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createIndexNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createIndexNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createIndexNode) PErr() *roachpb.Error         { return nil }
-func (n *createIndexNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createIndexNode) MarkDebug(mode explainMode)   {}
+func (n *createIndexNode) Next() bool                          { return false }
+func (n *createIndexNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createIndexNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createIndexNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createIndexNode) ExplainTypes(_ func(string, string)) {}
+func (n *createIndexNode) PErr() *roachpb.Error                { return nil }
+func (n *createIndexNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createIndexNode) MarkDebug(mode explainMode)          {}
 func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create index", "", nil
 }
@@ -251,14 +253,15 @@ func (n *createTableNode) Start() *roachpb.Error {
 	return nil
 }
 
-func (n *createTableNode) Next() bool                   { return false }
-func (n *createTableNode) Columns() []ResultColumn      { return make([]ResultColumn, 0) }
-func (n *createTableNode) Ordering() orderingInfo       { return orderingInfo{} }
-func (n *createTableNode) Values() parser.DTuple        { return parser.DTuple{} }
-func (n *createTableNode) DebugValues() debugValues     { return debugValues{} }
-func (n *createTableNode) PErr() *roachpb.Error         { return nil }
-func (n *createTableNode) SetLimitHint(_ int64, _ bool) {}
-func (n *createTableNode) MarkDebug(mode explainMode)   {}
+func (n *createTableNode) Next() bool                          { return false }
+func (n *createTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createTableNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createTableNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createTableNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createTableNode) PErr() *roachpb.Error                { return nil }
+func (n *createTableNode) ExplainTypes(_ func(string, string)) {}
+func (n *createTableNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createTableNode) MarkDebug(mode explainMode)          {}
 func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create table", "", nil
 }
