@@ -18,7 +18,6 @@ package sql
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -282,9 +281,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 				// Still processing table.
 				done = false
 				if nonNullableColumn != "" {
-					return fmt.Errorf("column %s contains null values", nonNullableColumn)
+					return &errNonNullViolation{columnName: nonNullableColumn}
 				}
-
 				if sentinelKey == nil || !bytes.HasPrefix(kv.Key, sentinelKey) {
 					// Sentinel keys have a 0 suffix indicating 0 bytes of
 					// column ID. Strip off that suffix to determine the

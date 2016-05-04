@@ -384,7 +384,11 @@ func (s *Server) Start() error {
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
-	s.schemaChangeManager = sql.NewSchemaChangeManager(*s.db, s.gossip, s.leaseMgr)
+	sqlTestKnobs := &sql.ExecutorTestingKnobs{}
+	if s.ctx.TestingKnobs.SQLExecutor != nil {
+		sqlTestKnobs = s.ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	}
+	s.schemaChangeManager = sql.NewSchemaChangeManager(sqlTestKnobs, *s.db, s.gossip, s.leaseMgr)
 	s.schemaChangeManager.Start(s.stopper)
 
 	s.periodicallyCheckForUpdates()
