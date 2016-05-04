@@ -514,6 +514,16 @@ var _ planNode = &unionNode{}
 var _ planNode = &emptyNode{}
 var _ planNode = &explainDebugNode{}
 var _ planNode = &explainTraceNode{}
+var _ planNode = &insertNode{}
+var _ planNode = &updateNode{}
+var _ planNode = &deleteNode{}
+var _ planNode = &createDatabaseNode{}
+var _ planNode = &createTableNode{}
+var _ planNode = &createIndexNode{}
+var _ planNode = &dropDatabaseNode{}
+var _ planNode = &dropTableNode{}
+var _ planNode = &dropIndexNode{}
+var _ planNode = &alterTableNode{}
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
 // results (if results is initialized to true). The former is used for nodes that have no results

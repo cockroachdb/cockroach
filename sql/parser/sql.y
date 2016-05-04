@@ -798,6 +798,10 @@ alter_table_cmd:
 alter_column_default:
   SET DEFAULT a_expr
   {
+    if containsSubquery($3.expr()) {
+      sqllex.Error("default expression contains a subquery")
+      return 1
+    }
     $$.val = $3.expr()
   }
 | DROP DEFAULT
@@ -1429,10 +1433,6 @@ col_qualification_elem:
   }
 | DEFAULT b_expr
   {
-    if ContainsVars($2.expr()) {
-      sqllex.Error("default expression contains a variable")
-      return 1
-    }
     if containsSubquery($2.expr()) {
       sqllex.Error("default expression contains a subquery")
       return 1

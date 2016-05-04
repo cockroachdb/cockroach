@@ -757,13 +757,6 @@ SELECT 0x FROM t
 `,
 		},
 		{
-			`CREATE TABLE a (b INT DEFAULT c)`,
-			`default expression contains a variable at or near ")"
-CREATE TABLE a (b INT DEFAULT c)
-                               ^
-`,
-		},
-		{
 			`CREATE TABLE a (b INT DEFAULT (SELECT 1))`,
 			`default expression contains a subquery at or near ")"
 CREATE TABLE a (b INT DEFAULT (SELECT 1))
