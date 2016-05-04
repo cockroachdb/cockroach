@@ -22,6 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // tableInfo contains the information for table used by a select statement. It can be an actual
@@ -51,7 +53,7 @@ type selectNode struct {
 	// Map of qvalues encountered in expressions.
 	qvals qvalMap
 
-	pErr *roachpb.Error
+	err error
 
 	// Rendering expressions for rows and corresponding output columns.
 	render  []parser.TypedExpr
@@ -126,7 +128,7 @@ func (s *selectNode) Next() bool {
 		s.qvals.populateQVals(row)
 		passesFilter, err := runFilter(s.filter, s.planner.evalCtx)
 		if err != nil {
-			s.pErr = roachpb.NewError(err)
+			s.err = err
 			return false
 		}
 
@@ -143,8 +145,8 @@ func (s *selectNode) Next() bool {
 }
 
 func (s *selectNode) PErr() *roachpb.Error {
-	if s.pErr != nil {
-		return s.pErr
+	if s.err != nil {
+		return roachpb.NewError(s.err)
 	}
 	return s.table.node.PErr()
 }
@@ -171,7 +173,7 @@ func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
-func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoCommit bool) (planNode, *roachpb.Error) {
+func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
@@ -180,13 +182,13 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 		wrapped = s.Select.Select
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
-				return nil, roachpb.NewUErrorf("multiple ORDER BY clauses not allowed")
+				return nil, fmt.Errorf("multiple ORDER BY clauses not allowed")
 			}
 			orderBy = s.Select.OrderBy
 		}
 		if s.Select.Limit != nil {
 			if limit != nil {
-				return nil, roachpb.NewUErrorf("multiple LIMIT clauses not allowed")
+				return nil, fmt.Errorf("multiple LIMIT clauses not allowed")
 			}
 			limit = s.Select.Limit
 		}
@@ -206,15 +208,15 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 	default:
 		plan, pErr := p.makePlan(s, desiredTypes, autoCommit)
 		if pErr != nil {
-			return nil, pErr
+			return nil, pErr.GoError()
 		}
-		sort, pErr := p.orderBy(orderBy, plan)
-		if pErr != nil {
-			return nil, pErr
+		sort, err := p.orderBy(orderBy, plan)
+		if err != nil {
+			return nil, err
 		}
 		count, offset, err := p.evalLimit(limit)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		return p.limit(count, offset, sort.wrap(plan)), nil
 	}
@@ -233,37 +235,37 @@ func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoComm
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) SelectClause(parsed *parser.SelectClause, desiredTypes []parser.Datum) (planNode, *roachpb.Error) {
+func (p *planner) SelectClause(parsed *parser.SelectClause, desiredTypes []parser.Datum) (planNode, error) {
 	node := &selectNode{planner: p}
 	return p.initSelect(node, parsed, nil, nil, desiredTypes)
 }
 
 func (p *planner) initSelect(
 	s *selectNode, parsed *parser.SelectClause, orderBy parser.OrderBy, limit *parser.Limit, desiredTypes []parser.Datum,
-) (planNode, *roachpb.Error) {
+) (planNode, error) {
 
 	s.qvals = make(qvalMap)
 
-	if pErr := s.initFrom(p, parsed); pErr != nil {
-		return nil, pErr
+	if err := s.initFrom(p, parsed); err != nil {
+		return nil, err
 	}
 
-	if pErr := s.initTargets(parsed.Exprs, desiredTypes); pErr != nil {
-		return nil, pErr
+	if err := s.initTargets(parsed.Exprs, desiredTypes); err != nil {
+		return nil, err
 	}
 
-	if pErr := s.initWhere(parsed.Where); pErr != nil {
-		return nil, pErr
+	if err := s.initWhere(parsed.Where); err != nil {
+		return nil, err
 	}
 
 	// NB: both orderBy and groupBy are passed and can modify the selectNode but orderBy must do so first.
-	sort, pErr := p.orderBy(orderBy, s)
-	if pErr != nil {
-		return nil, pErr
+	sort, err := p.orderBy(orderBy, s)
+	if err != nil {
+		return nil, err
 	}
-	group, pErr := p.groupBy(parsed, s)
-	if pErr != nil {
-		return nil, pErr
+	group, err := p.groupBy(parsed, s)
+	if err != nil {
+		return nil, err
 	}
 
 	if s.filter != nil && group != nil {
@@ -284,7 +286,7 @@ func (p *planner) initSelect(
 
 	limitCount, limitOffset, err := p.evalLimit(limit)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 
 	if scan, ok := s.table.node.(*scanNode); ok {
@@ -348,7 +350,7 @@ func (p *planner) initSelect(
 
 		plan, err := selectIndex(scan, analyzeOrdering, preferOrderMatchingIndex)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		// Update s.table with the new plan.
@@ -362,7 +364,7 @@ func (p *planner) initSelect(
 }
 
 // initFrom initializes the table node, given the parsed select expression
-func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.Error {
+func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) error {
 	from := parsed.From
 	var colAlias parser.NameList
 	switch len(from) {
@@ -372,32 +374,34 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 	case 1:
 		ate, ok := from[0].(*parser.AliasedTableExpr)
 		if !ok {
-			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
+			return util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
 
 		switch expr := ate.Expr.(type) {
 		case *parser.QualifiedName:
 			// Usual case: a table.
 			scan := &scanNode{planner: p, txn: p.txn}
-			s.table.alias, s.pErr = scan.initTable(p, expr, ate.Hints)
-			if s.pErr != nil {
-				return s.pErr
+			s.table.alias, s.err = scan.initTable(p, expr, ate.Hints)
+			if s.err != nil {
+				return s.err
 			}
 			s.table.node = scan
 
 		case *parser.Subquery:
 			// We have a subquery (this includes a simple "VALUES").
 			if ate.As.Alias == "" {
-				return roachpb.NewErrorf("subquery in FROM must have an alias")
+				return fmt.Errorf("subquery in FROM must have an alias")
 			}
 
-			s.table.node, s.pErr = p.makePlan(expr.Select, nil, false)
-			if s.pErr != nil {
-				return s.pErr
+			var pErr *roachpb.Error
+			s.table.node, pErr = p.makePlan(expr.Select, nil, false)
+			s.err = pErr.GoError()
+			if s.err != nil {
+				return s.err
 			}
 
 		default:
-			return roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
+			return util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
 		}
 
 		if ate.As.Alias != "" {
@@ -406,8 +410,8 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 		}
 		colAlias = ate.As.Cols
 	default:
-		s.pErr = roachpb.NewErrorf("TODO(pmattis): unsupported FROM: %s", from)
-		return s.pErr
+		s.err = util.Errorf("TODO(pmattis): unsupported FROM: %s", from)
+		return s.err
 	}
 
 	s.table.columns = s.table.node.Columns()
@@ -418,7 +422,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 		// The column aliases can only refer to explicit columns.
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(s.table.columns) {
-				return roachpb.NewErrorf(
+				return util.Errorf(
 					"table \"%s\" has %d columns available but %d columns specified",
 					s.table.alias, aliasIdx, len(colAlias))
 			}
@@ -432,7 +436,7 @@ func (s *selectNode) initFrom(p *planner, parsed *parser.SelectClause) *roachpb.
 	return nil
 }
 
-func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Datum) *roachpb.Error {
+func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Datum) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
@@ -441,8 +445,8 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
-		if s.pErr = s.addRender(target, desiredType); s.pErr != nil {
-			return s.pErr
+		if s.err = s.addRender(target, desiredType); s.err != nil {
+			return s.err
 		}
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
@@ -455,43 +459,40 @@ func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []pars
 	return nil
 }
 
-func (s *selectNode) initWhere(where *parser.Where) *roachpb.Error {
+func (s *selectNode) initWhere(where *parser.Where) error {
 	if where == nil {
 		return nil
 	}
 
 	var untypedFilter parser.Expr
-	untypedFilter, s.pErr = s.planner.expandSubqueries(where.Expr, 1)
-	if s.pErr != nil {
-		return s.pErr
+	untypedFilter, s.err = s.planner.expandSubqueries(where.Expr, 1)
+	if s.err != nil {
+		return s.err
 	}
 
-	untypedFilter, err := s.resolveQNames(untypedFilter)
-	if err != nil {
-		s.pErr = roachpb.NewError(err)
-		return s.pErr
+	untypedFilter, s.err = s.resolveQNames(untypedFilter)
+	if s.err != nil {
+		return s.err
 	}
 
-	s.filter, err = parser.TypeCheckAndRequire(untypedFilter, s.planner.evalCtx.Args,
+	s.filter, s.err = parser.TypeCheckAndRequire(untypedFilter, s.planner.evalCtx.Args,
 		parser.DummyBool, "WHERE")
-	if err != nil {
-		s.pErr = roachpb.NewError(err)
-		return s.pErr
+	if s.err != nil {
+		return s.err
 	}
 
 	// Normalize the expression (this will also evaluate any branches that are
 	// constant).
-	s.filter, err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
-	if err != nil {
-		s.pErr = roachpb.NewError(err)
-		return s.pErr
+	s.filter, s.err = s.planner.parser.NormalizeExpr(s.planner.evalCtx, s.filter)
+	if s.err != nil {
+		return s.err
 	}
 
 	// Make sure there are no aggregation functions in the filter (after subqueries have been
 	// expanded).
 	if s.planner.aggregateInExpr(s.filter) {
-		s.pErr = roachpb.NewUErrorf("aggregate functions are not allowed in WHERE")
-		return s.pErr
+		s.err = fmt.Errorf("aggregate functions are not allowed in WHERE")
+		return s.err
 	}
 
 	return nil
@@ -550,18 +551,20 @@ func getRenderColName(target parser.SelectExpr) string {
 	return target.Expr.String()
 }
 
-func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datum) *roachpb.Error {
+func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datum) error {
 	// outputName will be empty if the target is not aliased.
 	outputName := string(target.As)
 
 	if isStar, cols, typedExprs, err := checkRenderStar(target, &s.table, s.qvals); err != nil {
-		s.pErr = roachpb.NewError(err)
-		return s.pErr
+		s.err = err
+		return s.err
 	} else if isStar {
+		log.Infof("!!! isStar: %b", isStar)
 		s.columns = append(s.columns, cols...)
 		s.render = append(s.render, typedExprs...)
 		return nil
 	}
+	log.Infof("!!! after star check")
 
 	// When generating an output column name it should exactly match the original
 	// expression, so determine the output column name before we perform any
@@ -572,24 +575,23 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// qualified name found.
 	var resolved parser.Expr
 	var err error
-	if resolved, err = s.resolveQNames(target.Expr); err != nil {
-		s.pErr = roachpb.NewError(err)
-		return s.pErr
+	if resolved, s.err = s.resolveQNames(target.Expr); s.err != nil {
+		return s.err
 	}
-	if resolved, s.pErr = s.planner.expandSubqueries(resolved, 1); s.pErr != nil {
-		return s.pErr
+	if resolved, s.err = s.planner.expandSubqueries(resolved, 1); s.err != nil {
+		return s.err
 	}
 
 	typedResolved, err := parser.TypeCheck(resolved, s.planner.evalCtx.Args, desiredType)
 	if err != nil {
-		s.pErr = roachpb.NewError(err)
-		return s.pErr
+		s.err = err
+		return s.err
 	}
 
 	normalized, err := s.planner.parser.NormalizeExpr(s.planner.evalCtx, typedResolved)
-	s.pErr = roachpb.NewError(err)
-	if s.pErr != nil {
-		return s.pErr
+	if err != nil {
+		s.err = err
+		return s.err
 	}
 	s.render = append(s.render, normalized)
 
@@ -614,8 +616,8 @@ func (s *selectNode) renderRow() {
 	for i, e := range s.render {
 		var err error
 		s.row[i], err = e.Eval(s.planner.evalCtx)
-		s.pErr = roachpb.NewError(err)
-		if s.pErr != nil {
+		s.err = err
+		if s.err != nil {
 			return
 		}
 	}

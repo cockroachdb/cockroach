@@ -16,10 +16,7 @@
 
 package sql
 
-import (
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
-)
+import "github.com/cockroachdb/cockroach/sql/parser"
 
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
@@ -108,7 +105,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 // (a task for prepare) and controls that provided values
 // for placeholders match their context (a task for exec). This
 // ought to be split into two phases.
-func (rh *returningHelper) TypeCheck() *roachpb.Error {
+func (rh *returningHelper) TypeCheck() error {
 	for i, expr := range rh.untypedExprs {
 		desired := parser.NoTypePreference
 		if len(rh.desiredTypes) > i {
@@ -116,11 +113,11 @@ func (rh *returningHelper) TypeCheck() *roachpb.Error {
 		}
 		typedExpr, err := parser.TypeCheck(expr, rh.p.evalCtx.Args, desired)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		typedExpr, err = rh.p.parser.NormalizeExpr(rh.p.evalCtx, typedExpr)
 		if err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 		rh.exprs[i] = typedExpr
 		rh.columns[i].Typ = typedExpr.ReturnType()

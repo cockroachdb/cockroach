@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -41,7 +42,7 @@ import (
 // TODO(dan): SQL also allows sorting a VALUES or UNION by an expression.
 // Support this. It will reduce some of the special casing below, but requires a
 // generalization of how to add derived columns to a SelectStatement.
-func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roachpb.Error) {
+func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error) {
 	if orderBy == nil {
 		return nil, nil
 	}
@@ -89,7 +90,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 				//
 				//   SELECT a AS b FROM t ORDER BY a
 				if err := qname.NormalizeColumnName(); err != nil {
-					return nil, roachpb.NewError(err)
+					return nil, err
 				}
 				if qname.Table() == "" || equalName(s.table.alias, qname.Table()) {
 					qnameCol := NormalizeName(qname.Column())
@@ -109,7 +110,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 			// The order by expression matched neither an output column nor an
 			// existing render target.
 			if col, err := colIndex(numOriginalCols, expr); err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, err
 			} else if col >= 0 {
 				index = col
 			} else if s, ok := n.(*selectNode); ok {
@@ -127,7 +128,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, *roach
 				}
 				index = len(s.columns) - 1
 			} else {
-				return nil, roachpb.NewErrorf("column %s does not exist", expr)
+				return nil, util.Errorf("column %s does not exist", expr)
 			}
 		}
 		direction := encoding.Ascending

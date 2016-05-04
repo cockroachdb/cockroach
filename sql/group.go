@@ -43,7 +43,7 @@ var aggregates = map[string]func() aggregateImpl{
 
 // groupBy constructs a groupNode according to grouping functions or clauses. This may adjust the
 // render targets in the selectNode as necessary.
-func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *roachpb.Error) {
+func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -61,19 +61,19 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 	for i := range groupBy {
 		resolved, err := s.resolveQNames(groupBy[i])
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		// We could potentially skip this, since it will be checked in addRender,
 		// but checking now allows early err return.
 		typedExpr, err := parser.TypeCheck(resolved, p.evalCtx.Args, parser.NoTypePreference)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		norm, err := p.parser.NormalizeExpr(p.evalCtx, typedExpr)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		// If a col index is specified, replace it with that expression first.
@@ -81,7 +81,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 		// on s.render, the GroupBy expressions can contain wrapped qvalues.
 		// aggregateFunc's Eval() method handles being called during grouping.
 		if col, err := colIndex(s.numOriginalCols, norm); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		} else if col >= 0 {
 			groupBy[i] = s.render[col]
 		} else {
@@ -94,18 +94,18 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 	if n.Having != nil {
 		having, err := s.resolveQNames(n.Having.Expr)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		typedHaving, err = parser.TypeCheckAndRequire(having, p.evalCtx.Args,
 			parser.DummyBool, "HAVING")
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 
 		typedHaving, err = p.parser.NormalizeExpr(p.evalCtx, typedHaving)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		n.Having.Expr = typedHaving
 	}
@@ -140,7 +140,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 	for i := range group.render {
 		typedExpr, err := visitor.extract(group.render[i])
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		group.render[i] = typedExpr
 	}
@@ -149,7 +149,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, *r
 		var err error
 		typedHaving, err = visitor.extract(typedHaving)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, err
 		}
 		group.having = typedHaving
 	}
