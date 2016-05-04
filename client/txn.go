@@ -659,6 +659,16 @@ func (txn *Txn) send(maxScanResults int64, readConsistency roachpb.ReadConsisten
 
 	br, pErr := txn.db.send(maxScanResults, readConsistency, reqs...)
 	if elideEndTxn && pErr == nil {
+		// Check that read only transactions do not violate their deadline.
+		if endTxnRequest.Deadline != nil {
+			if endTxnRequest.Deadline.Less(txn.Proto.Timestamp) {
+				return nil, roachpb.NewErrorf(
+					"read-only txn timestamp violates deadline: %s < %s",
+					endTxnRequest.Deadline,
+					txn.Proto.Timestamp,
+				)
+			}
+		}
 		// This normally happens on the server and sent back in response
 		// headers, but this transaction was optimized away. The caller may
 		// still inspect the transaction struct, so we manually update it
