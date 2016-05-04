@@ -22,6 +22,7 @@ declare module cockroach {
 		roachpb: roachpbBuilder;
 		build: buildBuilder;
 		server: serverBuilder;
+		ts: tsBuilder;
 		
 }
 }
@@ -34,11 +35,10 @@ declare module cockroach {
 
 }
 	
-		
-export interface utilMessage extends util {
+	export interface utilMessage extends util {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -46,8 +46,6 @@ export interface utilMessage extends util {
 export interface utilBuilder {
 	new(data?: util): utilMessage;
 	decode(buffer: ArrayBuffer) : utilMessage;
-	//decode(buffer: NodeBuffer) : utilMessage;
-	//decode(buffer: ByteArrayBuffer) : utilMessage;
 	decode(buffer: ByteBuffer) : utilMessage;
 	decode64(buffer: string) : utilMessage;
 	UnresolvedAddr: util.UnresolvedAddrBuilder;
@@ -82,11 +80,10 @@ getAddressField?() : string;
 
 }
 	
-		
-export interface UnresolvedAddrMessage extends UnresolvedAddr {
+	export interface UnresolvedAddrMessage extends UnresolvedAddr {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -94,8 +91,6 @@ export interface UnresolvedAddrMessage extends UnresolvedAddr {
 export interface UnresolvedAddrBuilder {
 	new(data?: UnresolvedAddr): UnresolvedAddrMessage;
 	decode(buffer: ArrayBuffer) : UnresolvedAddrMessage;
-	//decode(buffer: NodeBuffer) : UnresolvedAddrMessage;
-	//decode(buffer: ByteArrayBuffer) : UnresolvedAddrMessage;
 	decode(buffer: ByteBuffer) : UnresolvedAddrMessage;
 	decode64(buffer: string) : UnresolvedAddrMessage;
 	
@@ -113,11 +108,10 @@ declare module cockroach {
 
 }
 	
-		
-export interface roachpbMessage extends roachpb {
+	export interface roachpbMessage extends roachpb {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -125,8 +119,6 @@ export interface roachpbMessage extends roachpb {
 export interface roachpbBuilder {
 	new(data?: roachpb): roachpbMessage;
 	decode(buffer: ArrayBuffer) : roachpbMessage;
-	//decode(buffer: NodeBuffer) : roachpbMessage;
-	//decode(buffer: ByteArrayBuffer) : roachpbMessage;
 	decode(buffer: ByteBuffer) : roachpbMessage;
 	decode64(buffer: string) : roachpbMessage;
 	Attributes: roachpb.AttributesBuilder;
@@ -157,11 +149,10 @@ getAttrs?() : string[];
 
 }
 	
-		
-export interface AttributesMessage extends Attributes {
+	export interface AttributesMessage extends Attributes {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -169,8 +160,6 @@ export interface AttributesMessage extends Attributes {
 export interface AttributesBuilder {
 	new(data?: Attributes): AttributesMessage;
 	decode(buffer: ArrayBuffer) : AttributesMessage;
-	//decode(buffer: NodeBuffer) : AttributesMessage;
-	//decode(buffer: ByteArrayBuffer) : AttributesMessage;
 	decode(buffer: ByteBuffer) : AttributesMessage;
 	decode64(buffer: string) : AttributesMessage;
 	
@@ -214,11 +203,10 @@ getReplicaId?() : number;
 
 }
 	
-		
-export interface ReplicaDescriptorMessage extends ReplicaDescriptor {
+	export interface ReplicaDescriptorMessage extends ReplicaDescriptor {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -226,8 +214,6 @@ export interface ReplicaDescriptorMessage extends ReplicaDescriptor {
 export interface ReplicaDescriptorBuilder {
 	new(data?: ReplicaDescriptor): ReplicaDescriptorMessage;
 	decode(buffer: ArrayBuffer) : ReplicaDescriptorMessage;
-	//decode(buffer: NodeBuffer) : ReplicaDescriptorMessage;
-	//decode(buffer: ByteArrayBuffer) : ReplicaDescriptorMessage;
 	decode(buffer: ByteBuffer) : ReplicaDescriptorMessage;
 	decode64(buffer: string) : ReplicaDescriptorMessage;
 	
@@ -289,11 +275,10 @@ getNextReplicaId?() : number;
 
 }
 	
-		
-export interface RangeDescriptorMessage extends RangeDescriptor {
+	export interface RangeDescriptorMessage extends RangeDescriptor {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -301,8 +286,6 @@ export interface RangeDescriptorMessage extends RangeDescriptor {
 export interface RangeDescriptorBuilder {
 	new(data?: RangeDescriptor): RangeDescriptorMessage;
 	decode(buffer: ArrayBuffer) : RangeDescriptorMessage;
-	//decode(buffer: NodeBuffer) : RangeDescriptorMessage;
-	//decode(buffer: ByteArrayBuffer) : RangeDescriptorMessage;
 	decode(buffer: ByteBuffer) : RangeDescriptorMessage;
 	decode64(buffer: string) : RangeDescriptorMessage;
 	
@@ -346,11 +329,10 @@ getRangeCount?() : number;
 
 }
 	
-		
-export interface StoreCapacityMessage extends StoreCapacity {
+	export interface StoreCapacityMessage extends StoreCapacity {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -358,8 +340,6 @@ export interface StoreCapacityMessage extends StoreCapacity {
 export interface StoreCapacityBuilder {
 	new(data?: StoreCapacity): StoreCapacityMessage;
 	decode(buffer: ArrayBuffer) : StoreCapacityMessage;
-	//decode(buffer: NodeBuffer) : StoreCapacityMessage;
-	//decode(buffer: ByteArrayBuffer) : StoreCapacityMessage;
 	decode(buffer: ByteBuffer) : StoreCapacityMessage;
 	decode64(buffer: string) : StoreCapacityMessage;
 	
@@ -403,11 +383,10 @@ getAttrs?() : Attributes;
 
 }
 	
-		
-export interface NodeDescriptorMessage extends NodeDescriptor {
+	export interface NodeDescriptorMessage extends NodeDescriptor {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -415,8 +394,6 @@ export interface NodeDescriptorMessage extends NodeDescriptor {
 export interface NodeDescriptorBuilder {
 	new(data?: NodeDescriptor): NodeDescriptorMessage;
 	decode(buffer: ArrayBuffer) : NodeDescriptorMessage;
-	//decode(buffer: NodeBuffer) : NodeDescriptorMessage;
-	//decode(buffer: ByteArrayBuffer) : NodeDescriptorMessage;
 	decode(buffer: ByteBuffer) : NodeDescriptorMessage;
 	decode64(buffer: string) : NodeDescriptorMessage;
 	
@@ -469,11 +446,10 @@ getCapacity?() : StoreCapacity;
 
 }
 	
-		
-export interface StoreDescriptorMessage extends StoreDescriptor {
+	export interface StoreDescriptorMessage extends StoreDescriptor {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -481,8 +457,6 @@ export interface StoreDescriptorMessage extends StoreDescriptor {
 export interface StoreDescriptorBuilder {
 	new(data?: StoreDescriptor): StoreDescriptorMessage;
 	decode(buffer: ArrayBuffer) : StoreDescriptorMessage;
-	//decode(buffer: NodeBuffer) : StoreDescriptorMessage;
-	//decode(buffer: ByteArrayBuffer) : StoreDescriptorMessage;
 	decode(buffer: ByteBuffer) : StoreDescriptorMessage;
 	decode64(buffer: string) : StoreDescriptorMessage;
 	
@@ -500,11 +474,10 @@ declare module cockroach {
 
 }
 	
-		
-export interface buildMessage extends build {
+	export interface buildMessage extends build {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -512,8 +485,6 @@ export interface buildMessage extends build {
 export interface buildBuilder {
 	new(data?: build): buildMessage;
 	decode(buffer: ArrayBuffer) : buildMessage;
-	//decode(buffer: NodeBuffer) : buildMessage;
-	//decode(buffer: ByteArrayBuffer) : buildMessage;
 	decode(buffer: ByteBuffer) : buildMessage;
 	decode64(buffer: string) : buildMessage;
 	Info: build.InfoBuilder;
@@ -584,11 +555,10 @@ getPlatform?() : string;
 
 }
 	
-		
-export interface InfoMessage extends Info {
+	export interface InfoMessage extends Info {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -596,8 +566,6 @@ export interface InfoMessage extends Info {
 export interface InfoBuilder {
 	new(data?: Info): InfoMessage;
 	decode(buffer: ArrayBuffer) : InfoMessage;
-	//decode(buffer: NodeBuffer) : InfoMessage;
-	//decode(buffer: ByteArrayBuffer) : InfoMessage;
 	decode(buffer: ByteBuffer) : InfoMessage;
 	decode64(buffer: string) : InfoMessage;
 	
@@ -615,11 +583,10 @@ declare module cockroach {
 
 }
 	
-		
-export interface serverMessage extends server {
+	export interface serverMessage extends server {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -627,8 +594,6 @@ export interface serverMessage extends server {
 export interface serverBuilder {
 	new(data?: server): serverMessage;
 	decode(buffer: ArrayBuffer) : serverMessage;
-	//decode(buffer: NodeBuffer) : serverMessage;
-	//decode(buffer: ByteArrayBuffer) : serverMessage;
 	decode(buffer: ByteBuffer) : serverMessage;
 	decode64(buffer: string) : serverMessage;
 	status: server.statusBuilder;
@@ -645,11 +610,10 @@ declare module cockroach.server {
 
 }
 	
-		
-export interface statusMessage extends status {
+	export interface statusMessage extends status {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -657,8 +621,6 @@ export interface statusMessage extends status {
 export interface statusBuilder {
 	new(data?: status): statusMessage;
 	decode(buffer: ArrayBuffer) : statusMessage;
-	//decode(buffer: NodeBuffer) : statusMessage;
-	//decode(buffer: ByteArrayBuffer) : statusMessage;
 	decode(buffer: ByteBuffer) : statusMessage;
 	decode64(buffer: string) : statusMessage;
 	StoreStatus: status.StoreStatusBuilder;
@@ -694,11 +656,10 @@ getMetrics?() : ProtoBufMap<string, number>;
 
 }
 	
-		
-export interface StoreStatusMessage extends StoreStatus {
+	export interface StoreStatusMessage extends StoreStatus {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -706,8 +667,6 @@ export interface StoreStatusMessage extends StoreStatus {
 export interface StoreStatusBuilder {
 	new(data?: StoreStatus): StoreStatusMessage;
 	decode(buffer: ArrayBuffer) : StoreStatusMessage;
-	//decode(buffer: NodeBuffer) : StoreStatusMessage;
-	//decode(buffer: ByteArrayBuffer) : StoreStatusMessage;
 	decode(buffer: ByteBuffer) : StoreStatusMessage;
 	decode64(buffer: string) : StoreStatusMessage;
 	
@@ -778,11 +737,10 @@ getStoreStatuses?() : StoreStatus[];
 
 }
 	
-		
-export interface NodeStatusMessage extends NodeStatus {
+	export interface NodeStatusMessage extends NodeStatus {
 	toArrayBuffer(): ArrayBuffer;
-	//toBuffer(): NodeBuffer;
 	encode(): ByteBuffer;
+	encodeJSON(): string;
 	toBase64(): string;
 	toString(): string;
 }
@@ -790,8 +748,6 @@ export interface NodeStatusMessage extends NodeStatus {
 export interface NodeStatusBuilder {
 	new(data?: NodeStatus): NodeStatusMessage;
 	decode(buffer: ArrayBuffer) : NodeStatusMessage;
-	//decode(buffer: NodeBuffer) : NodeStatusMessage;
-	//decode(buffer: ByteArrayBuffer) : NodeStatusMessage;
 	decode(buffer: ByteBuffer) : NodeStatusMessage;
 	decode64(buffer: string) : NodeStatusMessage;
 	
@@ -800,6 +756,366 @@ export interface NodeStatusBuilder {
 }
 
 
+
+
+declare module cockroach {
+	
+	export interface ts {
+	
+		
+
+}
+	
+	export interface tsMessage extends ts {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface tsBuilder {
+	new(data?: ts): tsMessage;
+	decode(buffer: ArrayBuffer) : tsMessage;
+	decode(buffer: ByteBuffer) : tsMessage;
+	decode64(buffer: string) : tsMessage;
+	TimeSeriesDatapoint: ts.TimeSeriesDatapointBuilder;
+	TimeSeriesData: ts.TimeSeriesDataBuilder;
+	Query: ts.QueryBuilder;
+	TimeSeriesQueryRequest: ts.TimeSeriesQueryRequestBuilder;
+	TimeSeriesQueryResponse: ts.TimeSeriesQueryResponseBuilder;
+	TimeSeriesQueryAggregator: ts.TimeSeriesQueryAggregator;
+	TimeSeriesQueryDerivative: ts.TimeSeriesQueryDerivative;
+	
+}
+	
+}
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesDatapoint {
+	
+		
+
+timestamp_nanos?: Long;
+		
+
+getTimestampNanos?() : Long;
+		setTimestampNanos?(timestampNanos : Long): void;
+		
+
+
+
+value?: number;
+		
+
+getValue?() : number;
+		setValue?(value : number): void;
+		
+
+
+
+}
+	
+	export interface TimeSeriesDatapointMessage extends TimeSeriesDatapoint {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesDatapointBuilder {
+	new(data?: TimeSeriesDatapoint): TimeSeriesDatapointMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesDatapointMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesDatapointMessage;
+	decode64(buffer: string) : TimeSeriesDatapointMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesData {
+	
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+source?: string;
+		
+
+getSource?() : string;
+		setSource?(source : string): void;
+		
+
+
+
+datapoints?: TimeSeriesDatapoint[];
+		
+
+getDatapoints?() : TimeSeriesDatapoint[];
+		setDatapoints?(datapoints : TimeSeriesDatapoint[]): void;
+		
+
+
+
+}
+	
+	export interface TimeSeriesDataMessage extends TimeSeriesData {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesDataBuilder {
+	new(data?: TimeSeriesData): TimeSeriesDataMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesDataMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesDataMessage;
+	decode64(buffer: string) : TimeSeriesDataMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface Query {
+	
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+downsampler?: TimeSeriesQueryAggregator;
+		
+
+getDownsampler?() : TimeSeriesQueryAggregator;
+		setDownsampler?(downsampler : TimeSeriesQueryAggregator): void;
+		
+
+
+
+source_aggregator?: TimeSeriesQueryAggregator;
+		
+
+getSourceAggregator?() : TimeSeriesQueryAggregator;
+		setSourceAggregator?(sourceAggregator : TimeSeriesQueryAggregator): void;
+		
+
+
+
+derivative?: TimeSeriesQueryDerivative;
+		
+
+getDerivative?() : TimeSeriesQueryDerivative;
+		setDerivative?(derivative : TimeSeriesQueryDerivative): void;
+		
+
+
+
+sources?: string[];
+		
+
+getSources?() : string[];
+		setSources?(sources : string[]): void;
+		
+
+
+
+}
+	
+	export interface QueryMessage extends Query {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface QueryBuilder {
+	new(data?: Query): QueryMessage;
+	decode(buffer: ArrayBuffer) : QueryMessage;
+	decode(buffer: ByteBuffer) : QueryMessage;
+	decode64(buffer: string) : QueryMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesQueryRequest {
+	
+		
+
+start_nanos?: Long;
+		
+
+getStartNanos?() : Long;
+		setStartNanos?(startNanos : Long): void;
+		
+
+
+
+end_nanos?: Long;
+		
+
+getEndNanos?() : Long;
+		setEndNanos?(endNanos : Long): void;
+		
+
+
+
+queries?: Query[];
+		
+
+getQueries?() : Query[];
+		setQueries?(queries : Query[]): void;
+		
+
+
+
+}
+	
+	export interface TimeSeriesQueryRequestMessage extends TimeSeriesQueryRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesQueryRequestBuilder {
+	new(data?: TimeSeriesQueryRequest): TimeSeriesQueryRequestMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesQueryRequestMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesQueryRequestMessage;
+	decode64(buffer: string) : TimeSeriesQueryRequestMessage;
+	
+}
+	
+}
+
+
+declare module cockroach.ts {
+	
+	export interface TimeSeriesQueryResponse {
+	
+		
+
+results?: TimeSeriesQueryResponse.Result[];
+		
+
+getResults?() : TimeSeriesQueryResponse.Result[];
+		setResults?(results : TimeSeriesQueryResponse.Result[]): void;
+		
+
+
+
+}
+	
+	export interface TimeSeriesQueryResponseMessage extends TimeSeriesQueryResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TimeSeriesQueryResponseBuilder {
+	new(data?: TimeSeriesQueryResponse): TimeSeriesQueryResponseMessage;
+	decode(buffer: ArrayBuffer) : TimeSeriesQueryResponseMessage;
+	decode(buffer: ByteBuffer) : TimeSeriesQueryResponseMessage;
+	decode64(buffer: string) : TimeSeriesQueryResponseMessage;
+	Result: TimeSeriesQueryResponse.ResultBuilder;
+	
+}
+	
+}
+
+declare module cockroach.ts.TimeSeriesQueryResponse {
+	
+	export interface Result {
+	
+		
+
+query?: Query;
+		
+
+getQuery?() : Query;
+		setQuery?(query : Query): void;
+		
+
+
+
+datapoints?: TimeSeriesDatapoint[];
+		
+
+getDatapoints?() : TimeSeriesDatapoint[];
+		setDatapoints?(datapoints : TimeSeriesDatapoint[]): void;
+		
+
+
+
+}
+	
+	export interface ResultMessage extends Result {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ResultBuilder {
+	new(data?: Result): ResultMessage;
+	decode(buffer: ArrayBuffer) : ResultMessage;
+	decode(buffer: ByteBuffer) : ResultMessage;
+	decode64(buffer: string) : ResultMessage;
+	
+}
+	
+}
+
+
+
+declare module cockroach.ts {
+	export const enum TimeSeriesQueryAggregator {
+		AVG = 1,
+		SUM = 2,
+		MAX = 3,
+		MIN = 4,
+		
+}
+}
+
+declare module cockroach.ts {
+	export const enum TimeSeriesQueryDerivative {
+		NONE = 0,
+		DERIVATIVE = 1,
+		NON_NEGATIVE_DERIVATIVE = 2,
+		
+}
+}
 
 
 
