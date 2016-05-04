@@ -418,16 +418,25 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	}
 
 	if !cmd.expanded {
+		n := cq.tree.Len()
 		if err := cq.tree.Delete(cmd, false /* !fast */); err != nil {
 			panic(err)
+		}
+		if d := n - cq.tree.Len(); d != 1 {
+			panic(fmt.Sprintf("%d: expected 1 deletion, found %d", cmd.id, d))
 		}
 		for _, wg := range cmd.pending {
 			wg.Done()
 		}
 	} else {
-		for _, child := range cmd.children {
-			if err := cq.tree.Delete(&child, false /* !fast */); err != nil {
+		for i := range cmd.children {
+			child := &cmd.children[i]
+			n := cq.tree.Len()
+			if err := cq.tree.Delete(child, false /* !fast */); err != nil {
 				panic(err)
+			}
+			if d := n - cq.tree.Len(); d != 1 {
+				panic(fmt.Sprintf("%d: expected 1 deletion, found %d", child.id, d))
 			}
 			for _, wg := range child.pending {
 				wg.Done()

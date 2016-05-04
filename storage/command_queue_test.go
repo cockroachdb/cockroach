@@ -299,3 +299,49 @@ func TestCommandQueueCovering(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+// Reconstruct a set of commands that tickled a bug in interval.Tree. See
+// https://github.com/cockroachdb/cockroach/issues/6495 for details.
+func TestCommandQueueIssue6495(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cq := NewCommandQueue()
+	cq.idAlloc = 1997
+
+	mkSpan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+	spans1998 := []roachpb.Span{
+		mkSpan("\xbb\x89\x8b\x8a\x89", "\xbb\x89\x8b\x8a\x89\x00"),
+	}
+	spans1999 := []roachpb.Span{
+		mkSpan("\xbb\x89\x88", "\xbb\x89\x89"),
+		mkSpan("\xbb\x89\x8b", "\xbb\x89\x8c"),
+	}
+	spans2002 := []roachpb.Span{
+		mkSpan("\xbb\x89\x8b", "\xbb\x89\x8c"),
+	}
+	spans2003 := []roachpb.Span{
+		mkSpan("\xbb\x89\x8a\x8a\x89", "\xbb\x89\x8a\x8a\x89\x00"),
+		mkSpan("\xbb\x89\x8b\x8a\x89", "\xbb\x89\x8b\x8a\x89\x00"),
+		mkSpan("\xbb\x89\x8a\x8a\x89", "\xbb\x89\x8a\x8a\x89\x00"),
+	}
+
+	var wg1998 sync.WaitGroup
+	cq.getWait(false, &wg1998, spans1998...)
+	cmd1998 := cq.add(false, spans1998...)
+
+	var wg1999 sync.WaitGroup
+	cq.getWait(true, &wg1999, spans1999...)
+	cmd1999 := cq.add(true, spans1999...)
+
+	var wg2002 sync.WaitGroup
+	cq.getWait(true, &wg2002, spans2002...)
+	cq.add(true, spans2002...)
+
+	var wg2003 sync.WaitGroup
+	cq.getWait(false, &wg2003, spans2003...)
+	cq.add(false, spans2003...)
+
+	cq.remove(cmd1998)
+	cq.remove(cmd1999)
+}
