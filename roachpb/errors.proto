@@ -215,12 +215,6 @@ message DescriptorNotFoundError {
   optional uint32 descriptor_id = 1 [(gogoproto.nullable) = false];
 }
 
-// ErrorWithPGCode is the detail for errors carring sql error codes.
-message ErrorWithPGCode {
-  optional string error_code = 1 [(gogoproto.nullable) = false];
-  optional string message = 2 [(gogoproto.nullable) = false];
-}
-
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -250,7 +244,6 @@ message ErrorDetail {
   optional LeaseVersionChangedError lease_version_changed = 18;
   optional DidntUpdateDescriptorError didnt_update_descriptor = 19;
   optional ExistingSchemaChangeLeaseError existing_scheme_change_lease = 20;
-  optional ErrorWithPGCode error_with_pg_code = 21;
   optional DescriptorDeletedError descriptor_deleted = 23;
   optional DescriptorNotFoundError descriptor_not_found = 24;
 }

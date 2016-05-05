@@ -659,13 +659,13 @@ func (e *Executor) execStmtInAbortedTxn(
 			// TODO(andrei/cdo): add a counter for user-directed retries.
 			return Result{}, nil
 		}
-		err := sqlErrToPErr(&errTransactionAborted{
+		err := &errTransactionAborted{
 			CustomMsg: fmt.Sprintf(
 				"SAVEPOINT %s has not been used or a non-retriable error was encountered.",
-				parser.RestartSavepointName)})
+				parser.RestartSavepointName)}
 		return Result{Err: err}, err
 	default:
-		err := sqlErrToPErr(&errTransactionAborted{})
+		err := &errTransactionAborted{}
 		return Result{Err: err}, err
 	}
 }
@@ -687,7 +687,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 		txnState.resetStateAndTxn(NoTxn)
 		return result, nil
 	default:
-		err := sqlErrToPErr(&errTransactionCommitted{})
+		err := &errTransactionCommitted{}
 		return Result{Err: err}, err
 	}
 }

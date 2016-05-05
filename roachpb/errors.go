@@ -261,16 +261,6 @@ func (e *Error) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
 }
 
-func (e *ErrorWithPGCode) Error() string {
-	return e.message(nil)
-}
-
-func (e *ErrorWithPGCode) message(_ *Error) string {
-	return e.Message
-}
-
-var _ ErrorDetailInterface = &ErrorWithPGCode{}
-
 func (e *NodeUnavailableError) Error() string {
 	return e.message(nil)
 }

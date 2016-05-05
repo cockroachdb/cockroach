@@ -114,7 +114,6 @@
 		ExistingSchemaChangeLeaseError
 		DescriptorDeletedError
 		DescriptorNotFoundError
-		ErrorWithPGCode
 		ErrorDetail
 		ErrPosition
 		Error
