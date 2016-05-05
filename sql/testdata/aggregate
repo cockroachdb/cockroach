@@ -362,25 +362,25 @@ SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
 ----
 NULL NULL NULL NULL
 
-query RRII
+query RRRR
 SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 ----
-5 2.8 30 14
+5.0000000000000000 2.8000000000000000 30 14
 
 query RRRR
 SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
 5.0000000000000000 2.8000000000000000 30 14
 
-query RRII
+query RRRR
 SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
 ----
-5 3 30 6
+5.0000000000000000 3.0000000000000000 30 6
 
 query R
-SELECT AVG(k) * 2.0 + MAX(v)::float FROM kv
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
-14
+14.0000000000000000
 
 query ITT
 EXPLAIN SELECT COUNT(k) FROM kv
@@ -610,14 +610,14 @@ EXPLAIN (DEBUG) SELECT MIN(z) FROM xyz
 query RRR
 SELECT AVG(1::int), AVG(2::float), AVG(3::decimal)
 ----
-1 2 3.0000000000000000
+1.0000000000000000 2 3.0000000000000000
 
 query III
 SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
 ----
 1 1 1
 
-query IRR
+query RRR
 SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
 ----
 1 2 3

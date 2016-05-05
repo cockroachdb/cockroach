@@ -740,16 +740,12 @@ func (a *avgAggregate) add(datum parser.Datum) error {
 func (a *avgAggregate) result() (parser.Datum, error) {
 	sum, err := a.sumAggregate.result()
 	if err != nil {
-		return parser.DNull, err
+		return nil, err
 	}
 	if sum == parser.DNull {
 		return sum, nil
 	}
 	switch t := sum.(type) {
-	case *parser.DInt:
-		// TODO(nvanbenschoten) decimal: this should be a numeric, once
-		// better type coercion semantics are defined.
-		return parser.NewDFloat(parser.DFloat(*t) / parser.DFloat(a.count)), nil
 	case *parser.DFloat:
 		return parser.NewDFloat(*t / parser.DFloat(a.count)), nil
 	case *parser.DDecimal:
@@ -757,7 +753,7 @@ func (a *avgAggregate) result() (parser.Datum, error) {
 		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
 		return t, nil
 	default:
-		return parser.DNull, util.Errorf("unexpected SUM result type: %s", t.Type())
+		return nil, util.Errorf("unexpected SUM result type: %s", t.Type())
 	}
 }
 
@@ -852,7 +848,10 @@ func (a *minAggregate) result() (parser.Datum, error) {
 }
 
 type sumAggregate struct {
-	sum parser.Datum
+	sumType  parser.Datum
+	sumFloat parser.DFloat
+	sumDec   inf.Dec
+	tmpDec   inf.Dec
 }
 
 func newSumAggregate() aggregateImpl {
@@ -863,53 +862,36 @@ func (a *sumAggregate) add(datum parser.Datum) error {
 	if datum == parser.DNull {
 		return nil
 	}
-	if a.sum == nil {
-		switch t := datum.(type) {
-		case *parser.DDecimal:
-			// Make copy of decimal to allow for modification later.
-			dd := &parser.DDecimal{}
-			dd.Set(&t.Dec)
-			datum = dd
-		}
-		a.sum = datum
-		return nil
-	}
-
 	switch t := datum.(type) {
-	case *parser.DInt:
-		if v, ok := a.sum.(*parser.DInt); ok {
-			a.sum = parser.NewDInt(*v + *t)
-			return nil
-		}
-
 	case *parser.DFloat:
-		if v, ok := a.sum.(*parser.DFloat); ok {
-			a.sum = parser.NewDFloat(*v + *t)
-			return nil
-		}
-
+		a.sumFloat += *t
+	case *parser.DInt:
+		a.tmpDec.SetUnscaled(int64(*t))
+		a.sumDec.Add(&a.sumDec, &a.tmpDec)
 	case *parser.DDecimal:
-		if v, ok := a.sum.(*parser.DDecimal); ok {
-			v.Add(&v.Dec, &t.Dec)
-			a.sum = v
-			return nil
-		}
+		a.sumDec.Add(&a.sumDec, &t.Dec)
+	default:
+		return util.Errorf("unexpected SUM argument type: %s", datum.Type())
 	}
-
-	return util.Errorf("unexpected SUM argument type: %s", datum.Type())
+	if a.sumType == nil {
+		a.sumType = datum
+	}
+	return nil
 }
 
 func (a *sumAggregate) result() (parser.Datum, error) {
-	if a.sum == nil {
+	if a.sumType == nil {
 		return parser.DNull, nil
 	}
-	switch t := a.sum.(type) {
-	case *parser.DDecimal:
+	switch {
+	case a.sumType.TypeEqual(parser.DummyFloat):
+		return parser.NewDFloat(a.sumFloat), nil
+	case a.sumType.TypeEqual(parser.DummyInt), a.sumType.TypeEqual(parser.DummyDecimal):
 		dd := &parser.DDecimal{}
-		dd.Set(&t.Dec)
+		dd.Set(&a.sumDec)
 		return dd, nil
 	default:
-		return a.sum, nil
+		panic("unreachable")
 	}
 }
 
