@@ -264,7 +264,7 @@ func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
 	cols := make([]ResultColumn, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
-		typ := colDesc.Type.toDatumType()
+		typ := colDesc.Type.ToDatumType()
 		if typ == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Kind))
 		}

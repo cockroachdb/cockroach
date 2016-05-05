@@ -160,7 +160,7 @@ func (p *planner) Insert(
 	// Analyze the expressions for column information and typing.
 	desiredTypesFromSelect := make([]parser.Datum, len(cols))
 	for i, col := range cols {
-		desiredTypesFromSelect[i] = col.Type.toDatumType()
+		desiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}
 	rows, err := p.makePlan(insertRows, desiredTypesFromSelect, false)
 	if err != nil {
@@ -495,7 +495,7 @@ func makeDefaultExprs(
 		if err != nil {
 			return nil, err
 		}
-		typedExpr, err := parser.TypeCheck(expr, nil, col.Type.toDatumType())
+		typedExpr, err := parser.TypeCheck(expr, nil, col.Type.ToDatumType())
 		if err != nil {
 			return nil, err
 		}

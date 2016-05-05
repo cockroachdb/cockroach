@@ -720,7 +720,7 @@ func (c *ColumnType) SQLString() string {
 
 // toDatum converts the ColumnType to a dummy Datum of the correct type, or nil
 // if there is no correspondence.
-func (c *ColumnType) toDatumType() parser.Datum {
+func (c *ColumnType) ToDatumType() parser.Datum {
 	switch c.Kind {
 	case ColumnType_BOOL:
 		return parser.DummyBool

@@ -395,7 +395,7 @@ func makeKeyVals(desc *sqlbase.TableDescriptor, columnIDs []sqlbase.ColumnID) ([
 			return nil, err
 		}
 
-		if vals[i] = col.Type.toDatumType(); vals[i] == nil {
+		if vals[i] = col.Type.ToDatumType(); vals[i] == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", col.Type.Kind))
 		}
 	}

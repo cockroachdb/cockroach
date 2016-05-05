@@ -182,7 +182,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if expr.Tuple {
 			if t, ok := expr.Expr.(*parser.Tuple); ok {
 				for _, e := range t.Exprs {
-					typ := updateCols[i].Type.toDatumType()
+					typ := updateCols[i].Type.ToDatumType()
 					e := fillDefault(e, typ, i, defaultExprs)
 					targets = append(targets, parser.SelectExpr{Expr: e})
 					desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -190,7 +190,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 				}
 			}
 		} else {
-			typ := updateCols[i].Type.toDatumType()
+			typ := updateCols[i].Type.ToDatumType()
 			e := fillDefault(expr.Expr, typ, i, defaultExprs)
 			targets = append(targets, parser.SelectExpr{Expr: e})
 			desiredTypesFromSelect = append(desiredTypesFromSelect, typ)
@@ -222,7 +222,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		if _, ok := target.(parser.DefaultVal); ok {
 			continue
 		}
-		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.toDatumType())
+		typedTarget, err := parser.TypeCheck(target, p.evalCtx.Args, updateCols[i].Type.ToDatumType())
 		if err != nil {
 			return nil, err
 		}

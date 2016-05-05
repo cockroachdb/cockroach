@@ -104,7 +104,7 @@ func incompatibleColumnDefaultTypeError(colDatumType parser.Datum, defaultType p
 		colDatumType.Type(), defaultType.Type())
 }
 
-func sanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
+func SanitizeDefaultExpr(expr parser.Expr, colDatumType parser.Datum) error {
 	typedExpr, err := parser.TypeCheck(expr, nil, colDatumType)
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 
 	if d.DefaultExpr != nil {
 		// Verify the default expression type is compatible with the column type.
-		if err := sanitizeDefaultExpr(d.DefaultExpr, colDatumType); err != nil {
+		if err := SanitizeDefaultExpr(d.DefaultExpr, colDatumType); err != nil {
 			return nil, nil, err
 		}
 		s := d.DefaultExpr.String()
