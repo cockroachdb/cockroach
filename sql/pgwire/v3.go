@@ -26,7 +26,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util"
@@ -653,8 +652,8 @@ func (c *v3Conn) sendCommandComplete(tag []byte) error {
 
 func (c *v3Conn) sendError(err error) error {
 	var errCode string
-	if sqlErr, ok := err.(*roachpb.ErrorWithPGCode); ok {
-		errCode = sqlErr.ErrorCode
+	if sqlErr, ok := err.(sql.ErrorWithPGCode); ok {
+		errCode = sqlErr.Code()
 	} else {
 		errCode = sql.CodeInternalError
 	}

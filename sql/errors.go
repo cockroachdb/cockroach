@@ -53,16 +53,17 @@ const (
 	CodeTransactionCommittedError string = "CR001"
 )
 
-// errorWithPGCode represents errors that carries an error code to the user.
-type errorWithPGCode interface {
+// ErrorWithPGCode represents errors that carries an error code to the user.
+// pgwire recognizes this interfaces and extracts the code.
+type ErrorWithPGCode interface {
 	error
 	Code() string
 }
 
-var _ errorWithPGCode = &errUniquenessConstraintViolation{}
-var _ errorWithPGCode = &errTransactionAborted{}
-var _ errorWithPGCode = &errTransactionCommitted{}
-var _ errorWithPGCode = &errRetry{}
+var _ ErrorWithPGCode = &errUniquenessConstraintViolation{}
+var _ ErrorWithPGCode = &errTransactionAborted{}
+var _ ErrorWithPGCode = &errTransactionCommitted{}
+var _ ErrorWithPGCode = &errRetry{}
 
 const (
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
@@ -169,10 +170,7 @@ func convertBatchError(tableDesc *sqlbase.TableDescriptor, b client.Batch, origP
 				return err
 			}
 
-			errConstraintViolation := &errUniquenessConstraintViolation{index: index, vals: vals}
-			return &roachpb.ErrorWithPGCode{
-				ErrorCode: errConstraintViolation.Code(),
-				Message:   errConstraintViolation.Error()}
+			return &errUniquenessConstraintViolation{index: index, vals: vals}
 		}
 	}
 	return origPErr.GoError()
@@ -191,16 +189,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	if _, ok := err.(*roachpb.RetryableTxnError); ok {
-		return sqlErrToPErr(&errRetry{msg: txnRetryMsgPrefix + " " + err.Error()})
+		return &errRetry{msg: txnRetryMsgPrefix + " " + err.Error()}
 	}
 	return err
-}
-
-// sqlErrToPErr takes a sqlError and produces a err with a suitable detail.
-// TODO(andrei): get rid of this function when sql stops using pErr.
-func sqlErrToPErr(e errorWithPGCode) error {
-	var detail roachpb.ErrorWithPGCode
-	detail.ErrorCode = e.Code()
-	detail.Message = e.Error()
-	return &detail
 }
