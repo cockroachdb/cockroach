@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -173,7 +173,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sql.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 4, 0, ""},
+		{sqlbase.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 4, 0, ""},
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{
@@ -219,7 +219,7 @@ func TestComputeSplits(t *testing.T) {
 		reservedStart = keys.MaxSystemConfigDescID + 1
 	)
 
-	schema := sql.MakeMetadataSchema()
+	schema := sqlbase.MakeMetadataSchema()
 	// Real SQL system tables only.
 	baseSql := schema.GetInitialValues()
 	// Real SQL system tables plus some user stuff.

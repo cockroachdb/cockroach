@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -379,9 +379,9 @@ func TestSystemConfigGossip(t *testing.T) {
 	defer s.Stop()
 
 	db := s.db
-	key := sql.MakeDescMetadataKey(keys.MaxReservedDescID)
-	valAt := func(i int) *sql.DatabaseDescriptor {
-		return &sql.DatabaseDescriptor{Name: "foo", ID: sql.ID(i)}
+	key := sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
+	valAt := func(i int) *sqlbase.DatabaseDescriptor {
+		return &sqlbase.DatabaseDescriptor{Name: "foo", ID: sqlbase.ID(i)}
 	}
 
 	// Register a callback for gossip updates.
@@ -451,7 +451,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Make sure the returned value is valAt(2).
-	got := new(sql.DatabaseDescriptor)
+	got := new(sqlbase.DatabaseDescriptor)
 	if err := val.GetProto(got); err != nil {
 		t.Fatal(err)
 	}

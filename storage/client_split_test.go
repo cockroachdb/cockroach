@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
@@ -92,7 +92,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	var desc sql.TableDescriptor
+	var desc sqlbase.TableDescriptor
 	descBytes, err := protoutil.Marshal(&desc)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	if err := store.DB().Txn(func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
-		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + 1))
+		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + 1))
 		return txn.Put(k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -622,7 +622,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	store, stopper, _ := createTestStore(t)
 	defer stopper.Stop()
 
-	schema := sql.MakeMetadataSchema()
+	schema := sqlbase.MakeMetadataSchema()
 	initialSystemValues := schema.GetInitialValues()
 	var userTableMax int
 	// Write the initial sql values to the system DB as well
@@ -651,7 +651,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			userTableMax = i + 1
 
 			// We don't care about the values, just the keys.
-			k := sql.MakeDescMetadataKey(sql.ID(descID))
+			k := sqlbase.MakeDescMetadataKey(sqlbase.ID(descID))
 			if err := txn.Put(k, bytes); err != nil {
 				return err
 			}
@@ -709,8 +709,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.
 		// We don't care about the values, just the keys.
-		k := sql.MakeDescMetadataKey(sql.ID(keys.MaxReservedDescID + numTotalValues))
-		return txn.Put(k, &sql.TableDescriptor{})
+		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + numTotalValues))
+		return txn.Put(k, &sqlbase.TableDescriptor{})
 	}); err != nil {
 		t.Fatal(err)
 	}
