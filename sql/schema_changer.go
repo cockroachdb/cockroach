@@ -514,7 +514,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		return
 	}
 	stopper.RunWorker(func() {
-		descKeyPrefix := keys.MakeTablePrefix(uint32(descriptorTable.ID))
+		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
 		for {

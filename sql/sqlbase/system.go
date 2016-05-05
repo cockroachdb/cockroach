@@ -86,8 +86,8 @@ var (
 	// namespaceTable is the descriptor for the namespace table.
 	namespaceTable = createSystemTable(keys.NamespaceTableID, namespaceTableSchema)
 
-	// descriptorTable is the descriptor for the descriptor table.
-	descriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
+	// DescriptorTable is the descriptor for the descriptor table.
+	DescriptorTable = createSystemTable(keys.DescriptorTableID, descriptorTableSchema)
 
 	// usersTable is the descriptor for the users table.
 	usersTable = createSystemTable(keys.UsersTableID, usersTableSchema)
@@ -173,7 +173,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// Add system config tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &namespaceTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &descriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &usersTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &zonesTable)
 
