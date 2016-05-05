@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -147,8 +148,8 @@ func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
-func GetBootstrapSchema() sql.MetadataSchema {
-	schema := sql.MakeMetadataSchema()
+func GetBootstrapSchema() sqlbase.MetadataSchema {
+	schema := sqlbase.MakeMetadataSchema()
 	AddEventLogToMetadataSchema(&schema)
 	sql.AddEventLogToMetadataSchema(&schema)
 	return schema
@@ -156,7 +157,7 @@ func GetBootstrapSchema() sql.MetadataSchema {
 
 // AddEventLogToMetadataSchema adds the range event log table to the supplied
 // MetadataSchema.
-func AddEventLogToMetadataSchema(schema *sql.MetadataSchema) {
+func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
 	schema.AddTable(keys.RangeEventTableID, storage.RangeEventTableSchema,
 		privilege.List{privilege.ALL})
 }
