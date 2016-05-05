@@ -103,7 +103,7 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 	}
 }
 
-// allocateName sets desc.Name to a value that is not equalName to any
+// allocateName sets desc.Name to a value that is not EqualName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
 func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
